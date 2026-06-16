@@ -28,6 +28,7 @@ package. The project's own config package is named for the project.
 - `notify`, `background`, `testing`: other reusable infrastructure apps
 - `custom`: the custom user model and other project-wide customizations
 - `user`: user-facing account features
+- `organization`: extends the custom user model to allow for groups of users
 - `bin`: helper scripts that run inside the Docker container
 
 A new self-contained feature app is a new top-level sibling (e.g. `src/blog/`),
@@ -38,6 +39,12 @@ are siblings.
 ## Module Structure
 
 All new files should adhere to these naming and directory conventions.
+
+### New Application Modules / Django Apps
+
+New coherent and semi-independent subsystems that are domain-specific, should be placed in `src/ucfp/${MODULE_NAME}` where `MODULE_ANME` is the name of the module that would be added to `INSTALLED_APPS`.
+
+If a new module si introduced that is generally useful across many domains, it is worth considering if it should be added to the base `https://github.com/cassandra/zzz-app` project for future project use.
 
 ### Application Module Structure
 

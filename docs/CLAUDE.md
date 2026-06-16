@@ -6,6 +6,17 @@ This file provides AI-specific guidance for Claude Code when working with this r
 
 In all code we write, we strive for extremely well factored code. We are thoughtful about responsibility boundaries, encapsulation, readability and maintainability. We do not write the first code we can think of to solve the problem - we find a well factored version that does the job. We avoid assumptions and seek clarification and verification before acting.
 
+## Current Project Phase (transient)
+
+This project is pre-release and greenfield. The two imported documents below
+establish the *current* assumptions — no legacy data, minimal tests, a
+provisional core model, and dual self-host/cloud deployment. They are
+**transient** and will be retired at first release. Read them before proposing
+"pragmatic" shortcuts or legacy/back-compat handling.
+
+@dev/project/project-phase.md
+@dev/project/project-goals.md
+
 ## Custom Command Ecosystem
 
 This project has custom commands for workflow automation. Use them proactively; the detailed specifications live in `.claude/commands/*.md`.
