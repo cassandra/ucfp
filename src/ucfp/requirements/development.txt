@@ -1,0 +1,13 @@
+-r base.txt
+
+autopep8==2.3.2
+certifi==2026.5.20
+fakeredis==2.36.1
+black==26.5.1
+flake8==7.3.0
+jedi==0.20.0
+pipdeptree==3.1.0
+PyYAML==6.0.3
+rope==1.14.0
+time-machine==3.2.0
+yapf==0.43.0

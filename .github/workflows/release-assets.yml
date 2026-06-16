@@ -1,0 +1,25 @@
+# On a published Release: build a source archive and attach it to the release.
+name: Create Release Assets
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  create-assets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and attach the source archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # git archive respects .gitignore; the version prefix makes it unzip
+          # into a versioned directory. gh attaches it to the published release.
+          git archive --format=zip --prefix=zzz-app-${TAG}/ --output=zzz-app.zip HEAD
+          gh release upload "${TAG}" zzz-app.zip --clobber

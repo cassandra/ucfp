@@ -1,0 +1,11 @@
+{% extends "pages/base.html" %}
+{% load common_tags %}
+
+{% block content %}
+<div class="container py-5 text-center">
+  <h1 class="text-primary mb-3">{% settings_value 'SITE_NAME' %}</h1>
+  <p class="lead text-muted">
+    Placeholder home page &mdash; replace this with your project's landing content.
+  </p>
+</div>
+{% endblock %}

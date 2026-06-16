@@ -1,0 +1,15 @@
+{% extends "notify/emails/base_email_message.html" %}
+{% load common_tags %}
+{% block title %}Sign In Access Code{% endblock %}
+{% block content %}
+<p>
+  Your access code is:
+</p>
+<p style="font-size:1.5rem; font-weight: bold">{{ magic_code }}</p>
+<p>
+  Note that this code will expire after {{ magic_code_lifetime_minutes }} minutes. The code is not case sensitive.
+</p>
+<p>
+  Or <a href="{{ page_url }}">sign in directly using this link</a>.
+</p>
+{% endblock %}

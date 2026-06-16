@@ -1,0 +1,49 @@
+from .base import *
+
+DEBUG = False
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": 'pipeline.storage.PipelineManifestStorage',
+    },
+}
+STATIC_ROOT = '/src/static'
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {module} {process:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+        },
+        'ucfp': {
+            'handlers': ['console' ],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

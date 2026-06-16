@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>JavaScript Unit Tests - All Modules</title>
+    <link rel="stylesheet" href="qunit/qunit-2.20.0.css">
+</head>
+<body>
+    <div id="qunit"></div>
+    <div id="qunit-fixture"></div>
+
+    <!-- Dependencies -->
+    <script src="../js/jquery-3.7.0.min.js"></script>
+
+    <!-- Server-injected globals that main.js reads. In production
+         window.__APP_CONFIG__ comes from the client-config context processor and
+         window.AppConst from the shared_constants context processor; here we
+         stub them so the modules under test load the same way. -->
+    <script>
+        window.__APP_CONFIG__ = { DEBUG: false, ENVIRONMENT: 'test', VERSION: 'test' };
+        window.AppConst = {};
+    </script>
+
+    <!-- Source modules under test (main.js defines the App namespace) -->
+    <script src="../js/main.js"></script>
+
+    <!-- Test framework -->
+    <script src="qunit/qunit-2.20.0.js"></script>
+    <script>
+        QUnit.config.autostart = false;
+        QUnit.config.reorder = false;   // keep test order consistent
+        window.addEventListener('load', function() { QUnit.start(); });
+    </script>
+
+    <!-- Test modules (add a <script> here for each new test-{module}.js) -->
+    <script src="test-main.js"></script>
+</body>
+</html>

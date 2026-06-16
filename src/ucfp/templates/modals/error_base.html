@@ -1,0 +1,13 @@
+{% extends "modals/action_ok.html" %}
+
+{% block header_class %}bg-secondary{% endblock %}
+
+{% block title_text %}
+Error
+{% endblock %}
+
+{% block body %}
+<div>
+  {{ error_message }}
+</div>
+{% endblock %}

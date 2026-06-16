@@ -1,0 +1,13 @@
+{% extends "notify/emails/base_email_message.txt" %}
+{% load common_tags %}
+{% block content %}{% settings_value 'SITE_NAME' %} Sign In
+
+Your access code is:
+
+    {{ magic_code }}
+
+Note that this code will expire after {{ magic_code_lifetime_minutes }} minutes. The code is not case sensitive.
+
+Or sign in directly using this link:
+
+    {{ page_url }}{% endblock %}

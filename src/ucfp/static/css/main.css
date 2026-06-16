@@ -1,0 +1,309 @@
+/*  UCFP -- main stylesheet
+ *
+ *  Curated from the source projects' main.css/icons.css: the theme palette,
+ *  the icon system supporting the {% icon %} tag, and a handful of general
+ *  Bootstrap overrides. Domain-specific styling was intentionally left out.
+ */
+
+
+/* =========================================================================
+   Color palette / theme
+
+   These --*-color variables define the project's theme. They were copied
+   from the source project as a starting point -- restyle them to match this
+   project's brand. See README, "Adapting to a new project".
+   ========================================================================= */
+:root {
+  --white: #fdfdfd;
+  --black: #020204;
+
+  --primary-color: #4c5bd4;
+  --on-primary-color: #ffffff;
+  --primary-highlight-color: #3b47a5;
+
+  --secondary-color: #f5b945;
+  --on-secondary-color: #1a1b3a;
+  --secondary-highlight-color: #f9d38a;
+
+  --tertiary-color: #020204;
+  --on-tertiary-color: #ffffff;
+  --tertiary-highlight-color: #7e7e81;
+
+  --success-color: #177219;
+  --on-success-color: #ffffff;
+  --success-bg-light: #e8f5e8;
+
+  --info-color: #4c5bd4;
+  --info-bg-light: #eceefb;
+
+  --warning-color: #ECA500;
+  --on-warning-color: #ffffff;
+  --warning-bg-light: #fef7e6;
+
+  --error-color: #721817;
+  --on-error-color: #ffffff;
+  --error-highlight-color: #a01111;
+  --danger-color: var(--error-color);
+
+  --muted-color: #7e7e81;
+  --on-muted-color: #ffffff;
+  --muted-bg-light: #f8f9fa;
+
+  --line-color: #cccccc;
+}
+
+
+/* =========================================================================
+   Icon system
+
+   Supports the {% icon %} template tag (common/templatetags/icons.py). Icons
+   are inline SVG using currentColor, so color follows the surrounding text
+   or an .icon-<color> class below.
+   ========================================================================= */
+.icon {
+    display: inline-block;
+    vertical-align: middle;
+    fill: currentColor;
+    stroke: currentColor;
+    flex-shrink: 0;
+}
+
+/* Sizes */
+.icon-sm    { width: 0.875rem; height: 0.875rem; }
+.icon-md    { width: 1rem;     height: 1rem; }
+.icon-lg    { width: 1.25rem;  height: 1.25rem; }
+.icon-xl    { width: 1.5rem;   height: 1.5rem; }
+.icon-xxl   { width: 2rem;     height: 2rem; }
+.icon-xxxl  { width: 3rem;     height: 3rem; }
+.icon-fluid { max-width: 100%; height: auto; }
+
+/* Semantic colors (use the theme variables above) */
+.icon-primary   { color: var(--primary-color); }
+.icon-secondary { color: var(--secondary-color); }
+.icon-success   { color: var(--success-color); }
+.icon-warning   { color: var(--warning-color); }
+.icon-error     { color: var(--error-color); }
+.icon-muted     { color: var(--muted-color); }
+
+/* Spacing utilities */
+.icon-left  { margin-right: 0.375rem; }
+.icon-right { margin-left: 0.375rem; }
+
+/* Modal width helpers (applied via the modal_dialog_class block). */
+.app-modal-600 { max-width: 600px; }
+.app-modal-700 { max-width: 700px; }
+.app-modal-800 { max-width: 800px; }
+
+/* Context integration */
+.btn .icon { vertical-align: text-top; }
+.card-header .icon,
+.card-title .icon { margin-right: 0.375rem; }
+.alert .icon { margin-right: 0.5rem; }
+
+@media (prefers-contrast: high) {
+    .icon { stroke-width: 2; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .icon { transition: none; }
+}
+
+
+/* =========================================================================
+   Bootstrap overrides / theme mappings
+
+   Bootstrap is added separately; these restyle a few of its components to
+   the theme palette and fill a couple of gaps.
+   ========================================================================= */
+
+/* Bootstrap ships no .alert-tertiary variant; provide a neutral-grey one. */
+.alert-tertiary {
+    color: #383d41;
+    background-color: #e2e3e5;
+    border-color: #d6d8db;
+}
+
+/* Map Bootstrap contextual backgrounds + buttons to the theme palette. */
+.bg-primary, .bg-info, .btn-primary, .btn-info {
+    color: var(--on-primary-color) !important;
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-highlight-color) !important;
+}
+.bg-primary a, .bg-info a, .btn-primary a, .btn-info a {
+    color: var(--on-primary-color);
+}
+.bg-primary a:hover, .bg-primary a:focus, .bg-primary a:active,
+.bg-info a:hover, .bg-info a:focus, .bg-info a:active {
+    opacity: 0.65;
+    color: var(--on-primary-color);
+}
+
+.bg-secondary, .btn-secondary, .badge-secondary {
+    color: var(--on-secondary-color) !important;
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-highlight-color) !important;
+}
+.bg-secondary a {
+    color: var(--on-secondary-color);
+}
+.bg-secondary a:hover, .bg-secondary a:focus, .bg-secondary a:active {
+    opacity: 0.65;
+    color: var(--on-secondary-color);
+}
+
+.bg-tertiary, .btn-tertiary {
+    color: var(--on-tertiary-color) !important;
+    background-color: var(--tertiary-color) !important;
+    border-color: var(--tertiary-highlight-color) !important;
+}
+.bg-tertiary a {
+    color: var(--on-tertiary-color);
+}
+.bg-tertiary a:hover, .bg-tertiary a:focus, .bg-tertiary a:active {
+    opacity: 0.65;
+    color: var(--on-tertiary-color);
+}
+
+.bg-danger, .btn-error, .btn-danger {
+    color: var(--on-error-color) !important;
+    background-color: var(--error-color) !important;
+    border-color: var(--error-highlight-color) !important;
+}
+.bg-danger a, .btn-error a, .btn-danger a {
+    color: var(--on-error-color);
+}
+.bg-error a:hover, .bg-error a:focus, .bg-error a:active,
+.bg-danger a:hover, .bg-danger a:focus, .bg-danger a:active {
+    opacity: 0.65;
+    color: var(--on-error-color);
+}
+.bg-muted, .btn-muted {
+    color: var(--on-muted-color) !important;
+    background-color: var(--muted-color) !important;
+}
+
+/* Outline buttons themed to the palette (incl. a tertiary Bootstrap lacks). */
+.btn-outline-primary {
+    color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    background-color: transparent !important;
+}
+.btn-outline-primary:hover, .btn-outline-primary:focus,
+.btn-outline-primary:active, .btn-outline-primary.active {
+    color: var(--on-primary-color) !important;
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-highlight-color) !important;
+}
+.btn-outline-primary:focus {
+    box-shadow: 0 0 0 0.2rem rgba(23, 112, 114, 0.25) !important;
+}
+
+.btn-outline-secondary {
+    color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    background-color: transparent !important;
+}
+.btn-outline-secondary:hover, .btn-outline-secondary:focus,
+.btn-outline-secondary:active, .btn-outline-secondary.active {
+    color: var(--on-secondary-color) !important;
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-highlight-color) !important;
+}
+.btn-outline-secondary:focus {
+    box-shadow: 0 0 0 0.2rem rgba(244, 95, 54, 0.25) !important;
+}
+
+.btn-outline-tertiary {
+    color: var(--tertiary-color) !important;
+    border-color: var(--tertiary-highlight-color) !important;
+    background-color: var(--muted-bg-light) !important;
+}
+.btn-outline-tertiary:hover, .btn-outline-tertiary:focus,
+.btn-outline-tertiary:active, .btn-outline-tertiary.active {
+    color: var(--on-tertiary-color) !important;
+    background-color: var(--tertiary-color) !important;
+    border-color: var(--tertiary-highlight-color) !important;
+}
+.btn-outline-tertiary:focus {
+    box-shadow: 0 0 0 0.2rem rgba(244, 95, 54, 0.25) !important;
+}
+
+.btn-outline-danger {
+    color: var(--error-color) !important;
+    border-color: var(--error-color) !important;
+    background-color: transparent !important;
+}
+.btn-outline-danger:hover, .btn-outline-danger:focus,
+.btn-outline-danger:active, .btn-outline-danger.active {
+    color: var(--on-error-color) !important;
+    background-color: var(--error-color) !important;
+    border-color: var(--error-highlight-color) !important;
+}
+.btn-outline-danger:focus {
+    box-shadow: 0 0 0 0.2rem var(--error-highlight-color) !important;
+}
+
+/* Pagination themed to the palette (pairs with the {% pagination_url %} tag). */
+.pagination-lg .page-link {
+    color: var(--primary-color) !important;
+    border-color: #dee2e6 !important;
+    height: 3rem !important;
+    min-height: 3rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0.5rem 0.75rem !important;
+    box-sizing: border-box !important;
+    line-height: 1.2 !important;
+}
+.pagination-lg .page-link span {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 100% !important;
+}
+.pagination-lg .page-link:hover {
+    color: var(--primary-highlight-color) !important;
+    background-color: #e9ecef !important;
+    border-color: #dee2e6 !important;
+}
+.pagination-lg .page-item.active .page-link {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--on-primary-color) !important;
+}
+.pagination-lg .page-item.disabled .page-link {
+    color: #6c757d !important;
+    background-color: #fff !important;
+    border-color: #dee2e6 !important;
+}
+
+/* Touch-target utility: meet the iOS-HIG 44px tap floor without changing how
+   an element looks (apply alongside e.g. Bootstrap .small / .text-muted). */
+.tap-target {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+}
+
+
+/* =========================================================================
+   Interstitial / full-page splash (error pages, loading screens)
+   ========================================================================= */
+.interstitial-page {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    max-width: 1200px;
+    margin: auto;
+    padding: 1rem;
+    box-sizing: border-box;
+}
+.interstitial-body {
+    padding: 1rem;
+    text-align: center;
+    border: 1px solid #ccc;
+    background-color: #f4f4f4;
+}

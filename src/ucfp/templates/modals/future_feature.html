@@ -1,0 +1,13 @@
+{% extends "modals/action_ok.html" %}
+
+{% block modal_dialog_class %}modal-lg{% endblock %}
+{% block header_class %}bg-tertiary{% endblock %}
+
+{% block title_text %}
+{{ feature_label|title }} : Future Features
+{% endblock %}
+
+{% block body %}
+<div class="h1 text-primary">{{ feature_label|title }}</div>
+{% include feature_template_name %}
+{% endblock %}
