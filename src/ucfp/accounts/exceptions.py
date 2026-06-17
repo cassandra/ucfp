@@ -27,4 +27,4 @@ class CurrencyConversionError( AccountsError ):
 
 
 class OpeningBalanceError( AccountsError ):
-    """Raised when a starting balance cannot be seeded into a baseline."""
+    """Raised when a starting balance cannot be seeded into a journal."""

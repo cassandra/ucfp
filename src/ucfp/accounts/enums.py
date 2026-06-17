@@ -74,4 +74,4 @@ class SystemAccountRole( LabeledEnum ):
     and closing.
     """
 
-    OPENING_BALANCES = ( 'Opening Balances' , 'Equity counterpart for a Baseline opening seed.' )
+    OPENING_BALANCES = ( 'Opening Balances' , 'Equity counterpart for a Journal opening seed.' )

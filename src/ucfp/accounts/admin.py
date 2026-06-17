@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Account, Baseline, Entry, Transaction
+from .models import Account, Journal, Entry, Transaction
 
 
 @admin.register( Account )
@@ -30,8 +30,8 @@ class AccountAdmin( admin.ModelAdmin ):
     )
 
 
-@admin.register( Baseline )
-class BaselineAdmin( admin.ModelAdmin ):
+@admin.register( Journal )
+class JournalAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
     list_display = (
@@ -57,7 +57,7 @@ class TransactionAdmin( admin.ModelAdmin ):
 
     list_display = (
         'uuid',
-        'baseline',
+        'journal',
         'transaction_date',
         'currency',
         'description',
@@ -65,7 +65,7 @@ class TransactionAdmin( admin.ModelAdmin ):
     search_fields = (
         'uuid',
         'description',
-        'baseline__label',
+        'journal__label',
     )
     readonly_fields = (
         'uuid',

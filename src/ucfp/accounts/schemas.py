@@ -77,7 +77,7 @@ class CurrencyConverter:
 
 @dataclass
 class OpeningBalances:
-    """The transient input that seeds a Baseline's opening state.
+    """The transient input that seeds a Journal's opening state.
 
     A collection of StartingBalances plus a CurrencyConverter. When every account
     shares the opening transaction's currency the converter is unused (the empty

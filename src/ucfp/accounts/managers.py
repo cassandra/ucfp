@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from organization.models import Organization
 
     from .enums import CurrencyType
-    from .models import Account, Baseline, Transaction
+    from .models import Account, Journal, Transaction
     from .schemas import CurrencyConverter, OpeningBalances, StartingBalance
 
 
@@ -54,7 +54,7 @@ class AccountManager( models.Manager ):
         return
 
 
-class BaselineManager( models.Manager ):
+class JournalManager( models.Manager ):
 
     @transaction.atomic
     def create_with_opening( self,
@@ -62,8 +62,8 @@ class BaselineManager( models.Manager ):
                              as_of_date       : 'date',
                              label            : str,
                              opening_balances : 'OpeningBalances',
-                             description      : str = OPENING_TRANSACTION_DESCRIPTION ) -> 'Baseline':
-        """Create a baseline and seed its opening financial state.
+                             description      : str = OPENING_TRANSACTION_DESCRIPTION ) -> 'Journal':
+        """Create a journal and seed its opening financial state.
 
         Builds one balanced opening transaction. Each StartingBalance is posted on
         the side that makes its account's natural balance equal the given amount,
@@ -82,12 +82,12 @@ class BaselineManager( models.Manager ):
             system_role = SystemAccountRole.OPENING_BALANCES,
         )
         transaction_currency = opening_balances_account.currency
-        baseline = self.create(
+        journal = self.create(
             organization = organization,
             as_of_date = as_of_date,
             label = label,
         )
-        opening_transaction = baseline.transactions.create(
+        opening_transaction = journal.transactions.create(
             transaction_date = as_of_date,
             description = description,
             currency = transaction_currency,
@@ -105,7 +105,7 @@ class BaselineManager( models.Manager ):
             opening_balances_account = opening_balances_account,
         )
         opening_transaction.assert_balanced()
-        return baseline
+        return journal
 
     def _add_starting_entry( self,
                              opening_transaction  : 'Transaction',

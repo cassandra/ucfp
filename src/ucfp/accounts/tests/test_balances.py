@@ -15,7 +15,7 @@ from ucfp.accounts.exceptions import (
     OpeningBalanceError,
     TransactionImbalanceError,
 )
-from ucfp.accounts.models import Account, Baseline
+from ucfp.accounts.models import Account, Journal
 from ucfp.accounts.schemas import (
     CurrencyConversion,
     CurrencyConverter,
@@ -102,8 +102,8 @@ class AccountsTestCase(TestCase):
             account_type = account_type, parent__isnull = True,
         )
 
-    def _make_transaction(self, baseline):
-        return baseline.transactions.create(
+    def _make_transaction(self, journal):
+        return journal.transactions.create(
             transaction_date = AS_OF, description = '', currency = CurrencyType.USD,
         )
 
@@ -111,10 +111,10 @@ class AccountsTestCase(TestCase):
 class EntryAmountTests(AccountsTestCase):
 
     def test_signed_amounts_and_derived_rate(self):
-        baseline = Baseline.objects.create(
+        journal = Journal.objects.create(
             organization = self.organization, as_of_date = AS_OF, label = 'B',
         )
-        transaction = self._make_transaction( baseline )
+        transaction = self._make_transaction( journal )
         entry = transaction.entries.create(
             account = self.checking,
             amount = Decimal( '100' ),
@@ -129,10 +129,10 @@ class EntryAmountTests(AccountsTestCase):
 class AccountBalanceTests(AccountsTestCase):
 
     def test_signed_and_natural_balance(self):
-        baseline = Baseline.objects.create(
+        journal = Journal.objects.create(
             organization = self.organization, as_of_date = AS_OF, label = 'B',
         )
-        transaction = self._make_transaction( baseline )
+        transaction = self._make_transaction( journal )
         transaction.entries.create(
             account = self.checking,
             amount = Decimal( '100' ),
@@ -147,17 +147,17 @@ class AccountBalanceTests(AccountsTestCase):
         )
         # Asset (debit-normal): credit-positive signed balance is negative; the
         # natural balance flips it positive.
-        self.assertEqual( self.checking.signed_balance( baseline ), Decimal( '-100' ) )
-        self.assertEqual( self.checking.natural_balance( baseline ), Decimal( '100' ) )
+        self.assertEqual( self.checking.signed_balance( journal ), Decimal( '-100' ) )
+        self.assertEqual( self.checking.natural_balance( journal ), Decimal( '100' ) )
         # Equity (credit-normal): signed and natural agree.
-        self.assertEqual( self.equity_root.signed_balance( baseline ), Decimal( '100' ) )
-        self.assertEqual( self.equity_root.natural_balance( baseline ), Decimal( '100' ) )
+        self.assertEqual( self.equity_root.signed_balance( journal ), Decimal( '100' ) )
+        self.assertEqual( self.equity_root.natural_balance( journal ), Decimal( '100' ) )
 
 
 class TransactionBalanceTests(AccountsTestCase):
 
-    def _two_sided(self, baseline, credit_amount):
-        transaction = self._make_transaction( baseline )
+    def _two_sided(self, journal, credit_amount):
+        transaction = self._make_transaction( journal )
         transaction.entries.create(
             account = self.checking,
             amount = Decimal( '100' ),
@@ -173,18 +173,18 @@ class TransactionBalanceTests(AccountsTestCase):
         return transaction
 
     def test_balanced_transaction(self):
-        baseline = Baseline.objects.create(
+        journal = Journal.objects.create(
             organization = self.organization, as_of_date = AS_OF, label = 'B',
         )
-        transaction = self._two_sided( baseline, Decimal( '100' ) )
+        transaction = self._two_sided( journal, Decimal( '100' ) )
         self.assertTrue( transaction.is_balanced )
         transaction.assert_balanced()
 
     def test_unbalanced_transaction_raises(self):
-        baseline = Baseline.objects.create(
+        journal = Journal.objects.create(
             organization = self.organization, as_of_date = AS_OF, label = 'B',
         )
-        transaction = self._two_sided( baseline, Decimal( '60' ) )
+        transaction = self._two_sided( journal, Decimal( '60' ) )
         self.assertFalse( transaction.is_balanced )
         with self.assertRaises( TransactionImbalanceError ):
             transaction.assert_balanced()
@@ -197,20 +197,20 @@ class OpeningSeedTests(AccountsTestCase):
         opening.add( self.checking, Decimal( '1000' ) )
         opening.add( self.credit_card, Decimal( '200' ) )
 
-        baseline = Baseline.objects.create_with_opening(
+        journal = Journal.objects.create_with_opening(
             organization = self.organization,
             as_of_date = AS_OF,
             label = 'Jun 2026',
             opening_balances = opening,
         )
 
-        self.assertEqual( baseline.transactions.count(), 1 )
-        transaction = baseline.transactions.get()
+        self.assertEqual( journal.transactions.count(), 1 )
+        transaction = journal.transactions.get()
         self.assertTrue( transaction.is_balanced )
         # A = L + E by construction: 1000 = 200 + 800.
-        self.assertEqual( self.checking.natural_balance( baseline ), Decimal( '1000' ) )
-        self.assertEqual( self.credit_card.natural_balance( baseline ), Decimal( '200' ) )
-        self.assertEqual( self.opening_balances.natural_balance( baseline ), Decimal( '800' ) )
+        self.assertEqual( self.checking.natural_balance( journal ), Decimal( '1000' ) )
+        self.assertEqual( self.credit_card.natural_balance( journal ), Decimal( '200' ) )
+        self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '800' ) )
 
     def test_discrepancy_surfaces_in_opening_balances(self):
         retained = Account.objects.create(
@@ -221,7 +221,7 @@ class OpeningSeedTests(AccountsTestCase):
         opening.add( self.credit_card, Decimal( '200' ) )
         opening.add( retained, Decimal( '900' ) )
 
-        baseline = Baseline.objects.create_with_opening(
+        journal = Journal.objects.create_with_opening(
             organization = self.organization,
             as_of_date = AS_OF,
             label = 'Jun 2026',
@@ -230,7 +230,7 @@ class OpeningSeedTests(AccountsTestCase):
 
         # Stated equity (900) overshoots the true residual (800) by 100, which
         # surfaces as a negative Opening Balances natural balance.
-        self.assertEqual( self.opening_balances.natural_balance( baseline ), Decimal( '-100' ) )
+        self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '-100' ) )
 
     def test_multi_currency_seed_converts_and_balances(self):
         euro_savings = Account.objects.create(
@@ -245,18 +245,18 @@ class OpeningSeedTests(AccountsTestCase):
         opening = OpeningBalances( converter = converter )
         opening.add( euro_savings, Decimal( '100' ) )
 
-        baseline = Baseline.objects.create_with_opening(
+        journal = Journal.objects.create_with_opening(
             organization = self.organization,
             as_of_date = AS_OF,
             label = 'Jun 2026',
             opening_balances = opening,
         )
 
-        transaction = baseline.transactions.get()
+        transaction = journal.transactions.get()
         self.assertTrue( transaction.is_balanced )
         # The account balance stays in EUR; the plug lands in USD.
-        self.assertEqual( euro_savings.natural_balance( baseline ), Decimal( '100' ) )
-        self.assertEqual( self.opening_balances.natural_balance( baseline ), Decimal( '110' ) )
+        self.assertEqual( euro_savings.natural_balance( journal ), Decimal( '100' ) )
+        self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '110' ) )
         euro_entry = transaction.entries.get( account = euro_savings )
         self.assertEqual( euro_entry.transaction_amount, Decimal( '110' ) )
         self.assertEqual( euro_entry.conversion_rate, Decimal( '1.1' ) )
@@ -272,7 +272,7 @@ class OpeningSeedTests(AccountsTestCase):
         opening.add( euro_savings, Decimal( '100' ) )
 
         with self.assertRaises( CurrencyConversionError ):
-            Baseline.objects.create_with_opening(
+            Journal.objects.create_with_opening(
                 organization = self.organization,
                 as_of_date = AS_OF,
                 label = 'Jun 2026',
@@ -292,14 +292,14 @@ class OpeningSeedTests(AccountsTestCase):
         opening = OpeningBalances( converter = converter )
         opening.add( euro_savings, Decimal( '1' ) )
 
-        baseline = Baseline.objects.create_with_opening(
+        journal = Journal.objects.create_with_opening(
             organization = self.organization,
             as_of_date = AS_OF,
             label = 'Jun 2026',
             opening_balances = opening,
         )
 
-        transaction = baseline.transactions.get()
+        transaction = journal.transactions.get()
         euro_entry = transaction.entries.get( account = euro_savings )
         # 1 * 1.234565 = 1.234565 -> half-up to 5 places -> 1.23457.
         self.assertEqual( euro_entry.transaction_amount, Decimal( '1.23457' ) )
@@ -320,7 +320,7 @@ class OpeningSeedTests(AccountsTestCase):
         opening.add( euro_savings, Decimal( '0.00001' ) )
 
         with self.assertRaises( OpeningBalanceError ):
-            Baseline.objects.create_with_opening(
+            Journal.objects.create_with_opening(
                 organization = self.organization,
                 as_of_date = AS_OF,
                 label = 'Jun 2026',
@@ -332,14 +332,14 @@ class OpeningSeedTests(AccountsTestCase):
         opening.add( self.checking, Decimal( '1000' ) )
         opening.add( self.credit_card, Decimal( '0' ) )
 
-        baseline = Baseline.objects.create_with_opening(
+        journal = Journal.objects.create_with_opening(
             organization = self.organization,
             as_of_date = AS_OF,
             label = 'Jun 2026',
             opening_balances = opening,
         )
 
-        transaction = baseline.transactions.get()
+        transaction = journal.transactions.get()
         self.assertFalse( transaction.entries.filter( account = self.credit_card ).exists() )
         self.assertTrue( transaction.entries.filter( account = self.checking ).exists() )
 
@@ -351,34 +351,34 @@ class OpeningSeedTests(AccountsTestCase):
         opening.add( self.checking, Decimal( '1000' ) )   # asset, debit
         opening.add( retained, Decimal( '1000' ) )        # equity, credit -> nets to zero
 
-        baseline = Baseline.objects.create_with_opening(
+        journal = Journal.objects.create_with_opening(
             organization = self.organization,
             as_of_date = AS_OF,
             label = 'Jun 2026',
             opening_balances = opening,
         )
 
-        transaction = baseline.transactions.get()
+        transaction = journal.transactions.get()
         self.assertFalse( transaction.entries.filter( account = self.opening_balances ).exists() )
-        self.assertEqual( self.opening_balances.natural_balance( baseline ), Decimal( '0' ) )
+        self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '0' ) )
         self.assertTrue( transaction.is_balanced )
 
     def test_negative_natural_balance_flips_side(self):
         opening = OpeningBalances()
         opening.add( self.checking, Decimal( '-200' ) )   # overdrawn asset
 
-        baseline = Baseline.objects.create_with_opening(
+        journal = Journal.objects.create_with_opening(
             organization = self.organization,
             as_of_date = AS_OF,
             label = 'Jun 2026',
             opening_balances = opening,
         )
 
-        transaction = baseline.transactions.get()
+        transaction = journal.transactions.get()
         checking_entry = transaction.entries.get( account = self.checking )
         # A negative natural balance on a debit-normal account posts as a credit.
         self.assertEqual( checking_entry.entry_direction, SideType.CREDIT )
-        self.assertEqual( self.checking.natural_balance( baseline ), Decimal( '-200' ) )
+        self.assertEqual( self.checking.natural_balance( journal ), Decimal( '-200' ) )
         self.assertTrue( transaction.is_balanced )
 
     def test_parent_account_balance_excludes_children(self):
@@ -389,15 +389,15 @@ class OpeningSeedTests(AccountsTestCase):
         opening.add( self.checking, Decimal( '1000' ) )
         opening.add( savings, Decimal( '500' ) )
 
-        baseline = Baseline.objects.create_with_opening(
+        journal = Journal.objects.create_with_opening(
             organization = self.organization,
             as_of_date = AS_OF,
             label = 'Jun 2026',
             opening_balances = opening,
         )
 
-        # Balance is per (account, baseline) with no subtree rollup: the assets
+        # Balance is per (account, journal) with no subtree rollup: the assets
         # root has no entries of its own, so its balance is zero, not 1500.
-        self.assertEqual( self.assets_root.natural_balance( baseline ), Decimal( '0' ) )
-        self.assertEqual( self.checking.natural_balance( baseline ), Decimal( '1000' ) )
-        self.assertEqual( savings.natural_balance( baseline ), Decimal( '500' ) )
+        self.assertEqual( self.assets_root.natural_balance( journal ), Decimal( '0' ) )
+        self.assertEqual( self.checking.natural_balance( journal ), Decimal( '1000' ) )
+        self.assertEqual( savings.natural_balance( journal ), Decimal( '500' ) )

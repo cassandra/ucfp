@@ -16,25 +16,25 @@ from .exceptions import (
     SystemAccountError,
     TransactionImbalanceError,
 )
-from .managers import AccountManager, BaselineManager
+from .managers import AccountManager, JournalManager
 
 
-class Baseline( TimestampedModel ):
+class Journal( TimestampedModel ):
     """A persisted, dated starting financial state, and the partition that owns
     transactions.
 
-    Many baselines may coexist per organization (e.g. "Oct 2026 planning",
+    Many journals may coexist per organization (e.g. "Oct 2026 planning",
     "Feb 2027 revision"); each is its own partition, so transactions in different
-    baselines never double-count. Accounts are shared across baselines (one chart
-    per organization) -- only transactions are partitioned by baseline.
+    journals never double-count. Accounts are shared across journals (one chart
+    per organization) -- only transactions are partitioned by journal.
     """
 
-    objects = BaselineManager()
+    objects = JournalManager()
 
     organization = models.ForeignKey(
         Organization,
         verbose_name = 'Organization',
-        related_name = 'baselines',
+        related_name = 'journals',
         on_delete = models.CASCADE,
         null = False,
         blank = False,
@@ -58,8 +58,8 @@ class Baseline( TimestampedModel ):
     )
 
     class Meta:
-        verbose_name = 'Baseline'
-        verbose_name_plural = 'Baselines'
+        verbose_name = 'Journal'
+        verbose_name_plural = 'Journals'
 
     def __str__(self):
         return f'{self.label} ({self.as_of_date})'
@@ -71,8 +71,8 @@ class Account( TimestampedModel ):
     The chart is a forest of per-type roots: each AccountType has exactly one
     parentless root that carries the type, and every other account inherits its
     type from its ancestry (see effective_account_type). Accounts are shared
-    across baselines; an account has no single global balance -- balance is
-    computed per (account, baseline).
+    across journals; an account has no single global balance -- balance is
+    computed per (account, journal).
 
     System accounts -- the per-type roots and the well-known role accounts (see
     SystemAccountRole) -- are created by `objects.initialize_chart` and are
@@ -173,14 +173,14 @@ class Account( TimestampedModel ):
         """The side (debit/credit) on which this account's balance is normal."""
         return self.effective_account_type.normal_side
 
-    def signed_balance( self, baseline : 'Baseline' ) -> Decimal:
-        """Credit-positive balance within `baseline`, in the account's currency.
+    def signed_balance( self, journal : 'Journal' ) -> Decimal:
+        """Credit-positive balance within `journal`, in the account's currency.
 
         The plain sum of this account's own entries' signed_amount (no currency
         conversion: every entry on an account is in that account's currency).
-        Descendants are not rolled up -- balance is per (account, baseline).
+        Descendants are not rolled up -- balance is per (account, journal).
         """
-        totals = self.entries.filter( transaction__baseline = baseline ).aggregate(
+        totals = self.entries.filter( transaction__journal = journal ).aggregate(
             credit_total = models.Sum(
                 'amount',
                 filter = models.Q( entry_direction = SideType.CREDIT ),
@@ -194,9 +194,9 @@ class Account( TimestampedModel ):
         debit_total = totals[ 'debit_total' ] or Decimal( '0' )
         return credit_total - debit_total
 
-    def natural_balance( self, baseline : 'Baseline' ) -> Decimal:
+    def natural_balance( self, journal : 'Journal' ) -> Decimal:
         """Display balance: positive in the account type's normal direction."""
-        signed = self.signed_balance( baseline )
+        signed = self.signed_balance( journal )
         if self.account_normal_type == SideType.DEBIT:
             return -signed
         return signed
@@ -257,7 +257,7 @@ class Account( TimestampedModel ):
 
 
 class Transaction( TimestampedModel ):
-    """A balanced movement of value within a single Baseline partition.
+    """A balanced movement of value within a single Journal partition.
 
     Comprises at least one debit and one credit Entry whose signed amounts sum to
     zero in `currency` (after per-entry conversion) -- the core double-entry
@@ -265,9 +265,9 @@ class Transaction( TimestampedModel ):
     and never stored.
     """
 
-    baseline = models.ForeignKey(
-        Baseline,
-        verbose_name = 'Baseline',
+    journal = models.ForeignKey(
+        Journal,
+        verbose_name = 'Journal',
         related_name = 'transactions',
         on_delete = models.CASCADE,
         null = False,
