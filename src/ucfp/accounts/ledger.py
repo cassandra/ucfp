@@ -16,7 +16,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Iterable, Optional
 
-from .enums import AccountType, SideType
+from .enums import AccountType, CurrencyType, SideType, SystemAccountRole
 from .exceptions import TransactionImbalanceError
 from .models import Account, Entry, Journal, Transaction
 
@@ -40,6 +40,7 @@ class Ledger:
 
     def __init__( self, organization : Organization ):
         self._organization = organization
+        self.journal = None                  # the partition posted transactions belong to
         self._accounts = { account.pk : account for account in organization.accounts.all() }
         self._transactions = list()
         self._postings_by_account = dict()   # account pk -> list[ _Posting ]
@@ -51,6 +52,7 @@ class Ledger:
         """Build a Ledger from a persisted Journal, bulk-fetching its chart,
         transactions and entries (never one query per account)."""
         ledger = cls( journal.organization )
+        ledger.journal = journal
         for transaction in journal.transactions.prefetch_related( 'entries' ):
             ledger._index( transaction, transaction.entries.all() )
             ledger._transactions.append( transaction )
@@ -74,6 +76,38 @@ class Ledger:
         self._index( transaction, entries )
         self._transactions.append( transaction )
         return
+
+    def record( self,
+                transaction_date : date,
+                currency : CurrencyType,
+                signed_postings : Iterable[ tuple[ Account, Decimal ] ] ) -> Transaction:
+        """Build and post a balanced transaction from (account, signed_amount)
+        pairs (credit-positive); each entry's direction is derived from its sign.
+        Amounts are in `currency` -- single-currency (conversion not yet handled).
+        Zero-amount postings are skipped."""
+        transaction = Transaction(
+            journal = self.journal,
+            transaction_date = transaction_date,
+            currency = currency,
+        )
+        entries = list()
+        for account, signed_amount in signed_postings:
+            if signed_amount == 0:
+                continue
+            direction = SideType.CREDIT if signed_amount > 0 else SideType.DEBIT
+            magnitude = abs( signed_amount )
+            entries.append(
+                Entry(
+                    transaction = transaction,
+                    account = account,
+                    amount = magnitude,
+                    transaction_amount = magnitude,
+                    entry_direction = direction,
+                )
+            )
+            continue
+        self.post( transaction, entries )
+        return transaction
 
     # -- queries (pure in-memory) --------------------------------------------
 
@@ -119,6 +153,29 @@ class Ledger:
             result[ account ] = self.signed_balance( account, through = through )
             continue
         return result
+
+    # -- chart accessors -----------------------------------------------------
+
+    def holdings( self ) -> list[ Account ]:
+        """The asset holdings -- accounts carrying an asset_class. Valuation
+        companions (no asset_class) and all other accounts are excluded."""
+        return [ account for account in self._accounts.values() if account.asset_class is not None ]
+
+    def valuation_of( self, holding : Account ) -> Optional[ Account ]:
+        """The holding's valuation companion (its is_valuation child), or None."""
+        for account in self._accounts.values():
+            if ( account.parent_id == holding.pk ) and account.is_valuation:
+                return account
+            continue
+        return None
+
+    def system_account( self, role : SystemAccountRole ) -> Optional[ Account ]:
+        """The account bearing system role `role`, or None."""
+        for account in self._accounts.values():
+            if account.system_role == role:
+                return account
+            continue
+        return None
 
     # -- invariants ----------------------------------------------------------
 

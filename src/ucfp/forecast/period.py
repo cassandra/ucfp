@@ -19,7 +19,11 @@ The interval is computed in three phases (see data/design/projection-model.md):
 NOTE: top-level orchestration stub. Phase bodies (and the collaborator shapes they
 use) are deliberately unimplemented pending design refinement.
 """
+from datetime import timedelta
+
+from ucfp.accounts.enums import SystemAccountRole
 from ucfp.accounts.ledger import Ledger
+from ucfp.accounts.money_utils import quantize_money
 from ucfp.tax.engine import TaxEngine
 
 from .parameters import PeriodParameters
@@ -55,10 +59,44 @@ class Period:
         return
 
     def _apply_asset_returns( self, ledger : Ledger, result : PeriodResult ) -> None:
-        """Per asset account, apply its AssetClass behavior to `asset_rates`:
-        growth (unrealized appreciation -> valuation account + Unrealized Gains
-        equity, at period start) and distributions (dividend/interest -> Savings +
-        the income tax-class, at midpoint). Dispatches on AssetClass behavior."""
+        """Per-asset returns for the interval: growth (unrealized appreciation) and
+        distributions (dividend/interest income)."""
+        self._apply_growth( ledger, result )
+        self._apply_distributions( ledger, result )
+        return
+
+    def _apply_growth( self, ledger : Ledger, result : PeriodResult ) -> None:
+        """Accrue each holding's unrealized appreciation for the interval, on its
+        opening market value (cost + prior valuation), posted at period start as
+        DR valuation / CR Unrealized Gains so net worth (= equity) stays current."""
+        unrealized_gain_account = ledger.system_account( SystemAccountRole.UNREALIZED_GAINS )
+        opening_through = self._parameters.date_span.start_date - timedelta( days = 1 )
+        growth_date = self._parameters.date_span.start_date
+        for holding in ledger.holdings():
+            valuation_account = ledger.valuation_of( holding )
+            if valuation_account is None:
+                continue
+            rate = self._parameters.asset_rates.growth_rate( holding.asset_class )
+            opening_market = (
+                ledger.natural_balance( holding, through = opening_through )
+                + ledger.natural_balance( valuation_account, through = opening_through )
+            )
+            appreciation = quantize_money( rate.change_on( opening_market ) )
+            if appreciation == 0:
+                continue
+            ledger.record(
+                growth_date,
+                valuation_account.currency,
+                [ ( valuation_account, -appreciation ), ( unrealized_gain_account, appreciation ) ],
+            )
+            continue
+        return
+
+    def _apply_distributions( self, ledger : Ledger, result : PeriodResult ) -> None:
+        """Distributions (dividend/interest) -> Savings + the income tax-class.
+
+        NOTE: stub -- grounded after the income tax-class taxonomy + CASH routing.
+        """
         raise NotImplementedError
 
     def _recognize_income( self, ledger : Ledger, result : PeriodResult ) -> None:

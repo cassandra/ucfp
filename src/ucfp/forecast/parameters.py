@@ -13,8 +13,8 @@ data/design/projection-model.md, "PeriodParameters".
 """
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal
 
+from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.enums import AssetClass
 from ucfp.tax.engine import TaxContext
 
@@ -34,14 +34,14 @@ class AssetRates:
     (appreciation) rate and a distribution (dividend/interest) rate per class.
     A class absent from a map carries a zero rate."""
 
-    growth       : dict[ AssetClass, Decimal ] = field( default_factory = dict )
-    distribution : dict[ AssetClass, Decimal ] = field( default_factory = dict )
+    growth       : dict[ AssetClass, Rate ] = field( default_factory = dict )
+    distribution : dict[ AssetClass, Rate ] = field( default_factory = dict )
 
-    def growth_rate( self, asset_class : AssetClass ) -> Decimal:
-        return self.growth.get( asset_class, Decimal( '0' ) )
+    def growth_rate( self, asset_class : AssetClass ) -> Rate:
+        return self.growth.get( asset_class, ZERO_RATE )
 
-    def distribution_rate( self, asset_class : AssetClass ) -> Decimal:
-        return self.distribution.get( asset_class, Decimal( '0' ) )
+    def distribution_rate( self, asset_class : AssetClass ) -> Rate:
+        return self.distribution.get( asset_class, ZERO_RATE )
 
 
 class IncomeLine:
