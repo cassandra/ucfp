@@ -94,6 +94,8 @@ INSTALLED_APPS = [
     'user',
     'organization',
     'ucfp.accounts',
+    'ucfp.forecast',
+    'ucfp.tax',
     'ucfp.environment',
 ]
 
