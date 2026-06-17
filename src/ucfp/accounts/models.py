@@ -9,7 +9,7 @@ from common.models import BoundedDecimalField, TimestampedModel
 from organization.models import Organization
 
 from .constants import MONEY_DECIMAL_PLACES, MONEY_MAX_DIGITS
-from .enums import AccountType, CurrencyType, SideType, SystemAccountRole
+from .enums import AccountType, AssetClass, CurrencyType, SideType, SystemAccountRole
 from .exceptions import (
     AccountStructureError,
     EntryImmutableError,
@@ -113,6 +113,15 @@ class Account( TimestampedModel ):
         SystemAccountRole,
         verbose_name = 'System Role',
         default = None,
+    )
+    asset_class = NullableLabeledEnumField(
+        AssetClass,
+        verbose_name = 'Asset Class',
+        default = None,
+    )
+    is_valuation = models.BooleanField(
+        'Is Valuation',
+        default = False,
     )
     name = models.CharField(
         'Name',
@@ -233,6 +242,11 @@ class Account( TimestampedModel ):
                     'A child account must belong to the same organization as its parent.'
                 )
             self._assert_no_parent_cycle()
+        if self.asset_class is not None:
+            if self.is_root or self.effective_account_type != AccountType.ASSET:
+                raise AccountStructureError(
+                    'An asset_class may be set only on a non-root asset account.'
+                )
         return
 
     def _assert_no_parent_cycle( self ):

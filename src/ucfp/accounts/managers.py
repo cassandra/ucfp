@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
     from organization.models import Organization
 
-    from .enums import CurrencyType
+    from .enums import AssetClass, CurrencyType
     from .models import Account, Journal, Transaction
     from .schemas import CurrencyConverter, OpeningBalances, StartingBalance
 
@@ -43,15 +43,46 @@ class AccountManager( models.Manager ):
             )
             roots[ account_type ] = root
             continue
-        self.get_or_create(
-            organization = organization,
-            system_role = SystemAccountRole.OPENING_BALANCES,
-            defaults = {
-                'parent': roots[ AccountType.EQUITY ],
-                'name': SystemAccountRole.OPENING_BALANCES.label,
-            },
-        )
+        for system_role in ( SystemAccountRole.OPENING_BALANCES, SystemAccountRole.UNREALIZED_GAINS ):
+            self.get_or_create(
+                organization = organization,
+                system_role = system_role,
+                defaults = {
+                    'parent': roots[ AccountType.EQUITY ],
+                    'name': system_role.label,
+                },
+            )
+            continue
         return
+
+    @transaction.atomic
+    def create_holding( self,
+                        organization : 'Organization',
+                        parent       : 'Account',
+                        name         : str,
+                        asset_class  : 'AssetClass',
+                        currency     : 'CurrencyType' = None ) -> 'Account':
+        """Create an asset holding and, for classes that accrue unrealized gains,
+        its companion valuation child. Market value = holding cost + valuation; the
+        holding itself carries the cost basis."""
+        fields = {
+            'organization': organization,
+            'parent': parent,
+            'name': name,
+            'asset_class': asset_class,
+        }
+        if currency is not None:
+            fields[ 'currency' ] = currency
+        holding = self.create( **fields )
+        if asset_class.accrues_unrealized_gains:
+            self.create(
+                organization = organization,
+                parent = holding,
+                name = f'{name} (Valuation)',
+                currency = holding.currency,
+                is_valuation = True,
+            )
+        return holding
 
 
 class JournalManager( models.Manager ):

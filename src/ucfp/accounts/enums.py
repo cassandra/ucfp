@@ -75,3 +75,40 @@ class SystemAccountRole( LabeledEnum ):
     """
 
     OPENING_BALANCES = ( 'Opening Balances' , 'Equity counterpart for a Journal opening seed.' )
+    UNREALIZED_GAINS = ( 'Unrealized Gains' , 'Equity counterpart for unrealized appreciation.' )
+
+
+class AssetClass( LabeledEnum ):
+    """A behavior-equivalence class for asset accounts in projection.
+
+    Each class groups asset accounts the projection treats identically -- the same
+    growth, distribution, basis, and realization behavior. It is the dispatch key
+    for that behavior; the behavior itself lives in the projection layer, not here.
+    "Tax-free", "ordinary", etc. are *tax-treatment* classes a class maps into, a
+    separate taxonomy -- so Roth is its own behavior class, not a generic
+    tax-free bucket. Set on asset accounts only (see Account.asset_class).
+    """
+
+    CASH                  = ( 'Cash & Savings'          , 'Cash and savings; the income/expense hub.' )
+    STOCKS                = ( 'Stocks'                  , 'Growth equities; appreciation only.' )
+    DIVIDEND_STOCKS       = ( 'Dividend Stocks'         , 'Dividend equities, plus appreciation.' )
+    BONDS                 = ( 'Bonds'                   , 'Bonds paying interest, with appreciation.' )
+    CDS                   = ( 'CDs'                     , 'Certificates of deposit paying interest.' )
+    REAL_ESTATE_RESIDENCE = ( 'Real Estate (Residence)' , 'A primary residence held for appreciation.' )
+    REAL_ESTATE_RENTAL    = ( 'Real Estate (Rental)'    , 'Rental property: income and depreciation.' )
+    PRETAX_RETIREMENT     = ( 'Pre-Tax Retirement'      , 'IRA/401(k); withdrawals are ordinary income.' )
+    ROTH                  = ( 'Roth Retirement'         , 'Qualified withdrawals tax-free; no RMDs.' )
+    PRECIOUS_METALS       = ( 'Precious Metals'         , 'Gold, silver; taxed as collectibles.' )
+    COLLECTIBLES          = ( 'Collectibles'            , 'Art, jewelry and similar collectibles.' )
+    DEPRECIATING          = ( 'Depreciating Assets'     , 'Vehicles, boats; depreciate over time.' )
+
+    @property
+    def accrues_unrealized_gains( self ) -> bool:
+        """Whether this class accumulates unrealized gain/loss in a valuation
+        companion account, rather than being held at face value."""
+        return self not in _NON_APPRECIATING_ASSET_CLASSES
+
+
+# Cash-like classes carried at face value: their return is distributed as interest
+# income, not accrued as appreciation, so they have no valuation companion.
+_NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS ) )
