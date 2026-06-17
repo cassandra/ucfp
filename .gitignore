@@ -1,0 +1,43 @@
+*~
+.*
+*#
+*.a
+*.o
+*.class
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+*.tar.gz
+*.tgz
+*.aux
+*.bbl
+*.log
+*.blg
+*.zip
+*.Z
+
+/.private/
+/venv/
+/data/
+
+# Auto-generated from VS Code markdown preview
+/*.html
+/docs/**/*.html
+
+!.gitignore
+!.dockerignore
+
+!src/.flake8
+!src/.flake8-ci
+
+!.github/
+
+# .claude/ -- include agents/ and commands/, ignore runtime state
+# (settings.local.json, scheduled_tasks.lock, state/, etc.)
+!.claude/
+.claude/*
+!.claude/agents/
+!.claude/commands/
+
+/CLAUDE.md
