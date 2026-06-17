@@ -4,13 +4,6 @@ from .base import *
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# Opt-in multi-tenancy app. Kept out of base INSTALLED_APPS so it is genuinely
-# optional; installed here so its migrations and tests run in CI, while
-# staging/production carry no trace of it.
-INSTALLED_APPS += [
-    'organization',
-]
-
 # Scratch collectstatic target, namespaced by the package dir name (BASE_DIR.name)
 # so it follows the package rename and never collides with sibling projects.
 STATIC_ROOT = f'/tmp/{BASE_DIR.name}/static'
