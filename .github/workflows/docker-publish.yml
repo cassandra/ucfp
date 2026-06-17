@@ -44,7 +44,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/zzz-app
+          images: ghcr.io/${{ github.repository_owner }}/ucfp
           tags: |
             type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}

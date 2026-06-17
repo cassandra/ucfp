@@ -56,18 +56,18 @@ jobs:
       - name: Pull target rollback version
         run: |
           echo "Pulling version to rollback to: ${{ inputs.rollback_to_version }}"
-          docker pull ghcr.io/${{ github.repository_owner }}/zzz-app:${{ inputs.rollback_to_version }}
+          docker pull ghcr.io/${{ github.repository_owner }}/ucfp:${{ inputs.rollback_to_version }}
 
       - name: Re-tag as latest
         run: |
           echo "Re-tagging ${{ inputs.rollback_to_version }} as latest"
-          docker tag ghcr.io/${{ github.repository_owner }}/zzz-app:${{ inputs.rollback_to_version }} \
-                     ghcr.io/${{ github.repository_owner }}/zzz-app:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/ucfp:${{ inputs.rollback_to_version }} \
+                     ghcr.io/${{ github.repository_owner }}/ucfp:latest
 
       - name: Push updated latest tag
         run: |
           echo "Pushing updated latest tag"
-          docker push ghcr.io/${{ github.repository_owner }}/zzz-app:latest
+          docker push ghcr.io/${{ github.repository_owner }}/ucfp:latest
 
       - name: Update bad release notes
         uses: actions/github-script@v7
