@@ -21,5 +21,5 @@ jobs:
         run: |
           # git archive respects .gitignore; the version prefix makes it unzip
           # into a versioned directory. gh attaches it to the published release.
-          git archive --format=zip --prefix=zzz-app-${TAG}/ --output=zzz-app.zip HEAD
-          gh release upload "${TAG}" zzz-app.zip --clobber
+          git archive --format=zip --prefix=ucfp-${TAG}/ --output=ucfp.zip HEAD
+          gh release upload "${TAG}" ucfp.zip --clobber

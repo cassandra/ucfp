@@ -2,11 +2,14 @@
 Tests for custom Django model fields.
 """
 import logging
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.test import TestCase
 
 from common.labeled_enum import LabeledEnum, LabeledEnumField, NullableLabeledEnumField
+from common.models import BoundedDecimalField
 
 logging.disable(logging.CRITICAL)
 
@@ -162,3 +165,122 @@ class TestLabeledEnumField(TestCase):
         string_value = field.value_to_string(obj)
 
         self.assertEqual(string_value, 'third')
+
+
+class BoundedDecimalTestModel(models.Model):
+    """Test model exercising BoundedDecimalField bound variants."""
+    non_negative = BoundedDecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0'),
+    )
+    positive = BoundedDecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0'),
+        exclusive_min=True,
+    )
+    ranged = BoundedDecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('1'),
+        max_value=Decimal('5'),
+    )
+    capped = BoundedDecimalField(
+        max_digits=10,
+        decimal_places=2,
+        max_value=Decimal('5'),
+        exclusive_max=True,
+    )
+
+    class Meta:
+        app_label = 'common'
+        # Don't create database table
+        managed = False
+
+
+class TestBoundedDecimalField(TestCase):
+    """Test the BoundedDecimalField custom field."""
+
+    def _field(self, name):
+        return BoundedDecimalTestModel._meta.get_field(name)
+
+    def test_non_negative_allows_zero_and_positive(self):
+        """min_value=0 is inclusive: zero and positive values pass."""
+        field = self._field('non_negative')
+
+        field.run_validators(Decimal('0'))
+        field.run_validators(Decimal('123.45'))
+
+    def test_non_negative_rejects_negative(self):
+        """A value below the inclusive minimum is rejected."""
+        field = self._field('non_negative')
+
+        with self.assertRaises(ValidationError):
+            field.run_validators(Decimal('-0.01'))
+
+    def test_positive_rejects_zero(self):
+        """exclusive_min excludes the limit itself: zero is rejected."""
+        field = self._field('positive')
+
+        with self.assertRaises(ValidationError):
+            field.run_validators(Decimal('0'))
+
+    def test_positive_allows_smallest_increment(self):
+        """A value strictly above zero passes the exclusive minimum."""
+        field = self._field('positive')
+
+        field.run_validators(Decimal('0.01'))
+
+    def test_ranged_accepts_inclusive_bounds(self):
+        """Both endpoints of an inclusive range pass."""
+        field = self._field('ranged')
+
+        field.run_validators(Decimal('1'))
+        field.run_validators(Decimal('3'))
+        field.run_validators(Decimal('5'))
+
+    def test_ranged_rejects_below_and_above(self):
+        """Values outside the inclusive range are rejected on both ends."""
+        field = self._field('ranged')
+
+        with self.assertRaises(ValidationError):
+            field.run_validators(Decimal('0.99'))
+        with self.assertRaises(ValidationError):
+            field.run_validators(Decimal('5.01'))
+
+    def test_scale_violation_is_rejected(self):
+        """DecimalField's scale check still applies (no silent rounding)."""
+        field = self._field('non_negative')
+
+        with self.assertRaises(ValidationError):
+            field.run_validators(Decimal('1.234'))
+
+    def test_exclusive_max_rejects_the_limit(self):
+        """exclusive_max excludes the limit itself: the maximum is rejected."""
+        field = self._field('capped')
+
+        with self.assertRaises(ValidationError):
+            field.run_validators(Decimal('5'))
+
+    def test_exclusive_max_allows_below_limit(self):
+        """A value strictly below the maximum passes the exclusive bound."""
+        field = self._field('capped')
+
+        field.run_validators(Decimal('4.99'))
+
+    def test_deconstruct_round_trips_bounds(self):
+        """deconstruct() emits only the bounds that were set, for migrations."""
+        field = BoundedDecimalField(
+            max_digits=10,
+            decimal_places=2,
+            min_value=Decimal('0'),
+            exclusive_min=True,
+        )
+
+        _name, _path, _args, kwargs = field.deconstruct()
+
+        self.assertEqual(kwargs['min_value'], Decimal('0'))
+        self.assertTrue(kwargs['exclusive_min'])
+        self.assertNotIn('max_value', kwargs)
+        self.assertNotIn('exclusive_max', kwargs)

@@ -4,13 +4,6 @@ from .base import *
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# Opt-in multi-tenancy app. Kept out of base INSTALLED_APPS so it is genuinely
-# optional; installed here so it migrates and its tests run, while
-# staging/production carry no trace of it.
-INSTALLED_APPS += [
-    'organization',
-]
-
 # Development/DEBUG-only testing hub (the /testing UI + devtools auto-discovery).
 # Kept out of base INSTALLED_APPS so production carries no trace of it; its URLs
 # are likewise mounted only under `if settings.DEBUG` (see ucfp/urls.py).

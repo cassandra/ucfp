@@ -92,6 +92,8 @@ INSTALLED_APPS = [
     'common',
     'notify',
     'user',
+    'organization',
+    'ucfp.accounts',
     'ucfp.environment',
 ]
 
