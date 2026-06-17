@@ -12,7 +12,7 @@ at a time (each needs enums not yet built). See
 data/design/projection-model.md, "PeriodParameters".
 """
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.enums import AssetClass
@@ -26,6 +26,17 @@ class DateSpan:
 
     start_date : date
     end_date   : date
+
+    @property
+    def day_before_start( self ) -> date:
+        """The day immediately before the span -- the point through which opening
+        balances are read (the prior period's close)."""
+        return self.start_date - timedelta( days = 1 )
+
+    @property
+    def midpoint( self ) -> date:
+        """The span's midpoint date; events default here (the mid-period convention)."""
+        return self.start_date + timedelta( days = ( self.end_date - self.start_date ).days // 2 )
 
 
 @dataclass( frozen = True )

@@ -16,7 +16,14 @@ from datetime import date
 from decimal import Decimal
 from typing import Iterable, Optional
 
-from .enums import AccountType, CurrencyType, SideType, SystemAccountRole
+from .enums import (
+    AccountType,
+    AssetClass,
+    CurrencyType,
+    IncomeTaxClass,
+    SideType,
+    SystemAccountRole,
+)
 from .exceptions import TransactionImbalanceError
 from .models import Account, Entry, Journal, Transaction
 
@@ -173,6 +180,32 @@ class Ledger:
         """The account bearing system role `role`, or None."""
         for account in self._accounts.values():
             if account.system_role == role:
+                return account
+            continue
+        return None
+
+    def market_value( self, account : Account, *, through : Optional[ date ] = None ) -> Decimal:
+        """An account's market value: its own natural balance plus its valuation
+        companion's, if any (cost + accumulated appreciation)."""
+        total = self.natural_balance( account, through = through )
+        valuation_account = self.valuation_of( account )
+        if valuation_account is not None:
+            total += self.natural_balance( valuation_account, through = through )
+        return total
+
+    def cash_account( self ) -> Optional[ Account ]:
+        """The cash hub: the first asset account classed CASH (multiple cash
+        accounts are not yet supported), or None."""
+        for account in self._accounts.values():
+            if account.asset_class == AssetClass.CASH:
+                return account
+            continue
+        return None
+
+    def income_account( self, income_tax_class : IncomeTaxClass ) -> Optional[ Account ]:
+        """The first revenue account with `income_tax_class`, or None."""
+        for account in self._accounts.values():
+            if account.income_tax_class == income_tax_class:
                 return account
             continue
         return None
