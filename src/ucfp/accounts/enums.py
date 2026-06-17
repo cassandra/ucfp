@@ -108,7 +108,48 @@ class AssetClass( LabeledEnum ):
         companion account, rather than being held at face value."""
         return self not in _NON_APPRECIATING_ASSET_CLASSES
 
+    @property
+    def distribution_income_class( self ):
+        """The income tax-class a yield distribution (dividend/interest) credits,
+        or None for classes that distribute no yield. Rental income is amount-based
+        (not a yield) and is supplied separately, so rental is not included here."""
+        return _DISTRIBUTION_INCOME_CLASS.get( self )
+
 
 # Cash-like classes carried at face value: their return is distributed as interest
 # income, not accrued as appreciation, so they have no valuation companion.
 _NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS ) )
+
+
+class IncomeTaxClass( LabeledEnum ):
+    """A tax-treatment class for revenue (income) accounts.
+
+    Groups income a tax engine treats identically -- the same rate, netting, and
+    inclusion rules. It is the chart's identity for income; how each class is rated
+    and netted lives inside a TaxEngine's parameters, not here. Set on revenue
+    accounts only (see Account.income_tax_class). US-oriented for now; another
+    jurisdiction's engine maps these to its own rules.
+    """
+
+    WAGES               = ( 'Wages', 'Earned income; ordinary rate, plus FICA.' )
+    ORDINARY            = ( 'Ordinary Income', 'Ordinary-rate income (pension, interest, IRA).' )
+    QUALIFIED_DIVIDENDS = ( 'Qualified Dividends', 'Preferential rate; not netted with losses.' )
+    LONG_TERM_GAINS     = ( 'Long-Term Gains', 'Preferential rate; netted with losses.' )
+    SHORT_TERM_GAINS    = ( 'Short-Term Gains', 'Ordinary rate; netted separately.' )
+    SECTION_1250_GAIN   = ( 'Section 1250 Gain', 'Unrecaptured depreciation; 25% max rate.' )
+    COLLECTIBLES_GAINS  = ( 'Collectibles Gains', 'Collectibles; 28% max rate.' )
+    SOCIAL_SECURITY     = ( 'Social Security', 'Benefits; partial-inclusion rule.' )
+    GROSS_RENTAL        = ( 'Gross Rental', 'Gross rents; netted with expenses in-period.' )
+    TAX_FREE            = ( 'Tax-Free', 'Excluded from tax everywhere (Roth).' )
+    TAX_EXEMPT_INTEREST = ( 'Tax-Exempt Interest', 'Untaxed, but counts in SS/ACA MAGI (muni).' )
+
+
+# The income tax-class each distributing asset class credits with its yield
+# (dividends/interest). Classes absent here distribute no yield; rental income is
+# amount-based and supplied separately, so rental is not listed.
+_DISTRIBUTION_INCOME_CLASS = {
+    AssetClass.CASH            : IncomeTaxClass.ORDINARY,
+    AssetClass.BONDS           : IncomeTaxClass.ORDINARY,
+    AssetClass.CDS             : IncomeTaxClass.ORDINARY,
+    AssetClass.DIVIDEND_STOCKS : IncomeTaxClass.QUALIFIED_DIVIDENDS,
+}

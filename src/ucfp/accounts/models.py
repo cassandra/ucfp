@@ -9,7 +9,14 @@ from common.models import BoundedDecimalField, TimestampedModel
 from organization.models import Organization
 
 from .constants import MONEY_DECIMAL_PLACES, MONEY_MAX_DIGITS
-from .enums import AccountType, AssetClass, CurrencyType, SideType, SystemAccountRole
+from .enums import (
+    AccountType,
+    AssetClass,
+    CurrencyType,
+    IncomeTaxClass,
+    SideType,
+    SystemAccountRole,
+)
 from .exceptions import (
     AccountStructureError,
     EntryImmutableError,
@@ -122,6 +129,11 @@ class Account( TimestampedModel ):
     is_valuation = models.BooleanField(
         'Is Valuation',
         default = False,
+    )
+    income_tax_class = NullableLabeledEnumField(
+        IncomeTaxClass,
+        verbose_name = 'Income Tax Class',
+        default = None,
     )
     name = models.CharField(
         'Name',
@@ -246,6 +258,11 @@ class Account( TimestampedModel ):
             if self.is_root or self.effective_account_type != AccountType.ASSET:
                 raise AccountStructureError(
                     'An asset_class may be set only on a non-root asset account.'
+                )
+        if self.income_tax_class is not None:
+            if self.is_root or self.effective_account_type != AccountType.REVENUE:
+                raise AccountStructureError(
+                    'An income_tax_class may be set only on a non-root revenue account.'
                 )
         return
 

@@ -12,6 +12,7 @@ class AccountAdmin( admin.ModelAdmin ):
         'organization',
         'account_type',
         'asset_class',
+        'income_tax_class',
         'parent',
         'currency',
         'closed',
@@ -20,6 +21,7 @@ class AccountAdmin( admin.ModelAdmin ):
     list_filter = (
         'account_type',
         'asset_class',
+        'income_tax_class',
         'closed',
     )
     search_fields = (
