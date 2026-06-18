@@ -18,7 +18,7 @@ from decimal import Decimal
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.accounts.models import Account
-from ucfp.tax.engine import TaxContext
+from ucfp.tax.us.context import TaxContext
 
 from .events import PeriodEvent
 
