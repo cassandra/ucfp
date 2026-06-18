@@ -16,15 +16,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Iterable, Optional
 
-from .enums import (
-    AccountType,
-    AssetClass,
-    CurrencyType,
-    ExpenseTaxClass,
-    IncomeTaxClass,
-    SideType,
-    SystemAccountRole,
-)
+from .enums import AccountType, CurrencyType, SideType
 from .exceptions import TransactionImbalanceError
 from .models import Account, Entry, Journal, Transaction
 
@@ -162,62 +154,19 @@ class Ledger:
             continue
         return result
 
-    # -- chart accessors -----------------------------------------------------
+    # -- chart access --------------------------------------------------------
 
-    def holdings( self ) -> list[ Account ]:
-        """The asset holdings -- accounts carrying an asset_class. Valuation
-        companions (no asset_class) and all other accounts are excluded."""
-        return [ account for account in self._accounts.values() if account.asset_class is not None ]
-
-    def valuation_of( self, holding : Account ) -> Optional[ Account ]:
-        """The holding's valuation companion (its is_valuation child), or None."""
-        for account in self._accounts.values():
-            if ( account.parent_id == holding.pk ) and account.is_valuation:
-                return account
-            continue
-        return None
-
-    def system_account( self, role : SystemAccountRole ) -> Optional[ Account ]:
-        """The account bearing system role `role`, or None."""
-        for account in self._accounts.values():
-            if account.system_role == role:
-                return account
-            continue
-        return None
-
-    def market_value( self, account : Account, *, through : Optional[ date ] = None ) -> Decimal:
-        """An account's market value: its own natural balance plus its valuation
-        companion's, if any (cost + accumulated appreciation)."""
-        total = self.natural_balance( account, through = through )
-        valuation_account = self.valuation_of( account )
-        if valuation_account is not None:
-            total += self.natural_balance( valuation_account, through = through )
-        return total
-
-    def cash_account( self ) -> Optional[ Account ]:
-        """The cash hub: the first asset account classed CASH (multiple cash
-        accounts are not yet supported), or None."""
-        for account in self._accounts.values():
-            if account.asset_class == AssetClass.CASH:
-                return account
-            continue
-        return None
-
-    def income_account( self, income_tax_class : IncomeTaxClass ) -> Optional[ Account ]:
-        """The first revenue account with `income_tax_class`, or None."""
-        for account in self._accounts.values():
-            if account.income_tax_class == income_tax_class:
-                return account
-            continue
-        return None
-
-    def expense_account( self, expense_tax_class : ExpenseTaxClass ) -> Optional[ Account ]:
-        """The first expense account with `expense_tax_class`, or None."""
-        for account in self._accounts.values():
-            if account.expense_tax_class == expense_tax_class:
-                return account
-            continue
-        return None
+    def accounts( self, *, account_type : Optional[ AccountType ] = None ) -> list[ Account ]:
+        """All chart accounts held, optionally filtered to one effective
+        account_type. The generic accessor that projection-layer chart navigation
+        (forecast/chart.py) builds on -- the Ledger itself stays free of
+        projection-specific conventions (cash hub, valuation companions, etc.)."""
+        if account_type is None:
+            return list( self._accounts.values() )
+        return [
+            account for account in self._accounts.values()
+            if self._effective_type( account ) == account_type
+        ]
 
     # -- invariants ----------------------------------------------------------
 

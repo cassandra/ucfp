@@ -24,6 +24,7 @@ from ucfp.accounts.ledger import Ledger
 from ucfp.accounts.money_utils import quantize_money
 from ucfp.tax.engine import TaxEngine
 
+from . import chart
 from .exceptions import MissingAccountError
 from .parameters import PeriodParameters
 from .results import PeriodResult
@@ -69,19 +70,19 @@ class Period:
         interval, on its opening market value (cost + prior valuation), posted at
         period start as DR valuation / CR Unrealized Gains so net worth (= equity)
         stays current."""
-        unrealized_gain_account = ledger.system_account( SystemAccountRole.UNREALIZED_GAINS )
+        unrealized_gain_account = chart.system_account( ledger, SystemAccountRole.UNREALIZED_GAINS )
         opening_through = self._parameters.date_span.day_before_start
         growth_date = self._parameters.date_span.start_date
-        for holding in ledger.holdings():
+        for holding in chart.holdings( ledger ):
             if not holding.asset_class.accrues_unrealized_gains:
                 continue
-            valuation_account = ledger.valuation_of( holding )
+            valuation_account = chart.valuation_of( ledger, holding )
             if valuation_account is None:
                 raise MissingAccountError(
                     f'Appreciating holding "{holding}" has no valuation account.'
                 )
             rate = self._parameters.asset_rates.growth_rate( holding.asset_class )
-            opening_market = ledger.market_value( holding, through = opening_through )
+            opening_market = chart.market_value( ledger, holding, through = opening_through )
             appreciation = quantize_money( rate.change_on( opening_market ) )
             if appreciation == 0:
                 continue
@@ -99,21 +100,21 @@ class Period:
         """Post each distributing holding's yield (dividend/interest) for the
         interval, at the midpoint: DR the cash hub / CR the income tax-class
         account -- landing the cash in savings and recognizing the income."""
-        cash_account = ledger.cash_account()
+        cash_account = chart.cash_account( ledger )
         opening_through = self._parameters.date_span.day_before_start
         distribution_date = self._parameters.date_span.midpoint
-        for holding in ledger.holdings():
+        for holding in chart.holdings( ledger ):
             income_class = holding.asset_class.distribution_income_class
             if income_class is None:
                 continue
             rate = self._parameters.asset_rates.distribution_rate( holding.asset_class )
-            opening_value = ledger.market_value( holding, through = opening_through )
+            opening_value = chart.market_value( ledger, holding, through = opening_through )
             distribution = quantize_money( rate.change_on( opening_value ) )
             if distribution == 0:
                 continue
             if cash_account is None:
                 raise MissingAccountError( 'No cash account to receive distributions.' )
-            income_account = ledger.income_account( income_class )
+            income_account = chart.income_account( ledger, income_class )
             if income_account is None:
                 raise MissingAccountError(
                     f'No revenue account for income tax-class {income_class.label}.'
@@ -129,7 +130,7 @@ class Period:
     def _recognize_income( self, ledger : Ledger, result : PeriodResult ) -> None:
         """Post the resolved `income_lines` (salary/pension/SS) at the midpoint:
         DR the cash hub / CR the line's income tax-class account."""
-        cash_account = ledger.cash_account()
+        cash_account = chart.cash_account( ledger )
         income_date = self._parameters.date_span.midpoint
         for income_line in self._parameters.income_lines:
             amount = quantize_money( income_line.gross_amount )
@@ -137,7 +138,7 @@ class Period:
                 continue
             if cash_account is None:
                 raise MissingAccountError( 'No cash account to receive income.' )
-            income_account = ledger.income_account( income_line.income_tax_class )
+            income_account = chart.income_account( ledger, income_line.income_tax_class )
             if income_account is None:
                 raise MissingAccountError(
                     f'No revenue account for income tax-class {income_line.income_tax_class.label}.'
@@ -155,7 +156,7 @@ class Period:
         its interest expense account, scheduled + extra principal to the loan, all
         from the cash hub. The Scenario resolves the breakdown; cash shortfalls are
         the funding step's concern, not here."""
-        cash_account = ledger.cash_account()
+        cash_account = chart.cash_account( ledger )
         payment_date = self._parameters.date_span.midpoint
         for term in self._parameters.liability_terms:
             interest = quantize_money( term.interest )
@@ -180,7 +181,7 @@ class Period:
     def _apply_expenses( self, ledger : Ledger, result : PeriodResult ) -> None:
         """Post the resolved per-class `expense_lines` at the midpoint: DR the
         expense tax-class account / CR the cash hub."""
-        cash_account = ledger.cash_account()
+        cash_account = chart.cash_account( ledger )
         expense_date = self._parameters.date_span.midpoint
         for expense_line in self._parameters.expense_lines:
             amount = quantize_money( expense_line.amount )
@@ -188,7 +189,7 @@ class Period:
                 continue
             if cash_account is None:
                 raise MissingAccountError( 'No cash account to pay expenses from.' )
-            expense_account = ledger.expense_account( expense_line.expense_tax_class )
+            expense_account = chart.expense_account( ledger, expense_line.expense_tax_class )
             if expense_account is None:
                 raise MissingAccountError(
                     f'No expense account for expense tax-class {expense_line.expense_tax_class.label}.'
