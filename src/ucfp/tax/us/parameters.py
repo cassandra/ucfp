@@ -21,8 +21,12 @@ from .enums import FilingStatus
 
 @dataclass( frozen = True )
 class StandardDeduction:
-    """Standard deduction: a base plus per-subject age-65 and senior bonuses. The
-    senior bonus phases out linearly across [phaseout_start, phaseout_end] of AGI."""
+    """Standard deduction: a base plus a per-qualifying-subject age-65 bonus and
+    senior bonus (each added once for every subject who is 65+, so MFJ with both
+    spouses 65+ gets two of each). The age-65 bonus is the traditional additional
+    standard deduction; the senior bonus is the newer senior deduction, which phases
+    out linearly across [phaseout_start, phaseout_end] of AGI (the age-65 bonus does
+    not phase out)."""
 
     base           : Decimal
     age_65_bonus   : Decimal
@@ -90,9 +94,9 @@ def federal_2025() -> TaxParameters:
         },
         standard_deduction = {
             FilingStatus.MARRIED_JOINT : StandardDeduction(
-                d( '31500' ), d( '3200' ), d( '12000' ), d( '150000' ), d( '250000' ) ),
+                d( '31500' ), d( '1600' ), d( '6000' ), d( '150000' ), d( '250000' ) ),
             FilingStatus.SINGLE : StandardDeduction(
-                d( '15750' ), d( '1600' ), d( '6000' ), d( '150000' ), d( '250000' ) ),
+                d( '15750' ), d( '2000' ), d( '6000' ), d( '150000' ), d( '250000' ) ),
         },
         ss_thresholds = {
             FilingStatus.MARRIED_JOINT : SocialSecurityThresholds( d( '32000' ), d( '44000' ) ),

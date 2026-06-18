@@ -26,6 +26,7 @@ from ucfp.tax.engine import TaxEngine
 
 from . import chart
 from .exceptions import MissingAccountError
+from .fiscal_window import FiscalWindow
 from .parameters import PeriodParameters
 from .results import Notice, PeriodResult
 
@@ -223,8 +224,15 @@ class Period:
 
     def _settle_tax( self, ledger : Ledger, result : PeriodResult ) -> None:
         """Assess the period's tax via the pluggable engine and book each charge as
-        a tax expense drawn from the cash hub. (The zero-tax engine yields none.)"""
-        assessment = self._tax_engine.assess( ledger, self._parameters.tax_context, None )
+        a tax expense drawn from the cash hub. (The zero-tax engine yields none.)
+
+        The engine assesses against a fiscal-year `FiscalWindow`, not the period's
+        own slice -- income tax is an annual computation. For an annual period the
+        window is the period's span; once the Scenario drives sub-annual cadences it
+        will gate settlement to the year-close period and supply the full-year span."""
+        fiscal_window = FiscalWindow( ledger, self._parameters.date_span )
+        assessment = self._tax_engine.assess(
+            fiscal_window, self._parameters.tax_context, None )
         if not assessment.charges:
             return
         cash_account = chart.cash_account( ledger )
