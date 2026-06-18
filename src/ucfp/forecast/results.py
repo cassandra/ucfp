@@ -22,10 +22,10 @@ class PeriodResult:
     hit, and the engine's closing tax state to thread into the next fiscal year. The
     generated transactions live in the Ledger the Period posted to.
 
-    `closing_tax_state` is the tax engine's updated carryforwards (opaque here); it
-    is None when no engine settled this period -- the Forecast carries the prior
-    opening state forward unchanged in that case."""
+    `closing_tax_state` is the tax engine's updated carryforwards, opaque here (its
+    concrete type is the engine's, e.g. the US `TaxState`); None when no engine settled
+    this period -- the Forecast carries the prior opening state forward unchanged then."""
 
-    notices           : list = field( default_factory = list )   # list[ Notice ]
+    notices           : list[ Notice ] = field( default_factory = list )
     is_depleted       : bool = False
     closing_tax_state : object = None

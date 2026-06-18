@@ -244,8 +244,8 @@ class Period:
             fiscal_window, self._parameters.tax_context, self._opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
         settlements = (
-            [ ( expense_class, amount ) for expense_class, amount in assessment.charges ]
-            + [ ( expense_class, -amount ) for expense_class, amount in assessment.credits ] )
+            [ ( charge.tax_class, charge.amount ) for charge in assessment.charges ]
+            + [ ( credit.tax_class, -credit.amount ) for credit in assessment.credits ] )
         if not settlements:
             return
         cash_account = chart.cash_account( ledger )

@@ -9,24 +9,45 @@ neutral. The `tax_context` and `tax_state` passed through `assess` are therefore
 engine-specific and opaque here.
 """
 from dataclasses import dataclass, field
+from decimal import Decimal
+
+from ucfp.accounts.enums import ExpenseTaxClass
+
+
+@dataclass( frozen = True )
+class TaxCharge:
+    """A tax to pay: an amount attributed to an expense tax-class, which the Period
+    posts as a tax expense drawn from cash."""
+
+    tax_class : ExpenseTaxClass
+    amount    : Decimal
+
+
+@dataclass( frozen = True )
+class TaxCredit:
+    """A refundable credit the Period books against `tax_class` (e.g. the ACA premium
+    tax credit against income tax) -- the reverse of a charge, refundable so a credit
+    beyond the matching tax yields a net refund."""
+
+    tax_class : ExpenseTaxClass
+    amount    : Decimal
 
 
 @dataclass( frozen = True )
 class TaxAssessment:
-    """The result of `TaxEngine.assess`: the charges to book -- each an
-    `(ExpenseTaxClass, amount)` the Period posts as a tax expense -- and
-    `closing_tax_state`, the engine's updated threaded tax state (opaque to the
-    Period) to carry forward as the next fiscal year's `opening_tax_state`. It is
-    None for engines that thread no state. `figures` holds engine-specific derived
-    figures (e.g. AGI/MAGI) for downstream consumers, also opaque to the Period.
-    `credits` are refundable credits -- each an `(ExpenseTaxClass, amount)` the Period
-    books against that tax (e.g. the ACA premium tax credit against income tax),
-    refundable so the net settlement may be a refund."""
+    """The result of `TaxEngine.assess`: the `charges` to book and refundable `credits`
+    to apply, plus `closing_tax_state` -- the engine's updated threaded tax state to
+    carry forward as the next fiscal year's `opening_tax_state` (None for engines that
+    thread no state) -- and `figures`, engine-specific derived figures (e.g. AGI/MAGI)
+    for downstream consumers. `closing_tax_state` and `figures` are opaque to the Period
+    and to this neutral module: their concrete types (e.g. the US `TaxState` /
+    `TaxFigures`) live in the country package, so they are typed `object` here to keep
+    the agnostic layer from depending on a specific jurisdiction."""
 
-    charges           : list = field( default_factory = list )
+    charges           : list[ TaxCharge ] = field( default_factory = list )
+    credits           : list[ TaxCredit ] = field( default_factory = list )
     closing_tax_state : object = None
     figures           : object = None
-    credits           : list = field( default_factory = list )
 
 
 class TaxEngine:

@@ -43,7 +43,7 @@ from decimal import Decimal
 from typing import NamedTuple
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
-from ucfp.tax.engine import TaxAssessment, TaxEngine
+from ucfp.tax.engine import TaxAssessment, TaxCharge, TaxCredit, TaxEngine
 
 from .context import TaxContext
 from .depreciation import accumulated_depreciation, period_depreciation
@@ -79,6 +79,15 @@ class _TaxableSplit( NamedTuple ):
     collectibles : Decimal
 
 
+class _PropertySaleAdjustments( NamedTuple ):
+    """The gain adjustments from a year's property sales: the §121 residence-gain
+    exclusion (reduces long-term gains) and the §1250 depreciation recapture (adds to
+    the 25% bucket)."""
+
+    residence_exclusion    : Decimal
+    depreciation_recapture : Decimal
+
+
 class USFederalTaxEngine( TaxEngine ):
     """Assesses US federal income tax for one fiscal year against the parameters it
     is constructed with."""
@@ -100,10 +109,10 @@ class USFederalTaxEngine( TaxEngine ):
         # Property sales adjust the gains the ledger posted: §121 excludes residence
         # gain from long-term gains; §1250 adds rental depreciation recapture to the
         # 25% bucket (the book gain stays in long-term gains).
-        residence_exclusion, depreciation_recapture = self._property_sale_adjustments(
-            tax_context, status )
-        long_term_gains   = fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS ) - residence_exclusion
-        section_1250_gain = fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN ) + depreciation_recapture
+        sales = self._property_sale_adjustments( tax_context, status )
+        long_term_gains   = fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS ) - sales.residence_exclusion
+        section_1250_gain = (
+            fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN ) + sales.depreciation_recapture )
 
         net_short = fiscal_window.income( IncomeTaxClass.SHORT_TERM_GAINS ) - carryover.short
         net_long  = long_term_gains - carryover.long
@@ -148,19 +157,19 @@ class USFederalTaxEngine( TaxEngine ):
         payroll_tax = self._payroll_tax( status, fiscal_window )
         premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.aca )
 
-        charges = [ ( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
+        charges = [ TaxCharge( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
         if payroll_tax > 0:
-            charges.append( ( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ) )
+            charges.append( TaxCharge( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ) )
         if niit > 0:
-            charges.append( ( ExpenseTaxClass.NIIT, niit ) )
+            charges.append( TaxCharge( ExpenseTaxClass.NIIT, niit ) )
         credits = []
         if premium_credit > 0:
-            credits.append( ( ExpenseTaxClass.INCOME_TAX, premium_credit ) )
+            credits.append( TaxCredit( ExpenseTaxClass.INCOME_TAX, premium_credit ) )
         return TaxAssessment(
             charges           = charges,
+            credits           = credits,
             closing_tax_state = TaxState( capital_loss_carryover = netted.carryover ),
             figures           = figures,
-            credits           = credits,
         )
 
     def _net_capital_gains( self, net_short : Decimal, net_long : Decimal ) -> _NetCapital:
@@ -194,7 +203,8 @@ class USFederalTaxEngine( TaxEngine ):
         )
         return _NetCapital( _ZERO, _ZERO, offset, carryover )
 
-    def _property_sale_adjustments( self, tax_context : TaxContext, status ):
+    def _property_sale_adjustments(
+            self, tax_context : TaxContext, status ) -> _PropertySaleAdjustments:
         """From the year's property dispositions: the total §121 residence-gain
         exclusion (reduces long-term gains) and the total §1250 depreciation recapture
         (adds to the 25% bucket). Recapture = min(accumulated depreciation, the total
@@ -218,7 +228,7 @@ class USFederalTaxEngine( TaxEngine ):
                 recapture += min(
                     accumulated, max( _ZERO, disposition.book_gain + accumulated ) )
             continue
-        return exclusion, recapture
+        return _PropertySaleAdjustments( exclusion, recapture )
 
     def _rental_net_income( self, fiscal_window, tax_context : TaxContext ) -> Decimal:
         """Net taxable rental income: gross rents minus operating expenses minus

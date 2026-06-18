@@ -66,7 +66,7 @@ class FICARules:
     ss_rate                        : Decimal
     medicare_rate                  : Decimal
     additional_medicare_rate       : Decimal
-    additional_medicare_thresholds : dict
+    additional_medicare_thresholds : dict[ FilingStatus, Decimal ]
 
 
 @dataclass( frozen = True )
@@ -93,16 +93,16 @@ class TaxParameters:
     """One tax year's US federal parameters, keyed by FilingStatus where they
     differ. Projectable per year by the Scenario."""
 
-    ordinary_brackets       : dict
-    ltcg_brackets           : dict
-    standard_deduction      : dict
-    ss_thresholds           : dict
+    ordinary_brackets       : dict[ FilingStatus, BracketTable ]
+    ltcg_brackets           : dict[ FilingStatus, BracketTable ]
+    standard_deduction      : dict[ FilingStatus, StandardDeduction ]
+    ss_thresholds           : dict[ FilingStatus, SocialSecurityThresholds ]
     itemized_rules          : ItemizedRules
     capital_loss_offset_cap : Decimal
-    section_121_exclusion   : dict
+    section_121_exclusion   : dict[ FilingStatus, Decimal ]
     section_1250_rate       : Decimal
     collectibles_rate       : Decimal
-    niit_thresholds         : dict
+    niit_thresholds         : dict[ FilingStatus, Decimal ]
     niit_rate               : Decimal
     fica_rules              : FICARules
     aca                     : AcaParameters
