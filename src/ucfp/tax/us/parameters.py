@@ -46,6 +46,17 @@ class SocialSecurityThresholds:
 
 
 @dataclass( frozen = True )
+class ItemizedRules:
+    """Floors and caps applied when totalling itemized deductions: the medical-
+    expense AGI floor (only the excess is deductible), the SALT cap (state/local
+    income + property tax), and the charitable AGI ceiling (cash-gift limit)."""
+
+    medical_floor_rate   : Decimal
+    salt_cap             : Decimal
+    charitable_agi_limit : Decimal
+
+
+@dataclass( frozen = True )
 class TaxParameters:
     """One tax year's US federal parameters, keyed by FilingStatus where they
     differ. Projectable per year by the Scenario."""
@@ -54,6 +65,7 @@ class TaxParameters:
     ltcg_brackets           : dict
     standard_deduction      : dict
     ss_thresholds           : dict
+    itemized_rules          : ItemizedRules
     capital_loss_offset_cap : Decimal
     niit_thresholds         : dict
     niit_rate               : Decimal
@@ -105,6 +117,13 @@ def federal_2025() -> TaxParameters:
             FilingStatus.MARRIED_JOINT : SocialSecurityThresholds( d( '32000' ), d( '44000' ) ),
             FilingStatus.SINGLE : SocialSecurityThresholds( d( '25000' ), d( '34000' ) ),
         },
+        # SALT cap is the canonical $10,000; the temporary OBBBA $40,000 cap (with its
+        # high-income phasedown) is a refinement to set here when wanted.
+        itemized_rules = ItemizedRules(
+            medical_floor_rate   = d( '0.075' ),
+            salt_cap             = d( '10000' ),
+            charitable_agi_limit = d( '0.60' ),
+        ),
         capital_loss_offset_cap = d( '3000' ),
         niit_thresholds = {
             FilingStatus.MARRIED_JOINT : d( '250000' ),

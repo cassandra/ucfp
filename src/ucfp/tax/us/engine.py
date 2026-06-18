@@ -9,19 +9,19 @@ what-if such as a rate hike).
 
 Pipeline (strict DAG): capital-gains netting (short vs long, with the prior year's
 loss carryover applied first, character-preserving) -> Social-Security taxability
-worksheet -> AGI -> standard deduction -> split taxable income into ordinary vs
-preferential -> ordinary brackets with the preferential (qualified-dividend /
-long-term-gain) amount stacked on top -> the 3.8% net investment income tax (NIIT)
--> total -> charges, plus the loss carryover to thread forward. The preferential
-stack is `ltcg.tax_on(ordinary + preferential) - ltcg.tax_on(ordinary)`, which spans
-LTCG rate boundaries correctly.
+worksheet -> AGI -> the greater of the standard and itemized deductions -> split
+taxable income into ordinary vs preferential -> ordinary brackets with the
+preferential (qualified-dividend / long-term-gain) amount stacked on top -> the 3.8%
+net investment income tax (NIIT) -> total -> charges, plus the loss carryover to
+thread forward. The preferential stack is `ltcg.tax_on(ordinary + preferential) -
+ltcg.tax_on(ordinary)`, which spans LTCG rate boundaries correctly.
 
 DEFERRED (added as later stages land, none of which change this contract): the 25%
 (§1250) and 28% (collectibles) special rates; MAGI distinct from AGI (the foreign-
 earned-income add-back for NIIT, the tax-exempt-interest / untaxed-SS add-backs for
-ACA); itemized deductions; FICA on wages; the ACA premium tax credit; rental income
-(gross netted with expenses), which also belongs in net investment income. Until
-then, AGI stands in for MAGI and the deduction is the standard deduction.
+ACA); the mortgage acquisition-debt limit and the charitable 5-year carryover; FICA
+on wages; the ACA premium tax credit; rental income (gross netted with expenses),
+which also belongs in net investment income. Until then, AGI stands in for MAGI.
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -77,7 +77,9 @@ class USFederalTaxEngine( TaxEngine ):
         taxable_ss = self._taxable_social_security(
             status, ss_gross, ordinary_income + preferential_income )
         agi        = ordinary_income + preferential_income + taxable_ss
-        deduction  = self._standard_deduction( status, tax_context, agi )
+        deduction  = max(
+            self._standard_deduction( status, tax_context, agi ),
+            self._itemized_deduction( fiscal_window, agi ) )
 
         taxable_income     = max( _ZERO, agi - deduction )
         preferential_taxed = min( preferential_income, taxable_income )
@@ -156,6 +158,22 @@ class USFederalTaxEngine( TaxEngine ):
         deduction = standard.base + standard.age_65_bonus * seniors
         deduction += standard.senior_bonus * seniors * self._senior_phaseout_factor( standard, agi )
         return deduction
+
+    def _itemized_deduction( self, fiscal_window, agi : Decimal ) -> Decimal:
+        """Total itemized deductions: medical above the AGI floor, SALT up to its
+        cap, mortgage interest, and charitable gifts up to the AGI ceiling. The
+        mortgage acquisition-debt limit and the charitable 5-year carryover of the
+        excess are deferred (rare for the planning cases, and the carryover would
+        join TaxState)."""
+        rules   = self._parameters.itemized_rules
+        medical = max(
+            _ZERO,
+            fiscal_window.expense( ExpenseTaxClass.MEDICAL ) - rules.medical_floor_rate * agi )
+        salt       = min( fiscal_window.expense( ExpenseTaxClass.SALT ), rules.salt_cap )
+        mortgage   = fiscal_window.expense( ExpenseTaxClass.MORTGAGE_INTEREST )
+        charitable = min( fiscal_window.expense( ExpenseTaxClass.CHARITABLE ),
+                          rules.charitable_agi_limit * agi )
+        return medical + salt + mortgage + charitable
 
     def _senior_phaseout_factor( self, standard, agi : Decimal ) -> Decimal:
         """The fraction of the senior bonus that survives the AGI phase-out: full

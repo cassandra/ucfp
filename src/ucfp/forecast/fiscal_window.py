@@ -13,7 +13,7 @@ only ever asks for annual income -- needs no change.
 """
 from decimal import Decimal
 
-from ucfp.accounts.enums import AccountType, IncomeTaxClass
+from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass
 from ucfp.accounts.ledger import Ledger
 
 from .parameters import DateSpan
@@ -39,3 +39,18 @@ class FiscalWindow:
                 account, start = self._span.start_date, end = self._span.end_date )
             continue
         return total
+
+    def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
+        """Total expense booked to `expense_tax_class` over the fiscal year (zero if
+        no expense account carries that class). Scoped to the one class, like
+        `income`; deductibility policy (which classes count, and their floors/caps)
+        lives in the tax engine, not here. Expense accounts are debit-normal, so the
+        window's credit-positive flows are negated to the positive amount spent."""
+        total = Decimal( '0' )
+        for account in self._ledger.accounts( account_type = AccountType.EXPENSE ):
+            if account.expense_tax_class != expense_tax_class:
+                continue
+            total += self._ledger.flows(
+                account, start = self._span.start_date, end = self._span.end_date )
+            continue
+        return -total
