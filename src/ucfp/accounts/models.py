@@ -13,6 +13,7 @@ from .enums import (
     AccountType,
     AssetClass,
     CurrencyType,
+    ExpenseTaxClass,
     IncomeTaxClass,
     SideType,
     SystemAccountRole,
@@ -133,6 +134,11 @@ class Account( TimestampedModel ):
     income_tax_class = NullableLabeledEnumField(
         IncomeTaxClass,
         verbose_name = 'Income Tax Class',
+        default = None,
+    )
+    expense_tax_class = NullableLabeledEnumField(
+        ExpenseTaxClass,
+        verbose_name = 'Expense Tax Class',
         default = None,
     )
     name = models.CharField(
@@ -263,6 +269,11 @@ class Account( TimestampedModel ):
             if self.is_root or self.effective_account_type != AccountType.REVENUE:
                 raise AccountStructureError(
                     'An income_tax_class may be set only on a non-root revenue account.'
+                )
+        if self.expense_tax_class is not None:
+            if self.is_root or self.effective_account_type != AccountType.EXPENSE:
+                raise AccountStructureError(
+                    'An expense_tax_class may be set only on a non-root expense account.'
                 )
         return
 

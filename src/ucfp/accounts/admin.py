@@ -13,6 +13,7 @@ class AccountAdmin( admin.ModelAdmin ):
         'account_type',
         'asset_class',
         'income_tax_class',
+        'expense_tax_class',
         'parent',
         'currency',
         'closed',
@@ -22,6 +23,7 @@ class AccountAdmin( admin.ModelAdmin ):
         'account_type',
         'asset_class',
         'income_tax_class',
+        'expense_tax_class',
         'closed',
     )
     search_fields = (

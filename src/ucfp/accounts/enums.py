@@ -153,3 +153,25 @@ _DISTRIBUTION_INCOME_CLASS = {
     AssetClass.CDS             : IncomeTaxClass.ORDINARY,
     AssetClass.DIVIDEND_STOCKS : IncomeTaxClass.QUALIFIED_DIVIDENDS,
 }
+
+
+class ExpenseTaxClass( LabeledEnum ):
+    """A tax-treatment class for expense accounts -- the expense mirror of
+    IncomeTaxClass.
+
+    Spans deductibility classes (how a lifestyle expense affects the tax
+    computation) and tax-payment classes (the tax outputs themselves). It is the
+    chart's identity for expenses; how each is treated lives in a TaxEngine's
+    parameters. Set on expense accounts only (see Account.expense_tax_class).
+    """
+
+    LIVING                  = ( 'Living', 'Non-deductible living expenses (the bulk).' )
+    MEDICAL                 = ( 'Medical', 'Deductible above the AGI floor.' )
+    MORTGAGE_INTEREST       = ( 'Mortgage Interest', 'Itemizable mortgage interest, with limits.' )
+    SALT                    = ( 'SALT', 'State/local income + property tax; capped.' )
+    CHARITABLE              = ( 'Charitable', 'Itemizable charitable gifts; AGI-limited.' )
+    NON_DEDUCTIBLE_INTEREST = ( 'Non-Deductible Interest', 'Auto/personal/credit-card interest.' )
+    RENTAL_EXPENSE          = ( 'Rental Expense', 'Netted against rental income.' )
+    INCOME_TAX              = ( 'Income Tax', 'Income tax paid (incl. AMT).' )
+    PAYROLL_TAX             = ( 'Payroll Tax', 'FICA / Medicare on wages.' )
+    NIIT                    = ( 'Net Investment Income Tax', '3.8% net investment income tax.' )
