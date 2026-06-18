@@ -128,6 +128,15 @@ class AssetClass( LabeledEnum ):
 _NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS ) )
 
 
+class RealPropertyType( LabeledEnum ):
+    """The depreciation class of rental real estate -- a general real-estate
+    distinction (the US recovery periods that depend on it live in the tax engine).
+    Irrelevant for a personal residence, which is not depreciated."""
+
+    RESIDENTIAL = ( 'Residential', 'Residential rental real estate.' )
+    COMMERCIAL  = ( 'Commercial' , 'Nonresidential (commercial) real estate.' )
+
+
 class IncomeTaxClass( LabeledEnum ):
     """A tax-treatment class for revenue (income) accounts.
 

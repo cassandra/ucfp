@@ -7,7 +7,9 @@ the year are the `TaxParameters` it is constructed with, so the Scenario builds 
 engine per projected year (indexing the baseline for inflation, or applying a
 what-if such as a rate hike).
 
-Pipeline (strict DAG): capital-gains netting (short vs long, with the prior year's
+Pipeline (strict DAG): property-sale adjustments from `TaxContext.properties` (§121
+residence-gain exclusion; §1250 rental depreciation recapture from the deterministic
+schedule) -> capital-gains netting (short vs long, with the prior year's
 loss carryover applied first, character-preserving) -> Social-Security taxability
 worksheet -> AGI -> the greater of the standard and itemized deductions -> split
 taxable income across rate buckets -> tax on the stack -> the 3.8% net investment
@@ -34,10 +36,11 @@ which also belongs in net investment income.
 from decimal import Decimal
 from typing import NamedTuple
 
-from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.tax.engine import TaxAssessment, TaxEngine
 
 from .context import TaxContext
+from .depreciation import accumulated_depreciation
 from .figures import TaxFigures
 from .parameters import TaxParameters
 from .state import CapitalLossCarryover, TaxState
@@ -88,13 +91,21 @@ class USFederalTaxEngine( TaxEngine ):
         qualified_dividends = fiscal_window.income( IncomeTaxClass.QUALIFIED_DIVIDENDS )
         ss_gross            = fiscal_window.income( IncomeTaxClass.SOCIAL_SECURITY )
 
+        # Property sales adjust the gains the ledger posted: §121 excludes residence
+        # gain from long-term gains; §1250 adds rental depreciation recapture to the
+        # 25% bucket (the book gain stays in long-term gains).
+        residence_exclusion, depreciation_recapture = self._property_sale_adjustments(
+            tax_context, status )
+        long_term_gains   = fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS ) - residence_exclusion
+        section_1250_gain = fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN ) + depreciation_recapture
+
         net_short = fiscal_window.income( IncomeTaxClass.SHORT_TERM_GAINS ) - carryover.short
-        net_long  = fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS )  - carryover.long
+        net_long  = long_term_gains - carryover.long
         netted    = self._net_capital_gains( net_short, net_long )
 
         # The maximum-rate long-term gains have their own buckets; they are not yet
         # part of the ST/LT loss netting (cross-category loss absorption deferred).
-        section_1250 = max( _ZERO, fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN ) )
+        section_1250 = max( _ZERO, section_1250_gain )
         collectibles = max( _ZERO, fiscal_window.income( IncomeTaxClass.COLLECTIBLES_GAINS ) )
 
         ordinary_income     = ( wages + ordinary_other + taxable_interest
@@ -169,6 +180,32 @@ class USFederalTaxEngine( TaxEngine ):
             long  = long_loss - offset_from_long,
         )
         return _NetCapital( _ZERO, _ZERO, offset, carryover )
+
+    def _property_sale_adjustments( self, tax_context : TaxContext, status ):
+        """From the year's property dispositions: the total §121 residence-gain
+        exclusion (reduces long-term gains) and the total §1250 depreciation recapture
+        (adds to the 25% bucket). Recapture = min(accumulated depreciation, the total
+        tax gain = book gain + accumulated depreciation); for a non-negative book gain
+        that is the full accumulated depreciation, with the book gain remaining
+        long-term. The sale-below-adjusted-basis edge is deferred."""
+        exclusion = _ZERO
+        recapture = _ZERO
+        for tax_property in tax_context.properties:
+            disposition = tax_property.disposition
+            if disposition is None:
+                continue
+            asset_class = tax_property.holding.asset_class
+            if asset_class == AssetClass.REAL_ESTATE_RESIDENCE:
+                cap = self._parameters.section_121_exclusion[ status ]
+                exclusion += min( cap, max( _ZERO, disposition.book_gain ) )
+            elif asset_class == AssetClass.REAL_ESTATE_RENTAL:
+                accumulated = accumulated_depreciation(
+                    tax_property.depreciable_basis, tax_property.acquisition_date,
+                    disposition.sale_date, tax_property.property_type )
+                recapture += min(
+                    accumulated, max( _ZERO, disposition.book_gain + accumulated ) )
+            continue
+        return exclusion, recapture
 
     def _taxable_social_security(
             self, status, ss_gross : Decimal, other_income : Decimal ) -> Decimal:

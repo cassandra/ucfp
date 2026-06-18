@@ -31,11 +31,13 @@ class TaxSubject:
 
 @dataclass( frozen = True )
 class TaxContext:
-    """The resolved taxpayer facts for one fiscal window: the filing status and the
-    people on the return."""
+    """The resolved taxpayer facts for one fiscal window: the filing status, the people
+    on the return (`subjects`), and the real estate held (`properties`, for §121/§1250
+    at sale and rental depreciation)."""
 
     filing_status : FilingStatus
     subjects      : tuple = field( default_factory = tuple )
+    properties    : tuple = field( default_factory = tuple )
 
     def count_age_at_least( self, age : int ) -> int:
         """How many subjects are at least `age` -- e.g. the 65+ count that drives the
