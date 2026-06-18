@@ -57,6 +57,19 @@ class ItemizedRules:
 
 
 @dataclass( frozen = True )
+class FICARules:
+    """Employee payroll-tax rates and bounds: Social Security (capped per worker at
+    the wage base), Medicare (uncapped), and the Additional Medicare surtax on
+    combined wages over the filing-status threshold."""
+
+    ss_wage_base                   : Decimal
+    ss_rate                        : Decimal
+    medicare_rate                  : Decimal
+    additional_medicare_rate       : Decimal
+    additional_medicare_thresholds : dict
+
+
+@dataclass( frozen = True )
 class TaxParameters:
     """One tax year's US federal parameters, keyed by FilingStatus where they
     differ. Projectable per year by the Scenario."""
@@ -71,6 +84,7 @@ class TaxParameters:
     collectibles_rate       : Decimal
     niit_thresholds         : dict
     niit_rate               : Decimal
+    fica_rules              : FICARules
 
 
 def federal_2025() -> TaxParameters:
@@ -134,4 +148,14 @@ def federal_2025() -> TaxParameters:
             FilingStatus.SINGLE : d( '200000' ),
         },
         niit_rate = d( '0.038' ),
+        fica_rules = FICARules(
+            ss_wage_base             = d( '176100' ),
+            ss_rate                  = d( '0.062' ),
+            medicare_rate            = d( '0.0145' ),
+            additional_medicare_rate = d( '0.009' ),
+            additional_medicare_thresholds = {
+                FilingStatus.MARRIED_JOINT : d( '250000' ),
+                FilingStatus.SINGLE : d( '200000' ),
+            },
+        ),
     )

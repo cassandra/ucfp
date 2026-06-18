@@ -11,7 +11,8 @@ Pipeline (strict DAG): capital-gains netting (short vs long, with the prior year
 loss carryover applied first, character-preserving) -> Social-Security taxability
 worksheet -> AGI -> the greater of the standard and itemized deductions -> split
 taxable income across rate buckets -> tax on the stack -> the 3.8% net investment
-income tax (NIIT) -> total -> charges, plus the loss carryover to thread forward.
+income tax (NIIT) -> employee FICA on wages -> total -> charges, plus the loss
+carryover to thread forward.
 
 The stack, bottom to top: ordinary income at ordinary brackets; then the §1250 (25%)
 and collectibles (28%) maximum-rate long-term gains, each taxed at ordinary rates
@@ -25,9 +26,9 @@ category capital-loss absorption (a net loss should reduce 28% then 25% then 0/1
 gains -- the §1250/collectibles buckets are not yet in the ST/LT netting, only their
 gains are taxed); MAGI distinct from AGI (the foreign-earned-income add-back for
 NIIT, the tax-exempt-interest / untaxed-SS add-backs for ACA); the mortgage
-acquisition-debt limit and the charitable 5-year carryover; FICA on wages; the ACA
-premium tax credit; rental income (gross netted with expenses), which also belongs in
-net investment income. Until then, AGI stands in for MAGI.
+acquisition-debt limit and the charitable 5-year carryover; the ACA premium tax
+credit; rental income (gross netted with expenses), which also belongs in net
+investment income. Until then, AGI stands in for MAGI.
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -116,7 +117,11 @@ class USFederalTaxEngine( TaxEngine ):
             + netted.gain_preferential + section_1250 + collectibles )
         niit = self._net_investment_income_tax( status, agi, net_investment_income )
 
+        payroll_tax = self._payroll_tax( status, tax_context.subjects )
+
         charges = [ ( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
+        if payroll_tax > 0:
+            charges.append( ( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ) )
         if niit > 0:
             charges.append( ( ExpenseTaxClass.NIIT, niit ) )
         return TaxAssessment(
@@ -255,3 +260,19 @@ class USFederalTaxEngine( TaxEngine ):
         foreign-earned-income add-back is deferred."""
         excess = max( _ZERO, magi - self._parameters.niit_thresholds[ status ] )
         return self._parameters.niit_rate * min( net_investment_income, excess )
+
+    def _payroll_tax( self, status, subjects ) -> Decimal:
+        """Employee FICA: Social Security on each worker's wages up to the wage base
+        (capped per worker, so two earners get two caps), Medicare on all wages, plus
+        the Additional Medicare surtax on combined wages over the filing-status
+        threshold. Wages come per-subject from the tax context, not the ledger, since
+        the per-worker cap needs the split the ledger's aggregate wage total lacks."""
+        rules       = self._parameters.fica_rules
+        total_wages = sum( ( subject.wages for subject in subjects ), _ZERO )
+        social_security = sum(
+            ( rules.ss_rate * min( subject.wages, rules.ss_wage_base ) for subject in subjects ),
+            _ZERO )
+        medicare   = rules.medicare_rate * total_wages
+        surtax     = rules.additional_medicare_rate * max(
+            _ZERO, total_wages - rules.additional_medicare_thresholds[ status ] )
+        return social_security + medicare + surtax
