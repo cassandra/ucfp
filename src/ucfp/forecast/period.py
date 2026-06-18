@@ -202,10 +202,13 @@ class Period:
         return
 
     def _apply_events( self, ledger : Ledger, result : PeriodResult ) -> None:
-        """Apply the scheduled `money_movement_events` (sales, purchases, explicit
-        transfers, Roth conversions, RMDs), each at its event date; some realize
-        gains or generate taxable income and may raise a Notice."""
-        raise NotImplementedError
+        """Apply each scheduled PeriodEvent (transfer, purchase, sale, conversion);
+        each materializes its own balanced transaction(s)."""
+        for event in self._parameters.events:
+            event.apply( ledger )
+            # Notices returned by apply() are collected once PeriodResult is grounded.
+            continue
+        return
 
     def _settle_and_fund( self, ledger : Ledger, result : PeriodResult ) -> None:
         """Assess tax for the period, then fund any shortfall via the waterfall

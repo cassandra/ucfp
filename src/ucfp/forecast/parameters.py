@@ -20,6 +20,8 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.accounts.models import Account
 from ucfp.tax.engine import TaxContext
 
+from .events import PeriodEvent
+
 
 @dataclass( frozen = True )
 class DateSpan:
@@ -99,14 +101,6 @@ class LiabilityTerm:
     extra_principal   : Decimal = Decimal( '0' )
 
 
-class MoneyMovementEvent:
-    """A scheduled directive applied this interval (sale, purchase, explicit
-    transfer, Roth conversion, RMD) -- shaped much like a Transaction template.
-
-    NOTE: stub -- shape deferred.
-    """
-
-
 class FundingPolicy:
     """How shortfalls are funded: an ordered draw priority across accounts, plus
     conditional movement rules.
@@ -126,4 +120,4 @@ class PeriodParameters:
     income_lines          : list[ IncomeLine ]         = field( default_factory = list )
     expense_lines         : list[ ExpenseLine ]        = field( default_factory = list )
     liability_terms       : list[ LiabilityTerm ]      = field( default_factory = list )
-    money_movement_events : list[ MoneyMovementEvent ] = field( default_factory = list )
+    events                : list[ PeriodEvent ]       = field( default_factory = list )
