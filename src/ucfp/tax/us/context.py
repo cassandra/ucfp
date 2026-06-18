@@ -7,27 +7,26 @@ forecast that crosses an age-65 or filing-status boundary picks up the change
 automatically. A neutral taxpayer seam can be extracted if a second jurisdiction is
 added.
 
-NOTE: carries what the engine needs per individual. Income tax reads aggregate income
-from the ledger (the `FiscalWindow`); per-subject facts that the ledger does not split
--- ages (deduction bonuses) and wages (FICA's per-worker Social Security cap) -- live
-here. The Scenario keeps the subjects' wages consistent with the ledger's wage total.
-Household size, state, ACA enrollment, and per-subject blindness join as the engine's
-later stages land.
+NOTE: carries the per-individual facts the engine needs that are NOT money amounts in
+the ledger. The engine reads all income (including per-worker wages, since each worker
+has their own WAGES account) from the ledger via the `FiscalWindow`; what lives here is
+non-monetary per-subject status -- currently ages (deduction bonuses). Household size,
+state, ACA enrollment, and per-subject blindness join as the engine's later stages
+land.
 """
 from dataclasses import dataclass, field
-from decimal import Decimal
 
 from .enums import FilingStatus
 
 
 @dataclass( frozen = True )
 class TaxSubject:
-    """One person on the tax return: the per-individual facts the engine needs --
-    age (for the age-65 and senior deduction bonuses) and wages (for FICA, where each
-    worker's Social Security tax is capped at the wage base separately)."""
+    """One person on the tax return: the per-individual facts the engine needs that
+    are not amounts in the ledger. Currently the age (for the age-65 and senior
+    deduction bonuses); blindness (another additional-standard-deduction trigger) will
+    join it."""
 
-    age   : int
-    wages : Decimal = Decimal( '0' )
+    age : int
 
 
 @dataclass( frozen = True )

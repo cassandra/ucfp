@@ -117,7 +117,7 @@ class USFederalTaxEngine( TaxEngine ):
             + netted.gain_preferential + section_1250 + collectibles )
         niit = self._net_investment_income_tax( status, agi, net_investment_income )
 
-        payroll_tax = self._payroll_tax( status, tax_context.subjects )
+        payroll_tax = self._payroll_tax( status, fiscal_window )
 
         charges = [ ( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
         if payroll_tax > 0:
@@ -261,18 +261,18 @@ class USFederalTaxEngine( TaxEngine ):
         excess = max( _ZERO, magi - self._parameters.niit_thresholds[ status ] )
         return self._parameters.niit_rate * min( net_investment_income, excess )
 
-    def _payroll_tax( self, status, subjects ) -> Decimal:
+    def _payroll_tax( self, status, fiscal_window ) -> Decimal:
         """Employee FICA: Social Security on each worker's wages up to the wage base
         (capped per worker, so two earners get two caps), Medicare on all wages, plus
         the Additional Medicare surtax on combined wages over the filing-status
-        threshold. Wages come per-subject from the tax context, not the ledger, since
-        the per-worker cap needs the split the ledger's aggregate wage total lacks."""
-        rules       = self._parameters.fica_rules
-        total_wages = sum( ( subject.wages for subject in subjects ), _ZERO )
+        threshold. Each worker has their own WAGES account, so the per-worker wage
+        amounts come straight from the ledger via the fiscal window."""
+        rules        = self._parameters.fica_rules
+        worker_wages = fiscal_window.income_by_account( IncomeTaxClass.WAGES )
+        total_wages  = sum( worker_wages, _ZERO )
         social_security = sum(
-            ( rules.ss_rate * min( subject.wages, rules.ss_wage_base ) for subject in subjects ),
-            _ZERO )
-        medicare   = rules.medicare_rate * total_wages
-        surtax     = rules.additional_medicare_rate * max(
+            ( rules.ss_rate * min( wages, rules.ss_wage_base ) for wages in worker_wages ), _ZERO )
+        medicare = rules.medicare_rate * total_wages
+        surtax   = rules.additional_medicare_rate * max(
             _ZERO, total_wages - rules.additional_medicare_thresholds[ status ] )
         return social_security + medicare + surtax

@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from common.rate import Rate, ZERO_RATE
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.accounts.models import Account
 from ucfp.tax.us.context import TaxContext
 
@@ -61,15 +61,17 @@ class AssetRates:
 
 @dataclass( frozen = True )
 class IncomeLine:
-    """One income source materializing this interval: the income tax-class it
-    credits and the resolved gross amount.
-
-    The per-subject linkage (needed later for FICA / SS rules) is deferred until
-    subjects and tax_context are grounded -- the posting itself does not use it.
+    """One income source materializing this interval: the revenue account it credits
+    and the resolved gross amount. The account carries the income tax-class and -- for
+    wages -- identifies the worker, since each worker has their own WAGES account (the
+    per-worker Social Security cap treats them separately). Lines name the account
+    directly so multiple accounts of one class (per-worker wages) post unambiguously;
+    distributions and realized gains, which are one account per class, are posted by
+    class elsewhere.
     """
 
-    income_tax_class : IncomeTaxClass
-    gross_amount     : Decimal
+    account      : Account
+    gross_amount : Decimal
 
 
 @dataclass( frozen = True )

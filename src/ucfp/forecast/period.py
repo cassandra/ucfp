@@ -134,7 +134,9 @@ class Period:
 
     def _recognize_income( self, ledger : Ledger, result : PeriodResult ) -> None:
         """Post the resolved `income_lines` (salary/pension/SS) at the midpoint:
-        DR the cash hub / CR the line's income tax-class account."""
+        DR the cash hub / CR each line's revenue account. Lines name their account
+        directly, so per-worker wage accounts (which share the WAGES class) post
+        unambiguously."""
         cash_account = chart.cash_account( ledger )
         income_date = self._parameters.date_span.midpoint
         for income_line in self._parameters.income_lines:
@@ -143,15 +145,10 @@ class Period:
                 continue
             if cash_account is None:
                 raise MissingAccountError( 'No cash account to receive income.' )
-            income_account = chart.income_account( ledger, income_line.income_tax_class )
-            if income_account is None:
-                raise MissingAccountError(
-                    f'No revenue account for income tax-class {income_line.income_tax_class.label}.'
-                )
             ledger.record(
                 income_date,
                 cash_account.currency,
-                [ ( cash_account, -amount ), ( income_account, amount ) ],
+                [ ( cash_account, -amount ), ( income_line.account, amount ) ],
             )
             continue
         return

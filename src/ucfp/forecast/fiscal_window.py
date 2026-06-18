@@ -40,6 +40,21 @@ class FiscalWindow:
             continue
         return total
 
+    def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
+        """The per-account income totals for `income_tax_class` over the fiscal year
+        -- one entry per contributing revenue account. Where a class has one account
+        per entity (wages: one per worker), this is the per-entity breakdown that
+        FICA's per-worker Social Security cap needs; `income` sums these for income
+        tax."""
+        amounts = list()
+        for account in self._ledger.accounts( account_type = AccountType.REVENUE ):
+            if account.income_tax_class != income_tax_class:
+                continue
+            amounts.append( self._ledger.flows(
+                account, start = self._span.start_date, end = self._span.end_date ) )
+            continue
+        return amounts
+
     def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
         """Total expense booked to `expense_tax_class` over the fiscal year (zero if
         no expense account carries that class). Scoped to the one class, like
