@@ -37,3 +37,18 @@ def accumulated_depreciation(
     elapsed_years = Decimal( elapsed_days ) / _DAYS_PER_YEAR
     annual        = depreciable_basis / _RECOVERY_YEARS[ property_type ]
     return min( depreciable_basis, annual * elapsed_years )
+
+
+def period_depreciation(
+        depreciable_basis : Decimal,
+        acquisition_date  : date,
+        property_type     : RealPropertyType,
+        as_of_open        : date,
+        as_of_close       : date ) -> Decimal:
+    """Depreciation deductible across a fiscal window -- the increase in accumulated
+    depreciation from `as_of_open` (the prior close) to `as_of_close` (the window end,
+    or the sale date if sold mid-year). Naturally handles partial first/last years and
+    the basis cap."""
+    opening = accumulated_depreciation( depreciable_basis, acquisition_date, as_of_open, property_type )
+    closing = accumulated_depreciation( depreciable_basis, acquisition_date, as_of_close, property_type )
+    return closing - opening

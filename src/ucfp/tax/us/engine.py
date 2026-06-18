@@ -25,13 +25,17 @@ preferential gains (qualified dividends + regular long-term gains) at the LTCG
 brackets stacked on top of everything ordinary-rated. Stacking via
 `table.tax_on(base + bucket) - table.tax_on(base)` spans rate boundaries correctly.
 
+Net rental income (gross rents minus operating expenses minus depreciation computed
+from each rental's attributes) is ordinary income and net investment income; it may be
+negative (a rental loss).
+
 DEFERRED (added as later stages land, none of which change this contract): cross-
 category capital-loss absorption (a net loss should reduce 28% then 25% then 0/15/20%
 gains -- the §1250/collectibles buckets are not yet in the ST/LT netting, only their
-gains are taxed); the foreign-earned-income exclusion add-back (a MAGI component, not
-modeled → zero); the mortgage acquisition-debt limit and the charitable 5-year
-carryover; the ACA premium tax credit; rental income (gross netted with expenses),
-which also belongs in net investment income.
+gains are taxed); passive-activity-loss limits on rental losses; the foreign-earned-
+income exclusion add-back (a MAGI component, not modeled → zero); the mortgage
+acquisition-debt limit and the charitable 5-year carryover; the ACA premium tax
+credit.
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -40,7 +44,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.tax.engine import TaxAssessment, TaxEngine
 
 from .context import TaxContext
-from .depreciation import accumulated_depreciation
+from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
 from .parameters import TaxParameters
 from .state import CapitalLossCarryover, TaxState
@@ -108,7 +112,9 @@ class USFederalTaxEngine( TaxEngine ):
         section_1250 = max( _ZERO, section_1250_gain )
         collectibles = max( _ZERO, fiscal_window.income( IncomeTaxClass.COLLECTIBLES_GAINS ) )
 
-        ordinary_income     = ( wages + ordinary_other + taxable_interest
+        net_rental = self._rental_net_income( fiscal_window, tax_context )
+
+        ordinary_income     = ( wages + ordinary_other + taxable_interest + net_rental
                                 + netted.gain_ordinary - netted.ordinary_offset )
         preferential_income = qualified_dividends + netted.gain_preferential
         total_gains         = preferential_income + section_1250 + collectibles
@@ -132,7 +138,7 @@ class USFederalTaxEngine( TaxEngine ):
 
         net_investment_income = max(
             _ZERO,
-            taxable_interest + qualified_dividends + netted.gain_ordinary
+            taxable_interest + qualified_dividends + net_rental + netted.gain_ordinary
             + netted.gain_preferential + section_1250 + collectibles )
         niit = self._net_investment_income_tax(
             status, figures.niit_magi, net_investment_income )
@@ -206,6 +212,34 @@ class USFederalTaxEngine( TaxEngine ):
                     accumulated, max( _ZERO, disposition.book_gain + accumulated ) )
             continue
         return exclusion, recapture
+
+    def _rental_net_income( self, fiscal_window, tax_context : TaxContext ) -> Decimal:
+        """Net taxable rental income: gross rents minus operating expenses minus
+        depreciation (computed per rental from its attributes for the window). It is
+        ordinary income and net investment income, and may be negative (a rental loss);
+        passive-activity-loss limits on such losses are deferred."""
+        gross        = fiscal_window.income( IncomeTaxClass.GROSS_RENTAL )
+        operating    = fiscal_window.expense( ExpenseTaxClass.RENTAL_EXPENSE )
+        depreciation = self._rental_depreciation( fiscal_window.span, tax_context )
+        return gross - operating - depreciation
+
+    def _rental_depreciation( self, span, tax_context : TaxContext ) -> Decimal:
+        """Total depreciation deductible this window across all rental properties --
+        each accrued from acquisition (or the prior close) to the window end, or to the
+        sale date if sold mid-year."""
+        total = _ZERO
+        for tax_property in tax_context.properties:
+            if tax_property.holding.asset_class != AssetClass.REAL_ESTATE_RENTAL:
+                continue
+            disposition = tax_property.disposition
+            close = span.end_date
+            if disposition is not None and disposition.sale_date < close:
+                close = disposition.sale_date
+            total += period_depreciation(
+                tax_property.depreciable_basis, tax_property.acquisition_date,
+                tax_property.property_type, span.day_before_start, close )
+            continue
+        return total
 
     def _taxable_social_security(
             self, status, ss_gross : Decimal, other_income : Decimal ) -> Decimal:

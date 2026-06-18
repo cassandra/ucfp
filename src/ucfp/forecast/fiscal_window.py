@@ -28,6 +28,12 @@ class FiscalWindow:
         self._ledger = ledger
         self._span   = span
 
+    @property
+    def span( self ) -> DateSpan:
+        """The fiscal year this window covers -- e.g. for computing a rental's
+        depreciation deduction across the period."""
+        return self._span
+
     def income( self, income_tax_class : IncomeTaxClass ) -> Decimal:
         """Total income recognized in `income_tax_class` over the fiscal year (zero
         if no revenue account carries that class)."""
