@@ -27,16 +27,28 @@ brackets stacked on top of everything ordinary-rated. Stacking via
 `table.tax_on(base + bucket) - table.tax_on(base)` spans rate boundaries correctly.
 
 Net rental income (gross rents minus operating expenses minus depreciation computed
-from each rental's attributes) is ordinary income and net investment income; it may be
-negative (a rental loss).
+from each rental's attributes) is ordinary income and net investment income, after the
+passive-activity-loss rules: a net rental loss is deductible against other income only
+up to the active-participation special allowance (phased out over MAGI), and the excess
+is suspended and carried forward in `TaxState` (netting against future passive income).
+
+AGGREGATE-RENTAL ASSUMPTION: all rentals are treated as one passive activity with
+uniform active participation (a single household flag). This is exact for a single
+rental or several uniformly-participated ones. To support a MIX of active and passive
+rentals (or per-property reporting / precise disposition release of suspended losses),
+the removal path is: per-property rental income/expense accounts (parallel to per-worker
+wages) referenced by `TaxProperty`; a per-property active-participation flag; per-
+activity PAL netting (cross-activity offset, allowance allocated to active losses); and
+per-activity suspended-loss tracking. Until then the Scenario must not create
+non-actively-participated rentals.
 
 DEFERRED (added as later stages land, none of which change this contract): cross-
 category capital-loss absorption (a net loss should reduce 28% then 25% then 0/15/20%
 gains -- the §1250/collectibles buckets are not yet in the ST/LT netting, only their
-gains are taxed); passive-activity-loss limits on rental losses; the foreign-earned-
-income exclusion add-back (a MAGI component, not modeled → zero); the mortgage
-acquisition-debt limit and the charitable 5-year carryover; ACA refinements (advance-
-PTC reconciliation, enrollment-month proration, the actual-premium cap, the
+gains are taxed); per-property / mixed passive-activity participation (above); the
+foreign-earned-income exclusion add-back (a MAGI component, not modeled → zero); the
+mortgage acquisition-debt limit and the charitable 5-year carryover; ACA refinements
+(advance-PTC reconciliation, enrollment-month proration, the actual-premium cap, the
 under-100%-FPL Medicaid floor).
 """
 from decimal import Decimal
@@ -49,7 +61,7 @@ from .context import TaxContext
 from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
 from .parameters import TaxParameters
-from .state import CapitalLossCarryover, TaxState
+from .state import CapitalLossCarryover, PassiveLossCarryover, TaxState
 
 _ZERO        = Decimal( '0' )
 _HALF        = Decimal( '0.5' )
@@ -88,6 +100,15 @@ class _PropertySaleAdjustments( NamedTuple ):
     depreciation_recapture : Decimal
 
 
+class _PassiveActivity( NamedTuple ):
+    """The passive-activity (rental) outcome: `deductible` is the amount flowing into
+    ordinary income and net investment income (net passive income if positive, the
+    allowed loss if negative); `suspended` is the disallowed loss carried forward."""
+
+    deductible : Decimal
+    suspended  : Decimal
+
+
 class USFederalTaxEngine( TaxEngine ):
     """Assesses US federal income tax for one fiscal year against the parameters it
     is constructed with."""
@@ -96,8 +117,9 @@ class USFederalTaxEngine( TaxEngine ):
         self._parameters = parameters
 
     def assess( self, fiscal_window, tax_context : TaxContext, opening_tax_state ) -> TaxAssessment:
-        status    = tax_context.filing_status
-        carryover = ( opening_tax_state or TaxState() ).capital_loss_carryover
+        status     = tax_context.filing_status
+        tax_state  = opening_tax_state or TaxState()
+        carryover  = tax_state.capital_loss_carryover
 
         wages               = fiscal_window.income( IncomeTaxClass.WAGES )
         ordinary_other      = fiscal_window.income( IncomeTaxClass.ORDINARY )
@@ -123,12 +145,20 @@ class USFederalTaxEngine( TaxEngine ):
         section_1250 = max( _ZERO, section_1250_gain )
         collectibles = max( _ZERO, fiscal_window.income( IncomeTaxClass.COLLECTIBLES_GAINS ) )
 
-        net_rental = self._rental_net_income( fiscal_window, tax_context )
-
-        ordinary_income     = ( wages + ordinary_other + taxable_interest + net_rental
+        ordinary_nonrental  = ( wages + ordinary_other + taxable_interest
                                 + netted.gain_ordinary - netted.ordinary_offset )
         preferential_income = qualified_dividends + netted.gain_preferential
         total_gains         = preferential_income + section_1250 + collectibles
+
+        # Rental income/loss runs through the passive-activity-loss rules: a loss is
+        # deductible against other income only up to the active-participation allowance
+        # (phased out over MAGI), with the excess suspended. The phase-out MAGI excludes
+        # the rental loss itself (and Social Security), so it is the other-income total.
+        net_rental = self._rental_net_income( fiscal_window, tax_context )
+        passive    = self._passive_activity_result(
+            net_rental, ordinary_nonrental + total_gains,
+            tax_state.passive_loss_carryover.suspended, tax_context )
+        ordinary_income = ordinary_nonrental + passive.deductible
 
         taxable_ss = self._taxable_social_security(
             status, ss_gross, ordinary_income + total_gains )
@@ -149,7 +179,7 @@ class USFederalTaxEngine( TaxEngine ):
 
         net_investment_income = max(
             _ZERO,
-            taxable_interest + qualified_dividends + net_rental + netted.gain_ordinary
+            taxable_interest + qualified_dividends + passive.deductible + netted.gain_ordinary
             + netted.gain_preferential + section_1250 + collectibles )
         niit = self._net_investment_income_tax(
             status, figures.niit_magi, net_investment_income )
@@ -168,7 +198,9 @@ class USFederalTaxEngine( TaxEngine ):
         return TaxAssessment(
             charges           = charges,
             credits           = credits,
-            closing_tax_state = TaxState( capital_loss_carryover = netted.carryover ),
+            closing_tax_state = TaxState(
+                capital_loss_carryover = netted.carryover,
+                passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ) ),
             figures           = figures,
         )
 
@@ -257,6 +289,41 @@ class USFederalTaxEngine( TaxEngine ):
                 tax_property.property_type, span.day_before_start, close )
             continue
         return total
+
+    def _passive_activity_result(
+            self, net_rental : Decimal, phaseout_magi : Decimal,
+            prior_suspended : Decimal, tax_context : TaxContext ) -> _PassiveActivity:
+        """Apply the passive-activity-loss rules to the year's net rental. Prior
+        suspended losses first net against current passive income; a remaining net loss
+        is deductible against other income only up to the active-participation allowance
+        (phased out over `phaseout_magi`), and the excess is suspended and carried
+        forward. Returns the amount flowing into ordinary income / NII and the new
+        suspended carryforward.
+
+        ASSUMPTION: rentals are aggregated and treated as a single activity with uniform
+        active participation (`tax_context.rental_active_participation`). Correct for a
+        single rental or several uniformly-participated ones; a *mix* of active and
+        passive rentals would need per-property net income (per-property rental accounts)
+        and per-activity netting -- see the engine docstring for the removal path."""
+        combined = net_rental - prior_suspended
+        if combined >= _ZERO:
+            return _PassiveActivity( deductible = combined, suspended = _ZERO )
+        loss      = -combined
+        allowance = self._passive_loss_allowance( phaseout_magi ) \
+            if tax_context.rental_active_participation else _ZERO
+        allowed   = min( loss, allowance )
+        return _PassiveActivity( deductible = -allowed, suspended = loss - allowed )
+
+    def _passive_loss_allowance( self, magi : Decimal ) -> Decimal:
+        """The active-participation special allowance, phased out linearly across the
+        MAGI band (full below the start, zero at/above the end)."""
+        rules = self._parameters.passive_activity
+        if magi <= rules.phaseout_start:
+            return rules.loss_allowance
+        if magi >= rules.phaseout_end:
+            return _ZERO
+        band = rules.phaseout_end - rules.phaseout_start
+        return rules.loss_allowance * ( rules.phaseout_end - magi ) / band
 
     def _premium_tax_credit( self, aca_magi : Decimal, aca_enrollment ) -> Decimal:
         """The ACA premium tax credit: the benchmark plan cost less the household's

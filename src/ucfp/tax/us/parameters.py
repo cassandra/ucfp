@@ -89,6 +89,17 @@ class AcaParameters:
 
 
 @dataclass( frozen = True )
+class PassiveActivityRules:
+    """The active-participation special allowance for rental real-estate losses against
+    ordinary income, phased out linearly across [phaseout_start, phaseout_end] of MAGI
+    (full below the start, zero at/above the end). The excess loss is suspended."""
+
+    loss_allowance : Decimal
+    phaseout_start : Decimal
+    phaseout_end   : Decimal
+
+
+@dataclass( frozen = True )
 class TaxParameters:
     """One tax year's US federal parameters, keyed by FilingStatus where they
     differ. Projectable per year by the Scenario."""
@@ -106,6 +117,7 @@ class TaxParameters:
     niit_rate               : Decimal
     fica_rules              : FICARules
     aca                     : AcaParameters
+    passive_activity        : PassiveActivityRules
 
 
 def federal_2025() -> TaxParameters:
@@ -189,5 +201,10 @@ def federal_2025() -> TaxParameters:
             applicable_lower_ratio    = d( '1.5' ),
             applicable_slope          = d( '0.034' ),
             applicable_max_rate       = d( '0.085' ),
+        ),
+        passive_activity = PassiveActivityRules(
+            loss_allowance = d( '25000' ),
+            phaseout_start = d( '100000' ),
+            phaseout_end   = d( '150000' ),
         ),
     )
