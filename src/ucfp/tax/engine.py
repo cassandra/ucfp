@@ -17,11 +17,13 @@ class TaxAssessment:
     `(ExpenseTaxClass, amount)` the Period posts as a tax expense -- and
     `closing_tax_state`, the engine's updated threaded tax state (opaque to the
     Period) to carry forward as the next fiscal year's `opening_tax_state`. It is
-    None for engines that thread no state. Credits (e.g. ACA PTC) come with later
-    engine stages."""
+    None for engines that thread no state. `figures` holds engine-specific derived
+    figures (e.g. AGI/MAGI) for downstream consumers, also opaque to the Period.
+    Credits (e.g. ACA PTC) come with later engine stages."""
 
     charges           : list = field( default_factory = list )
     closing_tax_state : object = None
+    figures           : object = None
 
 
 class TaxEngine:

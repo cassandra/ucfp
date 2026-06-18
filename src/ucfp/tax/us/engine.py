@@ -11,8 +11,10 @@ Pipeline (strict DAG): capital-gains netting (short vs long, with the prior year
 loss carryover applied first, character-preserving) -> Social-Security taxability
 worksheet -> AGI -> the greater of the standard and itemized deductions -> split
 taxable income across rate buckets -> tax on the stack -> the 3.8% net investment
-income tax (NIIT) -> employee FICA on wages -> total -> charges, plus the loss
-carryover to thread forward.
+income tax (NIIT, on its own MAGI) -> employee FICA on wages -> total -> charges, plus
+the loss carryover to thread forward. AGI and the modified-AGI variants are surfaced as
+`TaxFigures` on the assessment (see `figures.py`); NIIT uses `niit_magi`, and
+`aca_magi` / `irmaa_magi` are ready for the ACA credit and the Scenario's IRMAA.
 
 The stack, bottom to top: ordinary income at ordinary brackets; then the §1250 (25%)
 and collectibles (28%) maximum-rate long-term gains, each taxed at ordinary rates
@@ -24,11 +26,10 @@ brackets stacked on top of everything ordinary-rated. Stacking via
 DEFERRED (added as later stages land, none of which change this contract): cross-
 category capital-loss absorption (a net loss should reduce 28% then 25% then 0/15/20%
 gains -- the §1250/collectibles buckets are not yet in the ST/LT netting, only their
-gains are taxed); MAGI distinct from AGI (the foreign-earned-income add-back for
-NIIT, the tax-exempt-interest / untaxed-SS add-backs for ACA); the mortgage
-acquisition-debt limit and the charitable 5-year carryover; the ACA premium tax
-credit; rental income (gross netted with expenses), which also belongs in net
-investment income. Until then, AGI stands in for MAGI.
+gains are taxed); the foreign-earned-income exclusion add-back (a MAGI component, not
+modeled → zero); the mortgage acquisition-debt limit and the charitable 5-year
+carryover; the ACA premium tax credit; rental income (gross netted with expenses),
+which also belongs in net investment income.
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -37,6 +38,7 @@ from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
 from ucfp.tax.engine import TaxAssessment, TaxEngine
 
 from .context import TaxContext
+from .figures import TaxFigures
 from .parameters import TaxParameters
 from .state import CapitalLossCarryover, TaxState
 
@@ -82,6 +84,7 @@ class USFederalTaxEngine( TaxEngine ):
         wages               = fiscal_window.income( IncomeTaxClass.WAGES )
         ordinary_other      = fiscal_window.income( IncomeTaxClass.ORDINARY )
         taxable_interest    = fiscal_window.income( IncomeTaxClass.TAXABLE_INTEREST )
+        tax_exempt_interest = fiscal_window.income( IncomeTaxClass.TAX_EXEMPT_INTEREST )
         qualified_dividends = fiscal_window.income( IncomeTaxClass.QUALIFIED_DIVIDENDS )
         ss_gross            = fiscal_window.income( IncomeTaxClass.SOCIAL_SECURITY )
 
@@ -102,6 +105,11 @@ class USFederalTaxEngine( TaxEngine ):
         taxable_ss = self._taxable_social_security(
             status, ss_gross, ordinary_income + total_gains )
         agi        = ordinary_income + total_gains + taxable_ss
+        figures    = TaxFigures(
+            agi                     = agi,
+            tax_exempt_interest     = tax_exempt_interest,
+            untaxed_social_security = ss_gross - taxable_ss,
+        )
         deduction  = max(
             self._standard_deduction( status, tax_context, agi ),
             self._itemized_deduction( fiscal_window, agi ) )
@@ -115,7 +123,8 @@ class USFederalTaxEngine( TaxEngine ):
             _ZERO,
             taxable_interest + qualified_dividends + netted.gain_ordinary
             + netted.gain_preferential + section_1250 + collectibles )
-        niit = self._net_investment_income_tax( status, agi, net_investment_income )
+        niit = self._net_investment_income_tax(
+            status, figures.niit_magi, net_investment_income )
 
         payroll_tax = self._payroll_tax( status, fiscal_window )
 
@@ -127,6 +136,7 @@ class USFederalTaxEngine( TaxEngine ):
         return TaxAssessment(
             charges           = charges,
             closing_tax_state = TaxState( capital_loss_carryover = netted.carryover ),
+            figures           = figures,
         )
 
     def _net_capital_gains( self, net_short : Decimal, net_long : Decimal ) -> _NetCapital:
@@ -256,8 +266,8 @@ class USFederalTaxEngine( TaxEngine ):
     def _net_investment_income_tax(
             self, status, magi : Decimal, net_investment_income : Decimal ) -> Decimal:
         """NIIT: the rate applied to the lesser of net investment income and MAGI
-        over the filing-status threshold (zero below it). MAGI = AGI here; the
-        foreign-earned-income add-back is deferred."""
+        over the filing-status threshold (zero below it). `magi` is the NIIT MAGI
+        (`figures.niit_magi` = AGI + the foreign exclusion, which is not modeled → AGI)."""
         excess = max( _ZERO, magi - self._parameters.niit_thresholds[ status ] )
         return self._parameters.niit_rate * min( net_investment_income, excess )
 
