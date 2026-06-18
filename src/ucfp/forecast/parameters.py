@@ -101,12 +101,21 @@ class LiabilityTerm:
     extra_principal   : Decimal = Decimal( '0' )
 
 
+@dataclass( frozen = True )
 class FundingPolicy:
-    """How shortfalls are funded: an ordered draw priority across accounts, plus
-    conditional movement rules.
+    """How a savings shortfall is funded: a target cash balance to maintain and an
+    ordered list of accounts to draw from. The waterfall draws from each in turn
+    (realizing gains) until cash reaches `cash_target` or the sources are exhausted.
+    Tax settled afterward can pull cash below the target -- even negative -- and
+    that balance simply carries into the next period as a visible cash-flow signal;
+    only a net worth at or below zero ends the forecast.
 
-    NOTE: stub -- fields TBD.
+    `cash_target` is resolved per interval by the Scenario, so the user-facing
+    policy can be absolute, a multiple of expenses, or inflation-adjusted upstream.
     """
+
+    cash_target   : Decimal = Decimal( '0' )
+    draw_priority : list[ Account ] = field( default_factory = list )
 
 
 @dataclass( frozen = True )

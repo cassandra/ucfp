@@ -11,7 +11,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, SystemAccountRole
+from ucfp.accounts.enums import (
+    AccountType,
+    AssetClass,
+    ExpenseTaxClass,
+    IncomeTaxClass,
+    SystemAccountRole,
+)
 from ucfp.accounts.ledger import Ledger
 from ucfp.accounts.models import Account
 from ucfp.accounts.money_utils import quantize_money
@@ -79,6 +85,22 @@ def market_value( ledger : Ledger, holding : Account, *, through : Optional[ dat
     if valuation_account is not None:
         total += ledger.natural_balance( valuation_account, through = through )
     return total
+
+
+def net_worth( ledger : Ledger, *, through : Optional[ date ] = None ) -> Decimal:
+    """Total assets minus total liabilities (in natural terms) -- the partition's
+    net worth as of `through`."""
+    assets = sum(
+        ( ledger.natural_balance( account, through = through )
+          for account in ledger.accounts( account_type = AccountType.ASSET ) ),
+        Decimal( '0' ),
+    )
+    liabilities = sum(
+        ( ledger.natural_balance( account, through = through )
+          for account in ledger.accounts( account_type = AccountType.LIABILITY ) ),
+        Decimal( '0' ),
+    )
+    return assets - liabilities
 
 
 def realize( ledger : Ledger,

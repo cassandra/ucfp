@@ -16,8 +16,8 @@ The interval is computed in three phases (see data/design/projection-model.md):
                       with the tax/draw circular dependency.
   3. Close         -- finalize ending balances and the stop condition.
 
-NOTE: top-level orchestration stub. Phase bodies (and the collaborator shapes they
-use) are deliberately unimplemented pending design refinement.
+NOTE: Phase-1 complete against the zero-tax engine. The USFederalTaxEngine and the
+Conversion event are the remaining pieces.
 """
 from ucfp.accounts.enums import SystemAccountRole
 from ucfp.accounts.ledger import Ledger
@@ -27,7 +27,7 @@ from ucfp.tax.engine import TaxEngine
 from . import chart
 from .exceptions import MissingAccountError
 from .parameters import PeriodParameters
-from .results import PeriodResult
+from .results import Notice, PeriodResult
 
 
 class Period:
@@ -206,16 +206,95 @@ class Period:
         """Apply each scheduled PeriodEvent (transfer, purchase, sale, conversion);
         each materializes its own balanced transaction(s)."""
         for event in self._parameters.events:
-            event.apply( ledger )
-            # Notices returned by apply() are collected once PeriodResult is grounded.
+            result.notices.extend( event.apply( ledger ) )
             continue
         return
 
     def _settle_and_fund( self, ledger : Ledger, result : PeriodResult ) -> None:
-        """Assess tax for the period, then fund any shortfall via the waterfall
-        (heuristic gross-up). The phase carrying the tax/draw circularity."""
-        raise NotImplementedError
+        """Fund cash up to the policy's target buffer first -- so the draws' realized
+        income is taxed this period -- then settle the period's tax on the full
+        income. Tax may pull cash below the target (even negative); that balance is
+        carried into the next period as a visible cash-flow signal, and only a net
+        worth at or below zero ends the forecast (see _close). Because all funding
+        precedes settlement, no untaxed income is ever carried -- only cash is."""
+        self._fund_to_target( ledger, result )
+        self._settle_tax( ledger, result )
+        return
+
+    def _settle_tax( self, ledger : Ledger, result : PeriodResult ) -> None:
+        """Assess the period's tax via the pluggable engine and book each charge as
+        a tax expense drawn from the cash hub. (The zero-tax engine yields none.)"""
+        assessment = self._tax_engine.assess( ledger, self._parameters.tax_context, None )
+        if not assessment.charges:
+            return
+        cash_account = chart.cash_account( ledger )
+        settle_date = self._parameters.date_span.end_date
+        for expense_class, amount in assessment.charges:
+            amount = quantize_money( amount )
+            if amount == 0:
+                continue
+            if cash_account is None:
+                raise MissingAccountError( 'No cash account to pay tax from.' )
+            expense_account = chart.expense_account( ledger, expense_class )
+            if expense_account is None:
+                raise MissingAccountError(
+                    f'No expense account for expense tax-class {expense_class.label}.'
+                )
+            ledger.record(
+                settle_date,
+                cash_account.currency,
+                [ ( expense_account, -amount ), ( cash_account, amount ) ],
+            )
+            continue
+        return
+
+    def _fund_to_target( self, ledger : Ledger, result : PeriodResult ) -> None:
+        """Draw from the funding policy's accounts in priority order (realizing
+        gains as it goes) until cash reaches the policy's cash_target, or the
+        sources are exhausted. Dated at the period start so the draw precedes the
+        expenses it funds. A single pre-settlement pass: every gain it realizes is
+        taxed this period, so nothing is carried but the ending cash balance."""
+        cash_account = chart.cash_account( ledger )
+        if cash_account is None:
+            return
+        target = self._parameters.funding_policy.cash_target
+        fund_date = self._parameters.date_span.start_date
+        for source in self._parameters.funding_policy.draw_priority:
+            shortfall = target - ledger.natural_balance( cash_account )
+            if shortfall <= 0:
+                break
+            available = chart.market_value( ledger, source )
+            draw = quantize_money( min( shortfall, available ) )
+            if draw <= 0:
+                continue
+            income_class = None
+            if source.asset_class is not None:
+                income_class = source.asset_class.realized_gain_income_class
+            realized_gain_account = None
+            if income_class is not None:
+                realized_gain_account = chart.income_account( ledger, income_class )
+                if realized_gain_account is None:
+                    raise MissingAccountError(
+                        f'No revenue account for income tax-class {income_class.label}.'
+                    )
+            chart.realize(
+                ledger,
+                source,
+                draw,
+                proceeds_account = cash_account,
+                realized_gain_account = realized_gain_account,
+                on_date = fund_date,
+            )
+            result.notices.append(
+                Notice( f'Drew {draw} from "{source}" to cover a savings shortfall.' )
+            )
+            continue
+        return
 
     def _close( self, ledger : Ledger, result : PeriodResult ) -> None:
-        """Finalize ending balances and the stop condition (e.g. savings <= 0)."""
-        raise NotImplementedError
+        """Finalize the period: flag the stop condition when net worth is depleted
+        (assets no longer cover liabilities), which ends the Forecast."""
+        if chart.net_worth( ledger ) <= 0:
+            result.is_depleted = True
+            result.notices.append( Notice( 'Net worth depleted; the forecast should stop.' ) )
+        return

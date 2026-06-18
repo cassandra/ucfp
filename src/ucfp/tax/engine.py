@@ -13,15 +13,17 @@ contract -- the dependency runs forecast -> tax.
 
 NOTE: interface + a Phase-1 zero-tax stand-in. `USFederalTaxEngine` is Phase 2.
 """
+from dataclasses import dataclass, field
 
 
+@dataclass( frozen = True )
 class TaxAssessment:
-    """The result of `TaxEngine.assess`: the charges to book (income tax, payroll,
-    surtaxes), any credits (e.g. ACA PTC, negative), and the updated carryover
-    attributes to thread forward.
-
-    NOTE: stub -- shape TBD.
+    """The result of `TaxEngine.assess`: the charges to book -- each an
+    `(ExpenseTaxClass, amount)` the Period posts as a tax expense. Credits (e.g.
+    ACA PTC) and updated carryover attributes come with the USFederalTaxEngine.
     """
+
+    charges : list = field( default_factory = list )
 
 
 class TaxContext:
@@ -47,4 +49,4 @@ class ZeroTaxEngine( TaxEngine ):
     end to end before `USFederalTaxEngine` exists."""
 
     def assess( self, fiscal_window, tax_context : TaxContext, opening_attrs ) -> TaxAssessment:
-        raise NotImplementedError
+        return TaxAssessment()
