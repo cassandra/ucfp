@@ -10,18 +10,24 @@ what-if such as a rate hike).
 Pipeline (strict DAG): capital-gains netting (short vs long, with the prior year's
 loss carryover applied first, character-preserving) -> Social-Security taxability
 worksheet -> AGI -> the greater of the standard and itemized deductions -> split
-taxable income into ordinary vs preferential -> ordinary brackets with the
-preferential (qualified-dividend / long-term-gain) amount stacked on top -> the 3.8%
-net investment income tax (NIIT) -> total -> charges, plus the loss carryover to
-thread forward. The preferential stack is `ltcg.tax_on(ordinary + preferential) -
-ltcg.tax_on(ordinary)`, which spans LTCG rate boundaries correctly.
+taxable income across rate buckets -> tax on the stack -> the 3.8% net investment
+income tax (NIIT) -> total -> charges, plus the loss carryover to thread forward.
 
-DEFERRED (added as later stages land, none of which change this contract): the 25%
-(§1250) and 28% (collectibles) special rates; MAGI distinct from AGI (the foreign-
-earned-income add-back for NIIT, the tax-exempt-interest / untaxed-SS add-backs for
-ACA); the mortgage acquisition-debt limit and the charitable 5-year carryover; FICA
-on wages; the ACA premium tax credit; rental income (gross netted with expenses),
-which also belongs in net investment income. Until then, AGI stands in for MAGI.
+The stack, bottom to top: ordinary income at ordinary brackets; then the §1250 (25%)
+and collectibles (28%) maximum-rate long-term gains, each taxed at ordinary rates
+stacked on ordinary income but capped at its maximum rate; then the 0/15/20%
+preferential gains (qualified dividends + regular long-term gains) at the LTCG
+brackets stacked on top of everything ordinary-rated. Stacking via
+`table.tax_on(base + bucket) - table.tax_on(base)` spans rate boundaries correctly.
+
+DEFERRED (added as later stages land, none of which change this contract): cross-
+category capital-loss absorption (a net loss should reduce 28% then 25% then 0/15/20%
+gains -- the §1250/collectibles buckets are not yet in the ST/LT netting, only their
+gains are taxed); MAGI distinct from AGI (the foreign-earned-income add-back for
+NIIT, the tax-exempt-interest / untaxed-SS add-backs for ACA); the mortgage
+acquisition-debt limit and the charitable 5-year carryover; FICA on wages; the ACA
+premium tax credit; rental income (gross netted with expenses), which also belongs in
+net investment income. Until then, AGI stands in for MAGI.
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -49,6 +55,18 @@ class _NetCapital( NamedTuple ):
     carryover         : CapitalLossCarryover
 
 
+class _TaxableSplit( NamedTuple ):
+    """Taxable income apportioned across rate buckets. When the deduction exceeds
+    ordinary income and eats into gains, the lowest-rate bucket is preserved first
+    (collectibles reduced before §1250 before preferential), which is favorable and
+    matches the worksheet ordering."""
+
+    ordinary     : Decimal
+    preferential : Decimal
+    section_1250 : Decimal
+    collectibles : Decimal
+
+
 class USFederalTaxEngine( TaxEngine ):
     """Assesses US federal income tax for one fiscal year against the parameters it
     is constructed with."""
@@ -70,29 +88,32 @@ class USFederalTaxEngine( TaxEngine ):
         net_long  = fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS )  - carryover.long
         netted    = self._net_capital_gains( net_short, net_long )
 
+        # The maximum-rate long-term gains have their own buckets; they are not yet
+        # part of the ST/LT loss netting (cross-category loss absorption deferred).
+        section_1250 = max( _ZERO, fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN ) )
+        collectibles = max( _ZERO, fiscal_window.income( IncomeTaxClass.COLLECTIBLES_GAINS ) )
+
         ordinary_income     = ( wages + ordinary_other + taxable_interest
                                 + netted.gain_ordinary - netted.ordinary_offset )
         preferential_income = qualified_dividends + netted.gain_preferential
+        total_gains         = preferential_income + section_1250 + collectibles
 
         taxable_ss = self._taxable_social_security(
-            status, ss_gross, ordinary_income + preferential_income )
-        agi        = ordinary_income + preferential_income + taxable_ss
+            status, ss_gross, ordinary_income + total_gains )
+        agi        = ordinary_income + total_gains + taxable_ss
         deduction  = max(
             self._standard_deduction( status, tax_context, agi ),
             self._itemized_deduction( fiscal_window, agi ) )
 
-        taxable_income     = max( _ZERO, agi - deduction )
-        preferential_taxed = min( preferential_income, taxable_income )
-        ordinary_taxed     = taxable_income - preferential_taxed
-
-        ordinary_tax     = self._parameters.ordinary_brackets[ status ].tax_on( ordinary_taxed )
-        preferential_tax = self._preferential_tax( status, ordinary_taxed, preferential_taxed )
-        income_tax       = ordinary_tax + preferential_tax
+        taxable_income = max( _ZERO, agi - deduction )
+        split          = self._split_taxable_income(
+            taxable_income, preferential_income, section_1250, collectibles )
+        income_tax     = self._tax_on_stack( status, split )
 
         net_investment_income = max(
             _ZERO,
-            taxable_interest + qualified_dividends
-            + netted.gain_ordinary + netted.gain_preferential )
+            taxable_interest + qualified_dividends + netted.gain_ordinary
+            + netted.gain_preferential + section_1250 + collectibles )
         niit = self._net_investment_income_tax( status, agi, net_investment_income )
 
         charges = [ ( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
@@ -185,13 +206,47 @@ class USFederalTaxEngine( TaxEngine ):
         band = standard.phaseout_end - standard.phaseout_start
         return ( standard.phaseout_end - agi ) / band
 
-    def _preferential_tax(
-            self, status, ordinary_taxed : Decimal, preferential_taxed : Decimal ) -> Decimal:
-        """Tax on preferential income stacked on top of ordinary income: the LTCG
-        tax on the combined stack less the LTCG tax on the ordinary base, so the
-        preferential amount is rated by the brackets it actually lands in."""
-        ltcg = self._parameters.ltcg_brackets[ status ]
-        return ltcg.tax_on( ordinary_taxed + preferential_taxed ) - ltcg.tax_on( ordinary_taxed )
+    def _split_taxable_income(
+            self, taxable_income : Decimal, preferential : Decimal,
+            section_1250 : Decimal, collectibles : Decimal ) -> _TaxableSplit:
+        """Apportion taxable income across the rate buckets. Ordinary income sits at
+        the bottom; the gains fill the rest. When the deduction eats into gains, the
+        preferential bucket is filled first (it survives), then §1250, then
+        collectibles -- so the highest-rate gain is reduced first."""
+        nonordinary = preferential + section_1250 + collectibles
+        ordinary    = max( _ZERO, taxable_income - nonordinary )
+        room        = taxable_income - ordinary
+        pref_taxed  = min( preferential, room )
+        room       -= pref_taxed
+        s1250_taxed = min( section_1250, room )
+        room       -= s1250_taxed
+        coll_taxed  = min( collectibles, room )
+        return _TaxableSplit( ordinary, pref_taxed, s1250_taxed, coll_taxed )
+
+    def _tax_on_stack( self, status, split : _TaxableSplit ) -> Decimal:
+        """Tax the apportioned buckets as a stack: ordinary brackets on ordinary
+        income; the §1250 and collectibles gains at ordinary rates stacked on top,
+        each capped at its maximum rate; the 0/15/20% preferential gains at the LTCG
+        brackets stacked above all ordinary-rated income."""
+        ordinary = self._parameters.ordinary_brackets[ status ]
+        ltcg     = self._parameters.ltcg_brackets[ status ]
+
+        tax  = ordinary.tax_on( split.ordinary )
+        base = split.ordinary
+        tax += self._capped_gain_tax(
+            ordinary, base, split.section_1250, self._parameters.section_1250_rate )
+        base += split.section_1250
+        tax += self._capped_gain_tax(
+            ordinary, base, split.collectibles, self._parameters.collectibles_rate )
+        base += split.collectibles
+        tax += ltcg.tax_on( base + split.preferential ) - ltcg.tax_on( base )
+        return tax
+
+    def _capped_gain_tax( self, ordinary, base : Decimal, gain : Decimal, cap : Decimal ) -> Decimal:
+        """A maximum-rate gain stacked on `base`: ordinary-rate tax on the gain, but
+        never more than the cap rate times the gain."""
+        ordinary_rate_tax = ordinary.tax_on( base + gain ) - ordinary.tax_on( base )
+        return min( ordinary_rate_tax, cap * gain )
 
     def _net_investment_income_tax(
             self, status, magi : Decimal, net_investment_income : Decimal ) -> Decimal:

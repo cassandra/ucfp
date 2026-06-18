@@ -67,6 +67,8 @@ class TaxParameters:
     ss_thresholds           : dict
     itemized_rules          : ItemizedRules
     capital_loss_offset_cap : Decimal
+    section_1250_rate       : Decimal
+    collectibles_rate       : Decimal
     niit_thresholds         : dict
     niit_rate               : Decimal
 
@@ -125,6 +127,8 @@ def federal_2025() -> TaxParameters:
             charitable_agi_limit = d( '0.60' ),
         ),
         capital_loss_offset_cap = d( '3000' ),
+        section_1250_rate = d( '0.25' ),
+        collectibles_rate = d( '0.28' ),
         niit_thresholds = {
             FilingStatus.MARRIED_JOINT : d( '250000' ),
             FilingStatus.SINGLE : d( '200000' ),
