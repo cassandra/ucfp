@@ -139,7 +139,8 @@ class IncomeTaxClass( LabeledEnum ):
     """
 
     WAGES               = ( 'Wages', 'Earned income; ordinary rate, plus FICA.' )
-    ORDINARY            = ( 'Ordinary Income', 'Ordinary-rate income (pension, interest, IRA).' )
+    ORDINARY            = ( 'Ordinary Income', 'Ordinary rate, not investment income (pension, IRA).' )
+    TAXABLE_INTEREST    = ( 'Taxable Interest', 'Ordinary rate; net investment income (bank/bond/CD).' )
     QUALIFIED_DIVIDENDS = ( 'Qualified Dividends', 'Preferential rate; not netted with losses.' )
     LONG_TERM_GAINS     = ( 'Long-Term Gains', 'Preferential rate; netted with losses.' )
     SHORT_TERM_GAINS    = ( 'Short-Term Gains', 'Ordinary rate; netted separately.' )
@@ -155,9 +156,9 @@ class IncomeTaxClass( LabeledEnum ):
 # (dividends/interest). Classes absent here distribute no yield; rental income is
 # amount-based and supplied separately, so rental is not listed.
 _DISTRIBUTION_INCOME_CLASS = {
-    AssetClass.CASH            : IncomeTaxClass.ORDINARY,
-    AssetClass.BONDS           : IncomeTaxClass.ORDINARY,
-    AssetClass.CDS             : IncomeTaxClass.ORDINARY,
+    AssetClass.CASH            : IncomeTaxClass.TAXABLE_INTEREST,
+    AssetClass.BONDS           : IncomeTaxClass.TAXABLE_INTEREST,
+    AssetClass.CDS             : IncomeTaxClass.TAXABLE_INTEREST,
     AssetClass.DIVIDEND_STOCKS : IncomeTaxClass.QUALIFIED_DIVIDENDS,
 }
 

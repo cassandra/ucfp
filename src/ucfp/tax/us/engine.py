@@ -1,25 +1,27 @@
 """The US federal income-tax engine.
 
 `USFederalTaxEngine` replaces `ZeroTaxEngine` with the real federal pipeline: an
-ordered DAG over a fiscal year's income that yields the income-tax charge. The
-engine owns the *structure* (the stages and their dependencies); the projectable
-*values* for the year are the `TaxParameters` it is constructed with, so the
-Scenario builds one engine per projected year (indexing the baseline for inflation,
-or applying a what-if such as a rate hike).
+ordered DAG over a fiscal year's income that yields the tax charges. The engine owns
+the *structure* (the stages and their dependencies); the projectable *values* for
+the year are the `TaxParameters` it is constructed with, so the Scenario builds one
+engine per projected year (indexing the baseline for inflation, or applying a
+what-if such as a rate hike).
 
 Pipeline (strict DAG): capital-gains netting (short vs long, with the prior year's
 loss carryover applied first, character-preserving) -> Social-Security taxability
 worksheet -> AGI -> standard deduction -> split taxable income into ordinary vs
 preferential -> ordinary brackets with the preferential (qualified-dividend /
-long-term-gain) amount stacked on top -> total -> charge, plus the loss carryover to
-thread forward. The preferential stack is `ltcg.tax_on(ordinary + preferential) -
-ltcg.tax_on(ordinary)`, which spans LTCG rate boundaries correctly.
+long-term-gain) amount stacked on top -> the 3.8% net investment income tax (NIIT)
+-> total -> charges, plus the loss carryover to thread forward. The preferential
+stack is `ltcg.tax_on(ordinary + preferential) - ltcg.tax_on(ordinary)`, which spans
+LTCG rate boundaries correctly.
 
 DEFERRED (added as later stages land, none of which change this contract): the 25%
-(§1250) and 28% (collectibles) special rates; MAGI distinct from AGI (tax-exempt-
-interest / foreign add-backs); itemized deductions; NIIT and FICA surtaxes; the ACA
-premium tax credit. Until then, AGI stands in for MAGI and the deduction is the
-standard deduction.
+(§1250) and 28% (collectibles) special rates; MAGI distinct from AGI (the foreign-
+earned-income add-back for NIIT, the tax-exempt-interest / untaxed-SS add-backs for
+ACA); itemized deductions; FICA on wages; the ACA premium tax credit; rental income
+(gross netted with expenses), which also belongs in net investment income. Until
+then, AGI stands in for MAGI and the deduction is the standard deduction.
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -30,11 +32,6 @@ from ucfp.tax.engine import TaxAssessment, TaxEngine
 from .context import TaxContext
 from .parameters import TaxParameters
 from .state import CapitalLossCarryover, TaxState
-
-# Income tax-classes taxed at flat ordinary rates (capital gains are netted
-# separately; Social Security runs through its own worksheet; tax-free and
-# tax-exempt classes contribute nothing here).
-_ORDINARY_INCOME_CLASSES = ( IncomeTaxClass.WAGES, IncomeTaxClass.ORDINARY )
 
 _ZERO        = Decimal( '0' )
 _HALF        = Decimal( '0.5' )
@@ -63,8 +60,9 @@ class USFederalTaxEngine( TaxEngine ):
         status    = tax_context.filing_status
         carryover = ( opening_tax_state or TaxState() ).capital_loss_carryover
 
-        ordinary_base       = sum(
-            ( fiscal_window.income( c ) for c in _ORDINARY_INCOME_CLASSES ), _ZERO )
+        wages               = fiscal_window.income( IncomeTaxClass.WAGES )
+        ordinary_other      = fiscal_window.income( IncomeTaxClass.ORDINARY )
+        taxable_interest    = fiscal_window.income( IncomeTaxClass.TAXABLE_INTEREST )
         qualified_dividends = fiscal_window.income( IncomeTaxClass.QUALIFIED_DIVIDENDS )
         ss_gross            = fiscal_window.income( IncomeTaxClass.SOCIAL_SECURITY )
 
@@ -72,7 +70,8 @@ class USFederalTaxEngine( TaxEngine ):
         net_long  = fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS )  - carryover.long
         netted    = self._net_capital_gains( net_short, net_long )
 
-        ordinary_income     = ordinary_base + netted.gain_ordinary - netted.ordinary_offset
+        ordinary_income     = ( wages + ordinary_other + taxable_interest
+                                + netted.gain_ordinary - netted.ordinary_offset )
         preferential_income = qualified_dividends + netted.gain_preferential
 
         taxable_ss = self._taxable_social_security(
@@ -86,10 +85,19 @@ class USFederalTaxEngine( TaxEngine ):
 
         ordinary_tax     = self._parameters.ordinary_brackets[ status ].tax_on( ordinary_taxed )
         preferential_tax = self._preferential_tax( status, ordinary_taxed, preferential_taxed )
+        income_tax       = ordinary_tax + preferential_tax
 
-        total = ordinary_tax + preferential_tax
+        net_investment_income = max(
+            _ZERO,
+            taxable_interest + qualified_dividends
+            + netted.gain_ordinary + netted.gain_preferential )
+        niit = self._net_investment_income_tax( status, agi, net_investment_income )
+
+        charges = [ ( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
+        if niit > 0:
+            charges.append( ( ExpenseTaxClass.NIIT, niit ) )
         return TaxAssessment(
-            charges           = [ ( ExpenseTaxClass.INCOME_TAX, total ) ],
+            charges           = charges,
             closing_tax_state = TaxState( capital_loss_carryover = netted.carryover ),
         )
 
@@ -166,3 +174,11 @@ class USFederalTaxEngine( TaxEngine ):
         preferential amount is rated by the brackets it actually lands in."""
         ltcg = self._parameters.ltcg_brackets[ status ]
         return ltcg.tax_on( ordinary_taxed + preferential_taxed ) - ltcg.tax_on( ordinary_taxed )
+
+    def _net_investment_income_tax(
+            self, status, magi : Decimal, net_investment_income : Decimal ) -> Decimal:
+        """NIIT: the rate applied to the lesser of net investment income and MAGI
+        over the filing-status threshold (zero below it). MAGI = AGI here; the
+        foreign-earned-income add-back is deferred."""
+        excess = max( _ZERO, magi - self._parameters.niit_thresholds[ status ] )
+        return self._parameters.niit_rate * min( net_investment_income, excess )

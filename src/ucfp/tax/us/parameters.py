@@ -55,6 +55,8 @@ class TaxParameters:
     standard_deduction      : dict
     ss_thresholds           : dict
     capital_loss_offset_cap : Decimal
+    niit_thresholds         : dict
+    niit_rate               : Decimal
 
 
 def federal_2025() -> TaxParameters:
@@ -104,4 +106,9 @@ def federal_2025() -> TaxParameters:
             FilingStatus.SINGLE : SocialSecurityThresholds( d( '25000' ), d( '34000' ) ),
         },
         capital_loss_offset_cap = d( '3000' ),
+        niit_thresholds = {
+            FilingStatus.MARRIED_JOINT : d( '250000' ),
+            FilingStatus.SINGLE : d( '200000' ),
+        },
+        niit_rate = d( '0.038' ),
     )
