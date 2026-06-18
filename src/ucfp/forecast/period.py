@@ -34,9 +34,13 @@ from .results import Notice, PeriodResult
 class Period:
     """One forecast step over a single interval, computed against a running Ledger."""
 
-    def __init__( self, parameters : PeriodParameters, tax_engine : TaxEngine ):
-        self._parameters = parameters
-        self._tax_engine = tax_engine
+    def __init__( self,
+                  parameters       : PeriodParameters,
+                  tax_engine       : TaxEngine,
+                  opening_tax_state = None ):
+        self._parameters        = parameters
+        self._tax_engine        = tax_engine
+        self._opening_tax_state = opening_tax_state
 
     def compute( self, ledger : Ledger ) -> PeriodResult:
         """Post this interval's transactions onto `ledger` (the Forecast's running
@@ -229,10 +233,15 @@ class Period:
         The engine assesses against a fiscal-year `FiscalWindow`, not the period's
         own slice -- income tax is an annual computation. For an annual period the
         window is the period's span; once the Scenario drives sub-annual cadences it
-        will gate settlement to the year-close period and supply the full-year span."""
+        will gate settlement to the year-close period and supply the full-year span.
+
+        The engine's opening tax state (carryforwards) is threaded in, and its
+        closing state captured on the result -- even in a no-charge year, since a
+        capital-loss year produces a carryover with no tax due."""
         fiscal_window = FiscalWindow( ledger, self._parameters.date_span )
         assessment = self._tax_engine.assess(
-            fiscal_window, self._parameters.tax_context, None )
+            fiscal_window, self._parameters.tax_context, self._opening_tax_state )
+        result.closing_tax_state = assessment.closing_tax_state
         if not assessment.charges:
             return
         cash_account = chart.cash_account( ledger )

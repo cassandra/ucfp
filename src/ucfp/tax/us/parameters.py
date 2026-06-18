@@ -50,10 +50,11 @@ class TaxParameters:
     """One tax year's US federal parameters, keyed by FilingStatus where they
     differ. Projectable per year by the Scenario."""
 
-    ordinary_brackets  : dict
-    ltcg_brackets      : dict
-    standard_deduction : dict
-    ss_thresholds      : dict
+    ordinary_brackets       : dict
+    ltcg_brackets           : dict
+    standard_deduction      : dict
+    ss_thresholds           : dict
+    capital_loss_offset_cap : Decimal
 
 
 def federal_2025() -> TaxParameters:
@@ -102,4 +103,5 @@ def federal_2025() -> TaxParameters:
             FilingStatus.MARRIED_JOINT : SocialSecurityThresholds( d( '32000' ), d( '44000' ) ),
             FilingStatus.SINGLE : SocialSecurityThresholds( d( '25000' ), d( '34000' ) ),
         },
+        capital_loss_offset_cap = d( '3000' ),
     )

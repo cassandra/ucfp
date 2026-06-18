@@ -18,8 +18,14 @@ class Notice:
 
 @dataclass
 class PeriodResult:
-    """What a Period produces: the notices it raised and whether the stop condition
-    was hit. The generated transactions live in the Ledger the Period posted to."""
+    """What a Period produces: the notices it raised, whether the stop condition was
+    hit, and the engine's closing tax state to thread into the next fiscal year. The
+    generated transactions live in the Ledger the Period posted to.
 
-    notices     : list = field( default_factory = list )   # list[ Notice ]
-    is_depleted : bool = False
+    `closing_tax_state` is the tax engine's updated carryforwards (opaque here); it
+    is None when no engine settled this period -- the Forecast carries the prior
+    opening state forward unchanged in that case."""
+
+    notices           : list = field( default_factory = list )   # list[ Notice ]
+    is_depleted       : bool = False
+    closing_tax_state : object = None
