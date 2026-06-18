@@ -20,6 +20,7 @@ from .enums import (
     AccountType,
     AssetClass,
     CurrencyType,
+    ExpenseTaxClass,
     IncomeTaxClass,
     SideType,
     SystemAccountRole,
@@ -206,6 +207,14 @@ class Ledger:
         """The first revenue account with `income_tax_class`, or None."""
         for account in self._accounts.values():
             if account.income_tax_class == income_tax_class:
+                return account
+            continue
+        return None
+
+    def expense_account( self, expense_tax_class : ExpenseTaxClass ) -> Optional[ Account ]:
+        """The first expense account with `expense_tax_class`, or None."""
+        for account in self._accounts.values():
+            if account.expense_tax_class == expense_tax_class:
                 return account
             continue
         return None

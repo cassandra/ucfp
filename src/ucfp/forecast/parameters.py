@@ -13,9 +13,10 @@ data/design/projection-model.md, "PeriodParameters".
 """
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from decimal import Decimal
 
 from common.rate import Rate, ZERO_RATE
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.tax.engine import TaxContext
 
 
@@ -55,20 +56,27 @@ class AssetRates:
         return self.distribution.get( asset_class, ZERO_RATE )
 
 
+@dataclass( frozen = True )
 class IncomeLine:
-    """One income source materializing this interval: the subject, the income
-    (tax-treatment) class it credits, and the resolved gross amount.
+    """One income source materializing this interval: the income tax-class it
+    credits and the resolved gross amount.
 
-    NOTE: stub -- fields TBD (needs the income-source / tax-class enums).
+    The per-subject linkage (needed later for FICA / SS rules) is deferred until
+    subjects and tax_context are grounded -- the posting itself does not use it.
     """
 
+    income_tax_class : IncomeTaxClass
+    gross_amount     : Decimal
 
+
+@dataclass( frozen = True )
 class ExpenseLine:
-    """One expense materializing this interval: the expense (deductibility) class
-    it debits and the resolved amount.
+    """One class of expense materializing this interval: the expense tax-class it
+    debits and the resolved amount (the Scenario aggregates the user's detailed
+    per-item expenses into per-class lines)."""
 
-    NOTE: stub -- fields TBD (needs the deductibility enum).
-    """
+    expense_tax_class : ExpenseTaxClass
+    amount            : Decimal
 
 
 class LiabilityTerm:

@@ -127,9 +127,28 @@ class Period:
         return
 
     def _recognize_income( self, ledger : Ledger, result : PeriodResult ) -> None:
-        """Post the resolved `income_lines` (salary/pension/SS/rental) -> Savings,
-        crediting each line's income tax-class revenue account, at the midpoint."""
-        raise NotImplementedError
+        """Post the resolved `income_lines` (salary/pension/SS) at the midpoint:
+        DR the cash hub / CR the line's income tax-class account."""
+        cash_account = ledger.cash_account()
+        income_date = self._parameters.date_span.midpoint
+        for income_line in self._parameters.income_lines:
+            amount = quantize_money( income_line.gross_amount )
+            if amount == 0:
+                continue
+            if cash_account is None:
+                raise MissingAccountError( 'No cash account to receive income.' )
+            income_account = ledger.income_account( income_line.income_tax_class )
+            if income_account is None:
+                raise MissingAccountError(
+                    f'No revenue account for income tax-class {income_line.income_tax_class.label}.'
+                )
+            ledger.record(
+                income_date,
+                cash_account.currency,
+                [ ( cash_account, -amount ), ( income_account, amount ) ],
+            )
+            continue
+        return
 
     def _service_liabilities( self, ledger : Ledger, result : PeriodResult ) -> None:
         """Apply each `liability_terms` scheduled payment: Savings -> principal
@@ -137,9 +156,28 @@ class Period:
         raise NotImplementedError
 
     def _apply_expenses( self, ledger : Ledger, result : PeriodResult ) -> None:
-        """Post the resolved `expense_lines` -> expense accounts, drawn from
-        Savings, at the midpoint."""
-        raise NotImplementedError
+        """Post the resolved per-class `expense_lines` at the midpoint: DR the
+        expense tax-class account / CR the cash hub."""
+        cash_account = ledger.cash_account()
+        expense_date = self._parameters.date_span.midpoint
+        for expense_line in self._parameters.expense_lines:
+            amount = quantize_money( expense_line.amount )
+            if amount == 0:
+                continue
+            if cash_account is None:
+                raise MissingAccountError( 'No cash account to pay expenses from.' )
+            expense_account = ledger.expense_account( expense_line.expense_tax_class )
+            if expense_account is None:
+                raise MissingAccountError(
+                    f'No expense account for expense tax-class {expense_line.expense_tax_class.label}.'
+                )
+            ledger.record(
+                expense_date,
+                cash_account.currency,
+                [ ( expense_account, -amount ), ( cash_account, amount ) ],
+            )
+            continue
+        return
 
     def _apply_events( self, ledger : Ledger, result : PeriodResult ) -> None:
         """Apply the scheduled `money_movement_events` (sales, purchases, explicit
