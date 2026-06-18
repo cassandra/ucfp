@@ -70,6 +70,25 @@ class FICARules:
 
 
 @dataclass( frozen = True )
+class AcaParameters:
+    """ACA premium-tax-credit parameters: the federal poverty guideline (first person
+    plus each additional) and the applicable-percentage curve -- the share of income a
+    household is expected to contribute toward premiums, zero below
+    `applicable_lower_ratio` x the poverty line and rising at `applicable_slope` per
+    unit of poverty-ratio up to `applicable_max_rate`."""
+
+    poverty_first_person      : Decimal
+    poverty_additional_person : Decimal
+    applicable_lower_ratio    : Decimal
+    applicable_slope          : Decimal
+    applicable_max_rate       : Decimal
+
+    def poverty_line( self, household_size : int ) -> Decimal:
+        """The federal poverty guideline for a household of `household_size`."""
+        return self.poverty_first_person + self.poverty_additional_person * ( household_size - 1 )
+
+
+@dataclass( frozen = True )
 class TaxParameters:
     """One tax year's US federal parameters, keyed by FilingStatus where they
     differ. Projectable per year by the Scenario."""
@@ -86,6 +105,7 @@ class TaxParameters:
     niit_thresholds         : dict
     niit_rate               : Decimal
     fica_rules              : FICARules
+    aca                     : AcaParameters
 
 
 def federal_2025() -> TaxParameters:
@@ -162,5 +182,12 @@ def federal_2025() -> TaxParameters:
                 FilingStatus.MARRIED_JOINT : d( '250000' ),
                 FilingStatus.SINGLE : d( '200000' ),
             },
+        ),
+        aca = AcaParameters(
+            poverty_first_person      = d( '15960' ),
+            poverty_additional_person = d( '5680' ),
+            applicable_lower_ratio    = d( '1.5' ),
+            applicable_slope          = d( '0.034' ),
+            applicable_max_rate       = d( '0.085' ),
         ),
     )

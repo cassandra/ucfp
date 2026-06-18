@@ -234,16 +234,23 @@ class Period:
 
         The engine's opening tax state (carryforwards) is threaded in, and its
         closing state captured on the result -- even in a no-charge year, since a
-        capital-loss year produces a carryover with no tax due."""
+        capital-loss year produces a carryover with no tax due.
+
+        Charges are paid (DR tax expense / CR cash); refundable credits are the reverse
+        (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
+        refund -- modeled here as a negated charge against the same expense class."""
         fiscal_window = FiscalWindow( ledger, self._parameters.date_span )
         assessment = self._tax_engine.assess(
             fiscal_window, self._parameters.tax_context, self._opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
-        if not assessment.charges:
+        settlements = (
+            [ ( expense_class, amount ) for expense_class, amount in assessment.charges ]
+            + [ ( expense_class, -amount ) for expense_class, amount in assessment.credits ] )
+        if not settlements:
             return
         cash_account = chart.cash_account( ledger )
         settle_date = self._parameters.date_span.end_date
-        for expense_class, amount in assessment.charges:
+        for expense_class, amount in settlements:
             amount = quantize_money( amount )
             if amount == 0:
                 continue

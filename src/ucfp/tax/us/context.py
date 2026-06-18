@@ -11,11 +11,11 @@ NOTE: carries the per-individual facts the engine needs that are NOT money amoun
 the ledger. The engine reads all income (including per-worker wages, since each worker
 has their own WAGES account) from the ledger via the `FiscalWindow`; what lives here is
 non-monetary per-subject status -- currently ages (deduction bonuses). Household size,
-state, ACA enrollment, and per-subject blindness join as the engine's later stages
-land.
+state and per-subject blindness join as the engine's later stages land.
 """
 from dataclasses import dataclass, field
 
+from .aca import AcaEnrollment
 from .enums import FilingStatus
 
 
@@ -32,12 +32,14 @@ class TaxSubject:
 @dataclass( frozen = True )
 class TaxContext:
     """The resolved taxpayer facts for one fiscal window: the filing status, the people
-    on the return (`subjects`), and the real estate held (`properties`, for §121/§1250
-    at sale and rental depreciation)."""
+    on the return (`subjects`), the real estate held (`properties`, for §121/§1250 at
+    sale and rental depreciation), and ACA marketplace enrollment (`aca`, None when not
+    enrolled)."""
 
     filing_status : FilingStatus
     subjects      : tuple = field( default_factory = tuple )
     properties    : tuple = field( default_factory = tuple )
+    aca           : AcaEnrollment = None
 
     def count_age_at_least( self, age : int ) -> int:
         """How many subjects are at least `age` -- e.g. the 65+ count that drives the

@@ -13,10 +13,11 @@ schedule) -> capital-gains netting (short vs long, with the prior year's
 loss carryover applied first, character-preserving) -> Social-Security taxability
 worksheet -> AGI -> the greater of the standard and itemized deductions -> split
 taxable income across rate buckets -> tax on the stack -> the 3.8% net investment
-income tax (NIIT, on its own MAGI) -> employee FICA on wages -> total -> charges, plus
-the loss carryover to thread forward. AGI and the modified-AGI variants are surfaced as
-`TaxFigures` on the assessment (see `figures.py`); NIIT uses `niit_magi`, and
-`aca_magi` / `irmaa_magi` are ready for the ACA credit and the Scenario's IRMAA.
+income tax (NIIT, on its own MAGI) -> employee FICA on wages -> the ACA premium tax
+credit (a refundable credit, on its own MAGI) -> total -> charges + credits, plus the
+loss carryover to thread forward. AGI and the modified-AGI variants are surfaced as
+`TaxFigures` on the assessment (see `figures.py`); NIIT uses `niit_magi`, the PTC uses
+`aca_magi`, and `irmaa_magi` is ready for the Scenario's IRMAA.
 
 The stack, bottom to top: ordinary income at ordinary brackets; then the §1250 (25%)
 and collectibles (28%) maximum-rate long-term gains, each taxed at ordinary rates
@@ -34,8 +35,9 @@ category capital-loss absorption (a net loss should reduce 28% then 25% then 0/1
 gains -- the §1250/collectibles buckets are not yet in the ST/LT netting, only their
 gains are taxed); passive-activity-loss limits on rental losses; the foreign-earned-
 income exclusion add-back (a MAGI component, not modeled → zero); the mortgage
-acquisition-debt limit and the charitable 5-year carryover; the ACA premium tax
-credit.
+acquisition-debt limit and the charitable 5-year carryover; ACA refinements (advance-
+PTC reconciliation, enrollment-month proration, the actual-premium cap, the
+under-100%-FPL Medicaid floor).
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -144,16 +146,21 @@ class USFederalTaxEngine( TaxEngine ):
             status, figures.niit_magi, net_investment_income )
 
         payroll_tax = self._payroll_tax( status, fiscal_window )
+        premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.aca )
 
         charges = [ ( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
         if payroll_tax > 0:
             charges.append( ( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ) )
         if niit > 0:
             charges.append( ( ExpenseTaxClass.NIIT, niit ) )
+        credits = []
+        if premium_credit > 0:
+            credits.append( ( ExpenseTaxClass.INCOME_TAX, premium_credit ) )
         return TaxAssessment(
             charges           = charges,
             closing_tax_state = TaxState( capital_loss_carryover = netted.carryover ),
             figures           = figures,
+            credits           = credits,
         )
 
     def _net_capital_gains( self, net_short : Decimal, net_long : Decimal ) -> _NetCapital:
@@ -240,6 +247,21 @@ class USFederalTaxEngine( TaxEngine ):
                 tax_property.property_type, span.day_before_start, close )
             continue
         return total
+
+    def _premium_tax_credit( self, aca_magi : Decimal, aca_enrollment ) -> Decimal:
+        """The ACA premium tax credit: the benchmark plan cost less the household's
+        expected contribution -- a share of income that is zero below the lower
+        poverty-ratio and rises with the ratio to the cap -- floored at zero. Zero when
+        not enrolled. Enrollment-month proration, advance-PTC reconciliation, the
+        actual-premium cap, and the under-100%-FPL Medicaid floor are deferred."""
+        if aca_enrollment is None:
+            return _ZERO
+        aca   = self._parameters.aca
+        ratio = aca_magi / aca.poverty_line( aca_enrollment.household_size )
+        applicable_rate = max( _ZERO, min(
+            aca.applicable_max_rate, aca.applicable_slope * ( ratio - aca.applicable_lower_ratio ) ) )
+        expected_contribution = applicable_rate * aca_magi
+        return max( _ZERO, aca_enrollment.benchmark_premium - expected_contribution )
 
     def _taxable_social_security(
             self, status, ss_gross : Decimal, other_income : Decimal ) -> Decimal:

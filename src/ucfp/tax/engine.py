@@ -19,11 +19,14 @@ class TaxAssessment:
     Period) to carry forward as the next fiscal year's `opening_tax_state`. It is
     None for engines that thread no state. `figures` holds engine-specific derived
     figures (e.g. AGI/MAGI) for downstream consumers, also opaque to the Period.
-    Credits (e.g. ACA PTC) come with later engine stages."""
+    `credits` are refundable credits -- each an `(ExpenseTaxClass, amount)` the Period
+    books against that tax (e.g. the ACA premium tax credit against income tax),
+    refundable so the net settlement may be a refund."""
 
     charges           : list = field( default_factory = list )
     closing_tax_state : object = None
     figures           : object = None
+    credits           : list = field( default_factory = list )
 
 
 class TaxEngine:
