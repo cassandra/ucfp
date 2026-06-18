@@ -14,6 +14,8 @@ from decimal import Decimal
 from ucfp.accounts.ledger import Ledger
 from ucfp.accounts.models import Account
 
+from . import chart
+from .exceptions import MissingAccountError, ProjectionError
 from .results import Notice
 
 
@@ -65,15 +67,38 @@ class Purchase( PeriodEvent ):
 
 @dataclass( frozen = True )
 class Sale( PeriodEvent ):
-    """Sell (part of) a holding to cash, realizing the gain into the asset class's
-    realized-gain income class (with residence/rental special rules).
+    """Sell `amount` of a holding's market value to the cash hub, realizing the
+    gain into the asset class's realized-gain income class (caps at the holding's
+    value). Residence/rental special rules (§121, §1250) are not yet applied."""
 
-    NOTE: stub -- pending the Ledger.realize primitive and the AssetClass
-    realized-gain mapping.
-    """
+    event_date : date
+    holding    : Account
+    amount     : Decimal
 
     def apply( self, ledger : Ledger ) -> list[ Notice ]:
-        raise NotImplementedError
+        income_class = self.holding.asset_class.realized_gain_income_class
+        if income_class is None:
+            raise ProjectionError(
+                f'Sale of {self.holding.asset_class.label} is not supported '
+                '(no realized-gain income class).'
+            )
+        cash = chart.cash_account( ledger )
+        if cash is None:
+            raise MissingAccountError( 'No cash account to receive sale proceeds.' )
+        realized_gain_account = chart.income_account( ledger, income_class )
+        if realized_gain_account is None:
+            raise MissingAccountError(
+                f'No revenue account for income tax-class {income_class.label}.'
+            )
+        chart.realize(
+            ledger,
+            self.holding,
+            self.amount,
+            proceeds_account = cash,
+            realized_gain_account = realized_gain_account,
+            on_date = self.event_date,
+        )
+        return []
 
 
 @dataclass( frozen = True )

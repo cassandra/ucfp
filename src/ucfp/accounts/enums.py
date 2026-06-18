@@ -115,6 +115,13 @@ class AssetClass( LabeledEnum ):
         (not a yield) and is supplied separately, so rental is not included here."""
         return _DISTRIBUTION_INCOME_CLASS.get( self )
 
+    @property
+    def realized_gain_income_class( self ):
+        """The income tax-class the gain realized on a sale or withdrawal is
+        recognized in, or None for classes with no taxable realized gain (cash,
+        CDs, personal-use depreciating assets)."""
+        return _REALIZED_GAIN_INCOME_CLASS.get( self )
+
 
 # Cash-like classes carried at face value: their return is distributed as interest
 # income, not accrued as appreciation, so they have no valuation companion.
@@ -152,6 +159,21 @@ _DISTRIBUTION_INCOME_CLASS = {
     AssetClass.BONDS           : IncomeTaxClass.ORDINARY,
     AssetClass.CDS             : IncomeTaxClass.ORDINARY,
     AssetClass.DIVIDEND_STOCKS : IncomeTaxClass.QUALIFIED_DIVIDENDS,
+}
+
+
+# The income tax-class the gain realized on a sale or withdrawal is recognized in,
+# per asset class. Classes absent here have no taxable realized gain.
+_REALIZED_GAIN_INCOME_CLASS = {
+    AssetClass.STOCKS                : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.DIVIDEND_STOCKS       : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.BONDS                 : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.REAL_ESTATE_RESIDENCE : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.REAL_ESTATE_RENTAL    : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.PRETAX_RETIREMENT     : IncomeTaxClass.ORDINARY,
+    AssetClass.ROTH                  : IncomeTaxClass.TAX_FREE,
+    AssetClass.PRECIOUS_METALS       : IncomeTaxClass.COLLECTIBLES_GAINS,
+    AssetClass.COLLECTIBLES          : IncomeTaxClass.COLLECTIBLES_GAINS,
 }
 
 
