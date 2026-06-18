@@ -151,9 +151,31 @@ class Period:
         return
 
     def _service_liabilities( self, ledger : Ledger, result : PeriodResult ) -> None:
-        """Apply each `liability_terms` scheduled payment: Savings -> principal
-        (reducing the liability) plus interest (an expense, deductible or not)."""
-        raise NotImplementedError
+        """Apply each loan's payment for the interval, at the midpoint: interest to
+        its interest expense account, scheduled + extra principal to the loan, all
+        from the cash hub. The Scenario resolves the breakdown; cash shortfalls are
+        the funding step's concern, not here."""
+        cash_account = ledger.cash_account()
+        payment_date = self._parameters.date_span.midpoint
+        for term in self._parameters.liability_terms:
+            interest = quantize_money( term.interest )
+            total_principal = quantize_money( term.principal ) + quantize_money( term.extra_principal )
+            payment = total_principal + interest
+            if payment == 0:
+                continue
+            if cash_account is None:
+                raise MissingAccountError( 'No cash account to pay liabilities from.' )
+            ledger.record(
+                payment_date,
+                cash_account.currency,
+                [
+                    ( term.liability_account, -total_principal ),
+                    ( term.interest_account, -interest ),
+                    ( cash_account, payment ),
+                ],
+            )
+            continue
+        return
 
     def _apply_expenses( self, ledger : Ledger, result : PeriodResult ) -> None:
         """Post the resolved per-class `expense_lines` at the midpoint: DR the

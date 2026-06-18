@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.models import Account
 from ucfp.tax.engine import TaxContext
 
 
@@ -79,12 +80,23 @@ class ExpenseLine:
     amount            : Decimal
 
 
+@dataclass( frozen = True )
 class LiabilityTerm:
-    """This interval's terms for one liability: the account, its interest rate, and
-    the scheduled payment.
+    """This interval's payment for one loan (loans are modeled individually).
 
-    NOTE: stub -- fields TBD.
+    The Scenario owns the amortization schedule and resolves the breakdown
+    directly, so the Period just posts it -- no rate or opening-balance math here.
+    Scheduled `principal` and `extra_principal` are kept separate (an extra payment
+    is worth surfacing); both reduce the loan. `interest_account` is the expense
+    account the interest is booked to; it carries the deductibility class the tax
+    engine reads, so the class lives on the account, not here.
     """
+
+    liability_account : Account
+    interest_account  : Account
+    principal         : Decimal
+    interest          : Decimal
+    extra_principal   : Decimal = Decimal( '0' )
 
 
 class MoneyMovementEvent:
