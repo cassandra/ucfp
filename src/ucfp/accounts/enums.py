@@ -109,6 +109,15 @@ class AssetClass( LabeledEnum ):
         return self not in _NON_APPRECIATING_ASSET_CLASSES
 
     @property
+    def seeds_at_zero_basis( self ) -> bool:
+        """Whether a holding of this class opens with zero cost basis -- its entire value
+        seeded as unrealized gain rather than as cost -- so a later withdrawal or conversion
+        realizes the whole amount as income (a pre-tax account is wholly ordinary, a Roth
+        wholly tax-free). Other appreciating classes open at cost = market (basis) and
+        accrue gain only as they grow."""
+        return self in _ZERO_BASIS_ASSET_CLASSES
+
+    @property
     def distribution_income_class( self ):
         """The income tax-class a yield distribution (dividend/interest) credits,
         or None for classes that distribute no yield. Rental income is amount-based
@@ -127,6 +136,13 @@ class AssetClass( LabeledEnum ):
 # Cash-like classes carried at face value: their return is distributed as interest
 # income, not accrued as appreciation, so they have no valuation companion.
 _NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS ) )
+
+
+# Retirement classes seeded with zero cost basis (whole value as unrealized gain), so a
+# withdrawal/conversion recognizes the entire amount -- pre-tax as ordinary, Roth as
+# tax-free -- instead of only the post-seed appreciation.
+_ZERO_BASIS_ASSET_CLASSES = frozenset(
+    ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
 
 
 class RealPropertyType( LabeledEnum ):

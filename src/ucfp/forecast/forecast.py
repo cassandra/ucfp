@@ -199,17 +199,34 @@ class Forecast:
         return bookkeeper
 
     def _seed_opening_balances( self, bookkeeper : Bookkeeper, holdings : list ) -> None:
-        """Post the opening transaction: each holding's value (a debit, increasing the
-        asset) and each loan's balance (a credit, the liability), with Opening Balances
-        absorbing the residual so the books balance from t0."""
-        opening_postings = [ ( holding, -value ) for holding, value in holdings ]
+        """Post the opening transaction: each holding's value (increasing the asset) and each
+        loan's balance (a credit, the liability), with Opening Balances absorbing the residual
+        so the books balance from t0. A zero-basis holding self-balances (its value seeds its
+        own Unrealized Gains equity), so only basis-bearing holdings and loans hit the plug."""
+        chart = bookkeeper.chart
+        opening_postings = list()
+        for holding, value in holdings:
+            opening_postings += self._opening_value_postings( chart, holding, value )
+            continue
         opening_postings += [ ( loan.account, loan.parameters.opening_balance ) for loan in self._loans ]
         plug = -sum( ( amount for _account, amount in opening_postings ), Decimal( '0' ) )
         opening_postings.append(
-            ( bookkeeper.chart.system_account( SystemAccountRole.OPENING_BALANCES ), plug ) )
+            ( chart.system_account( SystemAccountRole.OPENING_BALANCES ), plug ) )
         if any( amount != 0 for _account, amount in opening_postings ):
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), opening_postings )
         return
+
+    def _opening_value_postings( self, chart, holding : Account, value : Decimal ) -> list:
+        """The opening postings seeding `holding` with `value`. A basis-bearing holding opens
+        at cost = market (one posting, absorbed by Opening Balances). A zero-basis holding (a
+        retirement account) opens at cost 0 with its whole value as unrealized gain, so a
+        later realization recognizes the entire amount -- the value lands in its valuation
+        companion and its own Unrealized Gains equity, balancing within the holding."""
+        if not holding.asset_class.seeds_at_zero_basis:
+            return [ ( holding, -value ) ]
+        valuation_account = chart.valuation_of( holding )
+        unrealized_gains = chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
+        return [ ( valuation_account, -value ), ( unrealized_gains, value ) ]
 
     def _create_loans( self, bookkeeper : Bookkeeper ) -> None:
         """Create a liability account and an interest expense account per loan, and derive

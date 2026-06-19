@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from common.rate import Rate
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
@@ -72,6 +72,32 @@ class EventResolutionTests( unittest.TestCase ):
                           Decimal( '0' ) )
         self.assertEqual( ledger.market_value( _holding( reader, 'Roth' ), through = through ),
                           Decimal( '40000' ) )
+
+    def test_pretax_withdrawal_recognizes_the_whole_amount_as_ordinary( self ):
+        # zero-basis seeding: a pre-tax account opens with no cost basis, so a withdrawal is
+        # wholly ordinary income (not just appreciation). With no growth, the entire 40k --
+        # not zero -- lands in the Ordinary revenue account.
+        parameters = ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 6, 30 ),
+            filing_status = FilingStatus.MARRIED_JOINT,
+            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ) ),
+                AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ) ),
+            ],
+            events        = [ ScheduledRealization( date( 2026, 3, 1 ), 'IRA', Decimal( '40000' ) ) ],
+        )
+        reader = Bookkeeper( Forecast( parameters ).run().books )
+        ledger = reader.ledger
+        through = date( 2026, 6, 30 )
+        ordinary = reader.chart.income_account( IncomeTaxClass.ORDINARY )
+        self.assertEqual( ledger.natural_balance( ordinary ), Decimal( '40000' ) )
+        # the withdrawal lands in cash; recognizing it is net-worth-neutral (no tax this half-year)
+        self.assertEqual( ledger.market_value( _holding( reader, 'Cash' ), through = through ),
+                          Decimal( '40000' ) )
+        self.assertEqual( ledger.net_worth( through = through ), Decimal( '40000' ) )
 
     def test_selling_a_depreciated_asset_realizes_a_tax_free_loss( self ):
         # A depreciating asset has no taxable realized gain; selling it must still resolve
