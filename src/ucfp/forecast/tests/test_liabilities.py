@@ -16,7 +16,7 @@ from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters,
     ForecastParameters,
-    LiabilityParameters,
+    LoanParameters,
     Subject,
 )
 from ucfp.tax.enums import TaxForecastType, TaxLawType
@@ -32,7 +32,7 @@ def _parameters( end_date ):
         tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
         subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
         assets        = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ) ) ],
-        liabilities   = [ LiabilityParameters(
+        loans         = [ LoanParameters(
             'Mortgage', Decimal( '200000' ), Rate( Decimal( '0.05' ) ),
             Duration( 30, TimeUnit.YEAR ), ExpenseTaxClass.MORTGAGE_INTEREST ) ],
     )

@@ -10,9 +10,9 @@ ledger from them. A "Scenario" is a *variation* of a ForecastParameters -- the
 comparison/what-if layer above the engine -- and is not modelled here.
 
 STUB: subjects, assets, the economic outlook, income streams, expenses, the frame, filing
-status, the tax-forecast profile, and the funding knobs (cash target + draw order, the
-asset classes drawn from in priority to cover a shortfall). Liabilities and Events join
-incrementally; per-item value-rules and existence windows ride on the item sub-objects.
+status, the tax-forecast profile, loans, and the funding knobs (cash target + draw order,
+the asset classes drawn from in priority to cover a shortfall). Events join incrementally;
+per-item value-rules and existence windows ride on the item sub-objects.
 """
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -92,7 +92,7 @@ class ExpenseItem:
 
 
 @dataclass( frozen = True )
-class LiabilityParameters:
+class LoanParameters:
     """A loan owed at the forecast start -- mortgage, car loan, etc. -- specified the way a
     loan naturally is: `opening_balance`, `interest_rate` (annual), and `term` (a Duration,
     e.g. 30 years). The Forecast derives the level payment by amortization at the run's
@@ -118,17 +118,17 @@ class ForecastParameters:
     end_date          : date
     filing_status     : FilingStatus
     tax_forecast      : TaxForecastProfile
-    label             : str                        = ''
-    granularity       : Duration                   = Duration( 1, TimeUnit.YEAR )
-    subjects          : list[ Subject ]            = field( default_factory = list )
-    assets            : list[ AssetParameters ]    = field( default_factory = list )
-    economic_outlook  : EconomicOutlook            = field( default_factory = EconomicOutlook )
-    income_streams    : list[ IncomeStream ]       = field( default_factory = list )
-    expenses          : list[ ExpenseItem ]        = field( default_factory = list )
-    liabilities       : list[ LiabilityParameters ] = field( default_factory = list )
-    cash_target       : Decimal                    = Decimal( '0' )
-    draw_order        : list[ AssetClass ]         = field( default_factory = list )
-    initial_tax_state : object                     = None
+    label             : str                     = ''
+    granularity       : Duration                = Duration( 1, TimeUnit.YEAR )
+    subjects          : list[ Subject ]         = field( default_factory = list )
+    assets            : list[ AssetParameters ] = field( default_factory = list )
+    economic_outlook  : EconomicOutlook         = field( default_factory = EconomicOutlook )
+    income_streams    : list[ IncomeStream ]    = field( default_factory = list )
+    expenses          : list[ ExpenseItem ]     = field( default_factory = list )
+    loans             : list[ LoanParameters ]  = field( default_factory = list )
+    cash_target       : Decimal                 = Decimal( '0' )
+    draw_order        : list[ AssetClass ]      = field( default_factory = list )
+    initial_tax_state : object                  = None
 
     def period_spans( self ) -> list[ DateSpan ]:
         """The horizon sliced into consecutive `granularity` intervals (the last truncated

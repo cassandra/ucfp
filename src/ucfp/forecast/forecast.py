@@ -185,7 +185,7 @@ class Forecast:
         holdings = [
             ( bookkeeper.create_holding( asset_root, asset.name, asset.asset_class ), asset.opening_value )
             for asset in self._parameters.assets ]
-        self._create_liabilities( bookkeeper )
+        self._create_loans( bookkeeper )
         self._seed_opening_balances( bookkeeper, holdings )
         self._create_income_accounts( bookkeeper )
         self._create_asset_income_accounts( bookkeeper )
@@ -207,16 +207,16 @@ class Forecast:
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), opening_postings )
         return
 
-    def _create_liabilities( self, bookkeeper : Bookkeeper ) -> None:
+    def _create_loans( self, bookkeeper : Bookkeeper ) -> None:
         """Create a liability account and an interest expense account per loan, and derive
         its level payment (amortizing the opening balance over the term at the run's
         granularity). Called before the opening seed, which credits each balance."""
-        if not self._parameters.liabilities:
+        if not self._parameters.loans:
             return
         self._periods_per_year = 12 // self._parameters.granularity.months()
         liability_root = bookkeeper.chart.root( AccountType.LIABILITY )
         expense_root = bookkeeper.chart.root( AccountType.EXPENSE )
-        for loan in self._parameters.liabilities:
+        for loan in self._parameters.loans:
             account = bookkeeper.add_account( Account( name = loan.name, parent = liability_root ) )
             interest_account = bookkeeper.add_account(
                 Account( name = f'{loan.name} Interest', parent = expense_root,
