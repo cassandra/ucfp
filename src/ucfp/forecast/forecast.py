@@ -21,8 +21,9 @@ engine as a black box: it asks the `TaxLaw` for each year's engine and never tou
 tax knob.
 
 STUB: per-period resolution covers subjects -> tax_context, AssetRates from the economic
-outlook, and income/expense lines from the active streams and items; events and the
-feedback knobs (funding draws, RMDs, adaptive conversions) join incrementally.
+outlook, income/expense lines from the active streams and items, and the scheduled events
+occurring in the interval; the auto/feedback knobs (RMDs, adaptive conversions) join
+incrementally.
 """
 import calendar
 from collections import namedtuple
@@ -149,6 +150,7 @@ class Forecast:
         self._tax_law    = TaxLaw( parameters.tax_forecast )
         self._income_accounts = None    # an IncomeAccounts, built with the books in _build_baseline
         self._expense_accounts = None   # an ExpenseAccounts, built with the books in _build_baseline
+        self._holding_by_name = dict()  # asset name -> holding account, for resolving events
         self._draw_priority = list()    # holdings to fund from, resolved from draw_order by class
         self._loans = list()            # resolved loans (accounts + level payment), built in baseline
         self._periods_per_year = None   # set when there are liabilities (needs month/year granularity)
@@ -185,6 +187,8 @@ class Forecast:
         holdings = [
             ( bookkeeper.create_holding( asset_root, asset.name, asset.asset_class ), asset.opening_value )
             for asset in self._parameters.assets ]
+        self._holding_by_name = {
+            holding.name : holding for holding, _value in holdings }
         self._create_loans( bookkeeper )
         self._seed_opening_balances( bookkeeper, holdings )
         self._create_income_accounts( bookkeeper )
@@ -354,6 +358,15 @@ class Forecast:
             continue
         return lines
 
+    def _events_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list:
+        """Resolve the scheduled events occurring in this interval into PeriodEvents, binding
+        their named holdings to the running accounts (and the cash hub for sale proceeds and
+        purchase funding). Order is preserved, so same-interval events apply as authored."""
+        cash = bookkeeper.chart.cash_account()
+        return [
+            event.to_period_event( self._holding_by_name, cash )
+            for event in self._parameters.events if event.in_span( span ) ]
+
     def _clip_to_window( self, span : DateSpan, window : DateWindow ) -> Optional[ tuple[ date, date ] ]:
         """The inclusive `[start, end]` overlap of `span` and `window`, or None if they do
         not overlap."""
@@ -407,6 +420,7 @@ class Forecast:
             income_lines      = self._income_lines_for( span, year_fraction ),
             expense_lines     = self._expense_lines_for( span ),
             liability_terms   = self._liability_terms_for( bookkeeper ),
+            events            = self._events_for( span, bookkeeper ),
             funding_policy    = FundingPolicy(
                 cash_target = self._parameters.cash_target, draw_priority = self._draw_priority ),
             tax_engine        = tax_engine,

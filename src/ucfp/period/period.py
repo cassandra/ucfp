@@ -16,8 +16,8 @@ The interval is computed in three phases (see data/design/projection-model.md):
                       with the tax/draw circular dependency.
   3. Close         -- finalize ending balances and the stop condition.
 
-NOTE: Phase-1 complete against the zero-tax engine. The USFederalTaxEngine and the
-Conversion event are the remaining pieces.
+NOTE: Phase-1 complete against the zero-tax engine. The Forecast resolves scheduled
+events (Transfer/Purchase/Realization) into each period's parameters.
 """
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import SystemAccountRole

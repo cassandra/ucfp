@@ -1,11 +1,12 @@
 """Self-applying Period operations (events).
 
 A `PeriodEvent` is a scheduled operation the Period materializes into balanced
-transactions during the Accrue phase -- a `Transfer`, `Purchase`, `Sale`, or
-`Conversion`. Each is a frozen dataclass that applies itself, so adding a new kind of
-operation is one new subclass. The Scenario constructs these (and materializes derived
-ones -- e.g. an RMD as a pre-tax `Sale`). "Money-movement event" is the user-facing term;
-`PeriodEvent` is the engine-internal type.
+transactions during the Accrue phase -- a `Transfer`, `Purchase`, or `Realization`. Each
+is a frozen dataclass that applies itself, so adding a new kind of operation is one new
+subclass. The Forecast resolves the user's scheduled events (which name holdings) into
+these (which hold accounts), and materializes derived ones -- e.g. an RMD as a pre-tax
+`Realization` to cash. "Money-movement event" is the user-facing term; `PeriodEvent` is
+the engine-internal type.
 """
 from dataclasses import dataclass
 from datetime import date
@@ -15,7 +16,6 @@ from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.exceptions import MissingAccountError
 
-from .exceptions import ProjectionError
 from .results import Notice
 
 
@@ -64,48 +64,34 @@ class Purchase( PeriodEvent ):
 
 
 @dataclass( frozen = True )
-class Sale( PeriodEvent ):
-    """Sell `amount` of a holding's market value to the cash hub, realizing the
-    gain into the asset class's realized-gain income class (caps at the holding's
-    value). Residence/rental special rules (§121, §1250) are not yet applied."""
+class Realization( PeriodEvent ):
+    """Realize `amount` of a holding's market value into a `destination` account,
+    recognizing the gain (the valuation portion) into the source asset class's
+    realized-gain income class. The destination distinguishes the user-facing meaning:
+    the cash hub for a sale or pre-tax withdrawal, or another holding for a conversion
+    (e.g. pre-tax -> Roth). Caps at the holding's value. Residence/rental special rules
+    (§121, §1250) are not yet applied; a face-value source (cash, CDs) realizes no gain."""
 
-    event_date : date
-    holding    : Account
-    amount     : Decimal
+    event_date  : date
+    holding     : Account
+    amount      : Decimal
+    destination : Account
 
     def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
-        income_class = self.holding.asset_class.realized_gain_income_class
-        if income_class is None:
-            raise ProjectionError(
-                f'Sale of {self.holding.asset_class.label} is not supported '
-                '(no realized-gain income class).'
-            )
         chart = bookkeeper.chart
-        cash = chart.cash_account()
-        if cash is None:
-            raise MissingAccountError( 'No cash account to receive sale proceeds.' )
-        realized_gain_account = chart.income_account( income_class )
-        if realized_gain_account is None:
-            raise MissingAccountError(
-                f'No revenue account for income tax-class {income_class.label}.'
-            )
+        income_class = self.holding.asset_class.realized_gain_income_class
+        realized_gain_account = None
+        if income_class is not None:
+            realized_gain_account = chart.income_account( income_class )
+            if realized_gain_account is None:
+                raise MissingAccountError(
+                    f'No revenue account for income tax-class {income_class.label}.'
+                )
         bookkeeper.realize(
             self.holding,
             self.amount,
-            proceeds_account = cash,
+            proceeds_account = self.destination,
             realized_gain_account = realized_gain_account,
             on_date = self.event_date,
         )
         return []
-
-
-@dataclass( frozen = True )
-class Conversion( PeriodEvent ):
-    """Convert pre-tax retirement to Roth: recognize ordinary income on the amount,
-    moving the value into the Roth holding rather than to cash.
-
-    NOTE: stub -- pending the conversion realization primitive.
-    """
-
-    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
-        raise NotImplementedError

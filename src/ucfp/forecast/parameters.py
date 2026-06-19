@@ -9,20 +9,23 @@ later liability) parameters' opening values, and the Forecast creates the chart 
 ledger from them. A "Scenario" is a *variation* of a ForecastParameters -- the
 comparison/what-if layer above the engine -- and is not modelled here.
 
-STUB: subjects, assets, the economic outlook, income streams, expenses, the frame, filing
-status, the tax-forecast profile, loans, and the funding knobs (cash target + draw order,
-the asset classes drawn from in priority to cover a shortfall). Events join incrementally;
-per-item value-rules and existence windows ride on the item sub-objects.
+STUB: subjects, assets, the economic outlook, income streams, expenses, loans, scheduled
+events, the frame, filing status, the tax-forecast profile, and the funding knobs (cash
+target + draw order, the asset classes drawn from in priority to cover a shortfall).
+Auto/feedback events (RMDs) and per-item value-rules and existence windows join later.
 """
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Optional
 
 from common.date_window import DateWindow
 from common.rate import Rate
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
+from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
@@ -110,6 +113,71 @@ class LoanParameters:
     annual_extra_principal : Decimal        = Decimal( '0' )
 
 
+class ScheduledEvent:
+    """Base for a user-scheduled money-movement event: it names the holdings it touches and
+    the date it occurs, and resolves to a `PeriodEvent` (which holds the accounts) once the
+    Forecast has built the books. `to_period_event` receives `holdings` (asset name ->
+    holding account) and the cash hub.
+
+    PLACEHOLDER: holdings are referenced by their (run-unique) `name` string. This is the
+    deficient stand-in for a stable `Handle` -- the planner-owned, serializable account
+    reference that will also key result drill-down; it replaces these names everywhere at
+    once when the handle work lands."""
+
+    event_date : date
+
+    def in_span( self, span : DateSpan ) -> bool:
+        """Whether this event occurs within the interval `span`."""
+        return span.start_date <= self.event_date <= span.end_date
+
+    def to_period_event( self, holdings : dict[ str, Account ], cash : Account ) -> PeriodEvent:
+        raise NotImplementedError
+
+
+@dataclass( frozen = True )
+class ScheduledTransfer( ScheduledEvent ):
+    """Move `amount` between two named holdings, with no tax effect (e.g. cash -> CD, or a
+    rebalance inside a tax-advantaged account)."""
+
+    event_date : date
+    source     : str
+    target     : str
+    amount     : Decimal
+
+    def to_period_event( self, holdings : dict[ str, Account ], cash : Account ) -> PeriodEvent:
+        return Transfer( self.event_date, holdings[ self.source ], holdings[ self.target ], self.amount )
+
+
+@dataclass( frozen = True )
+class ScheduledPurchase( ScheduledEvent ):
+    """Acquire `amount` of a named holding at cost, funded from cash. STUB: buys into a
+    holding present from t0 (possibly opening at zero value); originating a brand-new
+    holding mid-forecast joins later with asset existence windows."""
+
+    event_date : date
+    asset      : str
+    amount     : Decimal
+
+    def to_period_event( self, holdings : dict[ str, Account ], cash : Account ) -> PeriodEvent:
+        return Purchase( self.event_date, cash, holdings[ self.asset ], self.amount )
+
+
+@dataclass( frozen = True )
+class ScheduledRealization( ScheduledEvent ):
+    """Realize `amount` of a named holding -- a sale or pre-tax withdrawal when `destination`
+    is None (proceeds to the cash hub), or a conversion when `destination` names another
+    holding (e.g. pre-tax -> Roth). Tax treatment follows the source holding's class."""
+
+    event_date  : date
+    holding     : str
+    amount      : Decimal
+    destination : Optional[ str ] = None
+
+    def to_period_event( self, holdings : dict[ str, Account ], cash : Account ) -> PeriodEvent:
+        target = cash if self.destination is None else holdings[ self.destination ]
+        return Realization( self.event_date, holdings[ self.holding ], self.amount, target )
+
+
 @dataclass
 class ForecastParameters:
     """The full materialized inputs for an N-step Forecast (see module docstring)."""
@@ -126,6 +194,7 @@ class ForecastParameters:
     income_streams    : list[ IncomeStream ]    = field( default_factory = list )
     expenses          : list[ ExpenseItem ]     = field( default_factory = list )
     loans             : list[ LoanParameters ]  = field( default_factory = list )
+    events            : list[ ScheduledEvent ]  = field( default_factory = list )
     cash_target       : Decimal                 = Decimal( '0' )
     draw_order        : list[ AssetClass ]      = field( default_factory = list )
     initial_tax_state : object                  = None
