@@ -20,25 +20,24 @@ It selects the tax law via the parameters' `TaxForecastProfile` and treats the r
 engine as a black box: it asks the `TaxLaw` for each year's engine and never touches a
 tax knob.
 
-STUB: per-period resolution is minimal (subjects -> tax_context; AssetRates from the
-economic outlook; empty lines/events; funding from the cash-target). The remaining WHAT
-categories (income, expenses) and the feedback knobs (funding draws, RMDs, adaptive
-conversions) join incrementally.
+STUB: per-period resolution covers subjects -> tax_context, AssetRates from the economic
+outlook, and income lines from the active streams; expense lines, events, and the feedback
+knobs (funding draws, RMDs, adaptive conversions) join incrementally.
 """
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
-from ucfp.accounts.books import BooksOfAccount
+from ucfp.accounts.books import Account, BooksOfAccount
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AccountType, SystemAccountRole
-from ucfp.period.parameters import DateSpan, FundingPolicy, PeriodParameters
+from ucfp.accounts.enums import AccountType, IncomeTaxClass, SystemAccountRole
+from ucfp.period.parameters import DateSpan, FundingPolicy, IncomeLine, PeriodParameters
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.us.context import TaxContext, TaxSubject
 
-from .parameters import ForecastParameters
+from .parameters import ForecastParameters, Subject
 
 
 @dataclass
@@ -61,6 +60,34 @@ class ForecastResult:
     stopped_early : bool = False
 
 
+class IncomeAccounts:
+    """The revenue account for each `(subject, income tax-class)`, created on first request
+    and reused after. It owns the account key, so creation and per-period posting resolve
+    to the same account -- the key is defined here and nowhere else. Per subject so wages
+    stay per-worker (the FICA cap) and Social Security per person."""
+
+    def __init__( self, bookkeeper : Bookkeeper ):
+        self._bookkeeper = bookkeeper
+        self._revenue_root = bookkeeper.chart.root( AccountType.REVENUE )
+        self._account_by_key = dict()
+
+    def account_for( self, subject : Subject, income_tax_class : IncomeTaxClass ) -> Account:
+        """The revenue account for `subject`'s `income_tax_class` income, creating it under
+        the Revenue root on first request."""
+        key = ( subject, income_tax_class )
+        account = self._account_by_key.get( key )
+        if account is None:
+            account = self._bookkeeper.add_account(
+                Account(
+                    name             = f'{subject.name} {income_tax_class.label}',
+                    parent           = self._revenue_root,
+                    income_tax_class = income_tax_class,
+                )
+            )
+            self._account_by_key[ key ] = account
+        return account
+
+
 class Forecast:
     """Runs a `ForecastParameters` to completion (N Period steps); see the module
     docstring for the boundary."""
@@ -68,6 +95,7 @@ class Forecast:
     def __init__( self, parameters : ForecastParameters ):
         self._parameters = parameters
         self._tax_law    = TaxLaw( parameters.tax_forecast )
+        self._income_accounts = None   # an IncomeAccounts, built with the books in _build_baseline
 
     def run( self ) -> ForecastResult:
         """Build the opening books from the parameters, then walk the frame running a
@@ -89,10 +117,10 @@ class Forecast:
         return result
 
     def _build_baseline( self ) -> Bookkeeper:
-        """Build the chart and opening books from the asset parameters -- the baseline is
-        encoded in the parameters, not handed in. One opening transaction seeds each
-        holding's value against Opening Balances. STUB: holdings only; liabilities join
-        later."""
+        """Build the chart and opening books from the parameters -- the baseline is encoded
+        there, not handed in. One opening transaction seeds each holding's value against
+        Opening Balances; revenue accounts are created per (subject, income tax-class) for
+        the income streams. STUB: holdings + income accounts; liabilities join later."""
         bookkeeper = Bookkeeper( BooksOfAccount( label = self._parameters.label ) )
         bookkeeper.build_standard_chart()
         chart = bookkeeper.chart
@@ -106,17 +134,54 @@ class Forecast:
             postings = [ ( holding, -value ) for holding, value in holdings ]
             postings.append( ( opening_balances, opening_total ) )
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), postings )
+        self._create_income_accounts( bookkeeper )
         return bookkeeper
+
+    def _create_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
+        """Set up the income-account registry and pre-create an account for every stream,
+        so the chart is complete from the start (each stream's account exists even before
+        its window opens)."""
+        self._income_accounts = IncomeAccounts( bookkeeper )
+        for stream in self._parameters.income_streams:
+            self._income_accounts.account_for( stream.subject, stream.income_tax_class )
+            continue
+        return
+
+    def _income_lines_for( self, span : DateSpan ) -> list[ IncomeLine ]:
+        """Resolve the income streams active this interval into IncomeLines: grow each to
+        nominal by its class rate from the forecast start, posting to its per-(subject,
+        class) account."""
+        lines = list()
+        for stream in self._parameters.income_streams:
+            if not stream.covers( span.start_date ):
+                continue
+            factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
+            account = self._income_accounts.account_for( stream.subject, stream.income_tax_class )
+            lines.append( IncomeLine( account = account, gross_amount = stream.annual_amount * factor ) )
+            continue
+        return lines
+
+    def _income_growth_factor( self, income_tax_class : IncomeTaxClass, target_year : int ) -> Decimal:
+        """The cumulative growth from the forecast start year to `target_year`, applying
+        each year's economic-outlook rate for `income_tax_class` -- so a today's-dollar
+        amount becomes that year's nominal. 1.0 in the start year."""
+        factor = Decimal( '1' )
+        for year in range( self._parameters.start_date.year + 1, target_year + 1 ):
+            segment = self._parameters.economic_outlook.parameters_at( date( year, 1, 1 ) )
+            factor *= ( Decimal( '1' ) + segment.income_growth_rate( income_tax_class ).fraction )
+            continue
+        return factor
 
     def _build_period_parameters( self, span : DateSpan, opening_tax_state ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters, injecting the year's tax engine
         (from the tax-law projection) and the threaded carryforwards. STUB: tax_context
-        from subjects; AssetRates from the economic-outlook segment in effect; empty
-        lines/events; funding from the cash-target."""
+        from subjects; AssetRates from the economic-outlook segment in effect; income lines
+        from the active streams; empty expense lines/events; funding from the cash-target."""
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
             asset_rates       = self._parameters.economic_outlook.asset_rates_at( span.start_date ),
+            income_lines      = self._income_lines_for( span ),
             funding_policy    = FundingPolicy( cash_target = self._parameters.cash_target ),
             tax_engine        = self._tax_law.engine_for( span.end_date.year ),
             opening_tax_state = opening_tax_state,

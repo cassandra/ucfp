@@ -9,15 +9,16 @@ later liability) parameters' opening values, and the Forecast creates the chart 
 ledger from them. A "Scenario" is a *variation* of a ForecastParameters -- the
 comparison/what-if layer above the engine -- and is not modelled here.
 
-STUB: subjects + assets + frame + filing status + the tax-forecast profile + the
-cash-target knob. Income, Expenses, Liabilities, Events, and the Economic Outlook join
+STUB: subjects, assets, the economic outlook, income streams, the frame, filing status,
+the tax-forecast profile, and the cash-target knob. Expenses, Liabilities, and Events join
 incrementally; per-item value-rules and existence windows ride on the item sub-objects.
 """
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Optional
 
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
@@ -33,10 +34,13 @@ def _add_years( anchor : date, years : int ) -> date:
         return anchor.replace( year = anchor.year + years, day = 28 )
 
 
-@dataclass
+@dataclass( frozen = True )
 class Subject:
-    """A person on the forecast -- the invariant kernel; age is derived per interval."""
+    """A person on the forecast -- the invariant kernel (name + birthdate); age is derived
+    per interval, and income resolves per subject. Frozen so a subject can key the
+    per-person account map."""
 
+    name      : str
     birthdate : date
 
 
@@ -52,6 +56,31 @@ class AssetParameters:
     opening_value : Decimal
 
 
+@dataclass( frozen = True )
+class IncomeStream:
+    """A recurring received income for one subject over an existence window -- wages, a
+    pension (`ORDINARY`), Social Security, or gross rental. `annual_amount` is gross in
+    forecast-start ("today's") dollars; the Forecast grows it to nominal by the income
+    class's rate (the COLA lives in the Economic Outlook, per class) and gates it to the
+    `[start, end]` window (inclusive; `None` = unbounded). Interest/dividends/gains come
+    from assets, and IRA/401(k) withdrawals are asset draws, so none of those are streams.
+    """
+
+    subject          : Subject
+    income_tax_class : IncomeTaxClass
+    annual_amount    : Decimal
+    start            : Optional[ date ] = None
+    end              : Optional[ date ] = None
+
+    def covers( self, on_date : date ) -> bool:
+        """Whether this stream's window contains `on_date`."""
+        if ( self.start is not None ) and ( on_date < self.start ):
+            return False
+        if ( self.end is not None ) and ( on_date > self.end ):
+            return False
+        return True
+
+
 @dataclass
 class ForecastParameters:
     """The full materialized inputs for an N-step Forecast (see module docstring)."""
@@ -64,6 +93,7 @@ class ForecastParameters:
     subjects          : list[ Subject ]         = field( default_factory = list )
     assets            : list[ AssetParameters ] = field( default_factory = list )
     economic_outlook  : EconomicOutlook         = field( default_factory = EconomicOutlook )
+    income_streams    : list[ IncomeStream ]    = field( default_factory = list )
     cash_target       : Decimal                 = Decimal( '0' )
     initial_tax_state : object                  = None
 

@@ -17,7 +17,7 @@ from datetime import date
 from typing import Optional
 
 from common.rate import ZERO_RATE, Rate
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.period.parameters import AssetRates
 
 
@@ -42,6 +42,10 @@ class EconomicParameters:
     precious_metals_appreciation : Rate = ZERO_RATE   # PRECIOUS_METALS growth
     collectibles_appreciation    : Rate = ZERO_RATE   # COLLECTIBLES growth
     retirement_growth            : Rate = ZERO_RATE   # PRETAX_RETIREMENT + ROTH (blended)
+    wage_growth                  : Rate = ZERO_RATE   # WAGES streams
+    social_security_cola         : Rate = ZERO_RATE   # SOCIAL_SECURITY streams
+    pension_cola                 : Rate = ZERO_RATE   # ORDINARY (pension) streams
+    rental_increase              : Rate = ZERO_RATE   # GROSS_RENTAL streams
 
     def covers( self, on_date : date ) -> bool:
         """Whether this segment's window contains `on_date`."""
@@ -73,6 +77,16 @@ class EconomicParameters:
             AssetClass.DIVIDEND_STOCKS : self.stock_dividend,
         }
         return AssetRates( growth = growth, distribution = distribution )
+
+    def income_growth_rate( self, income_tax_class : IncomeTaxClass ) -> Rate:
+        """The annual growth (COLA) rate for an income class's streams; flat for classes
+        with no stream growth (investment income is asset-driven, not grown here)."""
+        return {
+            IncomeTaxClass.WAGES           : self.wage_growth,
+            IncomeTaxClass.SOCIAL_SECURITY : self.social_security_cola,
+            IncomeTaxClass.ORDINARY        : self.pension_cola,
+            IncomeTaxClass.GROSS_RENTAL    : self.rental_increase,
+        }.get( income_tax_class, ZERO_RATE )
 
 
 # Flat (all-zero, unbounded) parameters: the fallback where no segment covers a date.

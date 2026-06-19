@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 
 from common.rate import Rate
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 
 FIVE_PERCENT = Rate( Decimal( '0.05' ) )
@@ -38,6 +38,17 @@ class AssetRateMappingTests( unittest.TestCase ):
         self.assertEqual( rates.distribution_rate( AssetClass.CASH ), THREE_PERCENT )
         # an unlisted class is flat
         self.assertEqual( rates.growth_rate( AssetClass.DEPRECIATING ), Rate( Decimal( '0' ) ) )
+
+    def test_income_growth_rate_maps_classes( self ):
+        parameters = EconomicParameters(
+            wage_growth          = FIVE_PERCENT,
+            social_security_cola = THREE_PERCENT,
+        )
+        self.assertEqual( parameters.income_growth_rate( IncomeTaxClass.WAGES ), FIVE_PERCENT )
+        self.assertEqual( parameters.income_growth_rate( IncomeTaxClass.SOCIAL_SECURITY ), THREE_PERCENT )
+        # a class with no stream growth (investment income is asset-driven) is flat
+        self.assertEqual(
+            parameters.income_growth_rate( IncomeTaxClass.LONG_TERM_GAINS ), Rate( Decimal( '0' ) ) )
 
 
 class ScheduleResolutionTests( unittest.TestCase ):
