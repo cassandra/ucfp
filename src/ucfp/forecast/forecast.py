@@ -153,7 +153,7 @@ class Forecast:
         class) account."""
         lines = list()
         for stream in self._parameters.income_streams:
-            if not stream.covers( span.start_date ):
+            if not stream.window.covers( span.start_date ):
                 continue
             factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
             account = self._income_accounts.account_for( stream.subject, stream.income_tax_class )

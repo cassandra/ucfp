@@ -8,6 +8,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from common.date_window import DateWindow
 from common.rate import Rate
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
@@ -62,8 +63,10 @@ class ScheduleResolutionTests( unittest.TestCase ):
 
     def test_segments_pin_rates_to_windows( self ):
         outlook = EconomicOutlook( segments = (
-            EconomicParameters( end = date( 2030, 12, 31 ), stock_appreciation = FIVE_PERCENT ),
-            EconomicParameters( start = date( 2031, 1, 1 ), stock_appreciation = THREE_PERCENT ),
+            EconomicParameters(
+                window = DateWindow( end = date( 2030, 12, 31 ) ), stock_appreciation = FIVE_PERCENT ),
+            EconomicParameters(
+                window = DateWindow( start = date( 2031, 1, 1 ) ), stock_appreciation = THREE_PERCENT ),
         ) )
         self.assertEqual(
             outlook.asset_rates_at( date( 2028, 1, 1 ) ).growth_rate( AssetClass.STOCKS ), FIVE_PERCENT )
@@ -73,7 +76,8 @@ class ScheduleResolutionTests( unittest.TestCase ):
     def test_gap_falls_back_to_flat_zero( self ):
         outlook = EconomicOutlook( segments = (
             EconomicParameters(
-                start = date( 2031, 1, 1 ), end = date( 2040, 12, 31 ), stock_appreciation = FIVE_PERCENT ),
+                window = DateWindow( start = date( 2031, 1, 1 ), end = date( 2040, 12, 31 ) ),
+                stock_appreciation = FIVE_PERCENT ),
         ) )
         rates = outlook.asset_rates_at( date( 2026, 1, 1 ) )   # before any segment
         self.assertEqual( rates.growth_rate( AssetClass.STOCKS ), Rate( Decimal( '0' ) ) )

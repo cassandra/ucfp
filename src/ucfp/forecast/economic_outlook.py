@@ -14,8 +14,8 @@ at period boundaries (no sub-period rate changes).
 """
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional
 
+from common.date_window import DateWindow
 from common.rate import ZERO_RATE, Rate
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.period.parameters import AssetRates
@@ -23,14 +23,12 @@ from ucfp.period.parameters import AssetRates
 
 @dataclass( frozen = True )
 class EconomicParameters:
-    """The economic rates in effect over one window `[start, end]` (inclusive; `None` on a
-    side = unbounded). Holds inflation and the per-asset-class appreciation (growth) and
-    yield (distribution) rates in the spreadsheet's vocabulary; `asset_rates` maps them to
-    the Period's per-`AssetClass` rates. The window rides here -- like the other time-bound
-    inputs -- so an `EconomicOutlook` is just a list of these."""
+    """The economic rates in effect over a `window`. Holds inflation and the per-asset-class
+    appreciation (growth) and yield (distribution) rates in the spreadsheet's vocabulary;
+    `asset_rates` maps them to the Period's per-`AssetClass` rates. The window rides here --
+    like the other time-bound inputs -- so an `EconomicOutlook` is just a list of these."""
 
-    start                        : Optional[ date ] = None
-    end                          : Optional[ date ] = None
+    window                       : DateWindow = DateWindow()
     inflation                    : Rate = ZERO_RATE
     savings_interest             : Rate = ZERO_RATE   # CASH yield (distribution)
     cd_interest                  : Rate = ZERO_RATE   # CDS yield
@@ -46,14 +44,6 @@ class EconomicParameters:
     social_security_cola         : Rate = ZERO_RATE   # SOCIAL_SECURITY streams
     pension_cola                 : Rate = ZERO_RATE   # ORDINARY (pension) streams
     rental_increase              : Rate = ZERO_RATE   # GROSS_RENTAL streams
-
-    def covers( self, on_date : date ) -> bool:
-        """Whether this segment's window contains `on_date`."""
-        if ( self.start is not None ) and ( on_date < self.start ):
-            return False
-        if ( self.end is not None ) and ( on_date > self.end ):
-            return False
-        return True
 
     def asset_rates( self ) -> AssetRates:
         """Resolve into the Period's per-`AssetClass` growth and distribution rates. A
@@ -110,7 +100,7 @@ class EconomicOutlook:
     def parameters_at( self, on_date : date ) -> EconomicParameters:
         """The first segment covering `on_date`, or flat-zero parameters if none do."""
         for segment in self.segments:
-            if segment.covers( on_date ):
+            if segment.window.covers( on_date ):
                 return segment
             continue
         return _FLAT_PARAMETERS

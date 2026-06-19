@@ -16,8 +16,8 @@ incrementally; per-item value-rules and existence windows ride on the item sub-o
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Optional
 
+from common.date_window import DateWindow
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
@@ -58,27 +58,17 @@ class AssetParameters:
 
 @dataclass( frozen = True )
 class IncomeStream:
-    """A recurring received income for one subject over an existence window -- wages, a
+    """A recurring received income for one subject over an existence `window` -- wages, a
     pension (`ORDINARY`), Social Security, or gross rental. `annual_amount` is gross in
     forecast-start ("today's") dollars; the Forecast grows it to nominal by the income
     class's rate (the COLA lives in the Economic Outlook, per class) and gates it to the
-    `[start, end]` window (inclusive; `None` = unbounded). Interest/dividends/gains come
-    from assets, and IRA/401(k) withdrawals are asset draws, so none of those are streams.
-    """
+    window. Interest/dividends/gains come from assets, and IRA/401(k) withdrawals are asset
+    draws, so none of those are streams."""
 
     subject          : Subject
     income_tax_class : IncomeTaxClass
     annual_amount    : Decimal
-    start            : Optional[ date ] = None
-    end              : Optional[ date ] = None
-
-    def covers( self, on_date : date ) -> bool:
-        """Whether this stream's window contains `on_date`."""
-        if ( self.start is not None ) and ( on_date < self.start ):
-            return False
-        if ( self.end is not None ) and ( on_date > self.end ):
-            return False
-        return True
+    window           : DateWindow = DateWindow()
 
 
 @dataclass
