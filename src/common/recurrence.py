@@ -50,6 +50,16 @@ class Duration:
             return _add_months( anchor, self.count )
         return _add_months( anchor, self.count * 12 )
 
+    def months( self ) -> int:
+        """This duration as a whole number of months (MONTH or YEAR only -- the units a
+        loan term and the forecast frame use). Raises for DAY/WEEK, which have no whole-
+        month size."""
+        if self.unit == TimeUnit.MONTH:
+            return self.count
+        if self.unit == TimeUnit.YEAR:
+            return self.count * 12
+        raise ValueError( f'A {self.unit.label} duration has no whole-month size.' )
+
 
 _ZERO_OFFSET = Duration( 0, TimeUnit.DAY )
 

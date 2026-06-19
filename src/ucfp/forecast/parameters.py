@@ -19,6 +19,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from common.date_window import DateWindow
+from common.rate import Rate
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
@@ -90,6 +91,25 @@ class ExpenseItem:
     window            : DateWindow = DateWindow()
 
 
+@dataclass( frozen = True )
+class LiabilityParameters:
+    """A loan owed at the forecast start -- mortgage, car loan, etc. -- specified the way a
+    loan naturally is: `opening_balance`, `interest_rate` (annual), and `term` (a Duration,
+    e.g. 30 years). The Forecast derives the level payment by amortization at the run's
+    granularity, then each interval books interest (= balance x periodic rate) to an
+    interest expense account (deductibility per `interest_class`) and reduces the balance by
+    principal (= payment - interest) plus `annual_extra_principal`, until paid off. A loan
+    payment is principal (debt reduction) plus interest (the only expense), never a single
+    'expense'. STUB: existing loans only; a future-originated loan joins later as an Event."""
+
+    name                  : str
+    opening_balance       : Decimal
+    interest_rate         : Rate
+    term                  : Duration
+    interest_class        : ExpenseTaxClass = ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST
+    annual_extra_principal : Decimal        = Decimal( '0' )
+
+
 @dataclass
 class ForecastParameters:
     """The full materialized inputs for an N-step Forecast (see module docstring)."""
@@ -98,16 +118,17 @@ class ForecastParameters:
     end_date          : date
     filing_status     : FilingStatus
     tax_forecast      : TaxForecastProfile
-    label             : str                     = ''
-    granularity       : Duration                = Duration( 1, TimeUnit.YEAR )
-    subjects          : list[ Subject ]         = field( default_factory = list )
-    assets            : list[ AssetParameters ] = field( default_factory = list )
-    economic_outlook  : EconomicOutlook         = field( default_factory = EconomicOutlook )
-    income_streams    : list[ IncomeStream ]    = field( default_factory = list )
-    expenses          : list[ ExpenseItem ]     = field( default_factory = list )
-    cash_target       : Decimal                 = Decimal( '0' )
-    draw_order        : list[ AssetClass ]      = field( default_factory = list )
-    initial_tax_state : object                  = None
+    label             : str                        = ''
+    granularity       : Duration                   = Duration( 1, TimeUnit.YEAR )
+    subjects          : list[ Subject ]            = field( default_factory = list )
+    assets            : list[ AssetParameters ]    = field( default_factory = list )
+    economic_outlook  : EconomicOutlook            = field( default_factory = EconomicOutlook )
+    income_streams    : list[ IncomeStream ]       = field( default_factory = list )
+    expenses          : list[ ExpenseItem ]        = field( default_factory = list )
+    liabilities       : list[ LiabilityParameters ] = field( default_factory = list )
+    cash_target       : Decimal                    = Decimal( '0' )
+    draw_order        : list[ AssetClass ]         = field( default_factory = list )
+    initial_tax_state : object                     = None
 
     def period_spans( self ) -> list[ DateSpan ]:
         """The horizon sliced into consecutive `granularity` intervals (the last truncated

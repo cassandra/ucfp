@@ -25,6 +25,7 @@ outlook, and income/expense lines from the active streams and items; events and 
 feedback knobs (funding draws, RMDs, adaptive conversions) join incrementally.
 """
 import calendar
+from collections import namedtuple
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
@@ -34,13 +35,34 @@ from common.date_window import DateWindow
 from ucfp.accounts.books import Account, BooksOfAccount
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass, SystemAccountRole
-from ucfp.period.parameters import DateSpan, ExpenseLine, FundingPolicy, IncomeLine, PeriodParameters
+from ucfp.period.parameters import (
+    DateSpan,
+    ExpenseLine,
+    FundingPolicy,
+    IncomeLine,
+    LiabilityTerm,
+    PeriodParameters,
+)
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.us.context import TaxContext, TaxSubject
 
 from .parameters import ExpenseItem, ForecastParameters, Subject
+
+
+# A loan resolved against the books: its parameters plus the accounts and the level
+# payment (derived once by amortization) the per-interval term is computed from.
+_ResolvedLoan = namedtuple( '_ResolvedLoan', ( 'parameters', 'account', 'interest_account', 'payment' ) )
+
+
+def _amortized_payment( principal : Decimal, periodic_rate : Decimal, periods : int ) -> Decimal:
+    """The level payment that retires `principal` over `periods` at `periodic_rate` per
+    period -- the standard amortization formula (straight-line when the rate is zero)."""
+    if periodic_rate == 0:
+        return principal / periods
+    discount = ( Decimal( '1' ) + periodic_rate ) ** ( -periods )
+    return principal * periodic_rate / ( Decimal( '1' ) - discount )
 
 
 @dataclass
@@ -128,6 +150,8 @@ class Forecast:
         self._income_accounts = None    # an IncomeAccounts, built with the books in _build_baseline
         self._expense_accounts = None   # an ExpenseAccounts, built with the books in _build_baseline
         self._draw_priority = list()    # holdings to fund from, resolved from draw_order by class
+        self._loans = list()            # resolved loans (accounts + level payment), built in baseline
+        self._periods_per_year = None   # set when there are liabilities (needs month/year granularity)
 
     def run( self ) -> ForecastResult:
         """Build the opening books from the parameters, then walk the frame running a
@@ -136,7 +160,7 @@ class Forecast:
         result        = ForecastResult( books = bookkeeper.books )
         opening_state = self._parameters.initial_tax_state
         for span in self._parameters.period_spans():
-            period_parameters = self._build_period_parameters( span, opening_state )
+            period_parameters = self._build_period_parameters( span, opening_state, bookkeeper )
             period            = Period( period_parameters )
             period_result     = period.compute( bookkeeper )
             result.steps.append( ForecastStep( span, period_result ) )
@@ -150,10 +174,10 @@ class Forecast:
 
     def _build_baseline( self ) -> Bookkeeper:
         """Build the chart and opening books from the parameters -- the baseline is encoded
-        there, not handed in. One opening transaction seeds each holding's value against
-        Opening Balances; revenue and expense accounts are created per income stream, per
-        expense item, and per tax-payment class. STUB: holdings + income + expense + tax
-        accounts; liabilities join later."""
+        there, not handed in. One opening transaction seeds each holding's value (an asset)
+        and each loan's balance (a liability) against Opening Balances, which absorbs the
+        net (= opening net worth); revenue/expense accounts are created per income stream,
+        per expense item, per loan's interest, and per tax-payment class."""
         bookkeeper = Bookkeeper( BooksOfAccount( label = self._parameters.label ) )
         bookkeeper.build_standard_chart()
         chart = bookkeeper.chart
@@ -161,18 +185,48 @@ class Forecast:
         holdings = [
             ( bookkeeper.create_holding( asset_root, asset.name, asset.asset_class ), asset.opening_value )
             for asset in self._parameters.assets ]
-        opening_total = sum( ( value for _holding, value in holdings ), Decimal( '0' ) )
-        if opening_total != 0:
-            opening_balances = chart.system_account( SystemAccountRole.OPENING_BALANCES )
-            postings = [ ( holding, -value ) for holding, value in holdings ]
-            postings.append( ( opening_balances, opening_total ) )
-            bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), postings )
+        self._create_liabilities( bookkeeper )
+        self._seed_opening_balances( bookkeeper, holdings )
         self._create_income_accounts( bookkeeper )
         self._create_asset_income_accounts( bookkeeper )
         self._create_expense_accounts( bookkeeper )
         self._create_tax_accounts( bookkeeper )
         self._resolve_draw_priority( bookkeeper )
         return bookkeeper
+
+    def _seed_opening_balances( self, bookkeeper : Bookkeeper, holdings : list ) -> None:
+        """Post the opening transaction: each holding's value (a debit, increasing the
+        asset) and each loan's balance (a credit, the liability), with Opening Balances
+        absorbing the residual so the books balance from t0."""
+        opening_postings = [ ( holding, -value ) for holding, value in holdings ]
+        opening_postings += [ ( loan.account, loan.parameters.opening_balance ) for loan in self._loans ]
+        plug = -sum( ( amount for _account, amount in opening_postings ), Decimal( '0' ) )
+        opening_postings.append(
+            ( bookkeeper.chart.system_account( SystemAccountRole.OPENING_BALANCES ), plug ) )
+        if any( amount != 0 for _account, amount in opening_postings ):
+            bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), opening_postings )
+        return
+
+    def _create_liabilities( self, bookkeeper : Bookkeeper ) -> None:
+        """Create a liability account and an interest expense account per loan, and derive
+        its level payment (amortizing the opening balance over the term at the run's
+        granularity). Called before the opening seed, which credits each balance."""
+        if not self._parameters.liabilities:
+            return
+        self._periods_per_year = 12 // self._parameters.granularity.months()
+        liability_root = bookkeeper.chart.root( AccountType.LIABILITY )
+        expense_root = bookkeeper.chart.root( AccountType.EXPENSE )
+        for loan in self._parameters.liabilities:
+            account = bookkeeper.add_account( Account( name = loan.name, parent = liability_root ) )
+            interest_account = bookkeeper.add_account(
+                Account( name = f'{loan.name} Interest', parent = expense_root,
+                         expense_tax_class = loan.interest_class ) )
+            periodic_rate = loan.interest_rate.fraction / self._periods_per_year
+            periods = loan.term.months() // self._parameters.granularity.months()
+            payment = _amortized_payment( loan.opening_balance, periodic_rate, periods )
+            self._loans.append( _ResolvedLoan( loan, account, interest_account, payment ) )
+            continue
+        return
 
     def _create_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
         """Set up the income-account registry and pre-create an account for every stream,
@@ -235,6 +289,33 @@ class Forecast:
             for holding in holdings if holding.asset_class == asset_class
         ]
         return
+
+    def _liability_terms_for( self, bookkeeper : Bookkeeper ) -> list[ LiabilityTerm ]:
+        """Resolve each outstanding loan's payment for the interval from its running balance:
+        interest on the balance at the periodic rate, scheduled principal = level payment -
+        interest, plus the prorated extra principal -- all capped at the remaining balance so
+        the final payment pays it off. A loan with no balance left is skipped."""
+        ledger = bookkeeper.ledger
+        terms = list()
+        for loan in self._loans:
+            balance = ledger.natural_balance( loan.account )
+            if balance <= 0:
+                continue
+            interest = balance * ( loan.parameters.interest_rate.fraction / self._periods_per_year )
+            principal = min( max( loan.payment - interest, Decimal( '0' ) ), balance )
+            per_period_extra = loan.parameters.annual_extra_principal / self._periods_per_year
+            extra = min( per_period_extra, balance - principal )
+            terms.append(
+                LiabilityTerm(
+                    liability_account = loan.account,
+                    interest_account  = loan.interest_account,
+                    principal         = principal,
+                    interest          = interest,
+                    extra_principal   = extra,
+                )
+            )
+            continue
+        return terms
 
     def _income_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
         """Resolve the income streams active this interval into IncomeLines: grow each to
@@ -306,12 +387,13 @@ class Forecast:
             continue
         return factor
 
-    def _build_period_parameters( self, span : DateSpan, opening_tax_state ) -> PeriodParameters:
+    def _build_period_parameters( self, span : DateSpan, opening_tax_state,
+                                  bookkeeper : Bookkeeper ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters. Rates and flows are resolved to
-        the interval's length (so the same parameters run at any granularity), and tax is
-        gated to the year-close interval -- the tax engine and its full-year fiscal_window
-        are set only there, both None otherwise. STUB: events and feedback knobs join
-        later."""
+        the interval's length (so the same parameters run at any granularity), liability
+        terms are amortized off the running balance, and tax is gated to the year-close
+        interval -- the tax engine and its full-year fiscal_window are set only there, both
+        None otherwise. STUB: events and the remaining feedback knobs join later."""
         year_fraction = self._year_fraction( span )
         annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
         year_close = ( span.end_date.month == 12 ) and ( span.end_date.day == 31 )
@@ -324,6 +406,7 @@ class Forecast:
             asset_rates       = annual_rates.over_fraction( year_fraction ),
             income_lines      = self._income_lines_for( span, year_fraction ),
             expense_lines     = self._expense_lines_for( span ),
+            liability_terms   = self._liability_terms_for( bookkeeper ),
             funding_policy    = FundingPolicy(
                 cash_target = self._parameters.cash_target, draw_priority = self._draw_priority ),
             tax_engine        = tax_engine,
