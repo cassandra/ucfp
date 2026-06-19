@@ -1,12 +1,10 @@
-"""Errors raised by the projection (forecast) engine."""
+"""Errors raised by the projection (forecast) engine.
+
+A missing chart account is an accounts-domain concern, so it is
+`ucfp.accounts.exceptions.MissingAccountError`, raised both by the `Bookkeeper` and by the
+projection steps -- there is no projection-specific variant.
+"""
 
 
 class ProjectionError( Exception ):
     """Base class for projection-engine errors."""
-
-
-class MissingAccountError( ProjectionError ):
-    """Raised when a projection step requires a chart account that is absent --
-    e.g. a cash hub to receive distributions, an income account for a tax-class, or
-    the Unrealized Gains equity account for growth. Surfacing it beats silently
-    dropping the posting."""

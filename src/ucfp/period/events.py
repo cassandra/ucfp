@@ -13,8 +13,9 @@ from decimal import Decimal
 
 from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.exceptions import MissingAccountError
 
-from .exceptions import MissingAccountError, ProjectionError
+from .exceptions import ProjectionError
 from .results import Notice
 
 
