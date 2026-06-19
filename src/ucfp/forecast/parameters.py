@@ -9,8 +9,8 @@ later liability) parameters' opening values, and the Forecast creates the chart 
 ledger from them. A "Scenario" is a *variation* of a ForecastParameters -- the
 comparison/what-if layer above the engine -- and is not modelled here.
 
-STUB: subjects, assets, the economic outlook, income streams, the frame, filing status,
-the tax-forecast profile, and the cash-target knob. Expenses, Liabilities, and Events join
+STUB: subjects, assets, the economic outlook, income streams, expenses, the frame, filing
+status, the tax-forecast profile, and the cash-target knob. Liabilities and Events join
 incrementally; per-item value-rules and existence windows ride on the item sub-objects.
 """
 from dataclasses import dataclass, field
@@ -18,7 +18,9 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from common.date_window import DateWindow
-from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from common.recurrence import Recurrence
+from common.schedule import Schedule
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
@@ -71,6 +73,30 @@ class IncomeStream:
     window           : DateWindow = DateWindow()
 
 
+@dataclass( frozen = True )
+class WindowedAmount:
+    """A monetary amount (today's dollars) in effect over a `window` -- the segment type
+    for an expense's amount `Schedule` (e.g. one lifestyle level over a span)."""
+
+    amount : Decimal
+    window : DateWindow = DateWindow()
+
+
+@dataclass( frozen = True )
+class ExpenseItem:
+    """A recurring expense -- one chart line. `amounts` is the per-occurrence cost over
+    time (today's dollars, stepping with lifestyle); `recurrence` places the occurrences;
+    `window` is the item's existence. The Forecast posts, per interval, the occurrences in
+    that interval x the amount then in effect, inflated -- to a per-item account tagged with
+    `expense_tax_class`, so the Books keep item detail while tax aggregates by class."""
+
+    name              : str
+    expense_tax_class : ExpenseTaxClass
+    amounts           : Schedule[ WindowedAmount ]
+    recurrence        : Recurrence
+    window            : DateWindow = DateWindow()
+
+
 @dataclass
 class ForecastParameters:
     """The full materialized inputs for an N-step Forecast (see module docstring)."""
@@ -84,6 +110,7 @@ class ForecastParameters:
     assets            : list[ AssetParameters ] = field( default_factory = list )
     economic_outlook  : EconomicOutlook         = field( default_factory = EconomicOutlook )
     income_streams    : list[ IncomeStream ]    = field( default_factory = list )
+    expenses          : list[ ExpenseItem ]     = field( default_factory = list )
     cash_target       : Decimal                 = Decimal( '0' )
     initial_tax_state : object                  = None
 

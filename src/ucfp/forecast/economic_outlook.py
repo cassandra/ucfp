@@ -17,7 +17,8 @@ from datetime import date
 
 from common.date_window import DateWindow
 from common.rate import ZERO_RATE, Rate
-from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from common.schedule import Schedule
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.period.parameters import AssetRates
 
 
@@ -29,7 +30,8 @@ class EconomicParameters:
     like the other time-bound inputs -- so an `EconomicOutlook` is just a list of these."""
 
     window                       : DateWindow = DateWindow()
-    inflation                    : Rate = ZERO_RATE
+    inflation                    : Rate = ZERO_RATE   # general expense inflation
+    medical_inflation            : Rate = ZERO_RATE   # MEDICAL-class expense inflation
     savings_interest             : Rate = ZERO_RATE   # CASH yield (distribution)
     cd_interest                  : Rate = ZERO_RATE   # CDS yield
     bond_appreciation            : Rate = ZERO_RATE   # BONDS price growth
@@ -78,6 +80,13 @@ class EconomicParameters:
             IncomeTaxClass.GROSS_RENTAL    : self.rental_increase,
         }.get( income_tax_class, ZERO_RATE )
 
+    def expense_inflation_rate( self, expense_tax_class : ExpenseTaxClass ) -> Rate:
+        """The annual inflation rate for an expense class: medical for `MEDICAL`, the
+        general rate otherwise. (More per-class rates can join as needed.)"""
+        if expense_tax_class == ExpenseTaxClass.MEDICAL:
+            return self.medical_inflation
+        return self.inflation
+
 
 # Flat (all-zero, unbounded) parameters: the fallback where no segment covers a date.
 _FLAT_PARAMETERS = EconomicParameters()
@@ -85,25 +94,19 @@ _FLAT_PARAMETERS = EconomicParameters()
 
 @dataclass( frozen = True )
 class EconomicOutlook:
-    """A schedule of `EconomicParameters` segments over the horizon. The Forecast asks for
-    the segment in effect on an interval's start date; where none covers, rates are flat
-    zero. Order is priority -- the first covering segment wins, so callers keep segments
-    non-overlapping (or rely on first-match)."""
+    """A `Schedule` of `EconomicParameters` over the horizon. The Forecast asks for the
+    segment in effect on an interval's start date; where none covers, rates are flat zero."""
 
-    segments : tuple[ EconomicParameters, ... ] = ()
+    schedule : Schedule[ EconomicParameters ] = Schedule()
 
     @classmethod
     def constant( cls, parameters : EconomicParameters ) -> 'EconomicOutlook':
         """One set of rates for the whole horizon (a single unbounded segment)."""
-        return cls( segments = ( parameters, ) )
+        return cls( Schedule.constant( parameters ) )
 
     def parameters_at( self, on_date : date ) -> EconomicParameters:
-        """The first segment covering `on_date`, or flat-zero parameters if none do."""
-        for segment in self.segments:
-            if segment.window.covers( on_date ):
-                return segment
-            continue
-        return _FLAT_PARAMETERS
+        """The segment in effect on `on_date`, or flat-zero parameters if none covers it."""
+        return self.schedule.at( on_date ) or _FLAT_PARAMETERS
 
     def asset_rates_at( self, on_date : date ) -> AssetRates:
         """The Period `AssetRates` in effect on `on_date`."""

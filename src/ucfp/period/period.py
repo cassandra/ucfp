@@ -174,10 +174,10 @@ class Period:
         return
 
     def _apply_expenses( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Post the resolved per-class `expense_lines` at the midpoint: DR the
-        expense tax-class account / CR the cash hub."""
-        chart = bookkeeper.chart
-        cash_account = chart.cash_account()
+        """Post the resolved `expense_lines` at the midpoint: DR each line's expense
+        account / CR the cash hub. Lines name their account directly, so per-item expense
+        accounts (sharing a tax-class) post unambiguously."""
+        cash_account = bookkeeper.chart.cash_account()
         expense_date = self._parameters.date_span.midpoint
         for expense_line in self._parameters.expense_lines:
             amount = quantize_money( expense_line.amount )
@@ -185,14 +185,9 @@ class Period:
                 continue
             if cash_account is None:
                 raise MissingAccountError( 'No cash account to pay expenses from.' )
-            expense_account = chart.expense_account( expense_line.expense_tax_class )
-            if expense_account is None:
-                raise MissingAccountError(
-                    f'No expense account for expense tax-class {expense_line.expense_tax_class.label}.'
-                )
             bookkeeper.record(
                 expense_date,
-                [ ( expense_account, -amount ), ( cash_account, amount ) ],
+                [ ( expense_line.account, -amount ), ( cash_account, amount ) ],
             )
             continue
         return

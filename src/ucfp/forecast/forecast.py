@@ -21,23 +21,25 @@ engine as a black box: it asks the `TaxLaw` for each year's engine and never tou
 tax knob.
 
 STUB: per-period resolution covers subjects -> tax_context, AssetRates from the economic
-outlook, and income lines from the active streams; expense lines, events, and the feedback
-knobs (funding draws, RMDs, adaptive conversions) join incrementally.
+outlook, and income/expense lines from the active streams and items; events and the
+feedback knobs (funding draws, RMDs, adaptive conversions) join incrementally.
 """
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Optional
 
+from common.date_window import DateWindow
 from ucfp.accounts.books import Account, BooksOfAccount
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AccountType, IncomeTaxClass, SystemAccountRole
-from ucfp.period.parameters import DateSpan, FundingPolicy, IncomeLine, PeriodParameters
+from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass, SystemAccountRole
+from ucfp.period.parameters import DateSpan, ExpenseLine, FundingPolicy, IncomeLine, PeriodParameters
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.us.context import TaxContext, TaxSubject
 
-from .parameters import ForecastParameters, Subject
+from .parameters import ExpenseItem, ForecastParameters, Subject
 
 
 @dataclass
@@ -88,6 +90,33 @@ class IncomeAccounts:
         return account
 
 
+class ExpenseAccounts:
+    """The expense account for each expense item (keyed by name), created on first request
+    and reused after -- the one place the expense-account key lives. Per item so the Books
+    keep item-level detail; each account is tagged with the item's tax-class for the engine
+    to aggregate by class."""
+
+    def __init__( self, bookkeeper : Bookkeeper ):
+        self._bookkeeper = bookkeeper
+        self._expense_root = bookkeeper.chart.root( AccountType.EXPENSE )
+        self._account_by_name = dict()
+
+    def account_for( self, item : ExpenseItem ) -> Account:
+        """The expense account for `item`, creating it under the Expenses root on first
+        request."""
+        account = self._account_by_name.get( item.name )
+        if account is None:
+            account = self._bookkeeper.add_account(
+                Account(
+                    name              = item.name,
+                    parent            = self._expense_root,
+                    expense_tax_class = item.expense_tax_class,
+                )
+            )
+            self._account_by_name[ item.name ] = account
+        return account
+
+
 class Forecast:
     """Runs a `ForecastParameters` to completion (N Period steps); see the module
     docstring for the boundary."""
@@ -95,7 +124,8 @@ class Forecast:
     def __init__( self, parameters : ForecastParameters ):
         self._parameters = parameters
         self._tax_law    = TaxLaw( parameters.tax_forecast )
-        self._income_accounts = None   # an IncomeAccounts, built with the books in _build_baseline
+        self._income_accounts = None    # an IncomeAccounts, built with the books in _build_baseline
+        self._expense_accounts = None   # an ExpenseAccounts, built with the books in _build_baseline
 
     def run( self ) -> ForecastResult:
         """Build the opening books from the parameters, then walk the frame running a
@@ -119,8 +149,8 @@ class Forecast:
     def _build_baseline( self ) -> Bookkeeper:
         """Build the chart and opening books from the parameters -- the baseline is encoded
         there, not handed in. One opening transaction seeds each holding's value against
-        Opening Balances; revenue accounts are created per (subject, income tax-class) for
-        the income streams. STUB: holdings + income accounts; liabilities join later."""
+        Opening Balances; revenue and expense accounts are created per income stream and per
+        expense item. STUB: holdings + income + expense accounts; liabilities join later."""
         bookkeeper = Bookkeeper( BooksOfAccount( label = self._parameters.label ) )
         bookkeeper.build_standard_chart()
         chart = bookkeeper.chart
@@ -135,6 +165,7 @@ class Forecast:
             postings.append( ( opening_balances, opening_total ) )
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), postings )
         self._create_income_accounts( bookkeeper )
+        self._create_expense_accounts( bookkeeper )
         return bookkeeper
 
     def _create_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
@@ -144,6 +175,15 @@ class Forecast:
         self._income_accounts = IncomeAccounts( bookkeeper )
         for stream in self._parameters.income_streams:
             self._income_accounts.account_for( stream.subject, stream.income_tax_class )
+            continue
+        return
+
+    def _create_expense_accounts( self, bookkeeper : Bookkeeper ) -> None:
+        """Set up the expense-account registry and pre-create an account for every item, so
+        the chart is complete from the start."""
+        self._expense_accounts = ExpenseAccounts( bookkeeper )
+        for item in self._parameters.expenses:
+            self._expense_accounts.account_for( item )
             continue
         return
 
@@ -161,27 +201,73 @@ class Forecast:
             continue
         return lines
 
+    def _expense_lines_for( self, span : DateSpan ) -> list[ ExpenseLine ]:
+        """Resolve the expense items active this interval into ExpenseLines: the recurrence's
+        occurrences in the interval x the per-occurrence amount in effect (inflated from the
+        forecast start), posted to the item's account."""
+        lines = list()
+        for item in self._parameters.expenses:
+            clipped = self._clip_to_window( span, item.window )
+            if clipped is None:
+                continue
+            start, end = clipped
+            since = item.window.start if item.window.start is not None else self._parameters.start_date
+            occurrences = item.recurrence.count_in( start = start, end = end, since = since )
+            windowed_amount = item.amounts.at( span.start_date )
+            if ( occurrences == 0 ) or ( windowed_amount is None ):
+                continue
+            factor = self._expense_inflation_factor( item.expense_tax_class, span.start_date.year )
+            account = self._expense_accounts.account_for( item )
+            lines.append(
+                ExpenseLine( account = account, amount = occurrences * windowed_amount.amount * factor ) )
+            continue
+        return lines
+
+    def _clip_to_window( self, span : DateSpan, window : DateWindow ) -> Optional[ tuple[ date, date ] ]:
+        """The inclusive `[start, end]` overlap of `span` and `window`, or None if they do
+        not overlap."""
+        start = span.start_date
+        end = span.end_date
+        if ( window.start is not None ) and ( window.start > start ):
+            start = window.start
+        if ( window.end is not None ) and ( window.end < end ):
+            end = window.end
+        if start > end:
+            return None
+        return ( start, end )
+
     def _income_growth_factor( self, income_tax_class : IncomeTaxClass, target_year : int ) -> Decimal:
-        """The cumulative growth from the forecast start year to `target_year`, applying
-        each year's economic-outlook rate for `income_tax_class` -- so a today's-dollar
-        amount becomes that year's nominal. 1.0 in the start year."""
+        return self._cumulative_factor(
+            target_year, lambda segment : segment.income_growth_rate( income_tax_class ) )
+
+    def _expense_inflation_factor( self, expense_tax_class : ExpenseTaxClass, target_year : int ) -> Decimal:
+        return self._cumulative_factor(
+            target_year, lambda segment : segment.expense_inflation_rate( expense_tax_class ) )
+
+    def _cumulative_factor( self, target_year : int, rate_for ) -> Decimal:
+        """Cumulative growth from the forecast start year to `target_year`, compounding each
+        year's economic-outlook rate (selected by `rate_for`, a segment -> Rate) -- so a
+        today's-dollar amount becomes that year's nominal. 1.0 in the start year. (Annual
+        indexing: every sub-period of a year shares that year's level, at any granularity.)"""
         factor = Decimal( '1' )
         for year in range( self._parameters.start_date.year + 1, target_year + 1 ):
             segment = self._parameters.economic_outlook.parameters_at( date( year, 1, 1 ) )
-            factor *= ( Decimal( '1' ) + segment.income_growth_rate( income_tax_class ).fraction )
+            factor *= ( Decimal( '1' ) + rate_for( segment ).fraction )
             continue
         return factor
 
     def _build_period_parameters( self, span : DateSpan, opening_tax_state ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters, injecting the year's tax engine
         (from the tax-law projection) and the threaded carryforwards. STUB: tax_context
-        from subjects; AssetRates from the economic-outlook segment in effect; income lines
-        from the active streams; empty expense lines/events; funding from the cash-target."""
+        from subjects; AssetRates from the economic-outlook segment in effect; income and
+        expense lines from the active streams/items; events join later; funding from the
+        cash-target."""
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
             asset_rates       = self._parameters.economic_outlook.asset_rates_at( span.start_date ),
             income_lines      = self._income_lines_for( span ),
+            expense_lines     = self._expense_lines_for( span ),
             funding_policy    = FundingPolicy( cash_target = self._parameters.cash_target ),
             tax_engine        = self._tax_law.engine_for( span.end_date.year ),
             opening_tax_state = opening_tax_state,

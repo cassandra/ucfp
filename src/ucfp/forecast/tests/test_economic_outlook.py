@@ -10,7 +10,8 @@ from decimal import Decimal
 
 from common.date_window import DateWindow
 from common.rate import Rate
-from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from common.schedule import Schedule
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 
 FIVE_PERCENT = Rate( Decimal( '0.05' ) )
@@ -51,6 +52,11 @@ class AssetRateMappingTests( unittest.TestCase ):
         self.assertEqual(
             parameters.income_growth_rate( IncomeTaxClass.LONG_TERM_GAINS ), Rate( Decimal( '0' ) ) )
 
+    def test_expense_inflation_rate_splits_medical( self ):
+        parameters = EconomicParameters( inflation = THREE_PERCENT, medical_inflation = FIVE_PERCENT )
+        self.assertEqual( parameters.expense_inflation_rate( ExpenseTaxClass.MEDICAL ), FIVE_PERCENT )
+        self.assertEqual( parameters.expense_inflation_rate( ExpenseTaxClass.LIVING ), THREE_PERCENT )
+
 
 class ScheduleResolutionTests( unittest.TestCase ):
 
@@ -62,23 +68,23 @@ class ScheduleResolutionTests( unittest.TestCase ):
             continue
 
     def test_segments_pin_rates_to_windows( self ):
-        outlook = EconomicOutlook( segments = (
+        outlook = EconomicOutlook( Schedule( (
             EconomicParameters(
                 window = DateWindow( end = date( 2030, 12, 31 ) ), stock_appreciation = FIVE_PERCENT ),
             EconomicParameters(
                 window = DateWindow( start = date( 2031, 1, 1 ) ), stock_appreciation = THREE_PERCENT ),
-        ) )
+        ) ) )
         self.assertEqual(
             outlook.asset_rates_at( date( 2028, 1, 1 ) ).growth_rate( AssetClass.STOCKS ), FIVE_PERCENT )
         self.assertEqual(
             outlook.asset_rates_at( date( 2035, 1, 1 ) ).growth_rate( AssetClass.STOCKS ), THREE_PERCENT )
 
     def test_gap_falls_back_to_flat_zero( self ):
-        outlook = EconomicOutlook( segments = (
+        outlook = EconomicOutlook( Schedule( (
             EconomicParameters(
                 window = DateWindow( start = date( 2031, 1, 1 ), end = date( 2040, 12, 31 ) ),
                 stock_appreciation = FIVE_PERCENT ),
-        ) )
+        ) ) )
         rates = outlook.asset_rates_at( date( 2026, 1, 1 ) )   # before any segment
         self.assertEqual( rates.growth_rate( AssetClass.STOCKS ), Rate( Decimal( '0' ) ) )
 

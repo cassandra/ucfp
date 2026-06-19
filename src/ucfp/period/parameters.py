@@ -17,7 +17,7 @@ from decimal import Decimal
 
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.accounts.enums import AssetClass
 from ucfp.tax.engine import TaxEngine, ZeroTaxEngine
 from ucfp.tax.us.context import TaxContext
 
@@ -77,12 +77,13 @@ class IncomeLine:
 
 @dataclass( frozen = True )
 class ExpenseLine:
-    """One class of expense materializing this interval: the expense tax-class it
-    debits and the resolved amount (the Scenario aggregates the user's detailed
-    per-item expenses into per-class lines)."""
+    """One expense materializing this interval: the expense account it debits and the
+    resolved amount. Like `IncomeLine`, lines name the account directly, so per-item
+    expense accounts (which share an expense tax-class) post unambiguously while the tax
+    engine still aggregates by class."""
 
-    expense_tax_class : ExpenseTaxClass
-    amount            : Decimal
+    account : Account
+    amount  : Decimal
 
 
 @dataclass( frozen = True )
