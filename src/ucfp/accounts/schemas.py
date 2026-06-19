@@ -1,29 +1,20 @@
-"""In-memory container types for the accounts app."""
+"""In-memory container types for the accounts app.
+
+Currency conversion is reserved for the future GNUCash import boundary: an importer
+converts foreign source amounts to the organization's single currency before they enter
+the books. The in-ledger model itself is single-currency, so nothing here touches it.
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from .exceptions import CurrencyConversionError
 
 if TYPE_CHECKING:
-    # Referenced only in annotations; importing these at runtime would create a
-    # schemas <-> models import cycle.
+    # Referenced only in annotations; imported lazily to avoid a runtime cycle.
     from .enums import CurrencyType
-    from .models import Account
-
-
-@dataclass(frozen=True)
-class StartingBalance:
-    """One account's starting balance, as its natural balance.
-
-    The amount is in the organization's single currency. This is a transient input
-    (e.g. from manual entry or import), not a persisted record.
-    """
-
-    account : Account
-    amount  : Decimal
 
 
 @dataclass(frozen=True)
@@ -73,21 +64,3 @@ class CurrencyConverter:
         raise CurrencyConversionError(
             f'No conversion available from {from_currency_type} to {to_currency_type}.'
         )
-
-
-@dataclass
-class OpeningBalances:
-    """The transient input that seeds a Journal's opening state.
-
-    A collection of StartingBalances, all in the organization's single currency
-    (seeding is single-currency). The CurrencyConverter machinery is reserved for
-    the future import boundary: an importer converts foreign source amounts to the
-    organization's currency before building StartingBalances.
-    """
-
-    starting_balances : list[ StartingBalance ] = field( default_factory = list )
-
-    def add( self, account : Account, amount : Decimal ) -> OpeningBalances:
-        """Append a StartingBalance for `account`; chainable."""
-        self.starting_balances.append( StartingBalance( account = account, amount = amount ) )
-        return self

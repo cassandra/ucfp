@@ -1,3 +1,16 @@
+"""Persistence schema for the double-entry domain.
+
+These `*Record` models are the *persisted* form of the `BooksOfAccount` domain (see
+`books.py`) -- dumb tables, no behavior. The data, invariants, and mechanisms live in the
+pure-Python domain (`books.py`, `bookkeeper.py`); the `BooksOfAccountRepository` maps
+between the two. So there is no balance arithmetic, no structural validation, and no
+chart-building managers here -- only columns and the integrity constraints worth enforcing
+at the database.
+
+A `BooksOfAccountRecord` is the aggregate root: it owns its `AccountRecord`s and
+`TransactionRecord`s (which own `EntryRecord`s). Accounts are scoped to one books, never
+shared -- the `Organization` owns books, not accounts.
+"""
 import uuid
 from decimal import Decimal
 
@@ -17,31 +30,16 @@ from .enums import (
     SideType,
     SystemAccountRole,
 )
-from .exceptions import (
-    AccountStructureError,
-    EntryImmutableError,
-    SystemAccountError,
-    TransactionImbalanceError,
-)
-from .managers import AccountManager, JournalManager
 
 
-class Journal( TimestampedModel ):
-    """A persisted, dated starting financial state, and the partition that owns
-    transactions.
-
-    Many journals may coexist per organization (e.g. "Oct 2026 planning",
-    "Feb 2027 revision"); each is its own partition, so transactions in different
-    journals never double-count. Accounts are shared across journals (one chart
-    per organization) -- only transactions are partitioned by journal.
-    """
-
-    objects = JournalManager()
+class BooksOfAccountRecord( TimestampedModel ):
+    """A persisted set of books: the aggregate root owning its accounts and transactions.
+    The `Organization` (the tenant) owns these; each is self-contained."""
 
     organization = models.ForeignKey(
         Organization,
         verbose_name = 'Organization',
-        related_name = 'journals',
+        related_name = 'books',
         on_delete = models.CASCADE,
         null = False,
         blank = False,
@@ -53,44 +51,29 @@ class Journal( TimestampedModel ):
         null = False,
         editable = False,
     )
-    as_of_date = models.DateField(
-        'As Of Date',
-        null = False,
-    )
     label = models.CharField(
         'Label',
         max_length = 128,
         null = False,
-        blank = False,
+        blank = True,
+        default = '',
     )
 
     class Meta:
-        verbose_name = 'Journal'
-        verbose_name_plural = 'Journals'
+        verbose_name = 'Books of Account'
+        verbose_name_plural = 'Books of Account'
 
-    def __str__(self):
-        return f'{self.label} ({self.as_of_date})'
+    def __str__( self ):
+        return self.label or f'Books {self.uuid}'
 
 
-class Account( TimestampedModel ):
-    """A node in an organization's shared chart of accounts.
+class AccountRecord( TimestampedModel ):
+    """A persisted account node. Type placement and tree validity are domain concerns;
+    this carries only the columns and the per-books uniqueness of roots and system roles."""
 
-    The chart is a forest of per-type roots: each AccountType has exactly one
-    parentless root that carries the type, and every other account inherits its
-    type from its ancestry (see effective_account_type). Accounts are shared
-    across journals; an account has no single global balance -- balance is
-    computed per (account, journal).
-
-    System accounts -- the per-type roots and the well-known role accounts (see
-    SystemAccountRole) -- are created by `objects.initialize_chart` and are
-    protected from deletion and closing.
-    """
-
-    objects = AccountManager()
-
-    organization = models.ForeignKey(
-        Organization,
-        verbose_name = 'Organization',
+    books = models.ForeignKey(
+        BooksOfAccountRecord,
+        verbose_name = 'Books',
         related_name = 'accounts',
         on_delete = models.CASCADE,
         null = False,
@@ -161,148 +144,28 @@ class Account( TimestampedModel ):
         verbose_name_plural = 'Accounts'
         constraints = [
             models.UniqueConstraint(
-                fields = [ 'organization', 'account_type' ],
+                fields = [ 'books', 'account_type' ],
                 condition = models.Q( parent__isnull = True ),
                 name = 'unique_root_account_per_type',
             ),
             models.UniqueConstraint(
-                fields = [ 'organization', 'system_role' ],
+                fields = [ 'books', 'system_role' ],
                 condition = models.Q( system_role__isnull = False ),
-                name = 'unique_system_account_role_per_organization',
+                name = 'unique_system_account_role_per_books',
             ),
         ]
 
-    def __str__(self):
+    def __str__( self ):
         return self.name
 
-    @property
-    def is_root(self) -> bool:
-        return bool( self.parent_id is None )
 
-    @property
-    def is_system(self) -> bool:
-        return bool( ( self.parent_id is None ) or ( self.system_role is not None ) )
+class TransactionRecord( TimestampedModel ):
+    """A persisted transaction within a books. Balance is a domain invariant, not stored
+    or enforced here."""
 
-    @property
-    def effective_account_type(self) -> AccountType:
-        """The account's type, walking to the type-bearing root if inherited."""
-        if self.account_type is not None:
-            return self.account_type
-        return self.parent.effective_account_type
-
-    @property
-    def account_normal_type(self) -> SideType:
-        """The side (debit/credit) on which this account's balance is normal."""
-        return self.effective_account_type.normal_side
-
-    def signed_balance( self, journal : 'Journal' ) -> Decimal:
-        """Credit-positive balance within `journal`, in the organization's currency.
-
-        The plain sum of this account's own entries' signed_amount. Descendants are
-        not rolled up -- balance is per (account, journal).
-        """
-        totals = self.entries.filter( transaction__journal = journal ).aggregate(
-            credit_total = models.Sum(
-                'amount',
-                filter = models.Q( entry_direction = SideType.CREDIT ),
-            ),
-            debit_total = models.Sum(
-                'amount',
-                filter = models.Q( entry_direction = SideType.DEBIT ),
-            ),
-        )
-        credit_total = totals[ 'credit_total' ] or Decimal( '0' )
-        debit_total = totals[ 'debit_total' ] or Decimal( '0' )
-        return credit_total - debit_total
-
-    def natural_balance( self, journal : 'Journal' ) -> Decimal:
-        """Display balance: positive in the account type's normal direction."""
-        signed = self.signed_balance( journal )
-        if self.account_normal_type == SideType.DEBIT:
-            return -signed
-        return signed
-
-    def close(self):
-        """Archive this account from the chart (non-destructive)."""
-        self.closed = True
-        self.save()
-        return
-
-    def save( self, *args, **kwargs ):
-        self._assert_valid_structure()
-        self._assert_not_closing_system_account()
-        return super().save( *args, **kwargs )
-
-    def delete( self, *args, **kwargs ):
-        if self.is_system:
-            raise SystemAccountError( 'A system account cannot be deleted.' )
-        return super().delete( *args, **kwargs )
-
-    def _assert_valid_structure( self ):
-        if self.is_root:
-            if self.account_type is None:
-                raise AccountStructureError(
-                    'A root account must declare an account_type.'
-                )
-        else:
-            if self.account_type is not None:
-                raise AccountStructureError(
-                    'A non-root account inherits its type and must not set account_type.'
-                )
-            if self.parent.organization_id != self.organization_id:
-                raise AccountStructureError(
-                    'A child account must belong to the same organization as its parent.'
-                )
-            self._assert_no_parent_cycle()
-        if self.asset_class is not None:
-            if self.is_root or self.effective_account_type != AccountType.ASSET:
-                raise AccountStructureError(
-                    'An asset_class may be set only on a non-root asset account.'
-                )
-        if self.income_tax_class is not None:
-            if self.is_root or self.effective_account_type != AccountType.REVENUE:
-                raise AccountStructureError(
-                    'An income_tax_class may be set only on a non-root revenue account.'
-                )
-        if self.expense_tax_class is not None:
-            if self.is_root or self.effective_account_type != AccountType.EXPENSE:
-                raise AccountStructureError(
-                    'An expense_tax_class may be set only on a non-root expense account.'
-                )
-        return
-
-    def _assert_no_parent_cycle( self ):
-        # A new (unsaved) account cannot yet be an ancestor of anything, so only
-        # re-parenting an existing account can introduce a cycle. Walking to the
-        # root also bounds the otherwise-unbounded recursion in
-        # effective_account_type.
-        if self.pk is None:
-            return
-        ancestor = self.parent
-        while ancestor is not None:
-            if ancestor.pk == self.pk:
-                raise AccountStructureError( 'An account cannot be its own ancestor.' )
-            ancestor = ancestor.parent
-            continue
-        return
-
-    def _assert_not_closing_system_account( self ):
-        if self.closed and self.is_system:
-            raise SystemAccountError( 'A system account cannot be closed.' )
-        return
-
-
-class Transaction( TimestampedModel ):
-    """A balanced movement of value within a single Journal partition.
-
-    Comprises at least one debit and one credit Entry whose signed amounts sum to
-    zero -- the core double-entry invariant. Its magnitude (the common "amount")
-    is derived from its entries and never stored.
-    """
-
-    journal = models.ForeignKey(
-        Journal,
-        verbose_name = 'Journal',
+    books = models.ForeignKey(
+        BooksOfAccountRecord,
+        verbose_name = 'Books',
         related_name = 'transactions',
         on_delete = models.CASCADE,
         null = False,
@@ -329,41 +192,16 @@ class Transaction( TimestampedModel ):
         verbose_name = 'Transaction'
         verbose_name_plural = 'Transactions'
 
-    def __str__(self):
+    def __str__( self ):
         return f'{self.transaction_date} {self.description}'.strip()
 
-    def balance( self ) -> Decimal:
-        """Signed sum of the entries in the organization currency; zero when balanced."""
-        total = Decimal( '0' )
-        for entry in self.entries.all():
-            total += entry.signed_amount
-            continue
-        return total
 
-    @property
-    def is_balanced( self ) -> bool:
-        return bool( self.balance() == Decimal( '0' ) )
-
-    def assert_balanced( self ):
-        if not self.is_balanced:
-            raise TransactionImbalanceError(
-                f'Transaction {self.uuid} does not balance (residual {self.balance()}).'
-            )
-        return
-
-
-class Entry( TimestampedModel ):
-    """One side of a Transaction: a signed posting of an amount to an Account.
-
-    An entry is immutable once created -- it carries no edit path and no status
-    lifecycle (pending/posted/discarded). It records a single `amount` in the
-    organization's currency (the ledger is single-currency). `entry_direction`
-    supplies the side; `signed_amount` combines magnitude and side (credit
-    positive, debit negative).
-    """
+class EntryRecord( TimestampedModel ):
+    """A persisted entry: a signed posting of an amount to an account. The amount is a
+    positive magnitude in the books' single currency; `entry_direction` gives the side."""
 
     account = models.ForeignKey(
-        Account,
+        AccountRecord,
         verbose_name = 'Account',
         related_name = 'entries',
         on_delete = models.PROTECT,
@@ -371,7 +209,7 @@ class Entry( TimestampedModel ):
         blank = False,
     )
     transaction = models.ForeignKey(
-        Transaction,
+        TransactionRecord,
         verbose_name = 'Transaction',
         related_name = 'entries',
         on_delete = models.CASCADE,
@@ -412,17 +250,5 @@ class Entry( TimestampedModel ):
             ),
         ]
 
-    def __str__(self):
+    def __str__( self ):
         return f'{self.entry_direction.label} {self.amount} {self.account}'
-
-    @property
-    def signed_amount(self) -> Decimal:
-        """The magnitude with its credit-positive sign, in the organization's currency."""
-        if self.entry_direction == SideType.CREDIT:
-            return self.amount
-        return -self.amount
-
-    def save( self, *args, **kwargs ):
-        if self.pk is not None:
-            raise EntryImmutableError( 'An Entry is immutable once created.' )
-        return super().save( *args, **kwargs )

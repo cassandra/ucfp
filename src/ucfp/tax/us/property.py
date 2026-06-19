@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from ucfp.accounts.books import Account
 from ucfp.accounts.enums import RealPropertyType
-from ucfp.accounts.models import Account
 
 
 @dataclass( frozen = True )

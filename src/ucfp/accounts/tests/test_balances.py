@@ -1,7 +1,9 @@
-"""Tests for balance computation, the transaction invariant, and the opening seed.
+"""Tests for the currency-conversion boundary helper and the persistence round-trip.
 
-These cover the money arithmetic that is ground truth for the whole model, so
-they are exercised even under the phase's otherwise-minimal testing policy.
+The double-entry arithmetic and invariants are the domain's, tested without a database in
+`test_books.py`. What needs the database is the Repository, so it is tested here: a domain
+`BooksOfAccount` saved and reloaded must come back structurally and numerically intact.
+The `CurrencyConverter` (kept for the future import boundary) is pure and tested alongside.
 """
 from datetime import date
 from decimal import Decimal
@@ -9,19 +11,18 @@ from decimal import Decimal
 from django.test import TestCase
 
 from organization.models import Organization
-from ucfp.accounts.enums import AccountType, CurrencyType, SideType
-from ucfp.accounts.exceptions import (
-    CurrencyConversionError,
-    TransactionImbalanceError,
+from ucfp.accounts.books import BooksOfAccount
+from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.enums import (
+    AccountType,
+    AssetClass,
+    CurrencyType,
+    SystemAccountRole,
 )
-from ucfp.accounts.models import Account, Journal
-from ucfp.accounts.schemas import (
-    CurrencyConversion,
-    CurrencyConverter,
-    OpeningBalances,
-)
-
-AS_OF = date( 2026, 6, 16 )
+from ucfp.accounts.exceptions import CurrencyConversionError
+from ucfp.accounts.models import AccountRecord, BooksOfAccountRecord, EntryRecord
+from ucfp.accounts.repository import BooksOfAccountRepository
+from ucfp.accounts.schemas import CurrencyConversion, CurrencyConverter
 
 
 class CurrencyConverterTests(TestCase):
@@ -77,225 +78,48 @@ class CurrencyConverterTests(TestCase):
             CurrencyConversion( CurrencyType.USD, CurrencyType.USD, Decimal( '2' ) )
 
 
-class AccountsTestCase(TestCase):
-    """Shared chart fixture: a USD organization with two leaf accounts."""
+class BooksOfAccountRepositoryTests(TestCase):
+    """The domain <-> persistence round-trip: a saved books reloads intact."""
 
-    def setUp(self):
-        self.organization = Organization.objects.create( name = 'Acme' )
-        Account.objects.initialize_chart( self.organization )
-        self.assets_root = self._root( AccountType.ASSET )
-        self.equity_root = self._root( AccountType.EQUITY )
-        self.opening_balances = self.organization.accounts.get(
-            system_role = 'opening_balances',
+    def _build_books( self ) -> Bookkeeper:
+        bookkeeper = Bookkeeper( BooksOfAccount( label = 'Plan A' ) )
+        bookkeeper.build_standard_chart()
+        chart = bookkeeper.chart
+        asset_root = chart.root( AccountType.ASSET )
+        cash = bookkeeper.create_holding( asset_root, 'Cash', AssetClass.CASH )
+        stocks = bookkeeper.create_holding( asset_root, 'Brokerage', AssetClass.STOCKS )
+        opening = chart.system_account( SystemAccountRole.OPENING_BALANCES )
+        bookkeeper.record(
+            date( 2026, 1, 1 ),
+            [ ( cash, Decimal( '-100000' ) ), ( stocks, Decimal( '-400000' ) ),
+              ( opening, Decimal( '500000' ) ) ],
         )
-        self.checking = Account.objects.create(
-            organization = self.organization, parent = self.assets_root, name = 'Checking',
+        return bookkeeper
+
+    def test_save_persists_the_whole_graph(self):
+        bookkeeper = self._build_books()
+        organization = Organization.objects.create( name = 'Round Trip' )
+        books_record = BooksOfAccountRepository().save( bookkeeper.books, organization )
+        self.assertEqual( BooksOfAccountRecord.objects.count(), 1 )
+        self.assertEqual(
+            AccountRecord.objects.filter( books = books_record ).count(),
+            len( bookkeeper.books.accounts ),
         )
-        self.credit_card = Account.objects.create(
-            organization = self.organization,
-            parent = self._root( AccountType.LIABILITY ),
-            name = 'Credit Card',
-        )
+        self.assertEqual( EntryRecord.objects.count(), 3 )
 
-    def _root(self, account_type):
-        return self.organization.accounts.get(
-            account_type = account_type, parent__isnull = True,
-        )
+    def test_load_restores_balances_and_structure(self):
+        bookkeeper = self._build_books()
+        original_net_worth = bookkeeper.ledger.net_worth()
+        organization = Organization.objects.create( name = 'Round Trip' )
+        repository = BooksOfAccountRepository()
 
-    def _make_transaction(self, journal):
-        return journal.transactions.create(
-            transaction_date = AS_OF, description = '',
-        )
+        books_record = repository.save( bookkeeper.books, organization )
+        loaded = repository.load( books_record )
 
-
-class EntryAmountTests(AccountsTestCase):
-
-    def test_signed_amount(self):
-        journal = Journal.objects.create(
-            organization = self.organization, as_of_date = AS_OF, label = 'B',
-        )
-        transaction = self._make_transaction( journal )
-        entry = transaction.entries.create(
-            account = self.checking,
-            amount = Decimal( '100' ),
-            entry_direction = SideType.DEBIT,
-        )
-        self.assertEqual( entry.signed_amount, Decimal( '-100' ) )
-
-
-class AccountBalanceTests(AccountsTestCase):
-
-    def test_signed_and_natural_balance(self):
-        journal = Journal.objects.create(
-            organization = self.organization, as_of_date = AS_OF, label = 'B',
-        )
-        transaction = self._make_transaction( journal )
-        transaction.entries.create(
-            account = self.checking,
-            amount = Decimal( '100' ),
-            entry_direction = SideType.DEBIT,
-        )
-        transaction.entries.create(
-            account = self.equity_root,
-            amount = Decimal( '100' ),
-            entry_direction = SideType.CREDIT,
-        )
-        # Asset (debit-normal): credit-positive signed balance is negative; the
-        # natural balance flips it positive.
-        self.assertEqual( self.checking.signed_balance( journal ), Decimal( '-100' ) )
-        self.assertEqual( self.checking.natural_balance( journal ), Decimal( '100' ) )
-        # Equity (credit-normal): signed and natural agree.
-        self.assertEqual( self.equity_root.signed_balance( journal ), Decimal( '100' ) )
-        self.assertEqual( self.equity_root.natural_balance( journal ), Decimal( '100' ) )
-
-
-class TransactionBalanceTests(AccountsTestCase):
-
-    def _two_sided(self, journal, credit_amount):
-        transaction = self._make_transaction( journal )
-        transaction.entries.create(
-            account = self.checking,
-            amount = Decimal( '100' ),
-            entry_direction = SideType.DEBIT,
-        )
-        transaction.entries.create(
-            account = self.equity_root,
-            amount = credit_amount,
-            entry_direction = SideType.CREDIT,
-        )
-        return transaction
-
-    def test_balanced_transaction(self):
-        journal = Journal.objects.create(
-            organization = self.organization, as_of_date = AS_OF, label = 'B',
-        )
-        transaction = self._two_sided( journal, Decimal( '100' ) )
-        self.assertTrue( transaction.is_balanced )
-        transaction.assert_balanced()
-
-    def test_unbalanced_transaction_raises(self):
-        journal = Journal.objects.create(
-            organization = self.organization, as_of_date = AS_OF, label = 'B',
-        )
-        transaction = self._two_sided( journal, Decimal( '60' ) )
-        self.assertFalse( transaction.is_balanced )
-        with self.assertRaises( TransactionImbalanceError ):
-            transaction.assert_balanced()
-
-
-class OpeningSeedTests(AccountsTestCase):
-
-    def test_single_currency_seed_balances_and_plugs(self):
-        opening = OpeningBalances()
-        opening.add( self.checking, Decimal( '1000' ) )
-        opening.add( self.credit_card, Decimal( '200' ) )
-
-        journal = Journal.objects.create_with_opening(
-            organization = self.organization,
-            as_of_date = AS_OF,
-            label = 'Jun 2026',
-            opening_balances = opening,
-        )
-
-        self.assertEqual( journal.transactions.count(), 1 )
-        transaction = journal.transactions.get()
-        self.assertTrue( transaction.is_balanced )
-        # A = L + E by construction: 1000 = 200 + 800.
-        self.assertEqual( self.checking.natural_balance( journal ), Decimal( '1000' ) )
-        self.assertEqual( self.credit_card.natural_balance( journal ), Decimal( '200' ) )
-        self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '800' ) )
-
-    def test_discrepancy_surfaces_in_opening_balances(self):
-        retained = Account.objects.create(
-            organization = self.organization, parent = self.equity_root, name = 'Retained',
-        )
-        opening = OpeningBalances()
-        opening.add( self.checking, Decimal( '1000' ) )
-        opening.add( self.credit_card, Decimal( '200' ) )
-        opening.add( retained, Decimal( '900' ) )
-
-        journal = Journal.objects.create_with_opening(
-            organization = self.organization,
-            as_of_date = AS_OF,
-            label = 'Jun 2026',
-            opening_balances = opening,
-        )
-
-        # Stated equity (900) overshoots the true residual (800) by 100, which
-        # surfaces as a negative Opening Balances natural balance.
-        self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '-100' ) )
-
-    def test_zero_starting_balance_is_skipped(self):
-        opening = OpeningBalances()
-        opening.add( self.checking, Decimal( '1000' ) )
-        opening.add( self.credit_card, Decimal( '0' ) )
-
-        journal = Journal.objects.create_with_opening(
-            organization = self.organization,
-            as_of_date = AS_OF,
-            label = 'Jun 2026',
-            opening_balances = opening,
-        )
-
-        transaction = journal.transactions.get()
-        self.assertFalse( transaction.entries.filter( account = self.credit_card ).exists() )
-        self.assertTrue( transaction.entries.filter( account = self.checking ).exists() )
-
-    def test_plug_skipped_when_already_balanced(self):
-        retained = Account.objects.create(
-            organization = self.organization, parent = self.equity_root, name = 'Retained',
-        )
-        opening = OpeningBalances()
-        opening.add( self.checking, Decimal( '1000' ) )   # asset, debit
-        opening.add( retained, Decimal( '1000' ) )        # equity, credit -> nets to zero
-
-        journal = Journal.objects.create_with_opening(
-            organization = self.organization,
-            as_of_date = AS_OF,
-            label = 'Jun 2026',
-            opening_balances = opening,
-        )
-
-        transaction = journal.transactions.get()
-        self.assertFalse( transaction.entries.filter( account = self.opening_balances ).exists() )
-        self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '0' ) )
-        self.assertTrue( transaction.is_balanced )
-
-    def test_negative_natural_balance_flips_side(self):
-        opening = OpeningBalances()
-        opening.add( self.checking, Decimal( '-200' ) )   # overdrawn asset
-
-        journal = Journal.objects.create_with_opening(
-            organization = self.organization,
-            as_of_date = AS_OF,
-            label = 'Jun 2026',
-            opening_balances = opening,
-        )
-
-        transaction = journal.transactions.get()
-        checking_entry = transaction.entries.get( account = self.checking )
-        # A negative natural balance on a debit-normal account posts as a credit.
-        self.assertEqual( checking_entry.entry_direction, SideType.CREDIT )
-        self.assertEqual( self.checking.natural_balance( journal ), Decimal( '-200' ) )
-        self.assertTrue( transaction.is_balanced )
-
-    def test_parent_account_balance_excludes_children(self):
-        savings = Account.objects.create(
-            organization = self.organization, parent = self.assets_root, name = 'Savings',
-        )
-        opening = OpeningBalances()
-        opening.add( self.checking, Decimal( '1000' ) )
-        opening.add( savings, Decimal( '500' ) )
-
-        journal = Journal.objects.create_with_opening(
-            organization = self.organization,
-            as_of_date = AS_OF,
-            label = 'Jun 2026',
-            opening_balances = opening,
-        )
-
-        # Balance is per (account, journal) with no subtree rollup: the assets
-        # root has no entries of its own, so its balance is zero, not 1500.
-        self.assertEqual( self.assets_root.natural_balance( journal ), Decimal( '0' ) )
-        self.assertEqual( self.checking.natural_balance( journal ), Decimal( '1000' ) )
-        self.assertEqual( savings.natural_balance( journal ), Decimal( '500' ) )
+        reader = Bookkeeper( loaded )
+        self.assertEqual( loaded.label, 'Plan A' )
+        self.assertEqual( reader.ledger.net_worth(), original_net_worth )
+        self.assertEqual( len( loaded.accounts ), len( bookkeeper.books.accounts ) )
+        loaded_stocks = next( a for a in reader.chart.holdings() if a.name == 'Brokerage' )
+        self.assertIsNotNone( reader.chart.valuation_of( loaded_stocks ) )
+        reader.assert_balanced()
