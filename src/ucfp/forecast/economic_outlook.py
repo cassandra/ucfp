@@ -8,9 +8,9 @@ different rates to different year ranges is more segments.
 The Forecast resolves the segment in effect for each interval (by the interval's start
 date) into that period's `AssetRates`, so the Period's growth and distribution steps fire.
 
-STUB: income-side COLAs (Social Security, pensions, rent) live with the income inputs;
-precious-metals / collectibles / depreciating rates and a retirement asset-mix join as
-needed. Segments are resolved at period boundaries (no sub-period rate changes).
+STUB: income-side COLAs (Social Security, pensions, rent) live with the income inputs; a
+depreciating-asset rate and a retirement asset-mix join as needed. Segments are resolved
+at period boundaries (no sub-period rate changes).
 """
 from dataclasses import dataclass
 from datetime import date
@@ -29,17 +29,19 @@ class EconomicParameters:
     the Period's per-`AssetClass` rates. The window rides here -- like the other time-bound
     inputs -- so an `EconomicOutlook` is just a list of these."""
 
-    start                    : Optional[ date ] = None
-    end                      : Optional[ date ] = None
-    inflation                : Rate = ZERO_RATE
-    savings_interest         : Rate = ZERO_RATE   # CASH yield (distribution)
-    cd_interest              : Rate = ZERO_RATE   # CDS yield
-    bond_appreciation        : Rate = ZERO_RATE   # BONDS price growth
-    bond_interest            : Rate = ZERO_RATE   # BONDS coupon (distribution)
-    stock_appreciation       : Rate = ZERO_RATE   # STOCKS + DIVIDEND_STOCKS growth
-    stock_dividend           : Rate = ZERO_RATE   # DIVIDEND_STOCKS yield
-    real_estate_appreciation : Rate = ZERO_RATE   # residence + rental growth
-    retirement_growth        : Rate = ZERO_RATE   # PRETAX_RETIREMENT + ROTH (blended)
+    start                        : Optional[ date ] = None
+    end                          : Optional[ date ] = None
+    inflation                    : Rate = ZERO_RATE
+    savings_interest             : Rate = ZERO_RATE   # CASH yield (distribution)
+    cd_interest                  : Rate = ZERO_RATE   # CDS yield
+    bond_appreciation            : Rate = ZERO_RATE   # BONDS price growth
+    bond_interest                : Rate = ZERO_RATE   # BONDS coupon (distribution)
+    stock_appreciation           : Rate = ZERO_RATE   # STOCKS + DIVIDEND_STOCKS growth
+    stock_dividend               : Rate = ZERO_RATE   # DIVIDEND_STOCKS yield
+    real_estate_appreciation     : Rate = ZERO_RATE   # residence + rental growth
+    precious_metals_appreciation : Rate = ZERO_RATE   # PRECIOUS_METALS growth
+    collectibles_appreciation    : Rate = ZERO_RATE   # COLLECTIBLES growth
+    retirement_growth            : Rate = ZERO_RATE   # PRETAX_RETIREMENT + ROTH (blended)
 
     def covers( self, on_date : date ) -> bool:
         """Whether this segment's window contains `on_date`."""
@@ -51,14 +53,16 @@ class EconomicParameters:
 
     def asset_rates( self ) -> AssetRates:
         """Resolve into the Period's per-`AssetClass` growth and distribution rates. A
-        class absent from a map carries a zero rate (the `AssetRates` default), so precious
-        metals, collectibles, and depreciating assets simply do not move yet."""
+        class absent from a map carries a zero rate (the `AssetRates` default), so
+        depreciating assets simply do not move yet."""
         growth = {
             AssetClass.STOCKS                : self.stock_appreciation,
             AssetClass.DIVIDEND_STOCKS       : self.stock_appreciation,
             AssetClass.BONDS                 : self.bond_appreciation,
             AssetClass.REAL_ESTATE_RESIDENCE : self.real_estate_appreciation,
             AssetClass.REAL_ESTATE_RENTAL    : self.real_estate_appreciation,
+            AssetClass.PRECIOUS_METALS       : self.precious_metals_appreciation,
+            AssetClass.COLLECTIBLES          : self.collectibles_appreciation,
             AssetClass.PRETAX_RETIREMENT     : self.retirement_growth,
             AssetClass.ROTH                  : self.retirement_growth,
         }

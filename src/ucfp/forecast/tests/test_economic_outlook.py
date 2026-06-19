@@ -20,19 +20,24 @@ class AssetRateMappingTests( unittest.TestCase ):
 
     def test_named_rates_map_to_asset_classes( self ):
         parameters = EconomicParameters(
-            stock_appreciation = FIVE_PERCENT,
-            stock_dividend     = THREE_PERCENT,
-            savings_interest   = THREE_PERCENT,
+            stock_appreciation           = FIVE_PERCENT,
+            stock_dividend               = THREE_PERCENT,
+            savings_interest             = THREE_PERCENT,
+            precious_metals_appreciation = FIVE_PERCENT,
+            collectibles_appreciation    = THREE_PERCENT,
         )
         rates = parameters.asset_rates()
         # stock appreciation drives both stock classes' growth
         self.assertEqual( rates.growth_rate( AssetClass.STOCKS ), FIVE_PERCENT )
         self.assertEqual( rates.growth_rate( AssetClass.DIVIDEND_STOCKS ), FIVE_PERCENT )
+        # precious metals and collectibles have their own (distinct) rates
+        self.assertEqual( rates.growth_rate( AssetClass.PRECIOUS_METALS ), FIVE_PERCENT )
+        self.assertEqual( rates.growth_rate( AssetClass.COLLECTIBLES ), THREE_PERCENT )
         # dividends and savings are distributions
         self.assertEqual( rates.distribution_rate( AssetClass.DIVIDEND_STOCKS ), THREE_PERCENT )
         self.assertEqual( rates.distribution_rate( AssetClass.CASH ), THREE_PERCENT )
         # an unlisted class is flat
-        self.assertEqual( rates.growth_rate( AssetClass.COLLECTIBLES ), Rate( Decimal( '0' ) ) )
+        self.assertEqual( rates.growth_rate( AssetClass.DEPRECIATING ), Rate( Decimal( '0' ) ) )
 
 
 class ScheduleResolutionTests( unittest.TestCase ):
