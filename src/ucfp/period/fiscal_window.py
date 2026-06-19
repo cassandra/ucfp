@@ -13,8 +13,8 @@ only ever asks for annual income -- needs no change.
 """
 from decimal import Decimal
 
+from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass
-from ucfp.accounts.ledger import Ledger
 
 from .parameters import DateSpan
 
@@ -24,8 +24,9 @@ class FiscalWindow:
     booked to each income tax-class across the year (revenue accounts are
     credit-normal, so a window's flows are already the positive income earned)."""
 
-    def __init__( self, ledger : Ledger, span : DateSpan ):
-        self._ledger = ledger
+    def __init__( self, bookkeeper : Bookkeeper, span : DateSpan ):
+        self._chart  = bookkeeper.chart
+        self._ledger = bookkeeper.ledger
         self._span   = span
 
     @property
@@ -38,7 +39,7 @@ class FiscalWindow:
         """Total income recognized in `income_tax_class` over the fiscal year (zero
         if no revenue account carries that class)."""
         total = Decimal( '0' )
-        for account in self._ledger.accounts( account_type = AccountType.REVENUE ):
+        for account in self._chart.accounts( account_type = AccountType.REVENUE ):
             if account.income_tax_class != income_tax_class:
                 continue
             total += self._ledger.flows(
@@ -53,7 +54,7 @@ class FiscalWindow:
         FICA's per-worker Social Security cap needs; `income` sums these for income
         tax."""
         amounts = list()
-        for account in self._ledger.accounts( account_type = AccountType.REVENUE ):
+        for account in self._chart.accounts( account_type = AccountType.REVENUE ):
             if account.income_tax_class != income_tax_class:
                 continue
             amounts.append( self._ledger.flows(
@@ -68,7 +69,7 @@ class FiscalWindow:
         lives in the tax engine, not here. Expense accounts are debit-normal, so the
         window's credit-positive flows are negated to the positive amount spent."""
         total = Decimal( '0' )
-        for account in self._ledger.accounts( account_type = AccountType.EXPENSE ):
+        for account in self._chart.accounts( account_type = AccountType.EXPENSE ):
             if account.expense_tax_class != expense_tax_class:
                 continue
             total += self._ledger.flows(

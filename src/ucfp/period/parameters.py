@@ -16,8 +16,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from common.rate import Rate, ZERO_RATE
+from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
-from ucfp.accounts.models import Account
 from ucfp.tax.engine import TaxEngine, ZeroTaxEngine
 from ucfp.tax.us.context import TaxContext
 

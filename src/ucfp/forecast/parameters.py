@@ -58,6 +58,7 @@ class ForecastParameters:
     end_date          : date
     filing_status     : FilingStatus
     tax_forecast      : TaxForecastProfile
+    label             : str                     = ''
     subjects          : list[ Subject ]         = field( default_factory = list )
     assets            : list[ AssetParameters ] = field( default_factory = list )
     cash_target       : Decimal                 = Decimal( '0' )

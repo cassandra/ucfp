@@ -1,223 +1,86 @@
-"""The in-memory double-entry Ledger.
+"""The Ledger view: per-account balances over a `BooksOfAccount`.
 
-`Ledger` is the computational aggregate over a partition's books -- distinct from
-`Journal`, which is the *persisted* partition record. A Ledger holds the chart's
-accounts and a journal's transactions and entries (saved or unsaved) in memory,
-loaded once, and answers every balance / flow query in memory rather than issuing
-a database aggregate per account per call. It is also the authoritative enforcer
-of the double-entry invariants -- which must hold for ephemeral books that are
-never persisted -- so the cross-row transaction-balance rule lives here, not in a
-database constraint.
-
-NOTE: `flush` (optional persistence) remains stubbed pending a real need.
+The "book of final entry" view -- entries organized by account, with balances. Reads a
+`Bookkeeper`'s postings index and presents signed and natural balances, flows within a
+window, and the projection derivations `market_value` (cost + valuation companion) and
+`net_worth` (assets - liabilities). It uses a `Chart` for the structure those derivations
+need. A read-only view: it never mutates the books (that is the `Bookkeeper`'s job).
 """
-from collections import namedtuple
 from datetime import date
 from decimal import Decimal
-from typing import Iterable, Optional
+from typing import TYPE_CHECKING, Optional
 
+from .books import Account
 from .enums import AccountType, SideType
-from .exceptions import TransactionImbalanceError
-from .models import Account, Entry, Journal, Transaction
 
-from organization.models import Organization
-
-
-# One account's participation in one transaction, reduced to what the queries
-# need: the transaction's date and the entry's signed magnitude (credit-positive)
-# in the organization's single currency.
-_Posting = namedtuple( '_Posting', ( 'date', 'signed_amount' ) )
+if TYPE_CHECKING:
+    from .bookkeeper import Bookkeeper
 
 
 class Ledger:
-    """In-memory double-entry books over a single partition.
+    """A balance view over a `Bookkeeper`'s books."""
 
-    Construct once (load an existing Journal's books, or start empty against an
-    organization's chart), `post` balanced transactions into it, and query
-    balances and flows entirely in memory. Works with unsaved model instances; an
-    optional `flush` persists held objects only when a caller wants them durable.
-    """
-
-    def __init__( self, organization : Organization ):
-        self._organization = organization
-        self.journal = None                  # the partition posted transactions belong to
-        self._accounts = { account.pk : account for account in organization.accounts.all() }
-        self._transactions = list()
-        self._postings_by_account = dict()   # account pk -> list[ _Posting ]
-
-    # -- construction (load once) --------------------------------------------
-
-    @classmethod
-    def load( cls, journal : Journal ) -> 'Ledger':
-        """Build a Ledger from a persisted Journal, bulk-fetching its chart,
-        transactions and entries (never one query per account)."""
-        ledger = cls( journal.organization )
-        ledger.journal = journal
-        for transaction in journal.transactions.prefetch_related( 'entries' ):
-            ledger._index( transaction, transaction.entries.all() )
-            ledger._transactions.append( transaction )
-            continue
-        return ledger
-
-    @classmethod
-    def empty( cls, organization : Organization ) -> 'Ledger':
-        """Build an empty Ledger over `organization`'s chart -- no transactions
-        yet -- for ephemeral books built forward (e.g. a Forecast working set)."""
-        return cls( organization )
-
-    # -- mutation (invariant-enforcing, in memory) ---------------------------
-
-    def post( self, transaction : Transaction, entries : Iterable[ Entry ] ) -> None:
-        """Validate that `entries` balance to zero and hold them in memory. Entries
-        are passed explicitly because an unsaved transaction has no usable reverse
-        relation. Raises on imbalance."""
-        entries = list( entries )
-        self._assert_transaction_balanced( entries )
-        self._index( transaction, entries )
-        self._transactions.append( transaction )
-        return
-
-    def record( self,
-                transaction_date : date,
-                signed_postings : Iterable[ tuple[ Account, Decimal ] ] ) -> Transaction:
-        """Build and post a balanced transaction from (account, signed_amount)
-        pairs (credit-positive); each entry's direction is derived from its sign.
-        Amounts are in the organization's single currency. Zero-amount postings are
-        skipped."""
-        transaction = Transaction(
-            journal = self.journal,
-            transaction_date = transaction_date,
-        )
-        entries = list()
-        for account, signed_amount in signed_postings:
-            if signed_amount == 0:
-                continue
-            direction = SideType.CREDIT if signed_amount > 0 else SideType.DEBIT
-            magnitude = abs( signed_amount )
-            entries.append(
-                Entry(
-                    transaction = transaction,
-                    account = account,
-                    amount = magnitude,
-                    entry_direction = direction,
-                )
-            )
-            continue
-        self.post( transaction, entries )
-        return transaction
-
-    # -- queries (pure in-memory) --------------------------------------------
+    def __init__( self, bookkeeper : 'Bookkeeper' ):
+        self._bookkeeper = bookkeeper
+        self._chart = bookkeeper.chart
 
     def signed_balance( self, account : Account, *, through : Optional[ date ] = None ) -> Decimal:
-        """Credit-positive balance of `account`, cumulative through `through`
-        (a date; None = all held entries), in the account's currency."""
+        """Credit-positive balance of `account`, cumulative through `through` (None = all
+        held entries)."""
         total = Decimal( '0' )
-        for posting in self._postings_by_account.get( account.pk, () ):
+        for posting in self._bookkeeper.postings( account ):
             if ( through is None ) or ( posting.date <= through ):
                 total += posting.signed_amount
             continue
         return total
 
-    def flows( self, account : Account, *, start : date, end : date ) -> Decimal:
-        """Net credit-positive movement on `account` within [start, end] -- the
-        within-a-window primitive (e.g. fiscal-year income/expense totals)."""
-        total = Decimal( '0' )
-        for posting in self._postings_by_account.get( account.pk, () ):
-            if start <= posting.date <= end:
-                total += posting.signed_amount
-            continue
-        return total
-
     def natural_balance( self, account : Account, *, through : Optional[ date ] = None ) -> Decimal:
-        """Display balance (positive in the account type's normal direction);
-        the sign-flip of `signed_balance` for debit-normal accounts."""
+        """Display balance (positive in the account type's normal direction)."""
         signed = self.signed_balance( account, through = through )
         if account.account_normal_type == SideType.DEBIT:
             return -signed
         return signed
 
+    def flows( self, account : Account, *, start : date, end : date ) -> Decimal:
+        """Net credit-positive movement on `account` within [start, end] -- the
+        within-a-window primitive (e.g. fiscal-year income/expense totals)."""
+        total = Decimal( '0' )
+        for posting in self._bookkeeper.postings( account ):
+            if start <= posting.date <= end:
+                total += posting.signed_amount
+            continue
+        return total
+
     def balances( self,
                   *,
                   account_type : Optional[ AccountType ] = None,
                   through      : Optional[ date ] = None ) -> dict:
-        """Signed balances of every account that participates in this partition,
-        optionally filtered to a single (effective) `account_type`."""
-        result = dict()
-        for account_pk in self._postings_by_account:
-            account = self._accounts[ account_pk ]
-            if ( account_type is not None ) and ( self._effective_type( account ) != account_type ):
-                continue
-            result[ account ] = self.signed_balance( account, through = through )
-            continue
-        return result
+        """Signed balances keyed by account, optionally filtered to one effective
+        `account_type`."""
+        return {
+            account : self.signed_balance( account, through = through )
+            for account in self._chart.accounts( account_type = account_type )
+        }
 
-    # -- chart access --------------------------------------------------------
+    def market_value( self, holding : Account, *, through : Optional[ date ] = None ) -> Decimal:
+        """A holding's market value: its cost (own natural balance) plus its valuation
+        companion's accumulated appreciation, if any."""
+        total = self.natural_balance( holding, through = through )
+        valuation_account = self._chart.valuation_of( holding )
+        if valuation_account is not None:
+            total += self.natural_balance( valuation_account, through = through )
+        return total
 
-    def accounts( self, *, account_type : Optional[ AccountType ] = None ) -> list[ Account ]:
-        """All chart accounts held, optionally filtered to one effective
-        account_type. The generic accessor that projection-layer chart navigation
-        (forecast/chart.py) builds on -- the Ledger itself stays free of
-        projection-specific conventions (cash hub, valuation companions, etc.)."""
-        if account_type is None:
-            return list( self._accounts.values() )
-        return [
-            account for account in self._accounts.values()
-            if self._effective_type( account ) == account_type
-        ]
-
-    # -- invariants ----------------------------------------------------------
-
-    def assert_balanced( self ) -> None:
-        """Assert the whole partition's signed entries sum to zero in the
-        organization's single currency (every balanced transaction contributes
-        zero, so any residual reveals a malformed partition)."""
-        residual = sum(
-            ( posting.signed_amount
-              for postings in self._postings_by_account.values()
-              for posting in postings ),
+    def net_worth( self, *, through : Optional[ date ] = None ) -> Decimal:
+        """Total assets minus total liabilities (in natural terms) as of `through`."""
+        assets = sum(
+            ( self.natural_balance( account, through = through )
+              for account in self._chart.accounts( account_type = AccountType.ASSET ) ),
             Decimal( '0' ),
         )
-        if residual != 0:
-            raise TransactionImbalanceError(
-                f'Partition does not balance (residual {residual}).'
-            )
-        return
-
-    # -- persistence (optional, later) ---------------------------------------
-
-    def flush( self ) -> None:
-        """Persist held unsaved accounts / transactions / entries in bulk."""
-        raise NotImplementedError
-
-    # -- internals -----------------------------------------------------------
-
-    def _index( self, transaction : Transaction, entries : Iterable[ Entry ] ) -> None:
-        date_ = transaction.transaction_date
-        for entry in entries:
-            posting = _Posting(
-                date = date_,
-                signed_amount = entry.signed_amount,
-            )
-            self._postings_by_account.setdefault( entry.account_id, list() ).append( posting )
-            continue
-        return
-
-    def _assert_transaction_balanced( self, entries : Iterable[ Entry ] ) -> None:
-        residual = sum(
-            ( entry.signed_amount for entry in entries ),
+        liabilities = sum(
+            ( self.natural_balance( account, through = through )
+              for account in self._chart.accounts( account_type = AccountType.LIABILITY ) ),
             Decimal( '0' ),
         )
-        if residual != 0:
-            raise TransactionImbalanceError(
-                f'Transaction does not balance (residual {residual}).'
-            )
-        return
-
-    def _effective_type( self, account : Account ) -> AccountType:
-        """The account's type, walking parents in memory (no DB) to the
-        type-bearing root."""
-        current = account
-        while current.account_type is None:
-            current = self._accounts[ current.parent_id ]
-            continue
-        return current.account_type
+        return assets - liabilities

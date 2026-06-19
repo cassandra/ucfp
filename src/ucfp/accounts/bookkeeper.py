@@ -10,10 +10,6 @@ view reads for balance queries.
 The Bookkeeper is **persistence-ignorant** -- it imports no Django. Persisting a
 `BooksOfAccount` is the Repository's job. The `Chart` and `Ledger` views are exposed for
 convenience but own no state beyond the books and this index.
-
-TRANSITIONAL: the `Ledger` view is defined here for now so the legacy `accounts/ledger.py`
-(still used by `period`/`forecast`) can keep working alongside this new domain. It moves to
-its own `accounts/ledger.py` once that legacy file is removed in the `period` cutover.
 """
 from collections import namedtuple
 from datetime import date
@@ -25,87 +21,13 @@ from .chart import Chart
 from .constants import DEFAULT_ROOT_ACCOUNT_NAMES
 from .enums import AccountType, AssetClass, SideType, SystemAccountRole
 from .exceptions import MissingAccountError, TransactionImbalanceError
+from .ledger import Ledger
 from .money_utils import quantize_money
 
 
 # One account's participation in one transaction, reduced to what balance queries need:
 # the transaction's date and the entry's credit-positive signed magnitude.
 _Posting = namedtuple( '_Posting', ( 'date', 'signed_amount' ) )
-
-
-class Ledger:
-    """The Ledger view: per-account balances over a `Bookkeeper`'s books.
-
-    Reads the Bookkeeper's postings index; presents signed and natural balances, flows
-    within a window, and the projection derivations `market_value` (cost + valuation
-    companion) and `net_worth` (assets - liabilities). Uses a `Chart` for the structure
-    those derivations need.
-    """
-
-    def __init__( self, bookkeeper : 'Bookkeeper' ):
-        self._bookkeeper = bookkeeper
-        self._chart = bookkeeper.chart
-
-    def signed_balance( self, account : Account, *, through : Optional[ date ] = None ) -> Decimal:
-        """Credit-positive balance of `account`, cumulative through `through` (None = all
-        held entries)."""
-        total = Decimal( '0' )
-        for posting in self._bookkeeper.postings( account ):
-            if ( through is None ) or ( posting.date <= through ):
-                total += posting.signed_amount
-            continue
-        return total
-
-    def natural_balance( self, account : Account, *, through : Optional[ date ] = None ) -> Decimal:
-        """Display balance (positive in the account type's normal direction)."""
-        signed = self.signed_balance( account, through = through )
-        if account.account_normal_type == SideType.DEBIT:
-            return -signed
-        return signed
-
-    def flows( self, account : Account, *, start : date, end : date ) -> Decimal:
-        """Net credit-positive movement on `account` within [start, end] -- the
-        within-a-window primitive (e.g. fiscal-year income/expense totals)."""
-        total = Decimal( '0' )
-        for posting in self._bookkeeper.postings( account ):
-            if start <= posting.date <= end:
-                total += posting.signed_amount
-            continue
-        return total
-
-    def balances( self,
-                  *,
-                  account_type : Optional[ AccountType ] = None,
-                  through      : Optional[ date ] = None ) -> dict:
-        """Signed balances keyed by account, optionally filtered to one effective
-        `account_type`."""
-        return {
-            account : self.signed_balance( account, through = through )
-            for account in self._chart.accounts( account_type = account_type )
-        }
-
-    def market_value( self, holding : Account, *, through : Optional[ date ] = None ) -> Decimal:
-        """A holding's market value: its cost (own natural balance) plus its valuation
-        companion's accumulated appreciation, if any."""
-        total = self.natural_balance( holding, through = through )
-        valuation_account = self._chart.valuation_of( holding )
-        if valuation_account is not None:
-            total += self.natural_balance( valuation_account, through = through )
-        return total
-
-    def net_worth( self, *, through : Optional[ date ] = None ) -> Decimal:
-        """Total assets minus total liabilities (in natural terms) as of `through`."""
-        assets = sum(
-            ( self.natural_balance( account, through = through )
-              for account in self._chart.accounts( account_type = AccountType.ASSET ) ),
-            Decimal( '0' ),
-        )
-        liabilities = sum(
-            ( self.natural_balance( account, through = through )
-              for account in self._chart.accounts( account_type = AccountType.LIABILITY ) ),
-            Decimal( '0' ),
-        )
-        return assets - liabilities
 
 
 class Bookkeeper:

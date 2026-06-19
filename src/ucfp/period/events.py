@@ -1,20 +1,19 @@
 """Self-applying Period operations (events).
 
 A `PeriodEvent` is a scheduled operation the Period materializes into balanced
-ledger transactions during the Accrue phase -- a `Transfer`, `Purchase`, `Sale`,
-or `Conversion`. Each is a frozen dataclass that applies itself, so adding a new
-kind of operation is one new subclass. The Scenario constructs these (and
-materializes derived ones -- e.g. an RMD as a pre-tax `Sale`). "Money-movement
-event" is the user-facing term; `PeriodEvent` is the engine-internal type.
+transactions during the Accrue phase -- a `Transfer`, `Purchase`, `Sale`, or
+`Conversion`. Each is a frozen dataclass that applies itself, so adding a new kind of
+operation is one new subclass. The Scenario constructs these (and materializes derived
+ones -- e.g. an RMD as a pre-tax `Sale`). "Money-movement event" is the user-facing term;
+`PeriodEvent` is the engine-internal type.
 """
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from ucfp.accounts.ledger import Ledger
-from ucfp.accounts.models import Account
+from ucfp.accounts.books import Account
+from ucfp.accounts.bookkeeper import Bookkeeper
 
-from . import chart
 from .exceptions import MissingAccountError, ProjectionError
 from .results import Notice
 
@@ -22,8 +21,8 @@ from .results import Notice
 class PeriodEvent:
     """Base for a self-applying Period operation; subclasses implement `apply`."""
 
-    def apply( self, ledger : Ledger ) -> list[ Notice ]:
-        """Post this operation's balanced transaction(s) to `ledger`, returning any
+    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
+        """Post this operation's balanced transaction(s) via `bookkeeper`, returning any
         Notices it raises."""
         raise NotImplementedError
 
@@ -37,8 +36,8 @@ class Transfer( PeriodEvent ):
     target_account : Account
     amount         : Decimal
 
-    def apply( self, ledger : Ledger ) -> list[ Notice ]:
-        ledger.record(
+    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
+        bookkeeper.record(
             self.event_date,
             [ ( self.target_account, -self.amount ), ( self.source_account, self.amount ) ],
         )
@@ -55,8 +54,8 @@ class Purchase( PeriodEvent ):
     asset_account   : Account
     amount          : Decimal
 
-    def apply( self, ledger : Ledger ) -> list[ Notice ]:
-        ledger.record(
+    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
+        bookkeeper.record(
             self.event_date,
             [ ( self.asset_account, -self.amount ), ( self.funding_account, self.amount ) ],
         )
@@ -73,23 +72,23 @@ class Sale( PeriodEvent ):
     holding    : Account
     amount     : Decimal
 
-    def apply( self, ledger : Ledger ) -> list[ Notice ]:
+    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
         income_class = self.holding.asset_class.realized_gain_income_class
         if income_class is None:
             raise ProjectionError(
                 f'Sale of {self.holding.asset_class.label} is not supported '
                 '(no realized-gain income class).'
             )
-        cash = chart.cash_account( ledger )
+        chart = bookkeeper.chart
+        cash = chart.cash_account()
         if cash is None:
             raise MissingAccountError( 'No cash account to receive sale proceeds.' )
-        realized_gain_account = chart.income_account( ledger, income_class )
+        realized_gain_account = chart.income_account( income_class )
         if realized_gain_account is None:
             raise MissingAccountError(
                 f'No revenue account for income tax-class {income_class.label}.'
             )
-        chart.realize(
-            ledger,
+        bookkeeper.realize(
             self.holding,
             self.amount,
             proceeds_account = cash,
@@ -104,8 +103,8 @@ class Conversion( PeriodEvent ):
     """Convert pre-tax retirement to Roth: recognize ordinary income on the amount,
     moving the value into the Roth holding rather than to cash.
 
-    NOTE: stub -- pending the Ledger.realize primitive.
+    NOTE: stub -- pending the conversion realization primitive.
     """
 
-    def apply( self, ledger : Ledger ) -> list[ Notice ]:
+    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
         raise NotImplementedError

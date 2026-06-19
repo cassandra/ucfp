@@ -1,11 +1,15 @@
 """The Forecast: the N-step engine above the Period.
 
 Parallels the Period one level up -- `ForecastParameters -> Forecast -> ForecastResult`,
-as `PeriodParameters -> Period -> PeriodResult`. The Forecast materializes the chart and
-opening books from the asset/liability parameters (the "baseline" is encoded there, not
+as `PeriodParameters -> Period -> PeriodResult`. The Forecast materializes a
+`BooksOfAccount` from the asset/liability parameters (the "baseline" is encoded there, not
 handed in), then walks the frame: resolve each interval's `PeriodParameters`, run the
-`Period` on the running Ledger, apply feedback knobs, thread `TaxState`, accumulate, and
-stop at the horizon or net-worth depletion.
+`Period` on the running `Bookkeeper`, apply feedback knobs, thread `TaxState`, accumulate,
+and stop at the horizon or net-worth depletion.
+
+The whole run is in memory -- the `Bookkeeper`/`BooksOfAccount` domain touches no database
+-- so the produced books are returned on the result; persisting them is the caller's job
+(via the Repository), not the Forecast's.
 
 Boundary (the running-state test): the Forecast owns only what needs the running
 projection state -- per-period resolution that depends on the books, the feedback knobs,
@@ -24,10 +28,9 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal
 
+from ucfp.accounts.books import BooksOfAccount
+from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, SystemAccountRole
-from ucfp.accounts.ledger import Ledger
-from ucfp.accounts.models import Account
-from ucfp.period import chart
 from ucfp.period.parameters import AssetRates, DateSpan, FundingPolicy, PeriodParameters
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
@@ -39,19 +42,20 @@ from .parameters import ForecastParameters
 
 @dataclass
 class ForecastStep:
-    """One interval's outcome within a run: its span, the Period's result, and the net
-    worth at the interval's end. (Further per-step snapshots can join later.)"""
+    """One interval's outcome within a run: its span and the Period's result. Per-step
+    figures (net worth, cash) are *derived* from the result's books, not cached here."""
 
-    span      : DateSpan
-    result    : PeriodResult
-    net_worth : Decimal
+    span   : DateSpan
+    result : PeriodResult
 
 
 @dataclass
 class ForecastResult:
-    """What a Forecast run produces: each interval's step, and whether it stopped early
-    (net-worth depletion before the horizon)."""
+    """What a Forecast run produces: the final `BooksOfAccount` (the complete record --
+    every reported figure is derived from it), each interval's step, and whether it
+    stopped early (net-worth depletion before the horizon)."""
 
+    books         : BooksOfAccount
     steps         : list[ ForecastStep ] = field( default_factory = list )
     stopped_early : bool = False
 
@@ -60,23 +64,21 @@ class Forecast:
     """Runs a `ForecastParameters` to completion (N Period steps); see the module
     docstring for the boundary."""
 
-    def __init__( self, organization, parameters : ForecastParameters ):
-        self._organization = organization
-        self._parameters   = parameters
-        self._tax_law      = TaxLaw( parameters.tax_forecast )
+    def __init__( self, parameters : ForecastParameters ):
+        self._parameters = parameters
+        self._tax_law    = TaxLaw( parameters.tax_forecast )
 
     def run( self ) -> ForecastResult:
         """Build the opening books from the parameters, then walk the frame running a
         Period per interval -- threading the tax state and stopping at depletion."""
-        ledger        = self._build_baseline()
-        result        = ForecastResult()
+        bookkeeper    = self._build_baseline()
+        result        = ForecastResult( books = bookkeeper.books )
         opening_state = self._parameters.initial_tax_state
         for span in self._parameters.period_spans():
             period_parameters = self._build_period_parameters( span, opening_state )
             period            = Period( period_parameters )
-            period_result     = period.compute( ledger )
-            ending_net_worth  = chart.net_worth( ledger, through = span.end_date )
-            result.steps.append( ForecastStep( span, period_result, ending_net_worth ) )
+            period_result     = period.compute( bookkeeper )
+            result.steps.append( ForecastStep( span, period_result ) )
             if period_result.closing_tax_state is not None:
                 opening_state = period_result.closing_tax_state
             if period_result.is_depleted:
@@ -85,27 +87,25 @@ class Forecast:
             continue
         return result
 
-    def _build_baseline( self ) -> Ledger:
-        """Create the chart and opening books from the asset parameters -- the baseline is
-        encoded in the parameters, not handed in. Holdings are created first so the Ledger
-        snapshots them; one opening transaction seeds each holding's value against Opening
-        Balances. STUB: holdings only; liabilities join later."""
-        Account.objects.initialize_chart( self._organization )
-        asset_root = self._organization.accounts.get(
-            parent = None, account_type = AccountType.ASSET )
+    def _build_baseline( self ) -> Bookkeeper:
+        """Build the chart and opening books from the asset parameters -- the baseline is
+        encoded in the parameters, not handed in. One opening transaction seeds each
+        holding's value against Opening Balances. STUB: holdings only; liabilities join
+        later."""
+        bookkeeper = Bookkeeper( BooksOfAccount( label = self._parameters.label ) )
+        bookkeeper.build_standard_chart()
+        chart = bookkeeper.chart
+        asset_root = chart.root( AccountType.ASSET )
         holdings = [
-            ( Account.objects.create_holding(
-                organization = self._organization, parent = asset_root,
-                name = asset.name, asset_class = asset.asset_class ), asset.opening_value )
+            ( bookkeeper.create_holding( asset_root, asset.name, asset.asset_class ), asset.opening_value )
             for asset in self._parameters.assets ]
-        ledger        = Ledger.empty( self._organization )
         opening_total = sum( ( value for _holding, value in holdings ), Decimal( '0' ) )
         if opening_total != 0:
-            opening_balances = chart.system_account( ledger, SystemAccountRole.OPENING_BALANCES )
+            opening_balances = chart.system_account( SystemAccountRole.OPENING_BALANCES )
             postings = [ ( holding, -value ) for holding, value in holdings ]
             postings.append( ( opening_balances, opening_total ) )
-            ledger.record( self._parameters.start_date - timedelta( days = 1 ), postings )
-        return ledger
+            bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), postings )
+        return bookkeeper
 
     def _build_period_parameters( self, span : DateSpan, opening_tax_state ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters, injecting the year's tax engine
