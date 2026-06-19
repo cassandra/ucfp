@@ -41,6 +41,7 @@ class EconomicParameters:
     real_estate_appreciation     : Rate = ZERO_RATE   # residence + rental growth
     precious_metals_appreciation : Rate = ZERO_RATE   # PRECIOUS_METALS growth
     collectibles_appreciation    : Rate = ZERO_RATE   # COLLECTIBLES growth
+    depreciation_rate            : Rate = ZERO_RATE   # DEPRECIATING decline (positive = % lost/yr)
     retirement_growth            : Rate = ZERO_RATE   # PRETAX_RETIREMENT + ROTH (blended)
     wage_growth                  : Rate = ZERO_RATE   # WAGES streams
     social_security_cola         : Rate = ZERO_RATE   # SOCIAL_SECURITY streams
@@ -48,9 +49,9 @@ class EconomicParameters:
     rental_increase              : Rate = ZERO_RATE   # GROSS_RENTAL streams
 
     def asset_rates( self ) -> AssetRates:
-        """Resolve into the Period's per-`AssetClass` growth and distribution rates. A
-        class absent from a map carries a zero rate (the `AssetRates` default), so
-        depreciating assets simply do not move yet."""
+        """Resolve into the Period's per-`AssetClass` growth and distribution rates. A class
+        absent from a map carries a zero rate (the `AssetRates` default) -- cash and CDs are
+        face-value, so they have only a yield, no growth."""
         growth = {
             AssetClass.STOCKS                : self.stock_appreciation,
             AssetClass.DIVIDEND_STOCKS       : self.stock_appreciation,
@@ -59,6 +60,7 @@ class EconomicParameters:
             AssetClass.REAL_ESTATE_RENTAL    : self.real_estate_appreciation,
             AssetClass.PRECIOUS_METALS       : self.precious_metals_appreciation,
             AssetClass.COLLECTIBLES          : self.collectibles_appreciation,
+            AssetClass.DEPRECIATING          : self.depreciation_rate.negated(),
             AssetClass.PRETAX_RETIREMENT     : self.retirement_growth,
             AssetClass.ROTH                  : self.retirement_growth,
         }

@@ -27,6 +27,7 @@ class AssetRateMappingTests( unittest.TestCase ):
             savings_interest             = THREE_PERCENT,
             precious_metals_appreciation = FIVE_PERCENT,
             collectibles_appreciation    = THREE_PERCENT,
+            depreciation_rate            = FIVE_PERCENT,
         )
         rates = parameters.asset_rates()
         # stock appreciation drives both stock classes' growth
@@ -35,11 +36,13 @@ class AssetRateMappingTests( unittest.TestCase ):
         # precious metals and collectibles have their own (distinct) rates
         self.assertEqual( rates.growth_rate( AssetClass.PRECIOUS_METALS ), FIVE_PERCENT )
         self.assertEqual( rates.growth_rate( AssetClass.COLLECTIBLES ), THREE_PERCENT )
+        # depreciation is the negative of the (positive) depreciation rate
+        self.assertEqual( rates.growth_rate( AssetClass.DEPRECIATING ), Rate( Decimal( '-0.05' ) ) )
         # dividends and savings are distributions
         self.assertEqual( rates.distribution_rate( AssetClass.DIVIDEND_STOCKS ), THREE_PERCENT )
         self.assertEqual( rates.distribution_rate( AssetClass.CASH ), THREE_PERCENT )
-        # an unlisted class is flat
-        self.assertEqual( rates.growth_rate( AssetClass.DEPRECIATING ), Rate( Decimal( '0' ) ) )
+        # a face-value class (cash) has no growth
+        self.assertEqual( rates.growth_rate( AssetClass.CASH ), Rate( Decimal( '0' ) ) )
 
     def test_income_growth_rate_maps_classes( self ):
         parameters = EconomicParameters(

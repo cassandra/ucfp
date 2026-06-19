@@ -36,5 +36,10 @@ class Rate:
         full-interval amount."""
         return Rate( self.fraction * fraction )
 
+    def negated( self ) -> 'Rate':
+        """The opposite-sign rate -- e.g. a depreciation (a positive '% lost') expressed as
+        the negative growth the projection applies."""
+        return Rate( -self.fraction )
+
 
 ZERO_RATE = Rate( Decimal( '0' ) )
