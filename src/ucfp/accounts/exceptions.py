@@ -28,3 +28,7 @@ class CurrencyConversionError( AccountsError ):
 
 class OpeningBalanceError( AccountsError ):
     """Raised when a starting balance cannot be seeded into a journal."""
+
+
+class MissingAccountError( AccountsError ):
+    """Raised when a chart operation needs an account the books do not contain."""
