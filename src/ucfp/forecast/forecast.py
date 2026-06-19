@@ -20,9 +20,10 @@ It selects the tax law via the parameters' `TaxForecastProfile` and treats the r
 engine as a black box: it asks the `TaxLaw` for each year's engine and never touches a
 tax knob.
 
-STUB: per-period resolution is minimal (subjects -> tax_context; empty rates/lines/
-events; funding from the cash-target). The WHAT categories and the feedback knobs
-(funding draws, RMDs, adaptive conversions) join incrementally.
+STUB: per-period resolution is minimal (subjects -> tax_context; AssetRates from the
+economic outlook; empty lines/events; funding from the cash-target). The remaining WHAT
+categories (income, expenses) and the feedback knobs (funding draws, RMDs, adaptive
+conversions) join incrementally.
 """
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -31,7 +32,7 @@ from decimal import Decimal
 from ucfp.accounts.books import BooksOfAccount
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, SystemAccountRole
-from ucfp.period.parameters import AssetRates, DateSpan, FundingPolicy, PeriodParameters
+from ucfp.period.parameters import DateSpan, FundingPolicy, PeriodParameters
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
 from ucfp.tax.law import TaxLaw
@@ -110,11 +111,12 @@ class Forecast:
     def _build_period_parameters( self, span : DateSpan, opening_tax_state ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters, injecting the year's tax engine
         (from the tax-law projection) and the threaded carryforwards. STUB: tax_context
-        from subjects; empty rates/lines/events; funding from the cash-target."""
+        from subjects; AssetRates from the economic-outlook segment in effect; empty
+        lines/events; funding from the cash-target."""
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
-            asset_rates       = AssetRates(),
+            asset_rates       = self._parameters.economic_outlook.asset_rates_at( span.start_date ),
             funding_policy    = FundingPolicy( cash_target = self._parameters.cash_target ),
             tax_engine        = self._tax_law.engine_for( span.end_date.year ),
             opening_tax_state = opening_tax_state,

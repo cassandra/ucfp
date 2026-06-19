@@ -22,6 +22,8 @@ from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
 
+from .economic_outlook import EconomicOutlook
+
 
 def _add_years( anchor : date, years : int ) -> date:
     """`anchor` advanced by whole years (Feb 29 -> Feb 28 in a non-leap target year)."""
@@ -61,6 +63,7 @@ class ForecastParameters:
     label             : str                     = ''
     subjects          : list[ Subject ]         = field( default_factory = list )
     assets            : list[ AssetParameters ] = field( default_factory = list )
+    economic_outlook  : EconomicOutlook         = field( default_factory = EconomicOutlook )
     cash_target       : Decimal                 = Decimal( '0' )
     initial_tax_state : object                  = None
 
