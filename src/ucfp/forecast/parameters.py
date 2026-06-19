@@ -10,7 +10,8 @@ ledger from them. A "Scenario" is a *variation* of a ForecastParameters -- the
 comparison/what-if layer above the engine -- and is not modelled here.
 
 STUB: subjects, assets, the economic outlook, income streams, expenses, the frame, filing
-status, the tax-forecast profile, and the cash-target knob. Liabilities and Events join
+status, the tax-forecast profile, and the funding knobs (cash target + draw order, the
+asset classes drawn from in priority to cover a shortfall). Liabilities and Events join
 incrementally; per-item value-rules and existence windows ride on the item sub-objects.
 """
 from dataclasses import dataclass, field
@@ -105,6 +106,7 @@ class ForecastParameters:
     income_streams    : list[ IncomeStream ]    = field( default_factory = list )
     expenses          : list[ ExpenseItem ]     = field( default_factory = list )
     cash_target       : Decimal                 = Decimal( '0' )
+    draw_order        : list[ AssetClass ]      = field( default_factory = list )
     initial_tax_state : object                  = None
 
     def period_spans( self ) -> list[ DateSpan ]:

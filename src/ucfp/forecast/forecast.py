@@ -127,6 +127,7 @@ class Forecast:
         self._tax_law    = TaxLaw( parameters.tax_forecast )
         self._income_accounts = None    # an IncomeAccounts, built with the books in _build_baseline
         self._expense_accounts = None   # an ExpenseAccounts, built with the books in _build_baseline
+        self._draw_priority = list()    # holdings to fund from, resolved from draw_order by class
 
     def run( self ) -> ForecastResult:
         """Build the opening books from the parameters, then walk the frame running a
@@ -167,8 +168,10 @@ class Forecast:
             postings.append( ( opening_balances, opening_total ) )
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), postings )
         self._create_income_accounts( bookkeeper )
+        self._create_asset_income_accounts( bookkeeper )
         self._create_expense_accounts( bookkeeper )
         self._create_tax_accounts( bookkeeper )
+        self._resolve_draw_priority( bookkeeper )
         return bookkeeper
 
     def _create_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
@@ -201,6 +204,36 @@ class Forecast:
                 Account( name = expense_class.label, parent = expense_root,
                          expense_tax_class = expense_class ) )
             continue
+        return
+
+    def _create_asset_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
+        """Create a revenue account for each income class the assets can generate -- yields
+        (distributions) and realized gains -- that does not already have one, so a holding's
+        distributions and a funding draw's recognized gain have somewhere to post."""
+        chart = bookkeeper.chart
+        revenue_root = chart.root( AccountType.REVENUE )
+        income_classes = set()
+        for asset in self._parameters.assets:
+            income_classes.add( asset.asset_class.distribution_income_class )
+            income_classes.add( asset.asset_class.realized_gain_income_class )
+        income_classes.discard( None )
+        for income_class in sorted( income_classes, key = lambda klass : klass.name ):
+            if chart.income_account( income_class ) is None:
+                bookkeeper.add_account(
+                    Account( name = income_class.label, parent = revenue_root,
+                             income_tax_class = income_class ) )
+            continue
+        return
+
+    def _resolve_draw_priority( self, bookkeeper : Bookkeeper ) -> None:
+        """Bind the user's `draw_order` (asset classes, in priority) to the actual holding
+        accounts: each class expands to its holdings (drawn sequentially), flattened into
+        the order the funding waterfall draws from."""
+        holdings = bookkeeper.chart.holdings()
+        self._draw_priority = [
+            holding for asset_class in self._parameters.draw_order
+            for holding in holdings if holding.asset_class == asset_class
+        ]
         return
 
     def _income_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
@@ -291,7 +324,8 @@ class Forecast:
             asset_rates       = annual_rates.over_fraction( year_fraction ),
             income_lines      = self._income_lines_for( span, year_fraction ),
             expense_lines     = self._expense_lines_for( span ),
-            funding_policy    = FundingPolicy( cash_target = self._parameters.cash_target ),
+            funding_policy    = FundingPolicy(
+                cash_target = self._parameters.cash_target, draw_priority = self._draw_priority ),
             tax_engine        = tax_engine,
             fiscal_window     = fiscal_window,
             opening_tax_state = opening_tax_state,
