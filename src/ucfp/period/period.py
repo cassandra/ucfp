@@ -212,22 +212,25 @@ class Period:
         return
 
     def _settle_tax( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Assess the period's tax via the pluggable engine and book each charge as
-        a tax expense drawn from the cash hub. (The zero-tax engine yields none.)
+        """Assess the tax year and book each charge as a tax expense drawn from the cash
+        hub. (The zero-tax engine yields none.)
 
-        The engine assesses against a fiscal-year `FiscalWindow`, not the period's
-        own slice -- income tax is an annual computation. For an annual period the
-        window is the period's span; once the Scenario drives sub-annual cadences it
-        will gate settlement to the year-close period and supply the full-year span.
+        Tax is annual, so settlement is gated to the year-close interval: the Scenario sets
+        `tax_engine` (and the paired `fiscal_window`) only there, so a non-settling interval
+        carries no engine and this returns immediately. When present, the engine assesses
+        over `fiscal_window` (the full tax year, Jan-Dec), not the interval's own slice, so
+        a December month's window still sees the whole year's flows.
 
-        The engine's opening tax state (carryforwards) is threaded in, and its
-        closing state captured on the result -- even in a no-charge year, since a
-        capital-loss year produces a carryover with no tax due.
+        The engine's opening tax state (carryforwards) is threaded in, and its closing
+        state captured on the result -- even in a no-charge year, since a capital-loss year
+        produces a carryover with no tax due.
 
         Charges are paid (DR tax expense / CR cash); refundable credits are the reverse
         (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
         refund -- modeled here as a negated charge against the same expense class."""
-        fiscal_window = FiscalWindow( bookkeeper, self._parameters.date_span )
+        if self._parameters.tax_engine is None:
+            return
+        fiscal_window = FiscalWindow( bookkeeper, self._parameters.fiscal_window )
         assessment = self._parameters.tax_engine.assess(
             fiscal_window, self._parameters.tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state

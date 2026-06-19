@@ -18,7 +18,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from common.date_window import DateWindow
-from common.recurrence import Recurrence
+from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.period.parameters import DateSpan
@@ -26,14 +26,6 @@ from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
 
 from .economic_outlook import EconomicOutlook
-
-
-def _add_years( anchor : date, years : int ) -> date:
-    """`anchor` advanced by whole years (Feb 29 -> Feb 28 in a non-leap target year)."""
-    try:
-        return anchor.replace( year = anchor.year + years )
-    except ValueError:
-        return anchor.replace( year = anchor.year + years, day = 28 )
 
 
 @dataclass( frozen = True )
@@ -106,6 +98,7 @@ class ForecastParameters:
     filing_status     : FilingStatus
     tax_forecast      : TaxForecastProfile
     label             : str                     = ''
+    granularity       : Duration                = Duration( 1, TimeUnit.YEAR )
     subjects          : list[ Subject ]         = field( default_factory = list )
     assets            : list[ AssetParameters ] = field( default_factory = list )
     economic_outlook  : EconomicOutlook         = field( default_factory = EconomicOutlook )
@@ -115,12 +108,12 @@ class ForecastParameters:
     initial_tax_state : object                  = None
 
     def period_spans( self ) -> list[ DateSpan ]:
-        """The horizon sliced into consecutive one-year intervals (the last truncated to
-        `end_date`). Granularity is yearly for now -- it matches the annual tax engine."""
+        """The horizon sliced into consecutive `granularity` intervals (the last truncated
+        to `end_date`). Yearly by default; monthly when the granularity is a month."""
         spans  = list()
         cursor = self.start_date
         while cursor <= self.end_date:
-            following = _add_years( cursor, 1 )
+            following = self.granularity.add_to( cursor )
             spans.append( DateSpan( cursor, min( following - timedelta( days = 1 ), self.end_date ) ) )
             cursor = following
             continue

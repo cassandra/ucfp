@@ -24,6 +24,7 @@ STUB: per-period resolution covers subjects -> tax_context, AssetRates from the 
 outlook, and income/expense lines from the active streams and items; events and the
 feedback knobs (funding draws, RMDs, adaptive conversions) join incrementally.
 """
+import calendar
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
@@ -187,17 +188,18 @@ class Forecast:
             continue
         return
 
-    def _income_lines_for( self, span : DateSpan ) -> list[ IncomeLine ]:
+    def _income_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
         """Resolve the income streams active this interval into IncomeLines: grow each to
-        nominal by its class rate from the forecast start, posting to its per-(subject,
-        class) account."""
+        nominal by its class rate from the forecast start, prorate to the interval's share
+        of the year, and post to its per-(subject, class) account."""
         lines = list()
         for stream in self._parameters.income_streams:
             if not stream.window.covers( span.start_date ):
                 continue
             factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
+            amount = stream.annual_amount * factor * year_fraction
             account = self._income_accounts.account_for( stream.subject, stream.income_tax_class )
-            lines.append( IncomeLine( account = account, gross_amount = stream.annual_amount * factor ) )
+            lines.append( IncomeLine( account = account, gross_amount = amount ) )
             continue
         return lines
 
@@ -257,21 +259,36 @@ class Forecast:
         return factor
 
     def _build_period_parameters( self, span : DateSpan, opening_tax_state ) -> PeriodParameters:
-        """Build this interval's myopic PeriodParameters, injecting the year's tax engine
-        (from the tax-law projection) and the threaded carryforwards. STUB: tax_context
-        from subjects; AssetRates from the economic-outlook segment in effect; income and
-        expense lines from the active streams/items; events join later; funding from the
-        cash-target."""
+        """Build this interval's myopic PeriodParameters. Rates and flows are resolved to
+        the interval's length (so the same parameters run at any granularity), and tax is
+        gated to the year-close interval -- the tax engine and its full-year fiscal_window
+        are set only there, both None otherwise. STUB: events and feedback knobs join
+        later."""
+        year_fraction = self._year_fraction( span )
+        annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
+        year_close = ( span.end_date.month == 12 ) and ( span.end_date.day == 31 )
+        tax_engine = self._tax_law.engine_for( span.end_date.year ) if year_close else None
+        fiscal_window = (
+            DateSpan( date( span.end_date.year, 1, 1 ), span.end_date ) if year_close else None )
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
-            asset_rates       = self._parameters.economic_outlook.asset_rates_at( span.start_date ),
-            income_lines      = self._income_lines_for( span ),
+            asset_rates       = annual_rates.over_fraction( year_fraction ),
+            income_lines      = self._income_lines_for( span, year_fraction ),
             expense_lines     = self._expense_lines_for( span ),
             funding_policy    = FundingPolicy( cash_target = self._parameters.cash_target ),
-            tax_engine        = self._tax_law.engine_for( span.end_date.year ),
+            tax_engine        = tax_engine,
+            fiscal_window     = fiscal_window,
             opening_tax_state = opening_tax_state,
         )
+
+    def _year_fraction( self, span : DateSpan ) -> Decimal:
+        """The interval's share of its calendar year (`days / days-in-year`), used to scale
+        annual rates and income to the interval. 1 for a full calendar year; the months of
+        a year sum back to 1."""
+        period_days = ( span.end_date - span.start_date ).days + 1
+        year_days = 366 if calendar.isleap( span.start_date.year ) else 365
+        return Decimal( period_days ) / Decimal( year_days )
 
     def _tax_context_for( self, span : DateSpan ) -> TaxContext:
         """The taxpayer context for the interval: ages from birthdates at the interval's

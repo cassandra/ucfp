@@ -18,7 +18,7 @@ from decimal import Decimal
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass
-from ucfp.tax.engine import TaxEngine, ZeroTaxEngine
+from ucfp.tax.engine import TaxEngine
 from ucfp.tax.us.context import TaxContext
 
 from .events import PeriodEvent
@@ -58,6 +58,17 @@ class AssetRates:
 
     def distribution_rate( self, asset_class : AssetClass ) -> Rate:
         return self.distribution.get( asset_class, ZERO_RATE )
+
+    def over_fraction( self, fraction : Decimal ) -> 'AssetRates':
+        """These annual rates rescaled to `fraction` of a year, for a sub-annual interval:
+        growth compounds (geometric), distributions prorate (linear) -- each translation
+        reconciling back over a full year. `fraction == 1` returns self unchanged."""
+        if fraction == 1:
+            return self
+        return AssetRates(
+            growth       = { cls : rate.compounded( fraction ) for cls, rate in self.growth.items() },
+            distribution = { cls : rate.prorated( fraction ) for cls, rate in self.distribution.items() },
+        )
 
 
 @dataclass( frozen = True )
@@ -126,11 +137,14 @@ class FundingPolicy:
 class PeriodParameters:
     """The single-interval, already-resolved inputs the Period consumes.
 
-    `tax_engine` is the resolved tax strategy for this interval and `opening_tax_state`
-    its carryforwards entering the interval -- both resolved by the Scenario (the engine
-    from the tax-law projection, the state threaded from the prior period) and consumed
-    here exactly like the other resolved inputs. `tax_engine` defaults to the no-tax
-    engine so a standalone Period needs no tax wiring."""
+    Tax is annual, so settlement is gated to the year-close interval. The Scenario sets
+    `tax_engine` (the year's resolved engine, from the tax-law projection) and
+    `fiscal_window` (the full tax-year span it assesses) **together** -- only on that
+    interval -- and leaves both `None` elsewhere. So `tax_engine is None` iff
+    `fiscal_window is None`: a non-settling interval (e.g. a non-December month) carries
+    neither and the Period runs no tax step; the year-close interval (December, or a whole
+    yearly interval) carries both, and the engine assesses over `fiscal_window` (Jan-Dec).
+    `opening_tax_state` is the carryforwards threaded in from the prior period."""
 
     date_span             : DateSpan
     tax_context           : TaxContext
@@ -140,5 +154,6 @@ class PeriodParameters:
     expense_lines         : list[ ExpenseLine ]        = field( default_factory = list )
     liability_terms       : list[ LiabilityTerm ]      = field( default_factory = list )
     events                : list[ PeriodEvent ]        = field( default_factory = list )
-    tax_engine            : TaxEngine                  = field( default_factory = ZeroTaxEngine )
+    tax_engine            : TaxEngine                  = None
     opening_tax_state     : object                     = None
+    fiscal_window         : DateSpan                   = None
