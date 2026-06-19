@@ -1,134 +1,76 @@
-"""Inputs to a single Period computation.
+"""`ForecastParameters`: the full materialized data a Forecast needs to run N steps.
 
-`PeriodParameters` is the myopic, single-interval slice the Scenario resolves from
-its `EconomicAssumptions` + `PersonalParameters` + subjects (rates compounded to
-the interval, inflation/COLA applied, ages resolved). The Period consumes these as
-already-resolved values and does no time math itself. It is a shallow composite of
-cohesive value objects, all constructed by the Scenario.
+The N-step analog of `PeriodParameters` -- one container of cohesive sub-objects, in
+*materialized* form (the upstream materialization layer builds it from frictionless UX
+intent; profiles, ladders, and segment timelines are expanded away by then).
 
-NOTE: only `DateSpan` and the composite are grounded; the remaining sub-types are
-stubs whose intended fields are sketched in their docstrings, to be grounded one
-at a time (each needs enums not yet built). See
-data/design/projection-model.md, "PeriodParameters".
+There is no separate "Baseline" input: the opening books are encoded in the asset (and
+later liability) parameters' opening values, and the Forecast creates the chart and
+ledger from them. A "Scenario" is a *variation* of a ForecastParameters -- the
+comparison/what-if layer above the engine -- and is not modelled here.
+
+STUB: subjects + assets + frame + filing status + the tax-forecast profile + the
+cash-target knob. Income, Expenses, Liabilities, Events, and the Economic Outlook join
+incrementally; per-item value-rules and existence windows ride on the item sub-objects.
 """
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 
-from common.rate import Rate, ZERO_RATE
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
-from ucfp.accounts.models import Account
-from ucfp.tax.us.context import TaxContext
-
-from .events import PeriodEvent
+from ucfp.accounts.enums import AssetClass
+from ucfp.period.parameters import DateSpan
+from ucfp.tax.law import TaxForecastProfile
+from ucfp.tax.us.enums import FilingStatus
 
 
-@dataclass( frozen = True )
-class DateSpan:
-    """An inclusive [start_date, end_date] calendar span. A general value object --
-    a candidate to relocate to common/ alongside Interval."""
-
-    start_date : date
-    end_date   : date
-
-    @property
-    def day_before_start( self ) -> date:
-        """The day immediately before the span -- the point through which opening
-        balances are read (the prior period's close)."""
-        return self.start_date - timedelta( days = 1 )
-
-    @property
-    def midpoint( self ) -> date:
-        """The span's midpoint date; events default here (the mid-period convention)."""
-        return self.start_date + timedelta( days = ( self.end_date - self.start_date ).days // 2 )
+def _add_years( anchor : date, years : int ) -> date:
+    """`anchor` advanced by whole years (Feb 29 -> Feb 28 in a non-leap target year)."""
+    try:
+        return anchor.replace( year = anchor.year + years )
+    except ValueError:
+        return anchor.replace( year = anchor.year + years, day = 28 )
 
 
-@dataclass( frozen = True )
-class AssetRates:
-    """Per-AssetClass market rates resolved for one interval: a growth
-    (appreciation) rate and a distribution (dividend/interest) rate per class.
-    A class absent from a map carries a zero rate."""
+@dataclass
+class Subject:
+    """A person on the forecast -- the invariant kernel; age is derived per interval."""
 
-    growth       : dict[ AssetClass, Rate ] = field( default_factory = dict )
-    distribution : dict[ AssetClass, Rate ] = field( default_factory = dict )
-
-    def growth_rate( self, asset_class : AssetClass ) -> Rate:
-        return self.growth.get( asset_class, ZERO_RATE )
-
-    def distribution_rate( self, asset_class : AssetClass ) -> Rate:
-        return self.distribution.get( asset_class, ZERO_RATE )
+    birthdate : date
 
 
-@dataclass( frozen = True )
-class IncomeLine:
-    """One income source materializing this interval: the revenue account it credits
-    and the resolved gross amount. The account carries the income tax-class and -- for
-    wages -- identifies the worker, since each worker has their own WAGES account (the
-    per-worker Social Security cap treats them separately). Lines name the account
-    directly so multiple accounts of one class (per-worker wages) post unambiguously;
-    distributions and realized gains, which are one account per class, are posted by
-    class elsewhere.
-    """
+@dataclass
+class AssetParameters:
+    """A holding: its opening value and asset class. The Forecast creates the holding
+    account from this and seeds the opening value. STUB: `opening_value` is the basis
+    (= market at t0, no embedded unrealized gain); a basis/market split and the
+    value-rule + existence window join later."""
 
-    account      : Account
-    gross_amount : Decimal
+    name          : str
+    asset_class   : AssetClass
+    opening_value : Decimal
 
 
-@dataclass( frozen = True )
-class ExpenseLine:
-    """One class of expense materializing this interval: the expense tax-class it
-    debits and the resolved amount (the Scenario aggregates the user's detailed
-    per-item expenses into per-class lines)."""
+@dataclass
+class ForecastParameters:
+    """The full materialized inputs for an N-step Forecast (see module docstring)."""
 
-    expense_tax_class : ExpenseTaxClass
-    amount            : Decimal
+    start_date        : date
+    end_date          : date
+    filing_status     : FilingStatus
+    tax_forecast      : TaxForecastProfile
+    subjects          : list[ Subject ]         = field( default_factory = list )
+    assets            : list[ AssetParameters ] = field( default_factory = list )
+    cash_target       : Decimal                 = Decimal( '0' )
+    initial_tax_state : object                  = None
 
-
-@dataclass( frozen = True )
-class LiabilityTerm:
-    """This interval's payment for one loan (loans are modeled individually).
-
-    The Scenario owns the amortization schedule and resolves the breakdown
-    directly, so the Period just posts it -- no rate or opening-balance math here.
-    Scheduled `principal` and `extra_principal` are kept separate (an extra payment
-    is worth surfacing); both reduce the loan. `interest_account` is the expense
-    account the interest is booked to; it carries the deductibility class the tax
-    engine reads, so the class lives on the account, not here.
-    """
-
-    liability_account : Account
-    interest_account  : Account
-    principal         : Decimal
-    interest          : Decimal
-    extra_principal   : Decimal = Decimal( '0' )
-
-
-@dataclass( frozen = True )
-class FundingPolicy:
-    """How a savings shortfall is funded: a target cash balance to maintain and an
-    ordered list of accounts to draw from. The waterfall draws from each in turn
-    (realizing gains) until cash reaches `cash_target` or the sources are exhausted.
-    Tax settled afterward can pull cash below the target -- even negative -- and
-    that balance simply carries into the next period as a visible cash-flow signal;
-    only a net worth at or below zero ends the forecast.
-
-    `cash_target` is resolved per interval by the Scenario, so the user-facing
-    policy can be absolute, a multiple of expenses, or inflation-adjusted upstream.
-    """
-
-    cash_target   : Decimal = Decimal( '0' )
-    draw_priority : list[ Account ] = field( default_factory = list )
-
-
-@dataclass( frozen = True )
-class PeriodParameters:
-    """The single-interval, already-resolved inputs the Period consumes."""
-
-    date_span             : DateSpan
-    tax_context           : TaxContext
-    asset_rates           : AssetRates
-    funding_policy        : FundingPolicy
-    income_lines          : list[ IncomeLine ]         = field( default_factory = list )
-    expense_lines         : list[ ExpenseLine ]        = field( default_factory = list )
-    liability_terms       : list[ LiabilityTerm ]      = field( default_factory = list )
-    events                : list[ PeriodEvent ]       = field( default_factory = list )
+    def period_spans( self ) -> list[ DateSpan ]:
+        """The horizon sliced into consecutive one-year intervals (the last truncated to
+        `end_date`). Granularity is yearly for now -- it matches the annual tax engine."""
+        spans  = list()
+        cursor = self.start_date
+        while cursor <= self.end_date:
+            following = _add_years( cursor, 1 )
+            spans.append( DateSpan( cursor, min( following - timedelta( days = 1 ), self.end_date ) ) )
+            cursor = following
+            continue
+        return spans

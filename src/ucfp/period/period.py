@@ -4,8 +4,8 @@ A Period is a pure, myopic computation. It takes the Forecast's running books (a
 `Ledger`) and this interval's already-resolved `PeriodParameters`, posts the
 interval's transactions onto those books, and returns the `Notice`s it raised and
 the period's outcome. It does no time math (the Scenario resolves parameters
-across time) and treats tax as a pluggable black box (`TaxEngine`), which the
-Scenario constructs once and passes to each Period.
+across time) and treats tax as a pluggable black box (the `TaxEngine` carried on
+its `PeriodParameters`, resolved by the Scenario from the tax-law projection).
 
 The interval is computed in three phases (see data/design/projection-model.md):
   1. Accrue        -- effects whose magnitude is known up front: asset growth and
@@ -22,7 +22,6 @@ Conversion event are the remaining pieces.
 from ucfp.accounts.enums import SystemAccountRole
 from ucfp.accounts.ledger import Ledger
 from ucfp.accounts.money_utils import quantize_money
-from ucfp.tax.engine import TaxEngine
 
 from . import chart
 from .exceptions import MissingAccountError
@@ -34,13 +33,8 @@ from .results import Notice, PeriodResult
 class Period:
     """One forecast step over a single interval, computed against a running Ledger."""
 
-    def __init__( self,
-                  parameters       : PeriodParameters,
-                  tax_engine       : TaxEngine,
-                  opening_tax_state = None ):
-        self._parameters        = parameters
-        self._tax_engine        = tax_engine
-        self._opening_tax_state = opening_tax_state
+    def __init__( self, parameters : PeriodParameters ):
+        self._parameters = parameters
 
     def compute( self, ledger : Ledger ) -> PeriodResult:
         """Post this interval's transactions onto `ledger` (the Forecast's running
@@ -235,8 +229,8 @@ class Period:
         (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
         refund -- modeled here as a negated charge against the same expense class."""
         fiscal_window = FiscalWindow( ledger, self._parameters.date_span )
-        assessment = self._tax_engine.assess(
-            fiscal_window, self._parameters.tax_context, self._opening_tax_state )
+        assessment = self._parameters.tax_engine.assess(
+            fiscal_window, self._parameters.tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
         settlements = (
             [ ( charge.tax_class, charge.amount ) for charge in assessment.charges ]
