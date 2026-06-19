@@ -207,3 +207,19 @@ class ExpenseTaxClass( LabeledEnum ):
     INCOME_TAX              = ( 'Income Tax', 'Income tax paid (incl. AMT).' )
     PAYROLL_TAX             = ( 'Payroll Tax', 'FICA / Medicare on wages.' )
     NIIT                    = ( 'Net Investment Income Tax', '3.8% net investment income tax.' )
+
+    @property
+    def is_tax_payment( self ) -> bool:
+        """Whether this is a tax-payment class -- one a TaxEngine settles its charges into
+        (a tax the household pays) -- as opposed to a deductibility class it reads from
+        spending. The projection creates a chart account for each so settlement can post."""
+        return self in _TAX_PAYMENT_EXPENSE_CLASSES
+
+
+# The expense classes a TaxEngine settles charges/credits into (see
+# ExpenseTaxClass.is_tax_payment); kept beside the enum as its single source of truth.
+_TAX_PAYMENT_EXPENSE_CLASSES = frozenset( (
+    ExpenseTaxClass.INCOME_TAX,
+    ExpenseTaxClass.PAYROLL_TAX,
+    ExpenseTaxClass.NIIT,
+) )

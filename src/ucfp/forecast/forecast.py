@@ -150,8 +150,9 @@ class Forecast:
     def _build_baseline( self ) -> Bookkeeper:
         """Build the chart and opening books from the parameters -- the baseline is encoded
         there, not handed in. One opening transaction seeds each holding's value against
-        Opening Balances; revenue and expense accounts are created per income stream and per
-        expense item. STUB: holdings + income + expense accounts; liabilities join later."""
+        Opening Balances; revenue and expense accounts are created per income stream, per
+        expense item, and per tax-payment class. STUB: holdings + income + expense + tax
+        accounts; liabilities join later."""
         bookkeeper = Bookkeeper( BooksOfAccount( label = self._parameters.label ) )
         bookkeeper.build_standard_chart()
         chart = bookkeeper.chart
@@ -167,6 +168,7 @@ class Forecast:
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), postings )
         self._create_income_accounts( bookkeeper )
         self._create_expense_accounts( bookkeeper )
+        self._create_tax_accounts( bookkeeper )
         return bookkeeper
 
     def _create_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
@@ -185,6 +187,19 @@ class Forecast:
         self._expense_accounts = ExpenseAccounts( bookkeeper )
         for item in self._parameters.expenses:
             self._expense_accounts.account_for( item )
+            continue
+        return
+
+    def _create_tax_accounts( self, bookkeeper : Bookkeeper ) -> None:
+        """Create an expense account for each tax-payment class, so the year-close tax step
+        has somewhere to post its charges and refundable credits."""
+        expense_root = bookkeeper.chart.root( AccountType.EXPENSE )
+        for expense_class in ExpenseTaxClass.all():
+            if not expense_class.is_tax_payment:
+                continue
+            bookkeeper.add_account(
+                Account( name = expense_class.label, parent = expense_root,
+                         expense_tax_class = expense_class ) )
             continue
         return
 
