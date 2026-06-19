@@ -15,7 +15,6 @@ class AccountAdmin( admin.ModelAdmin ):
         'income_tax_class',
         'expense_tax_class',
         'parent',
-        'currency',
         'closed',
         'system_role',
     )
@@ -65,7 +64,6 @@ class TransactionAdmin( admin.ModelAdmin ):
         'uuid',
         'journal',
         'transaction_date',
-        'currency',
         'description',
     )
     search_fields = (
@@ -88,7 +86,6 @@ class EntryAdmin( admin.ModelAdmin ):
         'account',
         'entry_direction',
         'amount',
-        'transaction_amount',
     )
     list_filter = (
         'entry_direction',

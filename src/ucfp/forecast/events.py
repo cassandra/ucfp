@@ -40,7 +40,6 @@ class Transfer( PeriodEvent ):
     def apply( self, ledger : Ledger ) -> list[ Notice ]:
         ledger.record(
             self.event_date,
-            self.source_account.currency,
             [ ( self.target_account, -self.amount ), ( self.source_account, self.amount ) ],
         )
         return []
@@ -59,7 +58,6 @@ class Purchase( PeriodEvent ):
     def apply( self, ledger : Ledger ) -> list[ Notice ]:
         ledger.record(
             self.event_date,
-            self.funding_account.currency,
             [ ( self.asset_account, -self.amount ), ( self.funding_account, self.amount ) ],
         )
         return []

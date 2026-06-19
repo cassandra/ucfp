@@ -12,7 +12,6 @@ from .constants import MONEY_DECIMAL_PLACES, MONEY_MAX_DIGITS
 from .enums import (
     AccountType,
     AssetClass,
-    CurrencyType,
     ExpenseTaxClass,
     IncomeTaxClass,
     SideType,
@@ -152,10 +151,6 @@ class Account( TimestampedModel ):
         blank = True,
         default = '',
     )
-    currency = LabeledEnumField(
-        CurrencyType,
-        verbose_name = 'Currency',
-    )
     closed = models.BooleanField(
         'Closed',
         default = False,
@@ -201,11 +196,10 @@ class Account( TimestampedModel ):
         return self.effective_account_type.normal_side
 
     def signed_balance( self, journal : 'Journal' ) -> Decimal:
-        """Credit-positive balance within `journal`, in the account's currency.
+        """Credit-positive balance within `journal`, in the organization's currency.
 
-        The plain sum of this account's own entries' signed_amount (no currency
-        conversion: every entry on an account is in that account's currency).
-        Descendants are not rolled up -- balance is per (account, journal).
+        The plain sum of this account's own entries' signed_amount. Descendants are
+        not rolled up -- balance is per (account, journal).
         """
         totals = self.entries.filter( transaction__journal = journal ).aggregate(
             credit_total = models.Sum(
@@ -302,9 +296,8 @@ class Transaction( TimestampedModel ):
     """A balanced movement of value within a single Journal partition.
 
     Comprises at least one debit and one credit Entry whose signed amounts sum to
-    zero in `currency` (after per-entry conversion) -- the core double-entry
-    invariant. Its magnitude (the common "amount") is derived from its entries
-    and never stored.
+    zero -- the core double-entry invariant. Its magnitude (the common "amount")
+    is derived from its entries and never stored.
     """
 
     journal = models.ForeignKey(
@@ -331,10 +324,6 @@ class Transaction( TimestampedModel ):
         blank = True,
         default = '',
     )
-    currency = LabeledEnumField(
-        CurrencyType,
-        verbose_name = 'Currency',
-    )
 
     class Meta:
         verbose_name = 'Transaction'
@@ -344,10 +333,10 @@ class Transaction( TimestampedModel ):
         return f'{self.transaction_date} {self.description}'.strip()
 
     def balance( self ) -> Decimal:
-        """Signed sum of the entries in the transaction currency; zero when balanced."""
+        """Signed sum of the entries in the organization currency; zero when balanced."""
         total = Decimal( '0' )
         for entry in self.entries.all():
-            total += entry.signed_transaction_amount
+            total += entry.signed_amount
             continue
         return total
 
@@ -367,12 +356,10 @@ class Entry( TimestampedModel ):
     """One side of a Transaction: a signed posting of an amount to an Account.
 
     An entry is immutable once created -- it carries no edit path and no status
-    lifecycle (pending/posted/discarded). It records its magnitude in two
-    currencies: `amount` in the account's currency and `transaction_amount` in the
-    transaction's currency (equal when the two currencies match). `entry_direction`
-    supplies the side; `signed_amount` and `signed_transaction_amount` combine
-    magnitude and side (credit positive, debit negative). The conversion rate is
-    derived from the two amounts (see `conversion_rate`), not stored.
+    lifecycle (pending/posted/discarded). It records a single `amount` in the
+    organization's currency (the ledger is single-currency). `entry_direction`
+    supplies the side; `signed_amount` combines magnitude and side (credit
+    positive, debit negative).
     """
 
     account = models.ForeignKey(
@@ -409,13 +396,6 @@ class Entry( TimestampedModel ):
         SideType,
         verbose_name = 'Entry Direction',
     )
-    transaction_amount = BoundedDecimalField(
-        'Transaction Amount',
-        max_digits = MONEY_MAX_DIGITS,
-        decimal_places = MONEY_DECIMAL_PLACES,
-        min_value = Decimal( '0' ),
-        exclusive_min = True,
-    )
     description = models.TextField(
         'Description',
         blank = True,
@@ -430,10 +410,6 @@ class Entry( TimestampedModel ):
                 condition = models.Q( amount__gt = 0 ),
                 name = 'entry_amount_strictly_positive',
             ),
-            models.CheckConstraint(
-                condition = models.Q( transaction_amount__gt = 0 ),
-                name = 'entry_transaction_amount_strictly_positive',
-            ),
         ]
 
     def __str__(self):
@@ -441,22 +417,10 @@ class Entry( TimestampedModel ):
 
     @property
     def signed_amount(self) -> Decimal:
-        """The magnitude with its credit-positive sign, in the account's currency."""
+        """The magnitude with its credit-positive sign, in the organization's currency."""
         if self.entry_direction == SideType.CREDIT:
             return self.amount
         return -self.amount
-
-    @property
-    def signed_transaction_amount(self) -> Decimal:
-        """The magnitude with its credit-positive sign, in the transaction currency."""
-        if self.entry_direction == SideType.CREDIT:
-            return self.transaction_amount
-        return -self.transaction_amount
-
-    @property
-    def conversion_rate(self) -> Decimal:
-        """Derived account-to-transaction rate (transaction_amount / amount)."""
-        return self.transaction_amount / self.amount
 
     def save( self, *args, **kwargs ):
         if self.pk is not None:

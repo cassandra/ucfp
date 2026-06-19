@@ -137,5 +137,5 @@ def realize( ledger : Ledger,
             ( unrealized_gain_account, -gain ),
             ( realized_gain_account, gain ),
         ]
-    ledger.record( on_date, proceeds_account.currency, postings )
+    ledger.record( on_date, postings )
     return

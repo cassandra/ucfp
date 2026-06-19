@@ -95,7 +95,6 @@ class Period:
                 raise MissingAccountError( 'No Unrealized Gains equity account for growth.' )
             ledger.record(
                 growth_date,
-                valuation_account.currency,
                 [ ( valuation_account, -appreciation ), ( unrealized_gain_account, appreciation ) ],
             )
             continue
@@ -126,7 +125,6 @@ class Period:
                 )
             ledger.record(
                 distribution_date,
-                cash_account.currency,
                 [ ( cash_account, -distribution ), ( income_account, distribution ) ],
             )
             continue
@@ -147,7 +145,6 @@ class Period:
                 raise MissingAccountError( 'No cash account to receive income.' )
             ledger.record(
                 income_date,
-                cash_account.currency,
                 [ ( cash_account, -amount ), ( income_line.account, amount ) ],
             )
             continue
@@ -170,7 +167,6 @@ class Period:
                 raise MissingAccountError( 'No cash account to pay liabilities from.' )
             ledger.record(
                 payment_date,
-                cash_account.currency,
                 [
                     ( term.liability_account, -total_principal ),
                     ( term.interest_account, -interest ),
@@ -198,7 +194,6 @@ class Period:
                 )
             ledger.record(
                 expense_date,
-                cash_account.currency,
                 [ ( expense_account, -amount ), ( cash_account, amount ) ],
             )
             continue
@@ -263,7 +258,6 @@ class Period:
                 )
             ledger.record(
                 settle_date,
-                cash_account.currency,
                 [ ( expense_account, -amount ), ( cash_account, amount ) ],
             )
             continue

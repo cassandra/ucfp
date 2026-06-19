@@ -18,7 +18,7 @@ DEFAULT_ROOT_ACCOUNT_NAMES = {
 OPENING_TRANSACTION_DESCRIPTION = 'Opening balances'
 
 # Decimal scale (digits, places) for monetary amounts -- finer than cents for
-# planning headroom. Each Entry stores its magnitude in both the account and the
-# transaction currency at this scale; conversion rates are derived, not stored.
+# planning headroom. Each Entry stores its magnitude at this scale in the
+# organization's single currency (the ledger is single-currency).
 MONEY_MAX_DIGITS = 19
 MONEY_DECIMAL_PLACES = 5

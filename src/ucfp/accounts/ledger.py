@@ -16,7 +16,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Iterable, Optional
 
-from .enums import AccountType, CurrencyType, SideType
+from .enums import AccountType, SideType
 from .exceptions import TransactionImbalanceError
 from .models import Account, Entry, Journal, Transaction
 
@@ -24,9 +24,9 @@ from organization.models import Organization
 
 
 # One account's participation in one transaction, reduced to what the queries
-# need: the transaction's date and the entry's signed magnitudes (credit-positive)
-# in the account currency and the transaction currency.
-_Posting = namedtuple( '_Posting', ( 'date', 'signed_amount', 'signed_transaction_amount' ) )
+# need: the transaction's date and the entry's signed magnitude (credit-positive)
+# in the organization's single currency.
+_Posting = namedtuple( '_Posting', ( 'date', 'signed_amount' ) )
 
 
 class Ledger:
@@ -68,9 +68,9 @@ class Ledger:
     # -- mutation (invariant-enforcing, in memory) ---------------------------
 
     def post( self, transaction : Transaction, entries : Iterable[ Entry ] ) -> None:
-        """Validate that `entries` balance to zero in the transaction currency and
-        hold them in memory. Entries are passed explicitly because an unsaved
-        transaction has no usable reverse relation. Raises on imbalance."""
+        """Validate that `entries` balance to zero and hold them in memory. Entries
+        are passed explicitly because an unsaved transaction has no usable reverse
+        relation. Raises on imbalance."""
         entries = list( entries )
         self._assert_transaction_balanced( entries )
         self._index( transaction, entries )
@@ -79,16 +79,14 @@ class Ledger:
 
     def record( self,
                 transaction_date : date,
-                currency : CurrencyType,
                 signed_postings : Iterable[ tuple[ Account, Decimal ] ] ) -> Transaction:
         """Build and post a balanced transaction from (account, signed_amount)
         pairs (credit-positive); each entry's direction is derived from its sign.
-        Amounts are in `currency` -- single-currency (conversion not yet handled).
-        Zero-amount postings are skipped."""
+        Amounts are in the organization's single currency. Zero-amount postings are
+        skipped."""
         transaction = Transaction(
             journal = self.journal,
             transaction_date = transaction_date,
-            currency = currency,
         )
         entries = list()
         for account, signed_amount in signed_postings:
@@ -101,7 +99,6 @@ class Ledger:
                     transaction = transaction,
                     account = account,
                     amount = magnitude,
-                    transaction_amount = magnitude,
                     entry_direction = direction,
                 )
             )
@@ -172,10 +169,10 @@ class Ledger:
 
     def assert_balanced( self ) -> None:
         """Assert the whole partition's signed entries sum to zero in the
-        transaction currency (every balanced transaction contributes zero, so any
-        residual reveals a malformed partition)."""
+        organization's single currency (every balanced transaction contributes
+        zero, so any residual reveals a malformed partition)."""
         residual = sum(
-            ( posting.signed_transaction_amount
+            ( posting.signed_amount
               for postings in self._postings_by_account.values()
               for posting in postings ),
             Decimal( '0' ),
@@ -200,7 +197,6 @@ class Ledger:
             posting = _Posting(
                 date = date_,
                 signed_amount = entry.signed_amount,
-                signed_transaction_amount = entry.signed_transaction_amount,
             )
             self._postings_by_account.setdefault( entry.account_id, list() ).append( posting )
             continue
@@ -208,7 +204,7 @@ class Ledger:
 
     def _assert_transaction_balanced( self, entries : Iterable[ Entry ] ) -> None:
         residual = sum(
-            ( entry.signed_transaction_amount for entry in entries ),
+            ( entry.signed_amount for entry in entries ),
             Decimal( '0' ),
         )
         if residual != 0:

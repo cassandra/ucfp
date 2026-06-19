@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 class StartingBalance:
     """One account's starting balance, as its natural balance.
 
-    The amount's currency is implicit: it is the account's own currency. This is
-    a transient input (e.g. from manual entry or import), not a persisted record.
+    The amount is in the organization's single currency. This is a transient input
+    (e.g. from manual entry or import), not a persisted record.
     """
 
     account : Account
@@ -79,14 +79,13 @@ class CurrencyConverter:
 class OpeningBalances:
     """The transient input that seeds a Journal's opening state.
 
-    A collection of StartingBalances plus a CurrencyConverter. When every account
-    shares the opening transaction's currency the converter is unused (the empty
-    default suffices); when currencies differ, it must carry the conversions the
-    involved accounts require, or conversion raises.
+    A collection of StartingBalances, all in the organization's single currency
+    (seeding is single-currency). The CurrencyConverter machinery is reserved for
+    the future import boundary: an importer converts foreign source amounts to the
+    organization's currency before building StartingBalances.
     """
 
     starting_balances : list[ StartingBalance ] = field( default_factory = list )
-    converter         : CurrencyConverter       = field( default_factory = CurrencyConverter )
 
     def add( self, account : Account, amount : Decimal ) -> OpeningBalances:
         """Append a StartingBalance for `account`; chainable."""

@@ -12,7 +12,6 @@ from organization.models import Organization
 from ucfp.accounts.enums import AccountType, CurrencyType, SideType
 from ucfp.accounts.exceptions import (
     CurrencyConversionError,
-    OpeningBalanceError,
     TransactionImbalanceError,
 )
 from ucfp.accounts.models import Account, Journal
@@ -26,7 +25,8 @@ AS_OF = date( 2026, 6, 16 )
 
 
 class CurrencyConverterTests(TestCase):
-    """Pure conversion logic; no database."""
+    """Pure conversion logic; no database. The converter is kept for the future
+    import boundary, even though the in-ledger model is single-currency."""
 
     def test_same_currency_is_identity(self):
         converter = CurrencyConverter()
@@ -104,13 +104,13 @@ class AccountsTestCase(TestCase):
 
     def _make_transaction(self, journal):
         return journal.transactions.create(
-            transaction_date = AS_OF, description = '', currency = CurrencyType.USD,
+            transaction_date = AS_OF, description = '',
         )
 
 
 class EntryAmountTests(AccountsTestCase):
 
-    def test_signed_amounts_and_derived_rate(self):
+    def test_signed_amount(self):
         journal = Journal.objects.create(
             organization = self.organization, as_of_date = AS_OF, label = 'B',
         )
@@ -118,12 +118,9 @@ class EntryAmountTests(AccountsTestCase):
         entry = transaction.entries.create(
             account = self.checking,
             amount = Decimal( '100' ),
-            transaction_amount = Decimal( '110' ),
             entry_direction = SideType.DEBIT,
         )
         self.assertEqual( entry.signed_amount, Decimal( '-100' ) )
-        self.assertEqual( entry.signed_transaction_amount, Decimal( '-110' ) )
-        self.assertEqual( entry.conversion_rate, Decimal( '1.1' ) )
 
 
 class AccountBalanceTests(AccountsTestCase):
@@ -136,13 +133,11 @@ class AccountBalanceTests(AccountsTestCase):
         transaction.entries.create(
             account = self.checking,
             amount = Decimal( '100' ),
-            transaction_amount = Decimal( '100' ),
             entry_direction = SideType.DEBIT,
         )
         transaction.entries.create(
             account = self.equity_root,
             amount = Decimal( '100' ),
-            transaction_amount = Decimal( '100' ),
             entry_direction = SideType.CREDIT,
         )
         # Asset (debit-normal): credit-positive signed balance is negative; the
@@ -161,13 +156,11 @@ class TransactionBalanceTests(AccountsTestCase):
         transaction.entries.create(
             account = self.checking,
             amount = Decimal( '100' ),
-            transaction_amount = Decimal( '100' ),
             entry_direction = SideType.DEBIT,
         )
         transaction.entries.create(
             account = self.equity_root,
             amount = credit_amount,
-            transaction_amount = credit_amount,
             entry_direction = SideType.CREDIT,
         )
         return transaction
@@ -231,101 +224,6 @@ class OpeningSeedTests(AccountsTestCase):
         # Stated equity (900) overshoots the true residual (800) by 100, which
         # surfaces as a negative Opening Balances natural balance.
         self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '-100' ) )
-
-    def test_multi_currency_seed_converts_and_balances(self):
-        euro_savings = Account.objects.create(
-            organization = self.organization,
-            parent = self.assets_root,
-            name = 'Euro Savings',
-            currency = CurrencyType.EUR,
-        )
-        converter = CurrencyConverter(
-            ( CurrencyConversion( CurrencyType.EUR, CurrencyType.USD, Decimal( '1.1' ) ), ),
-        )
-        opening = OpeningBalances( converter = converter )
-        opening.add( euro_savings, Decimal( '100' ) )
-
-        journal = Journal.objects.create_with_opening(
-            organization = self.organization,
-            as_of_date = AS_OF,
-            label = 'Jun 2026',
-            opening_balances = opening,
-        )
-
-        transaction = journal.transactions.get()
-        self.assertTrue( transaction.is_balanced )
-        # The account balance stays in EUR; the plug lands in USD.
-        self.assertEqual( euro_savings.natural_balance( journal ), Decimal( '100' ) )
-        self.assertEqual( self.opening_balances.natural_balance( journal ), Decimal( '110' ) )
-        euro_entry = transaction.entries.get( account = euro_savings )
-        self.assertEqual( euro_entry.transaction_amount, Decimal( '110' ) )
-        self.assertEqual( euro_entry.conversion_rate, Decimal( '1.1' ) )
-
-    def test_missing_conversion_raises(self):
-        euro_savings = Account.objects.create(
-            organization = self.organization,
-            parent = self.assets_root,
-            name = 'Euro Savings',
-            currency = CurrencyType.EUR,
-        )
-        opening = OpeningBalances()
-        opening.add( euro_savings, Decimal( '100' ) )
-
-        with self.assertRaises( CurrencyConversionError ):
-            Journal.objects.create_with_opening(
-                organization = self.organization,
-                as_of_date = AS_OF,
-                label = 'Jun 2026',
-                opening_balances = opening,
-            )
-
-    def test_converted_amount_is_rounded_half_up(self):
-        euro_savings = Account.objects.create(
-            organization = self.organization,
-            parent = self.assets_root,
-            name = 'Euro Savings',
-            currency = CurrencyType.EUR,
-        )
-        converter = CurrencyConverter(
-            ( CurrencyConversion( CurrencyType.EUR, CurrencyType.USD, Decimal( '1.234565' ) ), ),
-        )
-        opening = OpeningBalances( converter = converter )
-        opening.add( euro_savings, Decimal( '1' ) )
-
-        journal = Journal.objects.create_with_opening(
-            organization = self.organization,
-            as_of_date = AS_OF,
-            label = 'Jun 2026',
-            opening_balances = opening,
-        )
-
-        transaction = journal.transactions.get()
-        euro_entry = transaction.entries.get( account = euro_savings )
-        # 1 * 1.234565 = 1.234565 -> half-up to 5 places -> 1.23457.
-        self.assertEqual( euro_entry.transaction_amount, Decimal( '1.23457' ) )
-        self.assertTrue( transaction.is_balanced )
-
-    def test_sub_quantum_conversion_raises(self):
-        euro_savings = Account.objects.create(
-            organization = self.organization,
-            parent = self.assets_root,
-            name = 'Euro Savings',
-            currency = CurrencyType.EUR,
-        )
-        converter = CurrencyConverter(
-            ( CurrencyConversion( CurrencyType.EUR, CurrencyType.USD, Decimal( '0.1' ) ), ),
-        )
-        opening = OpeningBalances( converter = converter )
-        # 0.00001 EUR * 0.1 = 0.000001 USD, which rounds to zero at the money scale.
-        opening.add( euro_savings, Decimal( '0.00001' ) )
-
-        with self.assertRaises( OpeningBalanceError ):
-            Journal.objects.create_with_opening(
-                organization = self.organization,
-                as_of_date = AS_OF,
-                label = 'Jun 2026',
-                opening_balances = opening,
-            )
 
     def test_zero_starting_balance_is_skipped(self):
         opening = OpeningBalances()
