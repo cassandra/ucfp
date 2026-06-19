@@ -17,12 +17,13 @@ from ucfp.accounts.enums import RealPropertyType
 
 @dataclass( frozen = True )
 class PropertyDisposition:
-    """A property sold during the fiscal year. `book_gain` is the economic gain
-    (proceeds - original cost) already posted to LONG_TERM_GAINS by `realize`; the
-    engine applies the §121 exclusion and adds the §1250 recapture on top of it."""
+    """A rental sold during the fiscal year, marking its `sale_date` so the engine can
+    accrue §1250 depreciation recapture through that date. It carries no gain: the gain is
+    already in the ledger (a residence's in its own §121 account, a rental's in long-term
+    gains), and recapture is computed from the property's depreciation attributes, not the
+    gain. A residence sale needs no disposition -- its own gains account is the signal."""
 
     sale_date : date
-    book_gain : Decimal
 
 
 @dataclass( frozen = True )
@@ -30,7 +31,7 @@ class TaxProperty:
     """A real-estate holding's tax-relevant attributes. `depreciable_basis` is the
     building portion (excludes land); zero for a personal residence (not depreciated).
     `property_type` sets the rental depreciation recovery period. `disposition` is set
-    by the Scenario when the property is sold this fiscal year (else None)."""
+    when the property is sold this fiscal year (else None)."""
 
     holding           : Account
     acquisition_date  : date

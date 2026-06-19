@@ -40,7 +40,8 @@ def _run():
         filing_status = FilingStatus.MARRIED_JOINT,
         tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
         subjects      = [ Subject( 'Solo', date( 1960, 1, 1 ) ) ],
-        assets        = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ) ) ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
         economic_outlook = EconomicOutlook.constant(
             EconomicParameters( inflation = Rate( Decimal( '0.03' ) ),
                                 medical_inflation = Rate( Decimal( '0.05' ) ) ) ),

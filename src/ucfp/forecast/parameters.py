@@ -24,7 +24,7 @@ from common.rate import Rate
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.books import Account
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
@@ -43,16 +43,45 @@ class Subject:
     birthdate : date
 
 
+@dataclass( frozen = True )
+class PropertyAttributes:
+    """The tax-relevant facts of a real-estate holding beyond its market value: when it was
+    acquired, the depreciable (building) basis -- zero for a residence, the building portion
+    for a rental -- and the rental depreciation class. Land is the implicit remainder of the
+    asset's opening value. The Forecast turns these into the engine's `TaxProperty`."""
+
+    acquisition_date  : date
+    depreciable_basis : Decimal          = Decimal( '0' )
+    property_type     : RealPropertyType = RealPropertyType.RESIDENTIAL
+
+
 @dataclass
 class AssetParameters:
-    """A holding: its opening value and asset class. The Forecast creates the holding
-    account from this and seeds the opening value. STUB: `opening_value` is the basis
-    (= market at t0, no embedded unrealized gain); a basis/market split and the
-    value-rule + existence window join later."""
+    """A holding: its market value at t0 (`opening_value`), its tax basis (`cost_basis`), and
+    its asset class. The Forecast seeds the basis as the holding's cost and any embedded gain
+    (`opening_value - cost_basis`) as unrealized appreciation -- so a later realization
+    recognizes the gain from the true basis, not from t0. A real-estate holding also carries
+    `property_attributes` (the tax facts behind §121/§1250); None for any other asset.
+    `cost_basis` is required (no defaulting -- an important distinction belongs upstream): a
+    retirement account passes 0 (its whole value is taxable/withdrawable on the way out), a
+    freshly-valued holding passes `opening_value` (cost = market). STUB: the value-rule and
+    existence window join later."""
 
-    name          : str
-    asset_class   : AssetClass
-    opening_value : Decimal
+    name                : str
+    asset_class         : AssetClass
+    opening_value       : Decimal
+    cost_basis          : Decimal
+    property_attributes : Optional[ PropertyAttributes ] = None
+
+    def __post_init__( self ):
+        """Enforce the zero-basis domain rule: a retirement holding must declare a zero
+        cost_basis (the engine realizes its whole value), so a mis-stated basis -- which
+        would silently under-tax withdrawals -- is rejected at construction."""
+        if self.asset_class.seeds_at_zero_basis and ( self.cost_basis != 0 ):
+            raise ValueError(
+                f'{self.asset_class.label} holdings carry zero tax basis; '
+                f'cost_basis must be 0, not {self.cost_basis}.' )
+        return
 
 
 @dataclass( frozen = True )

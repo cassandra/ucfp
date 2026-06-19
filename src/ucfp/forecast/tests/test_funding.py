@@ -38,8 +38,9 @@ def _parameters( draw_order, outlook = None ):
         filing_status = FilingStatus.MARRIED_JOINT,
         tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
         subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
-        assets        = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '5000' ) ),
-                          AssetParameters( 'Brokerage', AssetClass.STOCKS, Decimal( '500000' ) ) ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, Decimal( '5000' ), Decimal( '5000' ) ),
+            AssetParameters( 'Brokerage', AssetClass.STOCKS, Decimal( '500000' ), Decimal( '500000' ) ) ],
         economic_outlook = outlook if outlook is not None else EconomicOutlook(),
         expenses      = [ _LIVING_50K ],
         cash_target   = Decimal( '10000' ),

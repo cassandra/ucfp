@@ -110,11 +110,11 @@ class AssetClass( LabeledEnum ):
 
     @property
     def seeds_at_zero_basis( self ) -> bool:
-        """Whether a holding of this class opens with zero cost basis -- its entire value
-        seeded as unrealized gain rather than as cost -- so a later withdrawal or conversion
-        realizes the whole amount as income (a pre-tax account is wholly ordinary, a Roth
-        wholly tax-free). Other appreciating classes open at cost = market (basis) and
-        accrue gain only as they grow."""
+        """Whether holdings of this class carry zero tax basis -- a domain rule, not a planner
+        choice: a pre-tax retirement account's contributions were untaxed (the whole
+        withdrawal is ordinary), and a Roth is modeled at zero basis so a withdrawal realizes
+        wholly into the tax-free class. Such a holding's `cost_basis` must be 0 (its whole
+        value seeds as unrealized gain); other classes carry a real basis."""
         return self in _ZERO_BASIS_ASSET_CLASSES
 
     @property
@@ -138,9 +138,9 @@ class AssetClass( LabeledEnum ):
 _NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS ) )
 
 
-# Retirement classes seeded with zero cost basis (whole value as unrealized gain), so a
-# withdrawal/conversion recognizes the entire amount -- pre-tax as ordinary, Roth as
-# tax-free -- instead of only the post-seed appreciation.
+# Retirement classes that carry zero tax basis (a domain rule): the whole holding value is
+# realized on withdrawal/conversion -- pre-tax as ordinary, Roth as tax-free. Their
+# cost_basis must be 0 (validated on the input), so the whole value seeds as unrealized gain.
 _ZERO_BASIS_ASSET_CLASSES = frozenset(
     ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
 
@@ -170,6 +170,8 @@ class IncomeTaxClass( LabeledEnum ):
     QUALIFIED_DIVIDENDS = ( 'Qualified Dividends', 'Preferential rate; not netted with losses.' )
     LONG_TERM_GAINS     = ( 'Long-Term Gains', 'Preferential rate; netted with losses.' )
     SHORT_TERM_GAINS    = ( 'Short-Term Gains', 'Ordinary rate; netted separately.' )
+    RESIDENCE_SECTION_121_GAIN = (
+        'Residence Gain', 'Primary-residence gain; §121 exclusion, remainder long-term.' )
     SECTION_1250_GAIN   = ( 'Section 1250 Gain', 'Unrecaptured depreciation; 25% max rate.' )
     COLLECTIBLES_GAINS  = ( 'Collectibles Gains', 'Collectibles; 28% max rate.' )
     SOCIAL_SECURITY     = ( 'Social Security', 'Benefits; partial-inclusion rule.' )
@@ -198,7 +200,7 @@ _REALIZED_GAIN_INCOME_CLASS = {
     AssetClass.STOCKS                : IncomeTaxClass.LONG_TERM_GAINS,
     AssetClass.DIVIDEND_STOCKS       : IncomeTaxClass.LONG_TERM_GAINS,
     AssetClass.BONDS                 : IncomeTaxClass.LONG_TERM_GAINS,
-    AssetClass.REAL_ESTATE_RESIDENCE : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.REAL_ESTATE_RESIDENCE : IncomeTaxClass.RESIDENCE_SECTION_121_GAIN,
     AssetClass.REAL_ESTATE_RENTAL    : IncomeTaxClass.LONG_TERM_GAINS,
     AssetClass.PRETAX_RETIREMENT     : IncomeTaxClass.ORDINARY,
     AssetClass.ROTH                  : IncomeTaxClass.TAX_FREE,

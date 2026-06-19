@@ -40,7 +40,8 @@ def _parameters( granularity ):
         tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
         granularity   = granularity,
         subjects      = [ subject ],
-        assets        = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ) ) ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
         economic_outlook = EconomicOutlook.constant(
             EconomicParameters( inflation = Rate( Decimal( '0.03' ) ),
                                 social_security_cola = Rate( Decimal( '0.02' ) ) ) ),

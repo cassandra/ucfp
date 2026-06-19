@@ -27,7 +27,8 @@ class TaxSettlementTests( unittest.TestCase ):
             filing_status = FilingStatus.MARRIED_JOINT,
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ subject ],
-            assets        = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ) ) ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
             income_streams = [ IncomeStream( subject, IncomeTaxClass.ORDINARY, Decimal( '120000' ) ) ],
         )
         result = Forecast( parameters ).run()   # raised MissingAccountError before the fix

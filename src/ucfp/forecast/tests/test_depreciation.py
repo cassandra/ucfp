@@ -23,7 +23,8 @@ class DepreciationTests( unittest.TestCase ):
             filing_status = FilingStatus.MARRIED_JOINT,
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
-            assets        = [ AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ) ) ],
+            assets        = [
+                AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ), Decimal( '30000' ) ) ],
             economic_outlook = EconomicOutlook.constant(
                 EconomicParameters( depreciation_rate = Rate( Decimal( '0.20' ) ) ) ),
         )

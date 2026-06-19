@@ -35,7 +35,13 @@ from typing import Optional
 from common.date_window import DateWindow
 from ucfp.accounts.books import Account, BooksOfAccount
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass, SystemAccountRole
+from ucfp.accounts.enums import (
+    AccountType,
+    AssetClass,
+    ExpenseTaxClass,
+    IncomeTaxClass,
+    SystemAccountRole,
+)
 from ucfp.period.parameters import (
     DateSpan,
     ExpenseLine,
@@ -48,8 +54,9 @@ from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.us.context import TaxContext, TaxSubject
+from ucfp.tax.us.property import PropertyDisposition, TaxProperty
 
-from .parameters import ExpenseItem, ForecastParameters, Subject
+from .parameters import ExpenseItem, ForecastParameters, ScheduledRealization, Subject
 
 
 # A loan resolved against the books: its parameters plus the accounts and the level
@@ -185,10 +192,11 @@ class Forecast:
         chart = bookkeeper.chart
         asset_root = chart.root( AccountType.ASSET )
         holdings = [
-            ( bookkeeper.create_holding( asset_root, asset.name, asset.asset_class ), asset.opening_value )
+            ( bookkeeper.create_holding( asset_root, asset.name, asset.asset_class ),
+              asset.opening_value, asset.cost_basis )
             for asset in self._parameters.assets ]
         self._holding_by_name = {
-            holding.name : holding for holding, _value in holdings }
+            holding.name : holding for holding, _value, _basis in holdings }
         self._create_loans( bookkeeper )
         self._seed_opening_balances( bookkeeper, holdings )
         self._create_income_accounts( bookkeeper )
@@ -201,12 +209,12 @@ class Forecast:
     def _seed_opening_balances( self, bookkeeper : Bookkeeper, holdings : list ) -> None:
         """Post the opening transaction: each holding's value (increasing the asset) and each
         loan's balance (a credit, the liability), with Opening Balances absorbing the residual
-        so the books balance from t0. A zero-basis holding self-balances (its value seeds its
-        own Unrealized Gains equity), so only basis-bearing holdings and loans hit the plug."""
+        so the books balance from t0. Each holding's embedded gain (value - basis) self-balances
+        against its own Unrealized Gains equity, so only the bases and loans hit the plug."""
         chart = bookkeeper.chart
         opening_postings = list()
-        for holding, value in holdings:
-            opening_postings += self._opening_value_postings( chart, holding, value )
+        for holding, value, cost_basis in holdings:
+            opening_postings += self._opening_value_postings( chart, holding, value, cost_basis )
             continue
         opening_postings += [ ( loan.account, loan.parameters.opening_balance ) for loan in self._loans ]
         plug = -sum( ( amount for _account, amount in opening_postings ), Decimal( '0' ) )
@@ -216,17 +224,21 @@ class Forecast:
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), opening_postings )
         return
 
-    def _opening_value_postings( self, chart, holding : Account, value : Decimal ) -> list:
-        """The opening postings seeding `holding` with `value`. A basis-bearing holding opens
-        at cost = market (one posting, absorbed by Opening Balances). A zero-basis holding (a
-        retirement account) opens at cost 0 with its whole value as unrealized gain, so a
-        later realization recognizes the entire amount -- the value lands in its valuation
-        companion and its own Unrealized Gains equity, balancing within the holding."""
-        if not holding.asset_class.seeds_at_zero_basis:
-            return [ ( holding, -value ) ]
-        valuation_account = chart.valuation_of( holding )
-        unrealized_gains = chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
-        return [ ( valuation_account, -value ), ( unrealized_gains, value ) ]
+    def _opening_value_postings( self, chart, holding : Account, value : Decimal,
+                                 cost_basis : Decimal ) -> list:
+        """The opening postings seeding `holding` to market `value` with tax basis
+        `cost_basis`: the basis lands in the holding's cost account and any embedded gain
+        (value - basis) in its valuation companion against its own Unrealized Gains equity, so
+        a later realization recognizes the gain from the true basis, not from t0. A zero-basis
+        retirement holding (basis 0) seeds its whole value as gain; a freshly-valued holding
+        (basis = value) seeds cost = market with nothing unrealized."""
+        embedded_gain = value - cost_basis
+        postings = [ ( holding, -cost_basis ) ]
+        if embedded_gain != 0:
+            valuation_account = chart.valuation_of( holding )
+            unrealized_gains = chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
+            postings += [ ( valuation_account, -embedded_gain ), ( unrealized_gains, embedded_gain ) ]
+        return postings
 
     def _create_loans( self, bookkeeper : Bookkeeper ) -> None:
         """Create a liability account and an interest expense account per loan, and derive
@@ -454,9 +466,49 @@ class Forecast:
         return Decimal( period_days ) / Decimal( year_days )
 
     def _tax_context_for( self, span : DateSpan ) -> TaxContext:
-        """The taxpayer context for the interval: ages from birthdates at the interval's
-        end. STUB: filing status static; properties/ACA not yet resolved."""
+        """The taxpayer context for the interval: ages from birthdates at the interval's end
+        and the rental properties (depreciation attributes plus any in-year disposition).
+        STUB: filing status static; ACA not yet resolved."""
         subjects = tuple(
             TaxSubject( age = span.end_date.year - subject.birthdate.year )
             for subject in self._parameters.subjects )
-        return TaxContext( filing_status = self._parameters.filing_status, subjects = subjects )
+        return TaxContext(
+            filing_status = self._parameters.filing_status,
+            subjects      = subjects,
+            properties    = self._tax_properties_for( span ),
+        )
+
+    def _tax_properties_for( self, span : DateSpan ) -> tuple:
+        """The engine's `TaxProperty` for each rental: its depreciation attributes (for the
+        annual deduction) plus a disposition marking the sale date when it is sold within
+        this fiscal year (driving §1250 recapture). Residences need none -- their gain
+        settles through the §121 residence-gains account, not the context."""
+        properties = list()
+        for asset in self._parameters.assets:
+            attributes = asset.property_attributes
+            if ( asset.asset_class != AssetClass.REAL_ESTATE_RENTAL ) or ( attributes is None ):
+                continue
+            properties.append(
+                TaxProperty(
+                    holding           = self._holding_by_name[ asset.name ],
+                    acquisition_date  = attributes.acquisition_date,
+                    depreciable_basis = attributes.depreciable_basis,
+                    property_type     = attributes.property_type,
+                    disposition       = self._disposition_for( asset, span ),
+                )
+            )
+            continue
+        return tuple( properties )
+
+    def _disposition_for( self, asset, span : DateSpan ) -> Optional[ PropertyDisposition ]:
+        """The disposition for `asset` if a sale of it falls in this span's fiscal year, else
+        None: the first scheduled realization naming the holding, dated in that calendar year.
+        (The sale date is a scheduled input, so no running state is needed.)"""
+        fiscal_year = span.end_date.year
+        for event in self._parameters.events:
+            if not isinstance( event, ScheduledRealization ):
+                continue
+            if ( event.holding != asset.name ) or ( event.event_date.year != fiscal_year ):
+                continue
+            return PropertyDisposition( sale_date = event.event_date )
+        return None

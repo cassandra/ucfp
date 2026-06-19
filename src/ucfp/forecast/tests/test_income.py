@@ -34,7 +34,8 @@ def _run_two_pension_forecast():
         filing_status = FilingStatus.MARRIED_JOINT,
         tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
         subjects      = [ alice, bob ],
-        assets        = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ) ) ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
         economic_outlook = EconomicOutlook.constant(
             EconomicParameters( social_security_cola = Rate( Decimal( '0.02' ) ) ) ),
         income_streams = [

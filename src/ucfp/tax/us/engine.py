@@ -91,15 +91,6 @@ class _TaxableSplit( NamedTuple ):
     collectibles : Decimal
 
 
-class _PropertySaleAdjustments( NamedTuple ):
-    """The gain adjustments from a year's property sales: the §121 residence-gain
-    exclusion (reduces long-term gains) and the §1250 depreciation recapture (adds to
-    the 25% bucket)."""
-
-    residence_exclusion    : Decimal
-    depreciation_recapture : Decimal
-
-
 class _PassiveActivity( NamedTuple ):
     """The passive-activity (rental) outcome: `deductible` is the amount flowing into
     ordinary income and net investment income (net passive income if positive, the
@@ -128,13 +119,18 @@ class USFederalTaxEngine( TaxEngine ):
         qualified_dividends = fiscal_window.income( IncomeTaxClass.QUALIFIED_DIVIDENDS )
         ss_gross            = fiscal_window.income( IncomeTaxClass.SOCIAL_SECURITY )
 
-        # Property sales adjust the gains the ledger posted: §121 excludes residence
-        # gain from long-term gains; §1250 adds rental depreciation recapture to the
-        # 25% bucket (the book gain stays in long-term gains).
-        sales = self._property_sale_adjustments( tax_context, status )
-        long_term_gains   = fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS ) - sales.residence_exclusion
+        # A primary-residence sale realizes into its own account: §121 excludes up to the
+        # filing-status cap, and the taxable remainder is taxed as a long-term gain (a
+        # residence loss is personal and non-deductible, so the remainder floors at zero).
+        # §1250 adds rental depreciation recapture to the 25% bucket.
+        residence_gain   = max( _ZERO, fiscal_window.income( IncomeTaxClass.RESIDENCE_SECTION_121_GAIN ) )
+        residence_exclusion = min( self._parameters.section_121_exclusion[ status ], residence_gain )
+        long_term_gains   = (
+            fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS )
+            + ( residence_gain - residence_exclusion ) )
         section_1250_gain = (
-            fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN ) + sales.depreciation_recapture )
+            fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN )
+            + self._depreciation_recapture( tax_context ) )
 
         net_short = fiscal_window.income( IncomeTaxClass.SHORT_TERM_GAINS ) - carryover.short
         net_long  = long_term_gains - carryover.long
@@ -235,32 +231,23 @@ class USFederalTaxEngine( TaxEngine ):
         )
         return _NetCapital( _ZERO, _ZERO, offset, carryover )
 
-    def _property_sale_adjustments(
-            self, tax_context : TaxContext, status ) -> _PropertySaleAdjustments:
-        """From the year's property dispositions: the total §121 residence-gain
-        exclusion (reduces long-term gains) and the total §1250 depreciation recapture
-        (adds to the 25% bucket). Recapture = min(accumulated depreciation, the total
-        tax gain = book gain + accumulated depreciation); for a non-negative book gain
-        that is the full accumulated depreciation, with the book gain remaining
-        long-term. The sale-below-adjusted-basis edge is deferred."""
-        exclusion = _ZERO
+    def _depreciation_recapture( self, tax_context : TaxContext ) -> Decimal:
+        """The total §1250 unrecaptured depreciation from the year's rental dispositions,
+        added to the 25%-rate bucket: the accumulated straight-line depreciation through the
+        sale date. (The sale-below-adjusted-basis edge, which would cap recapture at the
+        actual gain, is deferred -- a non-negative gain recaptures the full accumulation.)"""
         recapture = _ZERO
         for tax_property in tax_context.properties:
             disposition = tax_property.disposition
             if disposition is None:
                 continue
-            asset_class = tax_property.holding.asset_class
-            if asset_class == AssetClass.REAL_ESTATE_RESIDENCE:
-                cap = self._parameters.section_121_exclusion[ status ]
-                exclusion += min( cap, max( _ZERO, disposition.book_gain ) )
-            elif asset_class == AssetClass.REAL_ESTATE_RENTAL:
-                accumulated = accumulated_depreciation(
-                    tax_property.depreciable_basis, tax_property.acquisition_date,
-                    disposition.sale_date, tax_property.property_type )
-                recapture += min(
-                    accumulated, max( _ZERO, disposition.book_gain + accumulated ) )
+            if tax_property.holding.asset_class != AssetClass.REAL_ESTATE_RENTAL:
+                continue
+            recapture += accumulated_depreciation(
+                tax_property.depreciable_basis, tax_property.acquisition_date,
+                disposition.sale_date, tax_property.property_type )
             continue
-        return _PropertySaleAdjustments( exclusion, recapture )
+        return recapture
 
     def _rental_net_income( self, fiscal_window, tax_context : TaxContext ) -> Decimal:
         """Net taxable rental income: gross rents minus operating expenses minus

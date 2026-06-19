@@ -43,11 +43,11 @@ class EventResolutionTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [
-                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ) ),
-                AssetParameters( 'CD', AssetClass.CDS, Decimal( '0' ) ),
-                AssetParameters( 'Stocks', AssetClass.STOCKS, Decimal( '50000' ) ),
-                AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ) ),
-                AssetParameters( 'Roth', AssetClass.ROTH, Decimal( '0' ) ),
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ) ),
+                AssetParameters( 'CD', AssetClass.CDS, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters( 'Stocks', AssetClass.STOCKS, Decimal( '50000' ), Decimal( '50000' ) ),
+                AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ) ),
+                AssetParameters( 'Roth', AssetClass.ROTH, Decimal( '0' ), Decimal( '0' ) ),
             ],
             events        = [
                 ScheduledTransfer( date( 2026, 3, 1 ), 'Cash', 'CD', Decimal( '20000' ) ),
@@ -84,8 +84,8 @@ class EventResolutionTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [
-                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ) ),
-                AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ) ),
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ) ),
             ],
             events        = [ ScheduledRealization( date( 2026, 3, 1 ), 'IRA', Decimal( '40000' ) ) ],
         )
@@ -109,8 +109,8 @@ class EventResolutionTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [
-                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ) ),
-                AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ) ),
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ), Decimal( '30000' ) ),
             ],
             economic_outlook = EconomicOutlook.constant(
                 EconomicParameters( depreciation_rate = Rate( Decimal( '0.20' ) ) ) ),
@@ -126,6 +126,16 @@ class EventResolutionTests( unittest.TestCase ):
                           Decimal( '24000' ) )
         # the 6k decline is the only net-worth change; the realized loss is excluded from tax
         self.assertEqual( ledger.net_worth( through = through ), Decimal( '24000' ) )
+
+
+class ZeroBasisValidationTests( unittest.TestCase ):
+
+    def test_pretax_account_rejects_a_nonzero_cost_basis( self ):
+        # zero basis is a domain rule for retirement accounts: a positive basis (which would
+        # silently under-tax withdrawals) is rejected at construction.
+        with self.assertRaises( ValueError ):
+            AssetParameters(
+                'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '40000' ) )
 
 
 if __name__ == '__main__':
