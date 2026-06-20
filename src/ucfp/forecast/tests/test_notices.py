@@ -110,6 +110,30 @@ class NoticeCatalogTests( unittest.TestCase ):
         self.assertEqual( notice.severity, NoticeSeverity.INFO )
         self.assertIsNotNone( _transaction( result.books, notice.transaction_uuid ) )
 
+    def test_funding_draw_from_pretax_under_59_incurs_the_penalty( self ):
+        # a waterfall draw from a pre-tax account (NOT a scheduled event) still incurs the
+        # early-withdrawal penalty: the penalty reads cash distributions from the books, so it
+        # sees the draw however it arose. A 60k expense against 5k cash forces a 65k draw from
+        # the IRA up to the 10k target; 10% of that is the penalty.
+        result = Forecast( ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.SINGLE,
+            tax_forecast  = _PROFILE,
+            subjects      = [ Subject( 'A', date( 1970, 1, 1 ), 'subject-a' ) ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '5000' ), Decimal( '5000' ) ),
+                AssetParameters(
+                    'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '500000' ), Decimal( '0' ),
+                    owner_handle = 'subject-a' ) ],
+            expenses      = [ _expense( 'Living', '60000' ) ],
+            cash_target   = Decimal( '10000' ),
+            draw_order    = [ AssetClass.PRETAX_RETIREMENT ],
+        ) ).run()
+        penalty = _notice( result, NoticeKind.EARLY_WITHDRAWAL_PENALTY )
+        self.assertEqual( penalty.severity, NoticeSeverity.WARNING )
+        self.assertEqual( penalty.amount, Decimal( '6500' ) )   # 10% of the 65k forced draw
+
     def test_cash_shortfall_and_depletion_raise_state_warnings( self ):
         # cash 10k, a 50k expense, no other assets: cash goes negative and net worth depletes
         result = Forecast( ForecastParameters(
