@@ -220,6 +220,30 @@ class ScheduledRealization( ScheduledEvent ):
         return Realization( self.event_date, holdings[ self.holding ], self.amount, target )
 
 
+@dataclass( frozen = True )
+class SubsidizedHealthCoverage:
+    """Income-subsidized individual-market healthcare coverage over a `window` -- a general
+    planning input named for the axis the model cares about (the income-based subsidy that
+    couples healthcare cost to the income/tax projection), not for any one program. It is the
+    privately-provided, individually-purchased, government-subsidized kind (the US ACA
+    marketplace; employer and government-provided coverage are different buckets that need no
+    node here -- Medicare's income *surcharge* joins later as a sibling). `household_size` is
+    the covered tax-family size; `reference_premium` is the annual premium the subsidy is
+    computed against, in today's dollars. The Forecast hands the year's coverage to the tax
+    engine, which (US) treats it as ACA enrollment and computes the premium tax credit;
+    outside the window the household is uncovered (no subsidy). STUB: constant over the window
+    -- a changing household size (survivor transition), premium inflation, and
+    enrollment-month proration join later."""
+
+    window            : DateWindow
+    household_size    : int
+    reference_premium : Decimal
+
+    def covers( self, on_date : date ) -> bool:
+        """Whether the household holds this coverage on `on_date`."""
+        return self.window.covers( on_date )
+
+
 @dataclass
 class ForecastParameters:
     """The full materialized inputs for an N-step Forecast (see module docstring)."""
@@ -228,18 +252,19 @@ class ForecastParameters:
     end_date          : date
     filing_status     : FilingStatus
     tax_forecast      : TaxForecastProfile
-    label             : str                     = ''
-    granularity       : Duration                = Duration( 1, TimeUnit.YEAR )
-    subjects          : list[ Subject ]         = field( default_factory = list )
-    assets            : list[ AssetParameters ] = field( default_factory = list )
-    economic_outlook  : EconomicOutlook         = field( default_factory = EconomicOutlook )
-    income_streams    : list[ IncomeStream ]    = field( default_factory = list )
-    expenses          : list[ ExpenseItem ]     = field( default_factory = list )
-    loans             : list[ LoanParameters ]  = field( default_factory = list )
-    events            : list[ ScheduledEvent ]  = field( default_factory = list )
-    cash_target       : Decimal                 = Decimal( '0' )
-    draw_order        : list[ AssetClass ]      = field( default_factory = list )
-    initial_tax_state : object                  = None
+    label             : str                                  = ''
+    granularity       : Duration                             = Duration( 1, TimeUnit.YEAR )
+    subjects          : list[ Subject ]                      = field( default_factory = list )
+    assets            : list[ AssetParameters ]              = field( default_factory = list )
+    economic_outlook  : EconomicOutlook                      = field( default_factory = EconomicOutlook )
+    income_streams    : list[ IncomeStream ]                 = field( default_factory = list )
+    expenses          : list[ ExpenseItem ]                  = field( default_factory = list )
+    loans             : list[ LoanParameters ]               = field( default_factory = list )
+    events            : list[ ScheduledEvent ]               = field( default_factory = list )
+    cash_target       : Decimal                              = Decimal( '0' )
+    draw_order        : list[ AssetClass ]                   = field( default_factory = list )
+    health_coverage   : Optional[ SubsidizedHealthCoverage ] = None
+    initial_tax_state : object                               = None
 
     def period_spans( self ) -> list[ DateSpan ]:
         """The horizon sliced into consecutive `granularity` intervals (the last truncated

@@ -189,7 +189,7 @@ class USFederalTaxEngine( TaxEngine ):
             status, figures.niit_magi, net_investment_income )
 
         payroll_tax = self._payroll_tax( status, fiscal_window )
-        premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.aca )
+        premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.health_enrollment )
 
         charges = [ TaxCharge( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
         if payroll_tax > 0:
@@ -380,20 +380,20 @@ class USFederalTaxEngine( TaxEngine ):
         band = rules.phaseout_end - rules.phaseout_start
         return rules.loss_allowance * ( rules.phaseout_end - magi ) / band
 
-    def _premium_tax_credit( self, aca_magi : Decimal, aca_enrollment ) -> Decimal:
+    def _premium_tax_credit( self, aca_magi : Decimal, enrollment ) -> Decimal:
         """The ACA premium tax credit: the benchmark plan cost less the household's
         expected contribution -- a share of income that is zero below the lower
         poverty-ratio and rises with the ratio to the cap -- floored at zero. Zero when
         not enrolled. Enrollment-month proration, advance-PTC reconciliation, the
         actual-premium cap, and the under-100%-FPL Medicaid floor are deferred."""
-        if aca_enrollment is None:
+        if enrollment is None:
             return _ZERO
         aca   = self._parameters.aca
-        ratio = aca_magi / aca.poverty_line( aca_enrollment.household_size )
+        ratio = aca_magi / aca.poverty_line( enrollment.household_size )
         applicable_rate = max( _ZERO, min(
             aca.applicable_max_rate, aca.applicable_slope * ( ratio - aca.applicable_lower_ratio ) ) )
         expected_contribution = applicable_rate * aca_magi
-        return max( _ZERO, aca_enrollment.benchmark_premium - expected_contribution )
+        return max( _ZERO, enrollment.reference_premium - expected_contribution )
 
     def _taxable_social_security(
             self, status, ss_gross : Decimal, other_income : Decimal ) -> Decimal:

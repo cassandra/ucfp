@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from ucfp.accounts.handle import Handle
+from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 
-from .aca import AcaEnrollment
 from .enums import FilingStatus
 from .property import TaxProperty
 
@@ -41,8 +41,9 @@ class TaxSubject:
 class TaxContext:
     """The resolved taxpayer facts for one fiscal window: the filing status, the people
     on the return (`subjects`), the real estate held (`properties`, for §121/§1250 at
-    sale and rental depreciation), ACA marketplace enrollment (`aca`, None when not
-    enrolled), and whether the taxpayer actively participates in rentals.
+    sale and rental depreciation), subsidized health-coverage enrollment (`health_enrollment`,
+    None when not enrolled, which the US engine turns into the ACA premium tax credit), and
+    whether the taxpayer actively participates in rentals.
 
     `rental_active_participation` is a single household-level flag: the passive-activity
     rules treat all rentals as one activity with uniform participation (see
@@ -51,10 +52,10 @@ class TaxContext:
     must therefore not create non-actively-participated rentals while this flag governs
     them all. See the engine docstring for the removal path."""
 
-    filing_status : FilingStatus
-    subjects      : tuple[ TaxSubject, ... ]  = field( default_factory = tuple )
-    properties    : tuple[ TaxProperty, ... ] = field( default_factory = tuple )
-    aca           : AcaEnrollment = None
+    filing_status     : FilingStatus
+    subjects          : tuple[ TaxSubject, ... ]  = field( default_factory = tuple )
+    properties        : tuple[ TaxProperty, ... ] = field( default_factory = tuple )
+    health_enrollment : Optional[ SubsidizedHealthEnrollment ] = None
     rental_active_participation : bool = True
 
     def count_age_at_least( self, age : int ) -> int:

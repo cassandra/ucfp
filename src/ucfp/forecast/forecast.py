@@ -53,6 +53,7 @@ from ucfp.period.parameters import (
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
 from ucfp.tax.law import TaxLaw
+from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.tax.us.context import TaxContext, TaxSubject
 from ucfp.tax.us.property import PropertyDisposition, TaxProperty
 
@@ -463,9 +464,10 @@ class Forecast:
         return Decimal( period_days ) / Decimal( year_days )
 
     def _tax_context_for( self, span : DateSpan ) -> TaxContext:
-        """The taxpayer context for the interval: ages from birthdates at the interval's end
-        and the rental properties (depreciation attributes plus any in-year disposition).
-        STUB: filing status static; ACA not yet resolved."""
+        """The taxpayer context for the interval: ages from birthdates at the interval's end,
+        the rental properties (depreciation attributes plus any in-year disposition), and the
+        household's subsidized health enrollment when coverage is in force. STUB: filing status
+        static."""
         subjects = tuple(
             TaxSubject(
                 handle     = subject.handle,
@@ -473,10 +475,23 @@ class Forecast:
                 birth_year = subject.birthdate.year )
             for subject in self._parameters.subjects )
         return TaxContext(
-            filing_status = self._parameters.filing_status,
-            subjects      = subjects,
-            properties    = self._tax_properties_for( span ),
+            filing_status     = self._parameters.filing_status,
+            subjects          = subjects,
+            properties        = self._tax_properties_for( span ),
+            health_enrollment = self._subsidized_health_enrollment_for( span ),
         )
+
+    def _subsidized_health_enrollment_for(
+            self, span : DateSpan ) -> Optional[ SubsidizedHealthEnrollment ]:
+        """Resolve the household's windowed subsidized health coverage, if in force this
+        interval, into the single-year `SubsidizedHealthEnrollment` the tax engine consumes
+        (and, in the US, turns into the ACA premium tax credit). None when uncovered."""
+        coverage = self._parameters.health_coverage
+        if ( coverage is None ) or ( not coverage.covers( span.end_date ) ):
+            return None
+        return SubsidizedHealthEnrollment(
+            household_size    = coverage.household_size,
+            reference_premium = coverage.reference_premium )
 
     def _tax_properties_for( self, span : DateSpan ) -> tuple:
         """The engine's `TaxProperty` for each rental: its depreciation attributes (for the
