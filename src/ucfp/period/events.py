@@ -46,6 +46,27 @@ class Transfer( PeriodEvent ):
 
 
 @dataclass( frozen = True )
+class Windfall( PeriodEvent ):
+    """Value received from outside landing in cash -- a one-time inflow (lottery, settlement,
+    gift, inheritance), the non-recurring counterpart of an income stream. The cash account is
+    debited and `credit_account` credited: a revenue account when the windfall is taxable (the
+    engine then taxes it at year-close), or the External Receipts equity account when it is
+    not (gifts, US inheritances), which the engine never sees."""
+
+    event_date     : date
+    cash_account   : Account
+    credit_account : Account
+    amount         : Decimal
+
+    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
+        bookkeeper.record(
+            self.event_date,
+            [ ( self.cash_account, -self.amount ), ( self.credit_account, self.amount ) ],
+        )
+        return []
+
+
+@dataclass( frozen = True )
 class Purchase( PeriodEvent ):
     """Acquire an asset at cost, funded from a cash account: the asset account
     gains the cost (its basis); the funding account is drawn down."""

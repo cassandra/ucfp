@@ -57,7 +57,13 @@ from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.tax.us.context import TaxContext, TaxSubject
 from ucfp.tax.us.property import PropertyDisposition, TaxProperty
 
-from .parameters import ExpenseItem, ForecastParameters, ScheduledRealization, Subject
+from .parameters import (
+    ExpenseItem,
+    ForecastParameters,
+    ScheduledRealization,
+    ScheduledWindfall,
+    Subject,
+)
 
 
 # A loan resolved against the books: its parameters plus the accounts and the level
@@ -204,6 +210,7 @@ class Forecast:
         self._seed_opening_balances( bookkeeper, holdings )
         self._create_income_accounts( bookkeeper )
         self._create_asset_income_accounts( bookkeeper )
+        self._create_windfall_income_accounts( bookkeeper )
         self._create_expense_accounts( bookkeeper )
         self._create_tax_accounts( bookkeeper )
         self._resolve_draw_priority( bookkeeper )
@@ -315,6 +322,23 @@ class Forecast:
             continue
         return
 
+    def _create_windfall_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
+        """Create a revenue account for each income class a taxable windfall credits, if one
+        does not already exist, so a taxable windfall has somewhere to post (non-taxable
+        windfalls credit the External Receipts equity account, already in the chart)."""
+        chart = bookkeeper.chart
+        revenue_root = chart.root( AccountType.REVENUE )
+        income_classes = {
+            event.income_tax_class for event in self._parameters.events
+            if isinstance( event, ScheduledWindfall ) and ( event.income_tax_class is not None ) }
+        for income_class in sorted( income_classes, key = lambda klass : klass.name ):
+            if chart.income_account( income_class ) is None:
+                bookkeeper.add_account(
+                    Account( name = income_class.label, parent = revenue_root,
+                             income_tax_class = income_class ) )
+            continue
+        return
+
     def _resolve_draw_priority( self, bookkeeper : Bookkeeper ) -> None:
         """Bind the user's `draw_order` (asset classes, in priority) to the actual holding
         accounts: each class expands to its holdings (drawn sequentially), flattened into
@@ -392,11 +416,12 @@ class Forecast:
 
     def _events_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list:
         """Resolve the scheduled events occurring in this interval into PeriodEvents, binding
-        their named holdings to the running accounts (and the cash hub for sale proceeds and
-        purchase funding). Order is preserved, so same-interval events apply as authored."""
-        cash = bookkeeper.chart.cash_account()
+        their named holdings to the running accounts via the chart (which also supplies the
+        cash hub and the revenue/equity accounts a windfall credits). Order is preserved, so
+        same-interval events apply as authored."""
+        chart = bookkeeper.chart
         return [
-            event.to_period_event( self._holding_by_name, cash )
+            event.to_period_event( self._holding_by_name, chart )
             for event in self._parameters.events if event.in_span( span ) ]
 
     def _clip_to_window( self, span : DateSpan, window : DateWindow ) -> Optional[ tuple[ date, date ] ]:

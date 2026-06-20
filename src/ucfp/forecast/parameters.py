@@ -24,9 +24,17 @@ from common.rate import Rate
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.books import Account
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
+from ucfp.accounts.chart import Chart
+from ucfp.accounts.enums import (
+    AssetClass,
+    ExpenseTaxClass,
+    IncomeTaxClass,
+    RealPropertyType,
+    SystemAccountRole,
+)
+from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.handle import Handle
-from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer
+from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer, Windfall
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
@@ -159,7 +167,7 @@ class ScheduledEvent:
     """Base for a user-scheduled money-movement event: it names the holdings it touches and
     the date it occurs, and resolves to a `PeriodEvent` (which holds the accounts) once the
     Forecast has built the books. `to_period_event` receives `holdings` (asset name ->
-    holding account) and the cash hub.
+    holding account) and the `Chart` (for the cash hub and other system/revenue accounts).
 
     PLACEHOLDER: holdings are referenced by their (run-unique) `name` string. This is the
     deficient stand-in for a stable `Handle` -- the planner-owned, serializable account
@@ -172,8 +180,15 @@ class ScheduledEvent:
         """Whether this event occurs within the interval `span`."""
         return span.start_date <= self.event_date <= span.end_date
 
-    def to_period_event( self, holdings : dict[ str, Account ], cash : Account ) -> PeriodEvent:
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
         raise NotImplementedError
+
+    def _cash( self, chart : Chart ) -> Account:
+        """The cash hub the event moves value through, or a MissingAccountError."""
+        cash = chart.cash_account()
+        if cash is None:
+            raise MissingAccountError( 'No cash account for the scheduled event.' )
+        return cash
 
 
 @dataclass( frozen = True )
@@ -186,7 +201,7 @@ class ScheduledTransfer( ScheduledEvent ):
     target     : str
     amount     : Decimal
 
-    def to_period_event( self, holdings : dict[ str, Account ], cash : Account ) -> PeriodEvent:
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
         return Transfer( self.event_date, holdings[ self.source ], holdings[ self.target ], self.amount )
 
 
@@ -200,8 +215,8 @@ class ScheduledPurchase( ScheduledEvent ):
     asset      : str
     amount     : Decimal
 
-    def to_period_event( self, holdings : dict[ str, Account ], cash : Account ) -> PeriodEvent:
-        return Purchase( self.event_date, cash, holdings[ self.asset ], self.amount )
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
+        return Purchase( self.event_date, self._cash( chart ), holdings[ self.asset ], self.amount )
 
 
 @dataclass( frozen = True )
@@ -215,9 +230,35 @@ class ScheduledRealization( ScheduledEvent ):
     amount      : Decimal
     destination : Optional[ str ] = None
 
-    def to_period_event( self, holdings : dict[ str, Account ], cash : Account ) -> PeriodEvent:
-        target = cash if self.destination is None else holdings[ self.destination ]
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
+        target = self._cash( chart ) if self.destination is None else holdings[ self.destination ]
         return Realization( self.event_date, holdings[ self.holding ], self.amount, target )
+
+
+@dataclass( frozen = True )
+class ScheduledWindfall( ScheduledEvent ):
+    """A one-time receipt of value from outside, landing in cash -- the non-recurring
+    counterpart of an income stream. `income_tax_class` classifies it the way a stream or
+    expense item carries its tax class: set (e.g. `ORDINARY`) for a taxable windfall (lottery,
+    settlement), which credits that revenue account and is taxed at year-close; None for a
+    non-taxable receipt (a gift, or a US inheritance -- which is non-taxable to the recipient,
+    estate tax being the estate's), which credits the External Receipts equity account and is
+    never taxed. STUB: a recipient-side inheritance/estate tax regime (some jurisdictions) has
+    no home yet -- raise it as unimplemented if needed."""
+
+    event_date       : date
+    amount           : Decimal
+    income_tax_class : Optional[ IncomeTaxClass ] = None
+
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
+        if self.income_tax_class is None:
+            credit_account = chart.system_account( SystemAccountRole.EXTERNAL_RECEIPTS )
+        else:
+            credit_account = chart.income_account( self.income_tax_class )
+            if credit_account is None:
+                raise MissingAccountError(
+                    f'No revenue account for income tax-class {self.income_tax_class.label}.' )
+        return Windfall( self.event_date, self._cash( chart ), credit_account, self.amount )
 
 
 @dataclass( frozen = True )

@@ -76,6 +76,8 @@ class SystemAccountRole( LabeledEnum ):
 
     OPENING_BALANCES = ( 'Opening Balances' , 'Equity counterpart for a Journal opening seed.' )
     UNREALIZED_GAINS = ( 'Unrealized Gains' , 'Equity counterpart for unrealized appreciation.' )
+    EXTERNAL_RECEIPTS = (
+        'External Receipts', 'Equity counterpart for non-taxable value received from outside.' )
 
 
 class AssetClass( LabeledEnum ):
