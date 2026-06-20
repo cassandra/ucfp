@@ -27,7 +27,7 @@ from ucfp.accounts.money_utils import quantize_money
 from .events import Realization
 from .fiscal_window import FiscalWindow
 from .parameters import DateSpan, PeriodParameters
-from .results import Notice, PeriodResult
+from .results import Notice, NoticeKind, NoticeSeverity, PeriodResult
 
 
 class Period:
@@ -194,10 +194,11 @@ class Period:
         return
 
     def _apply_events( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Apply each scheduled PeriodEvent (transfer, purchase, sale, conversion);
-        each materializes its own balanced transaction(s)."""
+        """Apply each scheduled PeriodEvent (transfer, purchase, realization, windfall); each
+        materializes its own balanced transaction. Scheduled events are the user's requested
+        operations, so they raise no Notices (a Notice flags the unrequested)."""
         for event in self._parameters.events:
-            result.notices.extend( event.apply( bookkeeper ) )
+            event.apply( bookkeeper )
             continue
         return
 
@@ -250,55 +251,65 @@ class Period:
         return
 
     def _book_charges( self, bookkeeper : Bookkeeper, settlements : list, settle_date ) -> None:
-        """Book each `(expense tax-class, amount)` as a tax expense drawn from the cash hub
-        (DR expense / CR cash); a negative amount -- a refundable credit -- reverses it."""
-        chart = bookkeeper.chart
-        cash_account = chart.cash_account()
+        """Book each `(expense tax-class, amount)` as a tax expense drawn from the cash hub."""
         for expense_class, amount in settlements:
-            amount = quantize_money( amount )
-            if amount == 0:
-                continue
-            if cash_account is None:
-                raise MissingAccountError( 'No cash account to pay tax from.' )
-            expense_account = chart.expense_account( expense_class )
-            if expense_account is None:
-                raise MissingAccountError(
-                    f'No expense account for expense tax-class {expense_class.label}.'
-                )
-            bookkeeper.record(
-                settle_date,
-                [ ( expense_account, -amount ), ( cash_account, amount ) ],
-            )
+            self._book_charge( bookkeeper, expense_class, amount, settle_date )
             continue
         return
 
+    def _book_charge( self, bookkeeper : Bookkeeper, expense_class, amount, settle_date,
+                      description : str = '' ):
+        """Book one `expense_class` charge as a tax expense drawn from the cash hub (DR expense
+        / CR cash); a negative amount -- a refundable credit -- reverses it. Returns the posted
+        transaction, or None for a zero amount, so a caller can reference it in a Notice."""
+        amount = quantize_money( amount )
+        if amount == 0:
+            return None
+        chart = bookkeeper.chart
+        cash_account = chart.cash_account()
+        if cash_account is None:
+            raise MissingAccountError( 'No cash account to pay tax from.' )
+        expense_account = chart.expense_account( expense_class )
+        if expense_account is None:
+            raise MissingAccountError(
+                f'No expense account for expense tax-class {expense_class.label}.' )
+        return bookkeeper.record(
+            settle_date, [ ( expense_account, -amount ), ( cash_account, amount ) ],
+            description = description )
+
     def _assess_penalties( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """At the tax-year close, book the penalties the engine reads from the books view (the
-        early-withdrawal penalty) -- each a tax expense from cash, with a Notice. Reading the
-        whole year's distributions from the books (not this interval's events) means it sees
-        them however they arose, funding draws included; the engine owns the rule."""
+        early-withdrawal penalty) -- each a tax expense from cash, with a WARNING Notice linked
+        to its charge (the charge's memo carries the reason). Reading the whole year's
+        distributions from the books (not this interval's events) means it sees them however
+        they arose, funding draws included; the engine owns the rule."""
         fiscal_window = self._fiscal_window( bookkeeper )
         if fiscal_window is None:
             return
         penalties = self._parameters.tax_engine.assess_penalties(
             fiscal_window, self._parameters.tax_context )
-        if not penalties:
-            return
-        self._book_charges(
-            bookkeeper,
-            [ ( penalty.tax_class, penalty.amount ) for penalty in penalties ],
-            self._parameters.date_span.end_date,
-        )
+        settle_date = self._parameters.date_span.end_date
         for penalty in penalties:
-            result.notices.append( Notice( penalty.reason ) )
+            charge = self._book_charge(
+                bookkeeper, penalty.tax_class, penalty.amount, settle_date,
+                description = penalty.reason )
+            if charge is None:
+                continue
+            result.notices.append(
+                Notice(
+                    kind             = NoticeKind.EARLY_WITHDRAWAL_PENALTY,
+                    severity         = NoticeSeverity.WARNING,
+                    amount           = penalty.amount,
+                    transaction_uuid = charge.transaction_uuid ) )
             continue
         return
 
     def _check_forced_tax_transactions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """At the tax-year close, apply the transactions the tax law forces (RMDs today): the
         engine reads the books view and returns them; the Period executes each as a realization
-        to cash and notes it. Run first among the close steps, so the forced income is funded
-        and taxed with the rest."""
+        to cash, with an INFO Notice linked to it (the transaction's memo carries the reason).
+        Run first among the close steps, so the forced income is funded and taxed with the
+        rest."""
         fiscal_window = self._fiscal_window( bookkeeper )
         if fiscal_window is None:
             return
@@ -311,10 +322,17 @@ class Period:
         if cash_account is None:
             raise MissingAccountError( 'No cash account to receive forced distributions.' )
         for forced_transaction in forced:
-            Realization(
+            transaction = Realization(
                 period_end, forced_transaction.account, forced_transaction.amount, cash_account
-            ).apply( bookkeeper )
-            result.notices.append( Notice( forced_transaction.reason ) )
+            ).apply( bookkeeper, description = forced_transaction.reason )
+            if transaction is None:
+                continue
+            result.notices.append(
+                Notice(
+                    kind             = NoticeKind.REQUIRED_MINIMUM_DISTRIBUTION,
+                    severity         = NoticeSeverity.INFO,
+                    amount           = forced_transaction.amount,
+                    transaction_uuid = transaction.transaction_uuid ) )
             continue
         return
 
@@ -349,23 +367,45 @@ class Period:
                     raise MissingAccountError(
                         f'No revenue account for income tax-class {income_class.label}.'
                     )
-            bookkeeper.realize(
+            transaction = bookkeeper.realize(
                 source,
                 draw,
                 proceeds_account = cash_account,
                 realized_gain_account = realized_gain_account,
                 on_date = fund_date,
+                description = f'Funding draw from {source} to cover a savings shortfall.',
             )
-            result.notices.append(
-                Notice( f'Drew {draw} from "{source}" to cover a savings shortfall.' )
-            )
+            if transaction is not None:
+                result.notices.append(
+                    Notice(
+                        kind             = NoticeKind.FUNDING_DRAW,
+                        severity         = NoticeSeverity.INFO,
+                        amount           = draw,
+                        transaction_uuid = transaction.transaction_uuid ) )
             continue
         return
 
     def _close( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Finalize the period: flag the stop condition when net worth is depleted
-        (assets no longer cover liabilities), which ends the Forecast."""
-        if bookkeeper.ledger.net_worth() <= 0:
+        """Finalize the period: warn on a cash shortfall (the balance went negative) and flag
+        the stop condition when net worth is depleted (assets no longer cover liabilities),
+        which ends the Forecast. Both are constraint outcomes the user did not request, so both
+        raise a WARNING Notice (state-level, with no linked transaction)."""
+        ledger = bookkeeper.ledger
+        cash_account = bookkeeper.chart.cash_account()
+        if cash_account is not None:
+            cash_balance = ledger.natural_balance( cash_account )
+            if cash_balance < 0:
+                result.notices.append(
+                    Notice(
+                        kind     = NoticeKind.CASH_SHORTFALL,
+                        severity = NoticeSeverity.WARNING,
+                        amount   = cash_balance ) )
+        net_worth = ledger.net_worth()
+        if net_worth <= 0:
             result.is_depleted = True
-            result.notices.append( Notice( 'Net worth depleted; the forecast should stop.' ) )
+            result.notices.append(
+                Notice(
+                    kind     = NoticeKind.NET_WORTH_DEPLETED,
+                    severity = NoticeSeverity.WARNING,
+                    amount   = net_worth ) )
         return

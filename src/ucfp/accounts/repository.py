@@ -57,6 +57,7 @@ class BooksOfAccountRepository:
         for txn in books.transactions:
             txn_record = TransactionRecord.objects.create(
                 books            = books_record,
+                uuid             = txn.transaction_uuid,
                 transaction_date = txn.transaction_date,
                 description      = txn.description,
             )
@@ -95,6 +96,7 @@ class BooksOfAccountRepository:
                     transaction_date = txn_record.transaction_date,
                     description      = txn_record.description,
                     entries          = entries,
+                    transaction_uuid = txn_record.uuid,
                 )
             )
             continue

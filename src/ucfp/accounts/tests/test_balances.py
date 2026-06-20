@@ -95,6 +95,7 @@ class BooksOfAccountRepositoryTests(TestCase):
             date( 2026, 1, 1 ),
             [ ( cash, Decimal( '-100000' ) ), ( stocks, Decimal( '-400000' ) ),
               ( opening, Decimal( '500000' ) ) ],
+            description = 'Opening balances',
         )
         return bookkeeper
 
@@ -129,4 +130,9 @@ class BooksOfAccountRepositoryTests(TestCase):
         self.assertEqual( loaded_stocks.owner_handle, 'subject-a' )
         loaded_cash = next( a for a in reader.chart.holdings() if a.name == 'Cash' )
         self.assertIsNone( loaded_cash.handle )
+        # the transaction's memo and its uuid identity round-trip (the uuid is the persisted key)
+        original_txn = bookkeeper.books.transactions[ 0 ]
+        loaded_txn = loaded.transactions[ 0 ]
+        self.assertEqual( loaded_txn.description, 'Opening balances' )
+        self.assertEqual( loaded_txn.transaction_uuid, original_txn.transaction_uuid )
         reader.assert_balanced()

@@ -11,20 +11,21 @@ the engine-internal type.
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 
-from ucfp.accounts.books import Account
+from ucfp.accounts.books import Account, Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.exceptions import MissingAccountError
-
-from .results import Notice
 
 
 class PeriodEvent:
     """Base for a self-applying Period operation; subclasses implement `apply`."""
 
-    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
-        """Post this operation's balanced transaction(s) via `bookkeeper`, returning any
-        Notices it raises."""
+    def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
+        """Post this operation's balanced transaction via `bookkeeper`, with `description` as
+        its memo, and return it (None if nothing was posted) -- so a caller can reference the
+        transaction, e.g. in a Notice. Events themselves raise no Notices: they are the user's
+        requested operations, so they carry a memo, not an attention signal."""
         raise NotImplementedError
 
 
@@ -37,12 +38,12 @@ class Transfer( PeriodEvent ):
     target_account : Account
     amount         : Decimal
 
-    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
-        bookkeeper.record(
+    def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
+        return bookkeeper.record(
             self.event_date,
             [ ( self.target_account, -self.amount ), ( self.source_account, self.amount ) ],
+            description = description,
         )
-        return []
 
 
 @dataclass( frozen = True )
@@ -58,12 +59,12 @@ class Windfall( PeriodEvent ):
     credit_account : Account
     amount         : Decimal
 
-    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
-        bookkeeper.record(
+    def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
+        return bookkeeper.record(
             self.event_date,
             [ ( self.cash_account, -self.amount ), ( self.credit_account, self.amount ) ],
+            description = description,
         )
-        return []
 
 
 @dataclass( frozen = True )
@@ -76,12 +77,12 @@ class Purchase( PeriodEvent ):
     asset_account   : Account
     amount          : Decimal
 
-    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
-        bookkeeper.record(
+    def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
+        return bookkeeper.record(
             self.event_date,
             [ ( self.asset_account, -self.amount ), ( self.funding_account, self.amount ) ],
+            description = description,
         )
-        return []
 
 
 @dataclass( frozen = True )
@@ -98,7 +99,7 @@ class Realization( PeriodEvent ):
     amount      : Decimal
     destination : Account
 
-    def apply( self, bookkeeper : Bookkeeper ) -> list[ Notice ]:
+    def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
         chart = bookkeeper.chart
         income_class = self.holding.asset_class.realized_gain_income_class
         realized_gain_account = None
@@ -108,11 +109,11 @@ class Realization( PeriodEvent ):
                 raise MissingAccountError(
                     f'No revenue account for income tax-class {income_class.label}.'
                 )
-        bookkeeper.realize(
+        return bookkeeper.realize(
             self.holding,
             self.amount,
             proceeds_account = self.destination,
             realized_gain_account = realized_gain_account,
             on_date = self.event_date,
+            description = description,
         )
-        return []

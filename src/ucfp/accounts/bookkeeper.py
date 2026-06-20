@@ -101,10 +101,12 @@ class Bookkeeper:
 
     def record( self,
                 transaction_date : date,
-                signed_postings  : Iterable[ tuple[ Account, Decimal ] ] ) -> Transaction:
+                signed_postings  : Iterable[ tuple[ Account, Decimal ] ],
+                description      : str = '' ) -> Transaction:
         """Build and post a balanced transaction from (account, signed_amount) pairs
         (credit-positive); each entry's direction is derived from its sign. Zero-amount
-        postings are skipped."""
+        postings are skipped. `description` is the transaction's memo -- the always-on 'why'
+        of the posting, distinct from any Notice that may highlight it."""
         entries = list()
         for account, signed_amount in signed_postings:
             if signed_amount == 0:
@@ -114,7 +116,8 @@ class Bookkeeper:
                 Entry( account = account, amount = abs( signed_amount ), entry_direction = direction )
             )
             continue
-        transaction = Transaction( transaction_date = transaction_date, entries = entries )
+        transaction = Transaction(
+            transaction_date = transaction_date, description = description, entries = entries )
         self.post( transaction )
         return transaction
 
@@ -132,16 +135,18 @@ class Bookkeeper:
                  *,
                  proceeds_account      : Account,
                  realized_gain_account : Account,
-                 on_date               : date ) -> None:
+                 on_date               : date,
+                 description           : str = '' ) -> Optional[ Transaction ]:
         """Realize `proceeds` of `holding`'s market value into `proceeds_account`: draw
         down cost and valuation proportionally, recognize the realized gain (the valuation
         portion) into `realized_gain_account`, and reverse the Unrealized Gains equity.
         Net-worth-neutral -- the gain just moves from unrealized to realized (taxable).
-        Caps at the holding's market value."""
+        Caps at the holding's market value. Returns the posted transaction (None if the
+        holding has no value to realize), so a caller can reference it (e.g. in a Notice)."""
         ledger = self.ledger
         market = ledger.market_value( holding )
         if market <= 0:
-            return
+            return None
         proceeds = quantize_money( min( proceeds, market ) )
         valuation_account = self.chart.valuation_of( holding )
         if valuation_account is None:
@@ -161,8 +166,7 @@ class Bookkeeper:
                 ( unrealized_gain_account, -gain ),
                 ( realized_gain_account, gain ),
             ]
-        self.record( on_date, postings )
-        return
+        return self.record( on_date, postings, description = description )
 
     # -- invariants and index access -----------------------------------------
 

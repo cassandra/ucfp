@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from typing import Optional
+from uuid import UUID, uuid4
 
 from .enums import (
     AccountType,
@@ -130,11 +131,18 @@ class Entry:
 @dataclass( eq = False )
 class Transaction:
     """A balanced movement of value: its date and its `Entry`s, whose signed amounts sum
-    to zero (the core double-entry invariant). Its magnitude is derived, never stored."""
+    to zero (the core double-entry invariant). Its magnitude is derived, never stored.
+
+    `transaction_uuid` is the engine's internal identity for the transaction (assigned at
+    creation) -- distinct from the planner's `Handle`, since a transaction is engine-generated,
+    not planner-authored. It is exactly the persisted `TransactionRecord.uuid`, so a `Notice`
+    that references the transaction it concerns by this uuid keeps that link across
+    serialization."""
 
     transaction_date : date
     description      : str          = ''
     entries          : list[ Entry ] = field( default_factory = list )
+    transaction_uuid : UUID         = field( default_factory = uuid4 )
 
     def __str__( self ):
         return f'{self.transaction_date} {self.description}'.strip()

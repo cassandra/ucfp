@@ -1,19 +1,52 @@
 """Outputs of a Period computation."""
 from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Optional
+from uuid import UUID
+
+from common.labeled_enum import LabeledEnum
+
+
+class NoticeSeverity( LabeledEnum ):
+    """How much a Notice should draw the user's attention -- the sort key for importance.
+    Two levels for now: informational (a consequential automatic action that is fine) and
+    a warning (an adverse or constraint-straining outcome). Defined low-to-high."""
+
+    INFO    = ( 'Info', 'A consequential automatic action worth surfacing; nothing wrong.' )
+    WARNING = ( 'Warning', 'An adverse or constraint-straining outcome the user may need to act on.' )
+
+
+class NoticeKind( LabeledEnum ):
+    """The category of a Notice -- its label is the human title, so the kind alone says what
+    happened without reading the linked transaction. Add members as the catalog grows."""
+
+    FUNDING_DRAW = (
+        'Funding Draw', 'Assets were sold to cover a cash shortfall to the target buffer.' )
+    REQUIRED_MINIMUM_DISTRIBUTION = (
+        'Required Minimum Distribution', 'A pre-tax retirement RMD was forced.' )
+    EARLY_WITHDRAWAL_PENALTY = (
+        'Early-Withdrawal Penalty', 'A 10% penalty was charged on an early retirement withdrawal.' )
+    CASH_SHORTFALL = (
+        'Cash Shortfall', 'The cash balance went negative -- spending outran available cash.' )
+    NET_WORTH_DEPLETED = (
+        'Net Worth Depleted', 'Assets no longer cover liabilities; the forecast stops.' )
 
 
 @dataclass( frozen = True )
 class Notice:
-    """A notable occurrence raised during a Period -- a forced draw, an asset sold,
-    savings depleted. This is the planning-insight stream the Forecast accumulates
-    and surfaces to the user, distinct from the *input* events: a Notice is what
-    actually happened.
+    """A notable occurrence raised during a Period -- the planning-insight stream the Forecast
+    accumulates and surfaces to the user, distinct from the *input* events: a Notice is what
+    actually happened that the user should attend to but did not directly request.
 
-    NOTE: a single message for now; a typed kind + structured payload (and a link
-    to the realizing transaction) will come as the surfacing layer is built.
-    """
+    `kind` is the self-describing category (its label is the title). `severity` ranks
+    importance. `amount` is the figure the notice carries (a penalty, an RMD, the shortfall),
+    or None. `transaction_uuid` links to the originating transaction (whose `description` memo
+    carries the per-posting detail) -- None for a notice about a state rather than a posting."""
 
-    message : str
+    kind             : NoticeKind
+    severity         : NoticeSeverity
+    amount           : Optional[ Decimal ] = None
+    transaction_uuid : Optional[ UUID ]    = None
 
 
 @dataclass
