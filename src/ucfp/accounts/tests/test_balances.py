@@ -88,6 +88,8 @@ class BooksOfAccountRepositoryTests(TestCase):
         asset_root = chart.root( AccountType.ASSET )
         cash = bookkeeper.create_holding( asset_root, 'Cash', AssetClass.CASH )
         stocks = bookkeeper.create_holding( asset_root, 'Brokerage', AssetClass.STOCKS )
+        stocks.handle = 'brokerage-1'
+        stocks.owner_handle = 'subject-a'
         opening = chart.system_account( SystemAccountRole.OPENING_BALANCES )
         bookkeeper.record(
             date( 2026, 1, 1 ),
@@ -122,4 +124,9 @@ class BooksOfAccountRepositoryTests(TestCase):
         self.assertEqual( len( loaded.accounts ), len( bookkeeper.books.accounts ) )
         loaded_stocks = next( a for a in reader.chart.holdings() if a.name == 'Brokerage' )
         self.assertIsNotNone( reader.chart.valuation_of( loaded_stocks ) )
+        # handles round-trip as their string form (a str satisfies the Handle protocol)
+        self.assertEqual( loaded_stocks.handle, 'brokerage-1' )
+        self.assertEqual( loaded_stocks.owner_handle, 'subject-a' )
+        loaded_cash = next( a for a in reader.chart.holdings() if a.name == 'Cash' )
+        self.assertIsNone( loaded_cash.handle )
         reader.assert_balanced()

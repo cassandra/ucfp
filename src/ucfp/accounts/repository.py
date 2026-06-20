@@ -9,8 +9,18 @@ keeps its own domain<->record correspondence rather than relying on any shared k
 from django.db import transaction
 
 from .books import Account, BooksOfAccount, Entry, Transaction
+from .handle import Handle
 from .models import AccountRecord, BooksOfAccountRecord, EntryRecord, TransactionRecord
 from organization.models import Organization
+
+
+def _handle_string( handle : Handle ) -> str:
+    """A handle's persisted string form (its identity, per the Handle contract), or None. The
+    reloaded account carries this string back as its handle -- a str satisfies the protocol --
+    so identity round-trips without the planner's original handle type."""
+    if handle is None:
+        return None
+    return str( handle )
 
 
 class BooksOfAccountRepository:
@@ -38,6 +48,8 @@ class BooksOfAccountRepository:
                 income_tax_class  = account.income_tax_class,
                 expense_tax_class = account.expense_tax_class,
                 name              = account.name,
+                handle            = _handle_string( account.handle ),
+                owner_handle      = _handle_string( account.owner_handle ),
                 description       = account.description,
                 closed            = account.closed,
             )
@@ -110,6 +122,8 @@ class BooksOfAccountRepository:
             is_valuation      = record.is_valuation,
             income_tax_class  = record.income_tax_class,
             expense_tax_class = record.expense_tax_class,
+            handle            = record.handle,
+            owner_handle      = record.owner_handle,
             description       = record.description,
             closed            = record.closed,
         )

@@ -129,6 +129,20 @@ class AccountRecord( TimestampedModel ):
         null = False,
         blank = False,
     )
+    handle = models.CharField(
+        'Handle',
+        max_length = 128,
+        null = True,
+        blank = True,
+        default = None,
+    )
+    owner_handle = models.CharField(
+        'Owner Handle',
+        max_length = 128,
+        null = True,
+        blank = True,
+        default = None,
+    )
     description = models.TextField(
         'Description',
         blank = True,
@@ -152,6 +166,11 @@ class AccountRecord( TimestampedModel ):
                 fields = [ 'books', 'system_role' ],
                 condition = models.Q( system_role__isnull = False ),
                 name = 'unique_system_account_role_per_books',
+            ),
+            models.UniqueConstraint(
+                fields = [ 'books', 'handle' ],
+                condition = models.Q( handle__isnull = False ),
+                name = 'unique_account_handle_per_books',
             ),
         ]
 
