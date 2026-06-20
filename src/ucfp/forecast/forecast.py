@@ -106,7 +106,9 @@ class IncomeAccounts:
     """The revenue account for each `(subject, income tax-class)`, created on first request
     and reused after. It owns the account key, so creation and per-period posting resolve
     to the same account -- the key is defined here and nowhere else. Per subject so wages
-    stay per-worker (the FICA cap) and Social Security per person."""
+    stay per-worker (the FICA cap) and Social Security per person. Each account carries its
+    subject's handle as `owner_handle`, so the planner associates it by `(owner, class)` --
+    many streams of one (subject, class) share the account, so it bears no own handle."""
 
     def __init__( self, bookkeeper : Bookkeeper ):
         self._bookkeeper = bookkeeper
@@ -124,6 +126,7 @@ class IncomeAccounts:
                     name             = f'{subject.name} {income_tax_class.label}',
                     parent           = self._revenue_root,
                     income_tax_class = income_tax_class,
+                    owner_handle     = subject.handle,
                 )
             )
             self._account_by_key[ key ] = account
@@ -143,7 +146,7 @@ class ExpenseAccounts:
 
     def account_for( self, item : ExpenseItem ) -> Account:
         """The expense account for `item`, creating it under the Expenses root on first
-        request."""
+        request and stamping the item's handle so the planner can associate it in results."""
         account = self._account_by_name.get( item.name )
         if account is None:
             account = self._bookkeeper.add_account(
@@ -151,6 +154,7 @@ class ExpenseAccounts:
                     name              = item.name,
                     parent            = self._expense_root,
                     expense_tax_class = item.expense_tax_class,
+                    handle            = item.handle,
                 )
             )
             self._account_by_name[ item.name ] = account
@@ -269,10 +273,11 @@ class Forecast:
         liability_root = bookkeeper.chart.root( AccountType.LIABILITY )
         expense_root = bookkeeper.chart.root( AccountType.EXPENSE )
         for loan in self._parameters.loans:
-            account = bookkeeper.add_account( Account( name = loan.name, parent = liability_root ) )
+            account = bookkeeper.add_account(
+                Account( name = loan.name, parent = liability_root, handle = loan.handle ) )
             interest_account = bookkeeper.add_account(
                 Account( name = f'{loan.name} Interest', parent = expense_root,
-                         expense_tax_class = loan.interest_class ) )
+                         expense_tax_class = loan.interest_class, handle = loan.interest_handle ) )
             periodic_rate = loan.interest_rate.fraction / self._periods_per_year
             periods = loan.term.months() // self._parameters.granularity.months()
             payment = _amortized_payment( loan.opening_balance, periodic_rate, periods )

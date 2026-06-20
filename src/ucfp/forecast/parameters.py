@@ -138,13 +138,16 @@ class ExpenseItem:
     time (today's dollars, stepping with lifestyle); `recurrence` places the occurrences;
     `window` is the item's existence. The Forecast posts, per interval, the occurrences in
     that interval x the amount then in effect, inflated -- to a per-item account tagged with
-    `expense_tax_class`, so the Books keep item detail while tax aggregates by class."""
+    `expense_tax_class`, so the Books keep item detail while tax aggregates by class. `handle`
+    is the planner's identity for the item's account, to associate it with the planner's
+    artifact in results; optional."""
 
     name              : str
     expense_tax_class : ExpenseTaxClass
     amounts           : Schedule[ WindowedAmount ]
     recurrence        : Recurrence
-    window            : DateWindow = DateWindow()
+    window            : DateWindow      = DateWindow()
+    handle            : Optional[ Handle ] = None
 
 
 @dataclass( frozen = True )
@@ -156,14 +159,19 @@ class LoanParameters:
     interest expense account (deductibility per `interest_class`) and reduces the balance by
     principal (= payment - interest) plus `annual_extra_principal`, until paid off. A loan
     payment is principal (debt reduction) plus interest (the only expense), never a single
-    'expense'. STUB: existing loans only; a future-originated loan joins later as an Event."""
+    'expense'. A loan creates two accounts -- the liability and an interest expense -- so it
+    carries two planner handles (`handle`, `interest_handle`) to associate each with the
+    planner's loan artifact when presenting results; both optional. STUB: existing loans only;
+    a future-originated loan joins later as an Event."""
 
     name                  : str
     opening_balance       : Decimal
     interest_rate         : Rate
     term                  : Duration
-    interest_class        : ExpenseTaxClass = ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST
-    annual_extra_principal : Decimal        = Decimal( '0' )
+    interest_class        : ExpenseTaxClass  = ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST
+    annual_extra_principal : Decimal         = Decimal( '0' )
+    handle                : Optional[ Handle ] = None
+    interest_handle       : Optional[ Handle ] = None
 
 
 class ScheduledEvent:
