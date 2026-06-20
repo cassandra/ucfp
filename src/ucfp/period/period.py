@@ -208,6 +208,7 @@ class Period:
         worth at or below zero ends the forecast (see _close). Because all funding
         precedes settlement, no untaxed income is ever carried -- only cash is."""
         self._fund_to_target( bookkeeper, result )
+        self._assess_penalties( bookkeeper, result )
         self._settle_tax( bookkeeper, result )
         return
 
@@ -239,11 +240,14 @@ class Period:
         settlements = (
             [ ( charge.tax_class, charge.amount ) for charge in assessment.charges ]
             + [ ( credit.tax_class, -credit.amount ) for credit in assessment.credits ] )
-        if not settlements:
-            return
+        self._book_charges( bookkeeper, settlements, self._parameters.date_span.end_date )
+        return
+
+    def _book_charges( self, bookkeeper : Bookkeeper, settlements : list, settle_date ) -> None:
+        """Book each `(expense tax-class, amount)` as a tax expense drawn from the cash hub
+        (DR expense / CR cash); a negative amount -- a refundable credit -- reverses it."""
         chart = bookkeeper.chart
         cash_account = chart.cash_account()
-        settle_date = self._parameters.date_span.end_date
         for expense_class, amount in settlements:
             amount = quantize_money( amount )
             if amount == 0:
@@ -259,6 +263,32 @@ class Period:
                 settle_date,
                 [ ( expense_account, -amount ), ( cash_account, amount ) ],
             )
+            continue
+        return
+
+    def _assess_penalties( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Report this interval's money-movements to the engine and book the per-event taxes
+        it returns (the early-withdrawal penalty) -- each a tax expense from cash, with a
+        Notice explaining it. Runs every interval (a penalty is a consequence of the movement,
+        not of year-close); the engine owns the whole filter, so the Period reports every
+        movement blindly."""
+        tax_engine = self._parameters.tax_engine
+        if tax_engine is None:
+            return
+        candidates = [
+            candidate for candidate in
+            ( event.tax_candidate() for event in self._parameters.events )
+            if candidate is not None ]
+        penalties = tax_engine.assess_penalties( candidates, self._parameters.tax_context )
+        if not penalties:
+            return
+        self._book_charges(
+            bookkeeper,
+            [ ( penalty.tax_class, penalty.amount ) for penalty in penalties ],
+            self._parameters.date_span.end_date,
+        )
+        for penalty in penalties:
+            result.notices.append( Notice( penalty.reason ) )
             continue
         return
 

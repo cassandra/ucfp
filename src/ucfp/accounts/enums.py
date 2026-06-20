@@ -230,6 +230,8 @@ class ExpenseTaxClass( LabeledEnum ):
     INCOME_TAX              = ( 'Income Tax', 'Income tax paid (incl. AMT).' )
     PAYROLL_TAX             = ( 'Payroll Tax', 'FICA / Medicare on wages.' )
     NIIT                    = ( 'Net Investment Income Tax', '3.8% net investment income tax.' )
+    EARLY_WITHDRAWAL_PENALTY = (
+        'Early-Withdrawal Penalty', '10% additional tax on early retirement withdrawals.' )
 
     @property
     def is_tax_payment( self ) -> bool:
@@ -245,4 +247,5 @@ _TAX_PAYMENT_EXPENSE_CLASSES = frozenset( (
     ExpenseTaxClass.INCOME_TAX,
     ExpenseTaxClass.PAYROLL_TAX,
     ExpenseTaxClass.NIIT,
+    ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,
 ) )

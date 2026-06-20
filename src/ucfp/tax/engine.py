@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
+from ucfp.accounts.books import Account
 from ucfp.accounts.enums import ExpenseTaxClass
 
 
@@ -32,6 +33,32 @@ class TaxCredit:
 
     tax_class : ExpenseTaxClass
     amount    : Decimal
+
+
+@dataclass( frozen = True )
+class TaxPenalty:
+    """A per-event tax penalty the engine assessed against one money-movement: the `tax_class`
+    it is paid into, the `amount`, and a human-readable `reason` the Period surfaces as a
+    Notice so the charge is explained (e.g. a 10% early-withdrawal penalty on a named
+    account). Distinct from a `TaxCharge` -- which is the year's aggregate assessment -- in
+    being one-per-event and carrying its rationale."""
+
+    tax_class : ExpenseTaxClass
+    amount    : Decimal
+    reason    : str
+
+
+@dataclass( frozen = True )
+class TaxEventCandidate:
+    """A money-movement presented to the engine for any per-event tax consequence (the
+    early-withdrawal penalty today). Neutral: the Period reports *every* movement and the
+    engine owns the entire filter -- it reads what it needs off the accounts (source and
+    destination asset class, the source's owner) and the `amount`. `source` is the account
+    the value leaves; `destination` the one it enters."""
+
+    source      : Account
+    destination : Account
+    amount      : Decimal
 
 
 @dataclass( frozen = True )
@@ -59,6 +86,12 @@ class TaxEngine:
 
     def assess( self, fiscal_window, tax_context, opening_tax_state ) -> TaxAssessment:
         raise NotImplementedError
+
+    def assess_penalties( self, candidates, tax_context ) -> list:
+        """The `TaxPenalty`s incurred by this interval's money-movement `candidates` (e.g. the
+        early-withdrawal penalty). Default: none. The engine owns the whole filter -- which
+        candidates qualify and the rate -- so the Period need only report the movements."""
+        return []
 
     def closes_tax_year( self, on_date : date ) -> bool:
         """Whether a tax year ends on `on_date` -- the interval on which the Period settles

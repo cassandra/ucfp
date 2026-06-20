@@ -55,7 +55,7 @@ from decimal import Decimal
 from typing import NamedTuple
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
-from ucfp.tax.engine import TaxAssessment, TaxCharge, TaxCredit, TaxEngine
+from ucfp.tax.engine import TaxAssessment, TaxCharge, TaxCredit, TaxEngine, TaxPenalty
 
 from .context import TaxContext
 from .depreciation import accumulated_depreciation, period_depreciation
@@ -199,6 +199,40 @@ class USFederalTaxEngine( TaxEngine ):
                 passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ) ),
             figures           = figures,
         )
+
+    def assess_penalties( self, candidates, tax_context ) -> list:
+        """The early-withdrawal penalty: 10% on each pre-tax retirement distribution to a
+        non-Roth destination (a withdrawal -- a conversion to Roth is exempt) whose owner is
+        under 59-1/2. The engine owns the whole filter; the Period merely reports every
+        money-movement, blind to which qualify. A pre-tax distribution whose owner age cannot
+        be resolved raises -- the penalty is the law's default, so a missing age is an error,
+        never a silent exemption."""
+        rate      = self._parameters.early_withdrawal_rate
+        age_limit = self._parameters.early_withdrawal_age
+        penalties = list()
+        for candidate in candidates:
+            if candidate.source.asset_class != AssetClass.PRETAX_RETIREMENT:
+                continue
+            if candidate.destination.asset_class == AssetClass.ROTH:
+                continue
+            owner = tax_context.subject_for( candidate.source.owner_handle )
+            if owner is None:
+                raise ValueError(
+                    f'No owner on file for the pre-tax distribution from {candidate.source}; '
+                    'the early-withdrawal penalty requires the owner age.' )
+            if owner.age >= age_limit:
+                continue
+            penalties.append(
+                TaxPenalty(
+                    tax_class = ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,
+                    amount    = rate * candidate.amount,
+                    reason    = (
+                        f'{rate:.0%} early-withdrawal penalty on {candidate.amount} '
+                        f'from {candidate.source}.' ),
+                )
+            )
+            continue
+        return penalties
 
     def _net_capital_gains( self, net_short : Decimal, net_long : Decimal ) -> _NetCapital:
         """Net short-term against long-term per Schedule D. A loss in one character

@@ -115,6 +115,8 @@ class TaxParameters:
     collectibles_rate       : Decimal
     niit_thresholds         : dict[ FilingStatus, Decimal ]
     niit_rate               : Decimal
+    early_withdrawal_rate   : Decimal
+    early_withdrawal_age    : Decimal
     fica_rules              : FICARules
     aca                     : AcaParameters
     passive_activity        : PassiveActivityRules
@@ -185,6 +187,10 @@ def federal_2025() -> TaxParameters:
             FilingStatus.SINGLE : d( '200000' ),
         },
         niit_rate = d( '0.038' ),
+        # 10% additional tax on early retirement distributions before age 59-1/2; with
+        # integer year-end ages the half-year reads as "under 59.5", i.e. age <= 59.
+        early_withdrawal_rate = d( '0.10' ),
+        early_withdrawal_age  = d( '59.5' ),
         fica_rules = FICARules(
             ss_wage_base             = d( '176100' ),
             ss_rate                  = d( '0.062' ),
