@@ -15,7 +15,6 @@ from decimal import Decimal
 from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.exceptions import MissingAccountError
-from ucfp.tax.engine import TaxEventCandidate
 
 from .results import Notice
 
@@ -27,12 +26,6 @@ class PeriodEvent:
         """Post this operation's balanced transaction(s) via `bookkeeper`, returning any
         Notices it raises."""
         raise NotImplementedError
-
-    def tax_candidate( self ) -> TaxEventCandidate:
-        """The money-movement this event makes, as a neutral candidate for the engine to
-        examine for per-event taxes (e.g. the early-withdrawal penalty) -- or None if it
-        moves no value. The Period reports these; the engine owns which (if any) incur tax."""
-        return None
 
 
 @dataclass( frozen = True )
@@ -51,9 +44,6 @@ class Transfer( PeriodEvent ):
         )
         return []
 
-    def tax_candidate( self ) -> TaxEventCandidate:
-        return TaxEventCandidate( self.source_account, self.target_account, self.amount )
-
 
 @dataclass( frozen = True )
 class Purchase( PeriodEvent ):
@@ -71,9 +61,6 @@ class Purchase( PeriodEvent ):
             [ ( self.asset_account, -self.amount ), ( self.funding_account, self.amount ) ],
         )
         return []
-
-    def tax_candidate( self ) -> TaxEventCandidate:
-        return TaxEventCandidate( self.funding_account, self.asset_account, self.amount )
 
 
 @dataclass( frozen = True )
@@ -108,6 +95,3 @@ class Realization( PeriodEvent ):
             on_date = self.event_date,
         )
         return []
-
-    def tax_candidate( self ) -> TaxEventCandidate:
-        return TaxEventCandidate( self.holding, self.destination, self.amount )

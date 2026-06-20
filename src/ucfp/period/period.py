@@ -24,6 +24,7 @@ from ucfp.accounts.enums import SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import quantize_money
 
+from .events import Realization
 from .fiscal_window import FiscalWindow
 from .parameters import DateSpan, PeriodParameters
 from .results import Notice, PeriodResult
@@ -207,19 +208,27 @@ class Period:
         carried into the next period as a visible cash-flow signal, and only a net
         worth at or below zero ends the forecast (see _close). Because all funding
         precedes settlement, no untaxed income is ever carried -- only cash is."""
+        self._check_forced_tax_transactions( bookkeeper, result )
         self._fund_to_target( bookkeeper, result )
         self._assess_penalties( bookkeeper, result )
         self._settle_tax( bookkeeper, result )
         return
 
-    def _settle_tax( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Assess the tax year and book each charge as a tax expense drawn from the cash
-        hub. (The zero-tax engine yields none.)
+    def _fiscal_window( self, bookkeeper : Bookkeeper ):
+        """The tax-year window to act on if this interval closes a tax year, else None. The
+        engine -- carried every interval -- names the boundary, so settlement, the penalty,
+        and forced transactions all act only at that close, over the full year (Jan-Dec, not
+        the interval's own slice)."""
+        tax_engine = self._parameters.tax_engine
+        period_end = self._parameters.date_span.end_date
+        if ( tax_engine is None ) or ( not tax_engine.closes_tax_year( period_end ) ):
+            return None
+        start_date, end_date = tax_engine.tax_year_bounds( period_end )
+        return FiscalWindow( bookkeeper, DateSpan( start_date, end_date ) )
 
-        Tax is annual, so the engine -- carried every interval -- is asked whether this
-        interval's end closes a tax year; only then does settlement run. When it does, the
-        engine names the full tax-year span (Jan-Dec, not the interval's own slice), so a
-        December month's window still sees the whole year's flows.
+    def _settle_tax( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Assess the tax year and book each charge as a tax expense drawn from the cash hub.
+        (The zero-tax engine yields none.) Settlement runs only at the tax-year close.
 
         The engine's opening tax state (carryforwards) is threaded in, and its closing
         state captured on the result -- even in a no-charge year, since a capital-loss year
@@ -228,13 +237,10 @@ class Period:
         Charges are paid (DR tax expense / CR cash); refundable credits are the reverse
         (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
         refund -- modeled here as a negated charge against the same expense class."""
-        tax_engine = self._parameters.tax_engine
-        period_end = self._parameters.date_span.end_date
-        if ( tax_engine is None ) or ( not tax_engine.closes_tax_year( period_end ) ):
+        fiscal_window = self._fiscal_window( bookkeeper )
+        if fiscal_window is None:
             return
-        start_date, end_date = tax_engine.tax_year_bounds( period_end )
-        fiscal_window = FiscalWindow( bookkeeper, DateSpan( start_date, end_date ) )
-        assessment = tax_engine.assess(
+        assessment = self._parameters.tax_engine.assess(
             fiscal_window, self._parameters.tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
         settlements = (
@@ -267,19 +273,15 @@ class Period:
         return
 
     def _assess_penalties( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Report this interval's money-movements to the engine and book the per-event taxes
-        it returns (the early-withdrawal penalty) -- each a tax expense from cash, with a
-        Notice explaining it. Runs every interval (a penalty is a consequence of the movement,
-        not of year-close); the engine owns the whole filter, so the Period reports every
-        movement blindly."""
-        tax_engine = self._parameters.tax_engine
-        if tax_engine is None:
+        """At the tax-year close, book the penalties the engine reads from the books view (the
+        early-withdrawal penalty) -- each a tax expense from cash, with a Notice. Reading the
+        whole year's distributions from the books (not this interval's events) means it sees
+        them however they arose, funding draws included; the engine owns the rule."""
+        fiscal_window = self._fiscal_window( bookkeeper )
+        if fiscal_window is None:
             return
-        candidates = [
-            candidate for candidate in
-            ( event.tax_candidate() for event in self._parameters.events )
-            if candidate is not None ]
-        penalties = tax_engine.assess_penalties( candidates, self._parameters.tax_context )
+        penalties = self._parameters.tax_engine.assess_penalties(
+            fiscal_window, self._parameters.tax_context )
         if not penalties:
             return
         self._book_charges(
@@ -289,6 +291,30 @@ class Period:
         )
         for penalty in penalties:
             result.notices.append( Notice( penalty.reason ) )
+            continue
+        return
+
+    def _check_forced_tax_transactions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """At the tax-year close, apply the transactions the tax law forces (RMDs today): the
+        engine reads the books view and returns them; the Period executes each as a realization
+        to cash and notes it. Run first among the close steps, so the forced income is funded
+        and taxed with the rest."""
+        fiscal_window = self._fiscal_window( bookkeeper )
+        if fiscal_window is None:
+            return
+        forced = self._parameters.tax_engine.forced_transactions(
+            fiscal_window, self._parameters.tax_context )
+        if not forced:
+            return
+        period_end = self._parameters.date_span.end_date
+        cash_account = bookkeeper.chart.cash_account()
+        if cash_account is None:
+            raise MissingAccountError( 'No cash account to receive forced distributions.' )
+        for forced_transaction in forced:
+            Realization(
+                period_end, forced_transaction.account, forced_transaction.amount, cash_account
+            ).apply( bookkeeper )
+            result.notices.append( Notice( forced_transaction.reason ) )
             continue
         return
 

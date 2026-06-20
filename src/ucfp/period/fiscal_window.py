@@ -11,10 +11,12 @@ This is also the swap seam for estimated taxes: a future window that annualizes
 year-to-date figures into full-year estimates plugs in here, and the engine -- which
 only ever asks for annual income -- needs no change.
 """
+from datetime import timedelta
 from decimal import Decimal
 
+from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass, SideType
 
 from .parameters import DateSpan
 
@@ -27,6 +29,7 @@ class FiscalWindow:
     def __init__( self, bookkeeper : Bookkeeper, span : DateSpan ):
         self._chart  = bookkeeper.chart
         self._ledger = bookkeeper.ledger
+        self._books  = bookkeeper.books
         self._span   = span
 
     @property
@@ -76,3 +79,43 @@ class FiscalWindow:
                 account, start = self._span.start_date, end = self._span.end_date )
             continue
         return -total
+
+    def holdings( self ) -> tuple:
+        """The asset holdings in the books. The engine filters these to the classes a rule
+        applies to (e.g. pre-tax retirement for RMDs) -- the window stays tax-agnostic."""
+        return self._chart.holdings()
+
+    def opening_value( self, holding : Account ) -> Decimal:
+        """`holding`'s market value at the start of the fiscal year (its prior year-end
+        balance) -- the base an RMD is sized on."""
+        return self._ledger.market_value(
+            holding, through = self._span.start_date - timedelta( days = 1 ) )
+
+    def distributions_to_cash( self, holding : Account ) -> Decimal:
+        """How much `holding` distributed to the cash hub over the fiscal year: the cash
+        proceeds of its realizations (a transaction that draws the holding down -- credits its
+        cost or valuation account -- and pays cash in). Excludes conversions to another
+        holding (e.g. pre-tax -> Roth, which pays no cash) and inflows. The RMD reconciliation
+        needs exactly this -- only cash distributions count toward the required minimum."""
+        cash_account = self._chart.cash_account()
+        if cash_account is None:
+            return Decimal( '0' )
+        value_accounts = { holding }
+        valuation_account = self._chart.valuation_of( holding )
+        if valuation_account is not None:
+            value_accounts.add( valuation_account )
+        total = Decimal( '0' )
+        for transaction in self._books.transactions:
+            if not ( self._span.start_date <= transaction.transaction_date <= self._span.end_date ):
+                continue
+            drawn_down = any(
+                ( entry.account in value_accounts ) and ( entry.entry_direction == SideType.CREDIT )
+                for entry in transaction.entries )
+            if not drawn_down:
+                continue
+            total += sum(
+                ( entry.amount for entry in transaction.entries
+                  if ( entry.account is cash_account ) and ( entry.entry_direction == SideType.DEBIT ) ),
+                Decimal( '0' ) )
+            continue
+        return total

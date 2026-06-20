@@ -468,8 +468,9 @@ class Forecast:
         STUB: filing status static; ACA not yet resolved."""
         subjects = tuple(
             TaxSubject(
-                handle = subject.handle,
-                age    = span.end_date.year - subject.birthdate.year )
+                handle     = subject.handle,
+                age        = span.end_date.year - subject.birthdate.year,
+                birth_year = subject.birthdate.year )
             for subject in self._parameters.subjects )
         return TaxContext(
             filing_status = self._parameters.filing_status,

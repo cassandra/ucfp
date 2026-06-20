@@ -55,8 +55,16 @@ from decimal import Decimal
 from typing import NamedTuple
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
-from ucfp.tax.engine import TaxAssessment, TaxCharge, TaxCredit, TaxEngine, TaxPenalty
+from ucfp.tax.engine import (
+    ForcedTransaction,
+    TaxAssessment,
+    TaxCharge,
+    TaxCredit,
+    TaxEngine,
+    TaxPenalty,
+)
 
+from . import rmd
 from .context import TaxContext
 from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
@@ -200,39 +208,65 @@ class USFederalTaxEngine( TaxEngine ):
             figures           = figures,
         )
 
-    def assess_penalties( self, candidates, tax_context ) -> list:
-        """The early-withdrawal penalty: 10% on each pre-tax retirement distribution to a
-        non-Roth destination (a withdrawal -- a conversion to Roth is exempt) whose owner is
-        under 59-1/2. The engine owns the whole filter; the Period merely reports every
-        money-movement, blind to which qualify. A pre-tax distribution whose owner age cannot
-        be resolved raises -- the penalty is the law's default, so a missing age is an error,
-        never a silent exemption."""
+    def _pretax_holdings( self, fiscal_window, tax_context ):
+        """Each pre-tax retirement holding paired with its owner -- the shared subject of the
+        early-withdrawal penalty and the RMD. A pre-tax holding without a resolvable owner
+        raises: these rules turn on the owner's age, so a missing owner is an error."""
+        for holding in fiscal_window.holdings():
+            if holding.asset_class != AssetClass.PRETAX_RETIREMENT:
+                continue
+            owner = tax_context.subject_for( holding.owner_handle )
+            if owner is None:
+                raise ValueError(
+                    f'No owner on file for {holding}; the pre-tax retirement rules need '
+                    'the owner age.' )
+            yield ( holding, owner )
+            continue
+        return
+
+    def assess_penalties( self, fiscal_window, tax_context ) -> list:
+        """The early-withdrawal penalty: 10% of the year's pre-tax distributions to cash for an
+        owner under 59-1/2. Read from the books view -- `distributions_to_cash` already excludes
+        conversions to Roth (which pay no cash) -- so any cash distribution, scheduled or a
+        funding draw, is caught. A missing owner age raises, never a silent exemption."""
         rate      = self._parameters.early_withdrawal_rate
         age_limit = self._parameters.early_withdrawal_age
         penalties = list()
-        for candidate in candidates:
-            if candidate.source.asset_class != AssetClass.PRETAX_RETIREMENT:
-                continue
-            if candidate.destination.asset_class == AssetClass.ROTH:
-                continue
-            owner = tax_context.subject_for( candidate.source.owner_handle )
-            if owner is None:
-                raise ValueError(
-                    f'No owner on file for the pre-tax distribution from {candidate.source}; '
-                    'the early-withdrawal penalty requires the owner age.' )
+        for holding, owner in self._pretax_holdings( fiscal_window, tax_context ):
             if owner.age >= age_limit:
+                continue
+            distributed = fiscal_window.distributions_to_cash( holding )
+            if distributed <= 0:
                 continue
             penalties.append(
                 TaxPenalty(
                     tax_class = ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,
-                    amount    = rate * candidate.amount,
-                    reason    = (
-                        f'{rate:.0%} early-withdrawal penalty on {candidate.amount} '
-                        f'from {candidate.source}.' ),
+                    amount    = rate * distributed,
+                    reason    = f'{rate:.0%} early-withdrawal penalty on {distributed} from {holding}.',
                 )
             )
             continue
         return penalties
+
+    def forced_transactions( self, fiscal_window, tax_context ) -> list:
+        """The required minimum distributions for this fiscal year: for each pre-tax holding,
+        size the RMD on its prior-year-end balance and the owner's age/cohort, then force the
+        shortfall not already met by cash distributions this year. A conversion to Roth pays
+        no cash, so it does not count -- the RMD must still come out to the taxpayer."""
+        forced = list()
+        for holding, owner in self._pretax_holdings( fiscal_window, tax_context ):
+            required = rmd.required_minimum_distribution(
+                fiscal_window.opening_value( holding ), owner.age, owner.birth_year )
+            shortfall = required - fiscal_window.distributions_to_cash( holding )
+            if shortfall <= 0:
+                continue
+            forced.append(
+                ForcedTransaction(
+                    account = holding,
+                    amount  = shortfall,
+                    reason  = f'Required minimum distribution of {shortfall} from {holding}.' ) )
+            continue
+        return forced
 
     def _net_capital_gains( self, net_short : Decimal, net_long : Decimal ) -> _NetCapital:
         """Net short-term against long-term per Schedule D. A loss in one character

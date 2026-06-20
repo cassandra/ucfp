@@ -105,11 +105,11 @@ class EventResolutionTests( unittest.TestCase ):
         self.assertEqual( ledger.net_worth( through = through ), Decimal( '40000' ) )
 
     def test_early_withdrawal_under_59_incurs_a_penalty( self ):
-        # an under-59-1/2 owner's pre-tax withdrawal to cash incurs the 10% penalty; with no
-        # year-close this half-year, the penalty is the only tax taken.
+        # an under-59-1/2 owner's pre-tax withdrawal to cash incurs the 10% penalty, assessed
+        # at the tax-year close from the year's distributions read off the books.
         parameters = ForecastParameters(
             start_date    = date( 2026, 1, 1 ),
-            end_date      = date( 2026, 6, 30 ),
+            end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.MARRIED_JOINT,
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1970, 1, 1 ), 'subject-a' ) ],
@@ -124,10 +124,12 @@ class EventResolutionTests( unittest.TestCase ):
         reader = Bookkeeper( Forecast( parameters ).run().books )
         ledger = reader.ledger
         penalty = reader.chart.expense_account( ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY )
-        # 10% of the 40k early withdrawal
+        # 10% of the 40k early withdrawal, charged at the year close
         self.assertEqual( ledger.natural_balance( penalty ), Decimal( '4000' ) )
-        # net worth is the 40k less the 4k penalty (the withdrawal itself is neutral)
-        self.assertEqual( ledger.net_worth( through = date( 2026, 6, 30 ) ), Decimal( '36000' ) )
+        # the IRA is emptied to cash
+        self.assertEqual(
+            ledger.market_value( _holding( reader, 'IRA' ), through = date( 2026, 12, 31 ) ),
+            Decimal( '0' ) )
 
     def test_selling_a_depreciated_asset_realizes_a_tax_free_loss( self ):
         # A depreciating asset has no taxable realized gain; selling it must still resolve

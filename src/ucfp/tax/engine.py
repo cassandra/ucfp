@@ -49,16 +49,14 @@ class TaxPenalty:
 
 
 @dataclass( frozen = True )
-class TaxEventCandidate:
-    """A money-movement presented to the engine for any per-event tax consequence (the
-    early-withdrawal penalty today). Neutral: the Period reports *every* movement and the
-    engine owns the entire filter -- it reads what it needs off the accounts (source and
-    destination asset class, the source's owner) and the `amount`. `source` is the account
-    the value leaves; `destination` the one it enters."""
+class ForcedTransaction:
+    """A transaction the tax law forces this interval -- an RMD today: distribute `amount`
+    out of `account` (to cash), with a `reason` the Period surfaces as a Notice. The engine
+    determines these (reading the books view); the Period executes each as a realization."""
 
-    source      : Account
-    destination : Account
-    amount      : Decimal
+    account : Account
+    amount  : Decimal
+    reason  : str
 
 
 @dataclass( frozen = True )
@@ -87,10 +85,18 @@ class TaxEngine:
     def assess( self, fiscal_window, tax_context, opening_tax_state ) -> TaxAssessment:
         raise NotImplementedError
 
-    def assess_penalties( self, candidates, tax_context ) -> list:
-        """The `TaxPenalty`s incurred by this interval's money-movement `candidates` (e.g. the
-        early-withdrawal penalty). Default: none. The engine owns the whole filter -- which
-        candidates qualify and the rate -- so the Period need only report the movements."""
+    def assess_penalties( self, fiscal_window, tax_context ) -> list:
+        """The `TaxPenalty`s the year's activity incurs (e.g. the early-withdrawal penalty),
+        read from the books view `fiscal_window` (balances, distributions) and `tax_context`
+        (owner ages). Default: none. The engine owns the whole rule -- which distributions
+        qualify and the rate -- reading the books rather than being handed pre-digested data."""
+        return []
+
+    def forced_transactions( self, fiscal_window, tax_context ) -> list:
+        """The `ForcedTransaction`s the tax law requires this interval (e.g. RMDs), read from
+        the books view `fiscal_window` (balances, distributions) and `tax_context` (owner
+        ages). Default: none. The engine owns the whole rule -- which accounts, the amount,
+        the reconciliation -- so the Period only executes what comes back."""
         return []
 
     def closes_tax_year( self, on_date : date ) -> bool:

@@ -27,13 +27,14 @@ from .property import TaxProperty
 class TaxSubject:
     """One person on the tax return: the per-individual facts the engine needs that are not
     amounts in the ledger -- the age (for the age-65/senior deduction bonuses and the 59-1/2
-    threshold) and the `handle` that pairs them with their owned accounts (so an
-    account-attributed rule like the early-withdrawal penalty can reach this person's age),
-    None when the subject owns no handled account. Blindness (another
-    additional-standard-deduction trigger) will join it."""
+    threshold), the `birth_year` (for the SECURE 2.0 RMD-start cohort), and the `handle` that
+    pairs them with their owned accounts (so an account-attributed rule like the
+    early-withdrawal penalty or RMD can reach this person's age), None when the subject owns no
+    handled account. Blindness (another additional-standard-deduction trigger) will join it."""
 
-    age    : int
-    handle : Optional[ Handle ] = None
+    age        : int
+    birth_year : int
+    handle     : Optional[ Handle ] = None
 
 
 @dataclass( frozen = True )
