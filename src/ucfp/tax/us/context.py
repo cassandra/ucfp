@@ -14,6 +14,9 @@ non-monetary per-subject status -- currently ages (deduction bonuses). Household
 state and per-subject blindness join as the engine's later stages land.
 """
 from dataclasses import dataclass, field
+from typing import Optional
+
+from ucfp.accounts.handle import Handle
 
 from .aca import AcaEnrollment
 from .enums import FilingStatus
@@ -22,12 +25,15 @@ from .property import TaxProperty
 
 @dataclass( frozen = True )
 class TaxSubject:
-    """One person on the tax return: the per-individual facts the engine needs that
-    are not amounts in the ledger. Currently the age (for the age-65 and senior
-    deduction bonuses); blindness (another additional-standard-deduction trigger) will
-    join it."""
+    """One person on the tax return: the per-individual facts the engine needs that are not
+    amounts in the ledger -- the age (for the age-65/senior deduction bonuses and the 59-1/2
+    threshold) and the `handle` that pairs them with their owned accounts (so an
+    account-attributed rule like the early-withdrawal penalty can reach this person's age),
+    None when the subject owns no handled account. Blindness (another
+    additional-standard-deduction trigger) will join it."""
 
-    age : int
+    age    : int
+    handle : Optional[ Handle ] = None
 
 
 @dataclass( frozen = True )
@@ -54,3 +60,13 @@ class TaxContext:
         """How many subjects are at least `age` -- e.g. the 65+ count that drives the
         per-subject standard-deduction bonuses."""
         return sum( 1 for subject in self.subjects if subject.age >= age )
+
+    def subject_for( self, handle : Handle ) -> Optional[ TaxSubject ]:
+        """The subject identified by `handle` (the owner of an account carrying it), or None
+        -- used to reach an account owner's age for an account-attributed rule. Handles are
+        compared by their string (their identity), so any planner scheme works."""
+        target = str( handle )
+        for subject in self.subjects:
+            if ( subject.handle is not None ) and ( str( subject.handle ) == target ):
+                return subject
+        return None

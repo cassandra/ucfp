@@ -191,10 +191,12 @@ class Forecast:
         bookkeeper.build_standard_chart()
         chart = bookkeeper.chart
         asset_root = chart.root( AccountType.ASSET )
-        holdings = [
-            ( bookkeeper.create_holding( asset_root, asset.name, asset.asset_class ),
-              asset.opening_value, asset.cost_basis )
-            for asset in self._parameters.assets ]
+        holdings = list()
+        for asset in self._parameters.assets:
+            holding = bookkeeper.create_holding( asset_root, asset.name, asset.asset_class )
+            holding.owner_handle = asset.owner_handle
+            holdings.append( ( holding, asset.opening_value, asset.cost_basis ) )
+            continue
         self._holding_by_name = {
             holding.name : holding for holding, _value, _basis in holdings }
         self._create_loans( bookkeeper )
@@ -465,7 +467,9 @@ class Forecast:
         and the rental properties (depreciation attributes plus any in-year disposition).
         STUB: filing status static; ACA not yet resolved."""
         subjects = tuple(
-            TaxSubject( age = span.end_date.year - subject.birthdate.year )
+            TaxSubject(
+                handle = subject.handle,
+                age    = span.end_date.year - subject.birthdate.year )
             for subject in self._parameters.subjects )
         return TaxContext(
             filing_status = self._parameters.filing_status,

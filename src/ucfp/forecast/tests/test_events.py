@@ -41,13 +41,16 @@ class EventResolutionTests( unittest.TestCase ):
             end_date      = date( 2026, 6, 30 ),
             filing_status = FilingStatus.MARRIED_JOINT,
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
-            subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
+            subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ) ),
                 AssetParameters( 'CD', AssetClass.CDS, Decimal( '0' ), Decimal( '0' ) ),
                 AssetParameters( 'Stocks', AssetClass.STOCKS, Decimal( '50000' ), Decimal( '50000' ) ),
-                AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ) ),
-                AssetParameters( 'Roth', AssetClass.ROTH, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters(
+                    'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ),
+                    owner_handle = 'subject-a' ),
+                AssetParameters(
+                    'Roth', AssetClass.ROTH, Decimal( '0' ), Decimal( '0' ), owner_handle = 'subject-a' ),
             ],
             events        = [
                 ScheduledTransfer( date( 2026, 3, 1 ), 'Cash', 'CD', Decimal( '20000' ) ),
@@ -82,10 +85,12 @@ class EventResolutionTests( unittest.TestCase ):
             end_date      = date( 2026, 6, 30 ),
             filing_status = FilingStatus.MARRIED_JOINT,
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
-            subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
+            subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
-                AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ) ),
+                AssetParameters(
+                    'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ),
+                    owner_handle = 'subject-a' ),
             ],
             events        = [ ScheduledRealization( date( 2026, 3, 1 ), 'IRA', Decimal( '40000' ) ) ],
         )
@@ -135,7 +140,13 @@ class ZeroBasisValidationTests( unittest.TestCase ):
         # silently under-tax withdrawals) is rejected at construction.
         with self.assertRaises( ValueError ):
             AssetParameters(
-                'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '40000' ) )
+                'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '40000' ),
+                owner_handle = 'subject-a' )
+
+    def test_retirement_account_requires_an_owner( self ):
+        # a retirement account must name its owner; the owner's age drives the penalty/RMDs
+        with self.assertRaises( ValueError ):
+            AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ) )
 
 
 if __name__ == '__main__':

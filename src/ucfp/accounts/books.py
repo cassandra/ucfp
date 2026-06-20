@@ -25,6 +25,7 @@ from .enums import (
     SystemAccountRole,
 )
 from .exceptions import AccountStructureError, TransactionImbalanceError
+from .handle import Handle
 
 
 @dataclass( eq = False )
@@ -45,6 +46,7 @@ class Account:
     is_valuation      : bool                         = False
     income_tax_class  : Optional[ IncomeTaxClass ]   = None
     expense_tax_class : Optional[ ExpenseTaxClass ]  = None
+    owner_handle      : Optional[ Handle ]           = None
     description       : str                          = ''
     closed            : bool                         = False
 

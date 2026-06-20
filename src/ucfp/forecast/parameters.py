@@ -25,6 +25,7 @@ from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
+from ucfp.accounts.handle import Handle
 from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
@@ -36,11 +37,14 @@ from .economic_outlook import EconomicOutlook
 @dataclass( frozen = True )
 class Subject:
     """A person on the forecast -- the invariant kernel (name + birthdate); age is derived
-    per interval, and income resolves per subject. Frozen so a subject can key the
+    per interval, and income resolves per subject. `handle` is the planner-minted identity
+    that pairs this subject with the accounts they own (required only when the subject owns a
+    retirement account, whose owner handle must match). Frozen so a subject can key the
     per-person account map."""
 
     name      : str
     birthdate : date
+    handle    : Optional[ Handle ] = None
 
 
 @dataclass( frozen = True )
@@ -64,23 +68,32 @@ class AssetParameters:
     `property_attributes` (the tax facts behind §121/§1250); None for any other asset.
     `cost_basis` is required (no defaulting -- an important distinction belongs upstream): a
     retirement account passes 0 (its whole value is taxable/withdrawable on the way out), a
-    freshly-valued holding passes `opening_value` (cost = market). STUB: the value-rule and
-    existence window join later."""
+    freshly-valued holding passes `opening_value` (cost = market). `owner_handle` is the
+    handle of the subject who owns the holding (matching that `Subject.handle`), required for
+    a retirement account -- the owner's age drives the early-withdrawal penalty and RMDs.
+    STUB: the value-rule and existence window join later."""
 
     name                : str
     asset_class         : AssetClass
     opening_value       : Decimal
     cost_basis          : Decimal
     property_attributes : Optional[ PropertyAttributes ] = None
+    owner_handle        : Optional[ Handle ]             = None
 
     def __post_init__( self ):
-        """Enforce the zero-basis domain rule: a retirement holding must declare a zero
-        cost_basis (the engine realizes its whole value), so a mis-stated basis -- which
-        would silently under-tax withdrawals -- is rejected at construction."""
-        if self.asset_class.seeds_at_zero_basis and ( self.cost_basis != 0 ):
+        """Enforce the retirement-account domain rules: zero cost basis (the engine realizes
+        its whole value, so a mis-stated basis -- which would silently under-tax withdrawals
+        -- is rejected) and a known owner (whose age drives the penalty and RMDs)."""
+        if not self.asset_class.seeds_at_zero_basis:
+            return
+        if self.cost_basis != 0:
             raise ValueError(
                 f'{self.asset_class.label} holdings carry zero tax basis; '
                 f'cost_basis must be 0, not {self.cost_basis}.' )
+        if self.owner_handle is None:
+            raise ValueError(
+                f'{self.asset_class.label} holdings require an owner handle (the owner age '
+                'drives the early-withdrawal penalty and RMDs).' )
         return
 
 
