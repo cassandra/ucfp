@@ -137,14 +137,12 @@ class FundingPolicy:
 class PeriodParameters:
     """The single-interval, already-resolved inputs the Period consumes.
 
-    Tax is annual, so settlement is gated to the year-close interval. The Scenario sets
-    `tax_engine` (the year's resolved engine, from the tax-law projection) and
-    `fiscal_window` (the full tax-year span it assesses) **together** -- only on that
-    interval -- and leaves both `None` elsewhere. So `tax_engine is None` iff
-    `fiscal_window is None`: a non-settling interval (e.g. a non-December month) carries
-    neither and the Period runs no tax step; the year-close interval (December, or a whole
-    yearly interval) carries both, and the engine assesses over `fiscal_window` (Jan-Dec).
-    `opening_tax_state` is the carryforwards threaded in from the prior period."""
+    `tax_engine` is the year's resolved engine (from the tax-law projection), carried every
+    interval. Tax is annual, so the Period asks the engine whether the interval's end closes
+    a tax year and settles only then, over the full tax-year span the engine names (Jan-Dec)
+    -- so the boundary is the tax law's to decide, not a pre-set window's presence. A `None`
+    engine simply runs no tax step. `opening_tax_state` is the carryforwards threaded in from
+    the prior period."""
 
     date_span             : DateSpan
     tax_context           : TaxContext
@@ -156,4 +154,3 @@ class PeriodParameters:
     events                : list[ PeriodEvent ]        = field( default_factory = list )
     tax_engine            : TaxEngine                  = None
     opening_tax_state     : object                     = None
-    fiscal_window         : DateSpan                   = None

@@ -25,7 +25,7 @@ from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import quantize_money
 
 from .fiscal_window import FiscalWindow
-from .parameters import PeriodParameters
+from .parameters import DateSpan, PeriodParameters
 from .results import Notice, PeriodResult
 
 
@@ -215,11 +215,10 @@ class Period:
         """Assess the tax year and book each charge as a tax expense drawn from the cash
         hub. (The zero-tax engine yields none.)
 
-        Tax is annual, so settlement is gated to the year-close interval: the Scenario sets
-        `tax_engine` (and the paired `fiscal_window`) only there, so a non-settling interval
-        carries no engine and this returns immediately. When present, the engine assesses
-        over `fiscal_window` (the full tax year, Jan-Dec), not the interval's own slice, so
-        a December month's window still sees the whole year's flows.
+        Tax is annual, so the engine -- carried every interval -- is asked whether this
+        interval's end closes a tax year; only then does settlement run. When it does, the
+        engine names the full tax-year span (Jan-Dec, not the interval's own slice), so a
+        December month's window still sees the whole year's flows.
 
         The engine's opening tax state (carryforwards) is threaded in, and its closing
         state captured on the result -- even in a no-charge year, since a capital-loss year
@@ -228,10 +227,13 @@ class Period:
         Charges are paid (DR tax expense / CR cash); refundable credits are the reverse
         (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
         refund -- modeled here as a negated charge against the same expense class."""
-        if self._parameters.tax_engine is None:
+        tax_engine = self._parameters.tax_engine
+        period_end = self._parameters.date_span.end_date
+        if ( tax_engine is None ) or ( not tax_engine.closes_tax_year( period_end ) ):
             return
-        fiscal_window = FiscalWindow( bookkeeper, self._parameters.fiscal_window )
-        assessment = self._parameters.tax_engine.assess(
+        start_date, end_date = tax_engine.tax_year_bounds( period_end )
+        fiscal_window = FiscalWindow( bookkeeper, DateSpan( start_date, end_date ) )
+        assessment = tax_engine.assess(
             fiscal_window, self._parameters.tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
         settlements = (

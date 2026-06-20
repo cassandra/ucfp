@@ -9,6 +9,7 @@ neutral. The `tax_context` and `tax_state` passed through `assess` are therefore
 engine-specific and opaque here.
 """
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 
 from ucfp.accounts.enums import ExpenseTaxClass
@@ -51,10 +52,23 @@ class TaxAssessment:
 
 
 class TaxEngine:
-    """A tax-calculation strategy. Subclasses implement `assess`."""
+    """A tax-calculation strategy. Subclasses implement `assess`; the tax-year calendar
+    defaults to the civil year and is overridden by a jurisdiction on a different fiscal
+    year. The Period owns one engine every interval and asks it when to settle, rather than
+    being handed a pre-decided window -- the boundary is the tax law's to know."""
 
     def assess( self, fiscal_window, tax_context, opening_tax_state ) -> TaxAssessment:
         raise NotImplementedError
+
+    def closes_tax_year( self, on_date : date ) -> bool:
+        """Whether a tax year ends on `on_date` -- the interval on which the Period settles
+        tax. Civil-year default: December 31."""
+        return ( on_date.month == 12 ) and ( on_date.day == 31 )
+
+    def tax_year_bounds( self, on_date : date ) -> tuple[ date, date ]:
+        """The (start, end) dates of the tax year containing `on_date` -- the full span the
+        engine assesses over. Civil-year default: January 1 to December 31 of that year."""
+        return ( date( on_date.year, 1, 1 ), date( on_date.year, 12, 31 ) )
 
 
 class ZeroTaxEngine( TaxEngine ):

@@ -432,16 +432,12 @@ class Forecast:
     def _build_period_parameters( self, span : DateSpan, opening_tax_state,
                                   bookkeeper : Bookkeeper ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters. Rates and flows are resolved to
-        the interval's length (so the same parameters run at any granularity), liability
-        terms are amortized off the running balance, and tax is gated to the year-close
-        interval -- the tax engine and its full-year fiscal_window are set only there, both
-        None otherwise. STUB: events and the remaining feedback knobs join later."""
+        the interval's length (so the same parameters run at any granularity), and liability
+        terms are amortized off the running balance. The year's tax engine is carried every
+        interval; the Period asks it whether the interval closes a tax year and settles only
+        then. STUB: the remaining feedback knobs join later."""
         year_fraction = self._year_fraction( span )
         annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
-        year_close = ( span.end_date.month == 12 ) and ( span.end_date.day == 31 )
-        tax_engine = self._tax_law.engine_for( span.end_date.year ) if year_close else None
-        fiscal_window = (
-            DateSpan( date( span.end_date.year, 1, 1 ), span.end_date ) if year_close else None )
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
@@ -452,8 +448,7 @@ class Forecast:
             events            = self._events_for( span, bookkeeper ),
             funding_policy    = FundingPolicy(
                 cash_target = self._parameters.cash_target, draw_priority = self._draw_priority ),
-            tax_engine        = tax_engine,
-            fiscal_window     = fiscal_window,
+            tax_engine        = self._tax_law.engine_for( span.end_date.year ),
             opening_tax_state = opening_tax_state,
         )
 
