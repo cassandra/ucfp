@@ -285,6 +285,29 @@ class SubsidizedHealthCoverage:
         return self.window.covers( on_date )
 
 
+@dataclass( frozen = True )
+class SubjectRemoval:
+    """A subject leaving the plan at `event_date` -- a death (a survivor transition for a
+    couple). NOT a money-movement event: it posts no transaction. Instead the Forecast derives
+    the tied consequences from this one fact -- the filing-status change (via the tax law's
+    rule), the household-size decrement, the retitling of the decedent's accounts to the
+    survivor, and dropping the subject from the tax context. The dedicated survivor-transition
+    module (roadmap) will emit this together with the materialized stream changes."""
+
+    event_date     : date
+    subject_handle : Handle
+
+
+def resolve_household_size(
+        base_size : int, removals : 'list[ SubjectRemoval ]', target_year : int ) -> int:
+    """The household size in `target_year`: the base less every subject removed before that
+    year (a removal takes effect the year after the death, like the subject drop). The
+    Forecast-owned mirror of the tax law's filing-status resolver -- household size is a
+    Forecast concern, not tax law."""
+    removed = sum( 1 for removal in removals if removal.event_date.year < target_year )
+    return base_size - removed
+
+
 @dataclass
 class ForecastParameters:
     """The full materialized inputs for an N-step Forecast (see module docstring)."""
@@ -305,7 +328,45 @@ class ForecastParameters:
     cash_target       : Decimal                              = Decimal( '0' )
     draw_order        : list[ AssetClass ]                   = field( default_factory = list )
     health_coverage   : Optional[ SubsidizedHealthCoverage ] = None
+    subject_removals  : list[ SubjectRemoval ]               = field( default_factory = list )
     initial_tax_state : object                               = None
+
+    def __post_init__( self ):
+        """Bake in the at-most-two-filing-subjects assumption that pervades the tax model: a
+        US return has at most two adults (joint), so more than two subjects is unsupported and
+        rejected outright rather than silently mismodeled."""
+        if len( self.subjects ) > 2:
+            raise ValueError(
+                f'At most two filing subjects are supported; got {len( self.subjects )}.' )
+        return
+
+    def earliest_removal_year( self ) -> Optional[ int ]:
+        """The year of the first subject removal (the spouse death that drives the survivor
+        filing transition), or None if no subject is removed."""
+        if not self.subject_removals:
+            return None
+        return min( removal.event_date.year for removal in self.subject_removals )
+
+    def active_subjects( self, year : int ) -> 'list[ Subject ]':
+        """The subjects still present in `year`: a removed subject is present through the year
+        of death and gone after, so age and SS stop the following year."""
+        return [
+            subject for subject in self.subjects
+            if not self._is_removed_before( subject, year ) ]
+
+    def survivor_handle( self, decedent_handle : Handle ) -> Optional[ Handle ]:
+        """The handle of a subject other than `decedent_handle` -- whom the decedent's accounts
+        retitle to. None if there is no other subject (the last death; the plan then ends)."""
+        for subject in self.subjects:
+            if ( subject.handle is not None ) and ( str( subject.handle ) != str( decedent_handle ) ):
+                return subject.handle
+        return None
+
+    def _is_removed_before( self, subject : 'Subject', year : int ) -> bool:
+        return any(
+            ( str( removal.subject_handle ) == str( subject.handle ) )
+            and ( removal.event_date.year < year )
+            for removal in self.subject_removals )
 
     def period_spans( self ) -> list[ DateSpan ]:
         """The horizon sliced into consecutive `granularity` intervals (the last truncated

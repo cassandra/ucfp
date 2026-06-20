@@ -55,6 +55,7 @@ from ucfp.period.results import PeriodResult
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.tax.us.context import TaxContext, TaxSubject
+from ucfp.tax.us.filing import resolve_filing_status
 from ucfp.tax.us.property import PropertyDisposition, TaxProperty
 
 from .parameters import (
@@ -63,6 +64,7 @@ from .parameters import (
     ScheduledRealization,
     ScheduledWindfall,
     Subject,
+    resolve_household_size,
 )
 
 
@@ -176,6 +178,10 @@ class Forecast:
         result        = ForecastResult( books = bookkeeper.books )
         opening_state = self._parameters.initial_tax_state
         for span in self._parameters.period_spans():
+            if self._parameters.subjects and not self._parameters.active_subjects( span.end_date.year ):
+                result.stopped_early = True
+                break
+            self._retitle_removed_subjects_accounts( bookkeeper, span )
             period_parameters = self._build_period_parameters( span, opening_state, bookkeeper )
             period            = Period( period_parameters )
             period_result     = period.compute( bookkeeper )
@@ -488,19 +494,43 @@ class Forecast:
         year_days = 366 if calendar.isleap( span.start_date.year ) else 365
         return Decimal( period_days ) / Decimal( year_days )
 
+    def _retitle_removed_subjects_accounts( self, bookkeeper : Bookkeeper, span : DateSpan ) -> None:
+        """Retitle a decedent's accounts to the survivor once the run passes the death year, so
+        the survivor's age then drives the account's RMDs and early-withdrawal penalty. The
+        scan is idempotent -- after a retitle the accounts no longer carry the decedent's
+        handle -- so it can run each period. No survivor (the last death) leaves them as-is;
+        the plan ends instead."""
+        year = span.end_date.year
+        for removal in self._parameters.subject_removals:
+            if year <= removal.event_date.year:
+                continue
+            survivor_handle = self._parameters.survivor_handle( removal.subject_handle )
+            if survivor_handle is None:
+                continue
+            for account in bookkeeper.books.accounts:
+                if ( account.owner_handle is not None ) and (
+                        str( account.owner_handle ) == str( removal.subject_handle ) ):
+                    account.owner_handle = survivor_handle
+                continue
+            continue
+        return
+
     def _tax_context_for( self, span : DateSpan ) -> TaxContext:
-        """The taxpayer context for the interval: ages from birthdates at the interval's end,
-        the rental properties (depreciation attributes plus any in-year disposition), and the
-        household's subsidized health enrollment when coverage is in force. STUB: filing status
-        static."""
+        """The taxpayer context for the interval: ages from birthdates at the interval's end
+        for the subjects still present, the rental properties (depreciation attributes plus any
+        in-year disposition), the survivor-aware filing status (the tax law's rule), and the
+        household's subsidized health enrollment when coverage is in force."""
+        year = span.end_date.year
         subjects = tuple(
             TaxSubject(
                 handle     = subject.handle,
-                age        = span.end_date.year - subject.birthdate.year,
+                age        = year - subject.birthdate.year,
                 birth_year = subject.birthdate.year )
-            for subject in self._parameters.subjects )
+            for subject in self._parameters.active_subjects( year ) )
+        filing_status = resolve_filing_status(
+            self._parameters.filing_status, self._parameters.earliest_removal_year(), year )
         return TaxContext(
-            filing_status     = self._parameters.filing_status,
+            filing_status     = filing_status,
             subjects          = subjects,
             properties        = self._tax_properties_for( span ),
             health_enrollment = self._subsidized_health_enrollment_for( span ),
@@ -510,12 +540,15 @@ class Forecast:
             self, span : DateSpan ) -> Optional[ SubsidizedHealthEnrollment ]:
         """Resolve the household's windowed subsidized health coverage, if in force this
         interval, into the single-year `SubsidizedHealthEnrollment` the tax engine consumes
-        (and, in the US, turns into the ACA premium tax credit). None when uncovered."""
+        (and, in the US, turns into the ACA premium tax credit). The household size is derived
+        from the base less any subject removed by this year. None when uncovered."""
         coverage = self._parameters.health_coverage
         if ( coverage is None ) or ( not coverage.covers( span.end_date ) ):
             return None
+        household_size = resolve_household_size(
+            coverage.household_size, self._parameters.subject_removals, span.end_date.year )
         return SubsidizedHealthEnrollment(
-            household_size    = coverage.household_size,
+            household_size    = household_size,
             reference_premium = coverage.reference_premium )
 
     def _tax_properties_for( self, span : DateSpan ) -> tuple:
