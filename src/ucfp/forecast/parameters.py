@@ -60,7 +60,13 @@ class PropertyAttributes:
     """The tax-relevant facts of a real-estate holding beyond its market value: when it was
     acquired, the depreciable (building) basis -- zero for a residence, the building portion
     for a rental -- and the rental depreciation class. Land is the implicit remainder of the
-    asset's opening value. The Forecast turns these into the engine's `TaxProperty`."""
+    asset's opening value. The Forecast turns these into the engine's `TaxProperty`.
+
+    For a rental, the asset's `cost_basis` must be the ORIGINAL purchase price, not the
+    depreciated/adjusted basis: the book gain at sale is proceeds - cost_basis (the
+    appreciation, recognized as a long-term gain), and the engine adds the accumulated
+    depreciation back on top as §1250 recapture (taxed at up to 25%). Passing the adjusted
+    basis would double-count the depreciation."""
 
     acquisition_date  : date
     depreciable_basis : Decimal          = Decimal( '0' )
