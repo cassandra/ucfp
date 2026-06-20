@@ -9,8 +9,8 @@ keeps its own domain<->record correspondence rather than relying on any shared k
 from django.db import transaction
 
 from .books import Account, BooksOfAccount, Entry, Transaction
-from .handle import Handle
 from .models import AccountRecord, BooksOfAccountRecord, EntryRecord, TransactionRecord
+from .schemas import Handle
 from organization.models import Organization
 
 

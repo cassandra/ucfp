@@ -16,7 +16,7 @@ state and per-subject blindness join as the engine's later stages land.
 from dataclasses import dataclass, field
 from typing import Optional
 
-from ucfp.accounts.handle import Handle
+from ucfp.accounts.schemas import Handle
 from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 
 from .enums import FilingStatus

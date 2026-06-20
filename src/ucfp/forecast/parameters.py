@@ -33,7 +33,7 @@ from ucfp.accounts.enums import (
     SystemAccountRole,
 )
 from ucfp.accounts.exceptions import MissingAccountError
-from ucfp.accounts.handle import Handle
+from ucfp.accounts.schemas import Handle
 from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer, Windfall
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile

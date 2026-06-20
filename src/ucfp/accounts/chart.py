@@ -16,7 +16,7 @@ from .enums import (
     IncomeTaxClass,
     SystemAccountRole,
 )
-from .handle import Handle
+from .schemas import Handle
 
 
 class Chart:

@@ -26,7 +26,7 @@ from .enums import (
     SystemAccountRole,
 )
 from .exceptions import AccountStructureError, TransactionImbalanceError
-from .handle import Handle
+from .schemas import Handle
 
 
 @dataclass( eq = False )
