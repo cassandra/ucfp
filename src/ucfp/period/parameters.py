@@ -14,6 +14,7 @@ data/design/projection-model.md, "PeriodParameters".
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Optional
 
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
@@ -133,19 +134,21 @@ class LiabilityTerm:
 
 @dataclass( frozen = True )
 class FundingPolicy:
-    """How a savings shortfall is funded: a target cash balance to maintain and an
-    ordered list of accounts to draw from. The waterfall draws from each in turn
-    (realizing gains) until cash reaches `cash_target` or the sources are exhausted.
-    Tax settled afterward can pull cash below the target -- even negative -- and
-    that balance simply carries into the next period as a visible cash-flow signal;
+    """How the cash hub is kept within its band. Below `cash_floor`, the waterfall draws
+    (realizing gains) from `draw_priority` in turn until cash reaches the floor or the sources
+    are exhausted. Above `cash_ceiling` (when set), the surplus is swept into `sweep_destination`
+    as an investment at cost. Tax settled afterward can pull cash below the floor -- even
+    negative -- and that balance carries into the next period as a visible cash-flow signal;
     only a net worth at or below zero ends the forecast.
 
-    `cash_target` is resolved per interval by the Scenario, so the user-facing
-    policy can be absolute, a multiple of expenses, or inflation-adjusted upstream.
+    The bounds are resolved per interval by the Scenario, so the user-facing policy can be
+    absolute, a multiple of expenses, or inflation-adjusted upstream.
     """
 
-    cash_target   : Decimal = Decimal( '0' )
-    draw_priority : list[ Account ] = field( default_factory = list )
+    cash_floor        : Decimal = Decimal( '0' )
+    draw_priority     : list[ Account ] = field( default_factory = list )
+    cash_ceiling      : Optional[ Decimal ] = None
+    sweep_destination : Optional[ Account ] = None
 
 
 @dataclass( frozen = True )

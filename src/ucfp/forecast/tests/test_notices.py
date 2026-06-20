@@ -17,6 +17,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters,
+    CashAccountParameters,
     ExpenseItem,
     ForecastParameters,
     ScheduledRealization,
@@ -103,8 +104,8 @@ class NoticeCatalogTests( unittest.TestCase ):
                 AssetParameters( 'Brokerage', AssetClass.STOCKS, Decimal( '500000' ),
                                  Decimal( '500000' ) ) ],
             expenses      = [ _expense( 'Living', '50000' ) ],
-            cash_target   = Decimal( '10000' ),
-            draw_order    = [ AssetClass.STOCKS ],
+            cash_account  = CashAccountParameters(
+                cash_floor = Decimal( '10000' ), draw_order = [ AssetClass.STOCKS ] ),
         ) ).run()
         notice = _notice( result, NoticeKind.FUNDING_DRAW )
         self.assertEqual( notice.severity, NoticeSeverity.INFO )
@@ -127,8 +128,8 @@ class NoticeCatalogTests( unittest.TestCase ):
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '500000' ), Decimal( '0' ),
                     owner_handle = 'subject-a' ) ],
             expenses      = [ _expense( 'Living', '60000' ) ],
-            cash_target   = Decimal( '10000' ),
-            draw_order    = [ AssetClass.PRETAX_RETIREMENT ],
+            cash_account  = CashAccountParameters(
+                cash_floor = Decimal( '10000' ), draw_order = [ AssetClass.PRETAX_RETIREMENT ] ),
         ) ).run()
         penalty = _notice( result, NoticeKind.EARLY_WITHDRAWAL_PENALTY )
         self.assertEqual( penalty.severity, NoticeSeverity.WARNING )

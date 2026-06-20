@@ -16,6 +16,7 @@ from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters,
+    CashAccountParameters,
     ExpenseItem,
     ForecastParameters,
     Subject,
@@ -45,8 +46,8 @@ def _parameters( draw_order, outlook = None ):
                              handle = 'brokerage' ) ],
         economic_outlook = outlook if outlook is not None else EconomicOutlook(),
         expenses      = [ _LIVING_50K ],
-        cash_target   = Decimal( '10000' ),
-        draw_order    = draw_order,
+        cash_account  = CashAccountParameters(
+            cash_floor = Decimal( '10000' ), draw_order = draw_order ),
     )
 
 

@@ -223,16 +223,18 @@ class Period:
         return
 
     def _settle_and_fund( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Fund cash up to the policy's target buffer first -- so the draws' realized
-        income is taxed this period -- then settle the period's tax on the full
-        income. Tax may pull cash below the target (even negative); that balance is
-        carried into the next period as a visible cash-flow signal, and only a net
-        worth at or below zero ends the forecast (see _close). Because all funding
-        precedes settlement, no untaxed income is ever carried -- only cash is."""
+        """Fund cash up to the policy's floor first -- so the draws' realized income is taxed
+        this period -- then settle the period's tax on the full income, and finally sweep any
+        surplus above the ceiling into investments (a basis-establishing purchase, so it is not
+        a taxable event and rightly runs after settlement). Tax may pull cash below the floor
+        (even negative); that balance is carried into the next period as a visible cash-flow
+        signal, and only a net worth at or below zero ends the forecast (see _close). Because
+        all funding precedes settlement, no untaxed income is ever carried -- only cash is."""
         self._check_forced_tax_transactions( bookkeeper, result )
         self._fund_to_target( bookkeeper, result )
         self._assess_penalties( bookkeeper, result )
         self._settle_tax( bookkeeper, result )
+        self._sweep_to_ceiling( bookkeeper, result )
         return
 
     def _fiscal_window( self, bookkeeper : Bookkeeper ):
@@ -358,7 +360,7 @@ class Period:
 
     def _fund_to_target( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Draw from the funding policy's accounts in priority order (realizing
-        gains as it goes) until cash reaches the policy's cash_target, or the
+        gains as it goes) until cash reaches the policy's cash_floor, or the
         sources are exhausted. Dated at the period start so the draw precedes the
         expenses it funds. A single pre-settlement pass: every gain it realizes is
         taxed this period, so nothing is carried but the ending cash balance."""
@@ -367,7 +369,7 @@ class Period:
         cash_account = chart.cash_account()
         if cash_account is None:
             return
-        target = self._parameters.funding_policy.cash_target
+        target = self._parameters.funding_policy.cash_floor
         fund_date = self._parameters.date_span.start_date
         for source in self._parameters.funding_policy.draw_priority:
             shortfall = target - ledger.natural_balance( cash_account )
@@ -403,6 +405,29 @@ class Period:
                         amount           = draw,
                         transaction_uuid = transaction.transaction_uuid ) )
             continue
+        return
+
+    def _sweep_to_ceiling( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Sweep any cash above the policy's ceiling into the sweep destination as an
+        investment: DR the holding (cost) / CR cash, so the swept amount becomes its cost basis
+        and a later sale taxes only the gain. Runs after settlement; it moves no income and is
+        net-worth-neutral, so it raises no Notice (routine policy, requested -- a memo suffices).
+        No ceiling or no destination means no sweep."""
+        policy = self._parameters.funding_policy
+        if ( policy.cash_ceiling is None ) or ( policy.sweep_destination is None ):
+            return
+        cash_account = bookkeeper.chart.cash_account()
+        if cash_account is None:
+            return
+        surplus = bookkeeper.ledger.natural_balance( cash_account ) - policy.cash_ceiling
+        surplus = quantize_money( surplus )
+        if surplus <= 0:
+            return
+        bookkeeper.record(
+            self._parameters.date_span.end_date,
+            [ ( policy.sweep_destination, -surplus ), ( cash_account, surplus ) ],
+            description = f'Swept surplus cash into {policy.sweep_destination}.',
+        )
         return
 
     def _close( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:

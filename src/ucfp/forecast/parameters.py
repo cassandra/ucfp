@@ -366,6 +366,20 @@ def resolve_household_size(
     return base_size - removed
 
 
+@dataclass( frozen = True )
+class CashAccountParameters:
+    """How the cash hub is managed -- the band to keep it in and how. `cash_floor` is the
+    minimum to maintain: a shortfall below it is covered by drawing (realizing) from the
+    `draw_order` asset classes in priority. `cash_ceiling` is the maximum: surplus above it is
+    swept into `sweep_account` (a non-retirement holding) as an investment at cost, so later
+    sales tax only the gain. A None `cash_ceiling` (or no `sweep_account`) disables sweeping."""
+
+    cash_floor    : Decimal              = Decimal( '0' )
+    cash_ceiling  : Optional[ Decimal ]  = None
+    draw_order    : list[ AssetClass ]   = field( default_factory = list )
+    sweep_account : Optional[ Handle ]   = None
+
+
 @dataclass
 class ForecastParameters:
     """The full materialized inputs for an N-step Forecast (see module docstring)."""
@@ -384,8 +398,8 @@ class ForecastParameters:
     loans             : list[ LoanParameters ]               = field( default_factory = list )
     contributions     : list[ RetirementContribution ]       = field( default_factory = list )
     events            : list[ ScheduledEvent ]               = field( default_factory = list )
-    cash_target       : Decimal                              = Decimal( '0' )
-    draw_order        : list[ AssetClass ]                   = field( default_factory = list )
+    cash_account      : CashAccountParameters                = field(
+        default_factory = CashAccountParameters )
     health_coverage   : Optional[ SubsidizedHealthCoverage ] = None
     subject_removals  : list[ SubjectRemoval ]               = field( default_factory = list )
     initial_tax_state : object                               = None
