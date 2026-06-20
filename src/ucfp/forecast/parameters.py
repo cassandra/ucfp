@@ -76,15 +76,18 @@ class AssetParameters:
     `property_attributes` (the tax facts behind §121/§1250); None for any other asset.
     `cost_basis` is required (no defaulting -- an important distinction belongs upstream): a
     retirement account passes 0 (its whole value is taxable/withdrawable on the way out), a
-    freshly-valued holding passes `opening_value` (cost = market). `owner_handle` is the
-    handle of the subject who owns the holding (matching that `Subject.handle`), required for
-    a retirement account -- the owner's age drives the early-withdrawal penalty and RMDs.
-    STUB: the value-rule and existence window join later."""
+    freshly-valued holding passes `opening_value` (cost = market). `handle` is the planner's
+    stable identity for this holding's account (distinct from the display `name`), needed for a
+    scheduled event to reference it or for result drill-down; None for a holding neither
+    references. `owner_handle` is the handle of the *subject* who owns it (matching that
+    `Subject.handle`), required for a retirement account -- the owner's age drives the
+    early-withdrawal penalty and RMDs. STUB: the value-rule and existence window join later."""
 
     name                : str
     asset_class         : AssetClass
     opening_value       : Decimal
     cost_basis          : Decimal
+    handle              : Optional[ Handle ]             = None
     property_attributes : Optional[ PropertyAttributes ] = None
     owner_handle        : Optional[ Handle ]             = None
 
@@ -164,15 +167,12 @@ class LoanParameters:
 
 
 class ScheduledEvent:
-    """Base for a user-scheduled money-movement event: it names the holdings it touches and
-    the date it occurs, and resolves to a `PeriodEvent` (which holds the accounts) once the
-    Forecast has built the books. `to_period_event` receives `holdings` (asset name ->
-    holding account) and the `Chart` (for the cash hub and other system/revenue accounts).
-
-    PLACEHOLDER: holdings are referenced by their (run-unique) `name` string. This is the
-    deficient stand-in for a stable `Handle` -- the planner-owned, serializable account
-    reference that will also key result drill-down; it replaces these names everywhere at
-    once when the handle work lands."""
+    """Base for a user-scheduled money-movement event: it references the holdings it touches by
+    their planner-minted `Handle`, and the date it occurs, and resolves to a `PeriodEvent`
+    (which holds the accounts) once the Forecast has built the books. `to_period_event` receives
+    `holdings` (holding-handle string -> holding account) and the `Chart` (for the cash hub and
+    other system/revenue accounts). Handles are matched by their string form, the identity
+    contract, so any planner scheme works."""
 
     event_date : date
 
@@ -190,49 +190,63 @@ class ScheduledEvent:
             raise MissingAccountError( 'No cash account for the scheduled event.' )
         return cash
 
+    def _holding( self, holdings : dict[ str, Account ], handle : Handle ) -> Account:
+        """The holding account `handle` refers to, or a MissingAccountError if no such holding
+        exists in the books (an event naming a holding the planner never created)."""
+        holding = holdings.get( str( handle ) )
+        if holding is None:
+            raise MissingAccountError( f'No holding with handle "{handle}" for the scheduled event.' )
+        return holding
+
 
 @dataclass( frozen = True )
 class ScheduledTransfer( ScheduledEvent ):
-    """Move `amount` between two named holdings, with no tax effect (e.g. cash -> CD, or a
+    """Move `amount` between two holdings (by handle), with no tax effect (e.g. cash -> CD, or a
     rebalance inside a tax-advantaged account)."""
 
     event_date : date
-    source     : str
-    target     : str
+    source     : Handle
+    target     : Handle
     amount     : Decimal
 
     def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
-        return Transfer( self.event_date, holdings[ self.source ], holdings[ self.target ], self.amount )
+        return Transfer(
+            self.event_date, self._holding( holdings, self.source ),
+            self._holding( holdings, self.target ), self.amount )
 
 
 @dataclass( frozen = True )
 class ScheduledPurchase( ScheduledEvent ):
-    """Acquire `amount` of a named holding at cost, funded from cash. STUB: buys into a
+    """Acquire `amount` of a holding (by handle) at cost, funded from cash. STUB: buys into a
     holding present from t0 (possibly opening at zero value); originating a brand-new
     holding mid-forecast joins later with asset existence windows."""
 
     event_date : date
-    asset      : str
+    asset      : Handle
     amount     : Decimal
 
     def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
-        return Purchase( self.event_date, self._cash( chart ), holdings[ self.asset ], self.amount )
+        return Purchase(
+            self.event_date, self._cash( chart ), self._holding( holdings, self.asset ), self.amount )
 
 
 @dataclass( frozen = True )
 class ScheduledRealization( ScheduledEvent ):
-    """Realize `amount` of a named holding -- a sale or pre-tax withdrawal when `destination`
-    is None (proceeds to the cash hub), or a conversion when `destination` names another
-    holding (e.g. pre-tax -> Roth). Tax treatment follows the source holding's class."""
+    """Realize `amount` of a holding (by handle) -- a sale or pre-tax withdrawal when
+    `destination` is None (proceeds to the cash hub), or a conversion when `destination` is
+    another holding's handle (e.g. pre-tax -> Roth). Tax treatment follows the source holding's
+    class."""
 
     event_date  : date
-    holding     : str
+    holding     : Handle
     amount      : Decimal
-    destination : Optional[ str ] = None
+    destination : Optional[ Handle ] = None
 
     def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
-        target = self._cash( chart ) if self.destination is None else holdings[ self.destination ]
-        return Realization( self.event_date, holdings[ self.holding ], self.amount, target )
+        target = self._cash( chart ) if self.destination is None else self._holding(
+            holdings, self.destination )
+        return Realization(
+            self.event_date, self._holding( holdings, self.holding ), self.amount, target )
 
 
 @dataclass( frozen = True )

@@ -46,6 +46,7 @@ class Account:
     is_valuation      : bool                         = False
     income_tax_class  : Optional[ IncomeTaxClass ]   = None
     expense_tax_class : Optional[ ExpenseTaxClass ]  = None
+    handle            : Optional[ Handle ]           = None
     owner_handle      : Optional[ Handle ]           = None
     description       : str                          = ''
     closed            : bool                         = False

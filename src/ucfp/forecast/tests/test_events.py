@@ -13,6 +13,7 @@ from decimal import Decimal
 from common.rate import Rate
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
@@ -43,14 +44,17 @@ class EventResolutionTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
-                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ) ),
-                AssetParameters( 'CD', AssetClass.CDS, Decimal( '0' ), Decimal( '0' ) ),
-                AssetParameters( 'Stocks', AssetClass.STOCKS, Decimal( '50000' ), Decimal( '50000' ) ),
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ),
+                                 handle = 'Cash' ),
+                AssetParameters( 'CD', AssetClass.CDS, Decimal( '0' ), Decimal( '0' ), handle = 'CD' ),
+                AssetParameters( 'Stocks', AssetClass.STOCKS, Decimal( '50000' ), Decimal( '50000' ),
+                                 handle = 'Stocks' ),
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ),
-                    owner_handle = 'subject-a' ),
+                    handle = 'IRA', owner_handle = 'subject-a' ),
                 AssetParameters(
-                    'Roth', AssetClass.ROTH, Decimal( '0' ), Decimal( '0' ), owner_handle = 'subject-a' ),
+                    'Roth', AssetClass.ROTH, Decimal( '0' ), Decimal( '0' ),
+                    handle = 'Roth', owner_handle = 'subject-a' ),
             ],
             events        = [
                 ScheduledTransfer( date( 2026, 3, 1 ), 'Cash', 'CD', Decimal( '20000' ) ),
@@ -90,7 +94,7 @@ class EventResolutionTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ),
-                    owner_handle = 'subject-a' ),
+                    handle = 'IRA', owner_handle = 'subject-a' ),
             ],
             events        = [ ScheduledRealization( date( 2026, 3, 1 ), 'IRA', Decimal( '40000' ) ) ],
         )
@@ -117,7 +121,7 @@ class EventResolutionTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ),
-                    owner_handle = 'subject-a' ),
+                    handle = 'IRA', owner_handle = 'subject-a' ),
             ],
             events        = [ ScheduledRealization( date( 2026, 3, 1 ), 'IRA', Decimal( '40000' ) ) ],
         )
@@ -142,7 +146,8 @@ class EventResolutionTests( unittest.TestCase ):
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
-                AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ), Decimal( '30000' ) ),
+                AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ), Decimal( '30000' ),
+                                 handle = 'Car' ),
             ],
             economic_outlook = EconomicOutlook.constant(
                 EconomicParameters( depreciation_rate = Rate( Decimal( '0.20' ) ) ) ),
@@ -174,6 +179,36 @@ class ZeroBasisValidationTests( unittest.TestCase ):
         # a retirement account must name its owner; the owner's age drives the penalty/RMDs
         with self.assertRaises( ValueError ):
             AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ) )
+
+
+class HandleResolutionTests( unittest.TestCase ):
+
+    def _parameters( self, events ):
+        return ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 6, 30 ),
+            filing_status = FilingStatus.SINGLE,
+            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            subjects      = [ Subject( 'A', date( 1960, 1, 1 ), 'subject-a' ) ],
+            assets        = [
+                AssetParameters( 'My Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters( 'My Brokerage', AssetClass.STOCKS, Decimal( '50000' ),
+                                 Decimal( '50000' ), handle = 'brokerage' ) ],
+            events        = events,
+        )
+
+    def test_holding_carries_its_handle( self ):
+        # the planner's handle (distinct from the display name) is stamped on the account, so
+        # results can be drilled by it
+        reader = Bookkeeper( Forecast( self._parameters( [] ) ).run().books )
+        brokerage = next(
+            account for account in reader.chart.holdings() if account.name == 'My Brokerage' )
+        self.assertEqual( str( brokerage.handle ), 'brokerage' )
+
+    def test_event_referencing_an_unknown_handle_raises( self ):
+        events = [ ScheduledRealization( date( 2026, 3, 1 ), 'nonesuch', Decimal( '1000' ) ) ]
+        with self.assertRaises( MissingAccountError ):
+            Forecast( self._parameters( events ) ).run()
 
 
 if __name__ == '__main__':

@@ -166,7 +166,8 @@ class Forecast:
         self._tax_law    = TaxLaw( parameters.tax_forecast )
         self._income_accounts = None    # an IncomeAccounts, built with the books in _build_baseline
         self._expense_accounts = None   # an ExpenseAccounts, built with the books in _build_baseline
-        self._holding_by_name = dict()  # asset name -> holding account, for resolving events
+        self._holding_by_handle = dict()  # handle string -> holding account, for resolving events
+        self._asset_holdings = list()   # (AssetParameters, holding) pairs, for property resolution
         self._draw_priority = list()    # holdings to fund from, resolved from draw_order by class
         self._loans = list()            # resolved loans (accounts + level payment), built in baseline
         self._periods_per_year = None   # set when there are liabilities (needs month/year granularity)
@@ -207,11 +208,13 @@ class Forecast:
         holdings = list()
         for asset in self._parameters.assets:
             holding = bookkeeper.create_holding( asset_root, asset.name, asset.asset_class )
+            holding.handle = asset.handle
             holding.owner_handle = asset.owner_handle
             holdings.append( ( holding, asset.opening_value, asset.cost_basis ) )
+            self._asset_holdings.append( ( asset, holding ) )
+            if asset.handle is not None:
+                self._holding_by_handle[ str( asset.handle ) ] = holding
             continue
-        self._holding_by_name = {
-            holding.name : holding for holding, _value, _basis in holdings }
         self._create_loans( bookkeeper )
         self._seed_opening_balances( bookkeeper, holdings )
         self._create_income_accounts( bookkeeper )
@@ -422,12 +425,12 @@ class Forecast:
 
     def _events_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list:
         """Resolve the scheduled events occurring in this interval into PeriodEvents, binding
-        their named holdings to the running accounts via the chart (which also supplies the
-        cash hub and the revenue/equity accounts a windfall credits). Order is preserved, so
-        same-interval events apply as authored."""
+        their holding handles to the running accounts (and via the chart the cash hub and the
+        revenue/equity accounts a windfall credits). Order is preserved, so same-interval events
+        apply as authored."""
         chart = bookkeeper.chart
         return [
-            event.to_period_event( self._holding_by_name, chart )
+            event.to_period_event( self._holding_by_handle, chart )
             for event in self._parameters.events if event.in_span( span ) ]
 
     def _clip_to_window( self, span : DateSpan, window : DateWindow ) -> Optional[ tuple[ date, date ] ]:
@@ -557,13 +560,13 @@ class Forecast:
         this fiscal year (driving §1250 recapture). Residences need none -- their gain
         settles through the §121 residence-gains account, not the context."""
         properties = list()
-        for asset in self._parameters.assets:
+        for asset, holding in self._asset_holdings:
             attributes = asset.property_attributes
             if ( asset.asset_class != AssetClass.REAL_ESTATE_RENTAL ) or ( attributes is None ):
                 continue
             properties.append(
                 TaxProperty(
-                    holding           = self._holding_by_name[ asset.name ],
+                    holding           = holding,
                     acquisition_date  = attributes.acquisition_date,
                     depreciable_basis = attributes.depreciable_basis,
                     property_type     = attributes.property_type,
@@ -575,13 +578,16 @@ class Forecast:
 
     def _disposition_for( self, asset, span : DateSpan ) -> Optional[ PropertyDisposition ]:
         """The disposition for `asset` if a sale of it falls in this span's fiscal year, else
-        None: the first scheduled realization naming the holding, dated in that calendar year.
-        (The sale date is a scheduled input, so no running state is needed.)"""
+        None: the first scheduled realization of its holding handle, dated in that calendar
+        year. (The sale date is a scheduled input, so no running state is needed.) A property
+        with no handle cannot be referenced by a sale, so it never disposes."""
+        if asset.handle is None:
+            return None
         fiscal_year = span.end_date.year
         for event in self._parameters.events:
             if not isinstance( event, ScheduledRealization ):
                 continue
-            if ( event.holding != asset.name ) or ( event.event_date.year != fiscal_year ):
+            if ( str( event.holding ) != str( asset.handle ) ) or ( event.event_date.year != fiscal_year ):
                 continue
             return PropertyDisposition( sale_date = event.event_date )
         return None

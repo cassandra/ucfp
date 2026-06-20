@@ -39,7 +39,8 @@ class Section121Tests( unittest.TestCase ):
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
                 AssetParameters(
-                    'Home', AssetClass.REAL_ESTATE_RESIDENCE, Decimal( '800000' ), Decimal( '800000' ) ),
+                    'Home', AssetClass.REAL_ESTATE_RESIDENCE, Decimal( '800000' ), Decimal( '800000' ),
+                    handle = 'Home' ),
             ],
             economic_outlook = EconomicOutlook.constant(
                 EconomicParameters( real_estate_appreciation = Rate( Decimal( '0.25' ) ) ) ),
@@ -66,7 +67,8 @@ class Section121Tests( unittest.TestCase ):
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
                 AssetParameters(
-                    'Home', AssetClass.REAL_ESTATE_RESIDENCE, Decimal( '600000' ), Decimal( '200000' ) ),
+                    'Home', AssetClass.REAL_ESTATE_RESIDENCE, Decimal( '600000' ), Decimal( '200000' ),
+                    handle = 'Home' ),
             ],
             events        = [ ScheduledRealization( date( 2026, 7, 1 ), 'Home', Decimal( '600000' ) ) ],
         )

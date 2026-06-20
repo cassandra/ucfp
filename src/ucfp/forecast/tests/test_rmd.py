@@ -50,7 +50,7 @@ class RmdTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '246000' ), Decimal( '0' ),
-                    owner_handle = 'subject-a' ),
+                    handle = 'IRA', owner_handle = 'subject-a' ),
             ],
             events = [] )
         ledger = reader.ledger
@@ -69,7 +69,7 @@ class RmdTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '246000' ), Decimal( '0' ),
-                    owner_handle = 'subject-a' ),
+                    handle = 'IRA', owner_handle = 'subject-a' ),
             ],
             events = [ ScheduledRealization( date( 2026, 3, 1 ), 'IRA', Decimal( '10000' ) ) ] )
         ledger = reader.ledger
@@ -87,10 +87,10 @@ class RmdTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '246000' ), Decimal( '0' ),
-                    owner_handle = 'subject-a' ),
+                    handle = 'IRA', owner_handle = 'subject-a' ),
                 AssetParameters(
                     'Roth', AssetClass.ROTH, Decimal( '0' ), Decimal( '0' ),
-                    owner_handle = 'subject-a' ),
+                    handle = 'Roth', owner_handle = 'subject-a' ),
             ],
             events = [ ScheduledRealization( date( 2026, 3, 1 ), 'IRA', Decimal( '10000' ), 'Roth' ) ] )
         ledger = reader.ledger
