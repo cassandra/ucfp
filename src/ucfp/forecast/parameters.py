@@ -20,6 +20,7 @@ from decimal import Decimal
 from typing import Optional
 
 from common.date_window import DateWindow
+from common.labeled_enum import LabeledEnum
 from common.rate import Rate
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
@@ -178,6 +179,35 @@ class LoanParameters:
     annual_extra_principal : Decimal         = Decimal( '0' )
     handle                : Optional[ Handle ] = None
     interest_handle       : Optional[ Handle ] = None
+
+
+class ContributionSource( LabeledEnum ):
+    """Where a retirement contribution comes from -- which sets its money source and tax
+    treatment. WAGE (payroll 401(k) deferral) and PERSONAL (direct IRA) both come from cash
+    and are deductible into a pre-tax account; they are identical today and split only for the
+    separate 401(k)/IRA contribution limits (deferred). EMPLOYER (match) is the employer's
+    money -- external, never deductible, and taxed only on withdrawal."""
+
+    WAGE     = ( 'Wage Deferral', 'Payroll 401(k)/403(b) deferral from the employee.' )
+    PERSONAL = ( 'Personal', 'A direct personal contribution (e.g. a traditional or Roth IRA).' )
+    EMPLOYER = ( 'Employer Match', 'An employer contribution; external money, taxed on withdrawal.' )
+
+
+@dataclass( frozen = True )
+class RetirementContribution:
+    """A recurring contribution into a retirement holding over a `window` -- the accrual-phase
+    mirror of a withdrawal. `account` is the target holding's handle; its asset class (pre-tax
+    vs Roth) and owner come from that holding, so they are not restated here. `amount` is the
+    annual contribution in today's dollars, grown by wage growth. `source` sets the money
+    source and deductibility (see `ContributionSource`): a cash contribution to a pre-tax
+    holding is deducted above the line; a Roth contribution and an employer match are not. STUB:
+    contribution limits and IRA/Roth income phase-outs are deferred (the planner states the
+    amount; the engine trusts it)."""
+
+    account : Handle
+    amount  : Decimal
+    source  : ContributionSource
+    window  : DateWindow = DateWindow()
 
 
 class ScheduledEvent:
@@ -352,6 +382,7 @@ class ForecastParameters:
     income_streams    : list[ IncomeStream ]                 = field( default_factory = list )
     expenses          : list[ ExpenseItem ]                  = field( default_factory = list )
     loans             : list[ LoanParameters ]               = field( default_factory = list )
+    contributions     : list[ RetirementContribution ]       = field( default_factory = list )
     events            : list[ ScheduledEvent ]               = field( default_factory = list )
     cash_target       : Decimal                              = Decimal( '0' )
     draw_order        : list[ AssetClass ]                   = field( default_factory = list )

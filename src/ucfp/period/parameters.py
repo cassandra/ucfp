@@ -98,6 +98,21 @@ class ExpenseLine:
 
 
 @dataclass( frozen = True )
+class ContributionLine:
+    """One retirement contribution materializing this interval: it debits the target holding's
+    `valuation_account` (the zero-basis representation, so the whole amount is taxed on a later
+    withdrawal) and credits its `funding_account` -- the cash hub for an employee contribution
+    (net-worth-neutral) or the External Receipts equity for an employer match (net-worth-
+    increasing). `description` is the posting memo. The Scenario resolves the accounts and the
+    grown amount; the Period just posts it."""
+
+    valuation_account : Account
+    funding_account   : Account
+    amount            : Decimal
+    description       : str = ''
+
+
+@dataclass( frozen = True )
 class LiabilityTerm:
     """This interval's payment for one loan (loans are modeled individually).
 
@@ -151,6 +166,7 @@ class PeriodParameters:
     income_lines          : list[ IncomeLine ]         = field( default_factory = list )
     expense_lines         : list[ ExpenseLine ]        = field( default_factory = list )
     liability_terms       : list[ LiabilityTerm ]      = field( default_factory = list )
+    contribution_lines    : list[ ContributionLine ]   = field( default_factory = list )
     events                : list[ PeriodEvent ]        = field( default_factory = list )
     tax_engine            : TaxEngine                  = None
     opening_tax_state     : object                     = None

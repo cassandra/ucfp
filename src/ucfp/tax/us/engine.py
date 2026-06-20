@@ -149,8 +149,15 @@ class USFederalTaxEngine( TaxEngine ):
         section_1250 = max( _ZERO, section_1250_gain )
         collectibles = max( _ZERO, fiscal_window.income( IncomeTaxClass.COLLECTIBLES_GAINS ) )
 
+        # Pre-tax retirement contributions from cash are an above-the-line deduction: they
+        # reduce ordinary income here (so AGI, the Social Security worksheet, and every MAGI
+        # downstream all see the reduction). FICA is unaffected -- it reads gross WAGES. The
+        # employer match and Roth contributions are excluded by construction (not cash into a
+        # pre-tax holding). The over-contribution edge (deduction exceeding wages) is deferred.
+        pretax_contributions = self._pretax_contributions( fiscal_window )
         ordinary_nonrental  = ( wages + ordinary_other + taxable_interest
-                                + netted.gain_ordinary - netted.ordinary_offset )
+                                + netted.gain_ordinary - netted.ordinary_offset
+                                - pretax_contributions )
         preferential_income = qualified_dividends + netted.gain_preferential
         total_gains         = preferential_income + section_1250 + collectibles
 
@@ -223,6 +230,16 @@ class USFederalTaxEngine( TaxEngine ):
             yield ( holding, owner )
             continue
         return
+
+    def _pretax_contributions( self, fiscal_window ) -> Decimal:
+        """The year's cash contributions into pre-tax retirement holdings -- the above-the-line
+        deduction. Read from the books view; the employer match and Roth contributions are
+        excluded by construction (only cash into a pre-tax holding counts)."""
+        return sum(
+            ( fiscal_window.contributions_from_cash( holding )
+              for holding in fiscal_window.holdings()
+              if holding.asset_class == AssetClass.PRETAX_RETIREMENT ),
+            _ZERO )
 
     def assess_penalties( self, fiscal_window, tax_context ) -> list:
         """The early-withdrawal penalty: 10% of the year's pre-tax distributions to cash for an

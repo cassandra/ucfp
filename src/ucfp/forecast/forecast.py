@@ -42,7 +42,9 @@ from ucfp.accounts.enums import (
     IncomeTaxClass,
     SystemAccountRole,
 )
+from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.period.parameters import (
+    ContributionLine,
     DateSpan,
     ExpenseLine,
     FundingPolicy,
@@ -59,6 +61,7 @@ from ucfp.tax.us.filing import resolve_filing_status
 from ucfp.tax.us.property import PropertyDisposition, TaxProperty
 
 from .parameters import (
+    ContributionSource,
     ExpenseItem,
     ForecastParameters,
     ScheduledRealization,
@@ -227,7 +230,27 @@ class Forecast:
         self._create_expense_accounts( bookkeeper )
         self._create_tax_accounts( bookkeeper )
         self._resolve_draw_priority( bookkeeper )
+        self._validate_contributions( bookkeeper )
         return bookkeeper
+
+    def _validate_contributions( self, bookkeeper : Bookkeeper ) -> None:
+        """Check each contribution's target is a retirement holding, and that an employer match
+        lands in a pre-tax account (Roth employer match is deferred) -- rejected at build so a
+        mis-targeted contribution cannot silently mismodel."""
+        retirement = ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH )
+        for contribution in self._parameters.contributions:
+            holding = self._holding_by_handle.get( str( contribution.account ) )
+            if ( holding is None ) or ( holding.asset_class not in retirement ):
+                raise MissingAccountError(
+                    f'Contribution targets "{contribution.account}", which is not a retirement '
+                    'holding.' )
+            if ( contribution.source == ContributionSource.EMPLOYER ) and (
+                    holding.asset_class != AssetClass.PRETAX_RETIREMENT ):
+                raise ValueError(
+                    'An employer match must target a pre-tax retirement holding '
+                    '(Roth employer match is not yet supported).' )
+            continue
+        return
 
     def _seed_opening_balances( self, bookkeeper : Bookkeeper, holdings : list ) -> None:
         """Post the opening transaction: each holding's value (increasing the asset) and each
@@ -406,6 +429,40 @@ class Forecast:
             continue
         return lines
 
+    def _contribution_lines_for(
+            self, span : DateSpan, year_fraction : Decimal,
+            bookkeeper : Bookkeeper ) -> list[ ContributionLine ]:
+        """Resolve the retirement contributions active this interval into ContributionLines:
+        grow each by wage growth from the forecast start and prorate to the interval, then post
+        into the target holding's valuation companion, funded from cash (employee) or External
+        Receipts equity (employer match)."""
+        chart = bookkeeper.chart
+        external_receipts = chart.system_account( SystemAccountRole.EXTERNAL_RECEIPTS )
+        lines = list()
+        for contribution in self._parameters.contributions:
+            if not contribution.window.covers( span.start_date ):
+                continue
+            holding = self._holding_by_handle[ str( contribution.account ) ]
+            valuation_account = chart.valuation_of( holding )
+            if valuation_account is None:
+                raise MissingAccountError(
+                    f'Retirement holding "{holding}" has no valuation account to contribute to.' )
+            funding_account = chart.cash_account()
+            if contribution.source == ContributionSource.EMPLOYER:
+                funding_account = external_receipts
+            if funding_account is None:
+                raise MissingAccountError( 'No account to fund the retirement contribution from.' )
+            factor = self._income_growth_factor( IncomeTaxClass.WAGES, span.start_date.year )
+            amount = contribution.amount * factor * year_fraction
+            lines.append(
+                ContributionLine(
+                    valuation_account = valuation_account,
+                    funding_account   = funding_account,
+                    amount            = amount,
+                    description       = f'{contribution.source.label} contribution to {holding}' ) )
+            continue
+        return lines
+
     def _expense_lines_for( self, span : DateSpan ) -> list[ ExpenseLine ]:
         """Resolve the expense items active this interval into ExpenseLines: the recurrence's
         occurrences in the interval x the per-occurrence amount in effect (inflated from the
@@ -487,6 +544,7 @@ class Forecast:
             income_lines      = self._income_lines_for( span, year_fraction ),
             expense_lines     = self._expense_lines_for( span ),
             liability_terms   = self._liability_terms_for( bookkeeper ),
+            contribution_lines = self._contribution_lines_for( span, year_fraction, bookkeeper ),
             events            = self._events_for( span, bookkeeper ),
             funding_policy    = FundingPolicy(
                 cash_target = self._parameters.cash_target, draw_priority = self._draw_priority ),

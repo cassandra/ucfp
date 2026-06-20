@@ -52,6 +52,7 @@ class Period:
         midpoint)."""
         self._apply_asset_returns( bookkeeper, result )
         self._recognize_income( bookkeeper, result )
+        self._apply_contributions( bookkeeper, result )
         self._service_liabilities( bookkeeper, result )
         self._apply_expenses( bookkeeper, result )
         self._apply_events( bookkeeper, result )
@@ -144,6 +145,25 @@ class Period:
             bookkeeper.record(
                 income_date,
                 [ ( cash_account, -amount ), ( income_line.account, amount ) ],
+            )
+            continue
+        return
+
+    def _apply_contributions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Post the resolved retirement `contribution_lines` at the midpoint (after income, so
+        cash is present): DR the holding's valuation companion / CR its funding account -- cash
+        for an employee contribution (net-worth-neutral), External Receipts equity for an
+        employer match (net-worth-increasing). Requested inputs, so they carry a memo, not a
+        Notice."""
+        contribution_date = self._parameters.date_span.midpoint
+        for line in self._parameters.contribution_lines:
+            amount = quantize_money( line.amount )
+            if amount == 0:
+                continue
+            bookkeeper.record(
+                contribution_date,
+                [ ( line.valuation_account, -amount ), ( line.funding_account, amount ) ],
+                description = line.description,
             )
             continue
         return

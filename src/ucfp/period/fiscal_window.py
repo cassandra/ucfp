@@ -119,3 +119,32 @@ class FiscalWindow:
                 Decimal( '0' ) )
             continue
         return total
+
+    def contributions_from_cash( self, holding : Account ) -> Decimal:
+        """How much cash was contributed into `holding` over the fiscal year: the mirror of
+        `distributions_to_cash` -- a transaction that builds the holding up (debits its cost or
+        valuation account) and is funded from cash (credits the cash hub). Excludes employer
+        matches (funded from equity, not cash) and growth (credited to Unrealized Gains, not
+        cash). Summed over the pre-tax holdings, this is the year's above-the-line deduction."""
+        cash_account = self._chart.cash_account()
+        if cash_account is None:
+            return Decimal( '0' )
+        value_accounts = { holding }
+        valuation_account = self._chart.valuation_of( holding )
+        if valuation_account is not None:
+            value_accounts.add( valuation_account )
+        total = Decimal( '0' )
+        for transaction in self._books.transactions:
+            if not ( self._span.start_date <= transaction.transaction_date <= self._span.end_date ):
+                continue
+            built_up = any(
+                ( entry.account in value_accounts ) and ( entry.entry_direction == SideType.DEBIT )
+                for entry in transaction.entries )
+            if not built_up:
+                continue
+            total += sum(
+                ( entry.amount for entry in transaction.entries
+                  if ( entry.account is cash_account ) and ( entry.entry_direction == SideType.CREDIT ) ),
+                Decimal( '0' ) )
+            continue
+        return total
