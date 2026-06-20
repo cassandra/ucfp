@@ -367,17 +367,38 @@ def resolve_household_size(
 
 
 @dataclass( frozen = True )
+class AssetAllocation:
+    """A target split of money across holdings, as `(account handle, weight)` pairs whose weights
+    sum to 1 -- e.g. 40% stocks / 40% bonds / 20% CDs. By account *handle*, not asset class, for
+    full flexibility (a planner can split across specific holdings, even two of the same class).
+    Used to spread a cash sweep across a portfolio; reusable later for contribution allocation or
+    rebalancing."""
+
+    weights : tuple[ tuple[ Handle, Decimal ], ... ]
+
+    def __post_init__( self ):
+        if not self.weights:
+            raise ValueError( 'An asset allocation needs at least one holding.' )
+        if any( weight <= 0 for _handle, weight in self.weights ):
+            raise ValueError( 'Asset-allocation weights must be positive.' )
+        total = sum( ( weight for _handle, weight in self.weights ), Decimal( '0' ) )
+        if total != Decimal( '1' ):
+            raise ValueError( f'Asset-allocation weights must sum to 1, not {total}.' )
+        return
+
+
+@dataclass( frozen = True )
 class CashAccountParameters:
     """How the cash hub is managed -- the band to keep it in and how. `cash_floor` is the
     minimum to maintain: a shortfall below it is covered by drawing (realizing) from the
     `draw_order` asset classes in priority. `cash_ceiling` is the maximum: surplus above it is
-    swept into `sweep_account` (a non-retirement holding) as an investment at cost, so later
-    sales tax only the gain. A None `cash_ceiling` (or no `sweep_account`) disables sweeping."""
+    swept into the `sweep_allocation` holdings (non-retirement) as investments at cost, so later
+    sales tax only the gain. A None `cash_ceiling` (or `sweep_allocation`) disables sweeping."""
 
-    cash_floor    : Decimal              = Decimal( '0' )
-    cash_ceiling  : Optional[ Decimal ]  = None
-    draw_order    : list[ AssetClass ]   = field( default_factory = list )
-    sweep_account : Optional[ Handle ]   = None
+    cash_floor       : Decimal                    = Decimal( '0' )
+    cash_ceiling     : Optional[ Decimal ]        = None
+    draw_order       : list[ AssetClass ]         = field( default_factory = list )
+    sweep_allocation : Optional[ AssetAllocation ] = None
 
 
 @dataclass

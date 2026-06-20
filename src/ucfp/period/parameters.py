@@ -145,10 +145,10 @@ class FundingPolicy:
     absolute, a multiple of expenses, or inflation-adjusted upstream.
     """
 
-    cash_floor        : Decimal = Decimal( '0' )
-    draw_priority     : list[ Account ] = field( default_factory = list )
-    cash_ceiling      : Optional[ Decimal ] = None
-    sweep_destination : Optional[ Account ] = None
+    cash_floor       : Decimal = Decimal( '0' )
+    draw_priority    : list[ Account ] = field( default_factory = list )
+    cash_ceiling     : Optional[ Decimal ] = None
+    sweep_allocation : tuple = ()   # resolved ( holding Account, weight ) pairs for the sweep
 
 
 @dataclass( frozen = True )

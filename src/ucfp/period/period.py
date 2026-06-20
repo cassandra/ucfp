@@ -19,6 +19,8 @@ The interval is computed in three phases (see data/design/projection-model.md):
 NOTE: Phase-1 complete against the zero-tax engine. The Forecast resolves scheduled
 events (Transfer/Purchase/Realization) into each period's parameters.
 """
+from decimal import Decimal
+
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
@@ -408,26 +410,37 @@ class Period:
         return
 
     def _sweep_to_ceiling( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Sweep any cash above the policy's ceiling into the sweep destination as an
-        investment: DR the holding (cost) / CR cash, so the swept amount becomes its cost basis
-        and a later sale taxes only the gain. Runs after settlement; it moves no income and is
-        net-worth-neutral, so it raises no Notice (routine policy, requested -- a memo suffices).
-        No ceiling or no destination means no sweep."""
+        """Sweep any cash above the policy's ceiling into the sweep allocation as investments:
+        each holding is debited its weighted share (DR holding (cost) / CR cash), so the swept
+        amount becomes its cost basis and a later sale taxes only the gain. One balanced
+        transaction. Shares are apportioned by cumulative rounding -- each portion is the rise in
+        the running quantized target -- so every portion is non-negative (never a stray sell) and
+        they sum exactly to the surplus (the weights sum to 1). Runs after settlement; it moves
+        no income and is net-worth-neutral, so it raises no Notice (routine policy, requested --
+        a memo suffices). No ceiling or no allocation means no sweep."""
         policy = self._parameters.funding_policy
-        if ( policy.cash_ceiling is None ) or ( policy.sweep_destination is None ):
+        if ( policy.cash_ceiling is None ) or ( not policy.sweep_allocation ):
             return
         cash_account = bookkeeper.chart.cash_account()
         if cash_account is None:
             return
-        surplus = bookkeeper.ledger.natural_balance( cash_account ) - policy.cash_ceiling
-        surplus = quantize_money( surplus )
+        surplus = quantize_money(
+            bookkeeper.ledger.natural_balance( cash_account ) - policy.cash_ceiling )
         if surplus <= 0:
             return
+        postings = list()
+        cumulative_weight = Decimal( '0' )
+        allocated = Decimal( '0' )
+        for holding, weight in policy.sweep_allocation:
+            cumulative_weight += weight
+            target = quantize_money( surplus * cumulative_weight )
+            postings.append( ( holding, -( target - allocated ) ) )
+            allocated = target
+            continue
+        postings.append( ( cash_account, surplus ) )
         bookkeeper.record(
-            self._parameters.date_span.end_date,
-            [ ( policy.sweep_destination, -surplus ), ( cash_account, surplus ) ],
-            description = f'Swept surplus cash into {policy.sweep_destination}.',
-        )
+            self._parameters.date_span.end_date, postings,
+            description = 'Swept surplus cash into the investment allocation.' )
         return
 
     def _close( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:

@@ -176,7 +176,7 @@ class Forecast:
         self._holding_by_handle = dict()  # handle string -> holding account, for resolving events
         self._asset_holdings = list()   # (AssetParameters, holding) pairs, for property resolution
         self._draw_priority = list()    # holdings to fund from, resolved from draw_order by class
-        self._sweep_destination = None  # holding to sweep surplus cash into, resolved in baseline
+        self._sweep_allocation = ()     # resolved ( holding, weight ) pairs to sweep surplus into
         self._loans = list()            # resolved loans (accounts + level payment), built in baseline
         self._periods_per_year = None   # set when there are liabilities (needs month/year granularity)
 
@@ -390,10 +390,10 @@ class Forecast:
         return
 
     def _resolve_sweep( self, bookkeeper : Bookkeeper ) -> None:
-        """Resolve and validate the cash policy's sweep destination: when a `cash_ceiling` is
-        set it must be at or above `cash_floor` and name a non-retirement, non-cash holding (the
-        surplus is invested at cost there). Rejected at build so a mis-configured sweep cannot
-        silently mismodel."""
+        """Resolve and validate the cash policy's sweep allocation: when a `cash_ceiling` is set
+        it must be at or above `cash_floor` and have a `sweep_allocation` whose holdings are each
+        non-retirement, non-cash (the surplus is invested at cost there). Binds each allocation
+        handle to its holding. Rejected at build so a mis-configured sweep cannot mismodel."""
         cash = self._parameters.cash_account
         if cash.cash_ceiling is None:
             return
@@ -401,19 +401,22 @@ class Forecast:
             raise ValueError(
                 f'cash_ceiling ({cash.cash_ceiling}) must be at or above cash_floor '
                 f'({cash.cash_floor}).' )
-        if cash.sweep_account is None:
-            raise ValueError( 'A cash_ceiling requires a sweep_account to invest the surplus into.' )
-        holding = self._holding_by_handle.get( str( cash.sweep_account ) )
-        if ( holding is None ) or ( holding.asset_class is None ):
-            raise MissingAccountError(
-                f'Sweep account "{cash.sweep_account}" is not a holding.' )
-        if holding.asset_class.seeds_at_zero_basis:
-            raise ValueError(
-                'A sweep destination must be a taxable holding, not a retirement account '
-                '(contribution limits are not modeled).' )
-        if holding.asset_class == AssetClass.CASH:
-            raise ValueError( 'A sweep destination must be an investment holding, not cash.' )
-        self._sweep_destination = holding
+        if cash.sweep_allocation is None:
+            raise ValueError( 'A cash_ceiling requires a sweep_allocation to invest the surplus into.' )
+        resolved = list()
+        for handle, weight in cash.sweep_allocation.weights:
+            holding = self._holding_by_handle.get( str( handle ) )
+            if ( holding is None ) or ( holding.asset_class is None ):
+                raise MissingAccountError( f'Sweep destination "{handle}" is not a holding.' )
+            if holding.asset_class.seeds_at_zero_basis:
+                raise ValueError(
+                    f'Sweep destination "{handle}" is a retirement account; the sweep must invest '
+                    'in taxable holdings (contribution limits are not modeled).' )
+            if holding.asset_class == AssetClass.CASH:
+                raise ValueError( f'Sweep destination "{handle}" is cash; it must be an investment.' )
+            resolved.append( ( holding, weight ) )
+            continue
+        self._sweep_allocation = tuple( resolved )
         return
 
     def _liability_terms_for( self, bookkeeper : Bookkeeper ) -> list[ LiabilityTerm ]:
@@ -558,10 +561,10 @@ class Forecast:
         inflation = self._inflation_factor( span.start_date.year )
         ceiling = None if cash.cash_ceiling is None else ( cash.cash_ceiling * inflation )
         return FundingPolicy(
-            cash_floor        = cash.cash_floor * inflation,
-            draw_priority     = self._draw_priority,
-            cash_ceiling      = ceiling,
-            sweep_destination = self._sweep_destination )
+            cash_floor       = cash.cash_floor * inflation,
+            draw_priority    = self._draw_priority,
+            cash_ceiling     = ceiling,
+            sweep_allocation = self._sweep_allocation )
 
     def _cumulative_factor( self, target_year : int, rate_for ) -> Decimal:
         """Cumulative growth from the forecast start year to `target_year`, compounding each
