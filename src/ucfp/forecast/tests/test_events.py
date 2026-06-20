@@ -28,8 +28,8 @@ from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
 
 
-def _holding( reader, name ):
-    return next( account for account in reader.chart.holdings() if account.name == name )
+def _holding( reader, handle ):
+    return reader.chart.account( handle )
 
 
 class EventResolutionTests( unittest.TestCase ):
@@ -91,7 +91,8 @@ class EventResolutionTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
-                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ),
+                                 handle = 'Cash' ),
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ),
                     handle = 'IRA', owner_handle = 'subject-a' ),
@@ -118,7 +119,8 @@ class EventResolutionTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1970, 1, 1 ), 'subject-a' ) ],
             assets        = [
-                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ),
+                                 handle = 'Cash' ),
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ),
                     handle = 'IRA', owner_handle = 'subject-a' ),
@@ -145,7 +147,8 @@ class EventResolutionTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [
-                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ),
+                                 handle = 'Cash' ),
                 AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ), Decimal( '30000' ),
                                  handle = 'Car' ),
             ],

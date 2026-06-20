@@ -24,8 +24,8 @@ from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
 
 
-def _holding( reader, name ):
-    return next( account for account in reader.chart.holdings() if account.name == name )
+def _holding( reader, handle ):
+    return reader.chart.account( handle )
 
 
 class WindfallTests( unittest.TestCase ):
@@ -38,7 +38,8 @@ class WindfallTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1960, 1, 1 ), 'subject-a' ) ],
             assets        = [
-                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ),
+                                 handle = 'cash' ) ],
             events        = [ windfall ],
         )
         return Bookkeeper( Forecast( parameters ).run().books )
@@ -51,7 +52,7 @@ class WindfallTests( unittest.TestCase ):
         through = date( 2026, 6, 30 )
         external = reader.chart.system_account( SystemAccountRole.EXTERNAL_RECEIPTS )
         # cash rises by the windfall; the balancing credit lands in External Receipts equity
-        self.assertEqual( ledger.market_value( _holding( reader, 'Cash' ), through = through ),
+        self.assertEqual( ledger.market_value( _holding( reader, 'cash' ), through = through ),
                           Decimal( '110000' ) )
         self.assertEqual( ledger.natural_balance( external ), Decimal( '100000' ) )
         self.assertEqual( ledger.net_worth( through = through ), Decimal( '110000' ) )

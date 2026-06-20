@@ -82,6 +82,14 @@ class AccountHandleTests( unittest.TestCase ):
         opening = reader.chart.system_account( SystemAccountRole.OPENING_BALANCES )
         self.assertIsNone( opening.handle )
 
+    def test_chart_account_accessor_finds_by_handle( self ):
+        # the query surface: the planner reaches its resulting account by the handle it minted
+        reader = self._reader()
+        self.assertIs( reader.chart.account( 'mortgage' ), _account( reader, 'Mortgage' ) )
+        self.assertIs(
+            reader.chart.account( 'mortgage-interest' ), _account( reader, 'Mortgage Interest' ) )
+        self.assertIsNone( reader.chart.account( 'no-such-handle' ) )
+
 
 if __name__ == '__main__':
     unittest.main()

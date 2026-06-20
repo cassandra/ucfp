@@ -35,12 +35,13 @@ def _parameters( end_date ):
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
         loans         = [ LoanParameters(
             'Mortgage', Decimal( '200000' ), Rate( Decimal( '0.05' ) ),
-            Duration( 30, TimeUnit.YEAR ), ExpenseTaxClass.MORTGAGE_INTEREST ) ],
+            Duration( 30, TimeUnit.YEAR ), ExpenseTaxClass.MORTGAGE_INTEREST,
+            handle = 'mortgage', interest_handle = 'mortgage-interest' ) ],
     )
 
 
-def _account( reader, name ):
-    return next( account for account in reader.chart.accounts() if account.name == name )
+def _account( reader, handle ):
+    return reader.chart.account( handle )
 
 
 class LiabilityTests( unittest.TestCase ):
@@ -53,14 +54,14 @@ class LiabilityTests( unittest.TestCase ):
     def test_first_year_interest_is_balance_times_rate( self ):
         reader = Bookkeeper( Forecast( _parameters( date( 2026, 12, 31 ) ) ).run().books )
         self.assertEqual(
-            reader.ledger.natural_balance( _account( reader, 'Mortgage Interest' ) ), Decimal( '10000' ) )
+            reader.ledger.natural_balance( _account( reader, 'mortgage-interest' ) ), Decimal( '10000' ) )
         self.assertLess(
-            reader.ledger.natural_balance( _account( reader, 'Mortgage' ) ), Decimal( '200000' ) )
+            reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '200000' ) )
 
     def test_loan_amortizes_to_zero_by_the_term( self ):
         # run past the 30-year term; the level payment retires the balance, final payment capped
         reader = Bookkeeper( Forecast( _parameters( date( 2060, 12, 31 ) ) ).run().books )
-        self.assertEqual( reader.ledger.natural_balance( _account( reader, 'Mortgage' ) ), Decimal( '0' ) )
+        self.assertEqual( reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '0' ) )
 
 
 if __name__ == '__main__':

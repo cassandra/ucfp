@@ -26,8 +26,8 @@ from ucfp.tax.us.enums import FilingStatus
 
 def _run_two_pension_forecast():
     """Two people with Social Security, a 2% SS COLA, over 2026-2028."""
-    alice = Subject( 'Alice', date( 1958, 1, 1 ) )
-    bob = Subject( 'Bob', date( 1960, 1, 1 ) )
+    alice = Subject( 'Alice', date( 1958, 1, 1 ), 'alice' )
+    bob = Subject( 'Bob', date( 1960, 1, 1 ), 'bob' )
     parameters = ForecastParameters(
         start_date    = date( 2026, 1, 1 ),
         end_date      = date( 2028, 12, 31 ),
@@ -50,17 +50,19 @@ class IncomeForecastTests( unittest.TestCase ):
 
     def test_social_security_is_per_person( self ):
         result = _run_two_pension_forecast()
-        names = sorted(
-            account.name for account in result.books.accounts
-            if account.income_tax_class == IncomeTaxClass.SOCIAL_SECURITY
-        )
-        self.assertEqual( names, [ 'Alice Social Security', 'Bob Social Security' ] )
+        chart = Bookkeeper( result.books ).chart
+        # a distinct Social Security account per subject, found by owner handle
+        alice_ss = chart.income_account( IncomeTaxClass.SOCIAL_SECURITY, owner_handle = 'alice' )
+        bob_ss = chart.income_account( IncomeTaxClass.SOCIAL_SECURITY, owner_handle = 'bob' )
+        self.assertIsNotNone( alice_ss )
+        self.assertIsNotNone( bob_ss )
+        self.assertIsNot( alice_ss, bob_ss )
 
     def test_income_grows_by_cola_from_forecast_start( self ):
         result = _run_two_pension_forecast()
         reader = Bookkeeper( result.books )
-        alice_ss = next(
-            account for account in reader.chart.accounts() if account.name == 'Alice Social Security' )
+        alice_ss = reader.chart.income_account(
+            IncomeTaxClass.SOCIAL_SECURITY, owner_handle = 'alice' )
         # start year is the base (no growth); then +2% a year, accumulating in the account
         self.assertEqual(
             reader.ledger.natural_balance( alice_ss, through = date( 2026, 12, 31 ) ), Decimal( '30000' ) )

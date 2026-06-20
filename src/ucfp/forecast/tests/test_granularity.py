@@ -32,7 +32,7 @@ _MONTHLY = Duration( 1, TimeUnit.MONTH )
 
 
 def _parameters( granularity ):
-    subject = Subject( 'A', date( 1958, 1, 1 ) )
+    subject = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
     return ForecastParameters(
         start_date    = date( 2026, 1, 1 ),
         end_date      = date( 2028, 12, 31 ),
@@ -50,28 +50,40 @@ def _parameters( granularity ):
         expenses = [
             ExpenseItem( 'Food', ExpenseTaxClass.LIVING,
                          Schedule.constant( WindowedAmount( Decimal( '1000' ) ) ),
-                         Recurrence( Duration( 1, TimeUnit.MONTH ) ) ),
+                         Recurrence( Duration( 1, TimeUnit.MONTH ) ), handle = 'food' ),
         ],
     )
 
 
-def _balance( books, name ):
-    reader = Bookkeeper( books )
-    account = next( a for a in reader.chart.accounts() if a.name == name )
-    return reader.ledger.natural_balance( account )
+def _balance( books, account ):
+    """The natural balance of `account` (resolved against `books`)."""
+    return Bookkeeper( books ).ledger.natural_balance( account )
+
+
+def _food( books ):
+    return Bookkeeper( books ).chart.account( 'food' )
+
+
+def _social_security( books ):
+    return Bookkeeper( books ).chart.income_account(
+        IncomeTaxClass.SOCIAL_SECURITY, owner_handle = 'subject-a' )
 
 
 class GranularityTests( unittest.TestCase ):
 
     def test_expense_flows_reconcile_exactly( self ):
-        yearly = _balance( Forecast( _parameters( _YEARLY ) ).run().books, 'Food' )
-        monthly = _balance( Forecast( _parameters( _MONTHLY ) ).run().books, 'Food' )
+        yearly_books = Forecast( _parameters( _YEARLY ) ).run().books
+        monthly_books = Forecast( _parameters( _MONTHLY ) ).run().books
+        yearly = _balance( yearly_books, _food( yearly_books ) )
+        monthly = _balance( monthly_books, _food( monthly_books ) )
         # 12 monthly occurrences per year either way (count_in is span-based), exact
         self.assertEqual( yearly, monthly )
 
     def test_income_flows_reconcile_to_the_cent( self ):
-        yearly = _balance( Forecast( _parameters( _YEARLY ) ).run().books, 'A Social Security' )
-        monthly = _balance( Forecast( _parameters( _MONTHLY ) ).run().books, 'A Social Security' )
+        yearly_books = Forecast( _parameters( _YEARLY ) ).run().books
+        monthly_books = Forecast( _parameters( _MONTHLY ) ).run().books
+        yearly = _balance( yearly_books, _social_security( yearly_books ) )
+        monthly = _balance( monthly_books, _social_security( monthly_books ) )
         # prorated by day-count across months, so equal to the cent (rounding per posting)
         self.assertAlmostEqual( yearly, monthly, places = 2 )
 

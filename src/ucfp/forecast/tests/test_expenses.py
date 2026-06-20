@@ -47,22 +47,25 @@ def _run():
                                 medical_inflation = Rate( Decimal( '0.05' ) ) ) ),
         expenses = [
             ExpenseItem( 'Food', ExpenseTaxClass.LIVING,
-                         Schedule.constant( WindowedAmount( Decimal( '1000' ) ) ), _MONTHLY ),
+                         Schedule.constant( WindowedAmount( Decimal( '1000' ) ) ), _MONTHLY,
+                         handle = 'food' ),
             ExpenseItem( 'Health Insurance', ExpenseTaxClass.MEDICAL,
-                         Schedule.constant( WindowedAmount( Decimal( '12000' ) ) ), _YEARLY ),
+                         Schedule.constant( WindowedAmount( Decimal( '12000' ) ) ), _YEARLY,
+                         handle = 'health-insurance' ),
             ExpenseItem( 'Car', ExpenseTaxClass.LIVING,
-                         Schedule.constant( WindowedAmount( Decimal( '30000' ) ) ), _DECADAL ),
+                         Schedule.constant( WindowedAmount( Decimal( '30000' ) ) ), _DECADAL,
+                         handle = 'car' ),
             ExpenseItem( 'Travel', ExpenseTaxClass.LIVING, Schedule( (
                 WindowedAmount( Decimal( '5000' ), DateWindow( end = date( 2026, 12, 31 ) ) ),
                 WindowedAmount( Decimal( '2000' ), DateWindow( start = date( 2027, 1, 1 ) ) ),
-            ) ), _YEARLY ),
+            ) ), _YEARLY, handle = 'travel' ),
         ],
     )
     return Forecast( parameters ).run()
 
 
-def _account( books, name ):
-    return next( account for account in books.accounts if account.name == name )
+def _account( books, handle ):
+    return Bookkeeper( books ).chart.account( handle )
 
 
 def _through( ledger, account, year ):
@@ -73,13 +76,13 @@ class ExpenseForecastTests( unittest.TestCase ):
 
     def test_per_item_accounts_tagged_by_class( self ):
         books = _run().books
-        self.assertEqual( _account( books, 'Food' ).expense_tax_class, ExpenseTaxClass.LIVING )
-        self.assertEqual( _account( books, 'Health Insurance' ).expense_tax_class, ExpenseTaxClass.MEDICAL )
+        self.assertEqual( _account( books, 'food' ).expense_tax_class, ExpenseTaxClass.LIVING )
+        self.assertEqual( _account( books, 'health-insurance' ).expense_tax_class, ExpenseTaxClass.MEDICAL )
 
     def test_frequent_expense_counts_occurrences( self ):
         books = _run().books
         ledger = Bookkeeper( books ).ledger
-        food = _account( books, 'Food' )
+        food = _account( books, 'food' )
         # 12 monthly $1000 occurrences, year 1 at today's dollars
         self.assertEqual( _through( ledger, food, 2026 ), Decimal( '12000' ) )
         # + 12 * 1000 * 1.03 in year 2 (general inflation)
@@ -88,7 +91,7 @@ class ExpenseForecastTests( unittest.TestCase ):
     def test_lumpy_purchase_lands_only_in_its_year( self ):
         books = _run().books
         ledger = Bookkeeper( books ).ledger
-        car = _account( books, 'Car' )
+        car = _account( books, 'car' )
         # one $30k purchase anchored at the start year, none in the following years
         self.assertEqual( _through( ledger, car, 2026 ), Decimal( '30000' ) )
         self.assertEqual( _through( ledger, car, 2028 ), Decimal( '30000' ) )
@@ -96,7 +99,7 @@ class ExpenseForecastTests( unittest.TestCase ):
     def test_medical_inflates_faster_than_general( self ):
         books = _run().books
         ledger = Bookkeeper( books ).ledger
-        health = _account( books, 'Health Insurance' )
+        health = _account( books, 'health-insurance' )
         # $12k yearly: 12000 in year 1, + 12000 * 1.05 in year 2 (medical inflation)
         self.assertEqual( _through( ledger, health, 2026 ), Decimal( '12000' ) )
         self.assertEqual( _through( ledger, health, 2027 ), Decimal( '24600' ) )
@@ -104,7 +107,7 @@ class ExpenseForecastTests( unittest.TestCase ):
     def test_lifestyle_step_changes_the_amount( self ):
         books = _run().books
         ledger = Bookkeeper( books ).ledger
-        travel = _account( books, 'Travel' )
+        travel = _account( books, 'travel' )
         # $5000 in 2026, then $2000 (today's dollars) inflated 3% in 2027
         self.assertEqual( _through( ledger, travel, 2026 ), Decimal( '5000' ) )
         self.assertEqual( _through( ledger, travel, 2027 ), Decimal( '7060' ) )

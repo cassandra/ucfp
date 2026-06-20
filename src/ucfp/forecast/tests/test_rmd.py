@@ -24,8 +24,8 @@ from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.us.enums import FilingStatus
 
 
-def _holding( reader, name ):
-    return next( account for account in reader.chart.holdings() if account.name == name )
+def _holding( reader, handle ):
+    return reader.chart.account( handle )
 
 
 class RmdTests( unittest.TestCase ):

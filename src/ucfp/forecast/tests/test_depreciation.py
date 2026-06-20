@@ -24,13 +24,14 @@ class DepreciationTests( unittest.TestCase ):
             tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [
-                AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ), Decimal( '30000' ) ) ],
+                AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ), Decimal( '30000' ),
+                                 handle = 'car' ) ],
             economic_outlook = EconomicOutlook.constant(
                 EconomicParameters( depreciation_rate = Rate( Decimal( '0.20' ) ) ) ),
         )
         reader = Bookkeeper( Forecast( parameters ).run().books )
         ledger = reader.ledger
-        car = next( account for account in reader.chart.holdings() if account.name == 'Car' )
+        car = reader.chart.account( 'car' )
         # declining-balance: 30000 -> 24000 -> 19200 (loses 20% of the remaining value each year)
         self.assertEqual( ledger.market_value( car, through = date( 2026, 12, 31 ) ), Decimal( '24000' ) )
         self.assertEqual( ledger.market_value( car, through = date( 2027, 12, 31 ) ), Decimal( '19200' ) )

@@ -26,8 +26,8 @@ from ucfp.tax.us.enums import FilingStatus
 from ucfp.tax.us.filing import resolve_filing_status
 
 
-def _account( reader, name ):
-    return next( account for account in reader.chart.accounts() if account.name == name )
+def _account( reader, handle ):
+    return reader.chart.account( handle )
 
 
 class FilingStatusRuleTests( unittest.TestCase ):
@@ -88,7 +88,7 @@ class SurvivorTransitionTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ) ),
                 AssetParameters(
                     'B IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '100000' ), Decimal( '0' ),
-                    owner_handle = 'subject-b' ) ],
+                    handle = 'b-ira', owner_handle = 'subject-b' ) ],
             subject_removals = [ SubjectRemoval( date( 2027, 5, 1 ), 'subject-b' ) ],
         ) )
 
@@ -97,7 +97,7 @@ class SurvivorTransitionTests( unittest.TestCase ):
         # completing at all exercises this -- without retitling, the post-death RMD step would
         # raise on B's now-absent owner.
         reader = Bookkeeper( self._forecast().run().books )
-        ira = _account( reader, 'B IRA' )
+        ira = _account( reader, 'b-ira' )
         self.assertEqual( str( ira.owner_handle ), 'subject-a' )
 
     def test_survivor_alone_after_death( self ):

@@ -16,6 +16,7 @@ from .enums import (
     IncomeTaxClass,
     SystemAccountRole,
 )
+from .handle import Handle
 
 
 class Chart:
@@ -49,6 +50,17 @@ class Chart:
             continue
         return None
 
+    def account( self, handle : Handle ) -> Optional[ Account ]:
+        """The account bearing the planner's `handle` (its own identity), or None. Matched by
+        the handle's string form, the identity contract -- the query surface for associating a
+        planner artifact with its resulting account."""
+        target = str( handle )
+        for account in self._books.accounts:
+            if ( account.handle is not None ) and ( str( account.handle ) == target ):
+                return account
+            continue
+        return None
+
     def holdings( self ) -> list[ Account ]:
         """The asset holdings -- accounts carrying an asset_class (valuation companions,
         which carry none, are excluded)."""
@@ -71,12 +83,20 @@ class Chart:
             continue
         return None
 
-    def income_account( self, income_tax_class : IncomeTaxClass ) -> Optional[ Account ]:
-        """The first revenue account with `income_tax_class`, or None."""
+    def income_account(
+            self, income_tax_class : IncomeTaxClass,
+            owner_handle : Optional[ Handle ] = None ) -> Optional[ Account ]:
+        """A revenue account with `income_tax_class`: the first one, or -- when `owner_handle`
+        is given -- the one owned by that subject (income is per (subject, class), so the owner
+        disambiguates between, say, two people's Social Security). None if none matches."""
+        target_owner = None if owner_handle is None else str( owner_handle )
         for account in self._books.accounts:
-            if account.income_tax_class == income_tax_class:
-                return account
-            continue
+            if account.income_tax_class != income_tax_class:
+                continue
+            if ( target_owner is not None ) and (
+                    ( account.owner_handle is None ) or ( str( account.owner_handle ) != target_owner ) ):
+                continue
+            return account
         return None
 
     def expense_account( self, expense_tax_class : ExpenseTaxClass ) -> Optional[ Account ]:
