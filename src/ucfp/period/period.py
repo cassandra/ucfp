@@ -11,9 +11,10 @@ The interval is computed in three phases (see `ucfp/FORECAST_ENGINE.md`):
   1. Accrue        -- effects whose magnitude is known up front: asset growth and
                       distributions, income, liability service, scheduled expenses
                       and money-movement events, each at its temporal-POV instant.
-  2. Settle & fund -- assess tax for the period, then cover any shortfall via the
-                      funding waterfall (with a heuristic gross-up). The only phase
-                      with the tax/draw circular dependency.
+  2. Settle & fund -- fund cash to the floor via the funding waterfall first (so the
+                      draws' realized income is taxed this period), then settle the
+                      period's tax. Tax may pull cash below the floor (even negative),
+                      carried forward rather than grossed up for.
   3. Close         -- finalize ending balances and the stop condition.
 """
 from datetime import date

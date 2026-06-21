@@ -419,12 +419,28 @@ class ForecastParameters:
     initial_tax_state : object                               = None
 
     def __post_init__( self ):
-        """Bake in the at-most-two-filing-subjects assumption that pervades the tax model: a
-        US return has at most two adults (joint), so more than two subjects is unsupported and
-        rejected outright rather than silently mismodeled."""
+        """Reject inputs that would silently mismodel. Permanent: at most two filing subjects (a
+        return has at most two adults); a granularity that divides the year evenly and a loan term
+        it divides evenly, so period counts and amortization are exact. Temporary guard: the
+        forecast must start on January 1 -- mid-year starts are not yet supported (the per-year
+        inflation/COLA and tax-year indexing currently assume calendar-aligned periods), and this
+        guard is removed once they are."""
         if len( self.subjects ) > 2:
             raise ValueError(
                 f'At most two filing subjects are supported; got {len( self.subjects )}.' )
+        period_months = self.granularity.months()
+        if 12 % period_months != 0:
+            raise ValueError(
+                f'The granularity must divide a year evenly; {period_months} months does not.' )
+        for loan in self.loans:
+            if loan.term.months() % period_months != 0:
+                raise ValueError(
+                    f'Loan "{loan.name}" term ({loan.term.months()} months) is not a whole '
+                    f'number of {period_months}-month periods.' )
+        if ( self.start_date.month, self.start_date.day ) != ( 1, 1 ):
+            raise ValueError(
+                'Mid-year forecast starts are not yet supported; the forecast must start on '
+                f'January 1. Got {self.start_date}.' )
         return
 
     def earliest_removal_year( self ) -> Optional[ int ]:
