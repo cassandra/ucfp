@@ -11,7 +11,7 @@ NOTE: the core needed for the worked example (brackets, standard deduction, SS
 thresholds). NIIT, ACA, the §1250/collectibles rates, and the capital-loss cap are
 added as the engine's later stages land.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from ucfp.tax.brackets import BracketTable
@@ -33,6 +33,16 @@ class StandardDeduction:
     senior_bonus   : Decimal
     phaseout_start : Decimal
     phaseout_end   : Decimal
+
+    def indexed( self, factor : Decimal ) -> 'StandardDeduction':
+        """This deduction with all its dollar figures scaled by the cumulative COLA `factor`."""
+        return replace(
+            self,
+            base           = self.base * factor,
+            age_65_bonus   = self.age_65_bonus * factor,
+            senior_bonus   = self.senior_bonus * factor,
+            phaseout_start = self.phaseout_start * factor,
+            phaseout_end   = self.phaseout_end * factor )
 
 
 @dataclass( frozen = True )
@@ -68,6 +78,11 @@ class FICARules:
     additional_medicare_rate       : Decimal
     additional_medicare_thresholds : dict[ FilingStatus, Decimal ]
 
+    def indexed( self, factor : Decimal ) -> 'FICARules':
+        """These rules with the Social Security wage base scaled by the cumulative COLA `factor`;
+        the rates and the statutory (non-indexed) Additional Medicare thresholds are unchanged."""
+        return replace( self, ss_wage_base = self.ss_wage_base * factor )
+
 
 @dataclass( frozen = True )
 class AcaParameters:
@@ -87,6 +102,14 @@ class AcaParameters:
         """The federal poverty guideline for a household of `household_size`."""
         return self.poverty_first_person + self.poverty_additional_person * ( household_size - 1 )
 
+    def indexed( self, factor : Decimal ) -> 'AcaParameters':
+        """These parameters with the federal poverty guideline figures scaled by the cumulative
+        COLA `factor`; the applicable-percentage curve (ratios and rates) is unchanged."""
+        return replace(
+            self,
+            poverty_first_person      = self.poverty_first_person * factor,
+            poverty_additional_person = self.poverty_additional_person * factor )
+
 
 @dataclass( frozen = True )
 class PassiveActivityRules:
@@ -97,6 +120,30 @@ class PassiveActivityRules:
     loss_allowance : Decimal
     phaseout_start : Decimal
     phaseout_end   : Decimal
+
+
+@dataclass( frozen = True )
+class ContributionLimits:
+    """Annual employee retirement-contribution limits: the employer-plan elective-deferral limit
+    (401(k)/403(b)) and the personal-account limit (IRA, shared across traditional and Roth), each
+    with a catch-up that applies once the owner reaches `catch_up_age`. An employer match is not an
+    employee contribution and is not limited here (its separate overall cap is deferred)."""
+
+    elective_deferral          : Decimal
+    elective_deferral_catch_up : Decimal
+    ira                        : Decimal
+    ira_catch_up               : Decimal
+    catch_up_age               : int
+
+    def indexed( self, factor : Decimal ) -> 'ContributionLimits':
+        """These limits with their dollar figures scaled by the cumulative COLA `factor`; the
+        catch-up age is statutory, not indexed."""
+        return replace(
+            self,
+            elective_deferral          = self.elective_deferral * factor,
+            elective_deferral_catch_up = self.elective_deferral_catch_up * factor,
+            ira                        = self.ira * factor,
+            ira_catch_up               = self.ira_catch_up * factor )
 
 
 @dataclass( frozen = True )
@@ -117,9 +164,35 @@ class TaxParameters:
     niit_rate               : Decimal
     early_withdrawal_rate   : Decimal
     early_withdrawal_age    : Decimal
+    contribution_limits     : ContributionLimits
     fica_rules              : FICARules
     aca                     : AcaParameters
     passive_activity        : PassiveActivityRules
+
+    def indexed( self, factor : Decimal ) -> 'TaxParameters':
+        """This baseline projected forward by a cumulative COLA `factor`: the inflation-indexed
+        figures scale; the statutorily fixed ones stay put (so they bite harder over time, which
+        is the real effect). INDEXED: the ordinary and LTCG brackets, the standard deduction, the
+        retirement contribution limits, the Social Security wage base, and the ACA poverty
+        guideline. NOT INDEXED (fixed in statute): the SS benefit-taxability thresholds, the NIIT
+        and Additional Medicare thresholds, the capital-loss offset cap, the section 121 home-sale
+        exclusion, the SALT cap, and the passive-activity allowance -- and every rate, ratio, and
+        age."""
+        return replace(
+            self,
+            ordinary_brackets   = { status : table.indexed( factor )
+                                    for status, table in self.ordinary_brackets.items() },
+            ltcg_brackets       = { status : table.indexed( factor )
+                                    for status, table in self.ltcg_brackets.items() },
+            standard_deduction  = { status : deduction.indexed( factor )
+                                    for status, deduction in self.standard_deduction.items() },
+            contribution_limits = self.contribution_limits.indexed( factor ),
+            fica_rules          = self.fica_rules.indexed( factor ),
+            aca                 = self.aca.indexed( factor ) )
+
+
+# The year `federal_2025` describes -- the baseline a COLA projection indexes forward from.
+BASE_YEAR = 2025
 
 
 def federal_2025() -> TaxParameters:
@@ -191,6 +264,15 @@ def federal_2025() -> TaxParameters:
         # integer year-end ages the half-year reads as "under 59.5", i.e. age <= 59.
         early_withdrawal_rate = d( '0.10' ),
         early_withdrawal_age  = d( '59.5' ),
+        # 2025 employee limits: 401(k) elective deferral $23,500 (+$7,500 catch-up at 50+);
+        # IRA $7,000 (+$1,000 catch-up at 50+). The 60-63 "super catch-up" is a later refinement.
+        contribution_limits = ContributionLimits(
+            elective_deferral          = d( '23500' ),
+            elective_deferral_catch_up = d( '7500' ),
+            ira                        = d( '7000' ),
+            ira_catch_up               = d( '1000' ),
+            catch_up_age               = 50,
+        ),
         fica_rules = FICARules(
             ss_wage_base             = d( '176100' ),
             ss_rate                  = d( '0.062' ),

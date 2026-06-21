@@ -19,6 +19,7 @@ The interval is computed in three phases (see data/design/projection-model.md):
 NOTE: Phase-1 complete against the zero-tax engine. The Forecast resolves scheduled
 events (Transfer/Purchase/Realization) into each period's parameters.
 """
+from datetime import date
 from decimal import Decimal
 
 from ucfp.accounts.bookkeeper import Bookkeeper
@@ -153,22 +154,76 @@ class Period:
 
     def _apply_contributions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Post the resolved retirement `contribution_lines` at the midpoint (after income, so
-        cash is present): DR the holding's valuation companion / CR its funding account -- cash
-        for an employee contribution (net-worth-neutral), External Receipts equity for an
-        employer match (net-worth-increasing). Requested inputs, so they carry a memo, not a
-        Notice."""
+        cash is present): DR the target holding's valuation companion / CR its funding account --
+        cash for an employee contribution (net-worth-neutral), External Receipts equity for an
+        employer match (net-worth-increasing). Each line is first scaled by its (owner, kind)
+        annual-limit factor (see `_contribution_cap_factors`): a contribution that has outgrown
+        what the year's limit still allows is clamped and raises a Notice. An uncapped line is a
+        requested input, so it carries a memo, not a Notice."""
+        chart = bookkeeper.chart
         contribution_date = self._parameters.date_span.midpoint
+        cap_factors = self._contribution_cap_factors( bookkeeper, result )
         for line in self._parameters.contribution_lines:
-            amount = quantize_money( line.amount )
+            factor = cap_factors.get( ( str( line.holding.owner_handle ), line.kind ), Decimal( '1' ) )
+            amount = quantize_money( line.amount * factor )
             if amount == 0:
                 continue
+            valuation_account = chart.valuation_of( line.holding )
+            if valuation_account is None:
+                raise MissingAccountError(
+                    f'Retirement holding "{line.holding}" has no valuation account to contribute to.' )
             bookkeeper.record(
                 contribution_date,
-                [ ( line.valuation_account, -amount ), ( line.funding_account, amount ) ],
+                [ ( valuation_account, -amount ), ( line.funding_account, amount ) ],
                 description = line.description,
             )
             continue
         return
+
+    def _contribution_cap_factors( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> dict:
+        """The scale factor (< 1) for each (owner, kind) group whose contributions this interval
+        overrun the annual headroom -- the limit less what the books already show contributed this
+        tax year (read from the year-to-date fiscal window, the same pattern the RMD uses). The
+        headroom is shared, so a group's contributions are summed and scaled together to fit it,
+        and the group raises one WARNING Notice. Groups within headroom and the no-limit employer
+        match are absent, leaving their lines unscaled. Correct at any granularity: the books carry
+        prior sub-periods' contributions, so the running total is always whole-year."""
+        tax_engine = self._parameters.tax_engine
+        if tax_engine is None:
+            return dict()
+        tax_context = self._parameters.tax_context
+        year_to_date = self._fiscal_window( bookkeeper )
+        groups = dict()           # ( owner string, kind ) -> { intended amount, target holdings }
+        for line in self._parameters.contribution_lines:
+            if line.kind is None:
+                continue
+            key = ( str( line.holding.owner_handle ), line.kind )
+            group = groups.setdefault( key, { 'intended' : Decimal( '0' ), 'holdings' : list() } )
+            group[ 'intended' ] += quantize_money( line.amount )
+            group[ 'holdings' ].append( line.holding )
+            continue
+        factors = dict()
+        for ( owner, kind ), group in groups.items():
+            subject = tax_context.subject_for( owner )
+            if subject is None:
+                continue
+            limit = tax_engine.contribution_limit( kind, subject.age )
+            if limit is None:
+                continue
+            contributed = sum(
+                ( year_to_date.contributions_from_cash( holding ) for holding in group[ 'holdings' ] ),
+                Decimal( '0' ) )
+            headroom = limit - contributed
+            if group[ 'intended' ] <= headroom:
+                continue
+            factors[ ( owner, kind ) ] = max( Decimal( '0' ), headroom ) / group[ 'intended' ]
+            result.notices.append(
+                Notice(
+                    kind     = NoticeKind.CONTRIBUTION_CAPPED,
+                    severity = NoticeSeverity.WARNING,
+                    amount   = limit ) )
+            continue
+        return factors
 
     def _service_liabilities( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Apply each loan's payment for the interval, at the midpoint: interest to
@@ -239,17 +294,30 @@ class Period:
         self._sweep_to_ceiling( bookkeeper, result )
         return
 
-    def _fiscal_window( self, bookkeeper : Bookkeeper ):
-        """The tax-year window to act on if this interval closes a tax year, else None. The
-        engine -- carried every interval -- names the boundary, so settlement, the penalty,
-        and forced transactions all act only at that close, over the full year (Jan-Dec, not
-        the interval's own slice)."""
+    def _fiscal_window( self, bookkeeper : Bookkeeper ) -> FiscalWindow:
+        """The tax-year-to-date books view: a window from the tax year's start (named by the
+        engine, carried every interval) through this interval's end. It always exists. At a
+        tax-year close the interval end is the year end, so it spans the whole year -- which is
+        when settlement, the penalty, and forced transactions read it (gated by
+        `_is_close_of_tax_year`, not by this window's presence). Mid-year it is the running
+        year-to-date total, which the contribution-limit clamp reads. With no engine there is no
+        tax year, so it falls back to the civil year."""
         tax_engine = self._parameters.tax_engine
         period_end = self._parameters.date_span.end_date
-        if ( tax_engine is None ) or ( not tax_engine.closes_tax_year( period_end ) ):
-            return None
-        start_date, end_date = tax_engine.tax_year_bounds( period_end )
-        return FiscalWindow( bookkeeper, DateSpan( start_date, end_date ) )
+        if tax_engine is not None:
+            year_start, _ = tax_engine.tax_year_bounds( period_end )
+        else:
+            year_start = date( period_end.year, 1, 1 )
+        return FiscalWindow( bookkeeper, DateSpan( year_start, period_end ) )
+
+    def _is_close_of_tax_year( self ) -> bool:
+        """Whether this interval ends a tax year -- the explicit gate for the annual-only tax
+        steps (settle, penalties, forced transactions). The engine, carried every interval, owns
+        the boundary; no engine means no tax, so never. The fiscal window exists every interval
+        regardless: this predicate, not the window's absence, is what gates the annual work."""
+        tax_engine = self._parameters.tax_engine
+        return ( tax_engine is not None ) and tax_engine.closes_tax_year(
+            self._parameters.date_span.end_date )
 
     def _settle_tax( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Assess the tax year and book each charge as a tax expense drawn from the cash hub.
@@ -262,9 +330,9 @@ class Period:
         Charges are paid (DR tax expense / CR cash); refundable credits are the reverse
         (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
         refund -- modeled here as a negated charge against the same expense class."""
-        fiscal_window = self._fiscal_window( bookkeeper )
-        if fiscal_window is None:
+        if not self._is_close_of_tax_year():
             return
+        fiscal_window = self._fiscal_window( bookkeeper )
         assessment = self._parameters.tax_engine.assess(
             fiscal_window, self._parameters.tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
@@ -307,9 +375,9 @@ class Period:
         to its charge (the charge's memo carries the reason). Reading the whole year's
         distributions from the books (not this interval's events) means it sees them however
         they arose, funding draws included; the engine owns the rule."""
-        fiscal_window = self._fiscal_window( bookkeeper )
-        if fiscal_window is None:
+        if not self._is_close_of_tax_year():
             return
+        fiscal_window = self._fiscal_window( bookkeeper )
         penalties = self._parameters.tax_engine.assess_penalties(
             fiscal_window, self._parameters.tax_context )
         settle_date = self._parameters.date_span.end_date
@@ -334,9 +402,9 @@ class Period:
         to cash, with an INFO Notice linked to it (the transaction's memo carries the reason).
         Run first among the close steps, so the forced income is funded and taxed with the
         rest."""
-        fiscal_window = self._fiscal_window( bookkeeper )
-        if fiscal_window is None:
+        if not self._is_close_of_tax_year():
             return
+        fiscal_window = self._fiscal_window( bookkeeper )
         forced = self._parameters.tax_engine.forced_transactions(
             fiscal_window, self._parameters.tax_context )
         if not forced:

@@ -26,6 +26,9 @@ class NoticeKind( LabeledEnum ):
         'Required Minimum Distribution', 'A pre-tax retirement RMD was forced.' )
     EARLY_WITHDRAWAL_PENALTY = (
         'Early-Withdrawal Penalty', 'A 10% penalty was charged on an early retirement withdrawal.' )
+    CONTRIBUTION_CAPPED = (
+        'Contribution Capped',
+        'A retirement contribution was reduced to its annual limit.' )
     CASH_SHORTFALL = (
         'Cash Shortfall', 'The cash balance went negative -- spending outran available cash.' )
     NET_WORTH_DEPLETED = (

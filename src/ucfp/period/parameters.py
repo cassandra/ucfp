@@ -19,7 +19,7 @@ from typing import Optional
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass
-from ucfp.tax.engine import TaxEngine
+from ucfp.tax.engine import ContributionKind, TaxEngine
 from ucfp.tax.us.context import TaxContext
 
 from .events import PeriodEvent
@@ -100,17 +100,22 @@ class ExpenseLine:
 
 @dataclass( frozen = True )
 class ContributionLine:
-    """One retirement contribution materializing this interval: it debits the target holding's
-    `valuation_account` (the zero-basis representation, so the whole amount is taxed on a later
-    withdrawal) and credits its `funding_account` -- the cash hub for an employee contribution
-    (net-worth-neutral) or the External Receipts equity for an employer match (net-worth-
-    increasing). `description` is the posting memo. The Scenario resolves the accounts and the
-    grown amount; the Period just posts it."""
+    """One retirement contribution materializing this interval into the target `holding`: the
+    Period debits the holding's zero-basis valuation companion (so the whole amount is taxed on a
+    later withdrawal) and credits its `funding_account` -- the cash hub for an employee
+    contribution (net-worth-neutral) or the External Receipts equity for an employer match
+    (net-worth-increasing). `description` is the posting memo. The Scenario resolves the holding,
+    funding account, and grown amount; the Period posts it after the annual-limit clamp.
 
-    valuation_account : Account
-    funding_account   : Account
-    amount            : Decimal
-    description       : str = ''
+    `holding` also carries the limit identity: its `owner_handle` plus `kind` group contributions
+    that share one annual limit, which the Period clamps the year-to-date total to. An employer
+    match counts against no employee limit, so its `kind` is None (never clamped)."""
+
+    holding         : Account
+    funding_account : Account
+    amount          : Decimal
+    kind            : Optional[ ContributionKind ] = None
+    description     : str = ''
 
 
 @dataclass( frozen = True )

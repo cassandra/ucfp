@@ -11,6 +11,8 @@ engine-specific and opaque here.
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from enum import Enum
+from typing import Optional
 
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import ExpenseTaxClass
@@ -76,6 +78,17 @@ class TaxAssessment:
     figures           : object = None
 
 
+class ContributionKind( Enum ):
+    """Which annual retirement-contribution limit a contribution counts against. The two buckets
+    have separate limits and aggregate independently per person: an employer-sponsored plan (US
+    401(k)/403(b)) versus a personal account (US IRA, traditional or Roth). An employer match
+    counts against neither employee limit, so such a contribution carries no kind. Neutral here;
+    a jurisdiction maps its account types onto these buckets."""
+
+    EMPLOYER_PLAN = 'employer_plan'
+    PERSONAL      = 'personal'
+
+
 class TaxEngine:
     """A tax-calculation strategy. Subclasses implement `assess`; the tax-year calendar
     defaults to the civil year and is overridden by a jurisdiction on a different fiscal
@@ -98,6 +111,14 @@ class TaxEngine:
         ages). Default: none. The engine owns the whole rule -- which accounts, the amount,
         the reconciliation -- so the Period only executes what comes back."""
         return []
+
+    def contribution_limit( self, kind : ContributionKind, age : int ) -> Optional[ Decimal ]:
+        """The annual employee contribution limit for a `kind` of retirement contribution at this
+        owner `age` (any age-based catch-up already folded in), or None for no limit. The Forecast
+        leverages this to keep contributions within the law -- rejecting an over-limit input at
+        build and clamping a contribution that outgrows its limit mid-forecast. Default: None (a
+        neutral engine imposes no limit)."""
+        return None
 
     def closes_tax_year( self, on_date : date ) -> bool:
         """Whether a tax year ends on `on_date` -- the interval on which the Period settles

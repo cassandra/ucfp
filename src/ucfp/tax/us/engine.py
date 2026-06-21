@@ -56,6 +56,7 @@ from typing import NamedTuple
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.tax.engine import (
+    ContributionKind,
     ForcedTransaction,
     TaxAssessment,
     TaxCharge,
@@ -284,6 +285,18 @@ class USFederalTaxEngine( TaxEngine ):
                     reason  = f'Required minimum distribution of {shortfall} from {holding}.' ) )
             continue
         return forced
+
+    def contribution_limit( self, kind : ContributionKind, age : int ) -> Decimal:
+        """The annual employee limit for `kind` at this owner `age`: the base elective-deferral
+        (employer plan) or IRA (personal) limit, plus the matching catch-up once the owner reaches
+        the catch-up age. An employer match has no kind and is not routed here."""
+        limits = self._parameters.contribution_limits
+        if kind == ContributionKind.EMPLOYER_PLAN:
+            base, catch_up = limits.elective_deferral, limits.elective_deferral_catch_up
+        else:
+            base, catch_up = limits.ira, limits.ira_catch_up
+        bonus = catch_up if age >= limits.catch_up_age else Decimal( '0' )
+        return base + bonus
 
     def _net_capital_gains( self, net_short : Decimal, net_long : Decimal ) -> _NetCapital:
         """Net short-term against long-term per Schedule D. A loss in one character

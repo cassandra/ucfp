@@ -184,9 +184,10 @@ class LoanParameters:
 class ContributionSource( LabeledEnum ):
     """Where a retirement contribution comes from -- which sets its money source and tax
     treatment. WAGE (payroll 401(k) deferral) and PERSONAL (direct IRA) both come from cash
-    and are deductible into a pre-tax account; they are identical today and split only for the
-    separate 401(k)/IRA contribution limits (deferred). EMPLOYER (match) is the employer's
-    money -- external, never deductible, and taxed only on withdrawal."""
+    and are deductible into a pre-tax account; they differ only in which annual limit they count
+    against -- the employer-plan (elective-deferral) limit versus the personal (IRA) limit.
+    EMPLOYER (match) is the employer's money -- external, never deductible, taxed only on
+    withdrawal, and counted against neither employee limit."""
 
     WAGE     = ( 'Wage Deferral', 'Payroll 401(k)/403(b) deferral from the employee.' )
     PERSONAL = ( 'Personal', 'A direct personal contribution (e.g. a traditional or Roth IRA).' )
@@ -200,9 +201,10 @@ class RetirementContribution:
     vs Roth) and owner come from that holding, so they are not restated here. `amount` is the
     annual contribution in today's dollars, grown by wage growth. `source` sets the money
     source and deductibility (see `ContributionSource`): a cash contribution to a pre-tax
-    holding is deducted above the line; a Roth contribution and an employer match are not. STUB:
-    contribution limits and IRA/Roth income phase-outs are deferred (the planner states the
-    amount; the engine trusts it)."""
+    holding is deducted above the line; a Roth contribution and an employer match are not. The
+    annual contribution limit is enforced (rejected at build if the first year is over, clamped
+    with a Notice if a later year grows past it); STUB: the IRA/Roth income phase-outs are
+    deferred (the planner states the amount within the limit; the engine trusts it)."""
 
     account : Handle
     amount  : Decimal

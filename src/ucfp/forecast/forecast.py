@@ -54,6 +54,7 @@ from ucfp.period.parameters import (
 )
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
+from ucfp.tax.engine import ContributionKind
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.tax.us.context import TaxContext, TaxSubject
@@ -69,6 +70,16 @@ from .parameters import (
     Subject,
     resolve_household_size,
 )
+
+
+# Which annual contribution limit each source counts against (None = no employee limit). The
+# WAGE/EMPLOYER split feeds the limit buckets: payroll deferrals are the employer-plan limit,
+# direct contributions the personal (IRA) limit, an employer match neither.
+_LIMIT_KIND_BY_SOURCE = {
+    ContributionSource.WAGE     : ContributionKind.EMPLOYER_PLAN,
+    ContributionSource.PERSONAL : ContributionKind.PERSONAL,
+    ContributionSource.EMPLOYER : None,
+}
 
 
 # A loan resolved against the books: its parameters plus the accounts and the level
@@ -252,7 +263,45 @@ class Forecast:
                     'An employer match must target a pre-tax retirement holding '
                     '(Roth employer match is not yet supported).' )
             continue
+        self._reject_over_limit_contributions()
         return
+
+    def _reject_over_limit_contributions( self ) -> None:
+        """Reject inputs whose first-year contributions already exceed an annual limit -- a clear
+        planner error, caught before the forecast runs. Contributions sharing an (owner, limit
+        kind) share one limit, so they are aggregated. (Once iterating, a contribution that *grows*
+        past its limit is clamped with a Notice instead, since the economy moved, not the planner.)"""
+        start_date = self._parameters.start_date
+        engine = self._tax_law.engine_for( start_date.year )
+        intended = dict()                                  # ( owner string, kind ) -> first-year total
+        for contribution in self._parameters.contributions:
+            kind = _LIMIT_KIND_BY_SOURCE[ contribution.source ]
+            if ( kind is None ) or ( not contribution.window.covers( start_date ) ):
+                continue
+            holding = self._holding_by_handle[ str( contribution.account ) ]
+            key = ( str( holding.owner_handle ), kind )
+            intended[ key ] = intended.get( key, Decimal( '0' ) ) + contribution.amount
+            continue
+        for ( owner, kind ), total in intended.items():
+            age = self._owner_age( owner, start_date.year )
+            if age is None:
+                continue
+            limit = engine.contribution_limit( kind, age )
+            if ( limit is None ) or ( total <= limit ):
+                continue
+            raise ValueError(
+                f'First-year retirement contributions for "{owner}" total {total}, over the '
+                f'{limit} annual limit.' )
+        return
+
+    def _owner_age( self, owner : str, year : int ) -> Optional[ int ]:
+        """The age at the end of `year` of the subject whose handle is `owner`, or None if no such
+        subject is on the forecast (so no per-owner contribution limit can attach)."""
+        for subject in self._parameters.subjects:
+            if ( subject.handle is not None ) and ( str( subject.handle ) == owner ):
+                return year - subject.birthdate.year
+            continue
+        return None
 
     def _seed_opening_balances( self, bookkeeper : Bookkeeper, holdings : list ) -> None:
         """Post the opening transaction: each holding's value (increasing the asset) and each
@@ -465,9 +514,10 @@ class Forecast:
             self, span : DateSpan, year_fraction : Decimal,
             bookkeeper : Bookkeeper ) -> list[ ContributionLine ]:
         """Resolve the retirement contributions active this interval into ContributionLines:
-        grow each by wage growth from the forecast start and prorate to the interval, then post
-        into the target holding's valuation companion, funded from cash (employee) or External
-        Receipts equity (employer match)."""
+        grow each by wage growth from the forecast start and prorate to the interval. The line
+        names the target holding (the Period posts into its valuation companion and clamps the
+        contribution to its annual limit) and the funding source -- cash for an employee
+        contribution, External Receipts equity for an employer match."""
         chart = bookkeeper.chart
         external_receipts = chart.system_account( SystemAccountRole.EXTERNAL_RECEIPTS )
         lines = list()
@@ -475,10 +525,6 @@ class Forecast:
             if not contribution.window.covers( span.start_date ):
                 continue
             holding = self._holding_by_handle[ str( contribution.account ) ]
-            valuation_account = chart.valuation_of( holding )
-            if valuation_account is None:
-                raise MissingAccountError(
-                    f'Retirement holding "{holding}" has no valuation account to contribute to.' )
             funding_account = chart.cash_account()
             if contribution.source == ContributionSource.EMPLOYER:
                 funding_account = external_receipts
@@ -488,10 +534,11 @@ class Forecast:
             amount = contribution.amount * factor * year_fraction
             lines.append(
                 ContributionLine(
-                    valuation_account = valuation_account,
-                    funding_account   = funding_account,
-                    amount            = amount,
-                    description       = f'{contribution.source.label} contribution to {holding}' ) )
+                    holding         = holding,
+                    funding_account = funding_account,
+                    amount          = amount,
+                    kind            = _LIMIT_KIND_BY_SOURCE[ contribution.source ],
+                    description     = f'{contribution.source.label} contribution to {holding}' ) )
             continue
         return lines
 
