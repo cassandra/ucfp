@@ -167,7 +167,7 @@ class USFederalTaxEngine( TaxEngine ):
         ordinary_income = ordinary_nonrental + passive.deductible
 
         taxable_ss = self._taxable_social_security(
-            status, ss_gross, ordinary_income + total_gains )
+            status, ss_gross, ordinary_income + total_gains + tax_exempt_interest )
         agi        = ordinary_income + total_gains + taxable_ss
         figures    = TaxFigures(
             agi                     = agi,
@@ -186,7 +186,7 @@ class USFederalTaxEngine( TaxEngine ):
         net_investment_income = max(
             _ZERO,
             taxable_interest + qualified_dividends + passive.deductible + netted.gain_ordinary
-            + netted.gain_preferential + section_1250 + collectibles )
+            + netted.gain_preferential - netted.ordinary_offset + section_1250 + collectibles )
         niit = self._net_investment_income_tax(
             status, figures.niit_magi, net_investment_income )
 
@@ -422,8 +422,9 @@ class USFederalTaxEngine( TaxEngine ):
             self, status, ss_gross : Decimal, other_income : Decimal ) -> Decimal:
         """The taxable portion of Social Security via the IRS two-tier worksheet:
         nothing below the base threshold, up to 50% between base and additional, up
-        to 85% above -- capped at 85% of benefits. Uses gross benefits and other
-        income directly (no inner dependency on the tax being computed)."""
+        to 85% above -- capped at 85% of benefits. `other_income` is the provisional-income
+        base (it includes tax-exempt interest, which counts here though not in AGI); the
+        worksheet has no inner dependency on the tax being computed."""
         thresholds  = self._parameters.ss_thresholds[ status ]
         provisional = other_income + ss_gross * _HALF
         if provisional <= thresholds.base:
