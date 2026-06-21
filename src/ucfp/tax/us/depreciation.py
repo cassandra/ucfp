@@ -2,7 +2,8 @@
 
 The deterministic "allowed or allowable" schedule, computed from a property's
 attributes rather than tracked in the ledger -- tax basis diverges from market value,
-so accumulated depreciation is not a net-worth fact.
+so accumulated depreciation is not a net-worth fact. Partial years prorate by elapsed
+days, not the §168 mid-month convention (a deliberate simplification).
 """
 from datetime import date
 from decimal import Decimal

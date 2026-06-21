@@ -43,7 +43,11 @@ buckets are excluded from the ST/LT netting, only their gains are taxed); per-pr
 mixed passive-activity participation (above); the foreign-earned-income exclusion add-back
 (a MAGI component treated as zero); the mortgage acquisition-debt limit and the charitable
 5-year carryover; ACA refinements (advance-PTC reconciliation, enrollment-month proration,
-the actual-premium cap, the under-100%-FPL Medicaid floor).
+the actual-premium cap, the under-100%-FPL Medicaid floor). Deliberate simplifications:
+§1250 recapture is the full accumulated depreciation, not capped at the actual gain on a
+below-basis sale; RMDs are forced per pre-tax account, not aggregated across a person's IRAs;
+the senior-deduction phase-out keys on AGI, not its own MAGI; depreciation prorates by
+elapsed days, not the §168 mid-month convention.
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -269,7 +273,8 @@ class USFederalTaxEngine( TaxEngine ):
         """The required minimum distributions for this fiscal year: for each pre-tax holding,
         size the RMD on its prior-year-end balance and the owner's age/cohort, then force the
         shortfall not already met by cash distributions this year. A conversion to Roth pays
-        no cash, so it does not count -- the RMD must still come out to the taxpayer."""
+        no cash, so it does not count -- the RMD must still come out to the taxpayer. Forced per
+        account; aggregating a person's IRA RMDs across accounts is not modeled."""
         forced = list()
         for holding, owner in self._pretax_holdings( fiscal_window, tax_context ):
             required = rmd.required_minimum_distribution(
@@ -441,8 +446,9 @@ class USFederalTaxEngine( TaxEngine ):
         return min( ss_gross * _SS_MAX_RATE, lower_tier + upper_tier )
 
     def _standard_deduction( self, status, tax_context : TaxContext, agi : Decimal ) -> Decimal:
-        """Base deduction plus the age-65 and senior bonuses for each subject 65+,
-        with the senior bonus phased out linearly across the AGI phase-out band."""
+        """Base deduction plus the age-65 and senior bonuses for each subject 65+, with the
+        senior bonus phased out linearly across the phase-out band -- keyed on AGI, not the
+        senior deduction's own MAGI (a simplification)."""
         standard = self._parameters.standard_deduction[ status ]
         seniors  = tax_context.count_age_at_least( 65 )
         deduction = standard.base + standard.age_65_bonus * seniors
