@@ -27,3 +27,8 @@ class BracketTable:
             total += ( top - lower ) * rate
             continue
         return total
+
+    def indexed( self, factor : Decimal ) -> 'BracketTable':
+        """This table with every bound scaled by the cumulative COLA `factor` and the rates left
+        unchanged -- the inflation-indexing projection (the zero bound stays zero)."""
+        return BracketTable( tuple( ( lower * factor, rate ) for lower, rate in self.rows ) )
