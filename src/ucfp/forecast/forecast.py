@@ -216,9 +216,9 @@ class BaselineBuilder:
         asset_root = chart.root( AccountType.ASSET )
         holdings = list()
         for asset in self._parameters.assets:
-            holding = bookkeeper.create_holding( asset_root, asset.name, asset.asset_class )
-            holding.handle = asset.handle
-            holding.owner_handle = asset.owner_handle
+            holding = bookkeeper.create_holding(
+                asset_root, asset.name, asset.asset_class,
+                handle = asset.handle, owner_handle = asset.owner_handle )
             holdings.append( ( holding, asset.opening_value, asset.cost_basis ) )
             self._asset_holdings.append( ( asset, holding ) )
             if asset.handle is not None:
@@ -703,11 +703,7 @@ class Forecast:
             survivor_handle = self._parameters.survivor_handle( removal.subject_handle )
             if survivor_handle is None:
                 continue
-            for account in bookkeeper.books.accounts:
-                if ( account.owner_handle is not None ) and (
-                        str( account.owner_handle ) == str( removal.subject_handle ) ):
-                    account.owner_handle = survivor_handle
-                continue
+            bookkeeper.retitle_owner( removal.subject_handle, survivor_handle )
             continue
         return
 

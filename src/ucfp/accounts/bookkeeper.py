@@ -23,6 +23,7 @@ from .enums import AccountType, AssetClass, SideType, SystemAccountRole
 from .exceptions import MissingAccountError, TransactionImbalanceError
 from .ledger import Ledger
 from .money_utils import quantize_money
+from .schemas import Handle
 
 
 # One account's participation in one transaction, reduced to what balance queries need:
@@ -83,11 +84,15 @@ class Bookkeeper:
             continue
         return
 
-    def create_holding( self, parent : Account, name : str, asset_class : AssetClass ) -> Account:
-        """Create an asset holding and, for classes that accrue unrealized gains, its
-        companion valuation child. Market value = holding cost + valuation; the holding
-        itself carries the cost basis."""
-        holding = self.add_account( Account( name = name, parent = parent, asset_class = asset_class ) )
+    def create_holding( self, parent : Account, name : str, asset_class : AssetClass,
+                        handle : Optional[ Handle ] = None,
+                        owner_handle : Optional[ Handle ] = None ) -> Account:
+        """Create an asset holding (stamped with its planner `handle` and `owner_handle`) and,
+        for classes that accrue unrealized gains, its companion valuation child. Market value =
+        holding cost + valuation; the holding itself carries the cost basis."""
+        holding = self.add_account(
+            Account( name = name, parent = parent, asset_class = asset_class,
+                     handle = handle, owner_handle = owner_handle ) )
         if asset_class.accrues_unrealized_gains:
             self.add_account(
                 Account( name = f'{name} (Valuation)', parent = holding, is_valuation = True )
@@ -99,6 +104,18 @@ class Bookkeeper:
         construction)."""
         self._books.accounts.append( account )
         return account
+
+    def retitle_owner( self, from_handle : Handle, to_handle : Handle ) -> None:
+        """Reassign every account owned by `from_handle` to `to_handle` -- a survivor inheriting a
+        decedent's holdings, so the new owner's age then drives the account's owner-attributed
+        rules (RMDs, the early-withdrawal penalty). Idempotent: after the move no account carries
+        `from_handle`."""
+        target = str( from_handle )
+        for account in self._books.accounts:
+            if ( account.owner_handle is not None ) and ( str( account.owner_handle ) == target ):
+                account.owner_handle = to_handle
+            continue
+        return
 
     # -- recording (invariant-enforcing) -------------------------------------
 
