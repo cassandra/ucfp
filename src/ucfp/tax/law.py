@@ -48,7 +48,12 @@ class TaxForecastProfile:
 
 
 class TaxLaw:
-    """A resolved tax law: yields the engine for any year per its forecast profile."""
+    """A resolved tax law: yields the engine for any year per its forecast profile.
+
+    The composition point -- the one place allowed to map a `TaxLawType` to a concrete engine
+    family (`tax/us`), so the neutral interface stays agnostic. `engine_for` projects the
+    baseline to the year: indexed figures scale by the profile's COLA, statutorily fixed
+    thresholds stay put. See `ucfp/FORECAST_ENGINE.md`."""
 
     def __init__( self, profile : TaxForecastProfile ):
         self._profile = profile

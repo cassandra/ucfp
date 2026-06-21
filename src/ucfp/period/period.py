@@ -7,7 +7,7 @@ period's outcome. It does no time math (the Scenario resolves parameters across 
 treats tax as a pluggable black box (the `TaxEngine` carried on its `PeriodParameters`,
 resolved by the Scenario from the tax-law projection).
 
-The interval is computed in three phases (see data/design/projection-model.md):
+The interval is computed in three phases (see `ucfp/FORECAST_ENGINE.md`):
   1. Accrue        -- effects whose magnitude is known up front: asset growth and
                       distributions, income, liability service, scheduled expenses
                       and money-movement events, each at its temporal-POV instant.
@@ -15,9 +15,6 @@ The interval is computed in three phases (see data/design/projection-model.md):
                       funding waterfall (with a heuristic gross-up). The only phase
                       with the tax/draw circular dependency.
   3. Close         -- finalize ending balances and the stop condition.
-
-NOTE: Phase-1 complete against the zero-tax engine. The Forecast resolves scheduled
-events (Transfer/Purchase/Realization) into each period's parameters.
 """
 from datetime import date
 from decimal import Decimal

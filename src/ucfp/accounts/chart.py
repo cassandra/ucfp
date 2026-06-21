@@ -20,7 +20,12 @@ from .schemas import Handle
 
 
 class Chart:
-    """A structure view over a `BooksOfAccount`."""
+    """A structure view over a `BooksOfAccount`.
+
+    Account granularity: one account per income/expense tax-class, except where identity
+    matters -- per-worker `WAGES` (the Social Security cap is per worker), per-item expenses,
+    and per-loan accounts. Where several accounts share a class, callers name the account
+    directly. See `ucfp/FORECAST_ENGINE.md`."""
 
     def __init__( self, books : BooksOfAccount ):
         self._books = books

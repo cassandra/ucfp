@@ -37,6 +37,9 @@ class Account:
     `account_type`; every other account inherits its type from its ancestry (see
     `effective_account_type`). Identity-compared (two accounts are equal only if the same
     object), so an account can serve as a dict key while the books are built in memory.
+
+    `handle` is the account's own planner-minted identity (distinct from the display
+    `name`); `owner_handle` references the owning subject. Identity is by handle, not name.
     """
 
     name              : str

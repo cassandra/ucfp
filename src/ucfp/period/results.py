@@ -18,7 +18,13 @@ class NoticeSeverity( LabeledEnum ):
 
 class NoticeKind( LabeledEnum ):
     """The category of a Notice -- its label is the human title, so the kind alone says what
-    happened without reading the linked transaction. Add members as the catalog grows."""
+    happened without reading the linked transaction. Add members as the catalog grows.
+
+    A Notice is raised only for an outcome that is both unrequested and consequential; a
+    requested input (a contribution, a scheduled event) gets a memo, not a Notice. INFO marks
+    an automatic consequential action (a forced RMD, a funding draw); WARNING marks an adverse
+    or constraint-straining outcome (a penalty, a shortfall, depletion, a capped
+    contribution)."""
 
     FUNDING_DRAW = (
         'Funding Draw', 'Assets were sold to cover a cash shortfall to the target buffer.' )

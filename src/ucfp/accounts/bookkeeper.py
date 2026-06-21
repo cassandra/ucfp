@@ -31,8 +31,11 @@ _Posting = namedtuple( '_Posting', ( 'date', 'signed_amount' ) )
 
 
 class Bookkeeper:
-    """Builds and queries a `BooksOfAccount` in memory; the authoritative invariant
-    enforcer."""
+    """Builds and queries a `BooksOfAccount` in memory; the authoritative invariant enforcer
+    and the sole writer of the books -- everything else reads through `Chart` (structure) and
+    `Ledger` (balances). `realize` honours the zero-basis representation: a pre-tax/Roth
+    holding (cost 0, value in its valuation companion) is drawn down whole, while a taxable
+    holding draws against cost so only the gain is realized."""
 
     def __init__( self, books : Optional[ BooksOfAccount ] = None ):
         self._books = books if books is not None else BooksOfAccount()
