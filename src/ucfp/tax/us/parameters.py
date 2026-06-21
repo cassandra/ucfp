@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from ucfp.tax.brackets import BracketTable
 
-from .enums import FilingStatus
+from ucfp.tax.enums import FilingStatus
 
 
 @dataclass( frozen = True )

@@ -210,15 +210,15 @@ class Period:
             contributed = sum(
                 ( year_to_date.contributions_from_cash( holding ) for holding in group[ 'holdings' ] ),
                 Decimal( '0' ) )
-            headroom = limit - contributed
+            headroom = max( Decimal( '0' ), limit - contributed )
             if group[ 'intended' ] <= headroom:
                 continue
-            factors[ ( owner, kind ) ] = max( Decimal( '0' ), headroom ) / group[ 'intended' ]
+            factors[ ( owner, kind ) ] = headroom / group[ 'intended' ]
             result.notices.append(
                 Notice(
                     kind     = NoticeKind.CONTRIBUTION_CAPPED,
                     severity = NoticeSeverity.WARNING,
-                    amount   = limit ) )
+                    amount   = quantize_money( group[ 'intended' ] - headroom ) ) )
             continue
         return factors
 

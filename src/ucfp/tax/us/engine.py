@@ -59,10 +59,12 @@ from ucfp.tax.engine import (
     TaxPenalty,
 )
 
+from ucfp.tax.context import TaxContext
+
 from . import rmd
-from .context import TaxContext
 from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
+from .filing import resolve_filing_status
 from .parameters import TaxParameters
 from .state import CapitalLossCarryover, PassiveLossCarryover, TaxState
 
@@ -111,7 +113,10 @@ class USFederalTaxEngine( TaxEngine ):
         self._parameters = parameters
 
     def assess( self, fiscal_window, tax_context : TaxContext, opening_tax_state ) -> TaxAssessment:
-        status     = tax_context.filing_status
+        # The context carries the household's standing filing status and the spouse death year;
+        # the US surviving-spouse (QSS) rule derives the year's effective status from them.
+        status     = resolve_filing_status(
+            tax_context.filing_status, tax_context.spouse_death_year, fiscal_window.span.end_date.year )
         tax_state  = opening_tax_state or TaxState()
         carryover  = tax_state.capital_loss_carryover
 

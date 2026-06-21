@@ -1,16 +1,12 @@
-"""The US taxpayer context -- the `tax_context` the US federal engine consumes.
+"""The taxpayer context -- the `tax_context` a jurisdiction's engine consumes.
 
-US-shaped (filing status, the people on the return, later ACA/state), so it lives in
-the US package. The Scenario resolves it per interval -- ages from birthdates, wages
-from the period's income, filing status from post-event household state -- so a
-forecast that crosses an age-65 or filing-status boundary picks up the change
-automatically. A neutral taxpayer seam can be extracted if a second jurisdiction is
-added.
-
-Carries the per-individual facts the engine needs that are NOT money amounts in the ledger:
-the engine reads all income (including per-worker wages, since each worker has their own
-WAGES account) from the ledger via the `FiscalWindow`; what lives here is non-monetary
-per-subject status -- ages (deduction bonuses).
+The Forecast resolves it per interval (ages from birthdates, the people on the return, the
+real estate held, health-coverage enrollment) and states facts only: it carries the
+household's *standing* `filing_status` and the year a filing spouse died, and the engine
+applies its own jurisdiction's rules (e.g. a surviving-spouse transition) to derive the
+effective status. This is general -- a country's engine reads what it needs and ignores the
+rest. The engine reads all *money* (including per-worker wages) from the ledger via the
+`FiscalWindow`; only non-monetary per-subject status lives here -- ages (deduction bonuses).
 """
 from dataclasses import dataclass, field
 from typing import Optional
@@ -25,11 +21,10 @@ from .property import TaxProperty
 @dataclass( frozen = True )
 class TaxSubject:
     """One person on the tax return: the per-individual facts the engine needs that are not
-    amounts in the ledger -- the age (for the age-65/senior deduction bonuses and the 59-1/2
-    threshold), the `birth_year` (for the SECURE 2.0 RMD-start cohort), and the `handle` that
-    pairs them with their owned accounts (so an account-attributed rule like the
-    early-withdrawal penalty or RMD can reach this person's age), None when the subject owns no
-    handled account. Blindness (another additional-standard-deduction trigger) will join it."""
+    amounts in the ledger -- the age (for age-65/senior deduction bonuses and the 59-1/2
+    threshold), the `birth_year` (for the RMD-start cohort), and the `handle` that pairs them
+    with their owned accounts (so an account-attributed rule like the early-withdrawal penalty
+    or RMD can reach this person's age), None when the subject owns no handled account."""
 
     age        : int
     birth_year : int
@@ -38,11 +33,12 @@ class TaxSubject:
 
 @dataclass( frozen = True )
 class TaxContext:
-    """The resolved taxpayer facts for one fiscal window: the filing status, the people
-    on the return (`subjects`), the real estate held (`properties`, for §121/§1250 at
-    sale and rental depreciation), subsidized health-coverage enrollment (`health_enrollment`,
-    None when not enrolled, which the US engine turns into the ACA premium tax credit), and
-    whether the taxpayer actively participates in rentals.
+    """The resolved taxpayer facts for one fiscal window: the household's standing
+    `filing_status`, the year a filing spouse died (`spouse_death_year`, driving any
+    surviving-spouse transition the engine applies), the people on the return (`subjects`),
+    the real estate held (`properties`, for gain-exclusion/recapture at sale and rental
+    depreciation), health-coverage enrollment (`health_enrollment`, None when not enrolled),
+    and whether the taxpayer actively participates in rentals.
 
     `rental_active_participation` is a single household-level flag: the passive-activity
     rules treat all rentals as one activity with uniform participation. Supporting a MIX of
@@ -51,6 +47,7 @@ class TaxContext:
     governs them all."""
 
     filing_status     : FilingStatus
+    spouse_death_year : Optional[ int ]           = None
     subjects          : tuple[ TaxSubject, ... ]  = field( default_factory = tuple )
     properties        : tuple[ TaxProperty, ... ] = field( default_factory = tuple )
     health_enrollment : Optional[ SubsidizedHealthEnrollment ] = None

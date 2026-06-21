@@ -25,9 +25,8 @@ from ucfp.forecast.parameters import (
     Subject,
 )
 from ucfp.period.results import NoticeKind, NoticeSeverity
-from ucfp.tax.enums import TaxForecastType, TaxLawType
+from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
-from ucfp.tax.us.enums import FilingStatus
 
 _PROFILE = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
 _SUBJECT = Subject( 'A', date( 1975, 1, 1 ), 'subject-a' )   # age 51 in 2026, working
@@ -201,7 +200,7 @@ class ContributionLimitTests( unittest.TestCase ):
             Decimal( '61000' ) )                                   # 30000 + clamped 31000
         caps = _cap_notices( result )
         self.assertEqual( len( caps ), 1 )
-        self.assertEqual( caps[ 0 ].amount, Decimal( '31000' ) )
+        self.assertEqual( caps[ 0 ].amount, Decimal( '2000' ) )    # 33000 wanted - 31000 allowed
         self.assertEqual( caps[ 0 ].severity, NoticeSeverity.WARNING )
 
     def test_contributions_to_two_accounts_share_one_limit( self ):

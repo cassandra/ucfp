@@ -14,8 +14,8 @@ from typing import Optional
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass
+from ucfp.tax.context import TaxContext
 from ucfp.tax.engine import ContributionKind, TaxEngine
-from ucfp.tax.us.context import TaxContext
 
 from .events import PeriodEvent
 
@@ -101,9 +101,9 @@ class ContributionLine:
     (net-worth-increasing). `description` is the posting memo. The Scenario resolves the holding,
     funding account, and grown amount; the Period posts it after the annual-limit clamp.
 
-    `holding` also carries the limit identity: its `owner_handle` plus `kind` group contributions
-    that share one annual limit, which the Period clamps the year-to-date total to. An employer
-    match counts against no employee limit, so its `kind` is None (never clamped)."""
+    `holding`'s `owner_handle` plus `kind` group contributions that share one annual limit, which
+    the Period clamps each group's year-to-date total to. An employer match counts against no
+    employee limit, so its `kind` is None (never clamped)."""
 
     holding         : Account
     funding_account : Account

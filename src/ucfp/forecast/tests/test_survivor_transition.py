@@ -20,9 +20,8 @@ from ucfp.forecast.parameters import (
     Subject,
     resolve_household_size,
 )
-from ucfp.tax.enums import TaxForecastType, TaxLawType
+from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
-from ucfp.tax.us.enums import FilingStatus
 from ucfp.tax.us.filing import resolve_filing_status
 
 

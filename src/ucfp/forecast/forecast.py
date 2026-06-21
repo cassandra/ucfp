@@ -51,9 +51,8 @@ from ucfp.period.results import PeriodResult
 from ucfp.tax.engine import ContributionKind
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
-from ucfp.tax.us.context import TaxContext, TaxSubject
-from ucfp.tax.us.filing import resolve_filing_status
-from ucfp.tax.us.property import PropertyDisposition, TaxProperty
+from ucfp.tax.context import TaxContext, TaxSubject
+from ucfp.tax.property import PropertyDisposition, TaxProperty
 
 from .parameters import (
     ContributionSource,
@@ -674,8 +673,9 @@ class Forecast:
     def _tax_context_for( self, span : DateSpan ) -> TaxContext:
         """The taxpayer context for the interval: ages from birthdates at the interval's end
         for the subjects still present, the rental properties (depreciation attributes plus any
-        in-year disposition), the survivor-aware filing status (the tax law's rule), and the
-        household's subsidized health enrollment when coverage is in force."""
+        in-year disposition), the household's standing filing status and any spouse death year
+        (the engine derives the survivor-aware effective status), and the household's subsidized
+        health enrollment when coverage is in force."""
         year = span.end_date.year
         subjects = tuple(
             TaxSubject(
@@ -683,10 +683,9 @@ class Forecast:
                 age        = year - subject.birthdate.year,
                 birth_year = subject.birthdate.year )
             for subject in self._parameters.active_subjects( year ) )
-        filing_status = resolve_filing_status(
-            self._parameters.filing_status, self._parameters.earliest_removal_year(), year )
         return TaxContext(
-            filing_status     = filing_status,
+            filing_status     = self._parameters.filing_status,
+            spouse_death_year = self._parameters.earliest_removal_year(),
             subjects          = subjects,
             properties        = self._tax_properties_for( span ),
             health_enrollment = self._subsidized_health_enrollment_for( span ),

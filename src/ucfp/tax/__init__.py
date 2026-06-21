@@ -1,10 +1,12 @@
 """The pluggable tax layer.
 
-`tax/` is the jurisdiction-agnostic interface -- `TaxEngine` (reads book facts through a
-read-only `FiscalWindow` and returns the instructions the Period executes) and `TaxLaw`
-(yields the year's engine) -- and `tax/us/` is the US federal implementation.
+`tax/` is the jurisdiction-agnostic part: the `TaxEngine` interface (it reads book facts
+through a read-only `FiscalWindow` and returns the instructions the Period executes), `TaxLaw`
+(yields the year's engine), and the general tax concepts the engine traffics in -- the taxpayer
+context (`TaxContext`/`TaxSubject`/`TaxProperty`/`PropertyDisposition`), `FilingStatus`, and
+subsidized-health enrollment. `tax/us/` is the US federal implementation.
 
-Tax law must not leak: this neutral layer stays agnostic (opaque state and context typed
-`object`), jurisdiction specifics live in the country package, and `TaxLaw` is the one
-place allowed to import `tax/us`. See `ucfp/FORECAST_ENGINE.md`.
+Tax law must not leak: forecast/period depend only on this neutral layer; US tax law (brackets,
+parameters, the surviving-spouse rule, recovery periods) lives in `tax/us`, and `TaxLaw` is the
+one place allowed to import it. See `ucfp/FORECAST_ENGINE.md`.
 """

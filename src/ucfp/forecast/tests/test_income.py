@@ -19,9 +19,8 @@ from ucfp.forecast.parameters import (
     IncomeStream,
     Subject,
 )
-from ucfp.tax.enums import TaxForecastType, TaxLawType
+from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
-from ucfp.tax.us.enums import FilingStatus
 
 
 def _run_two_pension_forecast():

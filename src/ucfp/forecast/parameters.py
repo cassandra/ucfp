@@ -33,7 +33,7 @@ from ucfp.accounts.schemas import Handle
 from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer, Windfall
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
-from ucfp.tax.us.enums import FilingStatus
+from ucfp.tax.enums import FilingStatus
 
 from .economic_outlook import EconomicOutlook
 
