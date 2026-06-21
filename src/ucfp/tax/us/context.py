@@ -7,11 +7,10 @@ forecast that crosses an age-65 or filing-status boundary picks up the change
 automatically. A neutral taxpayer seam can be extracted if a second jurisdiction is
 added.
 
-NOTE: carries the per-individual facts the engine needs that are NOT money amounts in
-the ledger. The engine reads all income (including per-worker wages, since each worker
-has their own WAGES account) from the ledger via the `FiscalWindow`; what lives here is
-non-monetary per-subject status -- currently ages (deduction bonuses). Household size,
-state and per-subject blindness join as the engine's later stages land.
+Carries the per-individual facts the engine needs that are NOT money amounts in the ledger:
+the engine reads all income (including per-worker wages, since each worker has their own
+WAGES account) from the ledger via the `FiscalWindow`; what lives here is non-monetary
+per-subject status -- ages (deduction bonuses).
 """
 from dataclasses import dataclass, field
 from typing import Optional
@@ -46,11 +45,10 @@ class TaxContext:
     whether the taxpayer actively participates in rentals.
 
     `rental_active_participation` is a single household-level flag: the passive-activity
-    rules treat all rentals as one activity with uniform participation (see
-    USFederalTaxEngine._passive_activity_result). Supporting a MIX of active and passive
-    rentals requires per-property rental accounts and per-activity netting -- the Scenario
-    must therefore not create non-actively-participated rentals while this flag governs
-    them all. See the engine docstring for the removal path."""
+    rules treat all rentals as one activity with uniform participation. Supporting a MIX of
+    active and passive rentals requires per-property rental accounts and per-activity netting
+    -- the Scenario must therefore not create non-actively-participated rentals while this flag
+    governs them all."""
 
     filing_status     : FilingStatus
     subjects          : tuple[ TaxSubject, ... ]  = field( default_factory = tuple )

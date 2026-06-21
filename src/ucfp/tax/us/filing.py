@@ -20,8 +20,8 @@ def resolve_filing_status(
     spouse died (`death_year`, or None for no death). A non-joint base is unaffected (a single
     filer stays single). For a joint base: the death year and the next two years file as
     MARRIED_JOINT (the year-of-death joint return, then the two surviving-spouse years), and
-    SINGLE thereafter. STUB: the surviving-spouse dependent-child requirement is simplified
-    away (always granted)."""
+    SINGLE thereafter. The surviving-spouse dependent-child requirement is not checked --
+    surviving-spouse treatment is always granted."""
     if ( death_year is None ) or ( target_year <= death_year ):
         return base_status
     if base_status != FilingStatus.MARRIED_JOINT:

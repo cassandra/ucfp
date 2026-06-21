@@ -6,10 +6,6 @@ trajectory from a current-year baseline (`federal_2025`) -- indexing thresholds 
 inflation, or applying a deliberate what-if such as a rate hike -- and constructs
 the per-period `USFederalTaxEngine` with that year's parameters. The Period never
 sees these; it treats tax as a black box.
-
-NOTE: the core needed for the worked example (brackets, standard deduction, SS
-thresholds). NIIT, ACA, the §1250/collectibles rates, and the capital-loss cap are
-added as the engine's later stages land.
 """
 from dataclasses import dataclass, replace
 from decimal import Decimal
@@ -242,7 +238,7 @@ def federal_2025() -> TaxParameters:
             FilingStatus.SINGLE : SocialSecurityThresholds( d( '25000' ), d( '34000' ) ),
         },
         # SALT cap is the canonical $10,000; the temporary OBBBA $40,000 cap (with its
-        # high-income phasedown) is a refinement to set here when wanted.
+        # high-income phasedown) is an alternative.
         itemized_rules = ItemizedRules(
             medical_floor_rate   = d( '0.075' ),
             salt_cap             = d( '10000' ),
@@ -265,7 +261,7 @@ def federal_2025() -> TaxParameters:
         early_withdrawal_rate = d( '0.10' ),
         early_withdrawal_age  = d( '59.5' ),
         # 2025 employee limits: 401(k) elective deferral $23,500 (+$7,500 catch-up at 50+);
-        # IRA $7,000 (+$1,000 catch-up at 50+). The 60-63 "super catch-up" is a later refinement.
+        # IRA $7,000 (+$1,000 catch-up at 50+).
         contribution_limits = ContributionLimits(
             elective_deferral          = d( '23500' ),
             elective_deferral_catch_up = d( '7500' ),

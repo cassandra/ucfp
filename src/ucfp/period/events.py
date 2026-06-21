@@ -92,7 +92,7 @@ class Realization( PeriodEvent ):
     realized-gain income class. The destination distinguishes the user-facing meaning:
     the cash hub for a sale or pre-tax withdrawal, or another holding for a conversion
     (e.g. pre-tax -> Roth). Caps at the holding's value. Residence/rental special rules
-    (§121, §1250) are not yet applied; a face-value source (cash, CDs) realizes no gain."""
+    (§121, §1250) are not modeled here; a face-value source (cash, CDs) realizes no gain."""
 
     event_date  : date
     holding     : Account

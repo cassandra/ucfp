@@ -2,8 +2,7 @@
 
 The deterministic "allowed or allowable" schedule, computed from a property's
 attributes rather than tracked in the ledger -- tax basis diverges from market value,
-so accumulated depreciation is not a net-worth fact. Used for §1250 recapture at sale
-(Phase B) and, later, the annual rental deduction (Phase C).
+so accumulated depreciation is not a net-worth fact.
 """
 from datetime import date
 from decimal import Decimal

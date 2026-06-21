@@ -8,9 +8,7 @@ different rates to different year ranges is more segments.
 The Forecast resolves the segment in effect for each interval (by the interval's start
 date) into that period's `AssetRates`, so the Period's growth and distribution steps fire.
 
-STUB: income-side COLAs (Social Security, pensions, rent) live with the income inputs; a
-depreciating-asset rate and a retirement asset-mix join as needed. Segments are resolved
-at period boundaries (no sub-period rate changes).
+Segments are resolved at period boundaries (no sub-period rate changes).
 """
 from dataclasses import dataclass
 from datetime import date
@@ -84,7 +82,7 @@ class EconomicParameters:
 
     def expense_inflation_rate( self, expense_tax_class : ExpenseTaxClass ) -> Rate:
         """The annual inflation rate for an expense class: medical for `MEDICAL`, the
-        general rate otherwise. (More per-class rates can join as needed.)"""
+        general rate otherwise."""
         if expense_tax_class == ExpenseTaxClass.MEDICAL:
             return self.medical_inflation
         return self.inflation

@@ -13,8 +13,7 @@ from decimal import Decimal
 class SubsidizedHealthEnrollment:
     """A household's income-subsidized health-coverage enrollment for one year. `household_size`
     is the covered tax-family size; `reference_premium` is the annual premium the subsidy is
-    computed against (the US engine reads it as the ACA benchmark, the SLCSP). Enrollment-month
-    proration and advance-subsidy reconciliation are deferred."""
+    computed against (the US engine reads it as the ACA benchmark, the SLCSP)."""
 
     household_size    : int
     reference_premium : Decimal

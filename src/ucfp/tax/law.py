@@ -29,8 +29,7 @@ class TaxProjection:
     rate the indexed parameters (brackets, deductions, contribution limits, the SS wage base, the
     poverty guideline) grow by: set it at expected inflation for full indexing, below it to model
     the government lagging, or at zero to freeze them. Resolved once at Forecast start and held
-    for every period. A value object so further projection knobs (per-figure freezes, statutory
-    what-ifs) can join without disturbing callers."""
+    for every period."""
 
     cola_rate : Rate = ZERO_RATE
 
@@ -73,8 +72,7 @@ class TaxLaw:
     def _cola_factor( self, year : int ) -> Decimal:
         """The cumulative COLA factor from the baseline year to `year` -- the projection's
         `cola_rate` compounded over the elapsed years. A COLA-indexed forecast must supply a
-        `projection` (the deliberate government-behaviour assumption; a fall-back to the Economic
-        Outlook's inflation is a later wiring)."""
+        `projection` (the deliberate government-behaviour assumption)."""
         projection = self._profile.projection
         if projection is None:
             raise ValueError(

@@ -80,8 +80,7 @@ class Chart:
         return None
 
     def cash_account( self ) -> Optional[ Account ]:
-        """The cash hub: the first asset account classed CASH (multiple cash accounts are
-        not yet supported), or None."""
+        """The cash hub: the first asset account classed CASH, or None."""
         for account in self._books.accounts:
             if account.asset_class == AssetClass.CASH:
                 return account

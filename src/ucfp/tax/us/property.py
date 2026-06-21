@@ -1,11 +1,11 @@
 """The tax materialized view of a real-estate holding -- what the engine reads from
-`TaxContext.properties`, paralleling `TaxSubject` for people.
+`TaxContext.properties`.
 
 This is NOT the general `Property` domain entity (address, full financials, etc.), which
 lives outside the tax/Period layer; this carries only the tax-relevant facts. They are
-not on the ledger `Account` either -- the account stays a pure financial holding (the
-same boundary we kept for wages) -- so they live here, with the entity referencing its
-holding, whose `asset_class` distinguishes a residence (§121) from a rental (§1250).
+not on the ledger `Account` either -- the account stays a pure financial holding -- so they
+live here, with the entity referencing its holding, whose `asset_class` distinguishes a
+residence (§121) from a rental (§1250).
 """
 from dataclasses import dataclass
 from datetime import date

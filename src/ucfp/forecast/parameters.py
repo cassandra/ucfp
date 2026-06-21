@@ -8,11 +8,6 @@ There is no separate "Baseline" input: the opening books are encoded in the asse
 later liability) parameters' opening values, and the Forecast creates the chart and
 ledger from them. A "Scenario" is a *variation* of a ForecastParameters -- the
 comparison/what-if layer above the engine -- and is not modelled here.
-
-STUB: subjects, assets, the economic outlook, income streams, expenses, loans, scheduled
-events, the frame, filing status, the tax-forecast profile, and the funding knobs (cash
-target + draw order, the asset classes drawn from in priority to cover a shortfall).
-Auto/feedback events (RMDs) and per-item value-rules and existence windows join later.
 """
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -88,7 +83,7 @@ class AssetParameters:
     scheduled event to reference it or for result drill-down; None for a holding neither
     references. `owner_handle` is the handle of the *subject* who owns it (matching that
     `Subject.handle`), required for a retirement account -- the owner's age drives the
-    early-withdrawal penalty and RMDs. STUB: the value-rule and existence window join later."""
+    early-withdrawal penalty and RMDs."""
 
     name                : str
     asset_class         : AssetClass
@@ -168,8 +163,8 @@ class LoanParameters:
     payment is principal (debt reduction) plus interest (the only expense), never a single
     'expense'. A loan creates two accounts -- the liability and an interest expense -- so it
     carries two planner handles (`handle`, `interest_handle`) to associate each with the
-    planner's loan artifact when presenting results; both optional. STUB: existing loans only;
-    a future-originated loan joins later as an Event."""
+    planner's loan artifact when presenting results; both optional. Models loans present from
+    t0 (with an opening balance)."""
 
     name                  : str
     opening_balance       : Decimal
@@ -203,8 +198,8 @@ class RetirementContribution:
     source and deductibility (see `ContributionSource`): a cash contribution to a pre-tax
     holding is deducted above the line; a Roth contribution and an employer match are not. The
     annual contribution limit is enforced (rejected at build if the first year is over, clamped
-    with a Notice if a later year grows past it); STUB: the IRA/Roth income phase-outs are
-    deferred (the planner states the amount within the limit; the engine trusts it)."""
+    with a Notice if a later year grows past it). The IRA/Roth income phase-outs are not
+    enforced: the planner states an amount within the limit and the engine trusts it."""
 
     account : Handle
     amount  : Decimal
@@ -263,9 +258,8 @@ class ScheduledTransfer( ScheduledEvent ):
 
 @dataclass( frozen = True )
 class ScheduledPurchase( ScheduledEvent ):
-    """Acquire `amount` of a holding (by handle) at cost, funded from cash. STUB: buys into a
-    holding present from t0 (possibly opening at zero value); originating a brand-new
-    holding mid-forecast joins later with asset existence windows."""
+    """Acquire `amount` of a holding (by handle) at cost, funded from cash. The target holding
+    must already be present from t0 (possibly opening at zero value)."""
 
     event_date : date
     asset      : Handle
@@ -303,8 +297,8 @@ class ScheduledWindfall( ScheduledEvent ):
     settlement), which credits that revenue account and is taxed at year-close; None for a
     non-taxable receipt (a gift, or a US inheritance -- which is non-taxable to the recipient,
     estate tax being the estate's), which credits the External Receipts equity account and is
-    never taxed. STUB: a recipient-side inheritance/estate tax regime (some jurisdictions) has
-    no home yet -- raise it as unimplemented if needed."""
+    never taxed. A recipient-side inheritance/estate tax regime (some jurisdictions) is not
+    modeled."""
 
     event_date       : date
     amount           : Decimal
@@ -328,13 +322,12 @@ class SubsidizedHealthCoverage:
     couples healthcare cost to the income/tax projection), not for any one program. It is the
     privately-provided, individually-purchased, government-subsidized kind (the US ACA
     marketplace; employer and government-provided coverage are different buckets that need no
-    node here -- Medicare's income *surcharge* joins later as a sibling). `household_size` is
+    node here). `household_size` is
     the covered tax-family size; `reference_premium` is the annual premium the subsidy is
     computed against, in today's dollars. The Forecast hands the year's coverage to the tax
     engine, which (US) treats it as ACA enrollment and computes the premium tax credit;
-    outside the window the household is uncovered (no subsidy). STUB: constant over the window
-    -- a changing household size (survivor transition), premium inflation, and
-    enrollment-month proration join later."""
+    outside the window the household is uncovered (no subsidy). Coverage values are constant
+    over the window."""
 
     window            : DateWindow
     household_size    : int
@@ -351,8 +344,7 @@ class SubjectRemoval:
     couple). NOT a money-movement event: it posts no transaction. Instead the Forecast derives
     the tied consequences from this one fact -- the filing-status change (via the tax law's
     rule), the household-size decrement, the retitling of the decedent's accounts to the
-    survivor, and dropping the subject from the tax context. The dedicated survivor-transition
-    module (roadmap) will emit this together with the materialized stream changes."""
+    survivor, and dropping the subject from the tax context."""
 
     event_date     : date
     subject_handle : Handle
@@ -361,9 +353,8 @@ class SubjectRemoval:
 def resolve_household_size(
         base_size : int, removals : 'list[ SubjectRemoval ]', target_year : int ) -> int:
     """The household size in `target_year`: the base less every subject removed before that
-    year (a removal takes effect the year after the death, like the subject drop). The
-    Forecast-owned mirror of the tax law's filing-status resolver -- household size is a
-    Forecast concern, not tax law."""
+    year (a removal takes effect the year after the death, like the subject drop). Household
+    size is a Forecast concern, not tax law."""
     removed = sum( 1 for removal in removals if removal.event_date.year < target_year )
     return base_size - removed
 

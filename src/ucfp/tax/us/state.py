@@ -5,8 +5,7 @@ Carryforwards beyond a single year are not lost. A net capital loss beyond the y
 ordinary-income offset carries forward, preserving its short- vs long-term character.
 Rental losses disallowed by the passive-activity rules are suspended and carried
 forward. Those are the carryforwards threaded here; `TaxState` is the container the
-engine reads and returns, and the wider family (AMT credit, charitable) joins it as
-those stages land.
+engine reads and returns.
 """
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -24,8 +23,7 @@ class CapitalLossCarryover:
 @dataclass( frozen = True )
 class PassiveLossCarryover:
     """Suspended passive-activity (rental) losses carried into a fiscal year -- a
-    non-negative magnitude. Aggregate for now; a per-activity breakdown (needed to
-    release a property's suspended losses precisely at its disposition) can join later."""
+    non-negative magnitude, aggregated across all rentals (not tracked per activity)."""
 
     suspended : Decimal = Decimal( '0' )
 

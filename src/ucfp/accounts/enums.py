@@ -47,10 +47,7 @@ _ACCOUNT_TYPE_NORMAL_SIDE = {
 
 
 class CurrencyType( LabeledEnum ):
-    """ISO 4217 currencies supported for accounts and transactions.
-
-    Seeded with a common subset. USD is the default base currency.
-    """
+    """ISO 4217 currencies supported for accounts and transactions."""
 
     USD = ( 'US Dollar'         , 'United States dollar.' )
     EUR = ( 'Euro'              , 'European Union euro.' )
@@ -70,7 +67,7 @@ class SystemAccountRole( LabeledEnum ):
 
     The per-type root accounts are identified structurally (parentless, with an
     account_type), so they need no role. This enum names the other system
-    accounts that initialize_chart creates and that are protected from deletion
+    accounts that build_standard_chart creates and that are protected from deletion
     and closing.
     """
 
@@ -162,7 +159,7 @@ class IncomeTaxClass( LabeledEnum ):
     Groups income a tax engine treats identically -- the same rate, netting, and
     inclusion rules. It is the chart's identity for income; how each class is rated
     and netted lives inside a TaxEngine's parameters, not here. Set on revenue
-    accounts only (see Account.income_tax_class). US-oriented for now; another
+    accounts only (see Account.income_tax_class). US-oriented; another
     jurisdiction's engine maps these to its own rules.
     """
 

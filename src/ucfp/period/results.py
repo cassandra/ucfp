@@ -9,8 +9,8 @@ from common.labeled_enum import LabeledEnum
 
 class NoticeSeverity( LabeledEnum ):
     """How much a Notice should draw the user's attention -- the sort key for importance.
-    Two levels for now: informational (a consequential automatic action that is fine) and
-    a warning (an adverse or constraint-straining outcome). Defined low-to-high."""
+    Two levels: informational (a consequential automatic action that is fine) and a warning
+    (an adverse or constraint-straining outcome). Defined low-to-high."""
 
     INFO    = ( 'Info', 'A consequential automatic action worth surfacing; nothing wrong.' )
     WARNING = ( 'Warning', 'An adverse or constraint-straining outcome the user may need to act on.' )
@@ -18,7 +18,7 @@ class NoticeSeverity( LabeledEnum ):
 
 class NoticeKind( LabeledEnum ):
     """The category of a Notice -- its label is the human title, so the kind alone says what
-    happened without reading the linked transaction. Add members as the catalog grows.
+    happened without reading the linked transaction.
 
     A Notice is raised only for an outcome that is both unrequested and consequential; a
     requested input (a contribution, a scheduled event) gets a memo, not a Notice. INFO marks

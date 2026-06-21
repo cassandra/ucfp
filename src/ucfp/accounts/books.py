@@ -8,8 +8,7 @@ in-memory building needs.
 
 The behavior here is the structural invariants (account-tree placement, transaction
 balance); the *mechanisms* that build and query the books live on the `Bookkeeper`, and
-the `Chart`/`Ledger` views read them. See data/design/projection-model.md "Domain
-vocabulary".
+the `Chart`/`Ledger` views read them.
 """
 from dataclasses import dataclass, field
 from datetime import date

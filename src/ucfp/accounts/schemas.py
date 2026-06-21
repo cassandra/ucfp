@@ -1,8 +1,8 @@
 """In-memory container types for the accounts app.
 
-Currency conversion is reserved for the future GNUCash import boundary: an importer
-converts foreign source amounts to the organization's single currency before they enter
-the books. The in-ledger model itself is single-currency, so nothing here touches it.
+Currency conversion is for the GNUCash import boundary: an importer converts foreign source
+amounts to the organization's single currency before they enter the books. The in-ledger
+model itself is single-currency, so nothing here touches it.
 """
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ if TYPE_CHECKING:
 
 class Handle(Protocol):
     """A stable, unique identity the planning layer mints for an entity an account refers to
-    -- its owner today (the subject whose account it is), and other planner references in
-    time. The domain treats it opaquely: it needs only a unique ``__str__``, stamps the
-    handle on the account (and, in time, persists its string), and pairs accounts to subjects
-    by it. The planning layer owns the scheme; any object with a unique ``__str__`` qualifies,
-    and a plain ``str`` is the simplest one."""
+    -- its owner (the subject whose account it is) and other planner references. The domain
+    treats it opaquely: it needs only a unique ``__str__``, stamps the handle on the account
+    (and persists its string), and pairs accounts to subjects by it. The planning layer owns
+    the scheme; any object with a unique ``__str__`` qualifies, and a plain ``str`` is the
+    simplest one."""
 
     def __str__(self) -> str:
         ...

@@ -7,8 +7,7 @@ from common.labeled_enum import LabeledEnum
 
 
 class TaxLawType( LabeledEnum ):
-    """Which jurisdiction's tax law (and so which engine family). US federal is the only
-    one today; others join as engines are added."""
+    """Which jurisdiction's tax law (and so which engine family)."""
 
     US_FEDERAL = ( 'US Federal', 'United States federal income tax.' )
 

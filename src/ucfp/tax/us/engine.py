@@ -34,22 +34,16 @@ is suspended and carried forward in `TaxState` (netting against future passive i
 
 AGGREGATE-RENTAL ASSUMPTION: all rentals are treated as one passive activity with
 uniform active participation (a single household flag). This is exact for a single
-rental or several uniformly-participated ones. To support a MIX of active and passive
-rentals (or per-property reporting / precise disposition release of suspended losses),
-the removal path is: per-property rental income/expense accounts (parallel to per-worker
-wages) referenced by `TaxProperty`; a per-property active-participation flag; per-
-activity PAL netting (cross-activity offset, allowance allocated to active losses); and
-per-activity suspended-loss tracking. Until then the Scenario must not create
-non-actively-participated rentals.
+rental or several uniformly-participated ones; a MIX of active and passive rentals is not
+supported, so the Scenario must not create non-actively-participated rentals.
 
-DEFERRED (added as later stages land, none of which change this contract): cross-
-category capital-loss absorption (a net loss should reduce 28% then 25% then 0/15/20%
-gains -- the §1250/collectibles buckets are not yet in the ST/LT netting, only their
-gains are taxed); per-property / mixed passive-activity participation (above); the
-foreign-earned-income exclusion add-back (a MAGI component, not modeled → zero); the
-mortgage acquisition-debt limit and the charitable 5-year carryover; ACA refinements
-(advance-PTC reconciliation, enrollment-month proration, the actual-premium cap, the
-under-100%-FPL Medicaid floor).
+NOT MODELED (none of which change this contract): cross-category capital-loss absorption
+(a net loss should reduce 28% then 25% then 0/15/20% gains -- the §1250/collectibles
+buckets are excluded from the ST/LT netting, only their gains are taxed); per-property /
+mixed passive-activity participation (above); the foreign-earned-income exclusion add-back
+(a MAGI component treated as zero); the mortgage acquisition-debt limit and the charitable
+5-year carryover; ACA refinements (advance-PTC reconciliation, enrollment-month proration,
+the actual-premium cap, the under-100%-FPL Medicaid floor).
 """
 from decimal import Decimal
 from typing import NamedTuple
@@ -145,8 +139,8 @@ class USFederalTaxEngine( TaxEngine ):
         net_long  = long_term_gains - carryover.long
         netted    = self._net_capital_gains( net_short, net_long )
 
-        # The maximum-rate long-term gains have their own buckets; they are not yet
-        # part of the ST/LT loss netting (cross-category loss absorption deferred).
+        # The maximum-rate long-term gains have their own buckets and are excluded from the
+        # ST/LT loss netting above; only their gains are taxed.
         section_1250 = max( _ZERO, section_1250_gain )
         collectibles = max( _ZERO, fiscal_window.income( IncomeTaxClass.COLLECTIBLES_GAINS ) )
 
@@ -154,7 +148,7 @@ class USFederalTaxEngine( TaxEngine ):
         # reduce ordinary income here (so AGI, the Social Security worksheet, and every MAGI
         # downstream all see the reduction). FICA is unaffected -- it reads gross WAGES. The
         # employer match and Roth contributions are excluded by construction (not cash into a
-        # pre-tax holding). The over-contribution edge (deduction exceeding wages) is deferred.
+        # pre-tax holding).
         pretax_contributions = self._pretax_contributions( fiscal_window )
         ordinary_nonrental  = ( wages + ordinary_other + taxable_interest
                                 + netted.gain_ordinary - netted.ordinary_offset
@@ -332,8 +326,8 @@ class USFederalTaxEngine( TaxEngine ):
     def _depreciation_recapture( self, tax_context : TaxContext ) -> Decimal:
         """The total §1250 unrecaptured depreciation from the year's rental dispositions,
         added to the 25%-rate bucket: the accumulated straight-line depreciation through the
-        sale date. (The sale-below-adjusted-basis edge, which would cap recapture at the
-        actual gain, is deferred -- a non-negative gain recaptures the full accumulation.)"""
+        sale date. Recapture is not capped at the actual gain -- a non-negative gain recaptures
+        the full accumulation."""
         recapture = _ZERO
         for tax_property in tax_context.properties:
             disposition = tax_property.disposition
@@ -350,8 +344,8 @@ class USFederalTaxEngine( TaxEngine ):
     def _rental_net_income( self, fiscal_window, tax_context : TaxContext ) -> Decimal:
         """Net taxable rental income: gross rents minus operating expenses minus
         depreciation (computed per rental from its attributes for the window). It is
-        ordinary income and net investment income, and may be negative (a rental loss);
-        passive-activity-loss limits on such losses are deferred."""
+        ordinary income and net investment income, and may be negative (a rental loss;
+        the passive-activity-loss limits are applied by `_passive_activity_result`)."""
         gross        = fiscal_window.income( IncomeTaxClass.GROSS_RENTAL )
         operating    = fiscal_window.expense( ExpenseTaxClass.RENTAL_EXPENSE )
         depreciation = self._rental_depreciation( fiscal_window.span, tax_context )
@@ -387,9 +381,8 @@ class USFederalTaxEngine( TaxEngine ):
 
         ASSUMPTION: rentals are aggregated and treated as a single activity with uniform
         active participation (`tax_context.rental_active_participation`). Correct for a
-        single rental or several uniformly-participated ones; a *mix* of active and
-        passive rentals would need per-property net income (per-property rental accounts)
-        and per-activity netting -- see the engine docstring for the removal path."""
+        single rental or several uniformly-participated ones; a *mix* of active and passive
+        rentals is not supported."""
         combined = net_rental - prior_suspended
         if combined >= _ZERO:
             return _PassiveActivity( deductible = combined, suspended = _ZERO )
@@ -415,7 +408,7 @@ class USFederalTaxEngine( TaxEngine ):
         expected contribution -- a share of income that is zero below the lower
         poverty-ratio and rises with the ratio to the cap -- floored at zero. Zero when
         not enrolled. Enrollment-month proration, advance-PTC reconciliation, the
-        actual-premium cap, and the under-100%-FPL Medicaid floor are deferred."""
+        actual-premium cap, and the under-100%-FPL Medicaid floor are not modeled."""
         if enrollment is None:
             return _ZERO
         aca   = self._parameters.aca
@@ -453,9 +446,8 @@ class USFederalTaxEngine( TaxEngine ):
     def _itemized_deduction( self, fiscal_window, agi : Decimal ) -> Decimal:
         """Total itemized deductions: medical above the AGI floor, SALT up to its
         cap, mortgage interest, and charitable gifts up to the AGI ceiling. The
-        mortgage acquisition-debt limit and the charitable 5-year carryover of the
-        excess are deferred (rare for the planning cases, and the carryover would
-        join TaxState)."""
+        mortgage acquisition-debt limit and the charitable carryover of the excess are
+        not modeled."""
         rules   = self._parameters.itemized_rules
         medical = max(
             _ZERO,
@@ -522,7 +514,7 @@ class USFederalTaxEngine( TaxEngine ):
             self, status, magi : Decimal, net_investment_income : Decimal ) -> Decimal:
         """NIIT: the rate applied to the lesser of net investment income and MAGI
         over the filing-status threshold (zero below it). `magi` is the NIIT MAGI
-        (`figures.niit_magi` = AGI + the foreign exclusion, which is not modeled → AGI)."""
+        (`figures.niit_magi` = AGI + the foreign exclusion, which is not modeled -> AGI)."""
         excess = max( _ZERO, magi - self._parameters.niit_thresholds[ status ] )
         return self._parameters.niit_rate * min( net_investment_income, excess )
 

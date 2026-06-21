@@ -5,11 +5,6 @@ its `EconomicAssumptions` + `PersonalParameters` + subjects (rates compounded to
 the interval, inflation/COLA applied, ages resolved). The Period consumes these as
 already-resolved values and does no time math itself. It is a shallow composite of
 cohesive value objects, all constructed by the Scenario.
-
-NOTE: only `DateSpan` and the composite are grounded; the remaining sub-types are
-stubs whose intended fields are sketched in their docstrings, to be grounded one
-at a time (each needs enums not yet built). See
-data/design/projection-model.md, "PeriodParameters".
 """
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -27,8 +22,7 @@ from .events import PeriodEvent
 
 @dataclass( frozen = True )
 class DateSpan:
-    """An inclusive [start_date, end_date] calendar span. A general value object --
-    a candidate to relocate to common/ alongside Interval."""
+    """An inclusive [start_date, end_date] calendar span."""
 
     start_date : date
     end_date   : date
@@ -141,8 +135,8 @@ class LiabilityTerm:
 class FundingPolicy:
     """How the cash hub is kept within its band. Below `cash_floor`, the waterfall draws
     (realizing gains) from `draw_priority` in turn until cash reaches the floor or the sources
-    are exhausted. Above `cash_ceiling` (when set), the surplus is swept into `sweep_destination`
-    as an investment at cost. Tax settled afterward can pull cash below the floor -- even
+    are exhausted. Above `cash_ceiling` (when set), the surplus is swept across `sweep_allocation`
+    as investments at cost. Tax settled afterward can pull cash below the floor -- even
     negative -- and that balance carries into the next period as a visible cash-flow signal;
     only a net worth at or below zero ends the forecast.
 

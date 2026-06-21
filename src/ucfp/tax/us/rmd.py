@@ -5,8 +5,7 @@ once the owner reaches the RMD age; the Period then executes the withdrawal thro
 existing draw mechanism (and the engine taxes it as ordinary income). Roth accounts have
 no lifetime RMDs, so the Scenario applies this only to pre-tax holdings.
 
-No Period/engine consumer yet -- built so the Scenario plugs into a ready library.
-Timing nuances (the first-year April-1 required-beginning-date delay) are deferred.
+The first-year April-1 required-beginning-date delay is not modeled.
 """
 from decimal import Decimal
 

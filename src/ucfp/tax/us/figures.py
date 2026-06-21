@@ -8,9 +8,6 @@ surcharge uses `irmaa_magi`.
 
 Surfaced on `TaxAssessment.figures` so downstream consumers (IRMAA, effective net
 worth) can read the assessment's MAGI without re-running the income pipeline.
-
-NOTE: the foreign-earned-income exclusion add-back (NIIT and ACA) is not modeled, so it
-is zero here; when foreign income is added it joins as another component.
 """
 from dataclasses import dataclass
 from decimal import Decimal
@@ -28,7 +25,7 @@ class TaxFigures:
     @property
     def niit_magi( self ) -> Decimal:
         """MAGI for the Net Investment Income Tax: AGI plus the foreign-earned-income
-        exclusion (not modeled → zero), so AGI for now."""
+        exclusion (not modeled -> zero), so AGI."""
         return self.agi
 
     @property

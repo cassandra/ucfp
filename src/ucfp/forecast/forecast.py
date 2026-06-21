@@ -1,7 +1,6 @@
-"""The Forecast: the N-step engine above the Period.
+"""The Forecast: the N-step engine above the Period -- `ForecastParameters -> Forecast -> ForecastResult`.
 
-Parallels the Period one level up -- `ForecastParameters -> Forecast -> ForecastResult`,
-as `PeriodParameters -> Period -> PeriodResult`. The Forecast materializes a
+The Forecast materializes a
 `BooksOfAccount` from the asset/liability parameters (the "baseline" is encoded there, not
 handed in), then walks the frame: resolve each interval's `PeriodParameters`, run the
 `Period` on the running `Bookkeeper`, apply feedback knobs, thread `TaxState`, accumulate,
@@ -19,11 +18,6 @@ is upstream materialization that builds the `ForecastParameters`.
 It selects the tax law via the parameters' `TaxForecastProfile` and treats the resulting
 engine as a black box: it asks the `TaxLaw` for each year's engine and never touches a
 tax knob.
-
-STUB: per-period resolution covers subjects -> tax_context, AssetRates from the economic
-outlook, income/expense lines from the active streams and items, and the scheduled events
-occurring in the interval; the auto/feedback knobs (RMDs, adaptive conversions) join
-incrementally.
 """
 import calendar
 from collections import namedtuple
@@ -631,7 +625,7 @@ class Forecast:
         the interval's length (so the same parameters run at any granularity), and liability
         terms are amortized off the running balance. The year's tax engine is carried every
         interval; the Period asks it whether the interval closes a tax year and settles only
-        then. STUB: the remaining feedback knobs join later."""
+        then."""
         year_fraction = self._year_fraction( span )
         annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
         return PeriodParameters(

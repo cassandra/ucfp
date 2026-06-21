@@ -3,7 +3,7 @@ from .enums import AccountType
 
 
 # Default display names for the auto-created per-type root accounts. Defined once
-# here so initialize_chart and any chart presentation draw on a single source.
+# here so build_standard_chart and any chart presentation draw on a single source.
 # (These intentionally differ from the AccountType labels, e.g. Revenue -> Income;
 # the Opening Balances account name instead derives from its SystemAccountRole.)
 DEFAULT_ROOT_ACCOUNT_NAMES = {
