@@ -168,46 +168,43 @@ class ExpenseAccounts:
         return account
 
 
-class Forecast:
-    """Runs a `ForecastParameters` to completion (N Period steps); see the module
-    docstring for the boundary."""
+@dataclass( frozen = True )
+class ResolvedBaseline:
+    """The immutable result of materializing a forecast's baseline: the seeded opening books and
+    the resolved structures the run loop reads -- the holding lookups, the draw priority and sweep
+    allocation, the loans, the periods-per-year, and the income/expense account registries. Built
+    once by `BaselineBuilder`; the `Forecast` holds it and its per-interval resolvers read it."""
 
-    def __init__( self, parameters : ForecastParameters ):
+    bookkeeper        : Bookkeeper
+    holding_by_handle : dict
+    asset_holdings    : list
+    draw_priority     : list
+    sweep_allocation  : tuple
+    loans             : list
+    periods_per_year  : Optional[ int ]
+    income_accounts   : IncomeAccounts
+    expense_accounts  : ExpenseAccounts
+
+
+class BaselineBuilder:
+    """Materializes a `ForecastParameters` into the opening books and the resolved structures the
+    run loop reads, validating the inputs as it goes. This is the one-time build phase, kept apart
+    from the time-stepping `Forecast`: `build()` runs the create/resolve/validate steps once and
+    returns an immutable `ResolvedBaseline`."""
+
+    def __init__( self, parameters : ForecastParameters, tax_law : TaxLaw ):
         self._parameters = parameters
-        self._tax_law    = TaxLaw( parameters.tax_forecast )
-        self._income_accounts = None    # an IncomeAccounts, built with the books in _build_baseline
-        self._expense_accounts = None   # an ExpenseAccounts, built with the books in _build_baseline
+        self._tax_law    = tax_law
+        self._income_accounts = None    # an IncomeAccounts, built with the books
+        self._expense_accounts = None   # an ExpenseAccounts, built with the books
         self._holding_by_handle = dict()  # handle string -> holding account, for resolving events
         self._asset_holdings = list()   # (AssetParameters, holding) pairs, for property resolution
         self._draw_priority = list()    # holdings to fund from, resolved from draw_order by class
         self._sweep_allocation = ()     # resolved ( holding, weight ) pairs to sweep surplus into
-        self._loans = list()            # resolved loans (accounts + level payment), built in baseline
+        self._loans = list()            # resolved loans (accounts + level payment)
         self._periods_per_year = None   # set when there are liabilities (needs month/year granularity)
 
-    def run( self ) -> ForecastResult:
-        """Build the opening books from the parameters, then walk the frame running a
-        Period per interval -- threading the tax state and stopping at depletion."""
-        bookkeeper    = self._build_baseline()
-        result        = ForecastResult( books = bookkeeper.books )
-        opening_state = self._parameters.initial_tax_state
-        for span in self._parameters.period_spans():
-            if self._parameters.subjects and not self._parameters.active_subjects( span.end_date.year ):
-                result.stopped_early = True
-                break
-            self._retitle_removed_subjects_accounts( bookkeeper, span )
-            period_parameters = self._build_period_parameters( span, opening_state, bookkeeper )
-            period            = Period( period_parameters )
-            period_result     = period.compute( bookkeeper )
-            result.steps.append( ForecastStep( span, period_result ) )
-            if period_result.closing_tax_state is not None:
-                opening_state = period_result.closing_tax_state
-            if period_result.is_depleted:
-                result.stopped_early = True
-                break
-            continue
-        return result
-
-    def _build_baseline( self ) -> Bookkeeper:
+    def build( self ) -> ResolvedBaseline:
         """Build the chart and opening books from the parameters -- the baseline is encoded
         there, not handed in. One opening transaction seeds each holding's value (an asset)
         and each loan's balance (a liability) against Opening Balances, which absorbs the
@@ -237,7 +234,17 @@ class Forecast:
         self._resolve_draw_priority( bookkeeper )
         self._resolve_sweep( bookkeeper )
         self._validate_contributions( bookkeeper )
-        return bookkeeper
+        return ResolvedBaseline(
+            bookkeeper        = bookkeeper,
+            holding_by_handle = self._holding_by_handle,
+            asset_holdings    = self._asset_holdings,
+            draw_priority     = self._draw_priority,
+            sweep_allocation  = self._sweep_allocation,
+            loans             = self._loans,
+            periods_per_year  = self._periods_per_year,
+            income_accounts   = self._income_accounts,
+            expense_accounts  = self._expense_accounts,
+        )
 
     def _validate_contributions( self, bookkeeper : Bookkeeper ) -> None:
         """Check each contribution's target is a retirement holding, and that an employer match
@@ -461,6 +468,40 @@ class Forecast:
         self._sweep_allocation = tuple( resolved )
         return
 
+
+class Forecast:
+    """Runs a `ForecastParameters` to completion (N Period steps); see the module
+    docstring for the boundary."""
+
+    def __init__( self, parameters : ForecastParameters ):
+        self._parameters = parameters
+        self._tax_law    = TaxLaw( parameters.tax_forecast )
+        self._baseline   = None         # the ResolvedBaseline, materialized once at the start of run()
+
+    def run( self ) -> ForecastResult:
+        """Build the opening books from the parameters, then walk the frame running a
+        Period per interval -- threading the tax state and stopping at depletion."""
+        self._baseline = BaselineBuilder( self._parameters, self._tax_law ).build()
+        bookkeeper    = self._baseline.bookkeeper
+        result        = ForecastResult( books = bookkeeper.books )
+        opening_state = self._parameters.initial_tax_state
+        for span in self._parameters.period_spans():
+            if self._parameters.subjects and not self._parameters.active_subjects( span.end_date.year ):
+                result.stopped_early = True
+                break
+            self._retitle_removed_subjects_accounts( bookkeeper, span )
+            period_parameters = self._build_period_parameters( span, opening_state, bookkeeper )
+            period            = Period( period_parameters )
+            period_result     = period.compute( bookkeeper )
+            result.steps.append( ForecastStep( span, period_result ) )
+            if period_result.closing_tax_state is not None:
+                opening_state = period_result.closing_tax_state
+            if period_result.is_depleted:
+                result.stopped_early = True
+                break
+            continue
+        return result
+
     def _liability_terms_for( self, bookkeeper : Bookkeeper ) -> list[ LiabilityTerm ]:
         """Resolve each outstanding loan's payment for the interval from its running balance:
         interest on the balance at the periodic rate, scheduled principal = level payment -
@@ -468,13 +509,13 @@ class Forecast:
         the final payment pays it off. A loan with no balance left is skipped."""
         ledger = bookkeeper.ledger
         terms = list()
-        for loan in self._loans:
+        for loan in self._baseline.loans:
             balance = ledger.natural_balance( loan.account )
             if balance <= 0:
                 continue
-            interest = balance * ( loan.parameters.interest_rate.fraction / self._periods_per_year )
+            interest = balance * ( loan.parameters.interest_rate.fraction / self._baseline.periods_per_year )
             principal = min( max( loan.payment - interest, Decimal( '0' ) ), balance )
-            per_period_extra = loan.parameters.annual_extra_principal / self._periods_per_year
+            per_period_extra = loan.parameters.annual_extra_principal / self._baseline.periods_per_year
             extra = min( per_period_extra, balance - principal )
             terms.append(
                 LiabilityTerm(
@@ -498,7 +539,7 @@ class Forecast:
                 continue
             factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
             amount = stream.annual_amount * factor * year_fraction
-            account = self._income_accounts.account_for( stream.subject, stream.income_tax_class )
+            account = self._baseline.income_accounts.account_for( stream.subject, stream.income_tax_class )
             lines.append( IncomeLine( account = account, gross_amount = amount ) )
             continue
         return lines
@@ -517,7 +558,7 @@ class Forecast:
         for contribution in self._parameters.contributions:
             if not contribution.window.covers( span.start_date ):
                 continue
-            holding = self._holding_by_handle[ str( contribution.account ) ]
+            holding = self._baseline.holding_by_handle[ str( contribution.account ) ]
             funding_account = chart.cash_account()
             if contribution.source == ContributionSource.EMPLOYER:
                 funding_account = external_receipts
@@ -551,7 +592,7 @@ class Forecast:
             if ( occurrences == 0 ) or ( windowed_amount is None ):
                 continue
             factor = self._expense_inflation_factor( item.expense_tax_class, span.start_date.year )
-            account = self._expense_accounts.account_for( item )
+            account = self._baseline.expense_accounts.account_for( item )
             lines.append(
                 ExpenseLine( account = account, amount = occurrences * windowed_amount.amount * factor ) )
             continue
@@ -564,7 +605,7 @@ class Forecast:
         apply as authored."""
         chart = bookkeeper.chart
         return [
-            event.to_period_event( self._holding_by_handle, chart )
+            event.to_period_event( self._baseline.holding_by_handle, chart )
             for event in self._parameters.events if event.in_span( span ) ]
 
     def _clip_to_window( self, span : DateSpan, window : DateWindow ) -> Optional[ tuple[ date, date ] ]:
@@ -602,9 +643,9 @@ class Forecast:
         ceiling = None if cash.cash_ceiling is None else ( cash.cash_ceiling * inflation )
         return FundingPolicy(
             cash_floor       = cash.cash_floor * inflation,
-            draw_priority    = self._draw_priority,
+            draw_priority    = self._baseline.draw_priority,
             cash_ceiling     = ceiling,
-            sweep_allocation = self._sweep_allocation )
+            sweep_allocation = self._baseline.sweep_allocation )
 
     def _cumulative_factor( self, target_year : int, rate_for ) -> Decimal:
         """Cumulative growth from the forecast start year to `target_year`, compounding each
@@ -712,7 +753,7 @@ class Forecast:
         this fiscal year (driving §1250 recapture). Residences need none -- their gain
         settles through the §121 residence-gains account, not the context."""
         properties = list()
-        for asset, holding in self._asset_holdings:
+        for asset, holding in self._baseline.asset_holdings:
             attributes = asset.property_attributes
             if ( asset.asset_class != AssetClass.REAL_ESTATE_RENTAL ) or ( attributes is None ):
                 continue
