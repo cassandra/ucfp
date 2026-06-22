@@ -136,6 +136,25 @@ class IncomeStream:
 
 
 @dataclass( frozen = True )
+class IncomeItem:
+    """Received income for one subject with a real cadence -- the income counterpart of
+    `ExpenseItem`. `amounts` is the per-occurrence gross over time (today's dollars, stepping
+    with life stage); `cadence` places the occurrences (a `Recurrence` for income known per
+    period -- "$5,000/month" -- or a `OneTime` for a single dated receipt such as a bonus or
+    settlement); `window` is the item's existence. The Forecast posts, per interval, the
+    occurrences in that interval x the amount then in effect, grown to nominal by the income
+    class's rate, to the per-(subject, class) revenue account (shared with any `IncomeStream`
+    of the same subject and class). For smooth income with no meaningful schedule, use
+    `IncomeStream` instead."""
+
+    subject          : Subject
+    income_tax_class : IncomeTaxClass
+    amounts          : Schedule[ WindowedAmount ]
+    cadence          : Cadence
+    window           : DateWindow = DateWindow()
+
+
+@dataclass( frozen = True )
 class ExpenseItem:
     """An expense with a real cadence -- one chart line. `amounts` is the per-occurrence cost
     over time (today's dollars, stepping with lifestyle); `cadence` places the occurrences (a
@@ -430,6 +449,7 @@ class ForecastParameters:
     assets            : list[ AssetParameters ]              = field( default_factory = list )
     economic_outlook  : EconomicOutlook                      = field( default_factory = EconomicOutlook )
     income_streams    : list[ IncomeStream ]                 = field( default_factory = list )
+    income_items      : list[ IncomeItem ]                   = field( default_factory = list )
     expenses          : list[ ExpenseItem ]                  = field( default_factory = list )
     expense_streams   : list[ ExpenseStream ]                = field( default_factory = list )
     loans             : list[ LoanParameters ]               = field( default_factory = list )

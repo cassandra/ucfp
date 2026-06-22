@@ -363,12 +363,15 @@ class BaselineBuilder:
         return
 
     def _create_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
-        """Set up the income-account registry and pre-create an account for every stream,
-        so the chart is complete from the start (each stream's account exists even before
-        its window opens)."""
+        """Set up the income-account registry and pre-create an account for every stream and
+        item, so the chart is complete from the start (each account exists even before its
+        window opens). A stream and an item of the same (subject, class) share one account."""
         self._income_accounts = IncomeAccounts( bookkeeper )
         for stream in self._parameters.income_streams:
             self._income_accounts.account_for( stream.subject, stream.income_tax_class )
+            continue
+        for item in self._parameters.income_items:
+            self._income_accounts.account_for( item.subject, item.income_tax_class )
             continue
         return
 
@@ -536,6 +539,13 @@ class Forecast:
         return terms
 
     def _income_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
+        """All income IncomeLines for this interval: the smooth streams (prorated) plus the
+        occurrence-based items (placed by their cadence). The income counterpart of
+        `_expense_lines_for`."""
+        return ( self._income_stream_lines_for( span, year_fraction )
+                 + self._income_item_lines_for( span ) )
+
+    def _income_stream_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
         """Resolve the income streams active this interval into IncomeLines: take each stream's
         level then in effect, grow it to nominal by its class rate from the forecast start,
         prorate to the interval's share of the year, and post to its per-(subject, class) account."""
@@ -550,6 +560,29 @@ class Forecast:
             amount = windowed_amount.amount * factor * year_fraction
             account = self._baseline.income_accounts.account_for( stream.subject, stream.income_tax_class )
             lines.append( IncomeLine( account = account, gross_amount = amount ) )
+            continue
+        return lines
+
+    def _income_item_lines_for( self, span : DateSpan ) -> list[ IncomeLine ]:
+        """Resolve the occurrence-based income items active this interval into IncomeLines: the
+        cadence's occurrences in the interval x the per-occurrence amount in effect (grown to
+        nominal from the forecast start), posted to the per-(subject, class) account. The income
+        counterpart of `_expense_item_lines_for` -- a `OneTime` cadence makes it a single receipt."""
+        lines = list()
+        for item in self._parameters.income_items:
+            clipped = self._clip_to_window( span, item.window )
+            if clipped is None:
+                continue
+            start, end = clipped
+            since = item.window.start if item.window.start is not None else self._parameters.start_date
+            occurrences = item.cadence.count_in( start = start, end = end, since = since )
+            windowed_amount = item.amounts.at( span.start_date )
+            if ( occurrences == 0 ) or ( windowed_amount is None ):
+                continue
+            factor = self._income_growth_factor( item.income_tax_class, span.start_date.year )
+            account = self._baseline.income_accounts.account_for( item.subject, item.income_tax_class )
+            lines.append(
+                IncomeLine( account = account, gross_amount = occurrences * windowed_amount.amount * factor ) )
             continue
         return lines
 
