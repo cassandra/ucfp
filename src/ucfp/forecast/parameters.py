@@ -153,6 +153,25 @@ class ExpenseItem:
 
 
 @dataclass( frozen = True )
+class ExpenseStream:
+    """A smooth recurring expense with no meaningful sub-annual schedule -- living costs, an
+    annual vacation -- the expense counterpart of `IncomeStream`. `annual_amount` is the cost in
+    forecast-start ("today's") dollars; the Forecast inflates it by the class rate and *prorates*
+    it evenly across each interval (as it does income), so the resolved figure is the same at any
+    granularity. Use `ExpenseItem` instead for a cost with a real cadence -- a monthly utility, an
+    annual property-tax bill, a car every N years -- whose timing within the year is meaningful and
+    should fall in one period. Smoothing is an approximation valid only while the granularity stays
+    coarse relative to the real cadence (we cap at monthly); it would misrepresent a true schedule
+    at finer resolution. `handle` is the planner's identity for the item's account; optional."""
+
+    name              : str
+    expense_tax_class : ExpenseTaxClass
+    annual_amount     : Decimal
+    window            : DateWindow         = DateWindow()
+    handle            : Optional[ Handle ] = None
+
+
+@dataclass( frozen = True )
 class LoanParameters:
     """A loan owed at the forecast start -- mortgage, car loan, etc. -- specified the way a
     loan naturally is: `opening_balance`, `interest_rate` (annual), and `term` (a Duration,
@@ -409,6 +428,7 @@ class ForecastParameters:
     economic_outlook  : EconomicOutlook                      = field( default_factory = EconomicOutlook )
     income_streams    : list[ IncomeStream ]                 = field( default_factory = list )
     expenses          : list[ ExpenseItem ]                  = field( default_factory = list )
+    expense_streams   : list[ ExpenseStream ]                = field( default_factory = list )
     loans             : list[ LoanParameters ]               = field( default_factory = list )
     contributions     : list[ RetirementContribution ]       = field( default_factory = list )
     events            : list[ ScheduledEvent ]               = field( default_factory = list )

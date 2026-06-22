@@ -4,8 +4,10 @@ A small, feature-spanning set of `ForecastParameters` (not exhaustive) crossed w
 **tiers** that progressively enable the sources of legitimate annual-vs-monthly divergence, so
 a diff at a low tier is a strong bug signal:
 
-- ``null``    -- zero economic rates, no cash floor/ceiling: annual should match monthly to
-                 rounding; any diff is almost certainly a real month-vs-year bug.
+- ``null``    -- zero economic rates, no cash floor/ceiling: rate flows and year-end levels
+                 should match to rounding, so a diff there is a strong bug signal. (Loan
+                 amortization still splits interest/principal per period, so a profile with a
+                 loan drifts slightly even here -- expected, not a bug.)
 - ``growth``  -- real rates, still no funding/sweep: isolates compounding-on-flows drift.
 - ``funding`` -- real rates + the profile's floor/draw waterfall (no sweep): isolates
                  draw-frequency drift.
@@ -30,6 +32,7 @@ from ucfp.forecast.parameters import (
     CashAccountParameters,
     ContributionSource,
     ExpenseItem,
+    ExpenseStream,
     ForecastParameters,
     IncomeStream,
     LoanParameters,
@@ -66,10 +69,18 @@ REAL_OUTLOOK = EconomicOutlook.constant( EconomicParameters(
 ) )
 
 
-def _expense( name : str, expense_class : ExpenseTaxClass, annual : str ) -> ExpenseItem:
+def _stream( name : str, expense_class : ExpenseTaxClass, annual : str ) -> ExpenseStream:
+    """A smooth cost with no meaningful sub-annual schedule (living, an annual vacation) -- the
+    Rate intent, prorated evenly, so it must match across granularities."""
+    return ExpenseStream( name, expense_class, D( annual ) )
+
+
+def _recurring(
+        name : str, expense_class : ExpenseTaxClass, amount : str, interval : Duration ) -> ExpenseItem:
+    """A cost with a real cadence (a yearly property-tax bill) -- the Occurrence intent, placed by
+    its recurrence, so its year-total matches but its intra-year timing may shift with granularity."""
     return ExpenseItem(
-        name, expense_class, Schedule.constant( WindowedAmount( D( annual ) ) ),
-        Recurrence( Duration( 1, TimeUnit.YEAR ) ) )
+        name, expense_class, Schedule.constant( WindowedAmount( D( amount ) ) ), Recurrence( interval ) )
 
 
 def _base( **overrides ) -> ForecastParameters:
@@ -93,7 +104,11 @@ def wage_earner() -> ForecastParameters:
             AssetParameters( '401k', AssetClass.PRETAX_RETIREMENT, D( '0' ), D( '0' ),
                              handle = '401k', owner_handle = 'avery' ) ],
         income_streams = [ IncomeStream( avery, IncomeTaxClass.WAGES, D( '120000' ) ) ],
-        expenses = [ _expense( 'Living', ExpenseTaxClass.LIVING, '70000' ) ],
+        expense_streams = [
+            _stream( 'Living', ExpenseTaxClass.LIVING, '70000' ),
+            _stream( 'Vacation', ExpenseTaxClass.LIVING, '8000' ) ],
+        expenses = [
+            _recurring( 'Property Tax', ExpenseTaxClass.SALT, '9000', Duration( 1, TimeUnit.YEAR ) ) ],
         contributions = [ RetirementContribution( '401k', D( '20000' ), ContributionSource.WAGE ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '20000' ), cash_ceiling = D( '60000' ),
@@ -116,7 +131,7 @@ def retiree() -> ForecastParameters:
         income_streams = [
             IncomeStream( riley, IncomeTaxClass.SOCIAL_SECURITY, D( '30000' ) ),
             IncomeStream( riley, IncomeTaxClass.ORDINARY, D( '25000' ) ) ],
-        expenses = [ _expense( 'Living', ExpenseTaxClass.LIVING, '130000' ) ],
+        expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '130000' ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '20000' ),
             draw_order = [ AssetClass.STOCKS, AssetClass.PRETAX_RETIREMENT ] ) )
@@ -141,9 +156,9 @@ def rental_owner() -> ForecastParameters:
         income_streams = [
             IncomeStream( quinn, IncomeTaxClass.WAGES, D( '100000' ) ),
             IncomeStream( quinn, IncomeTaxClass.GROSS_RENTAL, D( '36000' ) ) ],
-        expenses = [
-            _expense( 'Living', ExpenseTaxClass.LIVING, '60000' ),
-            _expense( 'Rental Expense', ExpenseTaxClass.RENTAL_EXPENSE, '12000' ) ],
+        expense_streams = [
+            _stream( 'Living', ExpenseTaxClass.LIVING, '60000' ),
+            _stream( 'Rental Expense', ExpenseTaxClass.RENTAL_EXPENSE, '12000' ) ],
         loans = [ LoanParameters(
             'Mortgage', D( '250000' ), Rate( D( '0.05' ) ), Duration( 30, TimeUnit.YEAR ),
             interest_class = ExpenseTaxClass.MORTGAGE_INTEREST ) ],
@@ -171,7 +186,7 @@ def couple_survivor() -> ForecastParameters:
             IncomeStream( sam, IncomeTaxClass.SOCIAL_SECURITY, D( '32000' ) ),
             IncomeStream( jordan, IncomeTaxClass.SOCIAL_SECURITY, D( '22000' ) ),
             IncomeStream( sam, IncomeTaxClass.ORDINARY, D( '20000' ) ) ],
-        expenses = [ _expense( 'Living', ExpenseTaxClass.LIVING, '100000' ) ],
+        expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '100000' ) ],
         subject_removals = [ SubjectRemoval( date( 2035, 6, 1 ), 'sam' ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '25000' ),
@@ -189,7 +204,7 @@ def life_events() -> ForecastParameters:
             AssetParameters( 'Cash', AssetClass.CASH, D( '50000' ), D( '50000' ) ),
             AssetParameters( 'Brokerage', AssetClass.STOCKS, D( '500000' ), D( '350000' ), handle = 'brokerage' ) ],
         income_streams = [ IncomeStream( drew, IncomeTaxClass.ORDINARY, D( '20000' ) ) ],
-        expenses = [ _expense( 'Living', ExpenseTaxClass.LIVING, '70000' ) ],
+        expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '70000' ) ],
         health_coverage = SubsidizedHealthCoverage( DateWindow( end = date( 2028, 12, 31 ) ), 1, D( '12000' ) ),
         events = [
             ScheduledWindfall( date( 2030, 6, 1 ), D( '100000' ) ),

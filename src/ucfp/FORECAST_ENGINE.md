@@ -35,8 +35,9 @@ with `Forecast → TaxLaw.engine_for(year) → TaxEngine`.
 
 ## Temporal & granularity
 - **POV instants:** growth at period start; flows/events at the midpoint; tax at the tax-year close. → `period/period.py`
-- **Levels vs flows:** flows prorate by `year_fraction`; levels (cash band, limits) don't; inflation/COLA applied per *year*, shared by all its sub-periods. → `forecast/forecast.py`
-- **Granularity-invariant:** the same parameters run at any interval length.
+- **Levels vs flows:** flows resolve per interval; levels (cash band, limits) don't; inflation/COLA applied per *year*, shared by all its sub-periods. → `forecast/forecast.py`
+- **Rate flows vs occurrence flows.** A *rate* flow (`IncomeStream`, `ExpenseStream`) is an annual magnitude with no meaningful sub-annual schedule — prorated evenly by `year_fraction`, so it is granularity-invariant. An *occurrence* flow (`ExpenseItem` + `Recurrence`) has a real cadence (monthly utility, yearly property tax, car every N years) — the engine counts occurrences in the interval, so the *year total* is invariant but the intra-year placement (and thus depletion timing) legitimately shifts with granularity. One-time receipts are `ScheduledWindfall` (income has no occurrence form); a one-time expense is an `ExpenseItem` clipped to a single occurrence by its window. Rate smoothing is valid only while granularity stays coarse relative to the real cadence (we cap at monthly). → `forecast/forecast.py` (`_income_lines_for`, `_expense_lines_for`)
+- **Granularity-invariant:** the same parameters run at any interval length. Rate flows and year-end levels match to rounding; occurrence placement, loan amortization splits, and draw-frequency effects on balances may drift within a year — by design, not as a defect.
 - **Annual work is gated by `_is_close_of_tax_year()`, not the window's presence** — the `FiscalWindow` always exists (year-to-date, = full year at the close). Annual rules (RMD, contribution limits) read year-to-date totals from the books, so they're correct at any granularity. → `period/period.py`, `period/fiscal_window.py`
 
 ## Tax projection
