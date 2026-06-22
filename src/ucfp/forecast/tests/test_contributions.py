@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from common.date_window import DateWindow
 from common.rate import Rate
+from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, SystemAccountRole
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
@@ -23,6 +24,7 @@ from ucfp.forecast.parameters import (
     RetirementContribution,
     ScheduledRealization,
     Subject,
+    WindowedAmount,
 )
 from ucfp.period.results import NoticeKind, NoticeSeverity
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
@@ -57,7 +59,8 @@ def _parameters( contributions, assets = None, income = Decimal( '120000' ), end
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ) ),
             AssetParameters( '401k', AssetClass.PRETAX_RETIREMENT, Decimal( '0' ), Decimal( '0' ),
                              handle = '401k', owner_handle = 'subject-a' ) ],
-        income_streams = [ IncomeStream( _SUBJECT, IncomeTaxClass.WAGES, income ) ],
+        income_streams = [ IncomeStream(
+            _SUBJECT, IncomeTaxClass.WAGES, Schedule.constant( WindowedAmount( income ) ) ) ],
         contributions = contributions,
     )
 
@@ -117,7 +120,9 @@ class ContributionMechanicsTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ) ),
                 AssetParameters( '401k', AssetClass.PRETAX_RETIREMENT, Decimal( '0' ), Decimal( '0' ),
                                  handle = '401k', owner_handle = 'subject-a' ) ],
-            income_streams = [ IncomeStream( _SUBJECT, IncomeTaxClass.WAGES, Decimal( '120000' ) ) ],
+            income_streams = [ IncomeStream(
+                _SUBJECT, IncomeTaxClass.WAGES,
+                Schedule.constant( WindowedAmount( Decimal( '120000' ) ) ) ) ],
             contributions = [
                 RetirementContribution(
                     '401k', Decimal( '20000' ), ContributionSource.WAGE,
@@ -173,7 +178,9 @@ class ContributionLimitTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ),
                 AssetParameters( '401k', AssetClass.PRETAX_RETIREMENT, Decimal( '0' ), Decimal( '0' ),
                                  handle = '401k', owner_handle = 'subject-a' ) ],
-            income_streams   = [ IncomeStream( _SUBJECT, IncomeTaxClass.WAGES, Decimal( '200000' ) ) ],
+            income_streams   = [ IncomeStream(
+                _SUBJECT, IncomeTaxClass.WAGES,
+                Schedule.constant( WindowedAmount( Decimal( '200000' ) ) ) ) ],
             economic_outlook = EconomicOutlook.constant(
                 EconomicParameters( wage_growth = Rate( Decimal( '0.10' ) ) ) ),
             contributions    = contributions,

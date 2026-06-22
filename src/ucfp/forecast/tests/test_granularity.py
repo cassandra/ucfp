@@ -45,7 +45,9 @@ def _parameters( granularity ):
             EconomicParameters( inflation = Rate( Decimal( '0.03' ) ),
                                 social_security_cola = Rate( Decimal( '0.02' ) ) ) ),
         # SS provisional income stays under the taxability threshold, so no tax is charged
-        income_streams = [ IncomeStream( subject, IncomeTaxClass.SOCIAL_SECURITY, Decimal( '40000' ) ) ],
+        income_streams = [ IncomeStream(
+            subject, IncomeTaxClass.SOCIAL_SECURITY,
+            Schedule.constant( WindowedAmount( Decimal( '40000' ) ) ) ) ],
         expenses = [
             ExpenseItem( 'Food', ExpenseTaxClass.LIVING,
                          Schedule.constant( WindowedAmount( Decimal( '1000' ) ) ),

@@ -8,7 +8,9 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from common.date_window import DateWindow
 from common.rate import Rate
+from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
@@ -18,6 +20,7 @@ from ucfp.forecast.parameters import (
     ForecastParameters,
     IncomeStream,
     Subject,
+    WindowedAmount,
 )
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
@@ -38,14 +41,53 @@ def _run_two_pension_forecast():
         economic_outlook = EconomicOutlook.constant(
             EconomicParameters( social_security_cola = Rate( Decimal( '0.02' ) ) ) ),
         income_streams = [
-            IncomeStream( alice, IncomeTaxClass.SOCIAL_SECURITY, Decimal( '30000' ) ),
-            IncomeStream( bob, IncomeTaxClass.SOCIAL_SECURITY, Decimal( '20000' ) ),
+            IncomeStream( alice, IncomeTaxClass.SOCIAL_SECURITY,
+                          Schedule.constant( WindowedAmount( Decimal( '30000' ) ) ) ),
+            IncomeStream( bob, IncomeTaxClass.SOCIAL_SECURITY,
+                          Schedule.constant( WindowedAmount( Decimal( '20000' ) ) ) ),
         ],
     )
     return Forecast( parameters ).run()
 
 
+def _run_stepped_wage_forecast():
+    """A single earner whose wages step down from 100k to 50k in 2028 (no economic growth),
+    over 2026-2029 -- exercises a stepped stream Schedule, where the amount changes at a
+    segment boundary rather than via a rate."""
+    worker = Subject( 'Worker', date( 1980, 1, 1 ), 'worker' )
+    wages = Schedule( (
+        WindowedAmount( Decimal( '100000' ), DateWindow( end = date( 2027, 12, 31 ) ) ),
+        WindowedAmount( Decimal( '50000' ), DateWindow( start = date( 2028, 1, 1 ) ) ),
+    ) )
+    parameters = ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( 2029, 12, 31 ),
+        filing_status = FilingStatus.SINGLE,
+        tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+        subjects      = [ worker ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ) ) ],
+        income_streams = [ IncomeStream( worker, IncomeTaxClass.WAGES, wages ) ],
+    )
+    return Forecast( parameters ).run()
+
+
 class IncomeForecastTests( unittest.TestCase ):
+
+    def test_stepped_stream_amount_changes_at_its_segment_boundary( self ):
+        result = _run_stepped_wage_forecast()
+        reader = Bookkeeper( result.books )
+        wages = reader.chart.income_account( IncomeTaxClass.WAGES, owner_handle = 'worker' )
+        ledger = reader.ledger
+        # 100k in 2026 and 2027, then 50k in 2028 and 2029 -- the cumulative WAGES total steps
+        self.assertEqual(
+            ledger.natural_balance( wages, through = date( 2026, 12, 31 ) ), Decimal( '100000' ) )
+        self.assertEqual(
+            ledger.natural_balance( wages, through = date( 2027, 12, 31 ) ), Decimal( '200000' ) )
+        self.assertEqual(
+            ledger.natural_balance( wages, through = date( 2028, 12, 31 ) ), Decimal( '250000' ) )
+        self.assertEqual(
+            ledger.natural_balance( wages, through = date( 2029, 12, 31 ) ), Decimal( '300000' ) )
 
     def test_social_security_is_per_person( self ):
         result = _run_two_pension_forecast()

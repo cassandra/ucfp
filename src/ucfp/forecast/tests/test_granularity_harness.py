@@ -5,8 +5,10 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
-from ucfp.forecast.parameters import AssetParameters, ForecastParameters, IncomeStream, Subject
+from ucfp.forecast.parameters import (
+    AssetParameters, ForecastParameters, IncomeStream, Subject, WindowedAmount )
 from ucfp.forecast.tests.granularity_harness import GRANULARITIES, compare, render
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
@@ -26,7 +28,9 @@ class GranularityHarnessSmokeTest( unittest.TestCase ):
             subjects      = [ subject ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ) ) ],
-            income_streams = [ IncomeStream( subject, IncomeTaxClass.WAGES, Decimal( '80000' ) ) ],
+            income_streams = [ IncomeStream(
+                subject, IncomeTaxClass.WAGES,
+                Schedule.constant( WindowedAmount( Decimal( '80000' ) ) ) ) ],
         )
 
     def test_compare_runs_every_granularity_and_extracts_aligned_years( self ):

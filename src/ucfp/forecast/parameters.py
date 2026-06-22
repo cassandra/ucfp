@@ -111,27 +111,28 @@ class AssetParameters:
 
 
 @dataclass( frozen = True )
+class WindowedAmount:
+    """A monetary amount (today's dollars) in effect over a `window` -- the segment type for a
+    flow's amount `Schedule` (e.g. one income or lifestyle level over a span)."""
+
+    amount : Decimal
+    window : DateWindow = DateWindow()
+
+
+@dataclass( frozen = True )
 class IncomeStream:
-    """A recurring received income for one subject over an existence `window` -- wages, a
-    pension (`ORDINARY`), Social Security, or gross rental. `annual_amount` is gross in
-    forecast-start ("today's") dollars; the Forecast grows it to nominal by the income
-    class's rate (the COLA lives in the Economic Outlook, per class) and gates it to the
-    window. Interest/dividends/gains come from assets, and IRA/401(k) withdrawals are asset
+    """A smooth received income for one subject over an existence `window` -- wages, a pension
+    (`ORDINARY`), Social Security, or gross rental -- the rate counterpart of `ExpenseStream`.
+    `amounts` is the gross level in forecast-start ("today's") dollars, stepping over time with
+    life stage; the Forecast grows it to nominal by the income class's rate (the COLA lives in
+    the Economic Outlook, per class), prorates it evenly across each interval, and gates it to
+    the window. Interest/dividends/gains come from assets, and IRA/401(k) withdrawals are asset
     draws, so none of those are streams."""
 
     subject          : Subject
     income_tax_class : IncomeTaxClass
-    annual_amount    : Decimal
+    amounts          : Schedule[ WindowedAmount ]
     window           : DateWindow = DateWindow()
-
-
-@dataclass( frozen = True )
-class WindowedAmount:
-    """A monetary amount (today's dollars) in effect over a `window` -- the segment type
-    for an expense's amount `Schedule` (e.g. one lifestyle level over a span)."""
-
-    amount : Decimal
-    window : DateWindow = DateWindow()
 
 
 @dataclass( frozen = True )
@@ -156,18 +157,19 @@ class ExpenseItem:
 @dataclass( frozen = True )
 class ExpenseStream:
     """A smooth recurring expense with no meaningful sub-annual schedule -- living costs, an
-    annual vacation -- the expense counterpart of `IncomeStream`. `annual_amount` is the cost in
-    forecast-start ("today's") dollars; the Forecast inflates it by the class rate and *prorates*
-    it evenly across each interval (as it does income), so the resolved figure is the same at any
-    granularity. Use `ExpenseItem` instead for a cost with a real cadence -- a monthly utility, an
-    annual property-tax bill, a car every N years -- whose timing within the year is meaningful and
-    should fall in one period. Smoothing is an approximation valid only while the granularity stays
-    coarse relative to the real cadence (we cap at monthly); it would misrepresent a true schedule
-    at finer resolution. `handle` is the planner's identity for the item's account; optional."""
+    annual vacation -- the expense counterpart of `IncomeStream`. `amounts` is the cost level in
+    forecast-start ("today's") dollars, stepping over time with lifestyle; the Forecast inflates
+    it by the class rate and *prorates* it evenly across each interval (as it does income), so the
+    resolved figure is the same at any granularity. Use `ExpenseItem` instead for a cost with a
+    real cadence -- a monthly utility, an annual property-tax bill, a car every N years -- whose
+    timing within the year is meaningful and should fall in one period. Smoothing is an
+    approximation valid only while the granularity stays coarse relative to the real cadence (we
+    cap at monthly); it would misrepresent a true schedule at finer resolution. `handle` is the
+    planner's identity for the item's account; optional."""
 
     name              : str
     expense_tax_class : ExpenseTaxClass
-    annual_amount     : Decimal
+    amounts           : Schedule[ WindowedAmount ]
     window            : DateWindow         = DateWindow()
     handle            : Optional[ Handle ] = None
 

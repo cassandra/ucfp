@@ -536,15 +536,18 @@ class Forecast:
         return terms
 
     def _income_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
-        """Resolve the income streams active this interval into IncomeLines: grow each to
-        nominal by its class rate from the forecast start, prorate to the interval's share
-        of the year, and post to its per-(subject, class) account."""
+        """Resolve the income streams active this interval into IncomeLines: take each stream's
+        level then in effect, grow it to nominal by its class rate from the forecast start,
+        prorate to the interval's share of the year, and post to its per-(subject, class) account."""
         lines = list()
         for stream in self._parameters.income_streams:
             if not stream.window.covers( span.start_date ):
                 continue
+            windowed_amount = stream.amounts.at( span.start_date )
+            if windowed_amount is None:
+                continue
             factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
-            amount = stream.annual_amount * factor * year_fraction
+            amount = windowed_amount.amount * factor * year_fraction
             account = self._baseline.income_accounts.account_for( stream.subject, stream.income_tax_class )
             lines.append( IncomeLine( account = account, gross_amount = amount ) )
             continue
@@ -611,15 +614,19 @@ class Forecast:
         return lines
 
     def _expense_stream_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ ExpenseLine ]:
-        """Resolve the smooth expense streams active this interval into ExpenseLines: inflate each
-        to nominal by its class rate from the forecast start and prorate to the interval's share of
-        the year, posting to its account. The expense counterpart of `_income_lines_for`."""
+        """Resolve the smooth expense streams active this interval into ExpenseLines: take each
+        stream's level then in effect, inflate it to nominal by its class rate from the forecast
+        start, and prorate to the interval's share of the year, posting to its account. The
+        expense counterpart of `_income_lines_for`."""
         lines = list()
         for stream in self._parameters.expense_streams:
             if not stream.window.covers( span.start_date ):
                 continue
+            windowed_amount = stream.amounts.at( span.start_date )
+            if windowed_amount is None:
+                continue
             factor = self._expense_inflation_factor( stream.expense_tax_class, span.start_date.year )
-            amount = stream.annual_amount * factor * year_fraction
+            amount = windowed_amount.amount * factor * year_fraction
             account = self._baseline.expense_accounts.account_for( stream )
             lines.append( ExpenseLine( account = account, amount = amount ) )
             continue
