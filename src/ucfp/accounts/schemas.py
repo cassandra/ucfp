@@ -1,29 +1,32 @@
-"""In-memory container types for the accounts app."""
+"""In-memory container types for the accounts app.
+
+Currency conversion is for the GNUCash import boundary: an importer converts foreign source
+amounts to the organization's single currency before they enter the books. The in-ledger
+model itself is single-currency, so nothing here touches it.
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from .exceptions import CurrencyConversionError
 
 if TYPE_CHECKING:
-    # Referenced only in annotations; importing these at runtime would create a
-    # schemas <-> models import cycle.
+    # Referenced only in annotations; imported lazily to avoid a runtime cycle.
     from .enums import CurrencyType
-    from .models import Account
 
 
-@dataclass(frozen=True)
-class StartingBalance:
-    """One account's starting balance, as its natural balance.
+class Handle(Protocol):
+    """A stable, unique identity the planning layer mints for an entity an account refers to
+    -- its owner (the subject whose account it is) and other planner references. The domain
+    treats it opaquely: it needs only a unique ``__str__``, stamps the handle on the account
+    (and persists its string), and pairs accounts to subjects by it. The planning layer owns
+    the scheme; any object with a unique ``__str__`` qualifies, and a plain ``str`` is the
+    simplest one."""
 
-    The amount's currency is implicit: it is the account's own currency. This is
-    a transient input (e.g. from manual entry or import), not a persisted record.
-    """
-
-    account : Account
-    amount  : Decimal
+    def __str__(self) -> str:
+        ...
 
 
 @dataclass(frozen=True)
@@ -73,22 +76,3 @@ class CurrencyConverter:
         raise CurrencyConversionError(
             f'No conversion available from {from_currency_type} to {to_currency_type}.'
         )
-
-
-@dataclass
-class OpeningBalances:
-    """The transient input that seeds a Baseline's opening state.
-
-    A collection of StartingBalances plus a CurrencyConverter. When every account
-    shares the opening transaction's currency the converter is unused (the empty
-    default suffices); when currencies differ, it must carry the conversions the
-    involved accounts require, or conversion raises.
-    """
-
-    starting_balances : list[ StartingBalance ] = field( default_factory = list )
-    converter         : CurrencyConverter       = field( default_factory = CurrencyConverter )
-
-    def add( self, account : Account, amount : Decimal ) -> OpeningBalances:
-        """Append a StartingBalance for `account`; chainable."""
-        self.starting_balances.append( StartingBalance( account = account, amount = amount ) )
-        return self

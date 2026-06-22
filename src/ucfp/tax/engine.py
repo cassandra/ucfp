@@ -1,0 +1,139 @@
+"""The pluggable, country-agnostic tax interface.
+
+A `TaxEngine` is a black box to the Period: given the fiscal window's ledger facts,
+the resolved taxpayer context, and the opening tax state (carryforwards), it returns
+the charges to book, any credits, and the updated tax state. Everything
+jurisdiction-specific -- the taxpayer-context shape, the tax-state shape, parameters,
+brackets, rules -- lives in a country package (e.g. `tax/us/`); this module stays
+neutral. The `tax_context` and `tax_state` passed through `assess` are therefore
+engine-specific and opaque here.
+"""
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+from enum import Enum
+from typing import Optional
+
+from ucfp.accounts.books import Account
+from ucfp.accounts.enums import ExpenseTaxClass
+
+
+@dataclass( frozen = True )
+class TaxCharge:
+    """A tax to pay: an amount attributed to an expense tax-class, which the Period
+    posts as a tax expense drawn from cash."""
+
+    tax_class : ExpenseTaxClass
+    amount    : Decimal
+
+
+@dataclass( frozen = True )
+class TaxCredit:
+    """A refundable credit the Period books against `tax_class` (e.g. the ACA premium
+    tax credit against income tax) -- the reverse of a charge, refundable so a credit
+    beyond the matching tax yields a net refund."""
+
+    tax_class : ExpenseTaxClass
+    amount    : Decimal
+
+
+@dataclass( frozen = True )
+class TaxPenalty:
+    """A per-event tax penalty the engine assessed against one money-movement: the `tax_class`
+    it is paid into, the `amount`, and a human-readable `reason` the Period surfaces as a
+    Notice so the charge is explained (e.g. a 10% early-withdrawal penalty on a named
+    account). Distinct from a `TaxCharge` -- which is the year's aggregate assessment -- in
+    being one-per-event and carrying its rationale."""
+
+    tax_class : ExpenseTaxClass
+    amount    : Decimal
+    reason    : str
+
+
+@dataclass( frozen = True )
+class ForcedTransaction:
+    """A transaction the tax law forces this interval -- an RMD today: distribute `amount`
+    out of `account` (to cash), with a `reason` the Period surfaces as a Notice. The engine
+    determines these (reading the books view); the Period executes each as a realization."""
+
+    account : Account
+    amount  : Decimal
+    reason  : str
+
+
+@dataclass( frozen = True )
+class TaxAssessment:
+    """The result of `TaxEngine.assess`: the `charges` to book and refundable `credits`
+    to apply, plus `closing_tax_state` -- the engine's updated threaded tax state to
+    carry forward as the next fiscal year's `opening_tax_state` (None for engines that
+    thread no state) -- and `figures`, engine-specific derived figures (e.g. AGI/MAGI)
+    for downstream consumers. `closing_tax_state` and `figures` are opaque to the Period
+    and to this neutral module: their concrete types (e.g. the US `TaxState` /
+    `TaxFigures`) live in the country package, so they are typed `object` here to keep
+    the agnostic layer from depending on a specific jurisdiction."""
+
+    charges           : list[ TaxCharge ] = field( default_factory = list )
+    credits           : list[ TaxCredit ] = field( default_factory = list )
+    closing_tax_state : object = None
+    figures           : object = None
+
+
+class ContributionKind( Enum ):
+    """Which annual retirement-contribution limit a contribution counts against. The two buckets
+    have separate limits and aggregate independently per person: an employer-sponsored plan (US
+    401(k)/403(b)) versus a personal account (US IRA, traditional or Roth). An employer match
+    counts against neither employee limit, so such a contribution carries no kind. Neutral here;
+    a jurisdiction maps its account types onto these buckets."""
+
+    EMPLOYER_PLAN = 'employer_plan'
+    PERSONAL      = 'personal'
+
+
+class TaxEngine:
+    """A tax-calculation strategy. Subclasses implement `assess`; the tax-year calendar
+    defaults to the civil year and is overridden by a jurisdiction on a different fiscal
+    year. The Period owns one engine every interval and asks it when to settle, rather than
+    being handed a pre-decided window -- the boundary is the tax law's to know."""
+
+    def assess( self, fiscal_window, tax_context, opening_tax_state ) -> TaxAssessment:
+        raise NotImplementedError
+
+    def assess_penalties( self, fiscal_window, tax_context ) -> list[ TaxPenalty ]:
+        """The `TaxPenalty`s the year's activity incurs (e.g. the early-withdrawal penalty),
+        read from the books view `fiscal_window` (balances, distributions) and `tax_context`
+        (owner ages). Default: none. The engine owns the whole rule -- which distributions
+        qualify and the rate -- reading the books rather than being handed pre-digested data."""
+        return []
+
+    def forced_transactions( self, fiscal_window, tax_context ) -> list[ ForcedTransaction ]:
+        """The `ForcedTransaction`s the tax law requires this interval (e.g. RMDs), read from
+        the books view `fiscal_window` (balances, distributions) and `tax_context` (owner
+        ages). Default: none. The engine owns the whole rule -- which accounts, the amount,
+        the reconciliation -- so the Period only executes what comes back."""
+        return []
+
+    def contribution_limit( self, kind : ContributionKind, age : int ) -> Optional[ Decimal ]:
+        """The annual employee contribution limit for a `kind` of retirement contribution at this
+        owner `age` (any age-based catch-up already folded in), or None for no limit. The Forecast
+        leverages this to keep contributions within the law -- rejecting an over-limit input at
+        build and clamping a contribution that outgrows its limit mid-forecast. Default: None (a
+        neutral engine imposes no limit)."""
+        return None
+
+    def closes_tax_year( self, on_date : date ) -> bool:
+        """Whether a tax year ends on `on_date` -- the interval on which the Period settles
+        tax. Civil-year default: December 31."""
+        return ( on_date.month == 12 ) and ( on_date.day == 31 )
+
+    def tax_year_bounds( self, on_date : date ) -> tuple[ date, date ]:
+        """The (start, end) dates of the tax year containing `on_date` -- the full span the
+        engine assesses over. Civil-year default: January 1 to December 31 of that year."""
+        return ( date( on_date.year, 1, 1 ), date( on_date.year, 12, 31 ) )
+
+
+class ZeroTaxEngine( TaxEngine ):
+    """Country-neutral stand-in that assesses no tax, so the Period flow can be
+    exercised end to end before a real engine exists."""
+
+    def assess( self, fiscal_window, tax_context, opening_tax_state ) -> TaxAssessment:
+        return TaxAssessment()

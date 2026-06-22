@@ -8,6 +8,8 @@ from django.db.models.functions import Lower
 from common.labeled_enum import LabeledEnumField
 from common.models import TimestampedModel
 
+from ucfp.accounts.enums import CurrencyType
+
 from .enums import OrganizationInvitationStatus, OrganizationRole
 from .exceptions import (
     InvitationRecipientMismatchError,
@@ -43,6 +45,11 @@ class Organization( TimestampedModel ):
         max_length = 64,
         null = False,
         blank = False,
+    )
+    currency = LabeledEnumField(
+        CurrencyType,
+        verbose_name = 'Currency',
+        default = CurrencyType.USD,
     )
     parent = models.ForeignKey(
         'self',

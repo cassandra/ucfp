@@ -1,43 +1,47 @@
 from django.contrib import admin
 
-from .models import Account, Baseline, Entry, Transaction
+from .models import AccountRecord, BooksOfAccountRecord, EntryRecord, TransactionRecord
 
 
-@admin.register( Account )
-class AccountAdmin( admin.ModelAdmin ):
+@admin.register( AccountRecord )
+class AccountRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
     list_display = (
         'name',
-        'organization',
+        'books',
         'account_type',
+        'asset_class',
+        'income_tax_class',
+        'expense_tax_class',
         'parent',
-        'currency',
         'closed',
         'system_role',
     )
     list_filter = (
         'account_type',
+        'asset_class',
+        'income_tax_class',
+        'expense_tax_class',
         'closed',
     )
     search_fields = (
         'name',
         'uuid',
-        'organization__name',
+        'books__organization__name',
     )
     readonly_fields = (
         'uuid',
     )
 
 
-@admin.register( Baseline )
-class BaselineAdmin( admin.ModelAdmin ):
+@admin.register( BooksOfAccountRecord )
+class BooksOfAccountRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
     list_display = (
         'label',
         'organization',
-        'as_of_date',
         'uuid',
         'created_datetime',
     )
@@ -51,29 +55,28 @@ class BaselineAdmin( admin.ModelAdmin ):
     )
 
 
-@admin.register( Transaction )
-class TransactionAdmin( admin.ModelAdmin ):
+@admin.register( TransactionRecord )
+class TransactionRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
     list_display = (
         'uuid',
-        'baseline',
+        'books',
         'transaction_date',
-        'currency',
         'description',
     )
     search_fields = (
         'uuid',
         'description',
-        'baseline__label',
+        'books__label',
     )
     readonly_fields = (
         'uuid',
     )
 
 
-@admin.register( Entry )
-class EntryAdmin( admin.ModelAdmin ):
+@admin.register( EntryRecord )
+class EntryRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
     list_display = (
@@ -82,7 +85,6 @@ class EntryAdmin( admin.ModelAdmin ):
         'account',
         'entry_direction',
         'amount',
-        'transaction_amount',
     )
     list_filter = (
         'entry_direction',
