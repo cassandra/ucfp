@@ -58,6 +58,7 @@ from ucfp.tax.property import PropertyDisposition, TaxProperty
 from .parameters import (
     ContributionSource,
     ExpenseItem,
+    ExpenseStream,
     ForecastParameters,
     ScheduledRealization,
     ScheduledWindfall,
@@ -142,8 +143,8 @@ class IncomeAccounts:
 
 
 class ExpenseAccounts:
-    """The expense account for each expense item (keyed by name), created on first request
-    and reused after -- the one place the expense-account key lives. Per item so the Books
+    """The expense account for each expense item or stream (keyed by name), created on first
+    request and reused after -- the one place the expense-account key lives. Per item so the Books
     keep item-level detail; each account is tagged with the item's tax-class for the engine
     to aggregate by class."""
 
@@ -152,9 +153,10 @@ class ExpenseAccounts:
         self._expense_root = bookkeeper.chart.root( AccountType.EXPENSE )
         self._account_by_name = dict()
 
-    def account_for( self, item : ExpenseItem ) -> Account:
-        """The expense account for `item`, creating it under the Expenses root on first
-        request and stamping the item's handle so the planner can associate it in results."""
+    def account_for( self, item : ExpenseItem | ExpenseStream ) -> Account:
+        """The expense account for `item` (an occurrence-based item or a smooth stream), creating
+        it under the Expenses root on first request and stamping its handle so the planner can
+        associate it in results."""
         account = self._account_by_name.get( item.name )
         if account is None:
             account = self._bookkeeper.add_account(
@@ -371,11 +373,14 @@ class BaselineBuilder:
         return
 
     def _create_expense_accounts( self, bookkeeper : Bookkeeper ) -> None:
-        """Set up the expense-account registry and pre-create an account for every item, so
-        the chart is complete from the start."""
+        """Set up the expense-account registry and pre-create an account for every occurrence-based
+        item and smooth stream, so the chart is complete from the start."""
         self._expense_accounts = ExpenseAccounts( bookkeeper )
         for item in self._parameters.expenses:
             self._expense_accounts.account_for( item )
+            continue
+        for stream in self._parameters.expense_streams:
+            self._expense_accounts.account_for( stream )
             continue
         return
 
@@ -577,10 +582,16 @@ class Forecast:
             continue
         return lines
 
-    def _expense_lines_for( self, span : DateSpan ) -> list[ ExpenseLine ]:
-        """Resolve the expense items active this interval into ExpenseLines: the recurrence's
-        occurrences in the interval x the per-occurrence amount in effect (inflated from the
-        forecast start), posted to the item's account."""
+    def _expense_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ ExpenseLine ]:
+        """All expense ExpenseLines for this interval: the occurrence-based items (placed by their
+        recurrence) plus the smooth streams (prorated like income)."""
+        return ( self._expense_item_lines_for( span )
+                 + self._expense_stream_lines_for( span, year_fraction ) )
+
+    def _expense_item_lines_for( self, span : DateSpan ) -> list[ ExpenseLine ]:
+        """Resolve the occurrence-based expense items active this interval into ExpenseLines: the
+        recurrence's occurrences in the interval x the per-occurrence amount in effect (inflated
+        from the forecast start), posted to the item's account."""
         lines = list()
         for item in self._parameters.expenses:
             clipped = self._clip_to_window( span, item.window )
@@ -596,6 +607,21 @@ class Forecast:
             account = self._baseline.expense_accounts.account_for( item )
             lines.append(
                 ExpenseLine( account = account, amount = occurrences * windowed_amount.amount * factor ) )
+            continue
+        return lines
+
+    def _expense_stream_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ ExpenseLine ]:
+        """Resolve the smooth expense streams active this interval into ExpenseLines: inflate each
+        to nominal by its class rate from the forecast start and prorate to the interval's share of
+        the year, posting to its account. The expense counterpart of `_income_lines_for`."""
+        lines = list()
+        for stream in self._parameters.expense_streams:
+            if not stream.window.covers( span.start_date ):
+                continue
+            factor = self._expense_inflation_factor( stream.expense_tax_class, span.start_date.year )
+            amount = stream.annual_amount * factor * year_fraction
+            account = self._baseline.expense_accounts.account_for( stream )
+            lines.append( ExpenseLine( account = account, amount = amount ) )
             continue
         return lines
 
@@ -674,7 +700,7 @@ class Forecast:
             tax_context       = self._tax_context_for( span ),
             asset_rates       = annual_rates.over_fraction( year_fraction ),
             income_lines      = self._income_lines_for( span, year_fraction ),
-            expense_lines     = self._expense_lines_for( span ),
+            expense_lines     = self._expense_lines_for( span, year_fraction ),
             liability_terms   = self._liability_terms_for( bookkeeper ),
             contribution_lines = self._contribution_lines_for( span, year_fraction, bookkeeper ),
             events            = self._events_for( span, bookkeeper ),
