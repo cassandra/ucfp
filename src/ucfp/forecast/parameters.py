@@ -17,7 +17,7 @@ from typing import Optional
 from common.date_window import DateWindow
 from common.labeled_enum import LabeledEnum
 from common.rate import Rate
-from common.recurrence import Duration, Recurrence, TimeUnit
+from common.recurrence import Cadence, Duration, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.books import Account
 from ucfp.accounts.chart import Chart
@@ -136,18 +136,19 @@ class WindowedAmount:
 
 @dataclass( frozen = True )
 class ExpenseItem:
-    """A recurring expense -- one chart line. `amounts` is the per-occurrence cost over
-    time (today's dollars, stepping with lifestyle); `recurrence` places the occurrences;
-    `window` is the item's existence. The Forecast posts, per interval, the occurrences in
-    that interval x the amount then in effect, inflated -- to a per-item account tagged with
-    `expense_tax_class`, so the Books keep item detail while tax aggregates by class. `handle`
-    is the planner's identity for the item's account, to associate it with the planner's
-    artifact in results; optional."""
+    """An expense with a real cadence -- one chart line. `amounts` is the per-occurrence cost
+    over time (today's dollars, stepping with lifestyle); `cadence` places the occurrences (a
+    `Recurrence` for a repeating cost, a `OneTime` for a single dated one); `window` is the
+    item's existence. The Forecast posts, per interval, the occurrences in that interval x the
+    amount then in effect, inflated -- to a per-item account tagged with `expense_tax_class`, so
+    the Books keep item detail while tax aggregates by class. `handle` is the planner's identity
+    for the item's account, to associate it with the planner's artifact in results; optional.
+    For a smooth cost with no meaningful schedule, use `ExpenseStream` instead."""
 
     name              : str
     expense_tax_class : ExpenseTaxClass
     amounts           : Schedule[ WindowedAmount ]
-    recurrence        : Recurrence
+    cadence           : Cadence
     window            : DateWindow      = DateWindow()
     handle            : Optional[ Handle ] = None
 

@@ -590,7 +590,7 @@ class Forecast:
 
     def _expense_item_lines_for( self, span : DateSpan ) -> list[ ExpenseLine ]:
         """Resolve the occurrence-based expense items active this interval into ExpenseLines: the
-        recurrence's occurrences in the interval x the per-occurrence amount in effect (inflated
+        cadence's occurrences in the interval x the per-occurrence amount in effect (inflated
         from the forecast start), posted to the item's account."""
         lines = list()
         for item in self._parameters.expenses:
@@ -599,7 +599,7 @@ class Forecast:
                 continue
             start, end = clipped
             since = item.window.start if item.window.start is not None else self._parameters.start_date
-            occurrences = item.recurrence.count_in( start = start, end = end, since = since )
+            occurrences = item.cadence.count_in( start = start, end = end, since = since )
             windowed_amount = item.amounts.at( span.start_date )
             if ( occurrences == 0 ) or ( windowed_amount is None ):
                 continue
