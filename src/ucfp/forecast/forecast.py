@@ -46,6 +46,7 @@ from ucfp.period.parameters import (
     LiabilityTerm,
     PeriodParameters,
 )
+from ucfp.period.events import PeriodEvent
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
 from ucfp.tax.engine import ContributionKind
@@ -322,7 +323,7 @@ class BaselineBuilder:
         return
 
     def _opening_value_postings( self, chart, holding : Account, value : Decimal,
-                                 cost_basis : Decimal ) -> list:
+                                 cost_basis : Decimal ) -> list[ tuple[ Account, Decimal ] ]:
         """The opening postings seeding `holding` to market `value` with tax basis
         `cost_basis`: the basis lands in the holding's cost account and any embedded gain
         (value - basis) in its valuation companion against its own Unrealized Gains equity, so
@@ -598,7 +599,7 @@ class Forecast:
             continue
         return lines
 
-    def _events_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list:
+    def _events_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list[ PeriodEvent ]:
         """Resolve the scheduled events occurring in this interval into PeriodEvents, binding
         their holding handles to the running accounts (and via the chart the cash hub and the
         revenue/equity accounts a windfall credits). Order is preserved, so same-interval events

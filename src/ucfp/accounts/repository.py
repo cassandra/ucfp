@@ -6,6 +6,8 @@ behavior-free. `save` writes a whole books graph for an organization; `load` reb
 domain graph from a stored books. Identity within a run is by object/row, so the mapping
 keeps its own domain<->record correspondence rather than relying on any shared key.
 """
+from typing import Optional
+
 from django.db import transaction
 
 from .books import Account, BooksOfAccount, Entry, Transaction
@@ -14,7 +16,7 @@ from .schemas import Handle
 from organization.models import Organization
 
 
-def _handle_string( handle : Handle ) -> str:
+def _handle_string( handle : Optional[ Handle ] ) -> Optional[ str ]:
     """A handle's persisted string form (its identity, per the Handle contract), or None. The
     reloaded account carries this string back as its handle -- a str satisfies the protocol --
     so identity round-trips without the planner's original handle type."""

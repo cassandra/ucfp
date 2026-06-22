@@ -98,14 +98,14 @@ class TaxEngine:
     def assess( self, fiscal_window, tax_context, opening_tax_state ) -> TaxAssessment:
         raise NotImplementedError
 
-    def assess_penalties( self, fiscal_window, tax_context ) -> list:
+    def assess_penalties( self, fiscal_window, tax_context ) -> list[ TaxPenalty ]:
         """The `TaxPenalty`s the year's activity incurs (e.g. the early-withdrawal penalty),
         read from the books view `fiscal_window` (balances, distributions) and `tax_context`
         (owner ages). Default: none. The engine owns the whole rule -- which distributions
         qualify and the rate -- reading the books rather than being handed pre-digested data."""
         return []
 
-    def forced_transactions( self, fiscal_window, tax_context ) -> list:
+    def forced_transactions( self, fiscal_window, tax_context ) -> list[ ForcedTransaction ]:
         """The `ForcedTransaction`s the tax law requires this interval (e.g. RMDs), read from
         the books view `fiscal_window` (balances, distributions) and `tax_context` (owner
         ages). Default: none. The engine owns the whole rule -- which accounts, the amount,

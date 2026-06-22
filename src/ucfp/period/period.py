@@ -178,7 +178,7 @@ class Period:
             continue
         return
 
-    def _contribution_cap_factors( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> dict:
+    def _contribution_cap_factors( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> dict[ tuple, Decimal ]:
         """The scale factor (< 1) for each (owner, kind) group whose contributions this interval
         overrun the annual headroom -- the limit less what the books already show contributed this
         tax year (read from the year-to-date fiscal window, the same pattern the RMD uses). The

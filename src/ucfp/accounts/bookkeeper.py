@@ -159,10 +159,11 @@ class Bookkeeper:
                  description           : str = '' ) -> Optional[ Transaction ]:
         """Realize `proceeds` of `holding`'s market value into `proceeds_account`: draw
         down cost and valuation proportionally, recognize the realized gain (the valuation
-        portion) into `realized_gain_account`, and reverse the Unrealized Gains equity.
-        Net-worth-neutral -- the gain just moves from unrealized to realized (taxable).
-        Caps at the holding's market value. Returns the posted transaction (None if the
-        holding has no value to realize), so a caller can reference it (e.g. in a Notice)."""
+        portion) into `realized_gain_account`, and reverse the Unrealized Gains equity. The
+        gain may be negative -- an underwater holding realizes a loss. Net-worth-neutral --
+        the gain just moves from unrealized to realized (taxable). Caps at the holding's market
+        value. Returns the posted transaction (None if the holding has no value to realize), so
+        a caller can reference it (e.g. in a Notice)."""
         ledger = self.ledger
         market = ledger.market_value( holding )
         if market <= 0:

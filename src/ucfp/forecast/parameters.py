@@ -420,14 +420,19 @@ class ForecastParameters:
 
     def __post_init__( self ):
         """Reject inputs that would silently mismodel. Permanent: at most two filing subjects (a
-        return has at most two adults); a granularity that divides the year evenly and a loan term
-        it divides evenly, so period counts and amortization are exact. Temporary guard: the
-        forecast must start on January 1 -- mid-year starts are not yet supported (the per-year
-        inflation/COLA and tax-year indexing currently assume calendar-aligned periods), and this
-        guard is removed once they are."""
+        return has at most two adults); at most one cash hub (the funding/sweep model keys on a
+        single CASH holding); a granularity that divides the year evenly and a loan term it divides
+        evenly, so period counts and amortization are exact. Temporary guard: the forecast must
+        start on January 1 -- mid-year starts are not yet supported (the per-year inflation/COLA
+        and tax-year indexing currently assume calendar-aligned periods), and this guard is removed
+        once they are."""
         if len( self.subjects ) > 2:
             raise ValueError(
                 f'At most two filing subjects are supported; got {len( self.subjects )}.' )
+        cash_holdings = sum( 1 for asset in self.assets if asset.asset_class == AssetClass.CASH )
+        if cash_holdings > 1:
+            raise ValueError(
+                f'At most one cash holding is supported (the cash hub); got {cash_holdings}.' )
         period_months = self.granularity.months()
         if 12 % period_months != 0:
             raise ValueError(
