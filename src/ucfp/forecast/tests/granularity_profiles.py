@@ -286,11 +286,37 @@ TIERS = {
 }
 
 
+# -- start dates ------------------------------------------------------------------------
+# A second axis: the same profiles run from January 1 (a whole first year) and from a mid-year
+# first-of-month (a partial first year, taxed by the section 443 estimate). Mid-year start
+# interacts with the granularity machinery from a different angle (issue #17), so the differential
+# is run over both.
+
+_MID_START = date( 2026, 4, 1 )
+
+
+def january_start( params : ForecastParameters ) -> ForecastParameters:
+    return params
+
+
+def mid_year_start( params : ForecastParameters ) -> ForecastParameters:
+    return replace( params, start_date = _MID_START )
+
+
+STARTS = {
+    'january'  : january_start,
+    'mid_year' : mid_year_start,
+}
+
+
 def matrix():
-    """Yield ( profile_name, tier_name, params ) for every profile x tier combination."""
+    """Yield ( profile_name, tier_name, start_name, params ) for every profile x tier x start
+    combination -- the granularity differential is run over each."""
     for profile_name, build in PROFILES.items():
         base = build()
-        for tier_name, transform in TIERS.items():
-            yield ( profile_name, tier_name, transform( base ) )
+        for tier_name, tier in TIERS.items():
+            for start_name, start in STARTS.items():
+                yield ( profile_name, tier_name, start_name, start( tier( base ) ) )
+                continue
             continue
         continue
