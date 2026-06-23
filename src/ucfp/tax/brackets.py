@@ -15,7 +15,7 @@ class BracketTable:
     `tax_on(ordinary + gains) - tax_on(ordinary)`, which spans rate boundaries
     correctly."""
 
-    rows : tuple
+    rows : tuple[ tuple[ Decimal, Decimal ], ... ]
 
     def tax_on( self, amount : Decimal ) -> Decimal:
         total = Decimal( '0' )

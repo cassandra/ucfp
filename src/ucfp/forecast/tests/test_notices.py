@@ -155,10 +155,11 @@ class NoticeCatalogTests( unittest.TestCase ):
         self.assertTrue( result.stopped_early )
 
     def test_scheduled_event_raises_no_notice( self ):
-        # a sale the user scheduled is requested, so it gets a memo, not a notice
+        # a sale the user scheduled is requested, so it gets a memo, not a notice (a full calendar
+        # year, so no partial-year approximation notice enters the picture)
         result = Forecast( ForecastParameters(
             start_date    = date( 2026, 1, 1 ),
-            end_date      = date( 2026, 6, 30 ),
+            end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
             tax_forecast  = _PROFILE,
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],

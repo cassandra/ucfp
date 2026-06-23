@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import UUID
 
 from common.labeled_enum import LabeledEnum
+from ucfp.tax.engine import TaxState
 
 
 class NoticeSeverity( LabeledEnum ):
@@ -39,6 +40,10 @@ class NoticeKind( LabeledEnum ):
         'Cash Shortfall', 'The cash balance went negative -- spending outran available cash.' )
     NET_WORTH_DEPLETED = (
         'Net Worth Depleted', 'Assets no longer cover liabilities; the forecast stops.' )
+    APPROXIMATE_TAX_YEAR = (
+        'Approximate Tax Year',
+        'A partial calendar year (a mid-year start or a non-year-end horizon): its tax is an '
+        'estimate or, for a trailing year, unsettled -- the figures are approximate.' )
 
 
 @dataclass( frozen = True )
@@ -70,4 +75,4 @@ class PeriodResult:
 
     notices           : list[ Notice ] = field( default_factory = list )
     is_depleted       : bool = False
-    closing_tax_state : object = None
+    closing_tax_state : Optional[ TaxState ] = None

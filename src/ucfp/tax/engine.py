@@ -12,10 +12,59 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
+from typing import Optional, Protocol
 
+from common.date_span import DateSpan
 from ucfp.accounts.books import Account
-from ucfp.accounts.enums import ExpenseTaxClass
+from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
+
+from .context import TaxContext
+
+
+class TaxState:
+    """Marker base for a jurisdiction's threaded tax carryforward state. The neutral layer and the
+    Period only *thread* it between periods (a fiscal year's `closing_tax_state` becomes the next
+    year's `opening_tax_state`); they never read its members. The concrete fields (e.g. the US
+    capital-loss carryover) live in the country package's subclass, so this stays an opaque,
+    field-less base -- a named type in place of bare `object`."""
+
+
+class TaxFigures:
+    """Marker base for a jurisdiction's derived tax figures (e.g. AGI/MAGI) an assessment carries
+    for downstream consumers. Opaque to the neutral layer; the concrete shape lives in the country
+    package's subclass."""
+
+
+class FiscalWindowView( Protocol ):
+    """The read-only view of one fiscal year's books the engine assesses against -- the structural
+    contract that `period`'s `FiscalWindow` / `EstimatedFiscalWindow` satisfy. Declared here rather
+    than imported because the dependency runs period -> tax: the engine names the shape it reads
+    without depending on (or cycling through) the concrete window class."""
+
+    @property
+    def span( self ) -> DateSpan:
+        ...
+
+    def income( self, income_tax_class : IncomeTaxClass ) -> Decimal:
+        ...
+
+    def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
+        ...
+
+    def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
+        ...
+
+    def holdings( self ) -> list[ Account ]:
+        ...
+
+    def opening_value( self, holding : Account ) -> Decimal:
+        ...
+
+    def distributions_to_cash( self, holding : Account ) -> Decimal:
+        ...
+
+    def contributions_from_cash( self, holding : Account ) -> Decimal:
+        ...
 
 
 @dataclass( frozen = True )
@@ -68,14 +117,14 @@ class TaxAssessment:
     carry forward as the next fiscal year's `opening_tax_state` (None for engines that
     thread no state) -- and `figures`, engine-specific derived figures (e.g. AGI/MAGI)
     for downstream consumers. `closing_tax_state` and `figures` are opaque to the Period
-    and to this neutral module: their concrete types (e.g. the US `TaxState` /
-    `TaxFigures`) live in the country package, so they are typed `object` here to keep
-    the agnostic layer from depending on a specific jurisdiction."""
+    and to this neutral module: their concrete types (the US `TaxState` / `TaxFigures`) live in
+    the country package and subclass the neutral marker bases here, so the agnostic layer names
+    the type without depending on a specific jurisdiction."""
 
-    charges           : list[ TaxCharge ] = field( default_factory = list )
-    credits           : list[ TaxCredit ] = field( default_factory = list )
-    closing_tax_state : object = None
-    figures           : object = None
+    charges           : list[ TaxCharge ]    = field( default_factory = list )
+    credits           : list[ TaxCredit ]    = field( default_factory = list )
+    closing_tax_state : Optional[ TaxState ] = None
+    figures           : Optional[ TaxFigures ] = None
 
 
 class ContributionKind( Enum ):
@@ -95,17 +144,20 @@ class TaxEngine:
     year. The Period owns one engine every interval and asks it when to settle, rather than
     being handed a pre-decided window -- the boundary is the tax law's to know."""
 
-    def assess( self, fiscal_window, tax_context, opening_tax_state ) -> TaxAssessment:
+    def assess( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
+                opening_tax_state : Optional[ TaxState ] ) -> TaxAssessment:
         raise NotImplementedError
 
-    def assess_penalties( self, fiscal_window, tax_context ) -> list[ TaxPenalty ]:
+    def assess_penalties( self, fiscal_window : FiscalWindowView,
+                          tax_context : TaxContext ) -> list[ TaxPenalty ]:
         """The `TaxPenalty`s the year's activity incurs (e.g. the early-withdrawal penalty),
         read from the books view `fiscal_window` (balances, distributions) and `tax_context`
         (owner ages). Default: none. The engine owns the whole rule -- which distributions
         qualify and the rate -- reading the books rather than being handed pre-digested data."""
         return []
 
-    def forced_transactions( self, fiscal_window, tax_context ) -> list[ ForcedTransaction ]:
+    def forced_transactions( self, fiscal_window : FiscalWindowView,
+                             tax_context : TaxContext ) -> list[ ForcedTransaction ]:
         """The `ForcedTransaction`s the tax law requires this interval (e.g. RMDs), read from
         the books view `fiscal_window` (balances, distributions) and `tax_context` (owner
         ages). Default: none. The engine owns the whole rule -- which accounts, the amount,
@@ -135,5 +187,6 @@ class ZeroTaxEngine( TaxEngine ):
     """Country-neutral stand-in that assesses no tax, so the Period flow can be
     exercised end to end before a real engine exists."""
 
-    def assess( self, fiscal_window, tax_context, opening_tax_state ) -> TaxAssessment:
+    def assess( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
+                opening_tax_state : Optional[ TaxState ] ) -> TaxAssessment:
         return TaxAssessment()

@@ -3,9 +3,9 @@
 Cross-cutting principles for the forecasting engine subsystem: the packages
 **`accounts/`, `forecast/`, `period/`, `tax/`**. Boundaries no single package owns
 live here; type- and package-local rules live in the relevant docstring and are
-only pointed to from here. Not API docs; not process (see `docs/dev/`). Each
-principle names where it is enforced — if a change breaks one, update this line in
-the same change.
+only pointed to from here. Not API docs (to *use* the engine — build inputs, read
+results — see `FORECAST_API.md`); not process (see `docs/dev/`). Each principle names
+where it is enforced — if a change breaks one, update this line in the same change.
 
 Flow: `ForecastParameters → Forecast → PeriodParameters → Period → books + Notices`,
 with `Forecast → TaxLaw.engine_for(year) → TaxEngine`.
@@ -44,7 +44,8 @@ with `Forecast → TaxLaw.engine_for(year) → TaxEngine`.
   → `forecast/forecast.py` (`_income_lines_for`, `_expense_lines_for`)
 - **Equity crossings are not flows.** Value entering or leaving the household that is neither income nor expense rides a balance-sheet event, not the P&L: `ScheduledExternalReceipt` (a non-taxable gift/inheritance → credits External Receipts equity, untaxed) and its mirror `ScheduledExternalDisbursement` (a non-deductible gift given → debits External Disbursements equity, net worth down with no expense). A *taxable* one-time receipt is instead a one-time `IncomeItem`; a *deductible* gift is a `CHARITABLE` expense. → `forecast/parameters.py`, `period/events.py`
 - **Granularity-invariant:** the same parameters run at any interval length. Rate flows and year-end levels match to rounding; occurrence placement, loan amortization splits, and draw-frequency effects on balances may drift within a year — by design, not as a defect.
-- **Annual work is gated by `_is_close_of_tax_year()`, not the window's presence** — the `FiscalWindow` always exists (year-to-date, = full year at the close). Annual rules (RMD, contribution limits) read year-to-date totals from the books, so they're correct at any granularity. → `period/period.py`, `period/fiscal_window.py`
+- **Annual work is gated by `_is_close_of_tax_year()`, not the window's presence** — the `FiscalWindow` (built by the Forecast, carried on `PeriodParameters`) always exists (year-to-date, = full year at the close). Annual rules (RMD, contribution limits) read year-to-date totals from the books, so they're correct at any granularity. → `period/period.py`, `period/fiscal_window.py`
+- **Calendar-aligned spans; mid-year starts.** `period_spans` slices each calendar year from its own start, so no interval crosses December 31 (the tax-year boundary). A forecast may begin on the *first of any month*: the first year is then partial (`[start, Dec 31]`), and an end date off December 31 leaves a trailing partial year. The Forecast owns the `FiscalWindow` (a time concern) and hands it to the Period. For the partial first year it hands an `EstimatedFiscalWindow` that annualizes income/expense by the year's `coverage`, so the engine applies full-year brackets and the standard deduction (IRC §443 short-period) and the Period prorates the charge back by `coverage`; non-bracket reads (RMDs, early-withdrawal penalty, contribution clamp) pass through unannualized and stay exact. A trailing partial year never closes a tax year, so it is unsettled. Both partial years raise an INFO `APPROXIMATE_TAX_YEAR` notice — the asterisk. → `forecast/forecast.py` (`_fiscal_window_for`, `_flag_partial_tax_year`), `period/fiscal_window.py`
 
 ## Tax projection
 - **`engine_for(year)` projects the 2025 baseline.** Inflation-indexed figures scale by a COLA; statutorily fixed thresholds (SS taxability, NIIT, capital-loss cap, §121, SALT, passive-activity allowance) stay put — their erosion is *deliberate*, not an omission. Smooth scaling, no statutory rounding. → `tax/us/parameters.py` (`*.indexed`), `tax/brackets.py`

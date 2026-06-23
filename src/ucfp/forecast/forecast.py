@@ -24,11 +24,14 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Optional
+from typing import Callable, Optional
 
+from common.date_span import DateSpan
 from common.date_window import DateWindow
+from common.rate import Rate
 from ucfp.accounts.books import Account, BooksOfAccount
 from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.chart import Chart
 from ucfp.accounts.enums import (
     AccountType,
     AssetClass,
@@ -39,7 +42,6 @@ from ucfp.accounts.enums import (
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.period.parameters import (
     ContributionLine,
-    DateSpan,
     ExpenseLine,
     FundingPolicy,
     IncomeLine,
@@ -47,15 +49,18 @@ from ucfp.period.parameters import (
     PeriodParameters,
 )
 from ucfp.period.events import PeriodEvent
+from ucfp.period.fiscal_window import EstimatedFiscalWindow, FiscalWindow
 from ucfp.period.period import Period
-from ucfp.period.results import PeriodResult
-from ucfp.tax.engine import ContributionKind
+from ucfp.period.results import Notice, NoticeKind, NoticeSeverity, PeriodResult
+from ucfp.tax.engine import ContributionKind, TaxEngine, TaxState
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.tax.context import TaxContext, TaxSubject
 from ucfp.tax.property import PropertyDisposition, TaxProperty
 
+from .economic_outlook import EconomicParameters
 from .parameters import (
+    AssetParameters,
     ContributionSource,
     ExpenseItem,
     ExpenseStream,
@@ -178,11 +183,11 @@ class ResolvedBaseline:
     once by `BaselineBuilder`; the `Forecast` holds it and its per-interval resolvers read it."""
 
     bookkeeper        : Bookkeeper
-    holding_by_handle : dict
-    asset_holdings    : list
-    draw_priority     : list
-    sweep_allocation  : tuple
-    loans             : list
+    holding_by_handle : dict[ str, Account ]
+    asset_holdings    : list[ tuple[ AssetParameters, Account ] ]
+    draw_priority     : list[ Account ]
+    sweep_allocation  : tuple[ tuple[ Account, Decimal ], ... ]
+    loans             : list[ _ResolvedLoan ]
     periods_per_year  : Optional[ int ]
     income_accounts   : IncomeAccounts
     expense_accounts  : ExpenseAccounts
@@ -322,7 +327,7 @@ class BaselineBuilder:
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), opening_postings )
         return
 
-    def _opening_value_postings( self, chart, holding : Account, value : Decimal,
+    def _opening_value_postings( self, chart : Chart, holding : Account, value : Decimal,
                                  cost_basis : Decimal ) -> list[ tuple[ Account, Decimal ] ]:
         """The opening postings seeding `holding` to market `value` with tax basis
         `cost_basis`: the basis lands in the holding's cost account and any embedded gain
@@ -483,6 +488,7 @@ class Forecast:
             period_parameters = self._build_period_parameters( span, opening_state, bookkeeper )
             period            = Period( period_parameters )
             period_result     = period.compute( bookkeeper )
+            self._flag_partial_tax_year( span, period_result )
             result.steps.append( ForecastStep( span, period_result ) )
             if period_result.closing_tax_state is not None:
                 opening_state = period_result.closing_tax_state
@@ -695,7 +701,9 @@ class Forecast:
             cash_ceiling     = ceiling,
             sweep_allocation = self._baseline.sweep_allocation )
 
-    def _cumulative_factor( self, target_year : int, rate_for ) -> Decimal:
+    def _cumulative_factor(
+            self, target_year : int,
+            rate_for : Callable[ [ EconomicParameters ], Rate ] ) -> Decimal:
         """Cumulative growth from the forecast start year to `target_year`, compounding each
         year's economic-outlook rate (selected by `rate_for`, a segment -> Rate) -- so a
         today's-dollar amount becomes that year's nominal. 1.0 in the start year. (Annual
@@ -707,7 +715,7 @@ class Forecast:
             continue
         return factor
 
-    def _build_period_parameters( self, span : DateSpan, opening_tax_state,
+    def _build_period_parameters( self, span : DateSpan, opening_tax_state : Optional[ TaxState ],
                                   bookkeeper : Bookkeeper ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters. Rates and flows are resolved to
         the interval's length (so the same parameters run at any granularity), and liability
@@ -716,6 +724,7 @@ class Forecast:
         then."""
         year_fraction = self._year_fraction( span )
         annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
+        tax_engine = self._tax_law.engine_for( span.end_date.year )
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
@@ -726,8 +735,9 @@ class Forecast:
             contribution_lines = self._contribution_lines_for( span, year_fraction, bookkeeper ),
             events            = self._events_for( span, bookkeeper ),
             funding_policy    = self._funding_policy_for( span ),
-            tax_engine        = self._tax_law.engine_for( span.end_date.year ),
+            tax_engine        = tax_engine,
             opening_tax_state = opening_tax_state,
+            fiscal_window     = self._fiscal_window_for( span, bookkeeper, tax_engine ),
         )
 
     def _year_fraction( self, span : DateSpan ) -> Decimal:
@@ -737,6 +747,45 @@ class Forecast:
         period_days = ( span.end_date - span.start_date ).days + 1
         year_days = 366 if calendar.isleap( span.start_date.year ) else 365
         return Decimal( period_days ) / Decimal( year_days )
+
+    def _fiscal_window_for(
+            self, span : DateSpan, bookkeeper : Bookkeeper,
+            tax_engine : Optional[ TaxEngine ] ) -> FiscalWindow | EstimatedFiscalWindow:
+        """The tax-year view this interval reads: a window from the tax year's start (named by
+        the engine) through the interval's end -- year-to-date, the whole year at a close. The
+        Forecast owns it because the tax-year boundary and the partial-year adjustment are time
+        facts. A mid-year start's partial first year is wrapped in an `EstimatedFiscalWindow` so
+        its figures annualize for the short-period tax estimate; every later (full) year is a
+        plain window."""
+        period_end = span.end_date
+        if tax_engine is not None:
+            year_start, year_end = tax_engine.tax_year_bounds( period_end )
+        else:
+            year_start, year_end = date( period_end.year, 1, 1 ), date( period_end.year, 12, 31 )
+        window = FiscalWindow( bookkeeper, DateSpan( year_start, period_end ) )
+        if self._parameters.start_date <= year_start:
+            return window
+        covered_days = ( year_end - self._parameters.start_date ).days + 1
+        year_days = ( year_end - year_start ).days + 1
+        return EstimatedFiscalWindow( window, Decimal( covered_days ) / Decimal( year_days ) )
+
+    def _flag_partial_tax_year( self, span : DateSpan, result : PeriodResult ) -> None:
+        """At the last interval of a partial calendar year -- the mid-year first year, or a
+        trailing year ending before December 31 -- raise an INFO Notice that the year's figures are
+        approximate: its tax is a short-period estimate (first year) or goes unsettled (trailing
+        year, no year-close). Raised once, at the year's last interval; full years are silent."""
+        end = span.end_date
+        closes_calendar_year = ( end == date( end.year, 12, 31 ) ) or ( end == self._parameters.end_date )
+        if not closes_calendar_year:
+            return
+        start = self._parameters.start_date
+        starts_partial = ( end.year == start.year ) and ( ( start.month, start.day ) != ( 1, 1 ) )
+        ends_partial = ( end.year == self._parameters.end_date.year ) and (
+            ( self._parameters.end_date.month, self._parameters.end_date.day ) != ( 12, 31 ) )
+        if starts_partial or ends_partial:
+            result.notices.append(
+                Notice( kind = NoticeKind.APPROXIMATE_TAX_YEAR, severity = NoticeSeverity.INFO ) )
+        return
 
     def _retitle_removed_subjects_accounts( self, bookkeeper : Bookkeeper, span : DateSpan ) -> None:
         """Retitle a decedent's accounts to the survivor once the run passes the death year, so
@@ -813,7 +862,8 @@ class Forecast:
             continue
         return tuple( properties )
 
-    def _disposition_for( self, asset, span : DateSpan ) -> Optional[ PropertyDisposition ]:
+    def _disposition_for(
+            self, asset : AssetParameters, span : DateSpan ) -> Optional[ PropertyDisposition ]:
         """The disposition for `asset` if a sale of it falls in this span's fiscal year, else
         None: the first scheduled realization of its holding handle, dated in that calendar
         year. (The sale date is a scheduled input, so no running state is needed.) A property

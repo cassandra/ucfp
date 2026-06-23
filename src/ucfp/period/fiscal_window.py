@@ -14,11 +14,10 @@ only ever asks for annual income -- needs no change.
 from datetime import timedelta
 from decimal import Decimal
 
+from common.date_span import DateSpan
 from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass, SideType
-
-from .parameters import DateSpan
 
 
 class FiscalWindow:
@@ -37,6 +36,13 @@ class FiscalWindow:
         """The fiscal year this window covers -- e.g. for computing a rental's
         depreciation deduction across the period."""
         return self._span
+
+    @property
+    def coverage( self ) -> Decimal:
+        """The share of the tax year the forecast actually covers -- 1 for a full year. The
+        partial first year of a mid-year start reads less (see `EstimatedFiscalWindow`); the
+        caller prorates the assessed charge by this."""
+        return Decimal( '1' )
 
     def income( self, income_tax_class : IncomeTaxClass ) -> Decimal:
         """Total income recognized in `income_tax_class` over the fiscal year (zero
@@ -80,7 +86,7 @@ class FiscalWindow:
             continue
         return -total
 
-    def holdings( self ) -> tuple:
+    def holdings( self ) -> list[ Account ]:
         """The asset holdings in the books. The engine filters these to the classes a rule
         applies to (e.g. pre-tax retirement for RMDs) -- the window stays tax-agnostic."""
         return self._chart.holdings()
@@ -148,3 +154,49 @@ class FiscalWindow:
                 Decimal( '0' ) )
             continue
         return total
+
+
+class EstimatedFiscalWindow:
+    """A FiscalWindow over a partial first year (a mid-year start) that presents a *projected
+    full year* to the tax engine -- the IRC section 443 short-period shape. Income and expense
+    totals are annualized (scaled up by `1 / coverage`, where `coverage` is the share of the year
+    the forecast actually covers), so the engine applies full-year brackets, the standard
+    deduction, and the SS/NIIT thresholds correctly; the caller then prorates the assessed charge
+    back by `coverage`. Everything that is not bracket-driven -- opening values and cash
+    distributions/contributions (RMDs, the early-withdrawal penalty, the contribution-limit
+    clamp) -- passes through unannualized, so those rules stay exact with no special-casing. FICA,
+    which reads per-worker wages, rides the annualization; for a high earner near the cap that is
+    a small over/under that the approximate-year asterisk covers."""
+
+    def __init__( self, base : FiscalWindow, coverage : Decimal ):
+        self._base     = base
+        self._coverage = coverage
+
+    @property
+    def span( self ) -> DateSpan:
+        return self._base.span
+
+    @property
+    def coverage( self ) -> Decimal:
+        return self._coverage
+
+    def income( self, income_tax_class : IncomeTaxClass ) -> Decimal:
+        return self._base.income( income_tax_class ) / self._coverage
+
+    def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
+        return [ amount / self._coverage for amount in self._base.income_by_account( income_tax_class ) ]
+
+    def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
+        return self._base.expense( expense_tax_class ) / self._coverage
+
+    def holdings( self ) -> list[ Account ]:
+        return self._base.holdings()
+
+    def opening_value( self, holding : Account ) -> Decimal:
+        return self._base.opening_value( holding )
+
+    def distributions_to_cash( self, holding : Account ) -> Decimal:
+        return self._base.distributions_to_cash( holding )
+
+    def contributions_from_cash( self, holding : Account ) -> Decimal:
+        return self._base.contributions_from_cash( holding )

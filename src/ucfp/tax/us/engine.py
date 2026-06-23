@@ -50,11 +50,15 @@ the senior-deduction phase-out keys on AGI, not its own MAGI; depreciation prora
 elapsed days, not the §168 mid-month convention.
 """
 from decimal import Decimal
-from typing import NamedTuple
+from typing import Iterator, NamedTuple, Optional
 
+from common.date_span import DateSpan
+from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.tax.brackets import BracketTable
 from ucfp.tax.engine import (
     ContributionKind,
+    FiscalWindowView,
     ForcedTransaction,
     TaxAssessment,
     TaxCharge,
@@ -63,13 +67,15 @@ from ucfp.tax.engine import (
     TaxPenalty,
 )
 
-from ucfp.tax.context import TaxContext
+from ucfp.tax.context import TaxContext, TaxSubject
+from ucfp.tax.enums import FilingStatus
+from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 
 from . import rmd
 from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
 from .filing import resolve_filing_status
-from .parameters import TaxParameters
+from .parameters import StandardDeduction, TaxParameters
 from .state import CapitalLossCarryover, PassiveLossCarryover, TaxState
 
 _ZERO        = Decimal( '0' )
@@ -116,7 +122,8 @@ class USFederalTaxEngine( TaxEngine ):
     def __init__( self, parameters : TaxParameters ):
         self._parameters = parameters
 
-    def assess( self, fiscal_window, tax_context : TaxContext, opening_tax_state ) -> TaxAssessment:
+    def assess( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
+                opening_tax_state : Optional[ TaxState ] ) -> TaxAssessment:
         # The context carries the household's standing filing status and the spouse death year;
         # the US surviving-spouse (QSS) rule derives the year's effective status from them.
         status     = resolve_filing_status(
@@ -219,7 +226,8 @@ class USFederalTaxEngine( TaxEngine ):
             figures           = figures,
         )
 
-    def _pretax_holdings( self, fiscal_window, tax_context ):
+    def _pretax_holdings( self, fiscal_window : FiscalWindowView,
+                          tax_context : TaxContext ) -> Iterator[ tuple[ Account, TaxSubject ] ]:
         """Each pre-tax retirement holding paired with its owner -- the shared subject of the
         early-withdrawal penalty and the RMD. A pre-tax holding without a resolvable owner
         raises: these rules turn on the owner's age, so a missing owner is an error."""
@@ -235,7 +243,7 @@ class USFederalTaxEngine( TaxEngine ):
             continue
         return
 
-    def _pretax_contributions( self, fiscal_window ) -> Decimal:
+    def _pretax_contributions( self, fiscal_window : FiscalWindowView ) -> Decimal:
         """The year's cash contributions into pre-tax retirement holdings -- the above-the-line
         deduction. Read from the books view; the employer match and Roth contributions are
         excluded by construction (only cash into a pre-tax holding counts)."""
@@ -245,7 +253,8 @@ class USFederalTaxEngine( TaxEngine ):
               if holding.asset_class == AssetClass.PRETAX_RETIREMENT ),
             _ZERO )
 
-    def assess_penalties( self, fiscal_window, tax_context ) -> list:
+    def assess_penalties( self, fiscal_window : FiscalWindowView,
+                          tax_context : TaxContext ) -> list[ TaxPenalty ]:
         """The early-withdrawal penalty: 10% of the year's pre-tax distributions to cash for an
         owner under 59-1/2. Read from the books view -- `distributions_to_cash` already excludes
         conversions to Roth (which pay no cash) -- so any cash distribution, scheduled or a
@@ -269,7 +278,8 @@ class USFederalTaxEngine( TaxEngine ):
             continue
         return penalties
 
-    def forced_transactions( self, fiscal_window, tax_context ) -> list:
+    def forced_transactions( self, fiscal_window : FiscalWindowView,
+                             tax_context : TaxContext ) -> list[ ForcedTransaction ]:
         """The required minimum distributions for this fiscal year: for each pre-tax holding,
         size the RMD on its prior-year-end balance and the owner's age/cohort, then force the
         shortfall not already met by cash distributions this year. A conversion to Roth pays
@@ -351,7 +361,7 @@ class USFederalTaxEngine( TaxEngine ):
             continue
         return recapture
 
-    def _rental_net_income( self, fiscal_window, tax_context : TaxContext ) -> Decimal:
+    def _rental_net_income( self, fiscal_window : FiscalWindowView, tax_context : TaxContext ) -> Decimal:
         """Net taxable rental income: gross rents minus operating expenses minus
         depreciation (computed per rental from its attributes for the window). It is
         ordinary income and net investment income, and may be negative (a rental loss;
@@ -361,7 +371,7 @@ class USFederalTaxEngine( TaxEngine ):
         depreciation = self._rental_depreciation( fiscal_window.span, tax_context )
         return gross - operating - depreciation
 
-    def _rental_depreciation( self, span, tax_context : TaxContext ) -> Decimal:
+    def _rental_depreciation( self, span : DateSpan, tax_context : TaxContext ) -> Decimal:
         """Total depreciation deductible this window across all rental properties --
         each accrued from acquisition (or the prior close) to the window end, or to the
         sale date if sold mid-year."""
@@ -413,7 +423,8 @@ class USFederalTaxEngine( TaxEngine ):
         band = rules.phaseout_end - rules.phaseout_start
         return rules.loss_allowance * ( rules.phaseout_end - magi ) / band
 
-    def _premium_tax_credit( self, aca_magi : Decimal, enrollment ) -> Decimal:
+    def _premium_tax_credit( self, aca_magi : Decimal,
+                             enrollment : Optional[ SubsidizedHealthEnrollment ] ) -> Decimal:
         """The ACA premium tax credit: the benchmark plan cost less the household's
         expected contribution -- a share of income that is zero below the lower
         poverty-ratio and rises with the ratio to the cap -- floored at zero. Zero when
@@ -429,7 +440,7 @@ class USFederalTaxEngine( TaxEngine ):
         return max( _ZERO, enrollment.reference_premium - expected_contribution )
 
     def _taxable_social_security(
-            self, status, ss_gross : Decimal, other_income : Decimal ) -> Decimal:
+            self, status : FilingStatus, ss_gross : Decimal, other_income : Decimal ) -> Decimal:
         """The taxable portion of Social Security via the IRS two-tier worksheet:
         nothing below the base threshold, up to 50% between base and additional, up
         to 85% above -- capped at 85% of benefits. `other_income` is the provisional-income
@@ -445,7 +456,7 @@ class USFederalTaxEngine( TaxEngine ):
         upper_tier = ( provisional - thresholds.additional ) * _SS_MAX_RATE
         return min( ss_gross * _SS_MAX_RATE, lower_tier + upper_tier )
 
-    def _standard_deduction( self, status, tax_context : TaxContext, agi : Decimal ) -> Decimal:
+    def _standard_deduction( self, status : FilingStatus, tax_context : TaxContext, agi : Decimal ) -> Decimal:
         """Base deduction plus the age-65 and senior bonuses for each subject 65+, with the
         senior bonus phased out linearly across the phase-out band -- keyed on AGI, not the
         senior deduction's own MAGI (a simplification)."""
@@ -455,7 +466,7 @@ class USFederalTaxEngine( TaxEngine ):
         deduction += standard.senior_bonus * seniors * self._senior_phaseout_factor( standard, agi )
         return deduction
 
-    def _itemized_deduction( self, fiscal_window, agi : Decimal ) -> Decimal:
+    def _itemized_deduction( self, fiscal_window : FiscalWindowView, agi : Decimal ) -> Decimal:
         """Total itemized deductions: medical above the AGI floor, SALT up to its
         cap, mortgage interest, and charitable gifts up to the AGI ceiling. The
         mortgage acquisition-debt limit and the charitable carryover of the excess are
@@ -470,7 +481,7 @@ class USFederalTaxEngine( TaxEngine ):
                           rules.charitable_agi_limit * agi )
         return medical + salt + mortgage + charitable
 
-    def _senior_phaseout_factor( self, standard, agi : Decimal ) -> Decimal:
+    def _senior_phaseout_factor( self, standard : StandardDeduction, agi : Decimal ) -> Decimal:
         """The fraction of the senior bonus that survives the AGI phase-out: full
         below the start, zero at/above the end, linear between."""
         if agi <= standard.phaseout_start:
@@ -497,7 +508,7 @@ class USFederalTaxEngine( TaxEngine ):
         coll_taxed  = min( collectibles, room )
         return _TaxableSplit( ordinary, pref_taxed, s1250_taxed, coll_taxed )
 
-    def _tax_on_stack( self, status, split : _TaxableSplit ) -> Decimal:
+    def _tax_on_stack( self, status : FilingStatus, split : _TaxableSplit ) -> Decimal:
         """Tax the apportioned buckets as a stack: ordinary brackets on ordinary
         income; the §1250 and collectibles gains at ordinary rates stacked on top,
         each capped at its maximum rate; the 0/15/20% preferential gains at the LTCG
@@ -516,21 +527,21 @@ class USFederalTaxEngine( TaxEngine ):
         tax += ltcg.tax_on( base + split.preferential ) - ltcg.tax_on( base )
         return tax
 
-    def _capped_gain_tax( self, ordinary, base : Decimal, gain : Decimal, cap : Decimal ) -> Decimal:
+    def _capped_gain_tax( self, ordinary : BracketTable, base : Decimal, gain : Decimal, cap : Decimal ) -> Decimal:
         """A maximum-rate gain stacked on `base`: ordinary-rate tax on the gain, but
         never more than the cap rate times the gain."""
         ordinary_rate_tax = ordinary.tax_on( base + gain ) - ordinary.tax_on( base )
         return min( ordinary_rate_tax, cap * gain )
 
     def _net_investment_income_tax(
-            self, status, magi : Decimal, net_investment_income : Decimal ) -> Decimal:
+            self, status : FilingStatus, magi : Decimal, net_investment_income : Decimal ) -> Decimal:
         """NIIT: the rate applied to the lesser of net investment income and MAGI
         over the filing-status threshold (zero below it). `magi` is the NIIT MAGI
         (`figures.niit_magi` = AGI + the foreign exclusion, which is not modeled -> AGI)."""
         excess = max( _ZERO, magi - self._parameters.niit_thresholds[ status ] )
         return self._parameters.niit_rate * min( net_investment_income, excess )
 
-    def _payroll_tax( self, status, fiscal_window ) -> Decimal:
+    def _payroll_tax( self, status : FilingStatus, fiscal_window : FiscalWindowView ) -> Decimal:
         """Employee FICA: Social Security on each worker's wages up to the wage base
         (capped per worker, so two earners get two caps), Medicare on all wages, plus
         the Additional Medicare surtax on combined wages over the filing-status

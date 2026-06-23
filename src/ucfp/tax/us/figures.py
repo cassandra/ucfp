@@ -12,11 +12,14 @@ worth) can read the assessment's MAGI without re-running the income pipeline.
 from dataclasses import dataclass
 from decimal import Decimal
 
+from ucfp.tax.engine import TaxFigures as NeutralTaxFigures
+
 
 @dataclass( frozen = True )
-class TaxFigures:
-    """AGI and the MAGI add-back components for one assessment. `untaxed_social_security`
-    is the portion of benefits excluded from AGI (gross minus the taxable part)."""
+class TaxFigures( NeutralTaxFigures ):
+    """AGI and the MAGI add-back components for one assessment -- the US realization of the
+    neutral `TaxFigures` marker. `untaxed_social_security` is the portion of benefits excluded
+    from AGI (gross minus the taxable part)."""
 
     agi                     : Decimal
     tax_exempt_interest     : Decimal
