@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
+from common.date_span import DateSpan
 from common.date_window import DateWindow
 from common.labeled_enum import LabeledEnum
 from common.rate import Rate
@@ -32,7 +33,7 @@ from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.schemas import Handle
 from ucfp.period.events import (
     ExternalDisbursement, ExternalReceipt, PeriodEvent, Purchase, Realization, Transfer )
-from ucfp.period.date_span import DateSpan
+from ucfp.tax.engine import TaxState
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.enums import FilingStatus
 
@@ -94,7 +95,7 @@ class AssetParameters:
     property_attributes : Optional[ PropertyAttributes ] = None
     owner_handle        : Optional[ Handle ]             = None
 
-    def __post_init__( self ):
+    def __post_init__( self ) -> None:
         """Enforce the retirement-account domain rules: zero cost basis (the engine realizes
         its whole value, so a mis-stated basis -- which would silently under-tax withdrawals
         -- is rejected) and a known owner (whose age drives the penalty and RMDs)."""
@@ -417,7 +418,7 @@ class AssetAllocation:
 
     weights : tuple[ tuple[ Handle, Decimal ], ... ]
 
-    def __post_init__( self ):
+    def __post_init__( self ) -> None:
         if not self.weights:
             raise ValueError( 'An asset allocation needs at least one holding.' )
         if any( weight <= 0 for _handle, weight in self.weights ):
@@ -466,9 +467,9 @@ class ForecastParameters:
         default_factory = CashAccountParameters )
     health_coverage   : Optional[ SubsidizedHealthCoverage ] = None
     subject_removals  : list[ SubjectRemoval ]               = field( default_factory = list )
-    initial_tax_state : object                               = None
+    initial_tax_state : Optional[ TaxState ]                 = None
 
-    def __post_init__( self ):
+    def __post_init__( self ) -> None:
         """Reject inputs that would silently mismodel. At most two filing subjects (a return has
         at most two adults); at most one cash hub (the funding/sweep model keys on a single CASH
         holding); a granularity that divides the year evenly and a loan term it divides evenly, so

@@ -24,11 +24,14 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Optional
+from typing import Callable, Optional
 
+from common.date_span import DateSpan
 from common.date_window import DateWindow
+from common.rate import Rate
 from ucfp.accounts.books import Account, BooksOfAccount
 from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.chart import Chart
 from ucfp.accounts.enums import (
     AccountType,
     AssetClass,
@@ -37,7 +40,6 @@ from ucfp.accounts.enums import (
     SystemAccountRole,
 )
 from ucfp.accounts.exceptions import MissingAccountError
-from ucfp.period.date_span import DateSpan
 from ucfp.period.parameters import (
     ContributionLine,
     ExpenseLine,
@@ -50,13 +52,15 @@ from ucfp.period.events import PeriodEvent
 from ucfp.period.fiscal_window import EstimatedFiscalWindow, FiscalWindow
 from ucfp.period.period import Period
 from ucfp.period.results import Notice, NoticeKind, NoticeSeverity, PeriodResult
-from ucfp.tax.engine import ContributionKind
+from ucfp.tax.engine import ContributionKind, TaxEngine, TaxState
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.tax.context import TaxContext, TaxSubject
 from ucfp.tax.property import PropertyDisposition, TaxProperty
 
+from .economic_outlook import EconomicParameters
 from .parameters import (
+    AssetParameters,
     ContributionSource,
     ExpenseItem,
     ExpenseStream,
@@ -179,11 +183,11 @@ class ResolvedBaseline:
     once by `BaselineBuilder`; the `Forecast` holds it and its per-interval resolvers read it."""
 
     bookkeeper        : Bookkeeper
-    holding_by_handle : dict
-    asset_holdings    : list
-    draw_priority     : list
-    sweep_allocation  : tuple
-    loans             : list
+    holding_by_handle : dict[ str, Account ]
+    asset_holdings    : list[ tuple[ AssetParameters, Account ] ]
+    draw_priority     : list[ Account ]
+    sweep_allocation  : tuple[ tuple[ Account, Decimal ], ... ]
+    loans             : list[ _ResolvedLoan ]
     periods_per_year  : Optional[ int ]
     income_accounts   : IncomeAccounts
     expense_accounts  : ExpenseAccounts
@@ -323,7 +327,7 @@ class BaselineBuilder:
             bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), opening_postings )
         return
 
-    def _opening_value_postings( self, chart, holding : Account, value : Decimal,
+    def _opening_value_postings( self, chart : Chart, holding : Account, value : Decimal,
                                  cost_basis : Decimal ) -> list[ tuple[ Account, Decimal ] ]:
         """The opening postings seeding `holding` to market `value` with tax basis
         `cost_basis`: the basis lands in the holding's cost account and any embedded gain
@@ -697,7 +701,9 @@ class Forecast:
             cash_ceiling     = ceiling,
             sweep_allocation = self._baseline.sweep_allocation )
 
-    def _cumulative_factor( self, target_year : int, rate_for ) -> Decimal:
+    def _cumulative_factor(
+            self, target_year : int,
+            rate_for : Callable[ [ EconomicParameters ], Rate ] ) -> Decimal:
         """Cumulative growth from the forecast start year to `target_year`, compounding each
         year's economic-outlook rate (selected by `rate_for`, a segment -> Rate) -- so a
         today's-dollar amount becomes that year's nominal. 1.0 in the start year. (Annual
@@ -709,7 +715,7 @@ class Forecast:
             continue
         return factor
 
-    def _build_period_parameters( self, span : DateSpan, opening_tax_state,
+    def _build_period_parameters( self, span : DateSpan, opening_tax_state : Optional[ TaxState ],
                                   bookkeeper : Bookkeeper ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters. Rates and flows are resolved to
         the interval's length (so the same parameters run at any granularity), and liability
@@ -742,7 +748,9 @@ class Forecast:
         year_days = 366 if calendar.isleap( span.start_date.year ) else 365
         return Decimal( period_days ) / Decimal( year_days )
 
-    def _fiscal_window_for( self, span : DateSpan, bookkeeper : Bookkeeper, tax_engine ):
+    def _fiscal_window_for(
+            self, span : DateSpan, bookkeeper : Bookkeeper,
+            tax_engine : Optional[ TaxEngine ] ) -> FiscalWindow | EstimatedFiscalWindow:
         """The tax-year view this interval reads: a window from the tax year's start (named by
         the engine) through the interval's end -- year-to-date, the whole year at a close. The
         Forecast owns it because the tax-year boundary and the partial-year adjustment are time
@@ -854,7 +862,8 @@ class Forecast:
             continue
         return tuple( properties )
 
-    def _disposition_for( self, asset, span : DateSpan ) -> Optional[ PropertyDisposition ]:
+    def _disposition_for(
+            self, asset : AssetParameters, span : DateSpan ) -> Optional[ PropertyDisposition ]:
         """The disposition for `asset` if a sale of it falls in this span's fiscal year, else
         None: the first scheduled realization of its holding handle, dated in that calendar
         year. (The sale date is a scheduled input, so no running state is needed.) A property

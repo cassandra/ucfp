@@ -17,12 +17,16 @@ The interval is computed in three phases (see `ucfp/FORECAST_ENGINE.md`):
                       carried forward rather than grossed up for.
   3. Close         -- finalize ending balances and the stop condition.
 """
+from datetime import date
 from decimal import Decimal
+from typing import Optional
 
+from ucfp.accounts.books import Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import SystemAccountRole
+from ucfp.accounts.enums import ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import quantize_money
+from ucfp.tax.engine import ContributionKind
 
 from .events import Realization
 from .parameters import PeriodParameters
@@ -176,7 +180,9 @@ class Period:
             continue
         return
 
-    def _contribution_cap_factors( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> dict[ tuple, Decimal ]:
+    def _contribution_cap_factors(
+            self, bookkeeper : Bookkeeper,
+            result : PeriodResult ) -> dict[ tuple[ str, Optional[ ContributionKind ] ], Decimal ]:
         """The scale factor (< 1) for each (owner, kind) group whose contributions this interval
         overrun the annual headroom -- the limit less what the books already show contributed this
         tax year (read from the year-to-date fiscal window, the same pattern the RMD uses). The
@@ -329,15 +335,18 @@ class Period:
         self._book_charges( bookkeeper, settlements, self._parameters.date_span.end_date )
         return
 
-    def _book_charges( self, bookkeeper : Bookkeeper, settlements : list, settle_date ) -> None:
+    def _book_charges( self, bookkeeper : Bookkeeper,
+                       settlements : list[ tuple[ ExpenseTaxClass, Decimal ] ],
+                       settle_date : date ) -> None:
         """Book each `(expense tax-class, amount)` as a tax expense drawn from the cash hub."""
         for expense_class, amount in settlements:
             self._book_charge( bookkeeper, expense_class, amount, settle_date )
             continue
         return
 
-    def _book_charge( self, bookkeeper : Bookkeeper, expense_class, amount, settle_date,
-                      description : str = '' ):
+    def _book_charge( self, bookkeeper : Bookkeeper, expense_class : ExpenseTaxClass,
+                      amount : Decimal, settle_date : date,
+                      description : str = '' ) -> Optional[ Transaction ]:
         """Book one `expense_class` charge as a tax expense drawn from the cash hub (DR expense
         / CR cash); a negative amount -- a refundable credit -- reverses it. Returns the posted
         transaction, or None for a zero amount, so a caller can reference it in a Notice."""

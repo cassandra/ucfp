@@ -14,11 +14,10 @@ only ever asks for annual income -- needs no change.
 from datetime import timedelta
 from decimal import Decimal
 
+from common.date_span import DateSpan
 from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass, SideType
-
-from .date_span import DateSpan
 
 
 class FiscalWindow:
@@ -87,7 +86,7 @@ class FiscalWindow:
             continue
         return -total
 
-    def holdings( self ) -> tuple:
+    def holdings( self ) -> list[ Account ]:
         """The asset holdings in the books. The engine filters these to the classes a rule
         applies to (e.g. pre-tax retirement for RMDs) -- the window stays tax-agnostic."""
         return self._chart.holdings()
@@ -190,7 +189,7 @@ class EstimatedFiscalWindow:
     def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
         return self._base.expense( expense_tax_class ) / self._coverage
 
-    def holdings( self ) -> tuple:
+    def holdings( self ) -> list[ Account ]:
         return self._base.holdings()
 
     def opening_value( self, holding : Account ) -> Decimal:

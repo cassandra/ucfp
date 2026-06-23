@@ -10,6 +10,7 @@ residence from a rental.
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import RealPropertyType
@@ -37,4 +38,4 @@ class TaxProperty:
     acquisition_date  : date
     depreciable_basis : Decimal             = Decimal( '0' )
     property_type     : RealPropertyType    = RealPropertyType.RESIDENTIAL
-    disposition       : PropertyDisposition = None
+    disposition       : Optional[ PropertyDisposition ] = None

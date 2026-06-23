@@ -1,8 +1,7 @@
-"""A calendar date span -- a foundational value object shared across the Period and Forecast.
+"""A calendar date span -- a foundational value object (standard library only).
 
-Kept in its own leaf module (depending only on the standard library) so both `PeriodParameters`
-and `FiscalWindow` can use it without importing each other -- the seam that lets the Forecast
-hand a resolved `FiscalWindow` to the Period through `PeriodParameters`.
+Lives in `common` so every layer (the Period, the Forecast, and the tax engine's window
+protocol) can name it without forming an import cycle.
 """
 from dataclasses import dataclass
 from datetime import date, timedelta

@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import UUID
 
 from common.labeled_enum import LabeledEnum
+from ucfp.tax.engine import TaxState
 
 
 class NoticeSeverity( LabeledEnum ):
@@ -74,4 +75,4 @@ class PeriodResult:
 
     notices           : list[ Notice ] = field( default_factory = list )
     is_depleted       : bool = False
-    closing_tax_state : object = None
+    closing_tax_state : Optional[ TaxState ] = None

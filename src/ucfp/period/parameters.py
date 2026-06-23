@@ -10,15 +10,15 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Optional
 
+from common.date_span import DateSpan
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass
 from ucfp.tax.context import TaxContext
-from ucfp.tax.engine import ContributionKind, TaxEngine
+from ucfp.tax.engine import ContributionKind, TaxEngine, TaxState
 
-from .date_span import DateSpan
 from .events import PeriodEvent
-from .fiscal_window import FiscalWindow
+from .fiscal_window import EstimatedFiscalWindow, FiscalWindow
 
 
 @dataclass( frozen = True )
@@ -129,7 +129,7 @@ class FundingPolicy:
     cash_floor       : Decimal = Decimal( '0' )
     draw_priority    : list[ Account ] = field( default_factory = list )
     cash_ceiling     : Optional[ Decimal ] = None
-    sweep_allocation : tuple = ()   # resolved ( holding Account, weight ) pairs for the sweep
+    sweep_allocation : tuple[ tuple[ Account, Decimal ], ... ] = ()   # resolved ( holding Account, weight ) pairs for the sweep
 
 
 @dataclass( frozen = True )
@@ -150,11 +150,11 @@ class PeriodParameters:
     tax_context           : TaxContext
     asset_rates           : AssetRates
     funding_policy        : FundingPolicy
-    income_lines          : list[ IncomeLine ]         = field( default_factory = list )
-    expense_lines         : list[ ExpenseLine ]        = field( default_factory = list )
-    liability_terms       : list[ LiabilityTerm ]      = field( default_factory = list )
-    contribution_lines    : list[ ContributionLine ]   = field( default_factory = list )
-    events                : list[ PeriodEvent ]        = field( default_factory = list )
-    tax_engine            : TaxEngine                  = None
-    opening_tax_state     : object                     = None
-    fiscal_window         : FiscalWindow               = None
+    income_lines          : list[ IncomeLine ]                              = field( default_factory = list )
+    expense_lines         : list[ ExpenseLine ]                             = field( default_factory = list )
+    liability_terms       : list[ LiabilityTerm ]                           = field( default_factory = list )
+    contribution_lines    : list[ ContributionLine ]                        = field( default_factory = list )
+    events                : list[ PeriodEvent ]                             = field( default_factory = list )
+    tax_engine            : Optional[ TaxEngine ]                           = None
+    opening_tax_state     : Optional[ TaxState ]                            = None
+    fiscal_window         : Optional[ FiscalWindow | EstimatedFiscalWindow ] = None

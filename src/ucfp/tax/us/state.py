@@ -10,6 +10,8 @@ engine reads and returns.
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from ucfp.tax.engine import TaxState as NeutralTaxState
+
 
 @dataclass( frozen = True )
 class CapitalLossCarryover:
@@ -29,9 +31,10 @@ class PassiveLossCarryover:
 
 
 @dataclass( frozen = True )
-class TaxState:
-    """The engine's threaded fiscal-year-to-fiscal-year tax state. The empty default
-    is the seed for a taxpayer with no prior carryforwards."""
+class TaxState( NeutralTaxState ):
+    """The engine's threaded fiscal-year-to-fiscal-year tax state -- the US realization of the
+    neutral `TaxState` marker. The empty default is the seed for a taxpayer with no prior
+    carryforwards."""
 
     capital_loss_carryover : CapitalLossCarryover = field(
         default_factory = CapitalLossCarryover )
