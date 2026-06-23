@@ -3,9 +3,9 @@
 Cross-cutting principles for the forecasting engine subsystem: the packages
 **`accounts/`, `forecast/`, `period/`, `tax/`**. Boundaries no single package owns
 live here; type- and package-local rules live in the relevant docstring and are
-only pointed to from here. Not API docs; not process (see `docs/dev/`). Each
-principle names where it is enforced — if a change breaks one, update this line in
-the same change.
+only pointed to from here. Not API docs (to *use* the engine — build inputs, read
+results — see `FORECAST_API.md`); not process (see `docs/dev/`). Each principle names
+where it is enforced — if a change breaks one, update this line in the same change.
 
 Flow: `ForecastParameters → Forecast → PeriodParameters → Period → books + Notices`,
 with `Forecast → TaxLaw.engine_for(year) → TaxEngine`.
