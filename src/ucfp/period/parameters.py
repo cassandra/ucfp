@@ -7,7 +7,6 @@ already-resolved values and does no time math itself. It is a shallow composite 
 cohesive value objects, all constructed by the Scenario.
 """
 from dataclasses import dataclass, field
-from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -17,26 +16,9 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.tax.context import TaxContext
 from ucfp.tax.engine import ContributionKind, TaxEngine
 
+from .date_span import DateSpan
 from .events import PeriodEvent
-
-
-@dataclass( frozen = True )
-class DateSpan:
-    """An inclusive [start_date, end_date] calendar span."""
-
-    start_date : date
-    end_date   : date
-
-    @property
-    def day_before_start( self ) -> date:
-        """The day immediately before the span -- the point through which opening
-        balances are read (the prior period's close)."""
-        return self.start_date - timedelta( days = 1 )
-
-    @property
-    def midpoint( self ) -> date:
-        """The span's midpoint date; events default here (the mid-period convention)."""
-        return self.start_date + timedelta( days = ( self.end_date - self.start_date ).days // 2 )
+from .fiscal_window import FiscalWindow
 
 
 @dataclass( frozen = True )
@@ -159,7 +141,10 @@ class PeriodParameters:
     a tax year and settles only then, over the full tax-year span the engine names (Jan-Dec)
     -- so the boundary is the tax law's to decide, not a pre-set window's presence. A `None`
     engine simply runs no tax step. `opening_tax_state` is the carryforwards threaded in from
-    the prior period."""
+    the prior period. `fiscal_window` is the tax-year view the Forecast resolves for this
+    interval -- a plain window for a full year, an annualizing `EstimatedFiscalWindow` for a
+    mid-year-start partial first year; the Period reads it for the contribution clamp and the
+    year-close tax steps, and prorates the settled charge by its `coverage`."""
 
     date_span             : DateSpan
     tax_context           : TaxContext
@@ -172,3 +157,4 @@ class PeriodParameters:
     events                : list[ PeriodEvent ]        = field( default_factory = list )
     tax_engine            : TaxEngine                  = None
     opening_tax_state     : object                     = None
+    fiscal_window         : FiscalWindow               = None

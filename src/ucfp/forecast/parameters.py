@@ -32,7 +32,7 @@ from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.schemas import Handle
 from ucfp.period.events import (
     ExternalDisbursement, ExternalReceipt, PeriodEvent, Purchase, Realization, Transfer )
-from ucfp.period.parameters import DateSpan
+from ucfp.period.date_span import DateSpan
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.enums import FilingStatus
 

@@ -17,7 +17,6 @@ The interval is computed in three phases (see `ucfp/FORECAST_ENGINE.md`):
                       carried forward rather than grossed up for.
   3. Close         -- finalize ending balances and the stop condition.
 """
-from datetime import date
 from decimal import Decimal
 
 from ucfp.accounts.bookkeeper import Bookkeeper
@@ -26,8 +25,7 @@ from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import quantize_money
 
 from .events import Realization
-from .fiscal_window import FiscalWindow
-from .parameters import DateSpan, PeriodParameters
+from .parameters import PeriodParameters
 from .results import Notice, NoticeKind, NoticeSeverity, PeriodResult
 
 
@@ -190,7 +188,7 @@ class Period:
         if tax_engine is None:
             return dict()
         tax_context = self._parameters.tax_context
-        year_to_date = self._fiscal_window( bookkeeper )
+        year_to_date = self._parameters.fiscal_window
         groups = dict()           # ( owner string, kind ) -> { intended amount, target holdings }
         for line in self._parameters.contribution_lines:
             if line.kind is None:
@@ -293,22 +291,6 @@ class Period:
         self._sweep_to_ceiling( bookkeeper, result )
         return
 
-    def _fiscal_window( self, bookkeeper : Bookkeeper ) -> FiscalWindow:
-        """The tax-year-to-date books view: a window from the tax year's start (named by the
-        engine, carried every interval) through this interval's end. It always exists. At a
-        tax-year close the interval end is the year end, so it spans the whole year -- which is
-        when settlement, the penalty, and forced transactions read it (gated by
-        `_is_close_of_tax_year`, not by this window's presence). Mid-year it is the running
-        year-to-date total, which the contribution-limit clamp reads. With no engine there is no
-        tax year, so it falls back to the civil year."""
-        tax_engine = self._parameters.tax_engine
-        period_end = self._parameters.date_span.end_date
-        if tax_engine is not None:
-            year_start, _ = tax_engine.tax_year_bounds( period_end )
-        else:
-            year_start = date( period_end.year, 1, 1 )
-        return FiscalWindow( bookkeeper, DateSpan( year_start, period_end ) )
-
     def _is_close_of_tax_year( self ) -> bool:
         """Whether this interval ends a tax year -- the explicit gate for the annual-only tax
         steps (settle, penalties, forced transactions). The engine, carried every interval, owns
@@ -328,16 +310,22 @@ class Period:
 
         Charges are paid (DR tax expense / CR cash); refundable credits are the reverse
         (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
-        refund -- modeled here as a negated charge against the same expense class."""
+        refund -- modeled here as a negated charge against the same expense class.
+
+        Over a partial first year the window annualizes its figures, so the engine returns a
+        full-year assessment; the charges and credits are prorated by the window's `coverage`
+        back to the in-window share (the section 443 short-period estimate). Coverage is 1 for a
+        full year, so this is a no-op then."""
         if not self._is_close_of_tax_year():
             return
-        fiscal_window = self._fiscal_window( bookkeeper )
+        fiscal_window = self._parameters.fiscal_window
         assessment = self._parameters.tax_engine.assess(
             fiscal_window, self._parameters.tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
+        coverage = fiscal_window.coverage
         settlements = (
-            [ ( charge.tax_class, charge.amount ) for charge in assessment.charges ]
-            + [ ( credit.tax_class, -credit.amount ) for credit in assessment.credits ] )
+            [ ( charge.tax_class, charge.amount * coverage ) for charge in assessment.charges ]
+            + [ ( credit.tax_class, -credit.amount * coverage ) for credit in assessment.credits ] )
         self._book_charges( bookkeeper, settlements, self._parameters.date_span.end_date )
         return
 
@@ -376,7 +364,7 @@ class Period:
         they arose, funding draws included; the engine owns the rule."""
         if not self._is_close_of_tax_year():
             return
-        fiscal_window = self._fiscal_window( bookkeeper )
+        fiscal_window = self._parameters.fiscal_window
         penalties = self._parameters.tax_engine.assess_penalties(
             fiscal_window, self._parameters.tax_context )
         settle_date = self._parameters.date_span.end_date
@@ -403,7 +391,7 @@ class Period:
         rest."""
         if not self._is_close_of_tax_year():
             return
-        fiscal_window = self._fiscal_window( bookkeeper )
+        fiscal_window = self._parameters.fiscal_window
         forced = self._parameters.tax_engine.forced_transactions(
             fiscal_window, self._parameters.tax_context )
         if not forced:
