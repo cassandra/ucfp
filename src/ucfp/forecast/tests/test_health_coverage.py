@@ -10,6 +10,7 @@ from datetime import date
 from decimal import Decimal
 
 from common.date_window import DateWindow
+from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.forecast import Forecast
@@ -19,6 +20,7 @@ from ucfp.forecast.parameters import (
     IncomeStream,
     SubsidizedHealthCoverage,
     Subject,
+    WindowedAmount,
 )
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
@@ -36,7 +38,9 @@ class HealthCoverageTests( unittest.TestCase ):
             subjects      = [ subject ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ) ) ],
-            income_streams = [ IncomeStream( subject, IncomeTaxClass.ORDINARY, Decimal( '40000' ) ) ],
+            income_streams = [ IncomeStream(
+                subject, IncomeTaxClass.ORDINARY,
+                Schedule.constant( WindowedAmount( Decimal( '40000' ) ) ) ) ],
             health_coverage = health_coverage,
         )
         return Bookkeeper( Forecast( parameters ).run().books )

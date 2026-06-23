@@ -44,7 +44,7 @@ def _parameters( draw_order, outlook = None ):
             AssetParameters( 'Brokerage', AssetClass.STOCKS, Decimal( '500000' ), Decimal( '500000' ),
                              handle = 'brokerage' ) ],
         economic_outlook = outlook if outlook is not None else EconomicOutlook(),
-        expenses      = [ _LIVING_50K ],
+        expense_items = [ _LIVING_50K ],
         cash_account  = CashAccountParameters(
             cash_floor = Decimal( '10000' ), draw_order = draw_order ),
     )

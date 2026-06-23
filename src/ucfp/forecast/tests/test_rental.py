@@ -17,6 +17,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.forecast import Forecast
@@ -27,6 +28,7 @@ from ucfp.forecast.parameters import (
     PropertyAttributes,
     ScheduledRealization,
     Subject,
+    WindowedAmount,
 )
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
@@ -59,7 +61,8 @@ class RentalDepreciationDeductionTests( unittest.TestCase ):
                         depreciable_basis = depreciable_basis,
                         property_type     = RealPropertyType.RESIDENTIAL ) ) ],
             income_streams = [
-                IncomeStream( subject, IncomeTaxClass.GROSS_RENTAL, Decimal( '60000' ) ) ],
+                IncomeStream( subject, IncomeTaxClass.GROSS_RENTAL,
+                              Schedule.constant( WindowedAmount( Decimal( '60000' ) ) ) ) ],
         )
         return _income_tax( Bookkeeper( Forecast( parameters ).run().books ) )
 

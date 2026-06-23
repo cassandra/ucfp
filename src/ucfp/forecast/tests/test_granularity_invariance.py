@@ -100,6 +100,25 @@ class GranularityInvarianceTest( unittest.TestCase ):
                 continue
             continue
 
+    def test_income_item_year_totals_invariant_across_granularity( self ):
+        """The occurrence-income shapes -- a recurring IncomeItem and a one-time IncomeItem --
+        place differently within a year at finer granularity, but their year totals hold. The
+        gig_worker's ORDINARY income is sourced only from items (no pre-tax withdrawals contaminate
+        it), so it must match across granularities at every tier."""
+        for tier_name, transform in TIERS.items():
+            comparison = compare( transform( PROFILES[ 'gig_worker' ]() ) )
+            annual     = { figures.year : figures for figures in comparison[ 'annual' ][ 0 ] }
+            for granularity_name, _ in GRANULARITIES:
+                other = { figures.year : figures for figures in comparison[ granularity_name ][ 0 ] }
+                for year, annual_figures in annual.items():
+                    self._assert_close(
+                        annual_figures.income.get( IncomeTaxClass.ORDINARY, _ZERO ),
+                        other[ year ].income.get( IncomeTaxClass.ORDINARY, _ZERO ),
+                        'gig_worker', tier_name, granularity_name, year, 'ORDINARY' )
+                    continue
+                continue
+            continue
+
     def test_null_tier_loan_free_net_worth_invariant( self ):
         """With zero economics and no funding policy, a loan-free profile is fully deterministic:
         year-end net worth matches across granularities to rounding. This is the check the

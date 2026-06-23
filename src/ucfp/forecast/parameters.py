@@ -17,7 +17,7 @@ from typing import Optional
 from common.date_window import DateWindow
 from common.labeled_enum import LabeledEnum
 from common.rate import Rate
-from common.recurrence import Duration, Recurrence, TimeUnit
+from common.recurrence import Cadence, Duration, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.books import Account
 from ucfp.accounts.chart import Chart
@@ -30,7 +30,8 @@ from ucfp.accounts.enums import (
 )
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.schemas import Handle
-from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer, Windfall
+from ucfp.period.events import (
+    ExternalDisbursement, ExternalReceipt, PeriodEvent, Purchase, Realization, Transfer )
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.enums import FilingStatus
@@ -111,43 +112,64 @@ class AssetParameters:
 
 
 @dataclass( frozen = True )
-class IncomeStream:
-    """A recurring received income for one subject over an existence `window` -- wages, a
-    pension (`ORDINARY`), Social Security, or gross rental. `annual_amount` is gross in
-    forecast-start ("today's") dollars; the Forecast grows it to nominal by the income
-    class's rate (the COLA lives in the Economic Outlook, per class) and gates it to the
-    window. Interest/dividends/gains come from assets, and IRA/401(k) withdrawals are asset
-    draws, so none of those are streams."""
-
-    subject          : Subject
-    income_tax_class : IncomeTaxClass
-    annual_amount    : Decimal
-    window           : DateWindow = DateWindow()
-
-
-@dataclass( frozen = True )
 class WindowedAmount:
-    """A monetary amount (today's dollars) in effect over a `window` -- the segment type
-    for an expense's amount `Schedule` (e.g. one lifestyle level over a span)."""
+    """A monetary amount (today's dollars) in effect over a `window` -- the segment type for a
+    flow's amount `Schedule` (e.g. one income or lifestyle level over a span)."""
 
     amount : Decimal
     window : DateWindow = DateWindow()
 
 
 @dataclass( frozen = True )
+class IncomeStream:
+    """A smooth received income for one subject over an existence `window` -- wages, a pension
+    (`ORDINARY`), Social Security, or gross rental -- the rate counterpart of `ExpenseStream`.
+    `amounts` is the gross level in forecast-start ("today's") dollars, stepping over time with
+    life stage; the Forecast grows it to nominal by the income class's rate (the COLA lives in
+    the Economic Outlook, per class), prorates it evenly across each interval, and gates it to
+    the window. Interest/dividends/gains come from assets, and IRA/401(k) withdrawals are asset
+    draws, so none of those are streams."""
+
+    subject          : Subject
+    income_tax_class : IncomeTaxClass
+    amounts          : Schedule[ WindowedAmount ]
+    window           : DateWindow = DateWindow()
+
+
+@dataclass( frozen = True )
+class IncomeItem:
+    """Received income for one subject with a real cadence -- the income counterpart of
+    `ExpenseItem`. `amounts` is the per-occurrence gross over time (today's dollars, stepping
+    with life stage); `cadence` places the occurrences (a `Recurrence` for income known per
+    period -- "$5,000/month" -- or a `OneTime` for a single dated receipt such as a bonus or
+    settlement); `window` is the item's existence. The Forecast posts, per interval, the
+    occurrences in that interval x the amount then in effect, grown to nominal by the income
+    class's rate, to the per-(subject, class) revenue account (shared with any `IncomeStream`
+    of the same subject and class). For smooth income with no meaningful schedule, use
+    `IncomeStream` instead."""
+
+    subject          : Subject
+    income_tax_class : IncomeTaxClass
+    amounts          : Schedule[ WindowedAmount ]
+    cadence          : Cadence
+    window           : DateWindow = DateWindow()
+
+
+@dataclass( frozen = True )
 class ExpenseItem:
-    """A recurring expense -- one chart line. `amounts` is the per-occurrence cost over
-    time (today's dollars, stepping with lifestyle); `recurrence` places the occurrences;
-    `window` is the item's existence. The Forecast posts, per interval, the occurrences in
-    that interval x the amount then in effect, inflated -- to a per-item account tagged with
-    `expense_tax_class`, so the Books keep item detail while tax aggregates by class. `handle`
-    is the planner's identity for the item's account, to associate it with the planner's
-    artifact in results; optional."""
+    """An expense with a real cadence -- one chart line. `amounts` is the per-occurrence cost
+    over time (today's dollars, stepping with lifestyle); `cadence` places the occurrences (a
+    `Recurrence` for a repeating cost, a `OneTime` for a single dated one); `window` is the
+    item's existence. The Forecast posts, per interval, the occurrences in that interval x the
+    amount then in effect, inflated -- to a per-item account tagged with `expense_tax_class`, so
+    the Books keep item detail while tax aggregates by class. `handle` is the planner's identity
+    for the item's account, to associate it with the planner's artifact in results; optional.
+    For a smooth cost with no meaningful schedule, use `ExpenseStream` instead."""
 
     name              : str
     expense_tax_class : ExpenseTaxClass
     amounts           : Schedule[ WindowedAmount ]
-    recurrence        : Recurrence
+    cadence           : Cadence
     window            : DateWindow      = DateWindow()
     handle            : Optional[ Handle ] = None
 
@@ -155,18 +177,19 @@ class ExpenseItem:
 @dataclass( frozen = True )
 class ExpenseStream:
     """A smooth recurring expense with no meaningful sub-annual schedule -- living costs, an
-    annual vacation -- the expense counterpart of `IncomeStream`. `annual_amount` is the cost in
-    forecast-start ("today's") dollars; the Forecast inflates it by the class rate and *prorates*
-    it evenly across each interval (as it does income), so the resolved figure is the same at any
-    granularity. Use `ExpenseItem` instead for a cost with a real cadence -- a monthly utility, an
-    annual property-tax bill, a car every N years -- whose timing within the year is meaningful and
-    should fall in one period. Smoothing is an approximation valid only while the granularity stays
-    coarse relative to the real cadence (we cap at monthly); it would misrepresent a true schedule
-    at finer resolution. `handle` is the planner's identity for the item's account; optional."""
+    annual vacation -- the expense counterpart of `IncomeStream`. `amounts` is the cost level in
+    forecast-start ("today's") dollars, stepping over time with lifestyle; the Forecast inflates
+    it by the class rate and *prorates* it evenly across each interval (as it does income), so the
+    resolved figure is the same at any granularity. Use `ExpenseItem` instead for a cost with a
+    real cadence -- a monthly utility, an annual property-tax bill, a car every N years -- whose
+    timing within the year is meaningful and should fall in one period. Smoothing is an
+    approximation valid only while the granularity stays coarse relative to the real cadence (we
+    cap at monthly); it would misrepresent a true schedule at finer resolution. `handle` is the
+    planner's identity for the item's account; optional."""
 
     name              : str
     expense_tax_class : ExpenseTaxClass
-    annual_amount     : Decimal
+    amounts           : Schedule[ WindowedAmount ]
     window            : DateWindow         = DateWindow()
     handle            : Optional[ Handle ] = None
 
@@ -309,29 +332,35 @@ class ScheduledRealization( ScheduledEvent ):
 
 
 @dataclass( frozen = True )
-class ScheduledWindfall( ScheduledEvent ):
-    """A one-time receipt of value from outside, landing in cash -- the non-recurring
-    counterpart of an income stream. `income_tax_class` classifies it the way a stream or
-    expense item carries its tax class: set (e.g. `ORDINARY`) for a taxable windfall (lottery,
-    settlement), which credits that revenue account and is taxed at year-close; None for a
-    non-taxable receipt (a gift, or a US inheritance -- which is non-taxable to the recipient,
-    estate tax being the estate's), which credits the External Receipts equity account and is
-    never taxed. A recipient-side inheritance/estate tax regime (some jurisdictions) is not
-    modeled."""
+class ScheduledExternalReceipt( ScheduledEvent ):
+    """A one-time receipt of non-taxable value from outside, landing in cash -- a gift, or a US
+    inheritance (non-taxable to the recipient, the estate tax being the estate's). Credits the
+    External Receipts equity account and is never taxed. Taxable one-time income (a lottery win, a
+    settlement) is instead a one-time `IncomeItem` (a `OneTime` cadence), crediting a revenue
+    account and taxed at year-close. A recipient-side inheritance/estate tax regime (some
+    jurisdictions) is not modeled."""
 
-    event_date       : date
-    amount           : Decimal
-    income_tax_class : Optional[ IncomeTaxClass ] = None
+    event_date : date
+    amount     : Decimal
 
     def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
-        if self.income_tax_class is None:
-            credit_account = chart.system_account( SystemAccountRole.EXTERNAL_RECEIPTS )
-        else:
-            credit_account = chart.income_account( self.income_tax_class )
-            if credit_account is None:
-                raise MissingAccountError(
-                    f'No revenue account for income tax-class {self.income_tax_class.label}.' )
-        return Windfall( self.event_date, self._cash( chart ), credit_account, self.amount )
+        equity = chart.system_account( SystemAccountRole.EXTERNAL_RECEIPTS )
+        return ExternalReceipt( self.event_date, self._cash( chart ), equity, self.amount )
+
+
+@dataclass( frozen = True )
+class ScheduledExternalDisbursement( ScheduledEvent ):
+    """A one-time gift of non-deductible value to outside, leaving cash -- a personal gift to
+    family, say. The mirror of `ScheduledExternalReceipt`: debits the External Disbursements
+    equity account, reducing net worth with no expense recognized and no tax effect. A deductible
+    charitable gift is instead an `ExpenseItem` with `ExpenseTaxClass.CHARITABLE`."""
+
+    event_date : date
+    amount     : Decimal
+
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
+        equity = chart.system_account( SystemAccountRole.EXTERNAL_DISBURSEMENTS )
+        return ExternalDisbursement( self.event_date, self._cash( chart ), equity, self.amount )
 
 
 @dataclass( frozen = True )
@@ -427,7 +456,8 @@ class ForecastParameters:
     assets            : list[ AssetParameters ]              = field( default_factory = list )
     economic_outlook  : EconomicOutlook                      = field( default_factory = EconomicOutlook )
     income_streams    : list[ IncomeStream ]                 = field( default_factory = list )
-    expenses          : list[ ExpenseItem ]                  = field( default_factory = list )
+    income_items      : list[ IncomeItem ]                   = field( default_factory = list )
+    expense_items     : list[ ExpenseItem ]                  = field( default_factory = list )
     expense_streams   : list[ ExpenseStream ]                = field( default_factory = list )
     loans             : list[ LoanParameters ]               = field( default_factory = list )
     contributions     : list[ RetirementContribution ]       = field( default_factory = list )

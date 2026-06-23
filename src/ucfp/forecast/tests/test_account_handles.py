@@ -46,8 +46,9 @@ class AccountHandleTests( unittest.TestCase ):
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
             income_streams = [
-                IncomeStream( subject, IncomeTaxClass.ORDINARY, Decimal( '30000' ) ) ],
-            expenses      = [
+                IncomeStream( subject, IncomeTaxClass.ORDINARY,
+                              Schedule.constant( WindowedAmount( Decimal( '30000' ) ) ) ) ],
+            expense_items = [
                 ExpenseItem(
                     'Groceries', ExpenseTaxClass.LIVING,
                     Schedule.constant( WindowedAmount( Decimal( '500' ) ) ),

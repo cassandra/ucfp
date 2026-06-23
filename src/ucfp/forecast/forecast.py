@@ -61,7 +61,6 @@ from .parameters import (
     ExpenseStream,
     ForecastParameters,
     ScheduledRealization,
-    ScheduledWindfall,
     Subject,
     resolve_household_size,
 )
@@ -231,7 +230,6 @@ class BaselineBuilder:
         self._seed_opening_balances( bookkeeper, holdings )
         self._create_income_accounts( bookkeeper )
         self._create_asset_income_accounts( bookkeeper )
-        self._create_windfall_income_accounts( bookkeeper )
         self._create_expense_accounts( bookkeeper )
         self._create_tax_accounts( bookkeeper )
         self._resolve_draw_priority( bookkeeper )
@@ -363,12 +361,15 @@ class BaselineBuilder:
         return
 
     def _create_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
-        """Set up the income-account registry and pre-create an account for every stream,
-        so the chart is complete from the start (each stream's account exists even before
-        its window opens)."""
+        """Set up the income-account registry and pre-create an account for every stream and
+        item, so the chart is complete from the start (each account exists even before its
+        window opens). A stream and an item of the same (subject, class) share one account."""
         self._income_accounts = IncomeAccounts( bookkeeper )
         for stream in self._parameters.income_streams:
             self._income_accounts.account_for( stream.subject, stream.income_tax_class )
+            continue
+        for item in self._parameters.income_items:
+            self._income_accounts.account_for( item.subject, item.income_tax_class )
             continue
         return
 
@@ -376,7 +377,7 @@ class BaselineBuilder:
         """Set up the expense-account registry and pre-create an account for every occurrence-based
         item and smooth stream, so the chart is complete from the start."""
         self._expense_accounts = ExpenseAccounts( bookkeeper )
-        for item in self._parameters.expenses:
+        for item in self._parameters.expense_items:
             self._expense_accounts.account_for( item )
             continue
         for stream in self._parameters.expense_streams:
@@ -408,23 +409,6 @@ class BaselineBuilder:
             income_classes.add( asset.asset_class.distribution_income_class )
             income_classes.add( asset.asset_class.realized_gain_income_class )
         income_classes.discard( None )
-        for income_class in sorted( income_classes, key = lambda klass : klass.name ):
-            if chart.income_account( income_class ) is None:
-                bookkeeper.add_account(
-                    Account( name = income_class.label, parent = revenue_root,
-                             income_tax_class = income_class ) )
-            continue
-        return
-
-    def _create_windfall_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
-        """Create a revenue account for each income class a taxable windfall credits, if one
-        does not already exist, so a taxable windfall has somewhere to post (non-taxable
-        windfalls credit the External Receipts equity account, already in the chart)."""
-        chart = bookkeeper.chart
-        revenue_root = chart.root( AccountType.REVENUE )
-        income_classes = {
-            event.income_tax_class for event in self._parameters.events
-            if isinstance( event, ScheduledWindfall ) and ( event.income_tax_class is not None ) }
         for income_class in sorted( income_classes, key = lambda klass : klass.name ):
             if chart.income_account( income_class ) is None:
                 bookkeeper.add_account(
@@ -536,17 +520,50 @@ class Forecast:
         return terms
 
     def _income_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
-        """Resolve the income streams active this interval into IncomeLines: grow each to
-        nominal by its class rate from the forecast start, prorate to the interval's share
-        of the year, and post to its per-(subject, class) account."""
+        """All income IncomeLines for this interval: the smooth streams (prorated) plus the
+        occurrence-based items (placed by their cadence). The income counterpart of
+        `_expense_lines_for`."""
+        return ( self._income_stream_lines_for( span, year_fraction )
+                 + self._income_item_lines_for( span ) )
+
+    def _income_stream_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
+        """Resolve the income streams active this interval into IncomeLines: take each stream's
+        level then in effect, grow it to nominal by its class rate from the forecast start,
+        prorate to the interval's share of the year, and post to its per-(subject, class) account."""
         lines = list()
         for stream in self._parameters.income_streams:
             if not stream.window.covers( span.start_date ):
                 continue
+            windowed_amount = stream.amounts.at( span.start_date )
+            if windowed_amount is None:
+                continue
             factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
-            amount = stream.annual_amount * factor * year_fraction
+            amount = windowed_amount.amount * factor * year_fraction
             account = self._baseline.income_accounts.account_for( stream.subject, stream.income_tax_class )
             lines.append( IncomeLine( account = account, gross_amount = amount ) )
+            continue
+        return lines
+
+    def _income_item_lines_for( self, span : DateSpan ) -> list[ IncomeLine ]:
+        """Resolve the occurrence-based income items active this interval into IncomeLines: the
+        cadence's occurrences in the interval x the per-occurrence amount in effect (grown to
+        nominal from the forecast start), posted to the per-(subject, class) account. The income
+        counterpart of `_expense_item_lines_for` -- a `OneTime` cadence makes it a single receipt."""
+        lines = list()
+        for item in self._parameters.income_items:
+            clipped = self._clip_to_window( span, item.window )
+            if clipped is None:
+                continue
+            start, end = clipped
+            since = item.window.start if item.window.start is not None else self._parameters.start_date
+            occurrences = item.cadence.count_in( start = start, end = end, since = since )
+            windowed_amount = item.amounts.at( span.start_date )
+            if ( occurrences == 0 ) or ( windowed_amount is None ):
+                continue
+            factor = self._income_growth_factor( item.income_tax_class, span.start_date.year )
+            account = self._baseline.income_accounts.account_for( item.subject, item.income_tax_class )
+            lines.append(
+                IncomeLine( account = account, gross_amount = occurrences * windowed_amount.amount * factor ) )
             continue
         return lines
 
@@ -590,16 +607,16 @@ class Forecast:
 
     def _expense_item_lines_for( self, span : DateSpan ) -> list[ ExpenseLine ]:
         """Resolve the occurrence-based expense items active this interval into ExpenseLines: the
-        recurrence's occurrences in the interval x the per-occurrence amount in effect (inflated
+        cadence's occurrences in the interval x the per-occurrence amount in effect (inflated
         from the forecast start), posted to the item's account."""
         lines = list()
-        for item in self._parameters.expenses:
+        for item in self._parameters.expense_items:
             clipped = self._clip_to_window( span, item.window )
             if clipped is None:
                 continue
             start, end = clipped
             since = item.window.start if item.window.start is not None else self._parameters.start_date
-            occurrences = item.recurrence.count_in( start = start, end = end, since = since )
+            occurrences = item.cadence.count_in( start = start, end = end, since = since )
             windowed_amount = item.amounts.at( span.start_date )
             if ( occurrences == 0 ) or ( windowed_amount is None ):
                 continue
@@ -611,15 +628,19 @@ class Forecast:
         return lines
 
     def _expense_stream_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ ExpenseLine ]:
-        """Resolve the smooth expense streams active this interval into ExpenseLines: inflate each
-        to nominal by its class rate from the forecast start and prorate to the interval's share of
-        the year, posting to its account. The expense counterpart of `_income_lines_for`."""
+        """Resolve the smooth expense streams active this interval into ExpenseLines: take each
+        stream's level then in effect, inflate it to nominal by its class rate from the forecast
+        start, and prorate to the interval's share of the year, posting to its account. The
+        expense counterpart of `_income_lines_for`."""
         lines = list()
         for stream in self._parameters.expense_streams:
             if not stream.window.covers( span.start_date ):
                 continue
+            windowed_amount = stream.amounts.at( span.start_date )
+            if windowed_amount is None:
+                continue
             factor = self._expense_inflation_factor( stream.expense_tax_class, span.start_date.year )
-            amount = stream.annual_amount * factor * year_fraction
+            amount = windowed_amount.amount * factor * year_fraction
             account = self._baseline.expense_accounts.account_for( stream )
             lines.append( ExpenseLine( account = account, amount = amount ) )
             continue
@@ -628,8 +649,8 @@ class Forecast:
     def _events_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list[ PeriodEvent ]:
         """Resolve the scheduled events occurring in this interval into PeriodEvents, binding
         their holding handles to the running accounts (and via the chart the cash hub and the
-        revenue/equity accounts a windfall credits). Order is preserved, so same-interval events
-        apply as authored."""
+        equity accounts an external receipt/disbursement moves). Order is preserved, so
+        same-interval events apply as authored."""
         chart = bookkeeper.chart
         return [
             event.to_period_event( self._baseline.holding_by_handle, chart )

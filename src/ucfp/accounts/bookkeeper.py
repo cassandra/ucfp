@@ -61,8 +61,8 @@ class Bookkeeper:
 
     def build_standard_chart( self ) -> None:
         """Create the standard chart: one parentless root per AccountType, plus the Opening
-        Balances, Unrealized Gains, and External Receipts equity accounts beneath the Equity
-        root."""
+        Balances, Unrealized Gains, External Receipts, and External Disbursements equity accounts
+        beneath the Equity root."""
         roots = dict()
         for account_type in AccountType.all():
             root = self.add_account(
@@ -73,7 +73,8 @@ class Bookkeeper:
         for system_role in (
                 SystemAccountRole.OPENING_BALANCES,
                 SystemAccountRole.UNREALIZED_GAINS,
-                SystemAccountRole.EXTERNAL_RECEIPTS ):
+                SystemAccountRole.EXTERNAL_RECEIPTS,
+                SystemAccountRole.EXTERNAL_DISBURSEMENTS ):
             self.add_account(
                 Account(
                     name = system_role.label,

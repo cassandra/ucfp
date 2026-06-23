@@ -44,7 +44,7 @@ def _run():
         economic_outlook = EconomicOutlook.constant(
             EconomicParameters( inflation = Rate( Decimal( '0.03' ) ),
                                 medical_inflation = Rate( Decimal( '0.05' ) ) ) ),
-        expenses = [
+        expense_items = [
             ExpenseItem( 'Food', ExpenseTaxClass.LIVING,
                          Schedule.constant( WindowedAmount( Decimal( '1000' ) ) ), _MONTHLY,
                          handle = 'food' ),

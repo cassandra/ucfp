@@ -1,11 +1,16 @@
-"""A calendar recurrence -- a general value object for placing repeating occurrences.
+"""Calendar cadences -- general value objects for placing actual occurrences in time.
 
-A `Recurrence` is an `interval` (every N days/weeks/months/years) plus an `offset` (how far
-past a reference date the first occurrence sits; default zero). It places *actual*
-occurrences -- it does not amortize -- so `count_in` is an exact, anchored count of the
-occurrences that fall in a date range. A consumer that works at a coarser grain (a yearly
-Period over a monthly recurrence) gets the true per-interval count; a sparse recurrence
-(every 10 years) lands 0 or 1 in a given interval.
+A `Cadence` answers one question, `count_in`: how many occurrences fall in a date range. It
+places *actual* occurrences -- it does not amortize -- so the count is exact and anchored. Two
+kinds:
+
+- `Recurrence` -- repeats every `interval` (every N days/weeks/months/years), the first
+  occurrence `offset` past a reference date (default zero). A consumer working at a coarser
+  grain (a yearly Period over a monthly recurrence) gets the true per-interval count; a sparse
+  recurrence (every 10 years) lands 0 or 1 in a given interval.
+- `OneTime` -- a single occurrence on an absolute date; the degenerate, non-repeating cadence.
+
+A consumer asks only `count_in`, so it treats either kind uniformly.
 """
 import calendar
 from dataclasses import dataclass
@@ -63,8 +68,18 @@ class Duration:
 _ZERO_OFFSET = Duration( 0, TimeUnit.DAY )
 
 
+class Cadence:
+    """How occurrences fall in time -- a `Recurrence` (repeats) or a `OneTime` (single dated
+    event). Consumers ask only `count_in`, so either kind resolves the same way."""
+
+    def count_in( self, *, start : date, end : date, since : date ) -> int:
+        """The number of occurrences in `[start, end]` (inclusive). `since` anchors a relative
+        cadence; an absolute one ignores it."""
+        raise NotImplementedError
+
+
 @dataclass( frozen = True )
-class Recurrence:
+class Recurrence( Cadence ):
     """A repeating occurrence: every `interval`, starting `offset` past a reference date."""
 
     interval : Duration
@@ -86,3 +101,15 @@ class Recurrence:
             occurrence = self.interval.add_to( occurrence )
             continue
         return count
+
+
+@dataclass( frozen = True )
+class OneTime( Cadence ):
+    """A single occurrence on the absolute date `on` -- the degenerate, non-repeating cadence.
+    `since` plays no part: the date is given outright, so the occurrence falls in the one
+    interval that contains it, at any granularity."""
+
+    on : date
+
+    def count_in( self, *, start : date, end : date, since : date ) -> int:
+        return 1 if start <= self.on <= end else 0

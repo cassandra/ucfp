@@ -269,9 +269,10 @@ class Period:
         return
 
     def _apply_events( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Apply each scheduled PeriodEvent (transfer, purchase, realization, windfall); each
-        materializes its own balanced transaction. Scheduled events are the user's requested
-        operations, so they raise no Notices (a Notice flags the unrequested)."""
+        """Apply each scheduled PeriodEvent (transfer, purchase, realization, external
+        receipt/disbursement); each materializes its own balanced transaction. Scheduled events
+        are the user's requested operations, so they raise no Notices (a Notice flags the
+        unrequested)."""
         for event in self._parameters.events:
             event.apply( bookkeeper )
             continue

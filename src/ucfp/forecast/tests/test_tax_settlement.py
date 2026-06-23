@@ -8,10 +8,12 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.forecast import Forecast
-from ucfp.forecast.parameters import AssetParameters, ForecastParameters, IncomeStream, Subject
+from ucfp.forecast.parameters import (
+    AssetParameters, ForecastParameters, IncomeStream, Subject, WindowedAmount )
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
 
@@ -28,7 +30,9 @@ class TaxSettlementTests( unittest.TestCase ):
             subjects      = [ subject ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
-            income_streams = [ IncomeStream( subject, IncomeTaxClass.ORDINARY, Decimal( '120000' ) ) ],
+            income_streams = [ IncomeStream(
+                subject, IncomeTaxClass.ORDINARY,
+                Schedule.constant( WindowedAmount( Decimal( '120000' ) ) ) ) ],
         )
         result = Forecast( parameters ).run()   # raised MissingAccountError before the fix
         reader = Bookkeeper( result.books )

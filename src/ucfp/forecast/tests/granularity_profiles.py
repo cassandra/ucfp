@@ -22,7 +22,7 @@ from decimal import Decimal
 
 from common.date_window import DateWindow
 from common.rate import Rate
-from common.recurrence import Duration, Recurrence, TimeUnit
+from common.recurrence import Duration, OneTime, Recurrence, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
@@ -34,12 +34,14 @@ from ucfp.forecast.parameters import (
     ExpenseItem,
     ExpenseStream,
     ForecastParameters,
+    IncomeItem,
     IncomeStream,
     LoanParameters,
     PropertyAttributes,
     RetirementContribution,
+    ScheduledExternalDisbursement,
+    ScheduledExternalReceipt,
     ScheduledRealization,
-    ScheduledWindfall,
     Subject,
     SubjectRemoval,
     SubsidizedHealthCoverage,
@@ -72,7 +74,13 @@ REAL_OUTLOOK = EconomicOutlook.constant( EconomicParameters(
 def _stream( name : str, expense_class : ExpenseTaxClass, annual : str ) -> ExpenseStream:
     """A smooth cost with no meaningful sub-annual schedule (living, an annual vacation) -- the
     Rate intent, prorated evenly, so it must match across granularities."""
-    return ExpenseStream( name, expense_class, D( annual ) )
+    return ExpenseStream( name, expense_class, Schedule.constant( WindowedAmount( D( annual ) ) ) )
+
+
+def _income( subject : Subject, income_class : IncomeTaxClass, annual : str ) -> IncomeStream:
+    """A smooth income at a level annual amount (the common case) -- the rate counterpart of
+    `_stream`."""
+    return IncomeStream( subject, income_class, Schedule.constant( WindowedAmount( D( annual ) ) ) )
 
 
 def _recurring(
@@ -103,11 +111,11 @@ def wage_earner() -> ForecastParameters:
             AssetParameters( 'Brokerage', AssetClass.STOCKS, D( '100000' ), D( '100000' ), handle = 'brokerage' ),
             AssetParameters( '401k', AssetClass.PRETAX_RETIREMENT, D( '0' ), D( '0' ),
                              handle = '401k', owner_handle = 'avery' ) ],
-        income_streams = [ IncomeStream( avery, IncomeTaxClass.WAGES, D( '120000' ) ) ],
+        income_streams = [ _income( avery, IncomeTaxClass.WAGES, '120000' ) ],
         expense_streams = [
             _stream( 'Living', ExpenseTaxClass.LIVING, '70000' ),
             _stream( 'Vacation', ExpenseTaxClass.LIVING, '8000' ) ],
-        expenses = [
+        expense_items = [
             _recurring( 'Property Tax', ExpenseTaxClass.SALT, '9000', Duration( 1, TimeUnit.YEAR ) ) ],
         contributions = [ RetirementContribution( '401k', D( '20000' ), ContributionSource.WAGE ) ],
         cash_account = CashAccountParameters(
@@ -129,8 +137,8 @@ def retiree() -> ForecastParameters:
             AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, D( '400000' ), D( '0' ),
                              handle = 'ira', owner_handle = 'riley' ) ],
         income_streams = [
-            IncomeStream( riley, IncomeTaxClass.SOCIAL_SECURITY, D( '30000' ) ),
-            IncomeStream( riley, IncomeTaxClass.ORDINARY, D( '25000' ) ) ],
+            _income( riley, IncomeTaxClass.SOCIAL_SECURITY, '30000' ),
+            _income( riley, IncomeTaxClass.ORDINARY, '25000' ) ],
         expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '130000' ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '20000' ),
@@ -154,8 +162,8 @@ def rental_owner() -> ForecastParameters:
                                  property_type = RealPropertyType.RESIDENTIAL ) ),
             AssetParameters( 'Brokerage', AssetClass.STOCKS, D( '80000' ), D( '80000' ), handle = 'brokerage' ) ],
         income_streams = [
-            IncomeStream( quinn, IncomeTaxClass.WAGES, D( '100000' ) ),
-            IncomeStream( quinn, IncomeTaxClass.GROSS_RENTAL, D( '36000' ) ) ],
+            _income( quinn, IncomeTaxClass.WAGES, '100000' ),
+            _income( quinn, IncomeTaxClass.GROSS_RENTAL, '36000' ) ],
         expense_streams = [
             _stream( 'Living', ExpenseTaxClass.LIVING, '60000' ),
             _stream( 'Rental Expense', ExpenseTaxClass.RENTAL_EXPENSE, '12000' ) ],
@@ -183,9 +191,9 @@ def couple_survivor() -> ForecastParameters:
             AssetParameters( 'IRA-Jordan', AssetClass.PRETAX_RETIREMENT, D( '200000' ), D( '0' ),
                              handle = 'ira-jordan', owner_handle = 'jordan' ) ],
         income_streams = [
-            IncomeStream( sam, IncomeTaxClass.SOCIAL_SECURITY, D( '32000' ) ),
-            IncomeStream( jordan, IncomeTaxClass.SOCIAL_SECURITY, D( '22000' ) ),
-            IncomeStream( sam, IncomeTaxClass.ORDINARY, D( '20000' ) ) ],
+            _income( sam, IncomeTaxClass.SOCIAL_SECURITY, '32000' ),
+            _income( jordan, IncomeTaxClass.SOCIAL_SECURITY, '22000' ),
+            _income( sam, IncomeTaxClass.ORDINARY, '20000' ) ],
         expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '100000' ) ],
         subject_removals = [ SubjectRemoval( date( 2035, 6, 1 ), 'sam' ) ],
         cash_account = CashAccountParameters(
@@ -194,8 +202,9 @@ def couple_survivor() -> ForecastParameters:
 
 
 def life_events() -> ForecastParameters:
-    """An early retiree on subsidized health coverage who receives two windfalls. Exercises the
-    ACA premium tax credit (MAGI-sensitive), taxable/non-taxable windfalls, sweep, and draws."""
+    """An early retiree on subsidized health coverage who receives a non-taxable inheritance and a
+    taxable one-time payment. Exercises the ACA premium tax credit (MAGI-sensitive), an external
+    equity receipt, a one-time taxable income, sweep, and draws."""
     drew = Subject( 'Drew', date( 1964, 1, 1 ), 'drew' )
     return _base(
         filing_status = FilingStatus.SINGLE,
@@ -203,14 +212,39 @@ def life_events() -> ForecastParameters:
         assets = [
             AssetParameters( 'Cash', AssetClass.CASH, D( '50000' ), D( '50000' ) ),
             AssetParameters( 'Brokerage', AssetClass.STOCKS, D( '500000' ), D( '350000' ), handle = 'brokerage' ) ],
-        income_streams = [ IncomeStream( drew, IncomeTaxClass.ORDINARY, D( '20000' ) ) ],
+        income_streams = [ _income( drew, IncomeTaxClass.ORDINARY, '20000' ) ],
+        income_items = [ IncomeItem(
+            drew, IncomeTaxClass.ORDINARY, Schedule.constant( WindowedAmount( D( '50000' ) ) ),
+            OneTime( date( 2032, 6, 1 ) ) ) ],
         expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '70000' ) ],
         health_coverage = SubsidizedHealthCoverage( DateWindow( end = date( 2028, 12, 31 ) ), 1, D( '12000' ) ),
-        events = [
-            ScheduledWindfall( date( 2030, 6, 1 ), D( '100000' ) ),
-            ScheduledWindfall( date( 2032, 6, 1 ), D( '50000' ), income_tax_class = IncomeTaxClass.ORDINARY ) ],
+        events = [ ScheduledExternalReceipt( date( 2030, 6, 1 ), D( '100000' ) ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '20000' ), cash_ceiling = D( '80000' ),
+            draw_order = [ AssetClass.STOCKS ],
+            sweep_allocation = AssetAllocation( ( ( 'brokerage', D( '1' ) ), ) ) ) )
+
+
+def gig_worker() -> ForecastParameters:
+    """A self-employed earner paid per cadence: a monthly retainer (a recurring IncomeItem) and a
+    year-end project bonus (a one-time IncomeItem), who makes a one-time family gift partway
+    through. Exercises the occurrence-income shapes and the external-disbursement equity event."""
+    sky = Subject( 'Sky', date( 1985, 1, 1 ), 'sky' )
+    return _base(
+        filing_status = FilingStatus.SINGLE,
+        subjects = [ sky ],
+        assets = [
+            AssetParameters( 'Cash', AssetClass.CASH, D( '40000' ), D( '40000' ) ),
+            AssetParameters( 'Brokerage', AssetClass.STOCKS, D( '150000' ), D( '120000' ), handle = 'brokerage' ) ],
+        income_items = [
+            IncomeItem( sky, IncomeTaxClass.ORDINARY, Schedule.constant( WindowedAmount( D( '5000' ) ) ),
+                        Recurrence( Duration( 1, TimeUnit.MONTH ) ) ),
+            IncomeItem( sky, IncomeTaxClass.ORDINARY, Schedule.constant( WindowedAmount( D( '30000' ) ) ),
+                        OneTime( date( 2031, 12, 1 ) ) ) ],
+        expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '54000' ) ],
+        events = [ ScheduledExternalDisbursement( date( 2035, 6, 1 ), D( '25000' ) ) ],
+        cash_account = CashAccountParameters(
+            cash_floor = D( '20000' ), cash_ceiling = D( '70000' ),
             draw_order = [ AssetClass.STOCKS ],
             sweep_allocation = AssetAllocation( ( ( 'brokerage', D( '1' ) ), ) ) ) )
 
@@ -221,6 +255,7 @@ PROFILES = {
     'rental_owner'    : rental_owner,
     'couple_survivor' : couple_survivor,
     'life_events'     : life_events,
+    'gig_worker'      : gig_worker,
 }
 
 
