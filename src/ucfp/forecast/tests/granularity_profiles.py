@@ -39,6 +39,7 @@ from ucfp.forecast.parameters import (
     LoanParameters,
     PropertyAttributes,
     RetirementContribution,
+    ScheduledExternalDisbursement,
     ScheduledExternalReceipt,
     ScheduledRealization,
     Subject,
@@ -224,12 +225,37 @@ def life_events() -> ForecastParameters:
             sweep_allocation = AssetAllocation( ( ( 'brokerage', D( '1' ) ), ) ) ) )
 
 
+def gig_worker() -> ForecastParameters:
+    """A self-employed earner paid per cadence: a monthly retainer (a recurring IncomeItem) and a
+    year-end project bonus (a one-time IncomeItem), who makes a one-time family gift partway
+    through. Exercises the occurrence-income shapes and the external-disbursement equity event."""
+    sky = Subject( 'Sky', date( 1985, 1, 1 ), 'sky' )
+    return _base(
+        filing_status = FilingStatus.SINGLE,
+        subjects = [ sky ],
+        assets = [
+            AssetParameters( 'Cash', AssetClass.CASH, D( '40000' ), D( '40000' ) ),
+            AssetParameters( 'Brokerage', AssetClass.STOCKS, D( '150000' ), D( '120000' ), handle = 'brokerage' ) ],
+        income_items = [
+            IncomeItem( sky, IncomeTaxClass.ORDINARY, Schedule.constant( WindowedAmount( D( '5000' ) ) ),
+                        Recurrence( Duration( 1, TimeUnit.MONTH ) ) ),
+            IncomeItem( sky, IncomeTaxClass.ORDINARY, Schedule.constant( WindowedAmount( D( '30000' ) ) ),
+                        OneTime( date( 2031, 12, 1 ) ) ) ],
+        expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '54000' ) ],
+        events = [ ScheduledExternalDisbursement( date( 2035, 6, 1 ), D( '25000' ) ) ],
+        cash_account = CashAccountParameters(
+            cash_floor = D( '20000' ), cash_ceiling = D( '70000' ),
+            draw_order = [ AssetClass.STOCKS ],
+            sweep_allocation = AssetAllocation( ( ( 'brokerage', D( '1' ) ), ) ) ) )
+
+
 PROFILES = {
     'wage_earner'     : wage_earner,
     'retiree'         : retiree,
     'rental_owner'    : rental_owner,
     'couple_survivor' : couple_survivor,
     'life_events'     : life_events,
+    'gig_worker'      : gig_worker,
 }
 
 
