@@ -115,7 +115,7 @@ def wage_earner() -> ForecastParameters:
         expense_streams = [
             _stream( 'Living', ExpenseTaxClass.LIVING, '70000' ),
             _stream( 'Vacation', ExpenseTaxClass.LIVING, '8000' ) ],
-        expenses = [
+        expense_items = [
             _recurring( 'Property Tax', ExpenseTaxClass.SALT, '9000', Duration( 1, TimeUnit.YEAR ) ) ],
         contributions = [ RetirementContribution( '401k', D( '20000' ), ContributionSource.WAGE ) ],
         cash_account = CashAccountParameters(

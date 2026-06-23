@@ -377,7 +377,7 @@ class BaselineBuilder:
         """Set up the expense-account registry and pre-create an account for every occurrence-based
         item and smooth stream, so the chart is complete from the start."""
         self._expense_accounts = ExpenseAccounts( bookkeeper )
-        for item in self._parameters.expenses:
+        for item in self._parameters.expense_items:
             self._expense_accounts.account_for( item )
             continue
         for stream in self._parameters.expense_streams:
@@ -610,7 +610,7 @@ class Forecast:
         cadence's occurrences in the interval x the per-occurrence amount in effect (inflated
         from the forecast start), posted to the item's account."""
         lines = list()
-        for item in self._parameters.expenses:
+        for item in self._parameters.expense_items:
             clipped = self._clip_to_window( span, item.window )
             if clipped is None:
                 continue

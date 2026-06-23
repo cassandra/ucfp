@@ -48,7 +48,7 @@ def _parameters( granularity ):
         income_streams = [ IncomeStream(
             subject, IncomeTaxClass.SOCIAL_SECURITY,
             Schedule.constant( WindowedAmount( Decimal( '40000' ) ) ) ) ],
-        expenses = [
+        expense_items = [
             ExpenseItem( 'Food', ExpenseTaxClass.LIVING,
                          Schedule.constant( WindowedAmount( Decimal( '1000' ) ) ),
                          Recurrence( Duration( 1, TimeUnit.MONTH ) ), handle = 'food' ),

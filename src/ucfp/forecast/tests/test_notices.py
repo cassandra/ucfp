@@ -102,7 +102,7 @@ class NoticeCatalogTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '5000' ), Decimal( '5000' ) ),
                 AssetParameters( 'Brokerage', AssetClass.STOCKS, Decimal( '500000' ),
                                  Decimal( '500000' ) ) ],
-            expenses      = [ _expense( 'Living', '50000' ) ],
+            expense_items = [ _expense( 'Living', '50000' ) ],
             cash_account  = CashAccountParameters(
                 cash_floor = Decimal( '10000' ), draw_order = [ AssetClass.STOCKS ] ),
         ) ).run()
@@ -126,7 +126,7 @@ class NoticeCatalogTests( unittest.TestCase ):
                 AssetParameters(
                     'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '500000' ), Decimal( '0' ),
                     owner_handle = 'subject-a' ) ],
-            expenses      = [ _expense( 'Living', '60000' ) ],
+            expense_items = [ _expense( 'Living', '60000' ) ],
             cash_account  = CashAccountParameters(
                 cash_floor = Decimal( '10000' ), draw_order = [ AssetClass.PRETAX_RETIREMENT ] ),
         ) ).run()
@@ -144,7 +144,7 @@ class NoticeCatalogTests( unittest.TestCase ):
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
-            expenses      = [ _expense( 'Living', '50000' ) ],
+            expense_items = [ _expense( 'Living', '50000' ) ],
         ) ).run()
         shortfall = _notice( result, NoticeKind.CASH_SHORTFALL )
         self.assertEqual( shortfall.severity, NoticeSeverity.WARNING )

@@ -457,7 +457,7 @@ class ForecastParameters:
     economic_outlook  : EconomicOutlook                      = field( default_factory = EconomicOutlook )
     income_streams    : list[ IncomeStream ]                 = field( default_factory = list )
     income_items      : list[ IncomeItem ]                   = field( default_factory = list )
-    expenses          : list[ ExpenseItem ]                  = field( default_factory = list )
+    expense_items     : list[ ExpenseItem ]                  = field( default_factory = list )
     expense_streams   : list[ ExpenseStream ]                = field( default_factory = list )
     loans             : list[ LoanParameters ]               = field( default_factory = list )
     contributions     : list[ RetirementContribution ]       = field( default_factory = list )
