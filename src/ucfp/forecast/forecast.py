@@ -49,7 +49,7 @@ from ucfp.period.parameters import (
 from ucfp.period.events import PeriodEvent
 from ucfp.period.fiscal_window import EstimatedFiscalWindow, FiscalWindow
 from ucfp.period.period import Period
-from ucfp.period.results import PeriodResult
+from ucfp.period.results import Notice, NoticeKind, NoticeSeverity, PeriodResult
 from ucfp.tax.engine import ContributionKind
 from ucfp.tax.law import TaxLaw
 from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
@@ -484,6 +484,7 @@ class Forecast:
             period_parameters = self._build_period_parameters( span, opening_state, bookkeeper )
             period            = Period( period_parameters )
             period_result     = period.compute( bookkeeper )
+            self._flag_partial_tax_year( span, period_result )
             result.steps.append( ForecastStep( span, period_result ) )
             if period_result.closing_tax_state is not None:
                 opening_state = period_result.closing_tax_state
@@ -759,6 +760,24 @@ class Forecast:
         covered_days = ( year_end - self._parameters.start_date ).days + 1
         year_days = ( year_end - year_start ).days + 1
         return EstimatedFiscalWindow( window, Decimal( covered_days ) / Decimal( year_days ) )
+
+    def _flag_partial_tax_year( self, span : DateSpan, result : PeriodResult ) -> None:
+        """At the last interval of a partial calendar year -- the mid-year first year, or a
+        trailing year ending before December 31 -- raise an INFO Notice that the year's figures are
+        approximate: its tax is a short-period estimate (first year) or goes unsettled (trailing
+        year, no year-close). Raised once, at the year's last interval; full years are silent."""
+        end = span.end_date
+        closes_calendar_year = ( end == date( end.year, 12, 31 ) ) or ( end == self._parameters.end_date )
+        if not closes_calendar_year:
+            return
+        start = self._parameters.start_date
+        starts_partial = ( end.year == start.year ) and ( ( start.month, start.day ) != ( 1, 1 ) )
+        ends_partial = ( end.year == self._parameters.end_date.year ) and (
+            ( self._parameters.end_date.month, self._parameters.end_date.day ) != ( 12, 31 ) )
+        if starts_partial or ends_partial:
+            result.notices.append(
+                Notice( kind = NoticeKind.APPROXIMATE_TAX_YEAR, severity = NoticeSeverity.INFO ) )
+        return
 
     def _retitle_removed_subjects_accounts( self, bookkeeper : Bookkeeper, span : DateSpan ) -> None:
         """Retitle a decedent's accounts to the survivor once the run passes the death year, so

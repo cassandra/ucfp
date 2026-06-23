@@ -18,6 +18,7 @@ from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, IncomeItem, IncomeStream, Subject, WindowedAmount )
+from ucfp.period.results import NoticeKind
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
 
@@ -32,14 +33,14 @@ def _reader( result ):
 
 class MidYearStartTests( unittest.TestCase ):
 
-    def _run( self, start, income_items = None ):
+    def _result( self, start, end = date( 2027, 12, 31 ), income_items = None, granularity = _MONTHLY ):
         subject = Subject( 'A', date( 1980, 1, 1 ), 'a' )
         parameters = ForecastParameters(
             start_date    = start,
-            end_date      = date( 2027, 12, 31 ),
+            end_date      = end,
             filing_status = FilingStatus.SINGLE,
             tax_forecast  = _TAX,
-            granularity   = _MONTHLY,
+            granularity   = granularity,
             subjects      = [ subject ],
             economic_outlook = _NULL,
             assets        = [
@@ -47,7 +48,15 @@ class MidYearStartTests( unittest.TestCase ):
             income_streams = [
                 IncomeStream( subject, IncomeTaxClass.WAGES, Schedule.constant( WindowedAmount( Decimal( '120000' ) ) ) ) ],
             income_items  = income_items or [] )
-        return _reader( Forecast( parameters ).run() )
+        return Forecast( parameters ).run()
+
+    def _run( self, start, income_items = None ):
+        return _reader( self._result( start, income_items = income_items ) )
+
+    def _approximate_years( self, result ):
+        return [ step.span.end_date.year for step in result.steps
+                 for notice in step.result.notices
+                 if notice.kind == NoticeKind.APPROXIMATE_TAX_YEAR ]
 
     def _flow( self, reader, account, year ):
         return reader.ledger.flows( account, start = date( year, 1, 1 ), end = date( year, 12, 31 ) )
@@ -88,6 +97,31 @@ class MidYearStartTests( unittest.TestCase ):
             self._flow( partial, wages, 2026 ), Decimal( '120000' ) * coverage, delta = Decimal( '1' ) )
         # ... but the one-time bonus lands at its full amount
         self.assertEqual( self._flow( partial, ordinary, 2026 ), Decimal( '50000' ) )
+
+    def test_partial_first_year_is_flagged_approximate_once( self ):
+        result = self._result( date( 2026, 4, 1 ), end = date( 2028, 12, 31 ) )
+        # the mid-year first year is flagged once; the full years after it are not
+        self.assertEqual( self._approximate_years( result ), [ 2026 ] )
+
+    def test_trailing_partial_year_is_flagged_approximate( self ):
+        result = self._result( date( 2026, 1, 1 ), end = date( 2028, 6, 30 ) )
+        # a full first year, full middle year, and a trailing partial year (ends June 30)
+        self.assertEqual( self._approximate_years( result ), [ 2028 ] )
+
+    def test_full_calendar_forecast_raises_no_approximate_notice( self ):
+        result = self._result( date( 2026, 1, 1 ), end = date( 2028, 12, 31 ) )
+        self.assertEqual( self._approximate_years( result ), [] )
+
+    def test_partial_first_year_flows_are_granularity_invariant( self ):
+        # the partial year's recurring wage total is the same run at annual or monthly
+        annual = _reader( self._result(
+            date( 2026, 4, 1 ), granularity = Duration( 1, TimeUnit.YEAR ) ) )
+        monthly = _reader( self._result( date( 2026, 4, 1 ) ) )
+        annual_wages = annual.chart.income_account( IncomeTaxClass.WAGES, owner_handle = 'a' )
+        monthly_wages = monthly.chart.income_account( IncomeTaxClass.WAGES, owner_handle = 'a' )
+        self.assertAlmostEqual(
+            self._flow( annual, annual_wages, 2026 ),
+            self._flow( monthly, monthly_wages, 2026 ), delta = Decimal( '0.01' ) )
 
 
 if __name__ == '__main__':
