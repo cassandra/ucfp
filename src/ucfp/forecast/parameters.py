@@ -526,12 +526,11 @@ class ForecastParameters:
 
     def period_spans( self ) -> list[ DateSpan ]:
         """The horizon sliced into `granularity` intervals, calendar-aligned: each calendar year
-        is sliced from its own start, so no interval crosses December 31 -- the tax-year boundary
-        the engine close, COLA indexing, and `year_fraction` proration all rely on. A mid-year
+        is sliced from its own start, so no interval crosses December 31 -- the boundary the
+        tax-year close, COLA indexing, and `year_fraction` proration all rely on. A mid-year
         start gives a partial first year (`[start, Dec 31]`); an `end_date` that is not December 31
         gives a partial last year; within a partial year the final interval clips to the year (or
-        horizon) end. A January-1 start over whole years reproduces plain calendar years, so
-        existing forecasts are unaffected."""
+        horizon) end. A January-1 start over whole years reproduces plain calendar years."""
         spans = list()
         for year in range( self.start_date.year, self.end_date.year + 1 ):
             window_start = max( self.start_date, date( year, 1, 1 ) )
