@@ -22,7 +22,7 @@ from decimal import Decimal
 
 from common.date_window import DateWindow
 from common.rate import Rate
-from common.recurrence import Duration, Recurrence, TimeUnit
+from common.recurrence import Duration, OneTime, Recurrence, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
@@ -34,12 +34,13 @@ from ucfp.forecast.parameters import (
     ExpenseItem,
     ExpenseStream,
     ForecastParameters,
+    IncomeItem,
     IncomeStream,
     LoanParameters,
     PropertyAttributes,
     RetirementContribution,
+    ScheduledExternalReceipt,
     ScheduledRealization,
-    ScheduledWindfall,
     Subject,
     SubjectRemoval,
     SubsidizedHealthCoverage,
@@ -200,8 +201,9 @@ def couple_survivor() -> ForecastParameters:
 
 
 def life_events() -> ForecastParameters:
-    """An early retiree on subsidized health coverage who receives two windfalls. Exercises the
-    ACA premium tax credit (MAGI-sensitive), taxable/non-taxable windfalls, sweep, and draws."""
+    """An early retiree on subsidized health coverage who receives a non-taxable inheritance and a
+    taxable one-time payment. Exercises the ACA premium tax credit (MAGI-sensitive), an external
+    equity receipt, a one-time taxable income, sweep, and draws."""
     drew = Subject( 'Drew', date( 1964, 1, 1 ), 'drew' )
     return _base(
         filing_status = FilingStatus.SINGLE,
@@ -210,11 +212,12 @@ def life_events() -> ForecastParameters:
             AssetParameters( 'Cash', AssetClass.CASH, D( '50000' ), D( '50000' ) ),
             AssetParameters( 'Brokerage', AssetClass.STOCKS, D( '500000' ), D( '350000' ), handle = 'brokerage' ) ],
         income_streams = [ _income( drew, IncomeTaxClass.ORDINARY, '20000' ) ],
+        income_items = [ IncomeItem(
+            drew, IncomeTaxClass.ORDINARY, Schedule.constant( WindowedAmount( D( '50000' ) ) ),
+            OneTime( date( 2032, 6, 1 ) ) ) ],
         expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '70000' ) ],
         health_coverage = SubsidizedHealthCoverage( DateWindow( end = date( 2028, 12, 31 ) ), 1, D( '12000' ) ),
-        events = [
-            ScheduledWindfall( date( 2030, 6, 1 ), D( '100000' ) ),
-            ScheduledWindfall( date( 2032, 6, 1 ), D( '50000' ), income_tax_class = IncomeTaxClass.ORDINARY ) ],
+        events = [ ScheduledExternalReceipt( date( 2030, 6, 1 ), D( '100000' ) ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '20000' ), cash_ceiling = D( '80000' ),
             draw_order = [ AssetClass.STOCKS ],

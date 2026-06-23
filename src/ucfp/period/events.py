@@ -47,22 +47,42 @@ class Transfer( PeriodEvent ):
 
 
 @dataclass( frozen = True )
-class Windfall( PeriodEvent ):
-    """Value received from outside landing in cash -- a one-time inflow (lottery, settlement,
-    gift, inheritance), the non-recurring counterpart of an income stream. The cash account is
-    debited and `credit_account` credited: a revenue account when the windfall is taxable (the
-    engine then taxes it at year-close), or the External Receipts equity account when it is
-    not (gifts, US inheritances), which the engine never sees."""
+class ExternalReceipt( PeriodEvent ):
+    """Non-taxable value received from outside landing in cash -- a gift or a US inheritance
+    (non-taxable to the recipient, the estate tax being the estate's). The cash account is debited
+    and the External Receipts `equity_account` credited; the tax engine never sees it. Taxable
+    one-time income (a lottery win, a settlement) is an `IncomeItem` with a `OneTime` cadence, not
+    this event."""
 
     event_date     : date
     cash_account   : Account
-    credit_account : Account
+    equity_account : Account
     amount         : Decimal
 
     def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
         return bookkeeper.record(
             self.event_date,
-            [ ( self.cash_account, -self.amount ), ( self.credit_account, self.amount ) ],
+            [ ( self.cash_account, -self.amount ), ( self.equity_account, self.amount ) ],
+            description = description,
+        )
+
+
+@dataclass( frozen = True )
+class ExternalDisbursement( PeriodEvent ):
+    """Non-deductible value given away to outside, leaving cash -- a personal gift to family, say.
+    The mirror of `ExternalReceipt`: the cash account is credited and the External Disbursements
+    `equity_account` debited, so net worth drops by the amount with no expense recognized. A
+    deductible charitable gift is an expense (`ExpenseTaxClass.CHARITABLE`), not this event."""
+
+    event_date     : date
+    cash_account   : Account
+    equity_account : Account
+    amount         : Decimal
+
+    def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
+        return bookkeeper.record(
+            self.event_date,
+            [ ( self.cash_account, self.amount ), ( self.equity_account, -self.amount ) ],
             description = description,
         )
 

@@ -30,7 +30,8 @@ from ucfp.accounts.enums import (
 )
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.schemas import Handle
-from ucfp.period.events import Purchase, PeriodEvent, Realization, Transfer, Windfall
+from ucfp.period.events import (
+    ExternalDisbursement, ExternalReceipt, PeriodEvent, Purchase, Realization, Transfer )
 from ucfp.period.parameters import DateSpan
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.enums import FilingStatus
@@ -331,29 +332,35 @@ class ScheduledRealization( ScheduledEvent ):
 
 
 @dataclass( frozen = True )
-class ScheduledWindfall( ScheduledEvent ):
-    """A one-time receipt of value from outside, landing in cash -- the non-recurring
-    counterpart of an income stream. `income_tax_class` classifies it the way a stream or
-    expense item carries its tax class: set (e.g. `ORDINARY`) for a taxable windfall (lottery,
-    settlement), which credits that revenue account and is taxed at year-close; None for a
-    non-taxable receipt (a gift, or a US inheritance -- which is non-taxable to the recipient,
-    estate tax being the estate's), which credits the External Receipts equity account and is
-    never taxed. A recipient-side inheritance/estate tax regime (some jurisdictions) is not
-    modeled."""
+class ScheduledExternalReceipt( ScheduledEvent ):
+    """A one-time receipt of non-taxable value from outside, landing in cash -- a gift, or a US
+    inheritance (non-taxable to the recipient, the estate tax being the estate's). Credits the
+    External Receipts equity account and is never taxed. Taxable one-time income (a lottery win, a
+    settlement) is instead a one-time `IncomeItem` (a `OneTime` cadence), crediting a revenue
+    account and taxed at year-close. A recipient-side inheritance/estate tax regime (some
+    jurisdictions) is not modeled."""
 
-    event_date       : date
-    amount           : Decimal
-    income_tax_class : Optional[ IncomeTaxClass ] = None
+    event_date : date
+    amount     : Decimal
 
     def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
-        if self.income_tax_class is None:
-            credit_account = chart.system_account( SystemAccountRole.EXTERNAL_RECEIPTS )
-        else:
-            credit_account = chart.income_account( self.income_tax_class )
-            if credit_account is None:
-                raise MissingAccountError(
-                    f'No revenue account for income tax-class {self.income_tax_class.label}.' )
-        return Windfall( self.event_date, self._cash( chart ), credit_account, self.amount )
+        equity = chart.system_account( SystemAccountRole.EXTERNAL_RECEIPTS )
+        return ExternalReceipt( self.event_date, self._cash( chart ), equity, self.amount )
+
+
+@dataclass( frozen = True )
+class ScheduledExternalDisbursement( ScheduledEvent ):
+    """A one-time gift of non-deductible value to outside, leaving cash -- a personal gift to
+    family, say. The mirror of `ScheduledExternalReceipt`: debits the External Disbursements
+    equity account, reducing net worth with no expense recognized and no tax effect. A deductible
+    charitable gift is instead an `ExpenseItem` with `ExpenseTaxClass.CHARITABLE`."""
+
+    event_date : date
+    amount     : Decimal
+
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
+        equity = chart.system_account( SystemAccountRole.EXTERNAL_DISBURSEMENTS )
+        return ExternalDisbursement( self.event_date, self._cash( chart ), equity, self.amount )
 
 
 @dataclass( frozen = True )

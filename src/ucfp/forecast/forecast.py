@@ -61,7 +61,6 @@ from .parameters import (
     ExpenseStream,
     ForecastParameters,
     ScheduledRealization,
-    ScheduledWindfall,
     Subject,
     resolve_household_size,
 )
@@ -231,7 +230,6 @@ class BaselineBuilder:
         self._seed_opening_balances( bookkeeper, holdings )
         self._create_income_accounts( bookkeeper )
         self._create_asset_income_accounts( bookkeeper )
-        self._create_windfall_income_accounts( bookkeeper )
         self._create_expense_accounts( bookkeeper )
         self._create_tax_accounts( bookkeeper )
         self._resolve_draw_priority( bookkeeper )
@@ -411,23 +409,6 @@ class BaselineBuilder:
             income_classes.add( asset.asset_class.distribution_income_class )
             income_classes.add( asset.asset_class.realized_gain_income_class )
         income_classes.discard( None )
-        for income_class in sorted( income_classes, key = lambda klass : klass.name ):
-            if chart.income_account( income_class ) is None:
-                bookkeeper.add_account(
-                    Account( name = income_class.label, parent = revenue_root,
-                             income_tax_class = income_class ) )
-            continue
-        return
-
-    def _create_windfall_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
-        """Create a revenue account for each income class a taxable windfall credits, if one
-        does not already exist, so a taxable windfall has somewhere to post (non-taxable
-        windfalls credit the External Receipts equity account, already in the chart)."""
-        chart = bookkeeper.chart
-        revenue_root = chart.root( AccountType.REVENUE )
-        income_classes = {
-            event.income_tax_class for event in self._parameters.events
-            if isinstance( event, ScheduledWindfall ) and ( event.income_tax_class is not None ) }
         for income_class in sorted( income_classes, key = lambda klass : klass.name ):
             if chart.income_account( income_class ) is None:
                 bookkeeper.add_account(
@@ -668,8 +649,8 @@ class Forecast:
     def _events_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list[ PeriodEvent ]:
         """Resolve the scheduled events occurring in this interval into PeriodEvents, binding
         their holding handles to the running accounts (and via the chart the cash hub and the
-        revenue/equity accounts a windfall credits). Order is preserved, so same-interval events
-        apply as authored."""
+        equity accounts an external receipt/disbursement moves). Order is preserved, so
+        same-interval events apply as authored."""
         chart = bookkeeper.chart
         return [
             event.to_period_event( self._baseline.holding_by_handle, chart )
