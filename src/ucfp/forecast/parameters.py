@@ -469,13 +469,12 @@ class ForecastParameters:
     initial_tax_state : object                               = None
 
     def __post_init__( self ):
-        """Reject inputs that would silently mismodel. Permanent: at most two filing subjects (a
-        return has at most two adults); at most one cash hub (the funding/sweep model keys on a
-        single CASH holding); a granularity that divides the year evenly and a loan term it divides
-        evenly, so period counts and amortization are exact. Temporary guard: the forecast must
-        start on January 1 -- mid-year starts are not yet supported (the per-year inflation/COLA
-        and tax-year indexing currently assume calendar-aligned periods), and this guard is removed
-        once they are."""
+        """Reject inputs that would silently mismodel. At most two filing subjects (a return has
+        at most two adults); at most one cash hub (the funding/sweep model keys on a single CASH
+        holding); a granularity that divides the year evenly and a loan term it divides evenly, so
+        period counts and amortization are exact. The forecast must start on the first of a month
+        -- `period_spans` is calendar-aligned, so any first-of-month start works (a mid-year start
+        yields a partial first year, taxed by estimate)."""
         if len( self.subjects ) > 2:
             raise ValueError(
                 f'At most two filing subjects are supported; got {len( self.subjects )}.' )
@@ -492,10 +491,9 @@ class ForecastParameters:
                 raise ValueError(
                     f'Loan "{loan.name}" term ({loan.term.months()} months) is not a whole '
                     f'number of {period_months}-month periods.' )
-        if ( self.start_date.month, self.start_date.day ) != ( 1, 1 ):
+        if self.start_date.day != 1:
             raise ValueError(
-                'Mid-year forecast starts are not yet supported; the forecast must start on '
-                f'January 1. Got {self.start_date}.' )
+                f'A forecast must start on the first of a month; got {self.start_date}.' )
         return
 
     def earliest_removal_year( self ) -> Optional[ int ]:
@@ -527,13 +525,22 @@ class ForecastParameters:
             for removal in self.subject_removals )
 
     def period_spans( self ) -> list[ DateSpan ]:
-        """The horizon sliced into consecutive `granularity` intervals (the last truncated
-        to `end_date`). Yearly by default; monthly when the granularity is a month."""
-        spans  = list()
-        cursor = self.start_date
-        while cursor <= self.end_date:
-            following = self.granularity.add_to( cursor )
-            spans.append( DateSpan( cursor, min( following - timedelta( days = 1 ), self.end_date ) ) )
-            cursor = following
+        """The horizon sliced into `granularity` intervals, calendar-aligned: each calendar year
+        is sliced from its own start, so no interval crosses December 31 -- the tax-year boundary
+        the engine close, COLA indexing, and `year_fraction` proration all rely on. A mid-year
+        start gives a partial first year (`[start, Dec 31]`); an `end_date` that is not December 31
+        gives a partial last year; within a partial year the final interval clips to the year (or
+        horizon) end. A January-1 start over whole years reproduces plain calendar years, so
+        existing forecasts are unaffected."""
+        spans = list()
+        for year in range( self.start_date.year, self.end_date.year + 1 ):
+            window_start = max( self.start_date, date( year, 1, 1 ) )
+            window_end   = min( self.end_date, date( year, 12, 31 ) )
+            cursor = window_start
+            while cursor <= window_end:
+                following = self.granularity.add_to( cursor )
+                spans.append( DateSpan( cursor, min( following - timedelta( days = 1 ), window_end ) ) )
+                cursor = following
+                continue
             continue
         return spans
