@@ -44,6 +44,15 @@ class OrganizationManager( models.Manager ):
         user = get_user_model().objects.create_user( email = email )
         return self.create_for_owner( user, name )
 
+    def create_default_for_user( self, user : UserType ) -> 'Organization':
+        """The organization a user owns by default when they have none, named from their uuid
+        (deliberately not personal data such as an email).
+
+        The single home for that naming policy, reusable wherever a user must be auto-provisioned
+        an organization -- not encoded by the caller.
+        """
+        return self.create_for_owner( user, f'user-{user.uuid}' )
+
 
 class OrganizationMemberManager( models.Manager ):
 

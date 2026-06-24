@@ -1,0 +1,48 @@
+"""Run a forecast and capture it as a `ProjectionRunRecord`.
+
+The composition point that ties the layers together: materialize the user's Profile + Scenario
++ frame into engine parameters, run the engine, persist the books through the accounts
+repository, and record the inputs and non-books result as a coherent, immutable package.
+"""
+from common.dataclass_json import to_json_data
+
+from organization.models import Organization
+
+from ucfp.accounts.repository import BooksOfAccountRepository
+from ucfp.forecast.forecast import Forecast
+from ucfp.profile.schemas import Profile
+from ucfp.scenario.schemas import Scenario
+
+from .materialization import ForecastFrame, materialize
+from .models import ProjectionRunRecord
+from .schemas import NoticeRecord, ProjectionResult, ProjectionRun, StepResult
+
+
+def run_and_capture(
+        organization: Organization, profile: Profile, scenario: Scenario,
+        frame: ForecastFrame, label: str ) -> ProjectionRunRecord:
+    """Materialize, run, persist the books, and capture the run as a `ProjectionRunRecord`."""
+    parameters   = materialize( profile, scenario, frame )
+    result       = Forecast( parameters ).run()
+    books_record = BooksOfAccountRepository().save( result.books, organization )
+    captured     = ProjectionRun(
+        profile = profile, scenario = scenario, frame = frame, result = _summarize( result ) )
+    return ProjectionRunRecord.objects.create(
+        organization = organization, books = books_record, label = label,
+        data = to_json_data( captured ) )
+
+
+def _summarize( result ) -> ProjectionResult:
+    """The non-books result data worth persisting (figures derivable from the books are not)."""
+    return ProjectionResult(
+        stopped_early = result.stopped_early,
+        steps = [ _step( step ) for step in result.steps ] )
+
+
+def _step( step ) -> StepResult:
+    return StepResult(
+        start_date  = step.span.start_date,
+        end_date    = step.span.end_date,
+        is_depleted = step.result.is_depleted,
+        notices     = [ NoticeRecord( notice.kind, notice.severity, notice.amount )
+                        for notice in step.result.notices ] )

@@ -1,0 +1,24 @@
+{% extends "pages/base.html" %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-4">Scenario</h1>
+  <form method="post">
+    {% csrf_token %}
+
+    <h2 class="h4 mt-4">External factors</h2>
+    {{ form.factors.as_p }}
+
+    <h2 class="h4 mt-4">Retirement timing</h2>
+    {{ form.timing.as_p }}
+
+    <h2 class="h4 mt-4">Lifestyle timeline</h2>
+    {{ form.segments.management_form }}
+    {% for segment in form.segments %}
+      <fieldset class="border rounded p-3 mb-2">{{ segment.as_p }}</fieldset>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary mt-3">Save scenario</button>
+  </form>
+</div>
+{% endblock %}

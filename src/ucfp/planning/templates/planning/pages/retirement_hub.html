@@ -1,0 +1,38 @@
+{% extends "pages/base.html" %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-4">Retirement Planning</h1>
+
+  {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
+
+  <p>
+    <a href="{% url 'profile_home' %}" class="btn btn-outline-secondary btn-sm">Edit profile</a>
+    <a href="{% url 'scenario_home' %}" class="btn btn-outline-secondary btn-sm">Edit / new scenario</a>
+  </p>
+
+  {% if has_profile and has_scenario %}
+  <form method="post" class="mt-3">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-primary">Run forecast</button>
+  </form>
+  {% else %}
+  <p class="text-muted mt-3">Set up a profile and create a scenario to run a forecast.</p>
+  {% endif %}
+
+  <h2 class="h4 mt-5">Past runs</h2>
+  {% if runs %}
+  <ul>
+    {% for run in runs %}
+    <li>
+      <a href="{% url 'run_results' run.uuid %}">{{ run.label }}</a>
+      &mdash; {{ run.created_datetime|date:"Y-m-d H:i" }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">No runs yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

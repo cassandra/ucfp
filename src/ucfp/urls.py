@@ -34,6 +34,10 @@ urlpatterns = [
 
     path( 'user/', include( 'user.urls' )),
 
+    path( 'profile/', include( 'ucfp.profile.urls' )),
+    path( 'scenario/', include( 'ucfp.scenario.urls' )),
+    path( 'planning/', include( 'ucfp.planning.urls' )),
+
     # Custom error pages
     path( '400.html', views.bad_request_response, name = 'bad_request' ),
     path( '403.html', views.not_authorized_response, name = 'not_authorized' ),

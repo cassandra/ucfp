@@ -1,0 +1,21 @@
+{% extends "pages/base.html" %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-4">Your Profile</h1>
+  <form method="post">
+    {% csrf_token %}
+
+    <h2 class="h4 mt-4">People</h2>
+    {{ form.people.as_p }}
+
+    <h2 class="h4 mt-4">What you own</h2>
+    {{ form.holdings.management_form }}
+    {% for asset in form.holdings %}
+      <fieldset class="border rounded p-3 mb-2">{{ asset.as_p }}</fieldset>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary mt-3">Save profile</button>
+  </form>
+</div>
+{% endblock %}
