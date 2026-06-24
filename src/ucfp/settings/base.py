@@ -97,6 +97,10 @@ INSTALLED_APPS = [
     'ucfp.period',
     'ucfp.forecast',
     'ucfp.tax',
+    'ucfp.parameter_sets',
+    'ucfp.profile',
+    'ucfp.scenario',
+    'ucfp.planning',
     'ucfp.environment',
 ]
 

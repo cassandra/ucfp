@@ -12,5 +12,8 @@ python manage.py migrate --noinput
 echo "Creating superuser and groups..."
 python manage.py bootstrap
 
+echo "Seeding parameters..."
+python manage.py seed_parameter_sets
+
 echo "Starting supervisord..."
 exec "$@"

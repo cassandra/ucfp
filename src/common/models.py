@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -24,6 +25,24 @@ class TimestampedModel( models.Model ):
         auto_now = True,
         blank = True,
     )
+
+    class Meta:
+        abstract = True
+
+
+class JsonDocumentModel( TimestampedModel ):
+    """Abstract base for a record whose content is a single JSON document.
+
+    Adds a stable external `uuid`, a user-facing `label`, and a `data` JSONField holding the
+    whole serialized payload, on top of TimestampedModel's timestamps. Ownership is left to
+    the concrete model (it is domain-specific), as is any typed access to `data`: this base
+    is dumb storage, while the typed aggregate and its (de)serialization live with the
+    owning app.
+    """
+
+    uuid = models.UUIDField( default = uuid.uuid4, unique = True, editable = False )
+    label = models.CharField( max_length = 255 )
+    data = models.JSONField( default = dict )
 
     class Meta:
         abstract = True

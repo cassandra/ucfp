@@ -1,0 +1,35 @@
+{% extends "pages/base.html" %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-2">{{ record.label }}</h1>
+  <p>
+    {% if stopped_early %}
+      <span class="text-danger fw-bold">Money ran out before the horizon.</span>
+    {% else %}
+      <span class="text-success fw-bold">Money lasted through the horizon.</span>
+    {% endif %}
+  </p>
+
+  <h2 class="h4 mt-4">Net worth by year</h2>
+  <table class="table table-sm w-auto">
+    <thead><tr><th>Year</th><th class="text-end">Net worth</th></tr></thead>
+    <tbody>
+      {% for year, net_worth in net_worth_rows %}
+      <tr><td>{{ year }}</td><td class="text-end">{{ net_worth|floatformat:0 }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if notices %}
+  <h2 class="h4 mt-4">Notices</h2>
+  <ul>
+    {% for year, kind, severity, amount in notices %}
+    <li>{{ year }}: {{ kind }} ({{ severity }}){% if amount %} &mdash; {{ amount|floatformat:0 }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <a href="{% url 'retirement_planning' %}" class="btn btn-outline-secondary mt-3">Back to planning</a>
+</div>
+{% endblock %}

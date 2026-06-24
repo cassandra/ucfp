@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from django.http import HttpRequest
 
@@ -35,12 +36,20 @@ class SessionState:
     AppConst (see ucfp/environment), not read from the session client-side.
     """
 
-    # No session-backed fields yet -- see the docstring for how to add one.
+    # The active organization for the request, by uuid (resolved/persisted by the
+    # `ensure_organization` view decorator). String form, since the session is JSON-backed.
+    current_organization_uuid : Optional[ str ] = None
+
+    # The scenario the user is currently working on, by uuid -- the scenario pages select it
+    # (many scenarios coexist per organization, unlike the single latest profile).
+    current_scenario_uuid : Optional[ str ] = None
 
     def to_session( self, request : HttpRequest ):
         """Write this state back into the session (extend as fields are added)."""
         if not hasattr( request, 'session' ):
             return
+        request.session[ 'current_organization_uuid' ] = self.current_organization_uuid
+        request.session[ 'current_scenario_uuid' ] = self.current_scenario_uuid
         return
 
     @staticmethod
@@ -48,4 +57,6 @@ class SessionState:
         """Build a SessionState from the request's session, with safe defaults."""
         if not request or not hasattr( request, 'session' ):
             return SessionState()
-        return SessionState()
+        return SessionState(
+            current_organization_uuid = request.session.get( 'current_organization_uuid' ),
+            current_scenario_uuid = request.session.get( 'current_scenario_uuid' ) )
