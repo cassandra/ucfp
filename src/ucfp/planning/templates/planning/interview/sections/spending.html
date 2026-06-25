@@ -1,0 +1,15 @@
+{% comment %}
+The spending L0 pane: a presumed annual total per applicable category, from the curated catalog.
+Read-only here -- the user accepts the defaults and drills into a category to adjust the individual
+expenses (a later level).
+{% endcomment %}
+<p class="text-muted">Your spending by category, using typical values. You'll be able to adjust the
+  individual expenses next.</p>
+<table class="table table-sm w-auto">
+  <thead><tr><th>Category</th><th class="text-end">Per year</th></tr></thead>
+  <tbody>
+    {% for category, total in form.category_totals %}
+    <tr><td>{{ category.label }}</td><td class="text-end">{{ total|floatformat:0 }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

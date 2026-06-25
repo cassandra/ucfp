@@ -33,6 +33,10 @@ from ucfp.tax.enums import FilingStatus
 PRIMARY_SUBJECT_HANDLE = 'subject'
 PARTNER_SUBJECT_HANDLE = 'partner'
 
+# The residence asset and rent obligation the home section mints, shared with the spending section.
+RESIDENCE_ASSET_HANDLE = 'residence'
+RENT_OBLIGATION_HANDLE = 'rent'
+
 
 # --- People ---------------------------------------------------------------
 

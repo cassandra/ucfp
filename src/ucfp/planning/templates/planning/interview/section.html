@@ -11,7 +11,11 @@ a section needs custom layout or a drill-down, at which point it gets its own pa
         action="{% url 'interview_section' section=current_section.key %}"
         data-async="#{{ section_target }}">
     {% csrf_token %}
+    {% if current_section.fields_template %}
+    {% include current_section.fields_template %}
+    {% else %}
     {{ form.as_p }}
+    {% endif %}
     <button type="submit" class="btn btn-primary mt-3">Continue</button>
   </form>
 </div>

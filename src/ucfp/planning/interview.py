@@ -21,10 +21,13 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.profile.schemas import (
-    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, AssetProfile, CommittedObligation,
-    GovernmentPensionEntitlement, LoanProfile, Profile, SalaryEntitlement, SubjectProfile )
+    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
+    AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile, Profile,
+    SalaryEntitlement, SubjectProfile )
 from ucfp.scenario.schemas import LoanPrepayment, RetirementTiming, Scenario
 from ucfp.tax.enums import FilingStatus
+
+from .spending import SpendingForm
 
 
 class Aggregate( Enum ):
@@ -43,6 +46,7 @@ class Section:
     title: str
     aggregates: tuple = ( Aggregate.PROFILE, )
     form: Optional[ type ] = None
+    fields_template: Optional[ str ] = None
 
 
 class SubjectsForm( forms.Form ):
@@ -178,9 +182,9 @@ class HomeForm( forms.Form ):
     _RENT = 'rent'
     _TENURE_CHOICES = ( ( _OWN, 'Own' ), ( _RENT, 'Rent' ) )
 
-    _RESIDENCE_HANDLE = 'residence'
+    _RESIDENCE_HANDLE = RESIDENCE_ASSET_HANDLE
     _MORTGAGE_HANDLE  = 'mortgage'
-    _RENT_HANDLE      = 'rent'
+    _RENT_HANDLE      = RENT_OBLIGATION_HANDLE
 
     tenure         = forms.ChoiceField( label = 'The residence is', choices = _TENURE_CHOICES )
     home_value     = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
@@ -501,7 +505,8 @@ SECTIONS = [
     Section( 'home'        , 'Home', ( Aggregate.PROFILE, Aggregate.SCENARIO ), HomeForm ),
     Section( 'accounts'    , 'Accounts', form = AccountsForm ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.SCENARIO ), IncomeForm ),
-    Section( 'spending'    , 'Spending' ),
+    Section( 'spending'    , 'Spending', ( Aggregate.SCENARIO, ), SpendingForm,
+             fields_template = 'planning/interview/sections/spending.html' ),
     Section( 'events'      , 'Plans & events' ),
     Section( 'assumptions' , 'Assumptions' ),
 ]
