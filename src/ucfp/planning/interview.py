@@ -23,7 +23,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, AssetProfile, CommittedObligation,
     LoanProfile, Profile, SubjectProfile )
-from ucfp.scenario.schemas import RetirementTiming, Scenario
+from ucfp.scenario.schemas import LoanPrepayment, RetirementTiming, Scenario
 from ucfp.tax.enums import FilingStatus
 
 
@@ -37,10 +37,11 @@ class Aggregate( Enum ):
 @dataclass( frozen = True )
 class Section:
     """One step of the interview: a stable `key` (its URL segment), a user-facing `title`, the
-    `aggregate` it edits, and the `form` that drives it (None until the section is built)."""
+    `aggregates` it writes (the Profile, the Scenario, or both), and the `form` that drives it
+    (None until the section is built)."""
     key: str
     title: str
-    aggregate: Aggregate = Aggregate.PROFILE
+    aggregates: tuple = ( Aggregate.PROFILE, )
     form: Optional[ type ] = None
 
 
@@ -84,9 +85,10 @@ class SubjectsForm( forms.Form ):
                 "Add the partner's name and birthdate, or clear the partner option." )
         return cleaned
 
-    def apply_to( self, profile : Profile ) -> Profile:
-        return replace(
+    def apply( self, profile : Profile, scenario : Scenario ):
+        updated = replace(
             profile, subjects = self._subjects(), filing_status = self._filing_status() )
+        return updated, scenario
 
     def _subjects( self ) -> list:
         cleaned  = self.cleaned_data
@@ -138,8 +140,8 @@ class RetirementForm( forms.Form ):
             field.initial = existing.retirement_date.year - subject.birthdate.year
         return field
 
-    def apply_to( self, scenario : Scenario ) -> Scenario:
-        return replace( scenario, timing = self._merged_timing() )
+    def apply( self, profile : Profile, scenario : Scenario ):
+        return profile, replace( scenario, timing = self._merged_timing() )
 
     def _merged_timing( self ) -> list:
         timing = list()
@@ -193,14 +195,16 @@ class HomeForm( forms.Form ):
         label = 'Loan term (years)', required = False, min_value = 1 )
     mortgage_current_balance = forms.DecimalField(
         label = 'Balance owed now (optional)', required = False, min_value = 0 )
+    mortgage_extra_principal = forms.DecimalField(
+        label = 'Extra principal per month (optional)', required = False, min_value = 0 )
     monthly_rent = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
 
     def __init__( self, data = None, *, profile = None, scenario = None ):
-        initial = self._initial( profile ) if profile is not None else None
+        initial = self._initial( profile, scenario ) if profile is not None else None
         super().__init__( data, initial = initial )
 
     @classmethod
-    def _initial( cls, profile : Profile ) -> dict:
+    def _initial( cls, profile : Profile, scenario : Scenario ) -> dict:
         rent = cls._find( profile.obligations, cls._RENT_HANDLE )
         if rent is not None:
             return { 'tenure': cls._RENT, 'monthly_rent': rent.amount }
@@ -211,14 +215,15 @@ class HomeForm( forms.Form ):
             'tenure': cls._OWN, 'home_value': residence.opening_value,
             'purchase_price': residence.cost_basis,
         }
-        initial.update( cls._mortgage_initial( cls._find( profile.loans, cls._MORTGAGE_HANDLE ) ) )
+        mortgage = cls._find( profile.loans, cls._MORTGAGE_HANDLE )
+        initial.update( cls._mortgage_initial( mortgage, scenario ) )
         return initial
 
-    @staticmethod
-    def _mortgage_initial( mortgage ) -> dict:
+    @classmethod
+    def _mortgage_initial( cls, mortgage, scenario : Scenario ) -> dict:
         if mortgage is None:
             return dict()
-        return {
+        initial = {
             'has_mortgage'             : True,
             'mortgage_origination'     : mortgage.origination_date,
             'mortgage_original_amount' : mortgage.original_amount,
@@ -226,6 +231,16 @@ class HomeForm( forms.Form ):
             'mortgage_term_years'      : mortgage.original_term.months() // 12,
             'mortgage_current_balance' : mortgage.current_balance,
         }
+        prepayment = cls._prepayment_for( scenario )
+        if prepayment is not None:
+            initial[ 'mortgage_extra_principal' ] = prepayment.annual_amount / 12
+        return initial
+
+    @classmethod
+    def _prepayment_for( cls, scenario : Scenario ):
+        prepayments = scenario.prepayments if scenario is not None else []
+        return next(
+            ( item for item in prepayments if item.loan_handle == cls._MORTGAGE_HANDLE ), None )
 
     def clean( self ):
         cleaned = super().clean()
@@ -244,12 +259,15 @@ class HomeForm( forms.Form ):
         if self.cleaned_data.get( field ) is None:
             self.add_error( field, message )
 
-    def apply_to( self, profile : Profile ) -> Profile:
-        return replace(
+    def apply( self, profile : Profile, scenario : Scenario ):
+        updated_profile = replace(
             profile,
             assets      = self._merged( profile.assets, self._RESIDENCE_HANDLE, self._residence() ),
             loans       = self._merged( profile.loans, self._MORTGAGE_HANDLE, self._mortgage() ),
             obligations = self._merged( profile.obligations, self._RENT_HANDLE, self._rent() ) )
+        updated_scenario = replace(
+            scenario, prepayments = self._merged_prepayments( scenario.prepayments ) )
+        return updated_profile, updated_scenario
 
     def _residence( self ) -> list:
         cleaned = self.cleaned_data
@@ -281,6 +299,17 @@ class HomeForm( forms.Form ):
             handle = self._RENT_HANDLE, name = 'Rent', amount = cleaned[ 'monthly_rent' ],
             cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ]
 
+    def _prepayment( self ) -> list:
+        cleaned = self.cleaned_data
+        extra   = cleaned.get( 'mortgage_extra_principal' )
+        if cleaned.get( 'tenure' ) != self._OWN or not cleaned.get( 'has_mortgage' ) or not extra:
+            return []
+        return [ LoanPrepayment( loan_handle = self._MORTGAGE_HANDLE, annual_amount = extra * 12 ) ]
+
+    def _merged_prepayments( self, existing : list ) -> list:
+        kept = [ item for item in existing if item.loan_handle != self._MORTGAGE_HANDLE ]
+        return kept + self._prepayment()
+
     @staticmethod
     def _merged( existing : list, handle : str, replacement : list ) -> list:
         return [ item for item in existing if item.handle != handle ] + replacement
@@ -294,8 +323,8 @@ class HomeForm( forms.Form ):
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm ),
-    Section( 'retirement'  , 'Retirement timing', Aggregate.SCENARIO, RetirementForm ),
-    Section( 'home'        , 'Home', form = HomeForm ),
+    Section( 'retirement'  , 'Retirement timing', ( Aggregate.SCENARIO, ), RetirementForm ),
+    Section( 'home'        , 'Home', ( Aggregate.PROFILE, Aggregate.SCENARIO ), HomeForm ),
     Section( 'accounts'    , 'Accounts' ),
     Section( 'income'      , 'Income' ),
     Section( 'spending'    , 'Spending' ),

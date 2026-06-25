@@ -155,19 +155,19 @@ class InterviewView( View ):
     def _load( organization, section ):
         profile  = load_profile( latest_profile( organization ) or create_profile( organization ) )
         scenario = None
-        if section.aggregate is Aggregate.SCENARIO:
+        if Aggregate.SCENARIO in section.aggregates:
             scenario = load_scenario(
                 latest_scenario( organization ) or create_scenario( organization ) )
         return profile, scenario
 
     @staticmethod
     def _store( organization, section, form, profile, scenario ):
-        if section.aggregate is Aggregate.SCENARIO:
-            save_scenario( latest_scenario( organization ), form.apply_to( scenario ) )
-            return profile
-        updated = form.apply_to( profile )
-        save_profile( organization, updated )
-        return updated
+        new_profile, new_scenario = form.apply( profile, scenario )
+        if Aggregate.PROFILE in section.aggregates:
+            save_profile( organization, new_profile )
+        if Aggregate.SCENARIO in section.aggregates:
+            save_scenario( latest_scenario( organization ), new_scenario )
+        return new_profile
 
     def _swap( self, request, sections, section, form ):
         context = self._context( sections, section, form )

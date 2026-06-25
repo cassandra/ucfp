@@ -87,6 +87,17 @@ class Contribution:
     through: Optional[ date ] = None
 
 
+# --- Loan paydown ---------------------------------------------------------
+
+@dataclass( frozen = True )
+class LoanPrepayment:
+    """A planned recurring extra-principal payment on a loan, beyond its scheduled payment, paying
+    it down faster. `loan_handle` targets a profile loan; `annual_amount` is the extra principal
+    per year (mirrors the engine's `LoanParameters.annual_extra_principal`)."""
+    loan_handle: str
+    annual_amount: Decimal
+
+
 # --- Drawdown -------------------------------------------------------------
 
 @dataclass( frozen = True )
@@ -149,6 +160,8 @@ class Scenario:
     lifestyle: Optional[ LifestylePlan ] = None
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
+    # Loan paydown
+    prepayments: list[ LoanPrepayment ] = field( default_factory = list )
     # Drawdown
     drawdown: Optional[ DrawdownPolicy ] = None
     # Planned moves

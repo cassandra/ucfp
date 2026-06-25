@@ -74,7 +74,7 @@ def materialize(
             profile, scenario, subjects_by_handle, government_pension ),
         expense_items    = _committed_obligations( profile ) + lifestyle_items,
         expense_streams  = lifestyle_streams,
-        loans            = _loans( profile, frame.start_date ),
+        loans            = _loans( profile, scenario, frame.start_date ),
         contributions    = _contributions( scenario ),
         events           = _events( scenario ),
         cash_account     = _cash_account( scenario ),
@@ -117,14 +117,18 @@ def _cost_basis( asset : AssetProfile ) -> Decimal:
     return asset.opening_value
 
 
-def _loans( profile : Profile, as_of : date ) -> list[ LoanParameters ]:
-    return [ _loan( loan, as_of ) for loan in profile.loans ]
+def _loans( profile : Profile, scenario : Scenario, as_of : date ) -> list[ LoanParameters ]:
+    extra = { prepayment.loan_handle: prepayment.annual_amount
+              for prepayment in scenario.prepayments }
+    return [ _loan( loan, as_of, extra.get( loan.handle, Decimal( '0' ) ) )
+             for loan in profile.loans ]
 
 
-def _loan( loan : LoanProfile, as_of : date ) -> LoanParameters:
+def _loan( loan : LoanProfile, as_of : date, extra_principal : Decimal ) -> LoanParameters:
     """The engine view of a loan as of the forecast start: amortize the original loan from its
     origination to the balance still owed (unless `current_balance` overrides it) and the
-    remaining term, since the engine projects forward from an opening balance over a term."""
+    remaining term, since the engine projects forward from an opening balance over a term. A
+    scenario prepayment becomes the engine's annual extra principal."""
     periods = loan.original_term.months()
     elapsed = min( _elapsed_months( loan.origination_date, as_of ), periods )
     opening = loan.current_balance if loan.current_balance is not None else remaining_balance(
@@ -133,7 +137,7 @@ def _loan( loan : LoanProfile, as_of : date ) -> LoanParameters:
         name = loan.name, opening_balance = opening, interest_rate = loan.interest_rate,
         term = Duration( max( periods - elapsed, 1 ), TimeUnit.MONTH ),
         interest_class = loan.interest_class or ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST,
-        handle = loan.handle )
+        annual_extra_principal = extra_principal, handle = loan.handle )
 
 
 def _elapsed_months( origination : date, as_of : date ) -> int:
