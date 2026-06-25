@@ -26,6 +26,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Callable, Optional
 
+from common.amortization import level_payment
 from common.date_span import DateSpan
 from common.date_window import DateWindow
 from common.rate import Rate
@@ -84,15 +85,6 @@ _LIMIT_KIND_BY_SOURCE = {
 # A loan resolved against the books: its parameters plus the accounts and the level
 # payment (derived once by amortization) the per-interval term is computed from.
 _ResolvedLoan = namedtuple( '_ResolvedLoan', ( 'parameters', 'account', 'interest_account', 'payment' ) )
-
-
-def _amortized_payment( principal : Decimal, periodic_rate : Decimal, periods : int ) -> Decimal:
-    """The level payment that retires `principal` over `periods` at `periodic_rate` per
-    period -- the standard amortization formula (straight-line when the rate is zero)."""
-    if periodic_rate == 0:
-        return principal / periods
-    discount = ( Decimal( '1' ) + periodic_rate ) ** ( -periods )
-    return principal * periodic_rate / ( Decimal( '1' ) - discount )
 
 
 @dataclass
@@ -360,7 +352,7 @@ class BaselineBuilder:
                          expense_tax_class = loan.interest_class, handle = loan.interest_handle ) )
             periodic_rate = loan.interest_rate.fraction / self._periods_per_year
             periods = loan.term.months() // self._parameters.granularity.months()
-            payment = _amortized_payment( loan.opening_balance, periodic_rate, periods )
+            payment = level_payment( loan.opening_balance, periodic_rate, periods )
             self._loans.append( _ResolvedLoan( loan, account, interest_account, payment ) )
             continue
         return

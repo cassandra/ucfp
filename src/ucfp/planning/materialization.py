@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
+from common.amortization import remaining_balance
 from common.date_window import DateWindow
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
@@ -34,7 +35,7 @@ from ucfp.parameter_sets import repository as parameter_sets
 from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.tax.government_pension import GovernmentPension
 
-from ucfp.profile.schemas import AssetProfile, Profile
+from ucfp.profile.schemas import AssetProfile, LoanProfile, Profile
 from ucfp.scenario.enums import PlannedMoveKind
 from ucfp.scenario.schemas import PlannedMove, RetirementTiming, Scenario
 
@@ -73,7 +74,7 @@ def materialize(
             profile, scenario, subjects_by_handle, government_pension ),
         expense_items    = _committed_obligations( profile ) + lifestyle_items,
         expense_streams  = lifestyle_streams,
-        loans            = _loans( profile ),
+        loans            = _loans( profile, frame.start_date ),
         contributions    = _contributions( scenario ),
         events           = _events( scenario ),
         cash_account     = _cash_account( scenario ),
@@ -116,13 +117,30 @@ def _cost_basis( asset : AssetProfile ) -> Decimal:
     return asset.opening_value
 
 
-def _loans( profile : Profile ) -> list[ LoanParameters ]:
-    return [ LoanParameters(
-        name = loan.name, opening_balance = loan.opening_balance,
-        interest_rate = loan.interest_rate, term = loan.term,
+def _loans( profile : Profile, as_of : date ) -> list[ LoanParameters ]:
+    return [ _loan( loan, as_of ) for loan in profile.loans ]
+
+
+def _loan( loan : LoanProfile, as_of : date ) -> LoanParameters:
+    """The engine view of a loan as of the forecast start: amortize the original loan from its
+    origination to the balance still owed (unless `current_balance` overrides it) and the
+    remaining term, since the engine projects forward from an opening balance over a term."""
+    periods = loan.original_term.months()
+    elapsed = min( _elapsed_months( loan.origination_date, as_of ), periods )
+    opening = loan.current_balance if loan.current_balance is not None else remaining_balance(
+        loan.original_amount, loan.interest_rate.fraction / 12, periods, elapsed )
+    return LoanParameters(
+        name = loan.name, opening_balance = opening, interest_rate = loan.interest_rate,
+        term = Duration( max( periods - elapsed, 1 ), TimeUnit.MONTH ),
         interest_class = loan.interest_class or ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST,
         handle = loan.handle )
-        for loan in profile.loans ]
+
+
+def _elapsed_months( origination : date, as_of : date ) -> int:
+    """Whole months from `origination` to `as_of`, floored at zero (a not-yet-originated loan has
+    not begun amortizing)."""
+    months = ( as_of.year - origination.year ) * 12 + ( as_of.month - origination.month )
+    return max( months, 0 )
 
 
 # --- Profile: flows (income entitlements, committed obligations) -----------

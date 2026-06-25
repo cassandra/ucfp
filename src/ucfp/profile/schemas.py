@@ -74,14 +74,20 @@ class AssetProfile:
 
 @dataclass( frozen = True )
 class LoanProfile:
-    """A loan contract -- the fact subset of the engine `LoanParameters`. Extra-principal
-    payment is a scenario strategy, not here. `interest_class` (e.g. residence mortgage)
-    defaults at materialization when omitted."""
+    """A loan contract, stored as a person knows it: when it started (`origination_date`), the
+    `original_amount` borrowed, the `interest_rate`, and the `original_term`. The balance still
+    owed at the forecast start -- and the remaining term -- are *derived* by materialization
+    (amortizing from origination), unless `current_balance` overrides the balance, the way to
+    capture extra principal already paid down. Future extra-principal payments are a scenario
+    strategy, not here. `interest_class` (e.g. residence mortgage) defaults at materialization
+    when omitted."""
     handle: str
     name: str
-    opening_balance: Decimal
+    origination_date: date
+    original_amount: Decimal
     interest_rate: Rate
-    term: Duration
+    original_term: Duration
+    current_balance: Optional[ Decimal ] = None
     interest_class: Optional[ ExpenseTaxClass ] = None
 
 

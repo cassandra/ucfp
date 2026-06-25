@@ -16,8 +16,13 @@ from typing import Optional
 
 from django import forms
 
+from common.rate import Rate
+from common.recurrence import Duration, TimeUnit
+
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.profile.schemas import (
-    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, Profile, SubjectProfile )
+    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, AssetProfile, CommittedObligation,
+    LoanProfile, Profile, SubjectProfile )
 from ucfp.scenario.schemas import RetirementTiming, Scenario
 from ucfp.tax.enums import FilingStatus
 
@@ -154,12 +159,143 @@ class RetirementForm( forms.Form ):
             return birthdate.replace( year = birthdate.year + age, day = 28 )
 
 
+class HomeForm( forms.Form ):
+    """§3 -- the household residence. Owning captures the home's current value and purchase price
+    (its cost basis) and, if there is a mortgage, the loan the way a person knows it -- when it
+    started, the original amount, the rate, the term -- from which materialization derives the
+    balance still owed; an optional current balance overrides that to capture extra principal
+    already paid down. Renting captures the monthly rent. The residence is household-owned, so
+    there is no "whose home".
+
+    `apply_to` merges only the residence asset, its mortgage, and the rent obligation into the
+    Profile by their stable handles, leaving the accounts and other sections' items intact.
+    Associated home expenses (property tax, insurance) are seeded later in Spending.
+    """
+
+    _OWN  = 'own'
+    _RENT = 'rent'
+    _TENURE_CHOICES = ( ( _OWN, 'Own' ), ( _RENT, 'Rent' ) )
+
+    _RESIDENCE_HANDLE = 'residence'
+    _MORTGAGE_HANDLE  = 'mortgage'
+    _RENT_HANDLE      = 'rent'
+
+    tenure         = forms.ChoiceField( label = 'The residence is', choices = _TENURE_CHOICES )
+    home_value     = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
+    purchase_price = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
+    has_mortgage   = forms.BooleanField( label = 'There is a mortgage', required = False )
+    mortgage_origination = forms.DateField( label = 'Loan start date', required = False )
+    mortgage_original_amount = forms.DecimalField(
+        label = 'Original loan amount', required = False, min_value = 0 )
+    mortgage_rate = forms.DecimalField(
+        label = 'Interest rate (%)', required = False, min_value = 0 )
+    mortgage_term_years = forms.IntegerField(
+        label = 'Loan term (years)', required = False, min_value = 1 )
+    mortgage_current_balance = forms.DecimalField(
+        label = 'Balance owed now (optional)', required = False, min_value = 0 )
+    monthly_rent = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
+
+    def __init__( self, data = None, *, profile = None, scenario = None ):
+        initial = self._initial( profile ) if profile is not None else None
+        super().__init__( data, initial = initial )
+
+    @classmethod
+    def _initial( cls, profile : Profile ) -> dict:
+        rent = cls._find( profile.obligations, cls._RENT_HANDLE )
+        if rent is not None:
+            return { 'tenure': cls._RENT, 'monthly_rent': rent.amount }
+        residence = cls._find( profile.assets, cls._RESIDENCE_HANDLE )
+        if residence is None:
+            return dict()
+        initial = {
+            'tenure': cls._OWN, 'home_value': residence.opening_value,
+            'purchase_price': residence.cost_basis,
+        }
+        initial.update( cls._mortgage_initial( cls._find( profile.loans, cls._MORTGAGE_HANDLE ) ) )
+        return initial
+
+    @staticmethod
+    def _mortgage_initial( mortgage ) -> dict:
+        if mortgage is None:
+            return dict()
+        return {
+            'has_mortgage'             : True,
+            'mortgage_origination'     : mortgage.origination_date,
+            'mortgage_original_amount' : mortgage.original_amount,
+            'mortgage_rate'            : mortgage.interest_rate.fraction * 100,
+            'mortgage_term_years'      : mortgage.original_term.months() // 12,
+            'mortgage_current_balance' : mortgage.current_balance,
+        }
+
+    def clean( self ):
+        cleaned = super().clean()
+        if cleaned.get( 'tenure' ) == self._OWN:
+            self._require( 'home_value', 'Enter the current home value.' )
+            if cleaned.get( 'has_mortgage' ):
+                self._require( 'mortgage_origination', 'Enter the loan start date.' )
+                self._require( 'mortgage_original_amount', 'Enter the original loan amount.' )
+                self._require( 'mortgage_rate', 'Enter the interest rate.' )
+                self._require( 'mortgage_term_years', 'Enter the loan term.' )
+        elif cleaned.get( 'tenure' ) == self._RENT:
+            self._require( 'monthly_rent', 'Enter the monthly rent.' )
+        return cleaned
+
+    def _require( self, field : str, message : str ):
+        if self.cleaned_data.get( field ) is None:
+            self.add_error( field, message )
+
+    def apply_to( self, profile : Profile ) -> Profile:
+        return replace(
+            profile,
+            assets      = self._merged( profile.assets, self._RESIDENCE_HANDLE, self._residence() ),
+            loans       = self._merged( profile.loans, self._MORTGAGE_HANDLE, self._mortgage() ),
+            obligations = self._merged( profile.obligations, self._RENT_HANDLE, self._rent() ) )
+
+    def _residence( self ) -> list:
+        cleaned = self.cleaned_data
+        if cleaned.get( 'tenure' ) != self._OWN:
+            return []
+        return [ AssetProfile(
+            handle = self._RESIDENCE_HANDLE, name = 'Home',
+            asset_class = AssetClass.REAL_ESTATE_RESIDENCE,
+            opening_value = cleaned[ 'home_value' ], cost_basis = cleaned.get( 'purchase_price' ) ) ]
+
+    def _mortgage( self ) -> list:
+        cleaned = self.cleaned_data
+        if cleaned.get( 'tenure' ) != self._OWN or not cleaned.get( 'has_mortgage' ):
+            return []
+        return [ LoanProfile(
+            handle = self._MORTGAGE_HANDLE, name = 'Mortgage',
+            origination_date = cleaned[ 'mortgage_origination' ],
+            original_amount = cleaned[ 'mortgage_original_amount' ],
+            interest_rate = Rate.percent( cleaned[ 'mortgage_rate' ] ),
+            original_term = Duration( cleaned[ 'mortgage_term_years' ], TimeUnit.YEAR ),
+            current_balance = cleaned.get( 'mortgage_current_balance' ),
+            interest_class = ExpenseTaxClass.MORTGAGE_INTEREST ) ]
+
+    def _rent( self ) -> list:
+        cleaned = self.cleaned_data
+        if cleaned.get( 'tenure' ) != self._RENT:
+            return []
+        return [ CommittedObligation(
+            handle = self._RENT_HANDLE, name = 'Rent', amount = cleaned[ 'monthly_rent' ],
+            cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ]
+
+    @staticmethod
+    def _merged( existing : list, handle : str, replacement : list ) -> list:
+        return [ item for item in existing if item.handle != handle ] + replacement
+
+    @staticmethod
+    def _find( items : list, handle : str ):
+        return next( ( item for item in items if item.handle == handle ), None )
+
+
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm ),
     Section( 'retirement'  , 'Retirement timing', Aggregate.SCENARIO, RetirementForm ),
-    Section( 'home'        , 'Home' ),
+    Section( 'home'        , 'Home', form = HomeForm ),
     Section( 'accounts'    , 'Accounts' ),
     Section( 'income'      , 'Income' ),
     Section( 'spending'    , 'Spending' ),
