@@ -61,6 +61,7 @@ def materialize(
                            for subject in subjects if subject.handle is not None }
     government_pension = GovernmentPension( tax_forecast.tax_law_type )
     lifestyle_streams, lifestyle_items = _lifestyle_expenses( scenario )
+    expense_streams, expense_items = _scenario_expenses( scenario )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -72,8 +73,8 @@ def materialize(
         economic_outlook = _economic_outlook( scenario ),
         income_streams   = _income_streams(
             profile, scenario, subjects_by_handle, government_pension ),
-        expense_items    = _committed_obligations( profile ) + lifestyle_items,
-        expense_streams  = lifestyle_streams,
+        expense_items    = _committed_obligations( profile ) + lifestyle_items + expense_items,
+        expense_streams  = lifestyle_streams + expense_streams,
         loans            = _loans( profile, scenario, frame.start_date ),
         contributions    = _contributions( scenario ),
         events           = _events( scenario ),
@@ -261,6 +262,24 @@ def _level_schedule( amounts, segments : list ) -> Schedule:
         windowed.append( WindowedAmount(
             amounts.for_level( segment.level ), DateWindow( start = start, end = end ) ) )
     return Schedule( tuple( windowed ) )
+
+
+def _scenario_expenses( scenario : Scenario ) -> tuple[ list, list ]:
+    """The scenario's planned expenses as (streams, items): a flow with no interval is a smoothed
+    stream, one with an interval an item placed at that cadence. Each is a flat amount for now;
+    value-steps over time come later. The successor to `_lifestyle_expenses`."""
+    streams, items = list(), list()
+    for expense in scenario.expenses:
+        amounts = Schedule.constant( WindowedAmount( expense.amount ) )
+        if expense.interval is None:
+            streams.append( ExpenseStream(
+                name = expense.name, expense_tax_class = expense.expense_tax_class,
+                amounts = amounts ) )
+        else:
+            items.append( ExpenseItem(
+                name = expense.name, expense_tax_class = expense.expense_tax_class,
+                amounts = amounts, cadence = Recurrence( expense.interval ) ) )
+    return streams, items
 
 
 # --- Scenario: knobs -------------------------------------------------------

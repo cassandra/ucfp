@@ -23,9 +23,12 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from ucfp.accounts.enums import AssetClass
+from common.recurrence import Duration
+
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource
-from ucfp.parameter_sets.enums import EconomicOutlookVariant, LifestyleLevel, LifestyleScope
+from ucfp.parameter_sets.enums import (
+    EconomicOutlookVariant, ExpenseCategory, LifestyleLevel, LifestyleScope )
 from ucfp.tax.law import TaxForecastProfile
 
 from .enums import PlannedMoveKind
@@ -73,6 +76,25 @@ class LifestylePlan:
     that selects each expense's value over the horizon."""
     scope: LifestyleScope = LifestyleScope.GENERAL
     segments: list[ LifestyleSegment ] = field( default_factory = list )
+
+
+# --- Spending -------------------------------------------------------------
+# The new expense model: the user's planned expenses, each seeded from the curated catalog (so it
+# carries the catalog's category, tax class, and cadence) with the user's amount. Supersedes the
+# lifestyle cost-table above, which is retired once this reaches parity.
+
+@dataclass( frozen = True )
+class ExpenseFlow:
+    """One planned expense -- its name, catalog `category`, tax class, cadence, and the user's
+    `amount` (seeded from the catalog default, then overridable). `interval` None is a smoothed
+    stream, a `Duration` an item placed at that cadence; `lifestyle_dependent` marks the ones that
+    will carry value-steps over time later."""
+    name: str
+    category: ExpenseCategory
+    expense_tax_class: ExpenseTaxClass
+    amount: Decimal
+    interval: Optional[ Duration ] = None
+    lifestyle_dependent: bool = False
 
 
 # --- Saving ---------------------------------------------------------------
@@ -158,6 +180,8 @@ class Scenario:
     timing: list[ RetirementTiming ] = field( default_factory = list )
     # Lifestyle
     lifestyle: Optional[ LifestylePlan ] = None
+    # Spending
+    expenses: list[ ExpenseFlow ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
     # Loan paydown
