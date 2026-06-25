@@ -8,22 +8,30 @@ stopped early, and the notices.
 """
 from datetime import timedelta
 
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 
 from user.decorators import ensure_organization
 
+from common import antinode
 from common.dataclass_json import from_json_data
+from common.request_utils import is_ajax
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.profile.models import ProfileRecord
-from ucfp.profile.repository import load_profile, profiles_for
+from ucfp.profile.repository import (
+    create_profile, latest_profile, load_profile, profiles_for, save_profile )
 from ucfp.scenario.models import ScenarioRecord
 from ucfp.scenario.repository import load_scenario, scenarios_for
 
 from .forms import GRANULARITY, RunForm
+from .interview import (
+    SECTION_FORMS, SECTIONS, applicable_sections, next_section_after, section_for )
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord
 from .orchestration import run_and_capture
@@ -81,6 +89,83 @@ class RetirementPlanningView( View ):
             'runs'        : ProjectionRunRecord.objects.filter(
                 organization = organization ).order_by( '-created_datetime' ),
             'error'       : error,
+        }
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class InterviewHomeView( View ):
+    """`/planning/interview/` -- enter the guided setup at its first section."""
+
+    def get( self, request ):
+        return redirect( 'interview_section', section = SECTIONS[ 0 ].key )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class InterviewView( View ):
+    """`/planning/interview/<section>/` -- one section of the guided setup: an antinode-swapped
+    linear flow over the organization's current Profile. A full GET renders the whole page; an
+    async GET (a stepper revisit) or a POST swaps just the section pane and refreshes the stepper.
+
+    On a valid POST the section is saved and the *next* section is recomputed from the now-updated
+    profile -- the conditional-flow payoff. Each section merges only its own part via `apply_to`,
+    so advancing (or revisiting) never clobbers another section's facts.
+    """
+
+    _PAGE_TEMPLATE    = 'planning/interview/page.html'
+    _SECTION_TEMPLATE = 'planning/interview/section.html'
+    _STEPPER_TEMPLATE = 'planning/interview/stepper.html'
+    _SECTION_TARGET   = 'interview-section'
+
+    def get( self, request, section ):
+        self._require_section( section )
+        profile  = self._current_profile( request.organization )
+        sections = applicable_sections( profile )
+        form     = SECTION_FORMS[ section ]( profile = profile )
+        if is_ajax( request ):
+            return self._swap( request, sections, section, form )
+        return render( request, self._PAGE_TEMPLATE, self._context( sections, section, form ) )
+
+    def post( self, request, section ):
+        self._require_section( section )
+        profile = self._current_profile( request.organization )
+        form    = SECTION_FORMS[ section ]( request.POST, profile = profile )
+        if not form.is_valid():
+            return self._swap( request, applicable_sections( profile ), section, form )
+        updated = form.apply_to( profile )
+        save_profile( request.organization, updated )
+        sections  = applicable_sections( updated )
+        following = next_section_after( sections, section )
+        if following is None:
+            return antinode.redirect_response( reverse( 'retirement_planning' ) )
+        next_form = SECTION_FORMS[ following.key ]( profile = updated )
+        return self._swap( request, sections, following.key, next_form )
+
+    @staticmethod
+    def _require_section( section ):
+        if section not in SECTION_FORMS:
+            raise Http404( f'No interview section {section!r}.' )
+
+    @staticmethod
+    def _current_profile( organization ):
+        record = latest_profile( organization ) or create_profile( organization )
+        return load_profile( record )
+
+    def _swap( self, request, sections, section, form ):
+        context = self._context( sections, section, form )
+        return antinode.response(
+            main_content = render_to_string( self._SECTION_TEMPLATE, context, request = request ),
+            replace_map = { 'interview-stepper': render_to_string(
+                self._STEPPER_TEMPLATE, context, request = request ) },
+            push_url = reverse( 'interview_section', kwargs = { 'section': section } ),
+            scroll_to = self._SECTION_TARGET )
+
+    @staticmethod
+    def _context( sections, section, form ):
+        return {
+            'sections'         : sections,
+            'current_section'  : section_for( section ),
+            'form'             : form,
+            'implemented_keys' : list( SECTION_FORMS ),
         }
 
 
