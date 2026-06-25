@@ -26,9 +26,9 @@ from typing import Optional
 from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.forecast.parameters import ContributionSource
-from ucfp.parameter_sets.enums import (
-    EconomicOutlookVariant, ExpenseCategory, LifestyleLevel, LifestyleScope )
+from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
 from ucfp.tax.law import TaxForecastProfile
 
 from .enums import PlannedMoveKind
@@ -173,8 +173,9 @@ class HealthCoverageAssumption:
 class Scenario:
     """One named set of assumptions, grouped by section. Serialized whole into a `Scenario`
     record's JSON, and materialized with a Profile into `ForecastParameters`."""
-    # External factors (see note above)
-    economic_outlook: EconomicOutlookVariant = EconomicOutlookVariant.EXPECTED
+    # External factors (see note above): the scenario's own editable copy of the economic rates
+    # (seeded from a library preset, then user-owned) and the tax forecast.
+    economics: Optional[ EconomicParameters ] = None
     tax_forecast: Optional[ TaxForecastProfile ] = None
     # Timing
     timing: list[ RetirementTiming ] = field( default_factory = list )

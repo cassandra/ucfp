@@ -16,7 +16,8 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
 from ucfp.forecast.parameters import ContributionSource
-from ucfp.parameter_sets.enums import EconomicOutlookVariant, LifestyleLevel, LifestyleScope
+from ucfp.forecast.economic_outlook import EconomicParameters
+from ucfp.parameter_sets.enums import LifestyleLevel, LifestyleScope
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
 
@@ -66,7 +67,15 @@ def _sample_profile():
 
 def _sample_scenario():
     return Scenario(
-        economic_outlook = EconomicOutlookVariant.OPTIMISTIC,
+        economics = EconomicParameters(
+            inflation = Rate( Decimal( '0.025' ) ), medical_inflation = Rate( Decimal( '0.045' ) ),
+            wage_growth = Rate( Decimal( '0.03' ) ), savings_interest = Rate( Decimal( '0.02' ) ),
+            cd_interest = Rate( Decimal( '0.03' ) ), bond_interest = Rate( Decimal( '0.04' ) ),
+            stock_appreciation = Rate( Decimal( '0.06' ) ), stock_dividend = Rate( Decimal( '0.018' ) ),
+            real_estate_appreciation = Rate( Decimal( '0.035' ) ),
+            retirement_growth = Rate( Decimal( '0.055' ) ),
+            social_security_cola = Rate( Decimal( '0.025' ) ), pension_cola = Rate( Decimal( '0.02' ) ),
+            rental_increase = Rate( Decimal( '0.03' ) ) ),
         tax_forecast = TaxForecastProfile( tax_law_type = TaxLawType.US_FEDERAL,
                                            tax_forecast_type = TaxForecastType.CURRENT_LAW ),
         timing = [ RetirementTiming( subject_handle = 'you', retirement_date = date( 2035, 1, 1 ),

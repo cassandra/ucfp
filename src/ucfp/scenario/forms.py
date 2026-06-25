@@ -12,9 +12,10 @@ from django import forms
 from django.forms import formset_factory
 
 from ucfp.parameter_sets.enums import EconomicOutlookVariant, LifestyleLevel, LifestyleScope
+from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.profile.schemas import PRIMARY_SUBJECT_HANDLE
 from ucfp.tax.enums import TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.tax.law import TaxForecastProfile, TaxProjection
 
 from .schemas import LifestylePlan, LifestyleSegment, RetirementTiming, Scenario
 
@@ -89,13 +90,16 @@ class ScenarioBuildForm:
         lifestyle = LifestylePlan(
             scope = LifestyleScope.from_name( factors[ 'lifestyle_scope' ] ),
             segments = segments ) if segments else None
+        economics = economic_parameters(
+            EconomicOutlookVariant.from_name( factors[ 'economic_outlook' ] ).label )
         return Scenario(
-            economic_outlook = EconomicOutlookVariant.from_name( factors[ 'economic_outlook' ] ),
-            tax_forecast     = TaxForecastProfile(
+            economics    = economics,
+            tax_forecast = TaxForecastProfile(
                 tax_law_type = TaxLawType.US_FEDERAL,
-                tax_forecast_type = TaxForecastType.CURRENT_LAW ),
-            lifestyle        = lifestyle,
-            timing           = self._timing() )
+                tax_forecast_type = TaxForecastType.COLA_INDEXED,
+                projection = TaxProjection( cola_rate = economics.inflation ) ),
+            lifestyle    = lifestyle,
+            timing       = self._timing() )
 
     def _segments( self ) -> list:
         segments = list()
@@ -118,9 +122,11 @@ class ScenarioBuildForm:
 
     @staticmethod
     def _factors_initial( scenario : Scenario ) -> dict:
+        # The outlook is now a copy on the scenario, not a stored variant, so the dropdown is a
+        # seed selector defaulting to Expected (it cannot reverse-map an edited copy to a preset).
         scope = scenario.lifestyle.scope if scenario.lifestyle is not None else LifestyleScope.GENERAL
         return {
-            'economic_outlook': scenario.economic_outlook.name.lower(),
+            'economic_outlook': EconomicOutlookVariant.EXPECTED.name.lower(),
             'lifestyle_scope' : scope.name.lower(),
         }
 

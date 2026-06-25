@@ -1,17 +1,22 @@
 {% comment %}
-One section pane. A section's own fields render inside the Continue form and post to advance the
-interview. A section with a custom `fields_template` (e.g. spending) renders that pane *outside*
-the form -- it manages its own inner forms (the spending drill editors), and nesting a form inside
-the Continue form would be invalid HTML; the Continue form then carries only the advance.
+One section pane. A section's standard fields render via form.as_p inside the Continue form. A
+section may instead supply a custom template: an `inner_template` renders inside the Continue form
+(custom-laid-out inputs, e.g. external factors), while an `outer_template` renders outside it (a
+pane that manages its own inner forms, e.g. the spending drill -- nesting a form inside the Continue
+form would be invalid HTML).
 {% endcomment %}
 <div id="{{ section_target }}">
   <h2 class="h4 mb-3">{{ current_section.title }}</h2>
-  {% if current_section.fields_template %}{% include current_section.fields_template %}{% endif %}
+  {% if current_section.outer_template %}{% include current_section.outer_template %}{% endif %}
   <form method="post"
         action="{% url 'interview_section' section=current_section.key %}"
         data-async="#{{ section_target }}">
     {% csrf_token %}
-    {% if not current_section.fields_template %}{{ form.as_p }}{% endif %}
+    {% if current_section.inner_template %}
+    {% include current_section.inner_template %}
+    {% elif not current_section.outer_template %}
+    {{ form.as_p }}
+    {% endif %}
     <button type="submit" class="btn btn-primary mt-3">Continue</button>
   </form>
 </div>

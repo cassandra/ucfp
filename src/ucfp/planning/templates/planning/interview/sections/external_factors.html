@@ -1,0 +1,18 @@
+{% comment %}
+The external-factors fields, rendered inside the Continue form. The tax projection is shown as one
+more factor; the economic rates are tucked behind a native disclosure (the scenario's own copy,
+seeded from a preset and editable). A percent per factor.
+{% endcomment %}
+<p class="text-muted">The economic assumptions your plan projects under. The defaults are a typical
+  ("Expected") outlook; adjust any factor to model a different one.</p>
+<p>{{ form.tax_forecast_type.label_tag }} {{ form.tax_forecast_type }}</p>
+<details class="mt-2">
+  <summary>Economic factors (percent per year)</summary>
+  <table class="table table-sm w-auto mt-2">
+    <tbody>
+      {% for field in form.factors %}
+      <tr><td>{{ field.label }}</td><td>{{ field }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>

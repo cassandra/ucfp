@@ -13,7 +13,7 @@ from ucfp.parameter_sets.enums import (
     CatalogScope, EconomicOutlookVariant, ExpenseCategory, LifestyleLevel, LifestyleScope,
     ParameterSetKind )
 from ucfp.parameter_sets.models import ParameterSet
-from ucfp.parameter_sets.repository import load
+from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
 from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.scenario.schemas import LifestylePlan, LifestyleSegment, Scenario
@@ -105,7 +105,8 @@ class MaterializeFromLibraryTest( TestCase ):
             assets = [ AssetProfile(
                 handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
                 opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) ) ] )
-        scenario = Scenario(   # economic_outlook defaults to EXPECTED, resolved from the library
+        scenario = Scenario(   # the scenario carries its own economic-factors copy, seeded here
+            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
             tax_forecast = TaxForecastProfile(
                 tax_law_type = TaxLawType.US_FEDERAL,
                 tax_forecast_type = TaxForecastType.CURRENT_LAW ) )
@@ -127,6 +128,7 @@ class MaterializeFromLibraryTest( TestCase ):
                 handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
                 opening_value = Decimal( '900000' ), cost_basis = Decimal( '900000' ) ) ] )
         scenario = Scenario(
+            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
             tax_forecast = TaxForecastProfile(
                 tax_law_type = TaxLawType.US_FEDERAL,
                 tax_forecast_type = TaxForecastType.CURRENT_LAW ),

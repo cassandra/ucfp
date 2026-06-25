@@ -18,6 +18,8 @@ from ucfp.planning.materialization import ForecastFrame
 from ucfp.planning.models import ProjectionRunRecord
 from ucfp.planning.orchestration import run_and_capture
 from ucfp.planning.schemas import ProjectionRun
+from ucfp.parameter_sets.enums import EconomicOutlookVariant
+from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.scenario.schemas import Scenario
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
@@ -40,9 +42,11 @@ class RunAndCaptureTest( TestCase ):
                 opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) ) ] )
 
     def _scenario( self ) -> Scenario:
-        return Scenario( tax_forecast = TaxForecastProfile(
-            tax_law_type = TaxLawType.US_FEDERAL,
-            tax_forecast_type = TaxForecastType.CURRENT_LAW ) )
+        return Scenario(
+            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
+            tax_forecast = TaxForecastProfile(
+                tax_law_type = TaxLawType.US_FEDERAL,
+                tax_forecast_type = TaxForecastType.CURRENT_LAW ) )
 
     def test_runs_persists_and_reloads_a_coherent_package( self ):
         frame = ForecastFrame(

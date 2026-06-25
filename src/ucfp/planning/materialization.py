@@ -339,11 +339,11 @@ def _health_coverage( scenario : Scenario ) -> Optional[ SubsidizedHealthCoverag
 # --- Scenario: external factors (reuse engine types; no zero-fill) ---------
 
 def _economic_outlook( scenario : Scenario ) -> EconomicOutlook:
-    """Resolve the scenario's chosen outlook variant to its curated, schedule-shaped rates from
-    the parameter-set library (loaded from the database, never zero-filled)."""
-    schedule = parameter_sets.load(
-        ParameterSetKind.ECONOMIC_OUTLOOK, scenario.economic_outlook.label )
-    return EconomicOutlook( Schedule( tuple( schedule.segments ) ) )
+    """The scenario's own economic-factors copy as the engine's outlook -- a constant outlook for
+    now. The copy is seeded from a library preset at input time, so there is no library load here."""
+    if scenario.economics is None:
+        raise ValueError( 'A scenario must carry economic factors (seed them from a preset).' )
+    return EconomicOutlook.constant( scenario.economics )
 
 
 def _tax_forecast( scenario : Scenario ):

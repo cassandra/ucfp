@@ -27,6 +27,7 @@ from ucfp.profile.schemas import (
 from ucfp.scenario.schemas import LoanPrepayment, RetirementTiming, Scenario
 from ucfp.tax.enums import FilingStatus
 
+from .external_factors import ExternalFactorsForm
 from .spending import SpendingForm
 
 
@@ -46,7 +47,8 @@ class Section:
     title: str
     aggregates: tuple = ( Aggregate.PROFILE, )
     form: Optional[ type ] = None
-    fields_template: Optional[ str ] = None
+    inner_template: Optional[ str ] = None   # custom content rendered inside the Continue form
+    outer_template: Optional[ str ] = None   # custom pane outside the form (manages its own forms)
 
 
 class SubjectsForm( forms.Form ):
@@ -506,9 +508,10 @@ SECTIONS = [
     Section( 'accounts'    , 'Accounts', form = AccountsForm ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.SCENARIO ), IncomeForm ),
     Section( 'spending'    , 'Spending', ( Aggregate.SCENARIO, ), SpendingForm,
-             fields_template = 'planning/interview/sections/spending.html' ),
+             outer_template = 'planning/interview/sections/spending.html' ),
     Section( 'events'      , 'Plans & events' ),
-    Section( 'assumptions' , 'Assumptions' ),
+    Section( 'external-factors', 'External Factors', ( Aggregate.SCENARIO, ), ExternalFactorsForm,
+             inner_template = 'planning/interview/sections/external_factors.html' ),
 ]
 
 
