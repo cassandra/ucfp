@@ -319,13 +319,90 @@ class HomeForm( forms.Form ):
         return next( ( item for item in items if item.handle == handle ), None )
 
 
+class AccountsForm( forms.Form ):
+    """§4 -- the household's financial accounts at a high level: a savings (cash) total, an
+    investment (taxable) total, and a retirement total per subject. Retirement accounts are
+    individual by law, so each is owned by its subject; savings and investments are household.
+    Itemizing into individual accounts, other account types, and cost basis is a later drill-down.
+
+    `apply` replaces the financial-account assets in the Profile, leaving the home and any other
+    holdings intact, so revisiting re-states just these buckets.
+    """
+
+    _SAVINGS_HANDLE    = 'savings'
+    _INVESTMENT_HANDLE = 'investment'
+    _RETIREMENT_PREFIX = 'retirement-'
+
+    _ACCOUNT_CLASSES = frozenset( (
+        AssetClass.CASH, AssetClass.STOCKS, AssetClass.DIVIDEND_STOCKS, AssetClass.BONDS,
+        AssetClass.CDS, AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
+
+    savings    = forms.DecimalField( label = 'Savings (cash)', required = False, min_value = 0 )
+    investment = forms.DecimalField( label = 'Investments', required = False, min_value = 0 )
+
+    def __init__( self, data = None, *, profile = None, scenario = None ):
+        super().__init__(
+            data, initial = self._initial( profile ) if profile is not None else None )
+        self._subjects = profile.subjects if profile is not None else []
+        for subject in self._subjects:
+            self.fields[ self._retirement_field( subject.handle ) ] = forms.DecimalField(
+                label = f'{subject.name} retirement savings', required = False, min_value = 0 )
+
+    @staticmethod
+    def _retirement_field( handle : str ) -> str:
+        return f'retirement_{handle}'
+
+    @classmethod
+    def _retirement_handle( cls, handle : str ) -> str:
+        return f'{cls._RETIREMENT_PREFIX}{handle}'
+
+    @classmethod
+    def _initial( cls, profile : Profile ) -> dict:
+        by_handle = { asset.handle: asset for asset in profile.assets }
+        initial   = dict()
+        if cls._SAVINGS_HANDLE in by_handle:
+            initial[ 'savings' ] = by_handle[ cls._SAVINGS_HANDLE ].opening_value
+        if cls._INVESTMENT_HANDLE in by_handle:
+            initial[ 'investment' ] = by_handle[ cls._INVESTMENT_HANDLE ].opening_value
+        for asset in profile.assets:
+            if asset.handle.startswith( cls._RETIREMENT_PREFIX ):
+                initial[ cls._retirement_field( asset.owner_handle ) ] = asset.opening_value
+        return initial
+
+    def apply( self, profile : Profile, scenario : Scenario ):
+        kept = [ asset for asset in profile.assets
+                 if asset.asset_class not in self._ACCOUNT_CLASSES ]
+        return replace( profile, assets = kept + self._accounts() ), scenario
+
+    def _accounts( self ) -> list:
+        accounts  = self._bucket( 'savings', self._SAVINGS_HANDLE, 'Savings', AssetClass.CASH )
+        accounts += self._bucket(
+            'investment', self._INVESTMENT_HANDLE, 'Investments', AssetClass.STOCKS )
+        for subject in self._subjects:
+            value = self.cleaned_data.get( self._retirement_field( subject.handle ) )
+            if value is not None:
+                accounts.append( AssetProfile(
+                    handle = self._retirement_handle( subject.handle ),
+                    name = f'{subject.name} Retirement',
+                    asset_class = AssetClass.PRETAX_RETIREMENT,
+                    opening_value = value, owner_handle = subject.handle ) )
+        return accounts
+
+    def _bucket( self, field : str, handle : str, name : str, asset_class ) -> list:
+        value = self.cleaned_data.get( field )
+        if value is None:
+            return []
+        return [ AssetProfile(
+            handle = handle, name = name, asset_class = asset_class, opening_value = value ) ]
+
+
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm ),
     Section( 'retirement'  , 'Retirement timing', ( Aggregate.SCENARIO, ), RetirementForm ),
     Section( 'home'        , 'Home', ( Aggregate.PROFILE, Aggregate.SCENARIO ), HomeForm ),
-    Section( 'accounts'    , 'Accounts' ),
+    Section( 'accounts'    , 'Accounts', form = AccountsForm ),
     Section( 'income'      , 'Income' ),
     Section( 'spending'    , 'Spending' ),
     Section( 'events'      , 'Plans & events' ),
