@@ -8,6 +8,7 @@ class ParameterSetKind( LabeledEnum ):
 
     ECONOMIC_OUTLOOK = ( 'Economic Outlook', 'A schedule of economic rate assumptions.' )
     LIFESTYLE_COSTS  = ( 'Lifestyle Costs', 'A table of discretionary expenses by lifestyle level.' )
+    EXPENSE_CATALOG  = ( 'Expense Catalog', 'The curated catalog of expense types and defaults.' )
 
 
 class LifestyleLevel( LabeledEnum ):
@@ -24,6 +25,29 @@ class LifestyleScope( LabeledEnum ):
     level. `GENERAL` is the non-regional default; regional tables are added as more scopes."""
 
     GENERAL = ( 'General', 'The general, non-regional cost table.' )
+
+
+class ExpenseCategory( LabeledEnum ):
+    """How curated expenses group in the interview -- the user-facing buckets, and the decision each
+    attaches to: Home costs to owning a home, Auto to a vehicle, Utilities to a residence; Everyday,
+    Discretionary, and Health always apply."""
+
+    EVERYDAY      = ( 'Everyday Living', 'Food, clothing, and the recurring basics.' )
+    DISCRETIONARY = ( 'Discretionary', 'Travel, entertainment, hobbies -- the lifestyle spend.' )
+    UTILITIES     = ( 'Utilities', 'Water, power, phone, and internet for a residence.' )
+    HOME          = ( 'Home', 'Costs of owning a home: insurance, upkeep, property tax.' )
+    AUTO          = ( 'Auto', 'Costs of owning a vehicle.' )
+    HEALTH        = ( 'Health', 'Medical care and health insurance.' )
+    GIVING        = ( 'Giving', 'Charitable contributions.' )
+    RENTAL        = ( 'Rental', 'Operating costs of a rental property.' )
+
+
+class CatalogScope( LabeledEnum ):
+    """Which curated expense catalog a scenario draws from -- `GENERAL` is the non-regional default;
+    regional catalogs are added as more scopes (the new structure's take on the regional idea the
+    lifestyle table carried)."""
+
+    GENERAL = ( 'General', 'The general, non-regional expense catalog.' )
 
 
 class EconomicOutlookVariant( LabeledEnum ):
