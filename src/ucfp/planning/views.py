@@ -27,11 +27,12 @@ from ucfp.profile.models import ProfileRecord
 from ucfp.profile.repository import (
     create_profile, latest_profile, load_profile, profiles_for, save_profile )
 from ucfp.scenario.models import ScenarioRecord
-from ucfp.scenario.repository import load_scenario, scenarios_for
+from ucfp.scenario.repository import (
+    create_scenario, latest_scenario, load_scenario, save_scenario, scenarios_for )
 
 from .forms import GRANULARITY, RunForm
 from .interview import (
-    SECTION_FORMS, SECTIONS, applicable_sections, next_section_after, section_for )
+    SECTIONS, Aggregate, applicable_sections, next_section_after, section_for )
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord
 from .orchestration import run_and_capture
@@ -103,8 +104,9 @@ class InterviewHomeView( View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class InterviewView( View ):
     """`/planning/interview/<section>/` -- one section of the guided setup: an antinode-swapped
-    linear flow over the organization's current Profile. A full GET renders the whole page; an
-    async GET (a stepper revisit) or a POST swaps just the section pane and refreshes the stepper.
+    linear flow over the organization's current Profile and Scenario. A full GET renders the whole
+    page; an async GET (a stepper revisit) or a POST swaps just the section pane and refreshes the
+    stepper.
 
     On a valid POST the section is saved and the *next* section is recomputed from the now-updated
     profile -- the conditional-flow payoff. Each section merges only its own part via `apply_to`,
@@ -115,57 +117,74 @@ class InterviewView( View ):
     _SECTION_TEMPLATE = 'planning/interview/section.html'
     _STEPPER_TEMPLATE = 'planning/interview/stepper.html'
     _SECTION_TARGET   = 'interview-section'
+    _STEPPER_TARGET   = 'interview-stepper'
 
     def get( self, request, section ):
-        self._require_section( section )
-        profile  = self._current_profile( request.organization )
+        current  = self._live_section( section )
+        profile, scenario = self._load( request.organization, current )
         sections = applicable_sections( profile )
-        form     = SECTION_FORMS[ section ]( profile = profile )
+        form     = current.form( profile = profile, scenario = scenario )
         if is_ajax( request ):
-            return self._swap( request, sections, section, form )
-        return render( request, self._PAGE_TEMPLATE, self._context( sections, section, form ) )
+            return self._swap( request, sections, current, form )
+        return render( request, self._PAGE_TEMPLATE, self._context( sections, current, form ) )
 
     def post( self, request, section ):
-        self._require_section( section )
-        profile = self._current_profile( request.organization )
-        form    = SECTION_FORMS[ section ]( request.POST, profile = profile )
+        current = self._live_section( section )
+        organization = request.organization
+        profile, scenario = self._load( organization, current )
+        form = current.form( request.POST, profile = profile, scenario = scenario )
         if not form.is_valid():
-            return self._swap( request, applicable_sections( profile ), section, form )
-        updated = form.apply_to( profile )
-        save_profile( request.organization, updated )
-        sections  = applicable_sections( updated )
-        following = next_section_after( sections, section )
+            return self._swap( request, applicable_sections( profile ), current, form )
+        profile   = self._store( organization, current, form, profile, scenario )
+        sections  = applicable_sections( profile )
+        following = next_section_after( sections, current.key )
         if following is None:
             return antinode.redirect_response( reverse( 'retirement_planning' ) )
-        next_form = SECTION_FORMS[ following.key ]( profile = updated )
-        return self._swap( request, sections, following.key, next_form )
+        next_profile, next_scenario = self._load( organization, following )
+        next_form = following.form( profile = next_profile, scenario = next_scenario )
+        return self._swap( request, sections, following, next_form )
 
     @staticmethod
-    def _require_section( section ):
-        if section not in SECTION_FORMS:
+    def _live_section( section ):
+        current = section_for( section )
+        if current is None or current.form is None:
             raise Http404( f'No interview section {section!r}.' )
+        return current
 
     @staticmethod
-    def _current_profile( organization ):
-        record = latest_profile( organization ) or create_profile( organization )
-        return load_profile( record )
+    def _load( organization, section ):
+        profile  = load_profile( latest_profile( organization ) or create_profile( organization ) )
+        scenario = None
+        if section.aggregate is Aggregate.SCENARIO:
+            scenario = load_scenario(
+                latest_scenario( organization ) or create_scenario( organization ) )
+        return profile, scenario
+
+    @staticmethod
+    def _store( organization, section, form, profile, scenario ):
+        if section.aggregate is Aggregate.SCENARIO:
+            save_scenario( latest_scenario( organization ), form.apply_to( scenario ) )
+            return profile
+        updated = form.apply_to( profile )
+        save_profile( organization, updated )
+        return updated
 
     def _swap( self, request, sections, section, form ):
         context = self._context( sections, section, form )
         return antinode.response(
             main_content = render_to_string( self._SECTION_TEMPLATE, context, request = request ),
-            replace_map = { 'interview-stepper': render_to_string(
+            replace_map = { self._STEPPER_TARGET: render_to_string(
                 self._STEPPER_TEMPLATE, context, request = request ) },
-            push_url = reverse( 'interview_section', kwargs = { 'section': section } ),
+            push_url = reverse( 'interview_section', kwargs = { 'section': section.key } ),
             scroll_to = self._SECTION_TARGET )
 
-    @staticmethod
-    def _context( sections, section, form ):
+    def _context( self, sections, section, form ):
         return {
-            'sections'         : sections,
-            'current_section'  : section_for( section ),
-            'form'             : form,
-            'implemented_keys' : list( SECTION_FORMS ),
+            'sections'        : sections,
+            'current_section' : section,
+            'form'            : form,
+            'section_target'  : self._SECTION_TARGET,
+            'stepper_target'  : self._STEPPER_TARGET,
         }
 
 

@@ -27,7 +27,11 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
 from ucfp.tax.enums import FilingStatus
 
 
-# Handles are stable string identities other sections reference; never display names.
+# Handles are stable string identities other sections reference; never display names. The subject
+# handles are canonical here -- the profile mints them and the scenario, interview, and engine
+# materialization all refer back to these, never a re-typed literal.
+PRIMARY_SUBJECT_HANDLE = 'subject'
+PARTNER_SUBJECT_HANDLE = 'partner'
 
 
 # --- People ---------------------------------------------------------------

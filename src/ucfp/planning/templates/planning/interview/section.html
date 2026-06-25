@@ -1,14 +1,15 @@
 {% comment %}
 One section pane. Submitting posts async to this section and replaces this same node with whatever
 the view returns -- the next section on success, or this section with errors on failure -- so the
-flow advances without a full reload. Kept generic (the form renders itself) until a section needs
-custom layout or a drill-down, at which point it gets its own pane template.
+flow advances without a full reload. The target id is supplied by the view (section_target) so the
+node id and the data-async target cannot drift apart. Kept generic (the form renders itself) until
+a section needs custom layout or a drill-down, at which point it gets its own pane template.
 {% endcomment %}
-<div id="interview-section">
+<div id="{{ section_target }}">
   <h2 class="h4 mb-3">{{ current_section.title }}</h2>
   <form method="post"
         action="{% url 'interview_section' section=current_section.key %}"
-        data-async="#interview-section">
+        data-async="#{{ section_target }}">
     {% csrf_token %}
     {{ form.as_p }}
     <button type="submit" class="btn btn-primary mt-3">Continue</button>

@@ -12,13 +12,11 @@ from django import forms
 from django.forms import formset_factory
 
 from ucfp.parameter_sets.enums import EconomicOutlookVariant, LifestyleLevel, LifestyleScope
+from ucfp.profile.schemas import PRIMARY_SUBJECT_HANDLE
 from ucfp.tax.enums import TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
 
 from .schemas import LifestylePlan, LifestyleSegment, RetirementTiming, Scenario
-
-# The single subject the tracer plans for, matching the profile's default subject handle.
-_SUBJECT_HANDLE = 'subject'
 
 
 class ExternalFactorsForm( forms.Form ):
@@ -114,7 +112,7 @@ class ScenarioBuildForm:
             return list()
         timing = self.timing.cleaned_data
         return [ RetirementTiming(
-            subject_handle = _SUBJECT_HANDLE,
+            subject_handle = PRIMARY_SUBJECT_HANDLE,
             retirement_date = timing.get( 'retirement_date' ),
             government_pension_claiming_age = timing.get( 'government_pension_claiming_age' ) ) ]
 

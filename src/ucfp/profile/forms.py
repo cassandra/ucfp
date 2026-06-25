@@ -13,7 +13,7 @@ from django.forms import formset_factory
 from ucfp.accounts.enums import AssetClass
 from ucfp.tax.enums import FilingStatus
 
-from .schemas import AssetProfile, Profile, SubjectProfile
+from .schemas import PRIMARY_SUBJECT_HANDLE, AssetProfile, Profile, SubjectProfile
 
 
 class PeopleForm( forms.Form ):
@@ -94,7 +94,7 @@ class ProfileBuildForm:
     def to_profile( self ) -> Profile:
         people = self.people.cleaned_data
         subject = SubjectProfile(
-            handle    = 'subject',
+            handle    = PRIMARY_SUBJECT_HANDLE,
             name      = people[ 'subject_name' ],
             birthdate = people[ 'subject_birthdate' ] )
         return Profile(
