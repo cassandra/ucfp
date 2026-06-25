@@ -22,7 +22,7 @@ from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, AssetProfile, CommittedObligation,
-    LoanProfile, Profile, SubjectProfile )
+    GovernmentPensionEntitlement, LoanProfile, Profile, SalaryEntitlement, SubjectProfile )
 from ucfp.scenario.schemas import LoanPrepayment, RetirementTiming, Scenario
 from ucfp.tax.enums import FilingStatus
 
@@ -396,6 +396,103 @@ class AccountsForm( forms.Form ):
             handle = handle, name = name, asset_class = asset_class, opening_value = value ) ]
 
 
+class IncomeForm( forms.Form ):
+    """§5 -- each subject's Social Security and (if still working) salary. Social Security is the
+    benefit at full retirement age plus the chosen claiming age; salary is today's wage, which the
+    engine stops at retirement (per §2's date). The benefit *amounts* are Profile facts, while the
+    claiming age merges into the scenario's per-subject timing, leaving §2's retirement date intact.
+
+    Pension income, hiding salary once a subject has retired, and spousal rules are later
+    refinements; here Social Security and salary are offered per subject and left blank if absent.
+    """
+
+    _SS_AMOUNT = 'ss_monthly'
+    _SS_AGE    = 'ss_claiming_age'
+    _SALARY    = 'salary'
+
+    def __init__( self, data = None, *, profile = None, scenario = None ):
+        super().__init__(
+            data, initial = self._initial( profile, scenario ) if profile is not None else None )
+        self._subjects = profile.subjects if profile is not None else []
+        self._timing   = self._timing_by_handle( scenario )
+        for subject in self._subjects:
+            self.fields[ self._field( self._SS_AMOUNT, subject.handle ) ] = forms.DecimalField(
+                label = f'{subject.name} Social Security (monthly, at full age)',
+                required = False, min_value = 0 )
+            self.fields[ self._field( self._SS_AGE, subject.handle ) ] = forms.IntegerField(
+                label = f'{subject.name} claims at age',
+                required = False, min_value = 0, max_value = 120 )
+            self.fields[ self._field( self._SALARY, subject.handle ) ] = forms.DecimalField(
+                label = f'{subject.name} salary (annual)', required = False, min_value = 0 )
+
+    @staticmethod
+    def _field( prefix : str, handle : str ) -> str:
+        return f'{prefix}_{handle}'
+
+    @staticmethod
+    def _timing_by_handle( scenario : Scenario ) -> dict:
+        timing = scenario.timing if scenario is not None else []
+        return { entry.subject_handle: entry for entry in timing }
+
+    @classmethod
+    def _initial( cls, profile : Profile, scenario : Scenario ) -> dict:
+        timing  = cls._timing_by_handle( scenario )
+        initial = dict()
+        for entitlement in profile.government_pension:
+            handle = entitlement.subject_handle
+            initial[ cls._field( cls._SS_AMOUNT, handle ) ] = entitlement.monthly_at_normal_age
+            entry = timing.get( handle )
+            if entry is not None and entry.government_pension_claiming_age is not None:
+                initial[ cls._field( cls._SS_AGE, handle ) ] = entry.government_pension_claiming_age
+        for salary in profile.salaries:
+            initial[ cls._field( cls._SALARY, salary.subject_handle ) ] = salary.annual_amount
+        return initial
+
+    def clean( self ):
+        cleaned = super().clean()
+        for subject in self._subjects:
+            amount = cleaned.get( self._field( self._SS_AMOUNT, subject.handle ) )
+            age    = cleaned.get( self._field( self._SS_AGE, subject.handle ) )
+            if amount is not None and age is None:
+                self.add_error(
+                    self._field( self._SS_AGE, subject.handle ),
+                    'Choose a Social Security claiming age.' )
+        return cleaned
+
+    def apply( self, profile : Profile, scenario : Scenario ):
+        updated_profile = replace(
+            profile, government_pension = self._entitlements(), salaries = self._salaries() )
+        updated_scenario = replace( scenario, timing = self._merged_timing() )
+        return updated_profile, updated_scenario
+
+    def _entitlements( self ) -> list:
+        entitlements = list()
+        for subject in self._subjects:
+            amount = self.cleaned_data.get( self._field( self._SS_AMOUNT, subject.handle ) )
+            if amount is not None:
+                entitlements.append( GovernmentPensionEntitlement(
+                    subject_handle = subject.handle, monthly_at_normal_age = amount ) )
+        return entitlements
+
+    def _salaries( self ) -> list:
+        salaries = list()
+        for subject in self._subjects:
+            amount = self.cleaned_data.get( self._field( self._SALARY, subject.handle ) )
+            if amount is not None:
+                salaries.append( SalaryEntitlement(
+                    subject_handle = subject.handle, annual_amount = amount ) )
+        return salaries
+
+    def _merged_timing( self ) -> list:
+        timing = list()
+        for subject in self._subjects:
+            current = self._timing.get( subject.handle ) or RetirementTiming(
+                subject_handle = subject.handle )
+            age = self.cleaned_data.get( self._field( self._SS_AGE, subject.handle ) )
+            timing.append( replace( current, government_pension_claiming_age = age ) )
+        return timing
+
+
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
@@ -403,7 +500,7 @@ SECTIONS = [
     Section( 'retirement'  , 'Retirement timing', ( Aggregate.SCENARIO, ), RetirementForm ),
     Section( 'home'        , 'Home', ( Aggregate.PROFILE, Aggregate.SCENARIO ), HomeForm ),
     Section( 'accounts'    , 'Accounts', form = AccountsForm ),
-    Section( 'income'      , 'Income' ),
+    Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.SCENARIO ), IncomeForm ),
     Section( 'spending'    , 'Spending' ),
     Section( 'events'      , 'Plans & events' ),
     Section( 'assumptions' , 'Assumptions' ),
