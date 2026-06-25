@@ -1,21 +1,17 @@
 {% comment %}
-One section pane. Submitting posts async to this section and replaces this same node with whatever
-the view returns -- the next section on success, or this section with errors on failure -- so the
-flow advances without a full reload. The target id is supplied by the view (section_target) so the
-node id and the data-async target cannot drift apart. Kept generic (the form renders itself) until
-a section needs custom layout or a drill-down, at which point it gets its own pane template.
+One section pane. A section's own fields render inside the Continue form and post to advance the
+interview. A section with a custom `fields_template` (e.g. spending) renders that pane *outside*
+the form -- it manages its own inner forms (the spending drill editors), and nesting a form inside
+the Continue form would be invalid HTML; the Continue form then carries only the advance.
 {% endcomment %}
 <div id="{{ section_target }}">
   <h2 class="h4 mb-3">{{ current_section.title }}</h2>
+  {% if current_section.fields_template %}{% include current_section.fields_template %}{% endif %}
   <form method="post"
         action="{% url 'interview_section' section=current_section.key %}"
         data-async="#{{ section_target }}">
     {% csrf_token %}
-    {% if current_section.fields_template %}
-    {% include current_section.fields_template %}
-    {% else %}
-    {{ form.as_p }}
-    {% endif %}
+    {% if not current_section.fields_template %}{{ form.as_p }}{% endif %}
     <button type="submit" class="btn btn-primary mt-3">Continue</button>
   </form>
 </div>

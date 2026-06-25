@@ -1,15 +1,23 @@
 {% comment %}
 The spending L0 pane: a presumed annual total per applicable category, from the curated catalog.
-Read-only here -- the user accepts the defaults and drills into a category to adjust the individual
-expenses (a later level).
+Each category's "Adjust" link drills in async, expanding its dense editor inline below the row (the
+placeholder row with the matching id); the editor refreshes this row's total cell on save.
 {% endcomment %}
-<p class="text-muted">Your spending by category, using typical values. You'll be able to adjust the
-  individual expenses next.</p>
+<p class="text-muted">Your spending by category, using typical values. Adjust a category's individual
+  expenses if a total looks off.</p>
 <table class="table table-sm w-auto">
-  <thead><tr><th>Category</th><th class="text-end">Per year</th></tr></thead>
+  <thead><tr><th>Category</th><th class="text-end">Per year</th><th></th></tr></thead>
   <tbody>
     {% for category, total in form.category_totals %}
-    <tr><td>{{ category.label }}</td><td class="text-end">{{ total|floatformat:0 }}</td></tr>
+    <tr>
+      <td>{{ category.label }}</td>
+      <td class="text-end" id="spending-total-{{ category.name|lower }}">{{ total|floatformat:0 }}</td>
+      <td>
+        <a data-async="#spending-cat-{{ category.name|lower }}"
+           href="{% url 'spending_category' category=category.name|lower %}">Adjust</a>
+      </td>
+    </tr>
+    <tr id="spending-cat-{{ category.name|lower }}"></tr>
     {% endfor %}
   </tbody>
 </table>

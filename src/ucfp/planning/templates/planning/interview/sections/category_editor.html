@@ -1,0 +1,28 @@
+{% comment %}
+One category's dense editor, swapped inline into its placeholder row (#spending-cat-<key>). Saving
+posts back here (re-rendering this row with the saved amounts) and refreshes the category's total
+cell; Done collapses the row.
+{% endcomment %}
+<tr id="spending-cat-{{ category_key }}">
+  <td colspan="3">
+    <form method="post" action="{% url 'spending_category' category=category_key %}"
+          data-async="#spending-cat-{{ category_key }}">
+      {% csrf_token %}
+      <table class="table table-sm w-auto mb-2">
+        <thead><tr><th>Expense</th><th>Amount</th><th>Cadence</th></tr></thead>
+        <tbody>
+          {% for row in form.rows %}
+          <tr>
+            <td>{{ row.name }}</td>
+            <td>{{ row.field }}</td>
+            <td class="text-muted">{{ row.cadence }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="submit" class="btn btn-sm btn-primary">Save</button>
+      <a class="btn btn-sm btn-link" data-async="#spending-cat-{{ category_key }}"
+         href="{% url 'spending_category' category=category_key %}?collapse=1">Done</a>
+    </form>
+  </td>
+</tr>
