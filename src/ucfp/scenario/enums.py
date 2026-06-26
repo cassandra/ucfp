@@ -19,3 +19,4 @@ class EventKind( LabeledEnum ):
     CHARITABLE_PAYMENT = ( 'Charitable gift' , 'A one-time deductible charitable gift.' )
     MEDICAL_PAYMENT    = ( 'Medical expense' , 'A one-time deductible medical expense.' )
     DEATH              = ( 'Death'           , "A subject's passing -- the survivor transition." )
+    SELL_PROPERTY      = ( 'Sell property'   , 'Sell a home or rental property.' )

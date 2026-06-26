@@ -37,16 +37,19 @@ SUBJECT_ROLE   = 'subject'
 RECIPIENT_ROLE = 'recipient'
 SOURCE_ROLE    = 'source'
 TARGET_ROLE    = 'target'
+PROPERTY_ROLE  = 'property'
 
 # Menu groups, in display order.
 _ACCOUNTS_GROUP  = 'Accounts'
+_PROPERTY_GROUP  = 'Property'
 _MONEY_IN_GROUP  = 'Money in'
 _MONEY_OUT_GROUP = 'Money out'
 _HOUSEHOLD_GROUP = 'Household'
-_GROUP_ORDER     = ( _ACCOUNTS_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP, _HOUSEHOLD_GROUP )
+_GROUP_ORDER     = ( _ACCOUNTS_GROUP, _PROPERTY_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP,
+                     _HOUSEHOLD_GROUP )
 
-# A transfer moves money between financial holdings, not real estate.
-_NON_TRANSFERABLE = frozenset(
+# Real-estate classes: excluded from money transfers, and the candidates a sale sells.
+_REAL_ESTATE = frozenset(
     ( AssetClass.REAL_ESTATE_RESIDENCE, AssetClass.REAL_ESTATE_RENTAL ) )
 
 
@@ -68,7 +71,60 @@ def _subjects( profile ) -> list:
 
 def _accounts( profile ) -> list:
     return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.handle is not None and asset.asset_class not in _NON_TRANSFERABLE ]
+             if asset.handle is not None and asset.asset_class not in _REAL_ESTATE ]
+
+
+def _properties( profile ) -> list:
+    return [ ( asset.handle, asset.name ) for asset in profile.assets
+             if asset.asset_class in _REAL_ESTATE ]
+
+
+def _has_mortgage( profile, property_handle : str ) -> bool:
+    return any( loan.property_handle == property_handle for loan in profile.loans )
+
+
+def _end_schedule( schedule : list, end_date ) -> list:
+    """A copy of `schedule` ended at `end_date`: segments starting after it are dropped, and any open
+    or later end is capped at it -- so the flow is zero past the sale."""
+    ended = list()
+    for windowed in schedule:
+        if windowed.window.start is not None and windowed.window.start > end_date:
+            continue
+        window = windowed.window
+        if window.end is None or window.end > end_date:
+            window = replace( window, end = end_date )
+        ended.append( replace( windowed, window = window ) )
+    return ended
+
+
+def _reopen_schedule( schedule : list, end_date ) -> list:
+    """Best-effort reverse of `_end_schedule`: re-open segments a sale had capped exactly at
+    `end_date`."""
+    return [ replace( w, window = replace( w.window, end = None ) ) if w.window.end == end_date else w
+             for w in schedule ]
+
+
+def _end_property_flows( profile, scenario, property_handle : str, sale_date ):
+    """End the sold property's rental income and operating expenses at `sale_date`. Its mortgage is
+    left running -- a scheduled loan payoff is not modeled yet (see the sale's summary notice)."""
+    incomes  = [ replace( income, end = sale_date )
+                 if income.property_handle == property_handle else income
+                 for income in profile.rental_incomes ]
+    expenses = [ replace( expense, schedule = _end_schedule( expense.schedule, sale_date ) )
+                 if expense.property_handle == property_handle else expense
+                 for expense in scenario.expenses ]
+    return replace( profile, rental_incomes = incomes ), replace( scenario, expenses = expenses )
+
+
+def _reopen_property_flows( profile, scenario, property_handle : str, sale_date ):
+    incomes  = [ replace( income, end = None )
+                 if income.property_handle == property_handle and income.end == sale_date
+                 else income
+                 for income in profile.rental_incomes ]
+    expenses = [ replace( expense, schedule = _reopen_schedule( expense.schedule, sale_date ) )
+                 if expense.property_handle == property_handle else expense
+                 for expense in scenario.expenses ]
+    return replace( profile, rental_incomes = incomes ), replace( scenario, expenses = expenses )
 
 
 def _pretax_accounts( profile ) -> list:
@@ -182,6 +238,16 @@ class EventType:
         The default provisions nothing; a Roth conversion creates the Roth account it lands in."""
         return profile, event
 
+    def cascade_on_add( self, event : PlanEvent, profile, scenario ):
+        """Adjust other inputs when this event is added -- a sale ends its property's income and
+        operating expenses at the sale date. Runs once, at add time (stateless and best-effort); the
+        default changes nothing. Returns the (possibly updated) profile and scenario."""
+        return profile, scenario
+
+    def cascade_on_remove( self, event : PlanEvent, profile, scenario ):
+        """Best-effort reverse of `cascade_on_add` when the event is removed."""
+        return profile, scenario
+
     def summary( self, event : PlanEvent, profile ) -> str:
         raise NotImplementedError
 
@@ -242,6 +308,33 @@ class RothConversionEvent( EventType ):
         into.scheduled_events.append( ScheduledRealization(
             event_date = event.date, holding = event.selections[ SOURCE_ROLE ],
             amount = event.amount, destination = event.selections[ TARGET_ROLE ] ) )
+
+
+class SellPropertyEvent( EventType ):
+    kind  = EventKind.SELL_PROPERTY
+    group = _PROPERTY_GROUP
+
+    def references( self, profile ) -> list:
+        return [ ReferenceSpec( PROPERTY_ROLE, 'Property', _properties ) ]
+
+    def summary( self, event : PlanEvent, profile ) -> str:
+        name   = _names( profile ).get( event.selections.get( PROPERTY_ROLE ) )
+        notice = ( ' (mortgage payoff not yet modeled)'
+                   if _has_mortgage( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
+        return f'Sell {name} for {_money( event.amount )} in {event.date.year}{notice}'
+
+    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        into.scheduled_events.append( ScheduledRealization(
+            event_date = event.date, holding = event.selections[ PROPERTY_ROLE ],
+            amount = event.amount ) )
+
+    def cascade_on_add( self, event : PlanEvent, profile, scenario ):
+        return _end_property_flows(
+            profile, scenario, event.selections[ PROPERTY_ROLE ], event.date )
+
+    def cascade_on_remove( self, event : PlanEvent, profile, scenario ):
+        return _reopen_property_flows(
+            profile, scenario, event.selections[ PROPERTY_ROLE ], event.date )
 
 
 class TaxableReceiptEvent( EventType ):
@@ -337,8 +430,9 @@ class DeathEvent( EventType ):
 # --- Registry -------------------------------------------------------------
 
 _EVENT_TYPES = (
-    TransferEvent(), RothConversionEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(),
-    GeneralPaymentEvent(), CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
+    TransferEvent(), RothConversionEvent(), SellPropertyEvent(), TaxableReceiptEvent(),
+    TaxFreeReceiptEvent(), GeneralPaymentEvent(), CharitablePaymentEvent(), MedicalPaymentEvent(),
+    DeathEvent() )
 
 _BY_KIND = { event_type.kind: event_type for event_type in _EVENT_TYPES }
 

@@ -226,7 +226,8 @@ def _rental_income(
         items.append( IncomeItem(
             subject = subject, income_tax_class = IncomeTaxClass.GROSS_RENTAL,
             amounts = Schedule.constant( WindowedAmount( rental.monthly_amount ) ),
-            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ) ) )
+            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ),
+            window = DateWindow( end = rental.end ) ) )
     return items
 
 

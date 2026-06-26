@@ -352,11 +352,12 @@ class EventAddView( View ):
         form = EventForm( request.POST, event_type = event_type, profile = profile )
         if not form.is_valid():
             return antinode.response( main_content = self._form( request, kind, form ) )
-        provisioned, event = event_type.provision( form.build_event(), profile )
-        if provisioned is not profile:   # an implied entity (e.g. a Roth account) was created
-            save_profile( organization, provisioned )
-            profile = provisioned
+        original = profile
+        profile, event = event_type.provision( form.build_event(), profile )
+        profile, scenario = event_type.cascade_on_add( event, profile, scenario )
         scenario = replace( scenario, events = list( scenario.events ) + [ event ] )
+        if profile is not original:   # provision created an entity, or a cascade adjusted facts
+            save_profile( organization, profile )
         save_scenario( latest_scenario( organization ), scenario )
         return antinode.response(
             main_content = self._menu( request, profile ),
@@ -395,8 +396,14 @@ class EventDeleteView( View ):
         profile, scenario = _current_plan( organization )
         events = list( scenario.events )
         if 0 <= index < len( events ):
+            original = profile
+            removed  = events[ index ]
+            profile, scenario = handler_for( removed.kind ).cascade_on_remove(
+                removed, profile, scenario )
             del events[ index ]
             scenario = replace( scenario, events = events )
+            if profile is not original:
+                save_profile( organization, profile )
             save_scenario( latest_scenario( organization ), scenario )
         return antinode.response( main_content = render_to_string(
             self._LIST_TEMPLATE, { 'events': events_context( profile, scenario ) },

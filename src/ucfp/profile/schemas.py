@@ -136,10 +136,11 @@ class GovernmentPensionEntitlement:
 class RentalIncome:
     """Gross rent a rental property produces, as the `monthly_amount` the owner naturally knows.
     Bound to its property by `property_handle`; the income is reported by that property's owner and
-    ends when the property is sold. Materializes to a monthly recurring `GROSS_RENTAL` income item,
-    grown by the rental-increase rate."""
+    ends when the property is sold (`end`, set by the sale's cascade). Materializes to a monthly
+    recurring `GROSS_RENTAL` income item, grown by the rental-increase rate."""
     property_handle: str
     monthly_amount: Decimal
+    end: Optional[ date ] = None
 
 
 # --- Committed obligations ------------------------------------------------
