@@ -296,7 +296,8 @@ class HomeForm( forms.Form ):
             interest_rate = Rate.percent( cleaned[ 'mortgage_rate' ] ),
             original_term = Duration( cleaned[ 'mortgage_term_years' ], TimeUnit.YEAR ),
             current_balance = cleaned.get( 'mortgage_current_balance' ),
-            interest_class = ExpenseTaxClass.MORTGAGE_INTEREST ) ]
+            interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
+            property_handle = self._RESIDENCE_HANDLE ) ]
 
     def _rent( self ) -> list:
         cleaned = self.cleaned_data
@@ -324,6 +325,26 @@ class HomeForm( forms.Form ):
     @staticmethod
     def _find( items : list, handle : str ):
         return next( ( item for item in items if item.handle == handle ), None )
+
+
+class PropertiesForm:
+    """§3 L0 -- the Properties pane. A no-op section form: the residence and the rentals are each
+    edited through their own async view, so Continue just advances. It exposes the residence
+    sub-form for the pane (the rentals manage themselves)."""
+
+    def __init__( self, data = None, *, profile = None, scenario = None ):
+        self._profile  = profile
+        self._scenario = scenario
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def residence_form( self ):
+        return HomeForm( profile = self._profile, scenario = self._scenario )
+
+    def apply( self, profile, scenario ):
+        return profile, scenario
 
 
 class AccountsForm( forms.Form ):
@@ -505,7 +526,8 @@ class IncomeForm( forms.Form ):
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm ),
     Section( 'retirement'  , 'Retirement timing', ( Aggregate.SCENARIO, ), RetirementForm ),
-    Section( 'home'        , 'Home', ( Aggregate.PROFILE, Aggregate.SCENARIO ), HomeForm ),
+    Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.SCENARIO ), PropertiesForm,
+             outer_template = 'planning/interview/sections/properties.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsForm ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.SCENARIO ), IncomeForm ),
     Section( 'spending'    , 'Spending', ( Aggregate.SCENARIO, ), SpendingForm,

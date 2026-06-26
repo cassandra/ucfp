@@ -36,7 +36,7 @@ from ucfp.scenario.repository import (
 from .events import EventForm, events_context, handler_for, menu_context
 from .forms import GRANULARITY, RunForm
 from .interview import (
-    SECTIONS, Aggregate, applicable_sections, next_section_after, section_for )
+    SECTIONS, Aggregate, HomeForm, applicable_sections, next_section_after, section_for )
 from .spending import CategorySpendingForm
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord
@@ -252,6 +252,34 @@ def _current_plan( organization ):
     profile  = load_profile( latest_profile( organization ) or create_profile( organization ) )
     scenario = load_scenario( latest_scenario( organization ) or create_scenario( organization ) )
     return profile, scenario
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ResidenceView( View ):
+    """`/planning/interview/properties/residence/` -- the residence sub-form of the §3 Properties
+    pane. GET renders it; POST applies and saves just the residence (its asset, mortgage, and rent),
+    then re-renders the sub-pane with the saved values."""
+
+    _TEMPLATE = 'planning/interview/sections/residence.html'
+
+    def get( self, request ):
+        profile, scenario = _current_plan( request.organization )
+        return self._response( request, HomeForm( profile = profile, scenario = scenario ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, scenario = _current_plan( organization )
+        form = HomeForm( request.POST, profile = profile, scenario = scenario )
+        if form.is_valid():
+            profile, scenario = form.apply( profile, scenario )
+            save_profile( organization, profile )
+            save_scenario( latest_scenario( organization ), scenario )
+            form = HomeForm( profile = profile, scenario = scenario )
+        return self._response( request, form )
+
+    def _response( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'residence_form': form }, request = request ) )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

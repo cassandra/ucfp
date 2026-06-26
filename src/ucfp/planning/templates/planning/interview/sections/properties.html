@@ -1,0 +1,7 @@
+{% comment %}
+The §3 Properties pane: the residence sub-form and (P2b) the rentals list, each managed by its own
+async view outside the section's Continue form (a nested form would be invalid HTML).
+{% endcomment %}
+<p class="text-muted">Your home and any rental properties. Each is saved on its own; Continue moves
+  on when you're done.</p>
+{% include 'planning/interview/sections/residence.html' with residence_form=form.residence_form %}
