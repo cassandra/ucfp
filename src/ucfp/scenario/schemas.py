@@ -27,7 +27,7 @@ from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.forecast.parameters import ContributionSource
+from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
 from ucfp.tax.law import TaxForecastProfile
 
@@ -85,14 +85,15 @@ class LifestylePlan:
 
 @dataclass( frozen = True )
 class ExpenseFlow:
-    """One planned expense -- its name, catalog `category`, tax class, cadence, and the user's
-    `amount` (seeded from the catalog default, then overridable). `interval` None is a smoothed
-    stream, a `Duration` an item placed at that cadence; `lifestyle_dependent` marks the ones that
-    will carry value-steps over time later."""
+    """One planned expense -- its name, catalog `category`, tax class, cadence (`interval`), and a
+    `schedule`: the amount over time spans, a `WindowedAmount` per span (one open-ended row is a
+    constant amount; reuses the engine's segment type, so it materializes with no conversion).
+    `interval` None is a smoothed stream, a `Duration` an item placed at that cadence;
+    `lifestyle_dependent` marks the ones a user would vary over time."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
-    amount: Decimal
+    schedule: list[ WindowedAmount ]
     interval: Optional[ Duration ] = None
     lifestyle_dependent: bool = False
 

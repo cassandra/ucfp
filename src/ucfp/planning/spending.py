@@ -7,12 +7,15 @@ decides which categories apply from the plan's context, seeds the scenario's exp
 catalog (preserving any amounts already set), and owns the annualization the totals use.
 """
 from dataclasses import replace
+from datetime import date
 from decimal import Decimal
 
 from django import forms
 
+from common.date_window import DateWindow
 from common.recurrence import TimeUnit
 
+from ucfp.forecast.parameters import WindowedAmount
 from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind
 from ucfp.parameter_sets.repository import load
 from ucfp.profile.schemas import RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE
@@ -61,8 +64,15 @@ def _flow( catalog_expense ) -> ExpenseFlow:
     return ExpenseFlow(
         name = catalog_expense.name, category = catalog_expense.category,
         expense_tax_class = catalog_expense.expense_tax_class,
-        amount = catalog_expense.default_amount, interval = catalog_expense.interval,
+        schedule = [ WindowedAmount( catalog_expense.default_amount ) ],
+        interval = catalog_expense.interval,
         lifestyle_dependent = catalog_expense.lifestyle_dependent )
+
+
+def current_amount( flow ) -> Decimal:
+    """The amount in effect at the start of the plan -- the first (earliest) schedule row. The L0
+    total shows what you spend now; the rest of the schedule lives in the drill."""
+    return flow.schedule[ 0 ].amount if flow.schedule else Decimal( '0' )
 
 
 def _occurrences_per_year( interval ) -> Decimal:
@@ -86,7 +96,7 @@ def annual_amount( amount : Decimal, interval ) -> Decimal:
 def category_annual_total( expenses ) -> Decimal:
     total = Decimal( '0' )
     for expense in expenses:
-        total += annual_amount( expense.amount, expense.interval )
+        total += annual_amount( current_amount( expense ), expense.interval )
     return total
 
 
@@ -116,7 +126,8 @@ class SpendingForm:
         by_category = dict()
         for expense in merged_expenses( self._profile, self._scenario ):
             by_category.setdefault( expense.category, Decimal( '0' ) )
-            by_category[ expense.category ] += annual_amount( expense.amount, expense.interval )
+            by_category[ expense.category ] += annual_amount(
+                current_amount( expense ), expense.interval )
         return [ ( category, by_category[ category ] )
                  for category in ExpenseCategory if category in by_category ]
 
@@ -125,43 +136,73 @@ class SpendingForm:
 
 
 class CategorySpendingForm( forms.Form ):
-    """The dense editor for one spending category -- an amount field per expense in that category,
-    seeded from the catalog/scenario. `apply` writes the edited amounts back into the scenario's
-    expense list, leaving the other categories' expenses untouched."""
+    """The dense editor for one spending category -- per expense, a schedule of amount-over-span
+    rows (`amount · start · end`), its existing rows plus one blank to add. `apply` rebuilds each
+    expense's schedule from the filled rows, leaving the other categories' expenses untouched."""
+
+    _EXTRA_ROWS = 1
 
     def __init__( self, data = None, *, profile = None, scenario = None, category = None ):
         super().__init__( data )
-        self._all      = merged_expenses( profile, scenario )
-        self._expenses = [ expense for expense in self._all if expense.category is category ]
-        for index, expense in enumerate( self._expenses ):
-            field = forms.DecimalField( label = expense.name, min_value = 0 )
-            field.initial = expense.amount
-            self.fields[ self._field( index ) ] = field
+        self._all        = merged_expenses( profile, scenario )
+        self._expenses   = [ expense for expense in self._all if expense.category is category ]
+        self._row_counts = [ len( expense.schedule ) + self._EXTRA_ROWS
+                             for expense in self._expenses ]
+        for ei, expense in enumerate( self._expenses ):
+            for ri in range( self._row_counts[ ei ] ):
+                row = expense.schedule[ ri ] if ri < len( expense.schedule ) else None
+                self._add_row_fields( ei, ri, row )
+
+    def _add_row_fields( self, ei : int, ri : int, row ):
+        amount = forms.DecimalField( required = False, min_value = 0 )
+        start  = forms.DateField( required = False )
+        end    = forms.DateField( required = False )
+        if row is not None:
+            amount.initial = row.amount
+            start.initial  = row.window.start
+            end.initial    = row.window.end
+        self.fields[ self._key( ei, ri, 'amount' ) ] = amount
+        self.fields[ self._key( ei, ri, 'start' ) ]  = start
+        self.fields[ self._key( ei, ri, 'end' ) ]    = end
 
     @staticmethod
-    def _field( index : int ) -> str:
-        return f'amount_{index}'
+    def _key( ei : int, ri : int, part : str ) -> str:
+        return f'e{ei}_r{ri}_{part}'
 
     @property
-    def rows( self ) -> list:
-        return [ { 'name': expense.name, 'field': self[ self._field( index ) ],
-                   'cadence': cadence_label( expense.interval ) }
-                 for index, expense in enumerate( self._expenses ) ]
+    def expense_rows( self ) -> list:
+        blocks = list()
+        for ei, expense in enumerate( self._expenses ):
+            rows = [ { 'amount' : self[ self._key( ei, ri, 'amount' ) ],
+                       'start'  : self[ self._key( ei, ri, 'start' ) ],
+                       'end'    : self[ self._key( ei, ri, 'end' ) ] }
+                     for ri in range( self._row_counts[ ei ] ) ]
+            blocks.append( {
+                'name': expense.name, 'cadence': cadence_label( expense.interval ), 'rows': rows } )
+        return blocks
 
     @property
     def category_total( self ) -> Decimal:
-        amounts = self._edited_amounts()
-        edited  = [ replace( expense, amount = amounts[ expense.name ] )
-                    for expense in self._expenses ]
-        return category_annual_total( edited )
+        return category_annual_total( self._edited_expenses() )
 
     def apply( self, profile, scenario ):
-        amounts  = self._edited_amounts()
-        expenses = [ replace( expense, amount = amounts[ expense.name ] )
-                     if expense.name in amounts else expense
-                     for expense in self._all ]
+        edited   = { expense.name: expense for expense in self._edited_expenses() }
+        expenses = [ edited.get( expense.name, expense ) for expense in self._all ]
         return profile, replace( scenario, expenses = expenses )
 
-    def _edited_amounts( self ) -> dict:
-        return { expense.name: self.cleaned_data[ self._field( index ) ]
-                 for index, expense in enumerate( self._expenses ) }
+    def _edited_expenses( self ) -> list:
+        return [ replace( expense, schedule = self._schedule( ei ) )
+                 for ei, expense in enumerate( self._expenses ) ]
+
+    def _schedule( self, ei : int ) -> list:
+        rows = list()
+        for ri in range( self._row_counts[ ei ] ):
+            amount = self.cleaned_data.get( self._key( ei, ri, 'amount' ) )
+            if amount is None:
+                continue
+            window = DateWindow(
+                start = self.cleaned_data.get( self._key( ei, ri, 'start' ) ),
+                end = self.cleaned_data.get( self._key( ei, ri, 'end' ) ) )
+            rows.append( WindowedAmount( amount, window ) )
+        rows.sort( key = lambda windowed: windowed.window.start or date.min )
+        return rows

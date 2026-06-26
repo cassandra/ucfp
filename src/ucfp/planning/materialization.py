@@ -270,7 +270,7 @@ def _scenario_expenses( scenario : Scenario ) -> tuple[ list, list ]:
     value-steps over time come later. The successor to `_lifestyle_expenses`."""
     streams, items = list(), list()
     for expense in scenario.expenses:
-        amounts = Schedule.constant( WindowedAmount( expense.amount ) )
+        amounts = Schedule( tuple( expense.schedule ) )
         if expense.interval is None:
             streams.append( ExpenseStream(
                 name = expense.name, expense_tax_class = expense.expense_tax_class,

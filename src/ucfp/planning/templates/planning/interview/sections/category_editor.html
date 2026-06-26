@@ -9,14 +9,18 @@ cell; Done collapses the row.
           data-async="#spending-cat-{{ category_key }}">
       {% csrf_token %}
       <table class="table table-sm w-auto mb-2">
-        <thead><tr><th>Expense</th><th>Amount</th><th>Cadence</th></tr></thead>
+        <thead><tr><th>Expense</th><th>Amount</th><th>From</th><th>To</th><th>Cadence</th></tr></thead>
         <tbody>
-          {% for row in form.rows %}
+          {% for expense in form.expense_rows %}
+          {% for row in expense.rows %}
           <tr>
-            <td>{{ row.name }}</td>
-            <td>{{ row.field }}</td>
-            <td class="text-muted">{{ row.cadence }}</td>
+            <td>{% if forloop.first %}{{ expense.name }}{% endif %}</td>
+            <td>{{ row.amount }}</td>
+            <td>{{ row.start }}</td>
+            <td>{{ row.end }}</td>
+            <td class="text-muted">{% if forloop.first %}{{ expense.cadence }}{% endif %}</td>
           </tr>
+          {% endfor %}
           {% endfor %}
         </tbody>
       </table>
