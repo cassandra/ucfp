@@ -29,6 +29,7 @@ from ucfp.tax.enums import FilingStatus
 
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
+from .properties import rentals_context
 from .spending import SpendingForm
 
 
@@ -342,6 +343,10 @@ class PropertiesForm:
     @property
     def residence_form( self ):
         return HomeForm( profile = self._profile, scenario = self._scenario )
+
+    @property
+    def rentals( self ) -> list:
+        return rentals_context( self._profile )
 
     def apply( self, profile, scenario ):
         return profile, scenario

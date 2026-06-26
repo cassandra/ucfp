@@ -37,6 +37,7 @@ from .events import EventForm, events_context, handler_for, menu_context
 from .forms import GRANULARITY, RunForm
 from .interview import (
     SECTIONS, Aggregate, HomeForm, applicable_sections, next_section_after, section_for )
+from .properties import RentalForm, delete_rental, rentals_context
 from .spending import CategorySpendingForm
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord
@@ -280,6 +281,59 @@ class ResidenceView( View ):
     def _response( self, request, form ):
         return antinode.response( main_content = render_to_string(
             self._TEMPLATE, { 'residence_form': form }, request = request ) )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RentalFormView( View ):
+    """`/planning/interview/properties/rentals/add/` and `.../<handle>/` -- the add/edit form for one
+    rental in the §3 Properties pane. GET opens the form (blank to add, prefilled to edit, empty on
+    cancel); POST validates and writes the rental as a unit, then refreshes the list and clears the
+    form area."""
+
+    _FORM_TEMPLATE = 'planning/interview/sections/rental_form.html'
+    _LIST_TEMPLATE = 'planning/interview/sections/rentals_list.html'
+
+    def get( self, request, handle = None ):
+        profile, scenario = _current_plan( request.organization )
+        if request.GET.get( 'collapse' ):
+            return antinode.response( main_content = self._form( request, None, None ) )
+        form = RentalForm( profile = profile, scenario = scenario, handle = handle )
+        return antinode.response( main_content = self._form( request, handle, form ) )
+
+    def post( self, request, handle = None ):
+        organization = request.organization
+        profile, scenario = _current_plan( organization )
+        form = RentalForm( request.POST, profile = profile, scenario = scenario, handle = handle )
+        if not form.is_valid():
+            return antinode.response( main_content = self._form( request, handle, form ) )
+        profile, scenario = form.apply( profile, scenario )
+        save_profile( organization, profile )
+        save_scenario( latest_scenario( organization ), scenario )
+        return antinode.response(
+            main_content = self._form( request, None, None ),
+            replace_map  = { 'rentals-list': render_to_string(
+                self._LIST_TEMPLATE, { 'rentals': rentals_context( profile ) }, request = request ) } )
+
+    def _form( self, request, handle, form ):
+        return render_to_string(
+            self._FORM_TEMPLATE, { 'rental_form': form, 'handle': handle }, request = request )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RentalDeleteView( View ):
+    """`/planning/interview/properties/rentals/<handle>/delete/` -- remove a rental as a unit, then
+    refresh the list."""
+
+    _LIST_TEMPLATE = 'planning/interview/sections/rentals_list.html'
+
+    def post( self, request, handle ):
+        organization = request.organization
+        profile, scenario = _current_plan( organization )
+        profile, scenario = delete_rental( profile, scenario, handle )
+        save_profile( organization, profile )
+        save_scenario( latest_scenario( organization ), scenario )
+        return antinode.response( main_content = render_to_string(
+            self._LIST_TEMPLATE, { 'rentals': rentals_context( profile ) }, request = request ) )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
