@@ -84,7 +84,8 @@ class LoanProfile:
     (amortizing from origination), unless `current_balance` overrides the balance, the way to
     capture extra principal already paid down. Future extra-principal payments are a scenario
     strategy, not here. `interest_class` (e.g. residence mortgage) defaults at materialization
-    when omitted."""
+    when omitted. `property_handle` attaches the loan to the property it finances, so a property
+    sale can find and end it; None for a non-property loan."""
     handle: str
     name: str
     origination_date: date
@@ -93,6 +94,7 @@ class LoanProfile:
     original_term: Duration
     current_balance: Optional[ Decimal ] = None
     interest_class: Optional[ ExpenseTaxClass ] = None
+    property_handle: Optional[ str ] = None
 
 
 # --- Income entitlements --------------------------------------------------
@@ -128,6 +130,18 @@ class GovernmentPensionEntitlement:
     monthly_at_normal_age: Decimal
 
 
+# --- Rental income --------------------------------------------------------
+
+@dataclass( frozen = True )
+class RentalIncome:
+    """Gross rent a rental property produces, as the `monthly_amount` the owner naturally knows.
+    Bound to its property by `property_handle`; the income is reported by that property's owner and
+    ends when the property is sold. Materializes to a monthly recurring `GROSS_RENTAL` income item,
+    grown by the rental-increase rate."""
+    property_handle: str
+    monthly_amount: Decimal
+
+
 # --- Committed obligations ------------------------------------------------
 
 @dataclass( frozen = True )
@@ -160,5 +174,7 @@ class Profile:
     salaries: list[ SalaryEntitlement ] = field( default_factory = list )
     pensions: list[ PensionEntitlement ] = field( default_factory = list )
     government_pension: list[ GovernmentPensionEntitlement ] = field( default_factory = list )
+    # Rental income
+    rental_incomes: list[ RentalIncome ] = field( default_factory = list )
     # Committed obligations
     obligations: list[ CommittedObligation ] = field( default_factory = list )

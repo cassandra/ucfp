@@ -15,17 +15,17 @@ from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
-from ucfp.forecast.parameters import ContributionSource
+from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.parameter_sets.enums import LifestyleLevel, LifestyleScope
+from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
 
 from ucfp.profile.schemas import (
     AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile,
-    PensionEntitlement, Profile, PropertyProfile, SalaryEntitlement, SubjectProfile )
+    PensionEntitlement, Profile, PropertyProfile, RentalIncome, SalaryEntitlement, SubjectProfile )
 from ucfp.scenario.schemas import (
-    Contribution, DrawdownPolicy, HealthCoverageAssumption, LifestylePlan,
+    Contribution, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption, LifestylePlan,
     LifestyleSegment, PlanEvent, RetirementTiming, Scenario )
 from ucfp.scenario.enums import EventKind
 
@@ -51,13 +51,16 @@ def _sample_profile():
                                interest_rate = Rate( Decimal( '0.0425' ) ),
                                original_term = Duration( 30, TimeUnit.YEAR ),
                                current_balance = Decimal( '250000' ),
-                               interest_class = ExpenseTaxClass.MORTGAGE_INTEREST ) ],
+                               interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
+                               property_handle = 'home' ) ],
         salaries = [ SalaryEntitlement( subject_handle = 'you', annual_amount = Decimal( '120000' ) ) ],
         pensions = [ PensionEntitlement( subject_handle = 'you',
                                          base_annual_amount = Decimal( '30000' ),
                                          normal_start_age = 65 ) ],
         government_pension = [ GovernmentPensionEntitlement(
             subject_handle = 'you', monthly_at_normal_age = Decimal( '2800.50' ) ) ],
+        rental_incomes = [ RentalIncome( property_handle = 'home',
+                                         monthly_amount = Decimal( '2500' ) ) ],
         obligations = [ CommittedObligation( handle = 'rent', name = 'Rent',
                                              amount = Decimal( '1500' ),
                                              cadence = Duration( 1, TimeUnit.MONTH ),
@@ -85,6 +88,10 @@ def _sample_scenario():
             segments = [
                 LifestyleSegment( start = date( 2035, 1, 1 ), level = LifestyleLevel.HIGH ),
                 LifestyleSegment( start = date( 2050, 1, 1 ), level = LifestyleLevel.MEDIUM ) ] ),
+        expenses = [ ExpenseFlow(
+            name = 'Property tax', category = ExpenseCategory.HOME,
+            expense_tax_class = ExpenseTaxClass.SALT,
+            schedule = [ WindowedAmount( Decimal( '6000' ) ) ], property_handle = 'home' ) ],
         contributions = [ Contribution( account_handle = '401k', annual_amount = Decimal( '23000' ),
                                         source = ContributionSource.WAGE ) ],
         drawdown = DrawdownPolicy( cash_floor = Decimal( '20000' ), cash_ceiling = Decimal( '50000' ),

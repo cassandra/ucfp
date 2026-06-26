@@ -26,8 +26,8 @@ from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook
 from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
-    ForecastParameters, IncomeStream, LoanParameters, PropertyAttributes, RetirementContribution,
-    Subject, SubsidizedHealthCoverage, WindowedAmount )
+    ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
+    RetirementContribution, Subject, SubsidizedHealthCoverage, WindowedAmount )
 
 from ucfp.parameter_sets import repository as parameter_sets
 from ucfp.parameter_sets.enums import ParameterSetKind
@@ -73,7 +73,7 @@ def materialize(
         economic_outlook = _economic_outlook( scenario ),
         income_streams   = _income_streams(
             profile, scenario, subjects_by_handle, government_pension ),
-        income_items     = events.income_items,
+        income_items     = _rental_income( profile, subjects_by_handle ) + events.income_items,
         expense_items    = (
             _committed_obligations( profile ) + lifestyle_items + expense_items
             + events.expense_items ),
@@ -210,6 +210,24 @@ def _claiming_date( birthdate : date, claiming_age : int ) -> date:
         return birthdate.replace( year = year )
     except ValueError:
         return birthdate.replace( year = year, day = 28 )
+
+
+def _rental_income(
+        profile : Profile, subjects_by_handle : dict[ str, Subject ] ) -> list[ IncomeItem ]:
+    """Each rental's gross rent as a monthly recurring `GROSS_RENTAL` income item, reported by the
+    property's owner (the primary subject if the property names none -- tax-neutral when filing
+    jointly). A bounded existence window comes later, when a sale ends it."""
+    assets = { asset.handle: asset for asset in profile.assets }
+    items  = list()
+    for rental in profile.rental_incomes:
+        property_asset = assets.get( rental.property_handle )
+        owner   = property_asset.owner_handle if property_asset is not None else None
+        subject = subjects_by_handle.get( owner ) or subjects_by_handle[ profile.subjects[ 0 ].handle ]
+        items.append( IncomeItem(
+            subject = subject, income_tax_class = IncomeTaxClass.GROSS_RENTAL,
+            amounts = Schedule.constant( WindowedAmount( rental.monthly_amount ) ),
+            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ) ) )
+    return items
 
 
 def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:

@@ -89,13 +89,16 @@ class ExpenseFlow:
     `schedule`: the amount over time spans, a `WindowedAmount` per span (one open-ended row is a
     constant amount; reuses the engine's segment type, so it materializes with no conversion).
     `interval` None is a smoothed stream, a `Duration` an item placed at that cadence;
-    `lifestyle_dependent` marks the ones a user would vary over time."""
+    `lifestyle_dependent` marks the ones a user would vary over time. `property_handle` attaches an
+    operating expense to the property it belongs to (so a sale can find and end it); None for a
+    general living expense."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     schedule: list[ WindowedAmount ]
     interval: Optional[ Duration ] = None
     lifestyle_dependent: bool = False
+    property_handle: Optional[ str ] = None
 
 
 # --- Saving ---------------------------------------------------------------
