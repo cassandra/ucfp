@@ -16,21 +16,19 @@ from typing import Optional
 
 from django import forms
 
-from common.date_window import DateWindow
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
-from ucfp.forecast.parameters import WindowedAmount
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
-    AssetProfile, CommittedObligation, GovernmentPensionEntitlement, IncomeFlow, LoanProfile,
-    Profile, SubjectProfile )
+    AssetProfile, CommittedObligation, LoanProfile, Profile, SubjectProfile )
 from ucfp.scenario.schemas import LoanPrepayment, RetirementTiming, Scenario
 from ucfp.tax.enums import FilingStatus
 
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
+from .income import IncomeTableForm
 from .properties import rentals_context
 from .spending import SpendingForm
 
@@ -431,178 +429,23 @@ class AccountsForm( forms.Form ):
             handle = handle, name = name, asset_class = asset_class, opening_value = value ) ]
 
 
-class IncomeForm( forms.Form ):
-    """§5 -- each subject's Social Security and (if still working) salary. Social Security is the
-    benefit at full retirement age plus the chosen claiming age; salary is today's wage, which the
-    engine stops at retirement (per §2's date). The benefit *amounts* are Profile facts, while the
-    claiming age merges into the scenario's per-subject timing, leaving §2's retirement date intact.
-
-    Pension income, hiding salary once a subject has retired, and spousal rules are later
-    refinements; here Social Security and salary are offered per subject and left blank if absent.
-    """
-
-    _SS_AMOUNT = 'ss_monthly'
-    _SS_AGE    = 'ss_claiming_age'
-    _SALARY    = 'salary'
+class IncomeSectionForm:
+    """§5 L0 -- the income pane. A no-op section form: income is edited and saved through the
+    `IncomeTableView`, so Continue just advances. It exposes the income table for the pane."""
 
     def __init__( self, data = None, *, profile = None, scenario = None ):
-        super().__init__(
-            data, initial = self._initial( profile, scenario ) if profile is not None else None )
-        self._subjects = profile.subjects if profile is not None else []
-        self._timing   = self._timing_by_handle( scenario )
-        for subject in self._subjects:
-            self.fields[ self._field( self._SS_AMOUNT, subject.handle ) ] = forms.DecimalField(
-                label = f'{subject.name} Social Security (monthly, at full age)',
-                required = False, min_value = 0 )
-            self.fields[ self._field( self._SS_AGE, subject.handle ) ] = forms.IntegerField(
-                label = f'{subject.name} claims at age',
-                required = False, min_value = 0, max_value = 120 )
-            self.fields[ self._field( self._SALARY, subject.handle ) ] = forms.DecimalField(
-                label = f'{subject.name} salary (annual)', required = False, min_value = 0 )
-        self._rentals = ( [ asset for asset in profile.assets
-                            if asset.asset_class is AssetClass.REAL_ESTATE_RENTAL ]
-                          if profile is not None else [] )
-        for rental in self._rentals:
-            self.fields[ self._rent_field( rental.handle ) ] = forms.DecimalField(
-                label = f'{rental.name} monthly rent', required = False, min_value = 0 )
-            self.fields[ self._rent_start_field( rental.handle ) ] = forms.DateField(
-                label = f'{rental.name} rent from', required = False )
-            self.fields[ self._rent_end_field( rental.handle ) ] = forms.DateField(
-                label = f'{rental.name} rent until', required = False )
+        self._profile  = profile
+        self._scenario = scenario
 
-    @staticmethod
-    def _field( prefix : str, handle : str ) -> str:
-        return f'{prefix}_{handle}'
+    def is_valid( self ) -> bool:
+        return True
 
-    @staticmethod
-    def _rent_field( handle : str ) -> str:
-        return f'rent_{handle}'
+    @property
+    def income_table( self ):
+        return IncomeTableForm( profile = self._profile, scenario = self._scenario )
 
-    @staticmethod
-    def _rent_start_field( handle : str ) -> str:
-        return f'rent_start_{handle}'
-
-    @staticmethod
-    def _rent_end_field( handle : str ) -> str:
-        return f'rent_end_{handle}'
-
-    @staticmethod
-    def _timing_by_handle( scenario : Scenario ) -> dict:
-        timing = scenario.timing if scenario is not None else []
-        return { entry.subject_handle: entry for entry in timing }
-
-    @classmethod
-    def _initial( cls, profile : Profile, scenario : Scenario ) -> dict:
-        timing  = cls._timing_by_handle( scenario )
-        initial = dict()
-        for entitlement in profile.government_pension:
-            handle = entitlement.subject_handle
-            initial[ cls._field( cls._SS_AMOUNT, handle ) ] = entitlement.monthly_at_normal_age
-            entry = timing.get( handle )
-            if entry is not None and entry.government_pension_claiming_age is not None:
-                initial[ cls._field( cls._SS_AGE, handle ) ] = entry.government_pension_claiming_age
-        salary_flows = { flow.subject_handle: flow for flow in profile.income_flows
-                         if flow.income_tax_class is IncomeTaxClass.WAGES }
-        for handle, flow in salary_flows.items():
-            if flow.schedule:
-                initial[ cls._field( cls._SALARY, handle ) ] = flow.schedule[ 0 ].amount
-        rental_flows = { flow.property_handle: flow for flow in profile.income_flows
-                         if flow.property_handle is not None }
-        for asset in profile.assets:
-            flow = rental_flows.get( asset.handle )
-            if flow is not None and flow.schedule:
-                row = flow.schedule[ 0 ]
-                initial[ cls._rent_field( asset.handle ) ]       = row.amount
-                initial[ cls._rent_start_field( asset.handle ) ] = row.window.start
-                initial[ cls._rent_end_field( asset.handle ) ]   = row.window.end
-        return initial
-
-    def clean( self ):
-        cleaned = super().clean()
-        for subject in self._subjects:
-            amount = cleaned.get( self._field( self._SS_AMOUNT, subject.handle ) )
-            age    = cleaned.get( self._field( self._SS_AGE, subject.handle ) )
-            if amount is not None and age is None:
-                self.add_error(
-                    self._field( self._SS_AGE, subject.handle ),
-                    'Choose a Social Security claiming age.' )
-        return cleaned
-
-    def apply( self, profile : Profile, scenario : Scenario ):
-        updated_profile = replace(
-            profile, government_pension = self._entitlements(),
-            income_flows = self._salary_flows() + self._rental_flows( profile ) )
-        updated_scenario = replace( scenario, timing = self._merged_timing() )
-        return updated_profile, updated_scenario
-
-    def _salary_flows( self ) -> list:
-        """A WAGES income flow per subject with a salary, ending at the subject's retirement (the
-        salary-stop date, else §2's retirement date). The retirement age is the convenience that
-        fills the `until`; a direct date editor comes later."""
-        flows = list()
-        for subject in self._subjects:
-            amount = self.cleaned_data.get( self._field( self._SALARY, subject.handle ) )
-            if amount is None:
-                continue
-            window = DateWindow( end = self._salary_end( subject.handle ) )
-            flows.append( IncomeFlow(
-                name = 'Salary', subject_handle = subject.handle,
-                income_tax_class = IncomeTaxClass.WAGES,
-                schedule = [ WindowedAmount( amount, window ) ] ) )
-        return flows
-
-    def _salary_end( self, handle : str ):
-        timing = self._timing.get( handle )
-        if timing is None:
-            return None
-        return timing.salary_stop or timing.retirement_date
-
-    def _rental_flows( self, profile : Profile ) -> list:
-        """A monthly GROSS_RENTAL income flow per rental with a rent, owned by the property's owner
-        and tagged with its `property_handle`. The rent's from/until come from the fields; later
-        schedule rows (a sale's truncation) are preserved, and a blank rent keeps any existing flow
-        untouched."""
-        existing = { flow.property_handle: flow for flow in profile.income_flows
-                     if flow.property_handle is not None }
-        flows = list()
-        for rental in self._rentals:
-            amount = self.cleaned_data.get( self._rent_field( rental.handle ) )
-            prior  = existing.get( rental.handle )
-            if amount is None:
-                if prior is not None:
-                    flows.append( prior )
-                continue
-            flows.append( self._rental_flow( rental, amount, prior ) )
-        return flows
-
-    def _rental_flow( self, rental, amount, prior ) -> IncomeFlow:
-        window = DateWindow(
-            start = self.cleaned_data.get( self._rent_start_field( rental.handle ) ),
-            end   = self.cleaned_data.get( self._rent_end_field( rental.handle ) ) )
-        later  = list( prior.schedule[ 1: ] ) if ( prior is not None and prior.schedule ) else []
-        return IncomeFlow(
-            name = rental.name, subject_handle = rental.owner_handle,
-            income_tax_class = IncomeTaxClass.GROSS_RENTAL,
-            schedule = [ WindowedAmount( amount, window ) ] + later,
-            interval = Duration( 1, TimeUnit.MONTH ), property_handle = rental.handle )
-
-    def _entitlements( self ) -> list:
-        entitlements = list()
-        for subject in self._subjects:
-            amount = self.cleaned_data.get( self._field( self._SS_AMOUNT, subject.handle ) )
-            if amount is not None:
-                entitlements.append( GovernmentPensionEntitlement(
-                    subject_handle = subject.handle, monthly_at_normal_age = amount ) )
-        return entitlements
-
-    def _merged_timing( self ) -> list:
-        timing = list()
-        for subject in self._subjects:
-            current = self._timing.get( subject.handle ) or RetirementTiming(
-                subject_handle = subject.handle )
-            age = self.cleaned_data.get( self._field( self._SS_AGE, subject.handle ) )
-            timing.append( replace( current, government_pension_claiming_age = age ) )
-        return timing
+    def apply( self, profile, scenario ):
+        return profile, scenario
 
 
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
@@ -613,7 +456,8 @@ SECTIONS = [
     Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.SCENARIO ), PropertiesForm,
              outer_template = 'planning/interview/sections/properties.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsForm ),
-    Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.SCENARIO ), IncomeForm ),
+    Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.SCENARIO ), IncomeSectionForm,
+             outer_template = 'planning/interview/sections/income.html' ),
     Section( 'spending'    , 'Spending', ( Aggregate.SCENARIO, ), SpendingForm,
              outer_template = 'planning/interview/sections/spending.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.SCENARIO, ), EventsForm,

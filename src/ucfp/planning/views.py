@@ -33,6 +33,7 @@ from ucfp.scenario.repository import (
     create_scenario, latest_scenario, load_scenario, save_scenario, scenarios_for )
 
 from .events import EventForm, events_context, handler_for, menu_context
+from .income import IncomeTableForm
 from .forms import GRANULARITY, RunForm
 from .interview import (
     SECTIONS, Aggregate, HomeForm, applicable_sections, next_section_after, section_for )
@@ -272,6 +273,34 @@ class ResidenceView( View ):
     def _response( self, request, form ):
         return antinode.response( main_content = render_to_string(
             self._TEMPLATE, { 'residence_form': form }, request = request ) )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class IncomeTableView( View ):
+    """`/planning/interview/income/` -- the §5 income table. GET renders it; POST saves the edited
+    income flows, Social Security, and timing, then re-renders in place (so the dates the retire age
+    fills show on save)."""
+
+    _TEMPLATE = 'planning/interview/sections/income_table.html'
+
+    def get( self, request ):
+        profile, scenario = _current_plan( request.organization )
+        return self._response( request, IncomeTableForm( profile = profile, scenario = scenario ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, scenario = _current_plan( organization )
+        form = IncomeTableForm( request.POST, profile = profile, scenario = scenario )
+        if form.is_valid():
+            profile, scenario = form.apply( profile, scenario )
+            save_profile( organization, profile )
+            save_scenario( latest_scenario( organization ), scenario )
+            form = IncomeTableForm( profile = profile, scenario = scenario )
+        return self._response( request, form )
+
+    def _response( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'income_form': form }, request = request ) )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

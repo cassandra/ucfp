@@ -6,6 +6,7 @@ urlpatterns = [
     path( 'retirement/', views.RetirementPlanningView.as_view(), name = 'retirement_planning' ),
     path( 'interview/', views.InterviewHomeView.as_view(), name = 'interview_home' ),
     path( 'interview/<str:section>/', views.InterviewView.as_view(), name = 'interview_section' ),
+    path( 'interview/income/', views.IncomeTableView.as_view(), name = 'income_table' ),
     path( 'interview/properties/residence/', views.ResidenceView.as_view(), name = 'residence' ),
     path( 'interview/properties/rentals/add/', views.RentalFormView.as_view(), name = 'rental_add' ),
     path( 'interview/properties/rentals/<str:handle>/delete/', views.RentalDeleteView.as_view(),

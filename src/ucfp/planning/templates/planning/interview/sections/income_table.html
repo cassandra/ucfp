@@ -1,0 +1,45 @@
+{% comment %}
+The §5 income table (id=income-table), async-saved. Each income flow is a row -- general lines have
+editable name/subject and a remove box; rental rows show the property and owner (the rent is set
+here, the property in §3). Below, the per-subject retire-age shortcut (fills a blank salary "until")
+and Social Security. Saving re-renders this pane with the dates the retire age filled.
+{% endcomment %}
+<div id="income-table">
+  <form method="post" action="{% url 'income_table' %}" data-async="#income-table">
+    {% csrf_token %}
+    <table class="table table-sm w-auto">
+      <thead>
+        <tr><th>Subject</th><th>Income</th><th>Amount</th><th>Per</th><th>From</th><th>Until</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in income_form.income_rows %}
+        <tr>
+          <td>{% if row.kind == 'rental' %}<span class="text-muted">{{ row.subject_name }}</span>{% else %}{{ row.subject }}{% endif %}</td>
+          <td>{% if row.kind == 'rental' %}{{ row.name }}{% else %}{{ row.name }}{% endif %}</td>
+          <td>{{ row.amount }}</td>
+          <td class="text-muted">{{ row.cadence }}</td>
+          <td>{{ row.from }}</td>
+          <td>{{ row.until }}</td>
+          <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small">Fill the blank row to add an income line; a salary with no "Until"
+      ends at retirement.</p>
+    <table class="table table-sm w-auto mt-2">
+      <thead><tr><th>Person</th><th>Retire at age</th><th>Social Security (monthly, full age)</th><th>Claims at age</th></tr></thead>
+      <tbody>
+        {% for subject in income_form.subject_rows %}
+        <tr>
+          <td>{{ subject.name }}</td>
+          <td>{{ subject.retire }}</td>
+          <td>{{ subject.ssamt }}</td>
+          <td>{{ subject.ssage }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <button type="submit" class="btn btn-sm btn-primary">Save income</button>
+  </form>
+</div>
