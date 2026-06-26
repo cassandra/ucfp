@@ -113,6 +113,25 @@ class IncomeTableForm( forms.Form ):
             return candidates
         return [ ( '', 'Choose...' ) ] + candidates
 
+    def _default_subject( self, subject : str ) -> str:
+        """The chosen subject, or the sole subject when there is only one (so a single-subject plan
+        need not pick); None when several and none was chosen."""
+        if subject:
+            return subject
+        return self._subjects[ 0 ].handle if len( self._subjects ) == 1 else None
+
+    def clean( self ):
+        cleaned = super().clean()
+        for i in range( self._general_rows ):
+            if i < len( self._general ) and cleaned.get( self._key( 'g', i, 'remove' ) ):
+                continue
+            amount  = cleaned.get( self._key( 'g', i, 'amount' ) )
+            subject = self._default_subject( cleaned.get( self._key( 'g', i, 'subject' ) ) )
+            if amount is not None and not subject:
+                self.add_error(
+                    self._key( 'g', i, 'subject' ), 'Choose who receives this income.' )
+        return cleaned
+
     @staticmethod
     def _age( subject, on : date ):
         return on.year - subject.birthdate.year if on is not None else None
@@ -179,7 +198,7 @@ class IncomeTableForm( forms.Form ):
             if i < len( self._general ) and self.cleaned_data.get( self._key( 'g', i, 'remove' ) ):
                 continue
             amount  = self.cleaned_data.get( self._key( 'g', i, 'amount' ) )
-            subject = self.cleaned_data.get( self._key( 'g', i, 'subject' ) )
+            subject = self._default_subject( self.cleaned_data.get( self._key( 'g', i, 'subject' ) ) )
             if amount is None or not subject:
                 continue
             until = self.cleaned_data.get( self._key( 'g', i, 'until' ) ) or retirement.get( subject )
