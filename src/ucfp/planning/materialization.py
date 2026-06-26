@@ -216,7 +216,8 @@ def _rental_income(
         profile : Profile, subjects_by_handle : dict[ str, Subject ] ) -> list[ IncomeItem ]:
     """Each rental's gross rent as a monthly recurring `GROSS_RENTAL` income item, reported by the
     property's owner (the primary subject if the property names none -- tax-neutral when filing
-    jointly). A bounded existence window comes later, when a sale ends it."""
+    jointly). The rent `schedule` maps straight to the item's amounts, so a sale that caps the
+    schedule zeroes the rent past the sale date."""
     assets = { asset.handle: asset for asset in profile.assets }
     items  = list()
     for rental in profile.rental_incomes:
@@ -225,9 +226,8 @@ def _rental_income(
         subject = subjects_by_handle.get( owner ) or subjects_by_handle[ profile.subjects[ 0 ].handle ]
         items.append( IncomeItem(
             subject = subject, income_tax_class = IncomeTaxClass.GROSS_RENTAL,
-            amounts = Schedule.constant( WindowedAmount( rental.monthly_amount ) ),
-            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ),
-            window = DateWindow( end = rental.end ) ) )
+            amounts = Schedule( tuple( rental.schedule ) ),
+            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ) ) )
     return items
 
 

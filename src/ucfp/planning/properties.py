@@ -14,7 +14,7 @@ from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
-from ucfp.profile.schemas import AssetProfile, LoanProfile, PropertyProfile, RentalIncome
+from ucfp.profile.schemas import AssetProfile, LoanProfile, PropertyProfile
 from ucfp.scenario.schemas import LoanPrepayment
 
 
@@ -35,16 +35,11 @@ def _minted_rental_handle( profile ) -> str:
 
 
 def rentals_context( profile ) -> list:
-    """The rentals for the list template: each rental's handle, name, value, and monthly rent."""
-    rents   = { income.property_handle: income.monthly_amount
-                for income in profile.rental_incomes }
-    rentals = list()
-    for asset in profile.assets:
-        if asset.asset_class is AssetClass.REAL_ESTATE_RENTAL:
-            rentals.append( {
-                'handle': asset.handle, 'name': asset.name, 'value': asset.opening_value,
-                'monthly_rent': rents.get( asset.handle ) } )
-    return rentals
+    """The rentals for the list template: each rental's handle, name, and value. The rent is set in
+    the Income section, not here."""
+    return [ { 'handle': asset.handle, 'name': asset.name, 'value': asset.opening_value }
+             for asset in profile.assets
+             if asset.asset_class is AssetClass.REAL_ESTATE_RENTAL ]
 
 
 def delete_rental( profile, scenario, property_handle : str ):
@@ -65,10 +60,10 @@ def delete_rental( profile, scenario, property_handle : str ):
 
 
 class RentalForm( forms.Form ):
-    """One rental property as a unit: the holding (value, basis, acquisition, owner, type), its
-    gross monthly rent, and an optional mortgage. `apply` writes the asset, the rental income, and
-    the mortgage (plus any extra-principal prepayment) under one property handle -- a new one when
-    adding, the given one when editing -- leaving other properties intact."""
+    """One rental property as a unit: the holding (value, basis, acquisition, owner, type) and an
+    optional mortgage. `apply` writes the asset and the mortgage (plus any extra-principal
+    prepayment) under one property handle -- a new one when adding, the given one when editing --
+    leaving other properties intact. The gross rent is set in the Income section, not here."""
 
     name             = forms.CharField( label = 'Name', max_length = 100 )
     value            = forms.DecimalField( label = 'Current value', min_value = 0 )
@@ -78,7 +73,6 @@ class RentalForm( forms.Form ):
         label = 'Building value, excludes land (for depreciation)', min_value = 0 )
     property_type    = forms.ChoiceField(
         label = 'Type', choices = [ ( kind.name, kind.label ) for kind in RealPropertyType ] )
-    monthly_rent     = forms.DecimalField( label = 'Monthly rent', min_value = 0 )
     has_mortgage     = forms.BooleanField( label = 'There is a mortgage', required = False )
     mortgage_origination     = forms.DateField( label = 'Loan start date', required = False )
     mortgage_original_amount = forms.DecimalField(
@@ -115,16 +109,12 @@ class RentalForm( forms.Form ):
         asset = next( ( a for a in profile.assets if a.handle == handle ), None )
         if asset is None:
             return dict()
-        income  = next( ( r for r in profile.rental_incomes
-                          if r.property_handle == handle ), None )
         initial = { 'name': asset.name, 'value': asset.opening_value,
                     'purchase_price': asset.cost_basis, 'owner': asset.owner_handle }
         if asset.property is not None:
             initial[ 'acquisition_date' ] = asset.property.acquisition_date
             initial[ 'building_basis' ]   = asset.property.depreciable_basis
             initial[ 'property_type' ]    = asset.property.property_type.name
-        if income is not None:
-            initial[ 'monthly_rent' ] = income.monthly_amount
         initial.update( cls._mortgage_initial( profile, scenario, handle ) )
         return initial
 
@@ -164,12 +154,9 @@ class RentalForm( forms.Form ):
         handle   = self._handle or _minted_rental_handle( profile )
         mortgage = _mortgage_handle( handle )
         assets   = self._without( profile.assets, 'handle', handle ) + [ self._asset( handle ) ]
-        incomes  = self._without( profile.rental_incomes, 'property_handle', handle )
         loans    = self._without( profile.loans, 'handle', mortgage ) + self._mortgage( handle )
         prepays  = self._without( scenario.prepayments, 'loan_handle', mortgage )
-        profile  = replace(
-            profile, assets = assets, loans = loans,
-            rental_incomes = incomes + [ self._income( handle ) ] )
+        profile  = replace( profile, assets = assets, loans = loans )
         scenario = replace( scenario, prepayments = prepays + self._prepayment( mortgage ) )
         return profile, scenario
 
@@ -187,10 +174,6 @@ class RentalForm( forms.Form ):
                 acquisition_date = cleaned[ 'acquisition_date' ],
                 depreciable_basis = cleaned[ 'building_basis' ],
                 property_type = RealPropertyType[ cleaned[ 'property_type' ] ] ) )
-
-    def _income( self, handle : str ) -> RentalIncome:
-        return RentalIncome(
-            property_handle = handle, monthly_amount = self.cleaned_data[ 'monthly_rent' ] )
 
     def _mortgage( self, property_handle : str ) -> list:
         cleaned = self.cleaned_data

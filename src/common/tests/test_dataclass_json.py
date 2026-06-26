@@ -60,7 +60,7 @@ def _sample_profile():
         government_pension = [ GovernmentPensionEntitlement(
             subject_handle = 'you', monthly_at_normal_age = Decimal( '2800.50' ) ) ],
         rental_incomes = [ RentalIncome( property_handle = 'home',
-                                         monthly_amount = Decimal( '2500' ) ) ],
+                                         schedule = [ WindowedAmount( Decimal( '2500' ) ) ] ) ],
         obligations = [ CommittedObligation( handle = 'rent', name = 'Rent',
                                              amount = Decimal( '1500' ),
                                              cadence = Duration( 1, TimeUnit.MONTH ),

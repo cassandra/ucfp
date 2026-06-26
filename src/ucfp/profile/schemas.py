@@ -24,6 +24,7 @@ from common.rate import Rate
 from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
+from ucfp.forecast.parameters import WindowedAmount
 from ucfp.tax.enums import FilingStatus
 
 
@@ -134,13 +135,13 @@ class GovernmentPensionEntitlement:
 
 @dataclass( frozen = True )
 class RentalIncome:
-    """Gross rent a rental property produces, as the `monthly_amount` the owner naturally knows.
-    Bound to its property by `property_handle`; the income is reported by that property's owner and
-    ends when the property is sold (`end`, set by the sale's cascade). Materializes to a monthly
+    """Gross rent a rental property produces, bound to its property by `property_handle`. `schedule`
+    is the monthly amount over time spans -- a `WindowedAmount` per span (one open-ended row is a
+    constant rent), the same shape an expense flow uses; a sale ends it by capping the schedule at
+    the sale date. The income is reported by the property's owner and materializes to a monthly
     recurring `GROSS_RENTAL` income item, grown by the rental-increase rate."""
     property_handle: str
-    monthly_amount: Decimal
-    end: Optional[ date ] = None
+    schedule: list[ WindowedAmount ]
 
 
 # --- Committed obligations ------------------------------------------------

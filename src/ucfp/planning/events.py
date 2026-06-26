@@ -105,9 +105,10 @@ def _reopen_schedule( schedule : list, end_date ) -> list:
 
 
 def _end_property_flows( profile, scenario, property_handle : str, sale_date ):
-    """End the sold property's rental income and operating expenses at `sale_date`. Its mortgage is
-    left running -- a scheduled loan payoff is not modeled yet (see the sale's summary notice)."""
-    incomes  = [ replace( income, end = sale_date )
+    """End the sold property's rental income and operating expenses at `sale_date` -- both are
+    amount-over-span schedules, capped the same way. Its mortgage is left running: a scheduled loan
+    payoff is not modeled yet (see the sale's summary notice)."""
+    incomes  = [ replace( income, schedule = _end_schedule( income.schedule, sale_date ) )
                  if income.property_handle == property_handle else income
                  for income in profile.rental_incomes ]
     expenses = [ replace( expense, schedule = _end_schedule( expense.schedule, sale_date ) )
@@ -117,9 +118,8 @@ def _end_property_flows( profile, scenario, property_handle : str, sale_date ):
 
 
 def _reopen_property_flows( profile, scenario, property_handle : str, sale_date ):
-    incomes  = [ replace( income, end = None )
-                 if income.property_handle == property_handle and income.end == sale_date
-                 else income
+    incomes  = [ replace( income, schedule = _reopen_schedule( income.schedule, sale_date ) )
+                 if income.property_handle == property_handle else income
                  for income in profile.rental_incomes ]
     expenses = [ replace( expense, schedule = _reopen_schedule( expense.schedule, sale_date ) )
                  if expense.property_handle == property_handle else expense
