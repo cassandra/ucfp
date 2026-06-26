@@ -1,10 +1,11 @@
 """§3 rentals: a rental property handled as a unit.
 
-A rental is three flat profile facts that belong together -- the holding (`AssetProfile`,
-`REAL_ESTATE_RENTAL`), its gross rent (`RentalIncome`), and an optional mortgage (`LoanProfile`) --
-tied by a shared property handle. This module owns creating, editing, and removing them as one, so
-the rest of the app keeps seeing flat lists while the user works with a whole property. Operating
-expenses attach later, in spending (§6), by the same handle.
+A rental is flat profile facts that belong together -- the holding (`AssetProfile`,
+`REAL_ESTATE_RENTAL`), an optional mortgage (`LoanProfile`), and its gross rent (an `IncomeFlow`
+carrying the property handle, set in the Income section) -- tied by a shared property handle. This
+module owns creating, editing, and removing the property as one, so the rest of the app keeps seeing
+flat lists while the user works with a whole property. Operating expenses attach in spending (§6),
+and the rent in income (§5), by the same handle.
 """
 from dataclasses import replace
 
@@ -48,10 +49,10 @@ def delete_rental( profile, scenario, property_handle : str ):
     mortgage = _mortgage_handle( property_handle )
     profile  = replace(
         profile,
-        assets         = [ a for a in profile.assets if a.handle != property_handle ],
-        rental_incomes = [ r for r in profile.rental_incomes
-                           if r.property_handle != property_handle ],
-        loans          = [ loan for loan in profile.loans if loan.handle != mortgage ] )
+        assets       = [ a for a in profile.assets if a.handle != property_handle ],
+        income_flows = [ flow for flow in profile.income_flows
+                         if flow.property_handle != property_handle ],
+        loans        = [ loan for loan in profile.loans if loan.handle != mortgage ] )
     scenario = replace(
         scenario,
         prepayments = [ p for p in scenario.prepayments if p.loan_handle != mortgage ],

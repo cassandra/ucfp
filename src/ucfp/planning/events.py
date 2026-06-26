@@ -108,23 +108,23 @@ def _end_property_flows( profile, scenario, property_handle : str, sale_date ):
     """End the sold property's rental income and operating expenses at `sale_date` -- both are
     amount-over-span schedules, capped the same way. Its mortgage is left running: a scheduled loan
     payoff is not modeled yet (see the sale's summary notice)."""
-    incomes  = [ replace( income, schedule = _end_schedule( income.schedule, sale_date ) )
-                 if income.property_handle == property_handle else income
-                 for income in profile.rental_incomes ]
+    incomes  = [ replace( flow, schedule = _end_schedule( flow.schedule, sale_date ) )
+                 if flow.property_handle == property_handle else flow
+                 for flow in profile.income_flows ]
     expenses = [ replace( expense, schedule = _end_schedule( expense.schedule, sale_date ) )
                  if expense.property_handle == property_handle else expense
                  for expense in scenario.expenses ]
-    return replace( profile, rental_incomes = incomes ), replace( scenario, expenses = expenses )
+    return replace( profile, income_flows = incomes ), replace( scenario, expenses = expenses )
 
 
 def _reopen_property_flows( profile, scenario, property_handle : str, sale_date ):
-    incomes  = [ replace( income, schedule = _reopen_schedule( income.schedule, sale_date ) )
-                 if income.property_handle == property_handle else income
-                 for income in profile.rental_incomes ]
+    incomes  = [ replace( flow, schedule = _reopen_schedule( flow.schedule, sale_date ) )
+                 if flow.property_handle == property_handle else flow
+                 for flow in profile.income_flows ]
     expenses = [ replace( expense, schedule = _reopen_schedule( expense.schedule, sale_date ) )
                  if expense.property_handle == property_handle else expense
                  for expense in scenario.expenses ]
-    return replace( profile, rental_incomes = incomes ), replace( scenario, expenses = expenses )
+    return replace( profile, income_flows = incomes ), replace( scenario, expenses = expenses )
 
 
 def _pretax_accounts( profile ) -> list:

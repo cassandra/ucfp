@@ -129,12 +129,14 @@ class IncomeStream:
     life stage; the Forecast grows it to nominal by the income class's rate (the COLA lives in
     the Economic Outlook, per class), prorates it evenly across each interval, and gates it to
     the window. Interest/dividends/gains come from assets, and IRA/401(k) withdrawals are asset
-    draws, so none of those are streams."""
+    draws, so none of those are streams. `source_handle` is the holding this income is sourced from
+    (a rental property), carried so per-property rental tax can key on it; None otherwise."""
 
     subject          : Subject
     income_tax_class : IncomeTaxClass
     amounts          : Schedule[ WindowedAmount ]
-    window           : DateWindow = DateWindow()
+    window           : DateWindow         = DateWindow()
+    source_handle    : Optional[ Handle ] = None
 
 
 @dataclass( frozen = True )
@@ -147,13 +149,15 @@ class IncomeItem:
     occurrences in that interval x the amount then in effect, grown to nominal by the income
     class's rate, to the per-(subject, class) revenue account (shared with any `IncomeStream`
     of the same subject and class). For smooth income with no meaningful schedule, use
-    `IncomeStream` instead."""
+    `IncomeStream` instead. `source_handle` is the holding this income is sourced from (a rental
+    property), carried so per-property rental tax can key on it; None otherwise."""
 
     subject          : Subject
     income_tax_class : IncomeTaxClass
     amounts          : Schedule[ WindowedAmount ]
     cadence          : Cadence
-    window           : DateWindow = DateWindow()
+    window           : DateWindow         = DateWindow()
+    source_handle    : Optional[ Handle ] = None
 
 
 @dataclass( frozen = True )

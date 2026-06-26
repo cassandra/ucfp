@@ -23,7 +23,7 @@ from typing import Optional
 from common.rate import Rate
 from common.recurrence import Duration
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.tax.enums import FilingStatus
 
@@ -98,17 +98,34 @@ class LoanProfile:
     property_handle: Optional[ str ] = None
 
 
-# --- Income entitlements --------------------------------------------------
-# The engine models all income as a generic IncomeStream keyed by tax class; the profile
-# diverges to entitlement *facts*, each composed with a scenario date-knob into a realized
-# stream at materialization.
+# --- Income flows ---------------------------------------------------------
+# Income the household receives -- the income twin of the scenario's `ExpenseFlow`. A flow is a
+# fact (its amount over time), plural and independent per subject. Social Security and pensions are
+# the exception: their amount is actuarially derived from the claiming/start timing, so they stay
+# entitlement facts below, not flows.
 
 @dataclass( frozen = True )
-class SalaryEntitlement:
-    """Today's wage level. Raises and the stop date are scenario knobs."""
+class IncomeFlow:
+    """One income the household receives -- salary, consulting, rental rent, or other ordinary
+    income -- the income twin of the scenario's `ExpenseFlow`. `subject_handle` is who receives it
+    (for per-subject tax); `income_tax_class` its treatment; `schedule` the amount over time spans (a
+    `WindowedAmount` per span, one open-ended row a constant amount); `interval` None is a smoothed
+    stream, a `Duration` an item placed at that cadence (rent is monthly). `property_handle` ties
+    rental income to its property -- carried through to the engine so a sale ends it and per-property
+    tax can key on it; None for non-property income. A subject may have several (shifting jobs,
+    overlapping incomes)."""
+    name: str
     subject_handle: str
-    annual_amount: Decimal
+    income_tax_class: IncomeTaxClass
+    schedule: list[ WindowedAmount ]
+    interval: Optional[ Duration ] = None
+    property_handle: Optional[ str ] = None
 
+
+# --- Retirement entitlements ----------------------------------------------
+# Social Security and pensions stay entitlement *facts* (the benefit at normal age), each composed
+# with a scenario timing knob into a realized stream at materialization -- because the benefit
+# amount depends on when it is claimed.
 
 @dataclass( frozen = True )
 class PensionEntitlement:
@@ -129,19 +146,6 @@ class GovernmentPensionEntitlement:
     (`tax.government_pension`)."""
     subject_handle: str
     monthly_at_normal_age: Decimal
-
-
-# --- Rental income --------------------------------------------------------
-
-@dataclass( frozen = True )
-class RentalIncome:
-    """Gross rent a rental property produces, bound to its property by `property_handle`. `schedule`
-    is the monthly amount over time spans -- a `WindowedAmount` per span (one open-ended row is a
-    constant rent), the same shape an expense flow uses; a sale ends it by capping the schedule at
-    the sale date. The income is reported by the property's owner and materializes to a monthly
-    recurring `GROSS_RENTAL` income item, grown by the rental-increase rate."""
-    property_handle: str
-    schedule: list[ WindowedAmount ]
 
 
 # --- Committed obligations ------------------------------------------------
@@ -172,11 +176,10 @@ class Profile:
     assets: list[ AssetProfile ] = field( default_factory = list )
     # What you owe
     loans: list[ LoanProfile ] = field( default_factory = list )
-    # Income entitlements
-    salaries: list[ SalaryEntitlement ] = field( default_factory = list )
+    # Income flows
+    income_flows: list[ IncomeFlow ] = field( default_factory = list )
+    # Retirement entitlements
     pensions: list[ PensionEntitlement ] = field( default_factory = list )
     government_pension: list[ GovernmentPensionEntitlement ] = field( default_factory = list )
-    # Rental income
-    rental_incomes: list[ RentalIncome ] = field( default_factory = list )
     # Committed obligations
     obligations: list[ CommittedObligation ] = field( default_factory = list )

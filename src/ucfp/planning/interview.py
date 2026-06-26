@@ -16,15 +16,16 @@ from typing import Optional
 
 from django import forms
 
+from common.date_window import DateWindow
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
-    AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile, Profile,
-    RentalIncome, SalaryEntitlement, SubjectProfile )
+    AssetProfile, CommittedObligation, GovernmentPensionEntitlement, IncomeFlow, LoanProfile,
+    Profile, SubjectProfile )
 from ucfp.scenario.schemas import LoanPrepayment, RetirementTiming, Scenario
 from ucfp.tax.enums import FilingStatus
 
@@ -464,6 +465,10 @@ class IncomeForm( forms.Form ):
         for rental in self._rentals:
             self.fields[ self._rent_field( rental.handle ) ] = forms.DecimalField(
                 label = f'{rental.name} monthly rent', required = False, min_value = 0 )
+            self.fields[ self._rent_start_field( rental.handle ) ] = forms.DateField(
+                label = f'{rental.name} rent from', required = False )
+            self.fields[ self._rent_end_field( rental.handle ) ] = forms.DateField(
+                label = f'{rental.name} rent until', required = False )
 
     @staticmethod
     def _field( prefix : str, handle : str ) -> str:
@@ -472,6 +477,14 @@ class IncomeForm( forms.Form ):
     @staticmethod
     def _rent_field( handle : str ) -> str:
         return f'rent_{handle}'
+
+    @staticmethod
+    def _rent_start_field( handle : str ) -> str:
+        return f'rent_start_{handle}'
+
+    @staticmethod
+    def _rent_end_field( handle : str ) -> str:
+        return f'rent_end_{handle}'
 
     @staticmethod
     def _timing_by_handle( scenario : Scenario ) -> dict:
@@ -488,13 +501,20 @@ class IncomeForm( forms.Form ):
             entry = timing.get( handle )
             if entry is not None and entry.government_pension_claiming_age is not None:
                 initial[ cls._field( cls._SS_AGE, handle ) ] = entry.government_pension_claiming_age
-        for salary in profile.salaries:
-            initial[ cls._field( cls._SALARY, salary.subject_handle ) ] = salary.annual_amount
-        rental_incomes = { income.property_handle: income for income in profile.rental_incomes }
+        salary_flows = { flow.subject_handle: flow for flow in profile.income_flows
+                         if flow.income_tax_class is IncomeTaxClass.WAGES }
+        for handle, flow in salary_flows.items():
+            if flow.schedule:
+                initial[ cls._field( cls._SALARY, handle ) ] = flow.schedule[ 0 ].amount
+        rental_flows = { flow.property_handle: flow for flow in profile.income_flows
+                         if flow.property_handle is not None }
         for asset in profile.assets:
-            income = rental_incomes.get( asset.handle )
-            if income is not None and income.schedule:
-                initial[ cls._rent_field( asset.handle ) ] = income.schedule[ 0 ].amount
+            flow = rental_flows.get( asset.handle )
+            if flow is not None and flow.schedule:
+                row = flow.schedule[ 0 ]
+                initial[ cls._rent_field( asset.handle ) ]       = row.amount
+                initial[ cls._rent_start_field( asset.handle ) ] = row.window.start
+                initial[ cls._rent_end_field( asset.handle ) ]   = row.window.end
         return initial
 
     def clean( self ):
@@ -510,34 +530,61 @@ class IncomeForm( forms.Form ):
 
     def apply( self, profile : Profile, scenario : Scenario ):
         updated_profile = replace(
-            profile, government_pension = self._entitlements(), salaries = self._salaries(),
-            rental_incomes = self._merged_rental_incomes( profile ) )
+            profile, government_pension = self._entitlements(),
+            income_flows = self._salary_flows() + self._rental_flows( profile ) )
         updated_scenario = replace( scenario, timing = self._merged_timing() )
         return updated_profile, updated_scenario
 
-    def _merged_rental_incomes( self, profile : Profile ) -> list:
-        """Each rental's income from its rent field: set the current monthly rent (the first
-        schedule row), preserving any later rows -- a sale's truncation, say. A blank field keeps
-        an existing income untouched and adds none."""
-        existing = { income.property_handle: income for income in profile.rental_incomes }
-        incomes  = list()
+    def _salary_flows( self ) -> list:
+        """A WAGES income flow per subject with a salary, ending at the subject's retirement (the
+        salary-stop date, else §2's retirement date). The retirement age is the convenience that
+        fills the `until`; a direct date editor comes later."""
+        flows = list()
+        for subject in self._subjects:
+            amount = self.cleaned_data.get( self._field( self._SALARY, subject.handle ) )
+            if amount is None:
+                continue
+            window = DateWindow( end = self._salary_end( subject.handle ) )
+            flows.append( IncomeFlow(
+                name = 'Salary', subject_handle = subject.handle,
+                income_tax_class = IncomeTaxClass.WAGES,
+                schedule = [ WindowedAmount( amount, window ) ] ) )
+        return flows
+
+    def _salary_end( self, handle : str ):
+        timing = self._timing.get( handle )
+        if timing is None:
+            return None
+        return timing.salary_stop or timing.retirement_date
+
+    def _rental_flows( self, profile : Profile ) -> list:
+        """A monthly GROSS_RENTAL income flow per rental with a rent, owned by the property's owner
+        and tagged with its `property_handle`. The rent's from/until come from the fields; later
+        schedule rows (a sale's truncation) are preserved, and a blank rent keeps any existing flow
+        untouched."""
+        existing = { flow.property_handle: flow for flow in profile.income_flows
+                     if flow.property_handle is not None }
+        flows = list()
         for rental in self._rentals:
             amount = self.cleaned_data.get( self._rent_field( rental.handle ) )
             prior  = existing.get( rental.handle )
             if amount is None:
                 if prior is not None:
-                    incomes.append( prior )
+                    flows.append( prior )
                 continue
-            incomes.append( self._rental_income( rental.handle, amount, prior ) )
-        return incomes
+            flows.append( self._rental_flow( rental, amount, prior ) )
+        return flows
 
-    @staticmethod
-    def _rental_income( handle : str, amount, prior ) -> RentalIncome:
-        if prior is not None and prior.schedule:
-            schedule = [ replace( prior.schedule[ 0 ], amount = amount ) ] + list( prior.schedule[ 1: ] )
-        else:
-            schedule = [ WindowedAmount( amount ) ]
-        return RentalIncome( property_handle = handle, schedule = schedule )
+    def _rental_flow( self, rental, amount, prior ) -> IncomeFlow:
+        window = DateWindow(
+            start = self.cleaned_data.get( self._rent_start_field( rental.handle ) ),
+            end   = self.cleaned_data.get( self._rent_end_field( rental.handle ) ) )
+        later  = list( prior.schedule[ 1: ] ) if ( prior is not None and prior.schedule ) else []
+        return IncomeFlow(
+            name = rental.name, subject_handle = rental.owner_handle,
+            income_tax_class = IncomeTaxClass.GROSS_RENTAL,
+            schedule = [ WindowedAmount( amount, window ) ] + later,
+            interval = Duration( 1, TimeUnit.MONTH ), property_handle = rental.handle )
 
     def _entitlements( self ) -> list:
         entitlements = list()
@@ -547,15 +594,6 @@ class IncomeForm( forms.Form ):
                 entitlements.append( GovernmentPensionEntitlement(
                     subject_handle = subject.handle, monthly_at_normal_age = amount ) )
         return entitlements
-
-    def _salaries( self ) -> list:
-        salaries = list()
-        for subject in self._subjects:
-            amount = self.cleaned_data.get( self._field( self._SALARY, subject.handle ) )
-            if amount is not None:
-                salaries.append( SalaryEntitlement(
-                    subject_handle = subject.handle, annual_amount = amount ) )
-        return salaries
 
     def _merged_timing( self ) -> list:
         timing = list()

@@ -10,11 +10,12 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
+from common.date_window import DateWindow
 from common.dataclass_json import DataclassJsonError, from_json_data, to_json_data
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
@@ -23,7 +24,7 @@ from ucfp.tax.law import TaxForecastProfile
 
 from ucfp.profile.schemas import (
     AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile,
-    PensionEntitlement, Profile, PropertyProfile, RentalIncome, SalaryEntitlement, SubjectProfile )
+    IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.scenario.schemas import (
     Contribution, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption, LifestylePlan,
     LifestyleSegment, PlanEvent, RetirementTiming, Scenario )
@@ -53,14 +54,20 @@ def _sample_profile():
                                current_balance = Decimal( '250000' ),
                                interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
                                property_handle = 'home' ) ],
-        salaries = [ SalaryEntitlement( subject_handle = 'you', annual_amount = Decimal( '120000' ) ) ],
+        income_flows = [
+            IncomeFlow( name = 'Salary', subject_handle = 'you',
+                        income_tax_class = IncomeTaxClass.WAGES,
+                        schedule = [ WindowedAmount( Decimal( '120000' ),
+                                                     DateWindow( end = date( 2035, 1, 1 ) ) ) ] ),
+            IncomeFlow( name = 'Home rent', subject_handle = 'you',
+                        income_tax_class = IncomeTaxClass.GROSS_RENTAL,
+                        schedule = [ WindowedAmount( Decimal( '2500' ) ) ],
+                        interval = Duration( 1, TimeUnit.MONTH ), property_handle = 'home' ) ],
         pensions = [ PensionEntitlement( subject_handle = 'you',
                                          base_annual_amount = Decimal( '30000' ),
                                          normal_start_age = 65 ) ],
         government_pension = [ GovernmentPensionEntitlement(
             subject_handle = 'you', monthly_at_normal_age = Decimal( '2800.50' ) ) ],
-        rental_incomes = [ RentalIncome( property_handle = 'home',
-                                         schedule = [ WindowedAmount( Decimal( '2500' ) ) ] ) ],
         obligations = [ CommittedObligation( handle = 'rent', name = 'Rent',
                                              amount = Decimal( '1500' ),
                                              cadence = Duration( 1, TimeUnit.MONTH ),

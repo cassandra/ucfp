@@ -61,6 +61,7 @@ def materialize(
     government_pension = GovernmentPension( tax_forecast.tax_law_type )
     lifestyle_streams, lifestyle_items = _lifestyle_expenses( scenario )
     expense_streams, expense_items = _scenario_expenses( scenario )
+    flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
     events = event_contributions( profile, scenario, subjects_by_handle )
     return ForecastParameters(
         start_date       = frame.start_date,
@@ -71,9 +72,9 @@ def materialize(
         subjects         = subjects,
         assets           = _assets( profile ),
         economic_outlook = _economic_outlook( scenario ),
-        income_streams   = _income_streams(
-            profile, scenario, subjects_by_handle, government_pension ),
-        income_items     = _rental_income( profile, subjects_by_handle ) + events.income_items,
+        income_streams   = _entitlement_income(
+            profile, scenario, subjects_by_handle, government_pension ) + flow_streams,
+        income_items     = flow_items + events.income_items,
         expense_items    = (
             _committed_obligations( profile ) + lifestyle_items + expense_items
             + events.expense_items ),
@@ -153,17 +154,35 @@ def _elapsed_months( origination : date, as_of : date ) -> int:
 
 # --- Profile: flows (income entitlements, committed obligations) -----------
 
-def _income_streams(
+def _income_flows(
+        profile : Profile, subjects_by_handle : dict[ str, Subject ] ) -> tuple[ list, list ]:
+    """The profile's income flows as (streams, items): a flow with no interval is a smoothed stream,
+    one with an interval an item placed at that cadence (rent is monthly). The flow's `schedule`
+    carries its own window, and its `property_handle` is carried to the engine as the income's
+    `source_handle` (rental income keeps its property link)."""
+    streams, items = list(), list()
+    for flow in profile.income_flows:
+        subject = subjects_by_handle[ flow.subject_handle ]
+        amounts = Schedule( tuple( flow.schedule ) )
+        if flow.interval is None:
+            streams.append( IncomeStream(
+                subject = subject, income_tax_class = flow.income_tax_class,
+                amounts = amounts, source_handle = flow.property_handle ) )
+        else:
+            items.append( IncomeItem(
+                subject = subject, income_tax_class = flow.income_tax_class,
+                amounts = amounts, cadence = Recurrence( flow.interval ),
+                source_handle = flow.property_handle ) )
+    return streams, items
+
+
+def _entitlement_income(
         profile : Profile, scenario : Scenario, subjects_by_handle : dict[ str, Subject ],
         government_pension : GovernmentPension ) -> list[ IncomeStream ]:
+    """The retirement entitlements as realized income streams: pension and Social Security, whose
+    amount and window depend on the scenario's start/claiming timing."""
     timing = { entry.subject_handle: entry for entry in scenario.timing }
     streams = list()
-    for salary in profile.salaries:
-        streams.append( IncomeStream(
-            subject = subjects_by_handle[ salary.subject_handle ],
-            income_tax_class = IncomeTaxClass.WAGES,
-            amounts = Schedule.constant( WindowedAmount( salary.annual_amount ) ),
-            window = DateWindow( end = _salary_end( timing.get( salary.subject_handle ) ) ) ) )
     for pension in profile.pensions:
         streams.append( IncomeStream(
             subject = subjects_by_handle[ pension.subject_handle ],
@@ -181,14 +200,6 @@ def _income_streams(
                 entitlement.monthly_at_normal_age, subject.birthdate, claiming_age ) ) ),
             window = DateWindow( start = _claiming_date( subject.birthdate, claiming_age ) ) ) )
     return streams
-
-
-def _salary_end( timing : Optional[ RetirementTiming ] ) -> Optional[ date ]:
-    """A salary runs until retirement: the explicit salary-stop date, else the retirement
-    date, else open-ended."""
-    if timing is None:
-        return None
-    return timing.salary_stop or timing.retirement_date
 
 
 def _pension_start( timing : Optional[ RetirementTiming ] ) -> Optional[ date ]:
@@ -210,25 +221,6 @@ def _claiming_date( birthdate : date, claiming_age : int ) -> date:
         return birthdate.replace( year = year )
     except ValueError:
         return birthdate.replace( year = year, day = 28 )
-
-
-def _rental_income(
-        profile : Profile, subjects_by_handle : dict[ str, Subject ] ) -> list[ IncomeItem ]:
-    """Each rental's gross rent as a monthly recurring `GROSS_RENTAL` income item, reported by the
-    property's owner (the primary subject if the property names none -- tax-neutral when filing
-    jointly). The rent `schedule` maps straight to the item's amounts, so a sale that caps the
-    schedule zeroes the rent past the sale date."""
-    assets = { asset.handle: asset for asset in profile.assets }
-    items  = list()
-    for rental in profile.rental_incomes:
-        property_asset = assets.get( rental.property_handle )
-        owner   = property_asset.owner_handle if property_asset is not None else None
-        subject = subjects_by_handle.get( owner ) or subjects_by_handle[ profile.subjects[ 0 ].handle ]
-        items.append( IncomeItem(
-            subject = subject, income_tax_class = IncomeTaxClass.GROSS_RENTAL,
-            amounts = Schedule( tuple( rental.schedule ) ),
-            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ) ) )
-    return items
 
 
 def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:
