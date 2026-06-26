@@ -13,7 +13,8 @@ is a real choice -- we never silently default. (Two later modes attach here addi
 to create an implied entity -- a Roth conversion's Roth account -- and *cascade*, to adjust other
 inputs -- a home sale ending its mortgage. Neither exists yet.)
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from decimal import Decimal
 from typing import Callable, Optional
 
 from django import forms
@@ -24,7 +25,8 @@ from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
-    ScheduledTransfer, SubjectRemoval, WindowedAmount )
+    ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
+from ucfp.profile.schemas import AssetProfile
 from ucfp.scenario.enums import EventKind
 from ucfp.scenario.schemas import PlanEvent
 
@@ -67,6 +69,61 @@ def _subjects( profile ) -> list:
 def _accounts( profile ) -> list:
     return [ ( asset.handle, asset.name ) for asset in profile.assets
              if asset.handle is not None and asset.asset_class not in _NON_TRANSFERABLE ]
+
+
+def _pretax_accounts( profile ) -> list:
+    return [ ( asset.handle, asset.name ) for asset in profile.assets
+             if asset.asset_class is AssetClass.PRETAX_RETIREMENT ]
+
+
+# The handle minted for a Roth account a conversion provisions for an owner who has none.
+_ROTH_HANDLE_PREFIX = 'roth-'
+
+
+def _owner_of( profile, handle : str ) -> Optional[ str ]:
+    asset = next( ( asset for asset in profile.assets if asset.handle == handle ), None )
+    return asset.owner_handle if asset is not None else None
+
+
+def _subject_name( profile, handle : str ) -> str:
+    subject = next( ( subject for subject in profile.subjects if subject.handle == handle ), None )
+    return subject.name if subject is not None else handle
+
+
+def _existing_roth_handle( profile, owner_handle : str ) -> Optional[ str ]:
+    """The handle of a Roth account the owner already holds -- the first found, since a conversion
+    needs no choice among several -- or None if they hold none."""
+    roth = next( ( asset for asset in profile.assets
+                   if asset.asset_class is AssetClass.ROTH and asset.owner_handle == owner_handle ),
+                 None )
+    return roth.handle if roth is not None else None
+
+
+def _minted_roth_handle( profile, owner_handle : str ) -> str:
+    """A fresh handle for a newly-provisioned Roth, unique among the profile's holdings (not
+    assuming the owner's natural handle is free)."""
+    taken  = { asset.handle for asset in profile.assets }
+    base   = f'{_ROTH_HANDLE_PREFIX}{owner_handle}'
+    handle = base
+    suffix = 2
+    while handle in taken:
+        handle = f'{base}-{suffix}'
+        suffix += 1
+    return handle
+
+
+def _ensure_roth_account( profile, owner_handle : str ):
+    """The Roth account a conversion for `owner_handle` lands in -- the owner's existing one if they
+    have any, otherwise a new empty Roth provisioned for them (the conversion implies it exists).
+    Returns the (possibly updated) profile and the Roth's handle."""
+    existing = _existing_roth_handle( profile, owner_handle )
+    if existing is not None:
+        return profile, existing
+    handle  = _minted_roth_handle( profile, owner_handle )
+    account = AssetProfile(
+        handle = handle, name = f'{_subject_name( profile, owner_handle )} Roth',
+        asset_class = AssetClass.ROTH, opening_value = Decimal( '0' ), owner_handle = owner_handle )
+    return replace( profile, assets = list( profile.assets ) + [ account ] ), handle
 
 
 def _names( profile ) -> dict:
@@ -119,6 +176,12 @@ class EventType:
         already constrained to valid candidates.)"""
         return None
 
+    def provision( self, event : PlanEvent, profile ):
+        """Bring into existence any entity this event implies, returning the (possibly updated)
+        profile and event. Runs once, when the event is added; the run then just reads the result.
+        The default provisions nothing; a Roth conversion creates the Roth account it lands in."""
+        return profile, event
+
     def summary( self, event : PlanEvent, profile ) -> str:
         raise NotImplementedError
 
@@ -154,6 +217,31 @@ class TransferEvent( EventType ):
         into.scheduled_events.append( ScheduledTransfer(
             event_date = event.date, source = event.selections[ SOURCE_ROLE ],
             target = event.selections[ TARGET_ROLE ], amount = event.amount ) )
+
+
+class RothConversionEvent( EventType ):
+    kind  = EventKind.ROTH_CONVERSION
+    group = _ACCOUNTS_GROUP
+
+    def references( self, profile ) -> list:
+        return [ ReferenceSpec( SOURCE_ROLE, 'From pre-tax account', _pretax_accounts ) ]
+
+    def provision( self, event : PlanEvent, profile ):
+        """The conversion lands in the source owner's Roth -- found or created. The resolved Roth
+        handle is recorded as the target selection, so materialization just reads it."""
+        owner = _owner_of( profile, event.selections[ SOURCE_ROLE ] )
+        profile, roth_handle = _ensure_roth_account( profile, owner )
+        return profile, replace(
+            event, selections = { **event.selections, TARGET_ROLE: roth_handle } )
+
+    def summary( self, event : PlanEvent, profile ) -> str:
+        source = _names( profile ).get( event.selections.get( SOURCE_ROLE ) )
+        return f'Roth conversion of {_money( event.amount )} from {source}'
+
+    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        into.scheduled_events.append( ScheduledRealization(
+            event_date = event.date, holding = event.selections[ SOURCE_ROLE ],
+            amount = event.amount, destination = event.selections[ TARGET_ROLE ] ) )
 
 
 class TaxableReceiptEvent( EventType ):
@@ -249,8 +337,8 @@ class DeathEvent( EventType ):
 # --- Registry -------------------------------------------------------------
 
 _EVENT_TYPES = (
-    TransferEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(), GeneralPaymentEvent(),
-    CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
+    TransferEvent(), RothConversionEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(),
+    GeneralPaymentEvent(), CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
 
 _BY_KIND = { event_type.kind: event_type for event_type in _EVENT_TYPES }
 
@@ -301,8 +389,9 @@ def events_context( profile, scenario ) -> list:
 
 class EventForm( forms.Form ):
     """The add form for one event kind, built from its `EventType`: a date, an amount (when the
-    kind carries one), and a picker per reference with more than one candidate (a single candidate
-    is auto-selected, no prompt). `build_event` returns the `PlanEvent` to append."""
+    kind carries one), and a picker per reference. A single candidate is shown pre-selected, so the
+    user sees and confirms what the event acts on; more than one prepends a placeholder, so the user
+    must choose (no silent default). `build_event` returns the `PlanEvent` to append."""
 
     date = forms.DateField( label = 'Date' )
 
@@ -312,18 +401,22 @@ class EventForm( forms.Form ):
         self._profile    = profile
         if event_type.has_amount:
             self.fields[ 'amount' ] = forms.DecimalField( label = 'Amount', min_value = 0 )
-        self._auto = dict()
         for spec in event_type.references( profile ):
-            candidates = spec.choices( profile )
-            if len( candidates ) == 1:
-                self._auto[ spec.role ] = candidates[ 0 ][ 0 ]
-            else:
-                self.fields[ self._role_field( spec.role ) ] = forms.ChoiceField(
-                    label = spec.label, choices = candidates )
+            self.fields[ self._role_field( spec.role ) ] = forms.ChoiceField(
+                label = spec.label, choices = self._choices( spec.choices( profile ) ) )
 
     @staticmethod
     def _role_field( role : str ) -> str:
         return f'select_{role}'
+
+    @staticmethod
+    def _choices( candidates : list ) -> list:
+        """The dropdown options for one reference: a lone candidate stands alone (shown selected,
+        nothing to pick); several get a leading placeholder that fails the required check, forcing
+        a deliberate choice."""
+        if len( candidates ) == 1:
+            return list( candidates )
+        return [ ( '', 'Choose...' ) ] + list( candidates )
 
     def clean( self ):
         cleaned = super().clean()
@@ -333,12 +426,8 @@ class EventForm( forms.Form ):
         return cleaned
 
     def _selections( self, cleaned : dict ) -> dict:
-        selections = dict( self._auto )
-        for spec in self._event_type.references( self._profile ):
-            field = self._role_field( spec.role )
-            if field in self.fields:
-                selections[ spec.role ] = cleaned.get( field )
-        return selections
+        return { spec.role: cleaned.get( self._role_field( spec.role ) )
+                 for spec in self._event_type.references( self._profile ) }
 
     def build_event( self ) -> PlanEvent:
         return PlanEvent(

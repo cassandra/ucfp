@@ -12,6 +12,7 @@ class EventKind( LabeledEnum ):
     must stay in step with these members."""
 
     TRANSFER           = ( 'Transfer'        , 'Move money between two accounts.' )
+    ROTH_CONVERSION    = ( 'Roth conversion' , 'Convert pre-tax retirement money to Roth.' )
     TAXABLE_RECEIPT    = ( 'Taxable receipt' , 'A one-time taxable receipt -- a bonus, a settlement.' )
     TAX_FREE_RECEIPT   = ( 'Tax-free receipt', 'A one-time tax-free receipt -- a gift, an inheritance.' )
     GENERAL_PAYMENT    = ( 'Payment'         , 'A one-time non-deductible payment out.' )

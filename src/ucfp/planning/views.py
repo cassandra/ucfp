@@ -275,10 +275,15 @@ class EventAddView( View ):
     def post( self, request, kind ):
         organization = request.organization
         profile, scenario = _current_plan( organization )
-        form = EventForm( request.POST, event_type = self._event_type( kind ), profile = profile )
+        event_type = self._event_type( kind )
+        form = EventForm( request.POST, event_type = event_type, profile = profile )
         if not form.is_valid():
             return antinode.response( main_content = self._form( request, kind, form ) )
-        scenario = replace( scenario, events = list( scenario.events ) + [ form.build_event() ] )
+        provisioned, event = event_type.provision( form.build_event(), profile )
+        if provisioned is not profile:   # an implied entity (e.g. a Roth account) was created
+            save_profile( organization, provisioned )
+            profile = provisioned
+        scenario = replace( scenario, events = list( scenario.events ) + [ event ] )
         save_scenario( latest_scenario( organization ), scenario )
         return antinode.response(
             main_content = self._menu( request, profile ),
