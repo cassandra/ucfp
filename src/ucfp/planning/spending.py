@@ -6,15 +6,17 @@ catalog, which the user accepts or drills into to adjust the individual expenses
 decides which categories apply from the plan's context, seeds the scenario's expense flows from the
 catalog (preserving any amounts already set), and owns the annualization the totals use.
 """
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 
 from django import forms
 
 from common.date_window import DateWindow
 from common.recurrence import TimeUnit
 
+from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind
 from ucfp.parameter_sets.repository import load
@@ -35,6 +37,22 @@ def load_catalog():
     return load( ParameterSetKind.EXPENSE_CATALOG, CatalogScope.GENERAL.label )
 
 
+@dataclass( frozen = True )
+class SpendingGroup:
+    """One row of the §6 spending list: a category, optionally scoped to a property (the residence
+    for Home, a specific rental for Rental; None for the general living categories). Its `key`
+    identifies the group in the URL and the inline editor's DOM, and its expenses are the merged
+    flows matching both the category and the property."""
+    category        : ExpenseCategory
+    property_handle : Optional[ str ]
+    label           : str
+
+    @property
+    def key( self ) -> str:
+        base = self.category.name.lower()
+        return base if self.property_handle is None else f'{base}-{self.property_handle}'
+
+
 def applicable_categories( profile ) -> set:
     applicable  = set( _ALWAYS )
     assets      = { asset.handle for asset in profile.assets } if profile else set()
@@ -44,19 +62,71 @@ def applicable_categories( profile ) -> set:
         applicable.add( ExpenseCategory.UTILITIES )
     if RESIDENCE_ASSET_HANDLE in assets:
         applicable.add( ExpenseCategory.HOME )
+    if _rental_handles( profile ):
+        applicable.add( ExpenseCategory.RENTAL )
     return applicable
+
+
+def _rental_handles( profile ) -> list:
+    return ( [ asset.handle for asset in profile.assets
+               if asset.asset_class is AssetClass.REAL_ESTATE_RENTAL ] if profile else [] )
+
+
+def _property_handles_for( category, profile ) -> list:
+    """The property handles a category's operating expenses attach to: the residence for Home, each
+    rental for Rental (one expense set per rental -- there may be several), and a single unbound
+    `[None]` for the general living categories."""
+    if category is ExpenseCategory.HOME:
+        return [ RESIDENCE_ASSET_HANDLE ]
+    if category is ExpenseCategory.RENTAL:
+        return _rental_handles( profile )
+    return [ None ]
+
+
+def _property_name( profile, handle : str ) -> str:
+    asset = next( ( a for a in profile.assets if a.handle == handle ), None )
+    return asset.name if asset is not None else handle
+
+
+def _group_label( category, property_handle, profile ) -> str:
+    if category is ExpenseCategory.RENTAL:
+        return f'Rental — {_property_name( profile, property_handle )}'
+    return category.label
+
+
+def spending_groups( profile ) -> list:
+    """The §6 spending groups in display order: each applicable category, with Rental expanded to one
+    group per rental property."""
+    applicable = applicable_categories( profile )
+    groups     = list()
+    for category in ExpenseCategory:
+        if category not in applicable:
+            continue
+        for handle in _property_handles_for( category, profile ):
+            groups.append( SpendingGroup(
+                category, handle, _group_label( category, handle, profile ) ) )
+    return groups
+
+
+def group_for_key( profile, key : str ) -> Optional[ SpendingGroup ]:
+    return next( ( group for group in spending_groups( profile ) if group.key == key ), None )
 
 
 def merged_expenses( profile, scenario ) -> list:
     """The applicable catalog expenses as scenario flows -- existing amounts preserved, missing ones
-    seeded at the catalog default, and no-longer-applicable categories dropped."""
+    seeded at the catalog default, and no-longer-applicable categories dropped. A property-scoped
+    category seeds one flow per attached property (each rental its own set), and the `property_handle`
+    binding is re-derived every merge, since it is structural, not a user edit."""
     applicable = applicable_categories( profile )
-    existing   = { expense.name: expense for expense in scenario.expenses } if scenario else dict()
+    existing   = { ( expense.property_handle, expense.name ): expense
+                   for expense in scenario.expenses } if scenario else dict()
     merged = list()
     for catalog_expense in load_catalog().expenses:
         if catalog_expense.category not in applicable:
             continue
-        merged.append( existing.get( catalog_expense.name ) or _flow( catalog_expense ) )
+        for handle in _property_handles_for( catalog_expense.category, profile ):
+            flow = existing.get( ( handle, catalog_expense.name ) ) or _flow( catalog_expense )
+            merged.append( replace( flow, property_handle = handle ) )
     return merged
 
 
@@ -121,31 +191,36 @@ class SpendingForm:
         return True
 
     @property
-    def category_totals( self ) -> list:
-        """(category, annual total) per applicable category, in catalog order, for display."""
-        by_category = dict()
-        for expense in merged_expenses( self._profile, self._scenario ):
-            by_category.setdefault( expense.category, Decimal( '0' ) )
-            by_category[ expense.category ] += annual_amount(
-                current_amount( expense ), expense.interval )
-        return [ ( category, by_category[ category ] )
-                 for category in ExpenseCategory if category in by_category ]
+    def group_totals( self ) -> list:
+        """(group, annual total) per spending group, in display order -- Rental expanded per
+        property."""
+        all_expenses = merged_expenses( self._profile, self._scenario )
+        totals       = list()
+        for group in spending_groups( self._profile ):
+            expenses = [ expense for expense in all_expenses
+                         if expense.category is group.category
+                         and expense.property_handle == group.property_handle ]
+            totals.append( ( group, category_annual_total( expenses ) ) )
+        return totals
 
     def apply( self, profile, scenario ):
         return profile, replace( scenario, expenses = merged_expenses( profile, scenario ) )
 
 
-class CategorySpendingForm( forms.Form ):
-    """The dense editor for one spending category -- per expense, a schedule of amount-over-span
-    rows (`amount · start · end`), its existing rows plus one blank to add. `apply` rebuilds each
-    expense's schedule from the filled rows, leaving the other categories' expenses untouched."""
+class GroupSpendingForm( forms.Form ):
+    """The dense editor for one spending group -- per expense, a schedule of amount-over-span rows
+    (`amount · start · end`), its existing rows plus one blank to add. `apply` rebuilds each
+    expense's schedule from the filled rows, leaving the other groups' expenses untouched (a
+    property-scoped group edits only its own property's expenses)."""
 
     _EXTRA_ROWS = 1
 
-    def __init__( self, data = None, *, profile = None, scenario = None, category = None ):
+    def __init__( self, data = None, *, profile = None, scenario = None, group = None ):
         super().__init__( data )
         self._all        = merged_expenses( profile, scenario )
-        self._expenses   = [ expense for expense in self._all if expense.category is category ]
+        self._expenses   = [ expense for expense in self._all
+                             if expense.category is group.category
+                             and expense.property_handle == group.property_handle ]
         self._row_counts = [ len( expense.schedule ) + self._EXTRA_ROWS
                              for expense in self._expenses ]
         for ei, expense in enumerate( self._expenses ):
@@ -182,12 +257,12 @@ class CategorySpendingForm( forms.Form ):
         return blocks
 
     @property
-    def category_total( self ) -> Decimal:
+    def group_total( self ) -> Decimal:
         return category_annual_total( self._edited_expenses() )
 
     def apply( self, profile, scenario ):
-        edited   = { expense.name: expense for expense in self._edited_expenses() }
-        expenses = [ edited.get( expense.name, expense ) for expense in self._all ]
+        edited   = { ( e.property_handle, e.name ): e for e in self._edited_expenses() }
+        expenses = [ edited.get( ( e.property_handle, e.name ), e ) for e in self._all ]
         return profile, replace( scenario, expenses = expenses )
 
     def _edited_expenses( self ) -> list:

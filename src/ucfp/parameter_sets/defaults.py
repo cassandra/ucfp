@@ -154,8 +154,9 @@ def _general_expense_catalog() -> ExpenseCatalog:
     the original tiers differed. Grouping follows the decision each cost attaches to; only the
     genuinely discretionary rows flex. Property tax, charitable giving, and the rental-context
     variants are added with the sections that introduce their context."""
-    living  = ExpenseTaxClass.LIVING
-    medical = ExpenseTaxClass.MEDICAL
+    living         = ExpenseTaxClass.LIVING
+    medical        = ExpenseTaxClass.MEDICAL
+    rental_expense = ExpenseTaxClass.RENTAL_EXPENSE
     weekly     = Duration( 1, TimeUnit.WEEK )
     monthly    = Duration( 1, TimeUnit.MONTH )
     quarterly  = Duration( 3, TimeUnit.MONTH )
@@ -171,6 +172,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
     home          = ExpenseCategory.HOME
     auto          = ExpenseCategory.AUTO
     health        = ExpenseCategory.HEALTH
+    rental        = ExpenseCategory.RENTAL
     return ExpenseCatalog( [
         # Everyday living
         _expense( 'Food', everyday, '150', living, weekly, flex = True ),
@@ -213,6 +215,11 @@ def _general_expense_catalog() -> ExpenseCatalog:
         # Health
         _expense( 'Medical Expenses', health, '7200', medical, flex = True ),
         _expense( 'Health Insurance', health, '26400', medical, flex = True ),
+        # Rental (a landlord's deductible operating costs, netted against the rent)
+        _expense( 'Rental Property Tax', rental, '4800', rental_expense, yearly ),
+        _expense( 'Rental Insurance', rental, '1800', rental_expense, yearly ),
+        _expense( 'Rental Maintenance', rental, '200', rental_expense, monthly ),
+        _expense( 'Property Management', rental, '240', rental_expense, monthly ),
     ] )
 
 

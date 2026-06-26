@@ -24,7 +24,6 @@ from common.request_utils import is_ajax
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
-from ucfp.parameter_sets.enums import ExpenseCategory
 from ucfp.profile.models import ProfileRecord
 from ucfp.profile.repository import (
     create_profile, latest_profile, load_profile, profiles_for, save_profile )
@@ -38,7 +37,7 @@ from .forms import GRANULARITY, RunForm
 from .interview import (
     SECTIONS, Aggregate, HomeForm, applicable_sections, next_section_after, section_for )
 from .properties import RentalForm, delete_rental, rentals_context
-from .spending import CategorySpendingForm
+from .spending import GroupSpendingForm, group_for_key
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord
 from .orchestration import run_and_capture
@@ -195,56 +194,48 @@ class InterviewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class SpendingCategoryView( View ):
-    """`/planning/interview/spending/<category>/` -- the inline dense editor for one spending
-    category, drilled from the §6 totals. GET expands the editor (or, with `collapse`, removes it);
-    POST saves the edited amounts and refreshes the category's total cell, leaving the editor open.
-    """
+class SpendingGroupView( View ):
+    """`/planning/interview/spending/<group>/` -- the inline dense editor for one spending group
+    (a category, scoped to a property for Home/Rental), drilled from the §6 totals. GET expands the
+    editor (or, with `collapse`, removes it); POST saves the edited amounts and refreshes the
+    group's total cell, leaving the editor open."""
 
-    _EDITOR_TEMPLATE    = 'planning/interview/sections/category_editor.html'
-    _COLLAPSED_TEMPLATE = 'planning/interview/sections/category_collapsed.html'
+    _EDITOR_TEMPLATE    = 'planning/interview/sections/group_editor.html'
+    _COLLAPSED_TEMPLATE = 'planning/interview/sections/group_collapsed.html'
 
-    def get( self, request, category ):
+    def get( self, request, group ):
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = render_to_string(
-                self._COLLAPSED_TEMPLATE, { 'category_key': category }, request = request ) )
-        resolved = self._category( category )
-        profile, scenario = self._plan( request.organization )
-        form = CategorySpendingForm( profile = profile, scenario = scenario, category = resolved )
-        return self._editor_response( request, category, form )
+                self._COLLAPSED_TEMPLATE, { 'group_key': group }, request = request ) )
+        profile, scenario = _current_plan( request.organization )
+        form = GroupSpendingForm(
+            profile = profile, scenario = scenario, group = self._group( profile, group ) )
+        return self._editor_response( request, group, form )
 
-    def post( self, request, category ):
-        resolved = self._category( category )
+    def post( self, request, group ):
         organization = request.organization
-        profile, scenario = self._plan( organization )
-        form = CategorySpendingForm(
-            request.POST, profile = profile, scenario = scenario, category = resolved )
+        profile, scenario = _current_plan( organization )
+        form = GroupSpendingForm(
+            request.POST, profile = profile, scenario = scenario,
+            group = self._group( profile, group ) )
         if form.is_valid():
             _, updated = form.apply( profile, scenario )
             save_scenario( latest_scenario( organization ), updated )
-        return self._editor_response( request, category, form )
+        return self._editor_response( request, group, form )
 
     @staticmethod
-    def _category( category ):
-        resolved = next(
-            ( member for member in ExpenseCategory if member.name.lower() == category ), None )
+    def _group( profile, key ):
+        resolved = group_for_key( profile, key )
         if resolved is None:
-            raise Http404( f'No spending category {category!r}.' )
+            raise Http404( f'No spending group {key!r}.' )
         return resolved
 
-    @staticmethod
-    def _plan( organization ):
-        profile  = load_profile( latest_profile( organization ) or create_profile( organization ) )
-        scenario = load_scenario(
-            latest_scenario( organization ) or create_scenario( organization ) )
-        return profile, scenario
-
-    def _editor_response( self, request, category, form ):
+    def _editor_response( self, request, group, form ):
         content = render_to_string(
-            self._EDITOR_TEMPLATE, { 'category_key': category, 'form': form }, request = request )
-        total = form.category_total if form.is_bound and form.is_valid() else None
+            self._EDITOR_TEMPLATE, { 'group_key': group, 'form': form }, request = request )
+        total = form.group_total if form.is_bound and form.is_valid() else None
         insert_map = (
-            { f'spending-total-{category}': f'{total:.0f}' } if total is not None else None )
+            { f'spending-total-{group}': f'{total:.0f}' } if total is not None else None )
         return antinode.response( main_content = content, insert_map = insert_map )
 
 

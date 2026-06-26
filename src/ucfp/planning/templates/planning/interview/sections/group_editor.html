@@ -1,12 +1,12 @@
 {% comment %}
-One category's dense editor, swapped inline into its placeholder row (#spending-cat-<key>). Saving
-posts back here (re-rendering this row with the saved amounts) and refreshes the category's total
-cell; Done collapses the row.
+One spending group's dense editor, swapped inline into its placeholder row (#spending-cat-<key>).
+Saving posts back here (re-rendering this row with the saved amounts) and refreshes the group's
+total cell; Done collapses the row.
 {% endcomment %}
-<tr id="spending-cat-{{ category_key }}">
+<tr id="spending-cat-{{ group_key }}">
   <td colspan="3">
-    <form method="post" action="{% url 'spending_category' category=category_key %}"
-          data-async="#spending-cat-{{ category_key }}">
+    <form method="post" action="{% url 'spending_group' group=group_key %}"
+          data-async="#spending-cat-{{ group_key }}">
       {% csrf_token %}
       <table class="table table-sm w-auto mb-2">
         <thead><tr><th>Expense</th><th>Amount</th><th>From</th><th>To</th><th>Cadence</th></tr></thead>
@@ -25,8 +25,8 @@ cell; Done collapses the row.
         </tbody>
       </table>
       <button type="submit" class="btn btn-sm btn-primary">Save</button>
-      <a class="btn btn-sm btn-link" data-async="#spending-cat-{{ category_key }}"
-         href="{% url 'spending_category' category=category_key %}?collapse=1">Done</a>
+      <a class="btn btn-sm btn-link" data-async="#spending-cat-{{ group_key }}"
+         href="{% url 'spending_group' group=group_key %}?collapse=1">Done</a>
     </form>
   </td>
 </tr>
