@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
-from common.dataclass_json import from_json_data, to_json_data
+from common.dataclass_json import DataclassJsonError, from_json_data, to_json_data
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
@@ -118,6 +118,16 @@ class DataclassJsonRoundTripTest( SimpleTestCase ):
     def test_empty_aggregates_round_trip( self ):
         self.assertEqual( from_json_data( Profile, to_json_data( Profile() ) ), Profile() )
         self.assertEqual( from_json_data( Scenario, to_json_data( Scenario() ) ), Scenario() )
+
+    def test_incompatible_stored_record_reports_clearly( self ):
+        # A record missing a now-required field (an older schema) names the type and the field gap,
+        # not a raw TypeError from deep in construction.
+        stale = { 'handle': 'you', 'name': 'You' }   # missing the required birthdate
+        with self.assertRaises( DataclassJsonError ) as caught:
+            from_json_data( SubjectProfile, stale )
+        message = str( caught.exception )
+        self.assertIn( 'SubjectProfile', message )
+        self.assertIn( 'schema change', message )
 
 
 class DataclassJsonLeafTest( SimpleTestCase ):

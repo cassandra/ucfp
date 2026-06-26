@@ -20,6 +20,11 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 _NoneType = type( None )
 
 
+class DataclassJsonError( Exception ):
+    """Stored JSON does not match its target dataclass -- typically a record written under an older
+    schema (a field added, removed, or renamed since it was saved)."""
+
+
 def to_json_data( obj: Any ) -> Any:
     if obj is None:
         return None
@@ -89,4 +94,10 @@ def _from_dataclass( target_type: Any, data: dict ) -> Any:
     hints = get_type_hints( target_type )
     kwargs = { name: from_json_data( hints[ name ], value )
                for name, value in data.items() if name in hints }
-    return target_type( **kwargs )
+    try:
+        return target_type( **kwargs )
+    except TypeError as error:
+        raise DataclassJsonError(
+            f'Cannot build {target_type.__name__} from stored data: {error}. The record may '
+            f'predate a schema change -- stored fields {sorted( data )}, '
+            f'expected {sorted( hints )}.' ) from error
