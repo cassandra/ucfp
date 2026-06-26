@@ -8,5 +8,8 @@ urlpatterns = [
     path( 'interview/<str:section>/', views.InterviewView.as_view(), name = 'interview_section' ),
     path( 'interview/spending/<str:category>/', views.SpendingCategoryView.as_view(),
           name = 'spending_category' ),
+    path( 'interview/events/add/<str:kind>/', views.EventAddView.as_view(), name = 'event_add' ),
+    path( 'interview/events/delete/<int:index>/', views.EventDeleteView.as_view(),
+          name = 'event_delete' ),
     path( 'run/<uuid:run_uuid>/', views.RunResultsView.as_view(), name = 'run_results' ),
 ]

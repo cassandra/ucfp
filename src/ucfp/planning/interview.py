@@ -27,6 +27,7 @@ from ucfp.profile.schemas import (
 from ucfp.scenario.schemas import LoanPrepayment, RetirementTiming, Scenario
 from ucfp.tax.enums import FilingStatus
 
+from .events import EventsForm
 from .external_factors import ExternalFactorsForm
 from .spending import SpendingForm
 
@@ -509,7 +510,8 @@ SECTIONS = [
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.SCENARIO ), IncomeForm ),
     Section( 'spending'    , 'Spending', ( Aggregate.SCENARIO, ), SpendingForm,
              outer_template = 'planning/interview/sections/spending.html' ),
-    Section( 'events'      , 'Plans & events' ),
+    Section( 'events'      , 'Plans & events', ( Aggregate.SCENARIO, ), EventsForm,
+             outer_template = 'planning/interview/sections/events.html' ),
     Section( 'external-factors', 'External Factors', ( Aggregate.SCENARIO, ), ExternalFactorsForm,
              inner_template = 'planning/interview/sections/external_factors.html' ),
 ]

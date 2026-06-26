@@ -25,9 +25,9 @@ from ucfp.profile.schemas import (
     AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile,
     PensionEntitlement, Profile, PropertyProfile, SalaryEntitlement, SubjectProfile )
 from ucfp.scenario.schemas import (
-    AssumedDeath, Contribution, DrawdownPolicy, HealthCoverageAssumption, LifestylePlan,
-    LifestyleSegment, PlannedMove, RetirementTiming, Scenario )
-from ucfp.scenario.enums import PlannedMoveKind
+    Contribution, DrawdownPolicy, HealthCoverageAssumption, LifestylePlan,
+    LifestyleSegment, PlanEvent, RetirementTiming, Scenario )
+from ucfp.scenario.enums import EventKind
 
 
 def _sample_profile():
@@ -91,10 +91,12 @@ def _sample_scenario():
                                    draw_order = [ AssetClass.STOCKS, AssetClass.BONDS ],
                                    sweep_allocation = [ ( 'brok', Decimal( '0.6' ) ),
                                                         ( 'bond', Decimal( '0.4' ) ) ] ),
-        planned_moves = [ PlannedMove( kind = PlannedMoveKind.REALIZATION, date = date( 2040, 1, 1 ),
-                                       amount = Decimal( '15000' ), source_handle = 'ira',
-                                       target_handle = 'roth' ) ],
-        assumed_deaths = [ AssumedDeath( subject_handle = 'spouse', event_date = date( 2060, 1, 1 ) ) ],
+        events = [
+            PlanEvent( kind = EventKind.TRANSFER, date = date( 2040, 1, 1 ),
+                       amount = Decimal( '15000' ),
+                       selections = { 'source': 'brok', 'target': 'savings' } ),
+            PlanEvent( kind = EventKind.DEATH, date = date( 2060, 1, 1 ),
+                       selections = { 'subject': 'spouse' } ) ],
         health_coverage = HealthCoverageAssumption( household_size = 2,
                                                     reference_premium = Decimal( '12000' ),
                                                     start = date( 2035, 1, 1 ) ),

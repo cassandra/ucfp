@@ -1,0 +1,13 @@
+{% comment %}
+One event kind's add form, swapped into the add area (id=events-add). Add posts to event_add, which
+appends the event and restores the menu; Cancel restores the menu without adding.
+{% endcomment %}
+<div id="events-add" class="border-top pt-2">
+  <form method="post" action="{% url 'event_add' kind=kind %}" data-async="#events-add">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-sm btn-primary">Add</button>
+    <a class="btn btn-sm btn-link" data-async="#events-add"
+       href="{% url 'event_add' kind=kind %}?collapse=1">Cancel</a>
+  </form>
+</div>

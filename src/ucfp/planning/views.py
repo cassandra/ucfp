@@ -6,6 +6,7 @@ scenario, the frame), runs it, and lists past runs. The results page (`/planning
 shows a captured run -- the net-worth trajectory derived from its persisted books, whether it
 stopped early, and the notices.
 """
+from dataclasses import replace
 from datetime import timedelta
 
 from django.http import Http404
@@ -27,10 +28,12 @@ from ucfp.parameter_sets.enums import ExpenseCategory
 from ucfp.profile.models import ProfileRecord
 from ucfp.profile.repository import (
     create_profile, latest_profile, load_profile, profiles_for, save_profile )
+from ucfp.scenario.enums import EventKind
 from ucfp.scenario.models import ScenarioRecord
 from ucfp.scenario.repository import (
     create_scenario, latest_scenario, load_scenario, save_scenario, scenarios_for )
 
+from .events import EventForm, events_context, handler_for, menu_context
 from .forms import GRANULARITY, RunForm
 from .interview import (
     SECTIONS, Aggregate, applicable_sections, next_section_after, section_for )
@@ -242,6 +245,84 @@ class SpendingCategoryView( View ):
         insert_map = (
             { f'spending-total-{category}': f'{total:.0f}' } if total is not None else None )
         return antinode.response( main_content = content, insert_map = insert_map )
+
+
+def _current_plan( organization ):
+    """The organization's current Profile and Scenario, creating either if absent."""
+    profile  = load_profile( latest_profile( organization ) or create_profile( organization ) )
+    scenario = load_scenario( latest_scenario( organization ) or create_scenario( organization ) )
+    return profile, scenario
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class EventAddView( View ):
+    """`/planning/interview/events/add/<kind>/` -- the §7 add affordance for one event kind. GET
+    opens that kind's form (or, with `collapse`, returns the add menu); POST validates it, appends
+    the event to the scenario, then refreshes the events list and resets the add area to the menu.
+    """
+
+    _MENU_TEMPLATE = 'planning/interview/sections/events_menu.html'
+    _FORM_TEMPLATE = 'planning/interview/sections/event_form.html'
+    _LIST_TEMPLATE = 'planning/interview/sections/events_list.html'
+
+    def get( self, request, kind ):
+        profile, _ = _current_plan( request.organization )
+        if request.GET.get( 'collapse' ):
+            return antinode.response( main_content = self._menu( request, profile ) )
+        form = EventForm( event_type = self._event_type( kind ), profile = profile )
+        return antinode.response( main_content = self._form( request, kind, form ) )
+
+    def post( self, request, kind ):
+        organization = request.organization
+        profile, scenario = _current_plan( organization )
+        form = EventForm( request.POST, event_type = self._event_type( kind ), profile = profile )
+        if not form.is_valid():
+            return antinode.response( main_content = self._form( request, kind, form ) )
+        scenario = replace( scenario, events = list( scenario.events ) + [ form.build_event() ] )
+        save_scenario( latest_scenario( organization ), scenario )
+        return antinode.response(
+            main_content = self._menu( request, profile ),
+            replace_map  = { 'events-list': self._list( request, profile, scenario ) } )
+
+    @staticmethod
+    def _event_type( kind ):
+        resolved = next( ( member for member in EventKind if member.name.lower() == kind ), None )
+        if resolved is None:
+            raise Http404( f'No event kind {kind!r}.' )
+        return handler_for( resolved )
+
+    def _menu( self, request, profile ):
+        return render_to_string(
+            self._MENU_TEMPLATE, { 'menu': menu_context( profile ) }, request = request )
+
+    def _form( self, request, kind, form ):
+        return render_to_string(
+            self._FORM_TEMPLATE, { 'form': form, 'kind': kind }, request = request )
+
+    def _list( self, request, profile, scenario ):
+        return render_to_string(
+            self._LIST_TEMPLATE, { 'events': events_context( profile, scenario ) },
+            request = request )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class EventDeleteView( View ):
+    """`/planning/interview/events/delete/<index>/` -- remove the event at `index`, then refresh
+    the events list."""
+
+    _LIST_TEMPLATE = 'planning/interview/sections/events_list.html'
+
+    def post( self, request, index ):
+        organization = request.organization
+        profile, scenario = _current_plan( organization )
+        events = list( scenario.events )
+        if 0 <= index < len( events ):
+            del events[ index ]
+            scenario = replace( scenario, events = events )
+            save_scenario( latest_scenario( organization ), scenario )
+        return antinode.response( main_content = render_to_string(
+            self._LIST_TEMPLATE, { 'events': events_context( profile, scenario ) },
+            request = request ) )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

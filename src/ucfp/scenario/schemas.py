@@ -31,7 +31,7 @@ from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
 from ucfp.tax.law import TaxForecastProfile
 
-from .enums import PlannedMoveKind
+from .enums import EventKind
 
 
 # ===== External factors (exogenous -- about the world, not the user) =====
@@ -134,29 +134,23 @@ class DrawdownPolicy:
     sweep_allocation: list[ tuple[ str, Decimal ] ] = field( default_factory = list )
 
 
-# --- Planned moves --------------------------------------------------------
+# --- Plan events ----------------------------------------------------------
 
 @dataclass( frozen = True )
-class PlannedMove:
-    """A one-off balance-sheet move on a date -- the engine's scheduled-event family
-    (transfer, purchase, realization, external gift in/out) as one type keyed by `kind`. The
-    fields in play depend on the kind; the family may split into distinct types later."""
-    kind: PlannedMoveKind
+class PlanEvent:
+    """One dated event the user adds in §7 -- a money move or a life event. `kind` selects its
+    `EventType` handler (which references it needs, how it materializes into the engine);
+    `selections` maps each required role (subject, source/target account, ...) to the chosen
+    entity handle. A best-effort authoring convenience: once added it is just another input the
+    run reads, never a simulation step. `amount` is None for an event that carries no sum (a
+    death)."""
+    kind: EventKind
     date: date
-    amount: Decimal
-    source_handle: Optional[ str ] = None
-    target_handle: Optional[ str ] = None
+    amount: Optional[ Decimal ] = None
+    selections: dict[ str, str ] = field( default_factory = dict )
 
 
 # --- Life events ----------------------------------------------------------
-
-@dataclass( frozen = True )
-class AssumedDeath:
-    """An assumed subject death driving the survivor transition -- mirrors the engine
-    `SubjectRemoval`."""
-    subject_handle: str
-    event_date: date
-
 
 @dataclass( frozen = True )
 class HealthCoverageAssumption:
@@ -190,8 +184,7 @@ class Scenario:
     prepayments: list[ LoanPrepayment ] = field( default_factory = list )
     # Drawdown
     drawdown: Optional[ DrawdownPolicy ] = None
-    # Planned moves
-    planned_moves: list[ PlannedMove ] = field( default_factory = list )
+    # Plan events (§7)
+    events: list[ PlanEvent ] = field( default_factory = list )
     # Life events
-    assumed_deaths: list[ AssumedDeath ] = field( default_factory = list )
     health_coverage: Optional[ HealthCoverageAssumption ] = None

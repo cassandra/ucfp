@@ -27,17 +27,16 @@ from ucfp.forecast.economic_outlook import EconomicOutlook
 from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
     ForecastParameters, IncomeStream, LoanParameters, PropertyAttributes, RetirementContribution,
-    ScheduledExternalDisbursement, ScheduledExternalReceipt, ScheduledPurchase,
-    ScheduledRealization, ScheduledTransfer, Subject, SubjectRemoval, SubsidizedHealthCoverage,
-    WindowedAmount )
+    Subject, SubsidizedHealthCoverage, WindowedAmount )
 
 from ucfp.parameter_sets import repository as parameter_sets
 from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.tax.government_pension import GovernmentPension
 
 from ucfp.profile.schemas import AssetProfile, LoanProfile, Profile
-from ucfp.scenario.enums import PlannedMoveKind
-from ucfp.scenario.schemas import PlannedMove, RetirementTiming, Scenario
+from ucfp.scenario.schemas import RetirementTiming, Scenario
+
+from .events import event_contributions
 
 
 @dataclass( frozen = True )
@@ -62,6 +61,7 @@ def materialize(
     government_pension = GovernmentPension( tax_forecast.tax_law_type )
     lifestyle_streams, lifestyle_items = _lifestyle_expenses( scenario )
     expense_streams, expense_items = _scenario_expenses( scenario )
+    events = event_contributions( profile, scenario, subjects_by_handle )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -73,14 +73,17 @@ def materialize(
         economic_outlook = _economic_outlook( scenario ),
         income_streams   = _income_streams(
             profile, scenario, subjects_by_handle, government_pension ),
-        expense_items    = _committed_obligations( profile ) + lifestyle_items + expense_items,
+        income_items     = events.income_items,
+        expense_items    = (
+            _committed_obligations( profile ) + lifestyle_items + expense_items
+            + events.expense_items ),
         expense_streams  = lifestyle_streams + expense_streams,
         loans            = _loans( profile, scenario, frame.start_date ),
         contributions    = _contributions( scenario ),
-        events           = _events( scenario ),
+        events           = events.scheduled_events,
         cash_account     = _cash_account( scenario ),
         health_coverage  = _health_coverage( scenario ),
-        subject_removals = _subject_removals( scenario ),
+        subject_removals = events.subject_removals,
     )
 
 
@@ -299,32 +302,6 @@ def _cash_account( scenario : Scenario ) -> CashAccountParameters:
     return CashAccountParameters(
         cash_floor = drawdown.cash_floor, cash_ceiling = drawdown.cash_ceiling,
         draw_order = list( drawdown.draw_order ), sweep_allocation = sweep )
-
-
-def _events( scenario : Scenario ) -> list:
-    return [ _event( move ) for move in scenario.planned_moves ]
-
-
-def _event( move : PlannedMove ):
-    if move.kind is PlannedMoveKind.TRANSFER:
-        return ScheduledTransfer( event_date = move.date, source = move.source_handle,
-                                  target = move.target_handle, amount = move.amount )
-    if move.kind is PlannedMoveKind.PURCHASE:
-        return ScheduledPurchase( event_date = move.date, asset = move.target_handle,
-                                  amount = move.amount )
-    if move.kind is PlannedMoveKind.REALIZATION:
-        return ScheduledRealization( event_date = move.date, holding = move.source_handle,
-                                     amount = move.amount, destination = move.target_handle )
-    if move.kind is PlannedMoveKind.EXTERNAL_RECEIPT:
-        return ScheduledExternalReceipt( event_date = move.date, amount = move.amount )
-    if move.kind is PlannedMoveKind.EXTERNAL_DISBURSEMENT:
-        return ScheduledExternalDisbursement( event_date = move.date, amount = move.amount )
-    raise ValueError( f'Unknown planned-move kind: {move.kind}.' )
-
-
-def _subject_removals( scenario : Scenario ) -> list[ SubjectRemoval ]:
-    return [ SubjectRemoval( event_date = death.event_date, subject_handle = death.subject_handle )
-             for death in scenario.assumed_deaths ]
 
 
 def _health_coverage( scenario : Scenario ) -> Optional[ SubsidizedHealthCoverage ]:
