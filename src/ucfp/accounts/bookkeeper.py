@@ -152,7 +152,7 @@ class Bookkeeper:
 
     def realize( self,
                  holding               : Account,
-                 proceeds              : Decimal,
+                 proceeds              : Optional[ Decimal ],
                  *,
                  proceeds_account      : Account,
                  realized_gain_account : Account,
@@ -162,14 +162,15 @@ class Bookkeeper:
         down cost and valuation proportionally, recognize the realized gain (the valuation
         portion) into `realized_gain_account`, and reverse the Unrealized Gains equity. The
         gain may be negative -- an underwater holding realizes a loss. Net-worth-neutral --
-        the gain just moves from unrealized to realized (taxable). Caps at the holding's market
-        value. Returns the posted transaction (None if the holding has no value to realize), so
-        a caller can reference it (e.g. in a Notice)."""
+        the gain just moves from unrealized to realized (taxable). `proceeds` of None realizes the
+        entire holding (a full sale); otherwise it caps at the holding's market value. Returns the
+        posted transaction (None if the holding has no value to realize), so a caller can reference
+        it (e.g. in a Notice)."""
         ledger = self.ledger
         market = ledger.market_value( holding )
         if market <= 0:
             return None
-        proceeds = quantize_money( min( proceeds, market ) )
+        proceeds = market if proceeds is None else quantize_money( min( proceeds, market ) )
         valuation_account = self.chart.valuation_of( holding )
         if valuation_account is None:
             cost_sold = proceeds

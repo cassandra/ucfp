@@ -317,13 +317,14 @@ class ScheduledPurchase( ScheduledEvent ):
 class ScheduledRealization( ScheduledEvent ):
     """Realize `amount` of a holding (by handle) -- a sale or pre-tax withdrawal when
     `destination` is None (proceeds to the cash hub), or a conversion when `destination` is
-    another holding's handle (e.g. pre-tax -> Roth). Tax treatment follows the source holding's
-    class."""
+    another holding's handle (e.g. pre-tax -> Roth). `amount` of None realizes the entire holding
+    (a full sale at its projected value); a value caps at the holding's market value. Tax treatment
+    follows the source holding's class."""
 
     event_date  : date
     holding     : Handle
-    amount      : Decimal
-    destination : Optional[ Handle ] = None
+    amount      : Optional[ Decimal ] = None
+    destination : Optional[ Handle ]  = None
 
     def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
         target = self._cash( chart ) if self.destination is None else self._holding(

@@ -311,8 +311,9 @@ class RothConversionEvent( EventType ):
 
 
 class SellPropertyEvent( EventType ):
-    kind  = EventKind.SELL_PROPERTY
-    group = _PROPERTY_GROUP
+    kind       = EventKind.SELL_PROPERTY
+    group      = _PROPERTY_GROUP
+    has_amount = False   # the sale price is the projected value, not a user figure
 
     def references( self, profile ) -> list:
         return [ ReferenceSpec( PROPERTY_ROLE, 'Property', _properties ) ]
@@ -321,12 +322,12 @@ class SellPropertyEvent( EventType ):
         name   = _names( profile ).get( event.selections.get( PROPERTY_ROLE ) )
         notice = ( ' (mortgage payoff not yet modeled)'
                    if _has_mortgage( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
-        return f'Sell {name} for {_money( event.amount )} in {event.date.year}{notice}'
+        return f'Sell {name} in {event.date.year}{notice}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        # No amount: a sale realizes the entire holding at its projected value.
         into.scheduled_events.append( ScheduledRealization(
-            event_date = event.date, holding = event.selections[ PROPERTY_ROLE ],
-            amount = event.amount ) )
+            event_date = event.date, holding = event.selections[ PROPERTY_ROLE ] ) )
 
     def cascade_on_add( self, event : PlanEvent, profile, scenario ):
         return _end_property_flows(
