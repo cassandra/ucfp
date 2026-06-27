@@ -10,7 +10,6 @@ and those per-section forms, which map input onto the typed aggregates.
 whole path, and a section becomes live simply by giving it a form.
 """
 from dataclasses import dataclass, replace
-from datetime import date
 from enum import Enum, auto
 from typing import Optional
 
@@ -23,7 +22,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
     AssetProfile, CommittedObligation, LoanProfile, Profile, SubjectProfile )
-from ucfp.scenario.schemas import LoanPrepayment, RetirementTiming, Scenario
+from ucfp.scenario.schemas import LoanPrepayment, Scenario
 from ucfp.tax.enums import FilingStatus
 
 from .events import EventsForm
@@ -112,61 +111,6 @@ class SubjectsForm( forms.Form ):
     def _filing_status( self ) -> FilingStatus:
         has_partner = self.cleaned_data.get( 'has_partner' )
         return FilingStatus.MARRIED_JOINT if has_partner else FilingStatus.SINGLE
-
-
-class RetirementForm( forms.Form ):
-    """§2 -- when each subject retires. Asks a retirement *age* per subject (the natural unit; the
-    date is derived from their birthdate) and writes it onto the scenario's per-subject timing.
-    Foundational: these dates drive when wages stop and retirement income starts.
-
-    Fields are built per subject from the Profile (so the count follows §1), and `apply_to` merges
-    the date into each subject's existing `RetirementTiming`, leaving the other timing knobs (a
-    later section's claiming age, ...) untouched.
-    """
-
-    def __init__( self, data = None, *, profile = None, scenario = None ):
-        super().__init__( data )
-        self._subjects = profile.subjects if profile is not None else []
-        self._timing   = self._timing_by_handle( scenario )
-        for subject in self._subjects:
-            self.fields[ self._age_field( subject.handle ) ] = self._age_field_for( subject )
-
-    @staticmethod
-    def _age_field( handle : str ) -> str:
-        return f'{handle}_retirement_age'
-
-    @staticmethod
-    def _timing_by_handle( scenario : Optional[ Scenario ] ) -> dict:
-        timing = scenario.timing if scenario is not None else []
-        return { entry.subject_handle: entry for entry in timing }
-
-    def _age_field_for( self, subject : SubjectProfile ) -> forms.IntegerField:
-        field    = forms.IntegerField(
-            label = f'{subject.name} retires at age', min_value = 0, max_value = 120 )
-        existing = self._timing.get( subject.handle )
-        if existing is not None and existing.retirement_date is not None:
-            field.initial = existing.retirement_date.year - subject.birthdate.year
-        return field
-
-    def apply( self, profile : Profile, scenario : Scenario ):
-        return profile, replace( scenario, timing = self._merged_timing() )
-
-    def _merged_timing( self ) -> list:
-        timing = list()
-        for subject in self._subjects:
-            age     = self.cleaned_data[ self._age_field( subject.handle ) ]
-            current = self._timing.get( subject.handle ) or RetirementTiming(
-                subject_handle = subject.handle )
-            timing.append(
-                replace( current, retirement_date = self._at_age( subject.birthdate, age ) ) )
-        return timing
-
-    @staticmethod
-    def _at_age( birthdate : date, age : int ) -> date:
-        try:
-            return birthdate.replace( year = birthdate.year + age )
-        except ValueError:  # 29 Feb landing in a non-leap target year
-            return birthdate.replace( year = birthdate.year + age, day = 28 )
 
 
 class HomeForm( forms.Form ):
@@ -452,7 +396,6 @@ class IncomeSectionForm:
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm ),
-    Section( 'retirement'  , 'Retirement timing', ( Aggregate.SCENARIO, ), RetirementForm ),
     Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.SCENARIO ), PropertiesForm,
              outer_template = 'planning/interview/sections/properties.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsForm ),

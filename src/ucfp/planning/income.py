@@ -73,9 +73,33 @@ class IncomeTableForm( forms.Form ):
         self.fields[ self._key( 'g', i, 'name' ) ]    = name
         self.fields[ self._key( 'g', i, 'subject' ) ] = subject
         self._add_window_fields( 'g', i, flow )
+        self._add_age_fields( i, flow )
 
     def _add_rental_fields( self, k : int, flow ):
         self._add_window_fields( 'r', k, flow )
+
+    def _add_age_fields( self, i : int, flow ):
+        """A from/until age helper per general row -- empty so the date stays canonical, with the
+        current age shown as a placeholder. A filled age fills the date on save (the date is editable
+        for precision)."""
+        from_age  = forms.IntegerField( required = False, min_value = 0, max_value = 120 )
+        until_age = forms.IntegerField( required = False, min_value = 0, max_value = 120 )
+        if flow is not None and flow.schedule:
+            birthdate = self._birthdate( flow.subject_handle )
+            window    = flow.schedule[ 0 ].window
+            self._age_placeholder( from_age, window.start, birthdate )
+            self._age_placeholder( until_age, window.end, birthdate )
+        self.fields[ self._key( 'g', i, 'from_age' ) ]  = from_age
+        self.fields[ self._key( 'g', i, 'until_age' ) ] = until_age
+
+    def _birthdate( self, handle : str ):
+        subject = next( ( s for s in self._subjects if s.handle == handle ), None )
+        return subject.birthdate if subject is not None else None
+
+    @staticmethod
+    def _age_placeholder( field, on : date, birthdate ):
+        if on is not None and birthdate is not None:
+            field.widget.attrs[ 'placeholder' ] = str( on.year - birthdate.year )
 
     def _add_window_fields( self, prefix : str, index : int, flow ):
         amount = forms.DecimalField( required = False, min_value = 0 )
@@ -93,9 +117,6 @@ class IncomeTableForm( forms.Form ):
     def _add_subject_fields( self, m : int, subject ):
         timing = self._timing.get( subject.handle )
         gov    = self._gov.get( subject.handle )
-        self.fields[ self._key( 's', m, 'retire' ) ] = forms.IntegerField(
-            label = 'retire at age', required = False, min_value = 0, max_value = 120,
-            initial = self._age( subject, timing.retirement_date if timing else None ) )
         self.fields[ self._key( 's', m, 'ssamt' ) ] = forms.DecimalField(
             label = 'Social Security (monthly, at full age)', required = False, min_value = 0,
             initial = gov.monthly_at_normal_age if gov is not None else None )
@@ -132,10 +153,6 @@ class IncomeTableForm( forms.Form ):
                     self._key( 'g', i, 'subject' ), 'Choose who receives this income.' )
         return cleaned
 
-    @staticmethod
-    def _age( subject, on : date ):
-        return on.year - subject.birthdate.year if on is not None else None
-
     # --- template rows -----------------------------------------------------
 
     @property
@@ -144,14 +161,16 @@ class IncomeTableForm( forms.Form ):
         for i in range( self._general_rows ):
             existing = i < len( self._general )
             rows.append( {
-                'kind'    : 'general',
-                'name'    : self[ self._key( 'g', i, 'name' ) ],
-                'subject' : self[ self._key( 'g', i, 'subject' ) ],
-                'amount'  : self[ self._key( 'g', i, 'amount' ) ],
-                'from'    : self[ self._key( 'g', i, 'from' ) ],
-                'until'   : self[ self._key( 'g', i, 'until' ) ],
-                'cadence' : 'year',
-                'remove'  : self[ self._key( 'g', i, 'remove' ) ] if existing else None } )
+                'kind'     : 'general',
+                'name'     : self[ self._key( 'g', i, 'name' ) ],
+                'subject'  : self[ self._key( 'g', i, 'subject' ) ],
+                'amount'   : self[ self._key( 'g', i, 'amount' ) ],
+                'from'     : self[ self._key( 'g', i, 'from' ) ],
+                'from_age' : self[ self._key( 'g', i, 'from_age' ) ],
+                'until'    : self[ self._key( 'g', i, 'until' ) ],
+                'until_age': self[ self._key( 'g', i, 'until_age' ) ],
+                'cadence'  : 'year',
+                'remove'   : self[ self._key( 'g', i, 'remove' ) ] if existing else None } )
         for k, rental in enumerate( self._rentals ):
             owner = next( ( s.name for s in self._subjects
                             if s.handle == rental.owner_handle ), rental.owner_handle )
@@ -167,32 +186,21 @@ class IncomeTableForm( forms.Form ):
 
     @property
     def subject_rows( self ) -> list:
-        return [ { 'name'   : subject.name,
-                   'retire' : self[ self._key( 's', m, 'retire' ) ],
-                   'ssamt'  : self[ self._key( 's', m, 'ssamt' ) ],
-                   'ssage'  : self[ self._key( 's', m, 'ssage' ) ] }
+        return [ { 'name'  : subject.name,
+                   'ssamt' : self[ self._key( 's', m, 'ssamt' ) ],
+                   'ssage' : self[ self._key( 's', m, 'ssage' ) ] }
                  for m, subject in enumerate( self._subjects ) ]
 
     # --- apply -------------------------------------------------------------
 
     def apply( self, profile, scenario ):
-        retirement = self._retirement_dates()
-        flows      = self._general_flows( retirement ) + self._rental_flows()
+        flows = self._general_flows() + self._rental_flows()
         updated_profile  = replace(
             profile, income_flows = flows, government_pension = self._entitlements() )
-        updated_scenario = replace( scenario, timing = self._merged_timing( retirement ) )
+        updated_scenario = replace( scenario, timing = self._merged_timing() )
         return updated_profile, updated_scenario
 
-    def _retirement_dates( self ) -> dict:
-        """Each subject's retirement date from the retire-age field (the convenience that fills a
-        blank salary `until`); None when the age is blank."""
-        dates = dict()
-        for m, subject in enumerate( self._subjects ):
-            age = self.cleaned_data.get( self._key( 's', m, 'retire' ) )
-            dates[ subject.handle ] = _at_age( subject.birthdate, age ) if age is not None else None
-        return dates
-
-    def _general_flows( self, retirement : dict ) -> list:
+    def _general_flows( self ) -> list:
         flows = list()
         for i in range( self._general_rows ):
             if i < len( self._general ) and self.cleaned_data.get( self._key( 'g', i, 'remove' ) ):
@@ -201,14 +209,23 @@ class IncomeTableForm( forms.Form ):
             subject = self._default_subject( self.cleaned_data.get( self._key( 'g', i, 'subject' ) ) )
             if amount is None or not subject:
                 continue
-            until = self.cleaned_data.get( self._key( 'g', i, 'until' ) ) or retirement.get( subject )
-            window = DateWindow(
-                start = self.cleaned_data.get( self._key( 'g', i, 'from' ) ), end = until )
+            birthdate = self._birthdate( subject )
+            window    = DateWindow(
+                start = self._endpoint( 'g', i, 'from', birthdate ),
+                end   = self._endpoint( 'g', i, 'until', birthdate ) )
             flows.append( IncomeFlow(
                 name = self.cleaned_data.get( self._key( 'g', i, 'name' ) ) or 'Income',
                 subject_handle = subject, income_tax_class = IncomeTaxClass.WAGES,
                 schedule = [ WindowedAmount( amount, window ) ] ) )
         return flows
+
+    def _endpoint( self, prefix : str, index : int, part : str, birthdate ):
+        """A window endpoint date: the age helper (a convenience) wins when filled, computed from the
+        subject's birthdate; otherwise the date field, which stays canonical."""
+        age = self.cleaned_data.get( self._key( prefix, index, f'{part}_age' ) )
+        if age is not None and birthdate is not None:
+            return _at_age( birthdate, age )
+        return self.cleaned_data.get( self._key( prefix, index, part ) )
 
     def _rental_flows( self ) -> list:
         flows = list()
@@ -235,14 +252,13 @@ class IncomeTableForm( forms.Form ):
                     subject_handle = subject.handle, monthly_at_normal_age = amount ) )
         return entitlements
 
-    def _merged_timing( self, retirement : dict ) -> list:
+    def _merged_timing( self ) -> list:
         timing = list()
         for m, subject in enumerate( self._subjects ):
             current = self._timing.get( subject.handle ) or RetirementTiming(
                 subject_handle = subject.handle )
             timing.append( replace(
                 current,
-                retirement_date = retirement.get( subject.handle ) or current.retirement_date,
                 government_pension_claiming_age = self.cleaned_data.get(
                     self._key( 's', m, 'ssage' ) ) ) )
         return timing
