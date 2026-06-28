@@ -25,7 +25,7 @@ from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
-    ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
+    ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
 from ucfp.profile.schemas import AssetProfile
 from ucfp.scenario.enums import EventKind
 from ucfp.scenario.schemas import PlanEvent
@@ -79,8 +79,10 @@ def _properties( profile ) -> list:
              if asset.asset_class in _REAL_ESTATE ]
 
 
-def _has_mortgage( profile, property_handle : str ) -> bool:
-    return any( loan.property_handle == property_handle for loan in profile.loans )
+def _mortgages( profile, property_handle : str ) -> list:
+    """The handles of the loans secured by `property_handle` -- the mortgages a sale pays off. A
+    property may carry more than one (e.g. a first and a second), so this is a list, not a flag."""
+    return [ loan.handle for loan in profile.loans if loan.property_handle == property_handle ]
 
 
 def _end_schedule( schedule : list, end_date ) -> list:
@@ -106,8 +108,8 @@ def _reopen_schedule( schedule : list, end_date ) -> list:
 
 def _end_property_flows( profile, scenario, property_handle : str, sale_date ):
     """End the sold property's rental income and operating expenses at `sale_date` -- both are
-    amount-over-span schedules, capped the same way. Its mortgage is left running: a scheduled loan
-    payoff is not modeled yet (see the sale's summary notice)."""
+    amount-over-span schedules, capped the same way. The mortgage is not ended here: the sale's
+    `contribute` emits a scheduled loan payoff that clears it from the proceeds at the sale date."""
     incomes  = [ replace( flow, schedule = _end_schedule( flow.schedule, sale_date ) )
                  if flow.property_handle == property_handle else flow
                  for flow in profile.income_flows ]
@@ -320,14 +322,19 @@ class SellPropertyEvent( EventType ):
 
     def summary( self, event : PlanEvent, profile ) -> str:
         name   = _names( profile ).get( event.selections.get( PROPERTY_ROLE ) )
-        notice = ( ' (mortgage payoff not yet modeled)'
-                   if _has_mortgage( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
+        notice = ( ' (mortgage paid off)'
+                   if _mortgages( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
         return f'Sell {name} in {event.date.year}{notice}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        # No amount: a sale realizes the entire holding at its projected value.
+        # No amount: a sale realizes the entire holding at its projected value, then pays off any
+        # mortgage secured by it from the proceeds (the engine clears the projected balance).
+        property_handle = event.selections[ PROPERTY_ROLE ]
         into.scheduled_events.append( ScheduledRealization(
-            event_date = event.date, holding = event.selections[ PROPERTY_ROLE ] ) )
+            event_date = event.date, holding = property_handle ) )
+        for loan_handle in _mortgages( profile, property_handle ):
+            into.scheduled_events.append( ScheduledLoanPayoff(
+                event_date = event.date, loan = loan_handle ) )
 
     def cascade_on_add( self, event : PlanEvent, profile, scenario ):
         return _end_property_flows(
