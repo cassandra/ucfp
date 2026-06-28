@@ -1,0 +1,18 @@
+{% comment %}
+The interview's progress rail. Re-rendered on every swap from the *applicable* sections, so a
+section that prior answers add or remove appears or disappears here. A live section (one with a
+form) that is not the current one is a revisit link (async, into the section pane); upcoming
+sections are plain. The element ids come from the view (stepper_target / section_target).
+{% endcomment %}
+<ol id="{{ stepper_target }}" class="list-group list-group-numbered">
+  {% for section in sections %}
+  <li class="list-group-item{% if section.key == current_section.key %} active{% endif %}">
+    {% if section.form and section.key != current_section.key %}
+    <a data-async="#{{ section_target }}"
+       href="{% url 'interview_section' section=section.key %}">{{ section.title }}</a>
+    {% else %}
+    {{ section.title }}
+    {% endif %}
+  </li>
+  {% endfor %}
+</ol>

@@ -20,3 +20,9 @@ def load( kind : ParameterSetKind, name : str,
     when None)."""
     record = ParameterSet.objects.get( kind = kind, label = name, organization = organization )
     return from_json_data( AGGREGATE_BY_KIND[ kind ], record.data )
+
+
+def economic_parameters( variant_label : str ):
+    """The `EconomicParameters` of the economic-outlook preset named `variant_label` -- the first
+    (currently only) segment of its schedule. The seed source for a scenario's editable copy."""
+    return load( ParameterSetKind.ECONOMIC_OUTLOOK, variant_label ).segments[ 0 ]

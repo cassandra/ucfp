@@ -5,8 +5,7 @@
 <div class="container py-5 text-center">
   <h1 class="text-primary mb-3">{% settings_value 'SITE_NAME' %}</h1>
   <p class="lead text-muted mb-4">Plan your financial future.</p>
-  <a href="{% url 'profile_home' %}" class="btn btn-outline-primary btn-lg me-2">Your profile</a>
-  <a href="{% url 'scenario_home' %}" class="btn btn-outline-primary btn-lg me-2">Scenarios</a>
-  <a href="{% url 'retirement_planning' %}" class="btn btn-primary btn-lg">Plan</a>
+  <a href="{% url 'interview_home' %}" class="btn btn-primary btn-lg me-2">Set up / edit your plan</a>
+  <a href="{% url 'retirement_planning' %}" class="btn btn-outline-primary btn-lg">Run forecasts</a>
 </div>
 {% endblock %}

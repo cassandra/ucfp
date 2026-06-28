@@ -13,7 +13,7 @@ from common.recurrence import Duration
 from ucfp.accounts.enums import ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 
-from .enums import LifestyleLevel
+from .enums import ExpenseCategory, LifestyleLevel
 
 
 @dataclass( frozen = True )
@@ -54,3 +54,24 @@ class LifestyleCostTable:
     scenario's lifestyle level selects each expense's value; materialization steps it over the
     schedule timeline."""
     expenses: list[ LifestyleExpense ] = field( default_factory = list )
+
+
+@dataclass( frozen = True )
+class ExpenseType:
+    """One catalog expense: its `category` (the user-facing bucket and the decision it attaches to),
+    tax class, cadence, and a single `default_amount` -- the typical value (annual for a stream,
+    per-occurrence for an item). `lifestyle_dependent` marks the ones whose amount a user would vary
+    over time; `interval` None is a smoothed stream, a `Duration` an item placed at its cadence."""
+    name: str
+    category: ExpenseCategory
+    expense_tax_class: ExpenseTaxClass
+    default_amount: Decimal
+    interval: Optional[ Duration ] = None
+    lifestyle_dependent: bool = False
+
+
+@dataclass( frozen = True )
+class ExpenseCatalog:
+    """The curated set of expense types -- the payload of an EXPENSE_CATALOG set, seeded from the
+    spreadsheet data and the source of presumed defaults for the spending section."""
+    expenses: list[ ExpenseType ] = field( default_factory = list )

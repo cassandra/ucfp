@@ -10,23 +10,25 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
-from common.dataclass_json import from_json_data, to_json_data
+from common.date_window import DateWindow
+from common.dataclass_json import DataclassJsonError, from_json_data, to_json_data
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
-from ucfp.forecast.parameters import ContributionSource
-from ucfp.parameter_sets.enums import EconomicOutlookVariant, LifestyleLevel, LifestyleScope
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
+from ucfp.forecast.parameters import ContributionSource, WindowedAmount
+from ucfp.forecast.economic_outlook import EconomicParameters
+from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
 
 from ucfp.profile.schemas import (
     AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile,
-    PensionEntitlement, Profile, PropertyProfile, SalaryEntitlement, SubjectProfile )
+    IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.scenario.schemas import (
-    AssumedDeath, Contribution, DrawdownPolicy, HealthCoverageAssumption, LifestylePlan,
-    LifestyleSegment, PlannedMove, RetirementTiming, Scenario )
-from ucfp.scenario.enums import PlannedMoveKind
+    Contribution, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption, LifestylePlan,
+    LifestyleSegment, PlanEvent, RetirementTiming, Scenario )
+from ucfp.scenario.enums import EventKind
 
 
 def _sample_profile():
@@ -45,11 +47,22 @@ def _sample_profile():
                                                       property_type = RealPropertyType.RESIDENTIAL ) ),
         ],
         loans = [ LoanProfile( handle = 'mort', name = 'Mortgage',
-                               opening_balance = Decimal( '250000' ),
+                               origination_date = date( 2005, 6, 1 ),
+                               original_amount = Decimal( '300000' ),
                                interest_rate = Rate( Decimal( '0.0425' ) ),
-                               term = Duration( 30, TimeUnit.YEAR ),
-                               interest_class = ExpenseTaxClass.MORTGAGE_INTEREST ) ],
-        salaries = [ SalaryEntitlement( subject_handle = 'you', annual_amount = Decimal( '120000' ) ) ],
+                               original_term = Duration( 30, TimeUnit.YEAR ),
+                               current_balance = Decimal( '250000' ),
+                               interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
+                               property_handle = 'home' ) ],
+        income_flows = [
+            IncomeFlow( name = 'Salary', subject_handle = 'you',
+                        income_tax_class = IncomeTaxClass.WAGES,
+                        schedule = [ WindowedAmount( Decimal( '120000' ),
+                                                     DateWindow( end = date( 2035, 1, 1 ) ) ) ] ),
+            IncomeFlow( name = 'Home rent', subject_handle = 'you',
+                        income_tax_class = IncomeTaxClass.GROSS_RENTAL,
+                        schedule = [ WindowedAmount( Decimal( '2500' ) ) ],
+                        interval = Duration( 1, TimeUnit.MONTH ), property_handle = 'home' ) ],
         pensions = [ PensionEntitlement( subject_handle = 'you',
                                          base_annual_amount = Decimal( '30000' ),
                                          normal_start_age = 65 ) ],
@@ -64,26 +77,42 @@ def _sample_profile():
 
 def _sample_scenario():
     return Scenario(
-        economic_outlook = EconomicOutlookVariant.OPTIMISTIC,
+        economics = EconomicParameters(
+            inflation = Rate( Decimal( '0.025' ) ), medical_inflation = Rate( Decimal( '0.045' ) ),
+            wage_growth = Rate( Decimal( '0.03' ) ), savings_interest = Rate( Decimal( '0.02' ) ),
+            cd_interest = Rate( Decimal( '0.03' ) ), bond_interest = Rate( Decimal( '0.04' ) ),
+            stock_appreciation = Rate( Decimal( '0.06' ) ), stock_dividend = Rate( Decimal( '0.018' ) ),
+            real_estate_appreciation = Rate( Decimal( '0.035' ) ),
+            retirement_growth = Rate( Decimal( '0.055' ) ),
+            social_security_cola = Rate( Decimal( '0.025' ) ), pension_cola = Rate( Decimal( '0.02' ) ),
+            rental_increase = Rate( Decimal( '0.03' ) ) ),
         tax_forecast = TaxForecastProfile( tax_law_type = TaxLawType.US_FEDERAL,
                                            tax_forecast_type = TaxForecastType.CURRENT_LAW ),
-        timing = [ RetirementTiming( subject_handle = 'you', retirement_date = date( 2035, 1, 1 ),
-                                     government_pension_claiming_age = 70 ) ],
+        timing = [ RetirementTiming(
+            subject_handle = 'you',
+            government_pension_claiming_date = date( 2040, 1, 1 ),
+            pension_start = date( 2038, 1, 1 ) ) ],
         lifestyle = LifestylePlan(
             scope = LifestyleScope.GENERAL,
             segments = [
                 LifestyleSegment( start = date( 2035, 1, 1 ), level = LifestyleLevel.HIGH ),
                 LifestyleSegment( start = date( 2050, 1, 1 ), level = LifestyleLevel.MEDIUM ) ] ),
+        expenses = [ ExpenseFlow(
+            name = 'Property tax', category = ExpenseCategory.HOME,
+            expense_tax_class = ExpenseTaxClass.SALT,
+            schedule = [ WindowedAmount( Decimal( '6000' ) ) ], property_handle = 'home' ) ],
         contributions = [ Contribution( account_handle = '401k', annual_amount = Decimal( '23000' ),
                                         source = ContributionSource.WAGE ) ],
         drawdown = DrawdownPolicy( cash_floor = Decimal( '20000' ), cash_ceiling = Decimal( '50000' ),
                                    draw_order = [ AssetClass.STOCKS, AssetClass.BONDS ],
                                    sweep_allocation = [ ( 'brok', Decimal( '0.6' ) ),
                                                         ( 'bond', Decimal( '0.4' ) ) ] ),
-        planned_moves = [ PlannedMove( kind = PlannedMoveKind.REALIZATION, date = date( 2040, 1, 1 ),
-                                       amount = Decimal( '15000' ), source_handle = 'ira',
-                                       target_handle = 'roth' ) ],
-        assumed_deaths = [ AssumedDeath( subject_handle = 'spouse', event_date = date( 2060, 1, 1 ) ) ],
+        events = [
+            PlanEvent( kind = EventKind.TRANSFER, date = date( 2040, 1, 1 ),
+                       amount = Decimal( '15000' ),
+                       selections = { 'source': 'brok', 'target': 'savings' } ),
+            PlanEvent( kind = EventKind.DEATH, date = date( 2060, 1, 1 ),
+                       selections = { 'subject': 'spouse' } ) ],
         health_coverage = HealthCoverageAssumption( household_size = 2,
                                                     reference_premium = Decimal( '12000' ),
                                                     start = date( 2035, 1, 1 ) ),
@@ -107,6 +136,16 @@ class DataclassJsonRoundTripTest( SimpleTestCase ):
     def test_empty_aggregates_round_trip( self ):
         self.assertEqual( from_json_data( Profile, to_json_data( Profile() ) ), Profile() )
         self.assertEqual( from_json_data( Scenario, to_json_data( Scenario() ) ), Scenario() )
+
+    def test_incompatible_stored_record_reports_clearly( self ):
+        # A record missing a now-required field (an older schema) names the type and the field gap,
+        # not a raw TypeError from deep in construction.
+        stale = { 'handle': 'you', 'name': 'You' }   # missing the required birthdate
+        with self.assertRaises( DataclassJsonError ) as caught:
+            from_json_data( SubjectProfile, stale )
+        message = str( caught.exception )
+        self.assertIn( 'SubjectProfile', message )
+        self.assertIn( 'schema change', message )
 
 
 class DataclassJsonLeafTest( SimpleTestCase ):

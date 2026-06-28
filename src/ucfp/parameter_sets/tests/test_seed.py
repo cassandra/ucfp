@@ -10,9 +10,10 @@ from django.test import TestCase
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.forecast import Forecast
 from ucfp.parameter_sets.enums import (
-    EconomicOutlookVariant, LifestyleLevel, LifestyleScope, ParameterSetKind )
+    CatalogScope, EconomicOutlookVariant, ExpenseCategory, LifestyleLevel, LifestyleScope,
+    ParameterSetKind )
 from ucfp.parameter_sets.models import ParameterSet
-from ucfp.parameter_sets.repository import load
+from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
 from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.scenario.schemas import LifestylePlan, LifestyleSegment, Scenario
@@ -83,6 +84,15 @@ class LoadPathTest( TestCase ):
         self.assertEqual( len( schedule.segments ), 1 )
         self.assertEqual( schedule.segments[ 0 ].inflation.fraction, Decimal( '0.025' ) )
 
+    def test_load_returns_the_expense_catalog( self ):
+        call_command( 'seed_parameter_sets' )
+        catalog = load( ParameterSetKind.EXPENSE_CATALOG, CatalogScope.GENERAL.label )
+        self.assertEqual( len( catalog.expenses ), 39 )
+        food = next( expense for expense in catalog.expenses if expense.name == 'Food' )
+        self.assertEqual( food.default_amount, Decimal( '150' ) )
+        self.assertEqual( food.category, ExpenseCategory.EVERYDAY )
+        self.assertTrue( food.lifestyle_dependent )
+
 
 class MaterializeFromLibraryTest( TestCase ):
 
@@ -95,7 +105,8 @@ class MaterializeFromLibraryTest( TestCase ):
             assets = [ AssetProfile(
                 handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
                 opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) ) ] )
-        scenario = Scenario(   # economic_outlook defaults to EXPECTED, resolved from the library
+        scenario = Scenario(   # the scenario carries its own economic-factors copy, seeded here
+            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
             tax_forecast = TaxForecastProfile(
                 tax_law_type = TaxLawType.US_FEDERAL,
                 tax_forecast_type = TaxForecastType.CURRENT_LAW ) )
@@ -117,6 +128,7 @@ class MaterializeFromLibraryTest( TestCase ):
                 handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
                 opening_value = Decimal( '900000' ), cost_basis = Decimal( '900000' ) ) ] )
         scenario = Scenario(
+            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
             tax_forecast = TaxForecastProfile(
                 tax_law_type = TaxLawType.US_FEDERAL,
                 tax_forecast_type = TaxForecastType.CURRENT_LAW ),

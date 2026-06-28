@@ -6,12 +6,17 @@ payload they index, since the scenario references that library.)
 from common.labeled_enum import LabeledEnum
 
 
-class PlannedMoveKind( LabeledEnum ):
-    """Which kind of one-off balance-sheet move a `PlannedMove` is -- the engine's
-    scheduled-event family."""
+class EventKind( LabeledEnum ):
+    """Which kind of plan event a `PlanEvent` is -- the discriminator that selects its `EventType`
+    handler in the planning layer (the references it needs, how it materializes). The handler set
+    must stay in step with these members."""
 
-    TRANSFER              = ( 'Transfer', 'Move between holdings (no tax).' )
-    PURCHASE              = ( 'Purchase', 'Buy a holding from cash.' )
-    REALIZATION           = ( 'Realization', 'Sell/withdraw, or convert (e.g. Roth conversion).' )
-    EXTERNAL_RECEIPT      = ( 'External Receipt', 'A non-taxable gift/inheritance in.' )
-    EXTERNAL_DISBURSEMENT = ( 'External Disbursement', 'A non-deductible gift out.' )
+    TRANSFER           = ( 'Transfer'        , 'Move money between two accounts.' )
+    ROTH_CONVERSION    = ( 'Roth conversion' , 'Convert pre-tax retirement money to Roth.' )
+    TAXABLE_RECEIPT    = ( 'Taxable receipt' , 'A one-time taxable receipt -- a bonus, a settlement.' )
+    TAX_FREE_RECEIPT   = ( 'Tax-free receipt', 'A one-time tax-free receipt -- a gift, an inheritance.' )
+    GENERAL_PAYMENT    = ( 'Payment'         , 'A one-time non-deductible payment out.' )
+    CHARITABLE_PAYMENT = ( 'Charitable gift' , 'A one-time deductible charitable gift.' )
+    MEDICAL_PAYMENT    = ( 'Medical expense' , 'A one-time deductible medical expense.' )
+    DEATH              = ( 'Death'           , "A subject's passing -- the survivor transition." )
+    SELL_PROPERTY      = ( 'Sell property'   , 'Sell a home or rental property.' )

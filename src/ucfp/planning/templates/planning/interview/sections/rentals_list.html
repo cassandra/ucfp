@@ -1,0 +1,26 @@
+{% comment %}
+The rentals list (id=rentals-list, refreshed on add/edit/delete): each rental with Edit and Remove,
+plus the Add affordance. Edit/Add open the form in #rentals-form; Remove posts to the delete view.
+{% endcomment %}
+<div id="rentals-list">
+  {% if rentals %}
+  <ul class="list-unstyled mb-2">
+    {% for rental in rentals %}
+    <li class="mb-1">
+      {{ rental.name }} &mdash; value {{ rental.value|floatformat:0 }}
+      <a class="ms-2" data-async="#rentals-form"
+         href="{% url 'rental_edit' handle=rental.handle %}">Edit</a>
+      <form method="post" action="{% url 'rental_delete' handle=rental.handle %}"
+            data-async="#rentals-list" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ms-1">Remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted mb-2">No rental properties.</p>
+  {% endif %}
+  <a class="btn btn-sm btn-outline-secondary" data-async="#rentals-form"
+     href="{% url 'rental_add' %}">Add a rental property</a>
+</div>

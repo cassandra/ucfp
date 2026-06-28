@@ -23,12 +23,15 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from ucfp.accounts.enums import AssetClass
-from ucfp.forecast.parameters import ContributionSource
-from ucfp.parameter_sets.enums import EconomicOutlookVariant, LifestyleLevel, LifestyleScope
+from common.recurrence import Duration
+
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.forecast.economic_outlook import EconomicParameters
+from ucfp.forecast.parameters import ContributionSource, WindowedAmount
+from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
 from ucfp.tax.law import TaxForecastProfile
 
-from .enums import PlannedMoveKind
+from .enums import EventKind
 
 
 # ===== External factors (exogenous -- about the world, not the user) =====
@@ -45,13 +48,12 @@ from .enums import PlannedMoveKind
 
 @dataclass( frozen = True )
 class RetirementTiming:
-    """The date knobs for one subject. `government_pension_claiming_age` and `pension_start`
-    select into that subject's profile entitlement facts, so the realized benefits are derived
-    rather than stored."""
+    """Per-subject benefit-election timing -- the dates Social Security and a pension are claimed /
+    started. Each selects into that subject's profile entitlement facts, so the realized benefit is
+    derived from the entitlement plus the election rather than stored. (A wage's end is no longer a
+    retirement date here -- it lives on the wage's own income line.)"""
     subject_handle: str
-    retirement_date: Optional[ date ] = None
-    salary_stop: Optional[ date ] = None
-    government_pension_claiming_age: Optional[ int ] = None
+    government_pension_claiming_date: Optional[ date ] = None
     pension_start: Optional[ date ] = None
 
 
@@ -75,6 +77,29 @@ class LifestylePlan:
     segments: list[ LifestyleSegment ] = field( default_factory = list )
 
 
+# --- Spending -------------------------------------------------------------
+# The new expense model: the user's planned expenses, each seeded from the curated catalog (so it
+# carries the catalog's category, tax class, and cadence) with the user's amount. Supersedes the
+# lifestyle cost-table above, which is retired once this reaches parity.
+
+@dataclass( frozen = True )
+class ExpenseFlow:
+    """One planned expense -- its name, catalog `category`, tax class, cadence (`interval`), and a
+    `schedule`: the amount over time spans, a `WindowedAmount` per span (one open-ended row is a
+    constant amount; reuses the engine's segment type, so it materializes with no conversion).
+    `interval` None is a smoothed stream, a `Duration` an item placed at that cadence;
+    `lifestyle_dependent` marks the ones a user would vary over time. `property_handle` attaches an
+    operating expense to the property it belongs to (so a sale can find and end it); None for a
+    general living expense."""
+    name: str
+    category: ExpenseCategory
+    expense_tax_class: ExpenseTaxClass
+    schedule: list[ WindowedAmount ]
+    interval: Optional[ Duration ] = None
+    lifestyle_dependent: bool = False
+    property_handle: Optional[ str ] = None
+
+
 # --- Saving ---------------------------------------------------------------
 
 @dataclass( frozen = True )
@@ -85,6 +110,17 @@ class Contribution:
     annual_amount: Decimal
     source: ContributionSource
     through: Optional[ date ] = None
+
+
+# --- Loan paydown ---------------------------------------------------------
+
+@dataclass( frozen = True )
+class LoanPrepayment:
+    """A planned recurring extra-principal payment on a loan, beyond its scheduled payment, paying
+    it down faster. `loan_handle` targets a profile loan; `annual_amount` is the extra principal
+    per year (mirrors the engine's `LoanParameters.annual_extra_principal`)."""
+    loan_handle: str
+    annual_amount: Decimal
 
 
 # --- Drawdown -------------------------------------------------------------
@@ -100,29 +136,23 @@ class DrawdownPolicy:
     sweep_allocation: list[ tuple[ str, Decimal ] ] = field( default_factory = list )
 
 
-# --- Planned moves --------------------------------------------------------
+# --- Plan events ----------------------------------------------------------
 
 @dataclass( frozen = True )
-class PlannedMove:
-    """A one-off balance-sheet move on a date -- the engine's scheduled-event family
-    (transfer, purchase, realization, external gift in/out) as one type keyed by `kind`. The
-    fields in play depend on the kind; the family may split into distinct types later."""
-    kind: PlannedMoveKind
+class PlanEvent:
+    """One dated event the user adds in §7 -- a money move or a life event. `kind` selects its
+    `EventType` handler (which references it needs, how it materializes into the engine);
+    `selections` maps each required role (subject, source/target account, ...) to the chosen
+    entity handle. A best-effort authoring convenience: once added it is just another input the
+    run reads, never a simulation step. `amount` is None for an event that carries no sum (a
+    death)."""
+    kind: EventKind
     date: date
-    amount: Decimal
-    source_handle: Optional[ str ] = None
-    target_handle: Optional[ str ] = None
+    amount: Optional[ Decimal ] = None
+    selections: dict[ str, str ] = field( default_factory = dict )
 
 
 # --- Life events ----------------------------------------------------------
-
-@dataclass( frozen = True )
-class AssumedDeath:
-    """An assumed subject death driving the survivor transition -- mirrors the engine
-    `SubjectRemoval`."""
-    subject_handle: str
-    event_date: date
-
 
 @dataclass( frozen = True )
 class HealthCoverageAssumption:
@@ -140,19 +170,23 @@ class HealthCoverageAssumption:
 class Scenario:
     """One named set of assumptions, grouped by section. Serialized whole into a `Scenario`
     record's JSON, and materialized with a Profile into `ForecastParameters`."""
-    # External factors (see note above)
-    economic_outlook: EconomicOutlookVariant = EconomicOutlookVariant.EXPECTED
+    # External factors (see note above): the scenario's own editable copy of the economic rates
+    # (seeded from a library preset, then user-owned) and the tax forecast.
+    economics: Optional[ EconomicParameters ] = None
     tax_forecast: Optional[ TaxForecastProfile ] = None
     # Timing
     timing: list[ RetirementTiming ] = field( default_factory = list )
     # Lifestyle
     lifestyle: Optional[ LifestylePlan ] = None
+    # Spending
+    expenses: list[ ExpenseFlow ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
+    # Loan paydown
+    prepayments: list[ LoanPrepayment ] = field( default_factory = list )
     # Drawdown
     drawdown: Optional[ DrawdownPolicy ] = None
-    # Planned moves
-    planned_moves: list[ PlannedMove ] = field( default_factory = list )
+    # Plan events (§7)
+    events: list[ PlanEvent ] = field( default_factory = list )
     # Life events
-    assumed_deaths: list[ AssumedDeath ] = field( default_factory = list )
     health_coverage: Optional[ HealthCoverageAssumption ] = None

@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
+from common.amortization import remaining_balance
 from common.date_window import DateWindow
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
@@ -25,18 +26,17 @@ from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook
 from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
-    ForecastParameters, IncomeStream, LoanParameters, PropertyAttributes, RetirementContribution,
-    ScheduledExternalDisbursement, ScheduledExternalReceipt, ScheduledPurchase,
-    ScheduledRealization, ScheduledTransfer, Subject, SubjectRemoval, SubsidizedHealthCoverage,
-    WindowedAmount )
+    ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
+    RetirementContribution, Subject, SubsidizedHealthCoverage, WindowedAmount )
 
 from ucfp.parameter_sets import repository as parameter_sets
 from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.tax.government_pension import GovernmentPension
 
-from ucfp.profile.schemas import AssetProfile, Profile
-from ucfp.scenario.enums import PlannedMoveKind
-from ucfp.scenario.schemas import PlannedMove, RetirementTiming, Scenario
+from ucfp.profile.schemas import AssetProfile, LoanProfile, Profile
+from ucfp.scenario.schemas import RetirementTiming, Scenario
+
+from .events import event_contributions
 
 
 @dataclass( frozen = True )
@@ -60,6 +60,9 @@ def materialize(
                            for subject in subjects if subject.handle is not None }
     government_pension = GovernmentPension( tax_forecast.tax_law_type )
     lifestyle_streams, lifestyle_items = _lifestyle_expenses( scenario )
+    expense_streams, expense_items = _scenario_expenses( scenario )
+    flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
+    events = event_contributions( profile, scenario, subjects_by_handle )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -69,16 +72,19 @@ def materialize(
         subjects         = subjects,
         assets           = _assets( profile ),
         economic_outlook = _economic_outlook( scenario ),
-        income_streams   = _income_streams(
-            profile, scenario, subjects_by_handle, government_pension ),
-        expense_items    = _committed_obligations( profile ) + lifestyle_items,
-        expense_streams  = lifestyle_streams,
-        loans            = _loans( profile ),
+        income_streams   = _entitlement_income(
+            profile, scenario, subjects_by_handle, government_pension ) + flow_streams,
+        income_items     = flow_items + events.income_items,
+        expense_items    = (
+            _committed_obligations( profile ) + lifestyle_items + expense_items
+            + events.expense_items ),
+        expense_streams  = lifestyle_streams + expense_streams,
+        loans            = _loans( profile, scenario, frame.start_date ),
         contributions    = _contributions( scenario ),
-        events           = _events( scenario ),
+        events           = events.scheduled_events,
         cash_account     = _cash_account( scenario ),
         health_coverage  = _health_coverage( scenario ),
-        subject_removals = _subject_removals( scenario ),
+        subject_removals = events.subject_removals,
     )
 
 
@@ -116,28 +122,67 @@ def _cost_basis( asset : AssetProfile ) -> Decimal:
     return asset.opening_value
 
 
-def _loans( profile : Profile ) -> list[ LoanParameters ]:
-    return [ LoanParameters(
-        name = loan.name, opening_balance = loan.opening_balance,
-        interest_rate = loan.interest_rate, term = loan.term,
+def _loans( profile : Profile, scenario : Scenario, as_of : date ) -> list[ LoanParameters ]:
+    extra = { prepayment.loan_handle: prepayment.annual_amount
+              for prepayment in scenario.prepayments }
+    return [ _loan( loan, as_of, extra.get( loan.handle, Decimal( '0' ) ) )
+             for loan in profile.loans ]
+
+
+def _loan( loan : LoanProfile, as_of : date, extra_principal : Decimal ) -> LoanParameters:
+    """The engine view of a loan as of the forecast start: amortize the original loan from its
+    origination to the balance still owed (unless `current_balance` overrides it) and the
+    remaining term, since the engine projects forward from an opening balance over a term. A
+    scenario prepayment becomes the engine's annual extra principal."""
+    periods = loan.original_term.months()
+    elapsed = min( _elapsed_months( loan.origination_date, as_of ), periods )
+    opening = loan.current_balance if loan.current_balance is not None else remaining_balance(
+        loan.original_amount, loan.interest_rate.fraction / 12, periods, elapsed )
+    return LoanParameters(
+        name = loan.name, opening_balance = opening, interest_rate = loan.interest_rate,
+        term = Duration( max( periods - elapsed, 1 ), TimeUnit.MONTH ),
         interest_class = loan.interest_class or ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST,
-        handle = loan.handle )
-        for loan in profile.loans ]
+        annual_extra_principal = extra_principal, handle = loan.handle )
+
+
+def _elapsed_months( origination : date, as_of : date ) -> int:
+    """Whole months from `origination` to `as_of`, floored at zero (a not-yet-originated loan has
+    not begun amortizing)."""
+    months = ( as_of.year - origination.year ) * 12 + ( as_of.month - origination.month )
+    return max( months, 0 )
 
 
 # --- Profile: flows (income entitlements, committed obligations) -----------
 
-def _income_streams(
+def _income_flows(
+        profile : Profile, subjects_by_handle : dict[ str, Subject ] ) -> tuple[ list, list ]:
+    """The profile's income flows as (streams, items): a flow with no interval is a smoothed stream,
+    one with an interval an item placed at that cadence (rent is monthly). The flow's `schedule`
+    carries its own window, and its `property_handle` is carried to the engine as the income's
+    `source_handle` (rental income keeps its property link)."""
+    streams, items = list(), list()
+    for flow in profile.income_flows:
+        subject = subjects_by_handle[ flow.subject_handle ]
+        amounts = Schedule( tuple( flow.schedule ) )
+        if flow.interval is None:
+            streams.append( IncomeStream(
+                subject = subject, income_tax_class = flow.income_tax_class,
+                amounts = amounts, source_handle = flow.property_handle ) )
+        else:
+            items.append( IncomeItem(
+                subject = subject, income_tax_class = flow.income_tax_class,
+                amounts = amounts, cadence = Recurrence( flow.interval ),
+                source_handle = flow.property_handle ) )
+    return streams, items
+
+
+def _entitlement_income(
         profile : Profile, scenario : Scenario, subjects_by_handle : dict[ str, Subject ],
         government_pension : GovernmentPension ) -> list[ IncomeStream ]:
+    """The retirement entitlements as realized income streams: pension and Social Security, whose
+    amount and window depend on the scenario's start/claiming timing."""
     timing = { entry.subject_handle: entry for entry in scenario.timing }
     streams = list()
-    for salary in profile.salaries:
-        streams.append( IncomeStream(
-            subject = subjects_by_handle[ salary.subject_handle ],
-            income_tax_class = IncomeTaxClass.WAGES,
-            amounts = Schedule.constant( WindowedAmount( salary.annual_amount ) ),
-            window = DateWindow( end = _salary_end( timing.get( salary.subject_handle ) ) ) ) )
     for pension in profile.pensions:
         streams.append( IncomeStream(
             subject = subjects_by_handle[ pension.subject_handle ],
@@ -146,44 +191,30 @@ def _income_streams(
             window = DateWindow( start = _pension_start( timing.get( pension.subject_handle ) ) ) ) )
     for entitlement in profile.government_pension:
         subject = subjects_by_handle[ entitlement.subject_handle ]
-        claiming_age = _claiming_age(
+        claiming = _claiming_date(
             timing.get( entitlement.subject_handle ), entitlement.subject_handle )
+        # The income starts on the precise claiming date; the engine's benefit adjustment is still
+        # whole-year (the age below), so month precision waits on issue #31.
+        claiming_age = claiming.year - subject.birthdate.year
         streams.append( IncomeStream(
             subject = subject,
             income_tax_class = government_pension.income_tax_class(),
             amounts = Schedule.constant( WindowedAmount( government_pension.realized_annual_benefit(
                 entitlement.monthly_at_normal_age, subject.birthdate, claiming_age ) ) ),
-            window = DateWindow( start = _claiming_date( subject.birthdate, claiming_age ) ) ) )
+            window = DateWindow( start = claiming ) ) )
     return streams
-
-
-def _salary_end( timing : Optional[ RetirementTiming ] ) -> Optional[ date ]:
-    """A salary runs until retirement: the explicit salary-stop date, else the retirement
-    date, else open-ended."""
-    if timing is None:
-        return None
-    return timing.salary_stop or timing.retirement_date
 
 
 def _pension_start( timing : Optional[ RetirementTiming ] ) -> Optional[ date ]:
     return timing.pension_start if timing is not None else None
 
 
-def _claiming_age( timing : Optional[ RetirementTiming ], subject_handle : str ) -> int:
-    if timing is None or timing.government_pension_claiming_age is None:
+def _claiming_date( timing : Optional[ RetirementTiming ], subject_handle : str ) -> date:
+    if timing is None or timing.government_pension_claiming_date is None:
         raise ValueError(
-            f'The government pension for "{subject_handle}" needs a claiming age in the '
-            'scenario timing.' )
-    return timing.government_pension_claiming_age
-
-
-def _claiming_date( birthdate : date, claiming_age : int ) -> date:
-    """The date the subject reaches `claiming_age` (Feb 29 clamped to Feb 28)."""
-    year = birthdate.year + claiming_age
-    try:
-        return birthdate.replace( year = year )
-    except ValueError:
-        return birthdate.replace( year = year, day = 28 )
+            f'The government pension for "{subject_handle}" needs a claiming date in the scenario '
+            'timing.' )
+    return timing.government_pension_claiming_date
 
 
 def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:
@@ -241,6 +272,24 @@ def _level_schedule( amounts, segments : list ) -> Schedule:
     return Schedule( tuple( windowed ) )
 
 
+def _scenario_expenses( scenario : Scenario ) -> tuple[ list, list ]:
+    """The scenario's planned expenses as (streams, items): a flow with no interval is a smoothed
+    stream, one with an interval an item placed at that cadence. Each is a flat amount for now;
+    value-steps over time come later. The successor to `_lifestyle_expenses`."""
+    streams, items = list(), list()
+    for expense in scenario.expenses:
+        amounts = Schedule( tuple( expense.schedule ) )
+        if expense.interval is None:
+            streams.append( ExpenseStream(
+                name = expense.name, expense_tax_class = expense.expense_tax_class,
+                amounts = amounts ) )
+        else:
+            items.append( ExpenseItem(
+                name = expense.name, expense_tax_class = expense.expense_tax_class,
+                amounts = amounts, cadence = Recurrence( expense.interval ) ) )
+    return streams, items
+
+
 # --- Scenario: knobs -------------------------------------------------------
 
 def _contributions( scenario : Scenario ) -> list[ RetirementContribution ]:
@@ -260,32 +309,6 @@ def _cash_account( scenario : Scenario ) -> CashAccountParameters:
         draw_order = list( drawdown.draw_order ), sweep_allocation = sweep )
 
 
-def _events( scenario : Scenario ) -> list:
-    return [ _event( move ) for move in scenario.planned_moves ]
-
-
-def _event( move : PlannedMove ):
-    if move.kind is PlannedMoveKind.TRANSFER:
-        return ScheduledTransfer( event_date = move.date, source = move.source_handle,
-                                  target = move.target_handle, amount = move.amount )
-    if move.kind is PlannedMoveKind.PURCHASE:
-        return ScheduledPurchase( event_date = move.date, asset = move.target_handle,
-                                  amount = move.amount )
-    if move.kind is PlannedMoveKind.REALIZATION:
-        return ScheduledRealization( event_date = move.date, holding = move.source_handle,
-                                     amount = move.amount, destination = move.target_handle )
-    if move.kind is PlannedMoveKind.EXTERNAL_RECEIPT:
-        return ScheduledExternalReceipt( event_date = move.date, amount = move.amount )
-    if move.kind is PlannedMoveKind.EXTERNAL_DISBURSEMENT:
-        return ScheduledExternalDisbursement( event_date = move.date, amount = move.amount )
-    raise ValueError( f'Unknown planned-move kind: {move.kind}.' )
-
-
-def _subject_removals( scenario : Scenario ) -> list[ SubjectRemoval ]:
-    return [ SubjectRemoval( event_date = death.event_date, subject_handle = death.subject_handle )
-             for death in scenario.assumed_deaths ]
-
-
 def _health_coverage( scenario : Scenario ) -> Optional[ SubsidizedHealthCoverage ]:
     coverage = scenario.health_coverage
     if coverage is None:
@@ -298,11 +321,11 @@ def _health_coverage( scenario : Scenario ) -> Optional[ SubsidizedHealthCoverag
 # --- Scenario: external factors (reuse engine types; no zero-fill) ---------
 
 def _economic_outlook( scenario : Scenario ) -> EconomicOutlook:
-    """Resolve the scenario's chosen outlook variant to its curated, schedule-shaped rates from
-    the parameter-set library (loaded from the database, never zero-filled)."""
-    schedule = parameter_sets.load(
-        ParameterSetKind.ECONOMIC_OUTLOOK, scenario.economic_outlook.label )
-    return EconomicOutlook( Schedule( tuple( schedule.segments ) ) )
+    """The scenario's own economic-factors copy as the engine's outlook -- a constant outlook for
+    now. The copy is seeded from a library preset at input time, so there is no library load here."""
+    if scenario.economics is None:
+        raise ValueError( 'A scenario must carry economic factors (seed them from a preset).' )
+    return EconomicOutlook.constant( scenario.economics )
 
 
 def _tax_forecast( scenario : Scenario ):

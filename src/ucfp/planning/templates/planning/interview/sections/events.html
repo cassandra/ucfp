@@ -1,0 +1,10 @@
+{% comment %}
+The §7 events pane: the plan's events (each removable) and an add menu of the kinds offerable in
+this plan. Choosing a kind opens its form inline in the add area; saving appends the event, refreshes
+the list, and returns the add area to the menu. The list and the add area render outside the
+section's Continue form (a nested form would be invalid HTML).
+{% endcomment %}
+<p class="text-muted">Add the plans and one-off events you expect -- transfers, windfalls, gifts, and
+  the like. Each becomes an input the forecast reads.</p>
+{% include 'planning/interview/sections/events_list.html' with events=form.events %}
+{% include 'planning/interview/sections/events_menu.html' with menu=form.menu %}

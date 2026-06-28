@@ -1,0 +1,13 @@
+{% comment %}
+The residence sub-form of the §3 Properties pane (id=residence). Save posts to the residence view,
+which applies just the residence (own/rent + mortgage) and re-renders this sub-pane with the saved
+values. Rendered outside the section's Continue form, so its form is not nested.
+{% endcomment %}
+<div id="residence">
+  <h3 class="h6">Your home</h3>
+  <form method="post" action="{% url 'residence' %}" data-async="#residence">
+    {% csrf_token %}
+    {{ residence_form.as_p }}
+    <button type="submit" class="btn btn-sm btn-primary">Save home</button>
+  </form>
+</div>
