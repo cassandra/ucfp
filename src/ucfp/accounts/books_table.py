@@ -170,12 +170,22 @@ class BooksTableDefinition:
 
     column_keys : tuple[ BooksColumnKey, ... ] = ()
 
-    def tokens( self ) -> list[ str ]:
+    def to_storage( self ) -> list[ str ]:
+        """This lens as a plain, storable value -- its column-key tokens. The definition owns its
+        own storage form, so a store (the session) keeps no knowledge of column keys."""
         return [ key.token for key in self.column_keys ]
 
     @classmethod
-    def from_tokens( cls, tokens : list[ str ] ) -> 'BooksTableDefinition':
-        return cls( tuple( BooksColumnKey( token ) for token in tokens ) )
+    def from_storage( cls, data ) -> Optional[ 'BooksTableDefinition' ]:
+        """Rebuild a lens from a stored value (a list of key tokens), or None when absent or
+        malformed. Unknown tokens survive parsing and are dropped later, when the lens is adapted
+        to a books (`adapt`) -- so a stale token never breaks the read."""
+        if not isinstance( data, list ):
+            return None
+        try:
+            return cls( tuple( BooksColumnKey( str( token ) ) for token in data ) )
+        except ( TypeError, ValueError ):
+            return None
 
 
 class BooksTableColumnCatalog:
