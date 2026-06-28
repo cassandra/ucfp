@@ -1,15 +1,16 @@
 """§5 income: the editable income table.
 
 Income is a list of windowed flows -- the income twin of the expense side (see `IncomeFlow`). This
-module presents them as one editable table: a row per general income line (salary, consulting, ...)
-and a row per rental property's rent, each an `amount` over a `from`/`until` window, plus the
-per-subject retire-age shortcut and Social Security. Async-saved like the spending drill, so the
-dates the retire age fills show on save.
+module presents them as one editable table: a row per general income line (salary, consulting, ...),
+a row per rental property's rent, and two entitlement rows per subject (Social Security, pension).
+Each row carries an `amount` over a `from`/`until` window, with an age column as a convenience that
+fills the date on save. Async-saved like the spending drill, so the dates the age fills show on save.
 
 General income is hand-entered (a WAGES annual stream for now). Rental rent is a monthly item tied to
-its property by `property_handle`. Social Security and pension are NOT free-form flows: their amount
-is derived from the claiming/start timing (it follows the entitlement), so they stay per-subject
-entitlement + timing inputs here.
+its property by `property_handle`. Social Security and pension are NOT free-form flows: their realized
+amount is the engine's job, derived from the stated benefit plus the claiming/start date -- so their
+rows capture only that benefit (FRA / base) and that date, and feed the profile entitlement facts and
+the scenario timing rather than an `IncomeFlow`.
 """
 from dataclasses import replace
 from datetime import date
@@ -21,18 +22,18 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.parameters import WindowedAmount
-from ucfp.profile.schemas import GovernmentPensionEntitlement, IncomeFlow
+from ucfp.profile.schemas import GovernmentPensionEntitlement, IncomeFlow, PensionEntitlement
 from ucfp.scenario.schemas import RetirementTiming
 
 _RENTAL_INTERVAL = Duration( 1, TimeUnit.MONTH )   # rent is a monthly item; general income a stream
 
 
 class IncomeTableForm( forms.Form ):
-    """The §5 income table: every income flow as an editable row, plus a blank row to add general
-    income, the per-subject retire-age shortcut, and Social Security. `apply` rebuilds the profile's
-    income flows (rental preserved by `property_handle`, general from the rows), fills any blank
-    salary `until` from the retire age, and writes the SS entitlement and the claiming/retirement
-    timing."""
+    """The §5 income table: every income flow as an editable row, a blank row to add general income,
+    and two entitlement rows per subject (Social Security, pension). `apply` rebuilds the profile's
+    income flows (rental preserved by `property_handle`, general from the rows), writes the SS and
+    pension entitlement facts from the entitlement rows, and writes the claiming/start dates into the
+    scenario timing."""
 
     _EXTRA_ROWS = 1
 
@@ -53,13 +54,15 @@ class IncomeTableForm( forms.Form ):
         self._gov      = { entitlement.subject_handle: entitlement
                            for entitlement in
                            ( profile.government_pension if profile is not None else [] ) }
+        self._pension  = { pension.subject_handle: pension
+                           for pension in ( profile.pensions if profile is not None else [] ) }
         self._general_rows = len( self._general ) + self._EXTRA_ROWS
         for i in range( self._general_rows ):
             self._add_general_fields( i, self._general[ i ] if i < len( self._general ) else None )
         for k, rental in enumerate( self._rentals ):
             self._add_rental_fields( k, rental_flows.get( rental.handle ) )
         for m, subject in enumerate( self._subjects ):
-            self._add_subject_fields( m, subject )
+            self._add_entitlement_fields( m, subject )
 
     # --- field construction ------------------------------------------------
 
@@ -114,15 +117,29 @@ class IncomeTableForm( forms.Form ):
         self.fields[ self._key( prefix, index, 'from' ) ]   = start
         self.fields[ self._key( prefix, index, 'until' ) ]  = until
 
-    def _add_subject_fields( self, m : int, subject ):
-        timing = self._timing.get( subject.handle )
-        gov    = self._gov.get( subject.handle )
-        self.fields[ self._key( 's', m, 'ssamt' ) ] = forms.DecimalField(
-            label = 'Social Security (monthly, at full age)', required = False, min_value = 0,
-            initial = gov.monthly_at_normal_age if gov is not None else None )
-        self.fields[ self._key( 's', m, 'ssage' ) ] = forms.IntegerField(
-            label = 'claims at age', required = False, min_value = 0, max_value = 120,
-            initial = timing.government_pension_claiming_age if timing is not None else None )
+    def _add_entitlement_fields( self, m : int, subject ):
+        """Social Security and pension as table rows for the subject: a stated benefit (FRA / base)
+        plus an election date with an age helper. The realized amount is the engine's job; this only
+        captures the benefit and when it is claimed/started."""
+        timing    = self._timing.get( subject.handle )
+        gov       = self._gov.get( subject.handle )
+        pension   = self._pension.get( subject.handle )
+        birthdate = subject.birthdate
+        claiming  = timing.government_pension_claiming_date if timing is not None else None
+        start     = timing.pension_start if timing is not None else None
+        self._add_entitlement_row(
+            m, 'ss', gov.monthly_at_normal_age if gov is not None else None, claiming, birthdate )
+        self._add_entitlement_row(
+            m, 'pen', pension.base_annual_amount if pension is not None else None, start, birthdate )
+
+    def _add_entitlement_row( self, m : int, kind : str, amount_initial, date_initial, birthdate ):
+        amount = forms.DecimalField( required = False, min_value = 0, initial = amount_initial )
+        on     = forms.DateField( required = False, initial = date_initial )
+        on_age = forms.IntegerField( required = False, min_value = 0, max_value = 120 )
+        self._age_placeholder( on_age, date_initial, birthdate )
+        self.fields[ self._key( 's', m, f'{kind}amt' ) ]      = amount
+        self.fields[ self._key( 's', m, f'{kind}_from' ) ]    = on
+        self.fields[ self._key( 's', m, f'{kind}_from_age' ) ] = on_age
 
     @staticmethod
     def _key( prefix : str, index : int, part : str ) -> str:
@@ -151,7 +168,18 @@ class IncomeTableForm( forms.Form ):
             if amount is not None and not subject:
                 self.add_error(
                     self._key( 'g', i, 'subject' ), 'Choose who receives this income.' )
+        for m, subject in enumerate( self._subjects ):
+            self._clean_entitlement( cleaned, m, subject, 'ss', 'a claiming date' )
+            self._clean_entitlement( cleaned, m, subject, 'pen', 'a start date' )
         return cleaned
+
+    def _clean_entitlement( self, cleaned, m, subject, kind, need ):
+        """A stated benefit is meaningless without when it is claimed/started -- the realized amount
+        and window both derive from that date -- so flag an amount with neither date nor age."""
+        amount = cleaned.get( self._key( 's', m, f'{kind}amt' ) )
+        when   = self._endpoint( 's', m, f'{kind}_from', subject.birthdate )
+        if amount is not None and when is None:
+            self.add_error( self._key( 's', m, f'{kind}_from' ), f'Enter {need} for this benefit.' )
 
     # --- template rows -----------------------------------------------------
 
@@ -182,21 +210,34 @@ class IncomeTableForm( forms.Form ):
                 'from'         : self[ self._key( 'r', k, 'from' ) ],
                 'until'        : self[ self._key( 'r', k, 'until' ) ],
                 'cadence'      : 'month' } )
+        for m, subject in enumerate( self._subjects ):
+            rows.append( self._entitlement_row(
+                m, subject, 'ss', 'Social Security', 'month', 'benefit at full retirement age' ) )
+            rows.append( self._entitlement_row(
+                m, subject, 'pen', 'Pension', 'year', 'base benefit' ) )
         return rows
 
-    @property
-    def subject_rows( self ) -> list:
-        return [ { 'name'  : subject.name,
-                   'ssamt' : self[ self._key( 's', m, 'ssamt' ) ],
-                   'ssage' : self[ self._key( 's', m, 'ssage' ) ] }
-                 for m, subject in enumerate( self._subjects ) ]
+    def _entitlement_row( self, m, subject, kind, name, cadence, note ) -> dict:
+        """An entitlement row: a stated benefit and a claiming/start date with an age helper. No
+        `until` (it runs for life) and no `remove` (the entitlement row is always offered); a blank
+        amount simply means the subject has no such benefit."""
+        return {
+            'kind'         : 'entitlement',
+            'subject_name' : subject.name,
+            'name'         : name,
+            'amount'       : self[ self._key( 's', m, f'{kind}amt' ) ],
+            'from'         : self[ self._key( 's', m, f'{kind}_from' ) ],
+            'from_age'     : self[ self._key( 's', m, f'{kind}_from_age' ) ],
+            'cadence'      : cadence,
+            'note'         : note }
 
     # --- apply -------------------------------------------------------------
 
     def apply( self, profile, scenario ):
         flows = self._general_flows() + self._rental_flows()
         updated_profile  = replace(
-            profile, income_flows = flows, government_pension = self._entitlements() )
+            profile, income_flows = flows,
+            government_pension = self._entitlements(), pensions = self._pensions() )
         updated_scenario = replace( scenario, timing = self._merged_timing() )
         return updated_profile, updated_scenario
 
@@ -252,6 +293,20 @@ class IncomeTableForm( forms.Form ):
                     subject_handle = subject.handle, monthly_at_normal_age = amount ) )
         return entitlements
 
+    def _pensions( self ) -> list:
+        """A pension entitlement per subject with a stated base benefit. `normal_start_age` -- the age
+        the base is quoted at -- is taken from the planned start (the only age signal here); the
+        engine's reduction terms for an off-normal start are deferred, so it is presently unused."""
+        pensions = list()
+        for m, subject in enumerate( self._subjects ):
+            amount = self.cleaned_data.get( self._key( 's', m, 'penamt' ) )
+            start  = self._endpoint( 's', m, 'pen_from', subject.birthdate )
+            if amount is not None and start is not None:
+                pensions.append( PensionEntitlement(
+                    subject_handle = subject.handle, base_annual_amount = amount,
+                    normal_start_age = start.year - subject.birthdate.year ) )
+        return pensions
+
     def _merged_timing( self ) -> list:
         timing = list()
         for m, subject in enumerate( self._subjects ):
@@ -259,8 +314,9 @@ class IncomeTableForm( forms.Form ):
                 subject_handle = subject.handle )
             timing.append( replace(
                 current,
-                government_pension_claiming_age = self.cleaned_data.get(
-                    self._key( 's', m, 'ssage' ) ) ) )
+                government_pension_claiming_date = self._endpoint(
+                    's', m, 'ss_from', subject.birthdate ),
+                pension_start = self._endpoint( 's', m, 'pen_from', subject.birthdate ) ) )
         return timing
 
 

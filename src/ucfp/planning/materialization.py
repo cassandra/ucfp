@@ -191,14 +191,17 @@ def _entitlement_income(
             window = DateWindow( start = _pension_start( timing.get( pension.subject_handle ) ) ) ) )
     for entitlement in profile.government_pension:
         subject = subjects_by_handle[ entitlement.subject_handle ]
-        claiming_age = _claiming_age(
+        claiming = _claiming_date(
             timing.get( entitlement.subject_handle ), entitlement.subject_handle )
+        # The income starts on the precise claiming date; the engine's benefit adjustment is still
+        # whole-year (the age below), so month precision waits on issue #31.
+        claiming_age = claiming.year - subject.birthdate.year
         streams.append( IncomeStream(
             subject = subject,
             income_tax_class = government_pension.income_tax_class(),
             amounts = Schedule.constant( WindowedAmount( government_pension.realized_annual_benefit(
                 entitlement.monthly_at_normal_age, subject.birthdate, claiming_age ) ) ),
-            window = DateWindow( start = _claiming_date( subject.birthdate, claiming_age ) ) ) )
+            window = DateWindow( start = claiming ) ) )
     return streams
 
 
@@ -206,21 +209,12 @@ def _pension_start( timing : Optional[ RetirementTiming ] ) -> Optional[ date ]:
     return timing.pension_start if timing is not None else None
 
 
-def _claiming_age( timing : Optional[ RetirementTiming ], subject_handle : str ) -> int:
-    if timing is None or timing.government_pension_claiming_age is None:
+def _claiming_date( timing : Optional[ RetirementTiming ], subject_handle : str ) -> date:
+    if timing is None or timing.government_pension_claiming_date is None:
         raise ValueError(
-            f'The government pension for "{subject_handle}" needs a claiming age in the '
-            'scenario timing.' )
-    return timing.government_pension_claiming_age
-
-
-def _claiming_date( birthdate : date, claiming_age : int ) -> date:
-    """The date the subject reaches `claiming_age` (Feb 29 clamped to Feb 28)."""
-    year = birthdate.year + claiming_age
-    try:
-        return birthdate.replace( year = year )
-    except ValueError:
-        return birthdate.replace( year = year, day = 28 )
+            f'The government pension for "{subject_handle}" needs a claiming date in the scenario '
+            'timing.' )
+    return timing.government_pension_claiming_date
 
 
 def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:

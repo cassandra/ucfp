@@ -48,13 +48,12 @@ from .enums import EventKind
 
 @dataclass( frozen = True )
 class RetirementTiming:
-    """The date knobs for one subject. `government_pension_claiming_age` and `pension_start`
-    select into that subject's profile entitlement facts, so the realized benefits are derived
-    rather than stored."""
+    """Per-subject benefit-election timing -- the dates Social Security and a pension are claimed /
+    started. Each selects into that subject's profile entitlement facts, so the realized benefit is
+    derived from the entitlement plus the election rather than stored. (A wage's end is no longer a
+    retirement date here -- it lives on the wage's own income line.)"""
     subject_handle: str
-    retirement_date: Optional[ date ] = None
-    salary_stop: Optional[ date ] = None
-    government_pension_claiming_age: Optional[ int ] = None
+    government_pension_claiming_date: Optional[ date ] = None
     pension_start: Optional[ date ] = None
 
 

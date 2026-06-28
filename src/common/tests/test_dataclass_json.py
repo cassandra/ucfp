@@ -88,8 +88,10 @@ def _sample_scenario():
             rental_increase = Rate( Decimal( '0.03' ) ) ),
         tax_forecast = TaxForecastProfile( tax_law_type = TaxLawType.US_FEDERAL,
                                            tax_forecast_type = TaxForecastType.CURRENT_LAW ),
-        timing = [ RetirementTiming( subject_handle = 'you', retirement_date = date( 2035, 1, 1 ),
-                                     government_pension_claiming_age = 70 ) ],
+        timing = [ RetirementTiming(
+            subject_handle = 'you',
+            government_pension_claiming_date = date( 2040, 1, 1 ),
+            pension_start = date( 2038, 1, 1 ) ) ],
         lifestyle = LifestylePlan(
             scope = LifestyleScope.GENERAL,
             segments = [
