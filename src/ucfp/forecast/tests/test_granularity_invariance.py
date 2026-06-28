@@ -6,23 +6,28 @@ audit -- so a future month-vs-year regression fails loudly here:
 
 - **Rate flows are granularity-invariant.** Pure-stream income/expense classes (wages, Social
   Security, gross rental, living) -- those sourced only from `IncomeStream` / `ExpenseStream` --
-  match across granularities to rounding, before any run depletes. RENTAL_EXPENSE is excluded: a
-  rental mortgage's interest nets into it (Schedule E), and loan amortization splits legitimately
-  drift month-vs-year, so the class is no longer purely stream-sourced.
+  match across granularities to rounding, before any run depletes. RENTAL_EXPENSE is excluded
+  because a rental mortgage's interest nets into it (Schedule E), so the class is not purely
+  stream-sourced; the loan portion's invariance is covered by the null-tier net-worth check.
+- **Loan amortization is granularity-invariant.** Loans amortize monthly at any granularity (each
+  interval rolls up the months it spans), so a loan's interest and principal -- and the balance
+  trajectory -- match across granularities exactly. Locked here via the null-tier net-worth check
+  on loan-bearing profiles.
 - **Occurrence flows are year-total-invariant.** A cost with a real cadence (`ExpenseItem` +
   `Recurrence`, e.g. property tax) places its occurrences differently within a year at different
   granularities, but the year total is the same.
 - **Zero-dynamics runs are identical.** At the null tier (no economic rates, no funding policy) a
-  loan-free profile's year-end net worth matches across granularities to rounding -- the check
-  that would have caught the expense-lumping defect this suite was born from.
+  profile's year-end net worth matches across granularities to rounding -- including loan-bearing
+  profiles -- the check that would have caught the expense-lumping defect this suite was born from.
 - **Outcomes hold to the materiality bar.** Depletion year is identical across granularities at
   the null and growth tiers; at the funding/full tiers (real draws) it may differ by at most one
   year, and refining the granularity converges (quarterly lies between annual and monthly).
 
 What this suite deliberately does NOT assert as invariant -- legitimate may-drift documented in
 `FORECAST_ENGINE.md`: draw/balance-driven income (ordinary withdrawals/RMDs, realized gains,
-interest, dividends), loan amortization interest/principal splits, draw-frequency effects on
-balances, and books carried flat after an early stop.
+interest, dividends), draw-frequency effects on balances, and books carried flat after an early
+stop. (Loan amortization, once a may-drift item, is now invariant -- loans amortize monthly at any
+granularity.)
 """
 import unittest
 from decimal import Decimal
@@ -132,16 +137,15 @@ class GranularityInvarianceTest( unittest.TestCase ):
                 continue
             continue
 
-    def test_null_tier_loan_free_net_worth_invariant( self ):
-        """With zero economics and no funding policy, a loan-free profile is fully deterministic:
-        year-end net worth matches across granularities to rounding. This is the check the
-        expense-lumping defect (#16) would have tripped -- any flow that lumps instead of
-        prorating shows here as a within-year net-worth divergence -- from either start."""
+    def test_null_tier_net_worth_invariant( self ):
+        """With zero economics and no funding policy, a profile is fully deterministic: year-end
+        net worth matches across granularities to rounding -- now including loan-bearing profiles,
+        since loans amortize monthly at any granularity. This is the check the expense-lumping
+        defect (#16) would have tripped -- any flow that lumps instead of prorating shows here as a
+        within-year net-worth divergence -- from either start."""
         for profile_name, build in PROFILES.items():
             for start_name, start in STARTS.items():
                 parameters = start( TIERS[ 'null' ]( build() ) )
-                if parameters.loans:                   # loan amortization legitimately drifts; skip
-                    continue
                 comparison = compare( parameters )
                 cutoff     = _earliest_depletion( comparison )
                 annual     = { figures.year : figures for figures in comparison[ 'annual' ][ 0 ] }

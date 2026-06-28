@@ -1,9 +1,11 @@
-"""Tests for liabilities: a loan seeded at t0 and amortized over its term.
+"""Tests for liabilities: a loan seeded at t0 and amortized monthly over its term.
 
-Covers the opening balance in net worth, the interest = balance x rate split, full
-amortization to zero by the term (the derived level payment, with the final payment
-capped to the remaining balance), and a scheduled payoff that extinguishes the remaining
-balance at a date and stops further amortization.
+Loans amortize monthly at any run granularity (each interval rolls up the months it spans), so
+year-one interest is monthly-compounded on a declining balance -- a little under the flat
+balance x rate. Covers the opening balance in net worth, that monthly-compounded interest, full
+amortization to zero by the term (with the final payment capped to the remaining balance), a term
+that is not a whole number of run-granularity periods (a mid-period origination), and a scheduled
+payoff that extinguishes the remaining balance at a date and stops further amortization.
 """
 import unittest
 from datetime import date
@@ -54,10 +56,13 @@ class LiabilityTests( unittest.TestCase ):
         # opening (day before the start): $500k cash less the $200k mortgage
         self.assertEqual( reader.ledger.net_worth( through = date( 2025, 12, 31 ) ), Decimal( '300000' ) )
 
-    def test_first_year_interest_is_balance_times_rate( self ):
+    def test_first_year_interest_is_monthly_compounded( self ):
+        # Twelve monthly steps at 5%/12 on a declining balance accrue a little under the flat
+        # 200000 x 5% = 10000 of simple annual interest (~9933), and the balance falls.
         reader = Bookkeeper( Forecast( _parameters( date( 2026, 12, 31 ) ) ).run().books )
-        self.assertEqual(
-            reader.ledger.natural_balance( _account( reader, 'mortgage-interest' ) ), Decimal( '10000' ) )
+        interest = reader.ledger.natural_balance( _account( reader, 'mortgage-interest' ) )
+        self.assertLess( interest, Decimal( '10000' ) )
+        self.assertGreater( interest, Decimal( '9900' ) )
         self.assertLess(
             reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '200000' ) )
 
@@ -120,6 +125,38 @@ class LoanPayoffTests( unittest.TestCase ):
         non_liability = ScheduledLoanPayoff( date( 2030, 6, 1 ), 'mortgage-interest' )
         with self.assertRaises( MissingAccountError ):
             Forecast( _parameters( date( 2030, 12, 31 ), [ non_liability ] ) ).run()
+
+
+class NonAlignedTermTests( unittest.TestCase ):
+    """A loan term that is not a whole number of run-granularity periods -- a mortgage originated
+    mid-period leaves e.g. 233 months -- forecasts at annual granularity. Loans amortize monthly,
+    so the term need not align to the period (this run was previously rejected outright)."""
+
+    def _parameters( self, term_months, end_date ):
+        return ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = end_date,
+            filing_status = FilingStatus.MARRIED_JOINT,
+            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
+            assets        = [ AssetParameters(
+                'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
+            loans         = [ LoanParameters(
+                'Mortgage', Decimal( '200000' ), Rate( Decimal( '0.05' ) ),
+                Duration( term_months, TimeUnit.MONTH ), ExpenseTaxClass.MORTGAGE_INTEREST,
+                handle = 'mortgage', interest_handle = 'mortgage-interest' ) ],
+        )
+
+    def test_non_period_aligned_term_runs_at_annual_granularity( self ):
+        # 233 months is not a multiple of 12; at annual granularity this once raised ValueError.
+        reader = Bookkeeper( Forecast( self._parameters( 233, date( 2026, 12, 31 ) ) ).run().books )
+        self.assertGreater(
+            reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '0' ) )
+
+    def test_non_period_aligned_term_amortizes_to_zero( self ):
+        # 233 months from 2026-01 retires the loan by ~2045-06; run past it -> fully paid off.
+        reader = Bookkeeper( Forecast( self._parameters( 233, date( 2046, 12, 31 ) ) ).run().books )
+        self.assertEqual( reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '0' ) )
 
 
 if __name__ == '__main__':
