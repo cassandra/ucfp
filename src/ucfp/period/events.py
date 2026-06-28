@@ -88,6 +88,30 @@ class ExternalDisbursement( PeriodEvent ):
 
 
 @dataclass( frozen = True )
+class LoanPayoff( PeriodEvent ):
+    """Extinguish a loan's remaining balance at a date, funded from cash: the whole balance still
+    owed is taken off the liability and drawn from the cash hub, zeroing the loan so no further
+    amortization posts. The balance is read live from the ledger at apply time -- the projected
+    amount the engine knows, not a planner-supplied figure -- so a payoff dated after the loan has
+    already been retired posts nothing. Mirrors the principal half of a liability service payment,
+    with the full remaining balance and no interest."""
+
+    event_date        : date
+    liability_account : Account
+    cash_account      : Account
+
+    def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
+        balance = bookkeeper.ledger.natural_balance( self.liability_account )
+        if balance == 0:
+            return None
+        return bookkeeper.record(
+            self.event_date,
+            [ ( self.liability_account, -balance ), ( self.cash_account, balance ) ],
+            description = description,
+        )
+
+
+@dataclass( frozen = True )
 class Purchase( PeriodEvent ):
     """Acquire an asset at cost, funded from a cash account: the asset account
     gains the cost (its basis); the funding account is drawn down."""
