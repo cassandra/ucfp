@@ -7,6 +7,7 @@ a single cash hub, the system equity accounts, valuation companions, accounts ke
 tax-class -- live here, where they are valid (the books are built to honor them).
 """
 from typing import Optional
+from uuid import UUID
 
 from .books import Account, BooksOfAccount
 from .enums import (
@@ -85,6 +86,15 @@ class Chart:
         """The account bearing system role `role`, or None."""
         for account in self._books.accounts:
             if account.system_role == role:
+                return account
+            continue
+        return None
+
+    def account_by_uuid( self, account_uuid : UUID ) -> Optional[ Account ]:
+        """The account bearing `account_uuid` (its stable, user-facing identity), or None -- the
+        lookup a results-table column uses to resolve back to its account after a reload."""
+        for account in self._books.accounts:
+            if account.account_uuid == account_uuid:
                 return account
             continue
         return None
