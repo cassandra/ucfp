@@ -389,6 +389,19 @@ class LabeledEnumField(models.CharField):
                 f"Valid values are: {', '.join(valid_values)}"
             )
 
+    def run_validators(self, value):
+        """
+        Run field validators against the persisted string form.
+
+        The field exposes its value as a LabeledEnum instance, but CharField's
+        MaxLengthValidator (and any user-supplied validators) expect the string
+        we actually store. Normalize here, the same way validate() does, before
+        delegating to the parent.
+        """
+        string_value = str(value) if isinstance(value, self.enum_class) else value
+        super().run_validators(string_value)
+        return
+
     def formfield(self, **kwargs):
         """
         Return a form field for this model field.

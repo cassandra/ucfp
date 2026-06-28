@@ -166,6 +166,43 @@ class TestLabeledEnumField(TestCase):
 
         self.assertEqual(string_value, 'third')
 
+    def test_full_clean_succeeds_with_enum_values(self):
+        """full_clean() must not crash on a LabeledEnumField. The field exposes
+        enum instances, and run_validators() previously fed those straight to
+        CharField's MaxLengthValidator, raising TypeError (len() on the enum)."""
+        obj = TestModel()
+        obj.safe_field     = TestEnum.SECOND
+        obj.strict_field   = TestEnum.THIRD
+        obj.nullable_field = TestEnum.FIRST
+
+        # managed = False model has no table, so skip the DB-backed checks; the
+        # regression is in per-field cleaning, which these flags do not affect.
+        obj.full_clean( validate_unique = False, validate_constraints = False )
+
+    def test_full_clean_allows_nullable_none(self):
+        """A nullable field left as None validates cleanly."""
+        obj = TestModel()
+        obj.safe_field     = TestEnum.FIRST
+        obj.strict_field   = TestEnum.FIRST
+        obj.nullable_field = None
+
+        obj.full_clean( validate_unique = False, validate_constraints = False )
+
+    def test_run_validators_accepts_enum_instance(self):
+        """run_validators() normalizes the enum instance to its stored string,
+        so inherited CharField validators run without error."""
+        field = TestModel._meta.get_field('safe_field')
+
+        field.run_validators( TestEnum.SECOND )
+
+    def test_run_validators_still_enforces_max_length(self):
+        """Normalization must not disable validation: an overlong raw string
+        still trips the inherited MaxLengthValidator."""
+        field = TestModel._meta.get_field('safe_field')
+
+        with self.assertRaises(ValidationError):
+            field.run_validators( 'x' * (field.max_length + 1) )
+
 
 class BoundedDecimalTestModel(models.Model):
     """Test model exercising BoundedDecimalField bound variants."""
