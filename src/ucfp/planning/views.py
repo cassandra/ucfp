@@ -277,30 +277,47 @@ class ResidenceView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class IncomeTableView( View ):
-    """`/planning/interview/income/` -- the §5 income table. GET renders it; POST saves the edited
-    income flows, Social Security, and timing, then re-renders in place (so the dates the retire age
-    fills show on save)."""
+    """`/planning/interview/income/table/` -- the §5 income table. GET renders it. POST auto-saves a
+    single edit in the background: it persists, then replies *silently* (an empty antinode response,
+    no DOM swap) for a pure value edit so typing flow is undisturbed, and re-renders the pane only
+    when the row set changed (a line added or removed) or a field failed validation -- cases the
+    client cannot reflect on its own. The age<->date sync is done client-side (`income_table.js`)."""
 
     _TEMPLATE = 'planning/interview/sections/income_table.html'
 
     def get( self, request ):
         profile, scenario = _current_plan( request.organization )
-        return self._response( request, IncomeTableForm( profile = profile, scenario = scenario ) )
+        return self._rendered( request, IncomeTableForm( profile = profile, scenario = scenario ) )
 
     def post( self, request ):
         organization = request.organization
         profile, scenario = _current_plan( organization )
         form = IncomeTableForm( request.POST, profile = profile, scenario = scenario )
-        if form.is_valid():
-            profile, scenario = form.apply( profile, scenario )
-            save_profile( organization, profile )
-            save_scenario( latest_scenario( organization ), scenario )
-            form = IncomeTableForm( profile = profile, scenario = scenario )
-        return self._response( request, form )
+        if not form.is_valid():
+            return self._swap( request, form )                 # show field errors
+        before = self._line_count( profile )
+        profile, scenario = form.apply( profile, scenario )
+        save_profile( organization, profile )
+        save_scenario( latest_scenario( organization ), scenario )
+        if self._line_count( profile ) != before:              # a line was added or removed
+            return self._swap( request, IncomeTableForm( profile = profile, scenario = scenario ) )
+        return antinode.response()                             # silent: nothing to re-render
 
-    def _response( self, request, form ):
+    @staticmethod
+    def _line_count( profile ) -> int:
+        """The general income lines (the only rows whose count changes); rental and entitlement rows
+        are fixed by the properties and subjects."""
+        return sum( 1 for flow in profile.income_flows if flow.property_handle is None )
+
+    def _rendered( self, request, form ) -> str:
         return antinode.response( main_content = render_to_string(
             self._TEMPLATE, { 'income_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        # Replace the pane by id (not the data-async target) so the loader-suppressed background
+        # POST -- which carries no target -- still applies the update.
+        return antinode.response( replace_map = { 'income-table': render_to_string(
+            self._TEMPLATE, { 'income_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

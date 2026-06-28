@@ -3,8 +3,19 @@
 Income is a list of windowed flows -- the income twin of the expense side (see `IncomeFlow`). This
 module presents them as one editable table: a row per general income line (salary, consulting, ...),
 a row per rental property's rent, and two entitlement rows per subject (Social Security, pension).
-Each row carries an `amount` over a `from`/`until` window, with an age column as a convenience that
-fills the date on save. Async-saved like the spending drill, so the dates the age fills show on save.
+Each row carries an `amount` over a `from`/`until` window. The **date is canonical**; the `age`
+column beside it is a convenience that a small client-side helper (`income_table.js`) keeps in sync
+with the date both ways. The server therefore just reads the date, with one fallback for a JS-less
+client: a window endpoint with no date but a filled age is resolved from the subject's birthdate
+(`_endpoint`).
+
+The table auto-saves -- every edit persists in the background -- so validation is deliberately
+non-blocking: an incomplete row simply does not materialize (no flow / no entitlement written),
+rather than raising a hard error that would fight the user mid-entry. Genuine input errors (a
+malformed date, a negative amount) still surface, on the re-render the server sends when a save is
+invalid. The real gate on incompleteness is the forecast run (materialization raises on, e.g., a
+benefit with no claiming date). (A client-side "this row won't take effect yet" hint is a deferred
+nicety -- it must live in the client to stay correct under silent, no-re-render saves.)
 
 General income is hand-entered (a WAGES annual stream for now). Rental rent is a monthly item tied to
 its property by `property_handle`. Social Security and pension are NOT free-form flows: their realized
@@ -12,6 +23,7 @@ amount is the engine's job, derived from the stated benefit plus the claiming/st
 rows capture only that benefit (FRA / base) and that date, and feed the profile entitlement facts and
 the scenario timing rather than an `IncomeFlow`.
 """
+import json
 from dataclasses import replace
 from datetime import date
 
@@ -33,7 +45,7 @@ class IncomeTableForm( forms.Form ):
     and two entitlement rows per subject (Social Security, pension). `apply` rebuilds the profile's
     income flows (rental preserved by `property_handle`, general from the rows), writes the SS and
     pension entitlement facts from the entitlement rows, and writes the claiming/start dates into the
-    scenario timing."""
+    scenario timing. Resolution is date-canonical with an age fallback (`_endpoint`)."""
 
     _EXTRA_ROWS = 1
 
@@ -75,47 +87,13 @@ class IncomeTableForm( forms.Form ):
             self.fields[ self._key( 'g', i, 'remove' ) ] = forms.BooleanField( required = False )
         self.fields[ self._key( 'g', i, 'name' ) ]    = name
         self.fields[ self._key( 'g', i, 'subject' ) ] = subject
-        self._add_window_fields( 'g', i, flow )
-        self._add_age_fields( i, flow )
+        row       = flow.schedule[ 0 ] if flow is not None and flow.schedule else None
+        birthdate = self._birthdate( flow.subject_handle ) if flow is not None else None
+        self._add_window_fields( 'g', i, row, birthdate )
 
     def _add_rental_fields( self, k : int, flow ):
-        self._add_window_fields( 'r', k, flow )
-
-    def _add_age_fields( self, i : int, flow ):
-        """A from/until age helper per general row -- empty so the date stays canonical, with the
-        current age shown as a placeholder. A filled age fills the date on save (the date is editable
-        for precision)."""
-        from_age  = forms.IntegerField( required = False, min_value = 0, max_value = 120 )
-        until_age = forms.IntegerField( required = False, min_value = 0, max_value = 120 )
-        if flow is not None and flow.schedule:
-            birthdate = self._birthdate( flow.subject_handle )
-            window    = flow.schedule[ 0 ].window
-            self._age_placeholder( from_age, window.start, birthdate )
-            self._age_placeholder( until_age, window.end, birthdate )
-        self.fields[ self._key( 'g', i, 'from_age' ) ]  = from_age
-        self.fields[ self._key( 'g', i, 'until_age' ) ] = until_age
-
-    def _birthdate( self, handle : str ):
-        subject = next( ( s for s in self._subjects if s.handle == handle ), None )
-        return subject.birthdate if subject is not None else None
-
-    @staticmethod
-    def _age_placeholder( field, on : date, birthdate ):
-        if on is not None and birthdate is not None:
-            field.widget.attrs[ 'placeholder' ] = str( on.year - birthdate.year )
-
-    def _add_window_fields( self, prefix : str, index : int, flow ):
-        amount = forms.DecimalField( required = False, min_value = 0 )
-        start  = forms.DateField( required = False )
-        until  = forms.DateField( required = False )
-        if flow is not None and flow.schedule:
-            row = flow.schedule[ 0 ]
-            amount.initial = row.amount
-            start.initial  = row.window.start
-            until.initial  = row.window.end
-        self.fields[ self._key( prefix, index, 'amount' ) ] = amount
-        self.fields[ self._key( prefix, index, 'from' ) ]   = start
-        self.fields[ self._key( prefix, index, 'until' ) ]  = until
+        row = flow.schedule[ 0 ] if flow is not None and flow.schedule else None
+        self._add_window_fields( 'r', k, row, None, with_age = False )
 
     def _add_entitlement_fields( self, m : int, subject ):
         """Social Security and pension as table rows for the subject: a stated benefit (FRA / base)
@@ -124,22 +102,76 @@ class IncomeTableForm( forms.Form ):
         timing    = self._timing.get( subject.handle )
         gov       = self._gov.get( subject.handle )
         pension   = self._pension.get( subject.handle )
-        birthdate = subject.birthdate
         claiming  = timing.government_pension_claiming_date if timing is not None else None
         start     = timing.pension_start if timing is not None else None
-        self._add_entitlement_row(
-            m, 'ss', gov.monthly_at_normal_age if gov is not None else None, claiming, birthdate )
-        self._add_entitlement_row(
-            m, 'pen', pension.base_annual_amount if pension is not None else None, start, birthdate )
+        ss_amount  = gov.monthly_at_normal_age if gov is not None else None
+        pen_amount = pension.base_annual_amount if pension is not None else None
+        self._add_entitlement_row( m, 'ss', ss_amount, claiming, subject.birthdate )
+        self._add_entitlement_row( m, 'pen', pen_amount, start, subject.birthdate )
 
     def _add_entitlement_row( self, m : int, kind : str, amount_initial, date_initial, birthdate ):
-        amount = forms.DecimalField( required = False, min_value = 0, initial = amount_initial )
-        on     = forms.DateField( required = False, initial = date_initial )
-        on_age = forms.IntegerField( required = False, min_value = 0, max_value = 120 )
-        self._age_placeholder( on_age, date_initial, birthdate )
-        self.fields[ self._key( 's', m, f'{kind}amt' ) ]      = amount
-        self.fields[ self._key( 's', m, f'{kind}_from' ) ]    = on
-        self.fields[ self._key( 's', m, f'{kind}_from_age' ) ] = on_age
+        self.fields[ self._key( 's', m, f'{kind}amt' ) ] = forms.DecimalField(
+            required = False, min_value = 0, initial = amount_initial )
+        self.fields[ self._key( 's', m, f'{kind}_from' ) ] = forms.DateField(
+            required = False, initial = date_initial )
+        self.fields[ self._key( 's', m, f'{kind}_from_age' ) ] = forms.IntegerField(
+            required = False, min_value = 0, max_value = 120,
+            initial = self._derived_age( date_initial, birthdate ) )
+        self._link_age( self._key( 's', m, f'{kind}_from' ), self._key( 's', m, f'{kind}_from_age' ),
+                        birthdate = birthdate )
+
+    def _add_window_fields( self, prefix : str, index : int, row, birthdate, with_age = True ):
+        """The amount + from/until date fields for a row, seeded from a `WindowedAmount` `row`. When
+        `with_age`, an age field beside each date is seeded with the date's whole-year age (the client
+        keeps the two in sync; the server falls back to the age only when its date is blank)."""
+        start_on = row.window.start if row is not None else None
+        end_on   = row.window.end if row is not None else None
+        self.fields[ self._key( prefix, index, 'amount' ) ] = forms.DecimalField(
+            required = False, min_value = 0, initial = row.amount if row is not None else None )
+        self.fields[ self._key( prefix, index, 'from' ) ]  = forms.DateField(
+            required = False, initial = start_on )
+        self.fields[ self._key( prefix, index, 'until' ) ] = forms.DateField(
+            required = False, initial = end_on )
+        if with_age:
+            self.fields[ self._key( prefix, index, 'from_age' ) ] = forms.IntegerField(
+                required = False, min_value = 0, max_value = 120,
+                initial = self._derived_age( start_on, birthdate ) )
+            self.fields[ self._key( prefix, index, 'until_age' ) ] = forms.IntegerField(
+                required = False, min_value = 0, max_value = 120,
+                initial = self._derived_age( end_on, birthdate ) )
+            # A general row's birthdate follows its chosen subject, so the client resolves it live
+            # from the subject field rather than a baked-in date.
+            subject_field = self._key( prefix, index, 'subject' )
+            self._link_age( self._key( prefix, index, 'from' ),
+                            self._key( prefix, index, 'from_age' ), subject_field = subject_field )
+            self._link_age( self._key( prefix, index, 'until' ),
+                            self._key( prefix, index, 'until_age' ), subject_field = subject_field )
+
+    def _link_age( self, date_key : str, age_key : str, *, subject_field = None, birthdate = None ):
+        """Tag a date/age pair so `income_table.js` can keep them in sync: each carries a class and a
+        pointer to its partner's element id, plus how to find the subject's birthdate -- either a
+        live `subject_field` (general rows) or a fixed `birthdate` (entitlement rows)."""
+        shared = {}
+        if subject_field is not None:
+            shared[ 'data-subject-field' ] = f'id_{subject_field}'
+        if birthdate is not None:
+            shared[ 'data-birthdate' ] = birthdate.isoformat()
+        self.fields[ date_key ].widget.attrs.update(
+            { 'class' : 'js-date', 'data-age-field' : f'id_{age_key}', **shared } )
+        self.fields[ age_key ].widget.attrs.update(
+            { 'class' : 'js-age', 'data-date-field' : f'id_{date_key}', **shared } )
+
+    def _birthdate( self, handle : str ):
+        subject = next( ( s for s in self._subjects if s.handle == handle ), None )
+        return subject.birthdate if subject is not None else None
+
+    @staticmethod
+    def _derived_age( on : date, birthdate : date ):
+        """The whole-year age a date falls on -- the inverse of `_at_age` (which lands on the
+        birthday), so round-tripping an age through a date and back is stable."""
+        if on is None or birthdate is None:
+            return None
+        return on.year - birthdate.year
 
     @staticmethod
     def _key( prefix : str, index : int, part : str ) -> str:
@@ -158,28 +190,19 @@ class IncomeTableForm( forms.Form ):
             return subject
         return self._subjects[ 0 ].handle if len( self._subjects ) == 1 else None
 
-    def clean( self ):
-        cleaned = super().clean()
-        for i in range( self._general_rows ):
-            if i < len( self._general ) and cleaned.get( self._key( 'g', i, 'remove' ) ):
-                continue
-            amount  = cleaned.get( self._key( 'g', i, 'amount' ) )
-            subject = self._default_subject( cleaned.get( self._key( 'g', i, 'subject' ) ) )
-            if amount is not None and not subject:
-                self.add_error(
-                    self._key( 'g', i, 'subject' ), 'Choose who receives this income.' )
-        for m, subject in enumerate( self._subjects ):
-            self._clean_entitlement( cleaned, m, subject, 'ss', 'a claiming date' )
-            self._clean_entitlement( cleaned, m, subject, 'pen', 'a start date' )
-        return cleaned
+    # --- date-canonical resolution -----------------------------------------
 
-    def _clean_entitlement( self, cleaned, m, subject, kind, need ):
-        """A stated benefit is meaningless without when it is claimed/started -- the realized amount
-        and window both derive from that date -- so flag an amount with neither date nor age."""
-        amount = cleaned.get( self._key( 's', m, f'{kind}amt' ) )
-        when   = self._endpoint( 's', m, f'{kind}_from', subject.birthdate )
-        if amount is not None and when is None:
-            self.add_error( self._key( 's', m, f'{kind}_from' ), f'Enter {need} for this benefit.' )
+    def _endpoint( self, prefix : str, index : int, part : str, birthdate ):
+        """A window endpoint date. The date field is canonical (the client keeps it filled from the
+        age helper); the age is consulted only as a fallback for a JS-less client that submitted an
+        age but no date."""
+        on = self.cleaned_data.get( self._key( prefix, index, part ) )
+        if on is not None:
+            return on
+        age = self.cleaned_data.get( self._key( prefix, index, f'{part}_age' ) )
+        if age is not None and birthdate is not None:
+            return _at_age( birthdate, age )
+        return None
 
     # --- template rows -----------------------------------------------------
 
@@ -188,10 +211,11 @@ class IncomeTableForm( forms.Form ):
         rows = list()
         for i in range( self._general_rows ):
             existing = i < len( self._general )
+            subject  = self[ self._key( 'g', i, 'subject' ) ]
             rows.append( {
                 'kind'     : 'general',
                 'name'     : self[ self._key( 'g', i, 'name' ) ],
-                'subject'  : self[ self._key( 'g', i, 'subject' ) ],
+                'subject'  : subject,
                 'amount'   : self[ self._key( 'g', i, 'amount' ) ],
                 'from'     : self[ self._key( 'g', i, 'from' ) ],
                 'from_age' : self[ self._key( 'g', i, 'from_age' ) ],
@@ -224,12 +248,20 @@ class IncomeTableForm( forms.Form ):
         return {
             'kind'         : 'entitlement',
             'subject_name' : subject.name,
+            'birthdate'    : subject.birthdate,
             'name'         : name,
             'amount'       : self[ self._key( 's', m, f'{kind}amt' ) ],
             'from'         : self[ self._key( 's', m, f'{kind}_from' ) ],
             'from_age'     : self[ self._key( 's', m, f'{kind}_from_age' ) ],
             'cadence'      : cadence,
             'note'         : note }
+
+    @property
+    def subject_birthdates_json( self ) -> str:
+        """Subject handle -> ISO birthdate, for the client age<->date helper to resolve a general
+        row's birthdate from its currently chosen subject."""
+        return json.dumps( { subject.handle: subject.birthdate.isoformat()
+                             for subject in self._subjects } )
 
     # --- apply -------------------------------------------------------------
 
@@ -259,14 +291,6 @@ class IncomeTableForm( forms.Form ):
                 subject_handle = subject, income_tax_class = IncomeTaxClass.WAGES,
                 schedule = [ WindowedAmount( amount, window ) ] ) )
         return flows
-
-    def _endpoint( self, prefix : str, index : int, part : str, birthdate ):
-        """A window endpoint date: the age helper (a convenience) wins when filled, computed from the
-        subject's birthdate; otherwise the date field, which stays canonical."""
-        age = self.cleaned_data.get( self._key( prefix, index, f'{part}_age' ) )
-        if age is not None and birthdate is not None:
-            return _at_age( birthdate, age )
-        return self.cleaned_data.get( self._key( prefix, index, part ) )
 
     def _rental_flows( self ) -> list:
         flows = list()
