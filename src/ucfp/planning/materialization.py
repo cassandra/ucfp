@@ -193,14 +193,11 @@ def _entitlement_income(
         subject = subjects_by_handle[ entitlement.subject_handle ]
         claiming = _claiming_date(
             timing.get( entitlement.subject_handle ), entitlement.subject_handle )
-        # The income starts on the precise claiming date; the engine's benefit adjustment is still
-        # whole-year (the age below), so month precision waits on issue #31.
-        claiming_age = claiming.year - subject.birthdate.year
         streams.append( IncomeStream(
             subject = subject,
             income_tax_class = government_pension.income_tax_class(),
             amounts = Schedule.constant( WindowedAmount( government_pension.realized_annual_benefit(
-                entitlement.monthly_at_normal_age, subject.birthdate, claiming_age ) ) ),
+                entitlement.monthly_at_normal_age, subject.birthdate, claiming ) ) ),
             window = DateWindow( start = claiming ) ) )
     return streams
 
