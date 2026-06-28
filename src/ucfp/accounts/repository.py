@@ -42,6 +42,7 @@ class BooksOfAccountRepository:
             parent_record = record_by_account[ account.parent ] if account.parent is not None else None
             record_by_account[ account ] = AccountRecord.objects.create(
                 books             = books_record,
+                uuid              = account.account_uuid,
                 parent            = parent_record,
                 account_type      = account.account_type,
                 system_role       = account.system_role,
@@ -130,5 +131,6 @@ class BooksOfAccountRepository:
             owner_handle      = record.owner_handle,
             description       = record.description,
             closed            = record.closed,
+            account_uuid      = record.uuid,
         )
         return account_by_id[ record.id ]
