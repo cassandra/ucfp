@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
 from .books import Account
-from .enums import AccountType, SideType
+from .enums import AccountClass, AccountType, SideType
 
 if TYPE_CHECKING:
     from .bookkeeper import Bookkeeper
@@ -51,6 +51,15 @@ class Ledger:
             continue
         return total
 
+    def natural_flow( self, account : Account, *, start : date, end : date ) -> Decimal:
+        """Display-direction movement on `account` within [start, end]: `flows` cast to the
+        account type's normal side, so revenue reads as positive income and expense as positive
+        spending -- the per-period figure a flow column shows."""
+        signed = self.flows( account, start = start, end = end )
+        if account.account_normal_type == SideType.DEBIT:
+            return -signed
+        return signed
+
     def balances( self,
                   *,
                   account_type : Optional[ AccountType ] = None,
@@ -71,16 +80,45 @@ class Ledger:
             total += self.natural_balance( valuation_account, through = through )
         return total
 
+    def type_total( self, account_type : AccountType, *, through : Optional[ date ] = None ) -> Decimal:
+        """Balance rollup for an account type as of `through`: the natural-balance sum over its
+        accounts. Asset valuation companions are themselves asset accounts, so an asset total
+        already carries unrealized appreciation -- it reads as market value, not bare cost."""
+        return sum(
+            ( self.natural_balance( account, through = through )
+              for account in self._chart.accounts( account_type = account_type ) ),
+            Decimal( '0' ),
+        )
+
+    def class_total( self, account_class : AccountClass, *, through : Optional[ date ] = None ) -> Decimal:
+        """Balance rollup for an account class as of `through`. Summed by `market_value` because a
+        class names only its holdings -- their valuation companions carry no class -- so each
+        holding's appreciation must be folded in to match `type_total`."""
+        return sum(
+            ( self.market_value( account, through = through )
+              for account in self._chart.accounts( account_class = account_class ) ),
+            Decimal( '0' ),
+        )
+
+    def type_flow( self, account_type : AccountType, *, start : date, end : date ) -> Decimal:
+        """Flow rollup for an account type within [start, end]: the natural-direction movement
+        summed over its accounts -- the per-period figure for a revenue/expense type column."""
+        return sum(
+            ( self.natural_flow( account, start = start, end = end )
+              for account in self._chart.accounts( account_type = account_type ) ),
+            Decimal( '0' ),
+        )
+
+    def class_flow( self, account_class : AccountClass, *, start : date, end : date ) -> Decimal:
+        """Flow rollup for an account class within [start, end]: the natural-direction movement
+        summed over its accounts -- the per-period figure for an income/expense class column."""
+        return sum(
+            ( self.natural_flow( account, start = start, end = end )
+              for account in self._chart.accounts( account_class = account_class ) ),
+            Decimal( '0' ),
+        )
+
     def net_worth( self, *, through : Optional[ date ] = None ) -> Decimal:
-        """Total assets minus total liabilities (in natural terms) as of `through`."""
-        assets = sum(
-            ( self.natural_balance( account, through = through )
-              for account in self._chart.accounts( account_type = AccountType.ASSET ) ),
-            Decimal( '0' ),
-        )
-        liabilities = sum(
-            ( self.natural_balance( account, through = through )
-              for account in self._chart.accounts( account_type = AccountType.LIABILITY ) ),
-            Decimal( '0' ),
-        )
-        return assets - liabilities
+        """Total assets minus total liabilities as of `through` (assets at market value)."""
+        return ( self.type_total( AccountType.ASSET, through = through )
+                 - self.type_total( AccountType.LIABILITY, through = through ) )

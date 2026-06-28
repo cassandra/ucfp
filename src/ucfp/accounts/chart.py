@@ -10,6 +10,7 @@ from typing import Optional
 
 from .books import Account, BooksOfAccount
 from .enums import (
+    AccountClass,
     AccountType,
     AssetClass,
     ExpenseTaxClass,
@@ -17,6 +18,16 @@ from .enums import (
     SystemAccountRole,
 )
 from .schemas import Handle
+
+
+# The Account attribute naming each type's class, for the types that have a class taxonomy
+# (Asset/Revenue/Expense). Liability and Equity are absent -- they have no class rung, so their
+# type expands straight to accounts.
+_ACCOUNT_TYPE_CLASS_ATTRIBUTE = {
+    AccountType.ASSET   : 'asset_class',
+    AccountType.REVENUE : 'income_tax_class',
+    AccountType.EXPENSE : 'expense_tax_class',
+}
 
 
 class Chart:
@@ -30,14 +41,37 @@ class Chart:
     def __init__( self, books : BooksOfAccount ):
         self._books = books
 
-    def accounts( self, *, account_type : Optional[ AccountType ] = None ) -> list[ Account ]:
-        """All accounts, optionally filtered to one effective `account_type`."""
-        if account_type is None:
-            return list( self._books.accounts )
-        return [
-            account for account in self._books.accounts
-            if account.effective_account_type == account_type
-        ]
+    def accounts( self,
+                  *,
+                  account_type  : Optional[ AccountType ]  = None,
+                  account_class : Optional[ AccountClass ] = None ) -> list[ Account ]:
+        """All accounts, optionally narrowed by effective `account_type` and/or `account_class`
+        (any of the three class taxonomies -- asset, income, or expense). The filters combine."""
+        result = list( self._books.accounts )
+        if account_type is not None:
+            result = [ account for account in result
+                       if account.effective_account_type == account_type ]
+        if account_class is not None:
+            result = [ account for account in result
+                       if account_class in ( account.asset_class,
+                                             account.income_tax_class,
+                                             account.expense_tax_class ) ]
+        return result
+
+    def classes( self, account_type : AccountType ) -> list[ AccountClass ]:
+        """The distinct classes present under `account_type`, in account order -- the asset,
+        income, or expense classes its accounts carry. Empty for Liability and Equity, which have
+        no class taxonomy. Drives which class-rollup columns a type can expand into."""
+        attribute = _ACCOUNT_TYPE_CLASS_ATTRIBUTE.get( account_type )
+        if attribute is None:
+            return []
+        present : list[ AccountClass ] = []
+        for account in self.accounts( account_type = account_type ):
+            account_class = getattr( account, attribute )
+            if ( account_class is not None ) and ( account_class not in present ):
+                present.append( account_class )
+            continue
+        return present
 
     def root( self, account_type : AccountType ) -> Optional[ Account ]:
         """The parentless, type-bearing root for `account_type`, or None."""
