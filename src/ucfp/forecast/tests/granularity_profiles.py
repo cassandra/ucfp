@@ -169,7 +169,7 @@ def rental_owner() -> ForecastParameters:
             _stream( 'Rental Expense', ExpenseTaxClass.RENTAL_EXPENSE, '12000' ) ],
         loans = [ LoanParameters(
             'Mortgage', D( '250000' ), Rate( D( '0.05' ) ), Duration( 30, TimeUnit.YEAR ),
-            interest_class = ExpenseTaxClass.MORTGAGE_INTEREST ) ],
+            interest_class = ExpenseTaxClass.RENTAL_EXPENSE ) ],
         events = [ ScheduledRealization( date( 2040, 6, 1 ), 'rental', D( '800000' ) ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '20000' ), draw_order = [ AssetClass.STOCKS ] ) )

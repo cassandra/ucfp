@@ -5,8 +5,10 @@ locks the *contract* that promise actually entails -- derived and validated in t
 audit -- so a future month-vs-year regression fails loudly here:
 
 - **Rate flows are granularity-invariant.** Pure-stream income/expense classes (wages, Social
-  Security, gross rental, living, rental expense) -- those sourced only from `IncomeStream` /
-  `ExpenseStream` -- match across granularities to rounding, before any run depletes.
+  Security, gross rental, living) -- those sourced only from `IncomeStream` / `ExpenseStream` --
+  match across granularities to rounding, before any run depletes. RENTAL_EXPENSE is excluded: a
+  rental mortgage's interest nets into it (Schedule E), and loan amortization splits legitimately
+  drift month-vs-year, so the class is no longer purely stream-sourced.
 - **Occurrence flows are year-total-invariant.** A cost with a real cadence (`ExpenseItem` +
   `Recurrence`, e.g. property tax) places its occurrences differently within a year at different
   granularities, but the year total is the same.
@@ -30,8 +32,10 @@ from ucfp.forecast.tests.granularity_harness import GRANULARITIES, compare
 from ucfp.forecast.tests.granularity_profiles import PROFILES, STARTS, TIERS
 
 # Classes sourced only from smooth streams -> prorated, so granularity-invariant per year.
+# RENTAL_EXPENSE is intentionally absent: a rental mortgage's interest nets into it (Schedule E),
+# and loan amortization splits drift month-vs-year, so it is no longer a pure stream (see below).
 _PURE_STREAM_INCOME  = ( IncomeTaxClass.WAGES, IncomeTaxClass.SOCIAL_SECURITY, IncomeTaxClass.GROSS_RENTAL )
-_PURE_STREAM_EXPENSE = ( ExpenseTaxClass.LIVING, ExpenseTaxClass.RENTAL_EXPENSE )
+_PURE_STREAM_EXPENSE = ( ExpenseTaxClass.LIVING, )
 
 # Tiers by how much legitimate divergence they admit (see granularity_profiles).
 _LOW_TIERS     = ( 'null', 'growth' )     # outcomes must be identical across granularities
