@@ -17,6 +17,8 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from common.rate import Rate
+from common.recurrence import Duration, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
@@ -25,6 +27,7 @@ from ucfp.forecast.parameters import (
     AssetParameters,
     ForecastParameters,
     IncomeStream,
+    LoanParameters,
     PropertyAttributes,
     ScheduledRealization,
     Subject,
@@ -71,6 +74,47 @@ class RentalDepreciationDeductionTests( unittest.TestCase ):
         with_depreciation = self._income_tax_with_basis( Decimal( '275000' ) )
         without = self._income_tax_with_basis( Decimal( '0' ) )
         self.assertLess( with_depreciation, without )
+
+
+class RentalLoanInterestNettingTests( unittest.TestCase ):
+    """A rental mortgage's interest is a Schedule-E rental expense netted against gross rent, not
+    itemized home-mortgage interest. Classed RENTAL_EXPENSE it nets dollar-for-dollar against the
+    rental income; classed MORTGAGE_INTEREST (Schedule A) it gives a standard-deduction filer no
+    benefit -- so the correct classification yields the lower tax."""
+
+    def _income_tax_with_interest_class( self, interest_class ):
+        subject = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
+        parameters = ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.SINGLE,
+            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            subjects      = [ subject ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ),
+                                 handle = 'cash' ),
+                AssetParameters(
+                    'Rental', AssetClass.REAL_ESTATE_RENTAL, Decimal( '500000' ), Decimal( '500000' ),
+                    handle = 'rental',
+                    property_attributes = PropertyAttributes(
+                        acquisition_date  = date( 2026, 1, 1 ),
+                        depreciable_basis = Decimal( '0' ),               # isolate the interest effect
+                        property_type     = RealPropertyType.RESIDENTIAL ) ) ],
+            income_streams = [
+                IncomeStream( subject, IncomeTaxClass.GROSS_RENTAL,
+                              Schedule.constant( WindowedAmount( Decimal( '60000' ) ) ) ) ],
+            loans = [ LoanParameters(
+                'Rental Mortgage', Decimal( '250000' ), Rate( Decimal( '0.05' ) ),
+                Duration( 30, TimeUnit.YEAR ), interest_class = interest_class ) ],
+        )
+        return _income_tax( Bookkeeper( Forecast( parameters ).run().books ) )
+
+    def test_rental_loan_interest_nets_against_rent( self ):
+        # The ~12,500 first-year interest nets against the 60k rent as a RENTAL_EXPENSE; as
+        # itemized MORTGAGE_INTEREST it is below the single standard deduction, so it does not.
+        netted     = self._income_tax_with_interest_class( ExpenseTaxClass.RENTAL_EXPENSE )
+        itemizable = self._income_tax_with_interest_class( ExpenseTaxClass.MORTGAGE_INTEREST )
+        self.assertLess( netted, itemizable )
 
 
 class RentalSaleRecaptureTests( unittest.TestCase ):
