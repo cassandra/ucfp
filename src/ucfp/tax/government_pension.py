@@ -28,12 +28,12 @@ class GovernmentPension:
         self._jurisdiction = jurisdiction
 
     def realized_annual_benefit(
-            self, entitlement_monthly : Decimal, birthdate : date, claiming_age : int ) -> Decimal:
-        """The annual benefit (today's dollars) for claiming at `claiming_age`, given the
+            self, entitlement_monthly : Decimal, birthdate : date, claiming_date : date ) -> Decimal:
+        """The annual benefit (today's dollars) for claiming on `claiming_date`, given the
         jurisdiction's entitlement -- the monthly benefit at its normal retirement age."""
         if self._jurisdiction is TaxLawType.US_FEDERAL:
             return us_social_security.realized_annual_benefit(
-                entitlement_monthly, birthdate, claiming_age )
+                entitlement_monthly, birthdate, claiming_date )
         raise NotImplementedError(
             f'No government pension schedule for jurisdiction {self._jurisdiction}.' )
 

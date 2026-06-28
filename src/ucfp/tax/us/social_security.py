@@ -1,27 +1,30 @@
-"""Social Security retirement-benefit adjustment for claiming age (US).
+"""Social Security retirement-benefit adjustment for claiming date (US).
 
 A standalone `tax/us` helper the planning layer calls to turn a subject's PIA (primary
 insurance amount -- the monthly benefit at full retirement age) into the realized benefit for
-a chosen claiming age. The SSA schedule reduces the benefit for claiming before full
-retirement age (FRA) and adds delayed-retirement credits for claiming after, up to age 70;
-FRA slides with birth year (65 for 1937 and earlier, to 67 for 1960 and later). Benefits are
-in today's dollars; the engine grows them by the Social Security COLA over the horizon.
+a chosen claiming date. The SSA schedule adjusts the benefit by the month: it reduces the
+benefit for each month claimed before full retirement age (FRA) and adds delayed-retirement
+credits for each month after, up to age 70; FRA slides with birth year (65 for 1937 and
+earlier, to 67 for 1960 and later). Benefits are in today's dollars; the engine grows them by
+the Social Security COLA over the horizon.
 
-Not modeled: per-month claiming precision (claiming age is whole years); the earnings test
-before FRA; and family/spousal/survivor benefits.
+Not modeled: the earnings test before FRA; and family/spousal/survivor benefits.
 """
 from datetime import date
 from decimal import Decimal
+
+from common.datetime_utils import elapsed_months
 
 _EARLY_BREAKPOINT  = 36   # months early at which the reduction rate steps down
 _DELAY_CEILING_AGE = 70   # delayed-retirement credits stop accruing at age 70
 
 
 def realized_annual_benefit(
-        pia_monthly : Decimal, birthdate : date, claiming_age : int ) -> Decimal:
-    """The annual benefit (today's dollars) for claiming at `claiming_age` -- the PIA scaled by
-    the SSA adjustment factor for that age, times twelve."""
-    return pia_monthly * _adjustment_factor( birthdate.year, claiming_age ) * Decimal( 12 )
+        pia_monthly : Decimal, birthdate : date, claiming_date : date ) -> Decimal:
+    """The annual benefit (today's dollars) for claiming on `claiming_date` -- the PIA scaled by
+    the SSA adjustment factor for that claiming month, times twelve."""
+    claiming_age_months = elapsed_months( birthdate, claiming_date )
+    return pia_monthly * _adjustment_factor( birthdate.year, claiming_age_months ) * Decimal( 12 )
 
 
 def full_retirement_age_months( birth_year : int ) -> int:
@@ -38,11 +41,11 @@ def full_retirement_age_months( birth_year : int ) -> int:
     return 67 * 12
 
 
-def _adjustment_factor( birth_year : int, claiming_age : int ) -> Decimal:
-    """The fraction of PIA payable for claiming at `claiming_age`: below 1 before FRA, above 1
-    after, exactly 1 at FRA."""
+def _adjustment_factor( birth_year : int, claiming_age_months : int ) -> Decimal:
+    """The fraction of PIA payable for claiming at `claiming_age_months` of age: below 1 before
+    FRA, above 1 after, exactly 1 at FRA."""
     fra_months   = full_retirement_age_months( birth_year )
-    delta_months = claiming_age * 12 - fra_months
+    delta_months = claiming_age_months - fra_months
     if delta_months < 0:
         return Decimal( 1 ) - _early_reduction( -delta_months )
     if delta_months > 0:
