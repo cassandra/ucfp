@@ -7,8 +7,7 @@
   {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
 
   <p>
-    <a href="{% url 'profile_home' %}" class="btn btn-outline-secondary btn-sm">Edit profile</a>
-    <a href="{% url 'scenario_home' %}" class="btn btn-outline-secondary btn-sm">Edit / new scenario</a>
+    <a href="{% url 'interview_home' %}" class="btn btn-outline-secondary btn-sm">Edit plan inputs</a>
   </p>
 
   {% if has_profile and has_scenario %}
