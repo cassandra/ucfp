@@ -24,3 +24,11 @@ class DateSpan:
     def midpoint( self ) -> date:
         """The span's midpoint date; events default here (the mid-period convention)."""
         return self.start_date + timedelta( days = ( self.end_date - self.start_date ).days // 2 )
+
+    @property
+    def months( self ) -> int:
+        """The whole calendar months the span covers, inclusive -- a calendar year is 12, a single
+        calendar month is 1. Assumes month-aligned bounds (a first-of-month start and a month-end
+        end), as the forecast's period spans are."""
+        return ( ( self.end_date.year - self.start_date.year ) * 12
+                 + self.end_date.month - self.start_date.month + 1 )

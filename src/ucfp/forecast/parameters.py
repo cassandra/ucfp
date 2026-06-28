@@ -507,10 +507,10 @@ class ForecastParameters:
     def __post_init__( self ) -> None:
         """Reject inputs that would silently mismodel. At most two filing subjects (a return has
         at most two adults); at most one cash hub (the funding/sweep model keys on a single CASH
-        holding); a granularity that divides the year evenly and a loan term it divides evenly, so
-        period counts and amortization are exact. The forecast must start on the first of a month
-        -- `period_spans` is calendar-aligned, so any first-of-month start works (a mid-year start
-        yields a partial first year, taxed by estimate)."""
+        holding); a granularity that divides the year evenly. Loans amortize monthly regardless of
+        granularity, so a loan term need not align to the period. The forecast must start on the
+        first of a month -- `period_spans` is calendar-aligned, so any first-of-month start works (a
+        mid-year start yields a partial first year, taxed by estimate)."""
         if len( self.subjects ) > 2:
             raise ValueError(
                 f'At most two filing subjects are supported; got {len( self.subjects )}.' )
@@ -522,11 +522,6 @@ class ForecastParameters:
         if 12 % period_months != 0:
             raise ValueError(
                 f'The granularity must divide a year evenly; {period_months} months does not.' )
-        for loan in self.loans:
-            if loan.term.months() % period_months != 0:
-                raise ValueError(
-                    f'Loan "{loan.name}" term ({loan.term.months()} months) is not a whole '
-                    f'number of {period_months}-month periods.' )
         if self.start_date.day != 1:
             raise ValueError(
                 f'A forecast must start on the first of a month; got {self.start_date}.' )

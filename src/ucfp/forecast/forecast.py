@@ -41,6 +41,7 @@ from ucfp.accounts.enums import (
     SystemAccountRole,
 )
 from ucfp.accounts.exceptions import MissingAccountError
+from ucfp.accounts.money_utils import quantize_money
 from ucfp.period.parameters import (
     ContributionLine,
     ExpenseLine,
@@ -82,9 +83,11 @@ _LIMIT_KIND_BY_SOURCE = {
 }
 
 
-# A loan resolved against the books: its parameters plus the accounts and the level
-# payment (derived once by amortization) the per-interval term is computed from.
-_ResolvedLoan = namedtuple( '_ResolvedLoan', ( 'parameters', 'account', 'interest_account', 'payment' ) )
+# A loan resolved against the books: its parameters plus the accounts and the monthly level
+# payment (derived once from the opening balance and remaining months). Loans amortize monthly
+# regardless of the run granularity; each interval rolls up the months it spans.
+_ResolvedLoan = namedtuple(
+    '_ResolvedLoan', ( 'parameters', 'account', 'interest_account', 'monthly_payment' ) )
 
 
 @dataclass
@@ -180,7 +183,6 @@ class ResolvedBaseline:
     draw_priority     : list[ Account ]
     sweep_allocation  : tuple[ tuple[ Account, Decimal ], ... ]
     loans             : list[ _ResolvedLoan ]
-    periods_per_year  : Optional[ int ]
     income_accounts   : IncomeAccounts
     expense_accounts  : ExpenseAccounts
 
@@ -200,8 +202,7 @@ class BaselineBuilder:
         self._asset_holdings = list()   # (AssetParameters, holding) pairs, for property resolution
         self._draw_priority = list()    # holdings to fund from, resolved from draw_order by class
         self._sweep_allocation = ()     # resolved ( holding, weight ) pairs to sweep surplus into
-        self._loans = list()            # resolved loans (accounts + level payment)
-        self._periods_per_year = None   # set when there are liabilities (needs month/year granularity)
+        self._loans = list()            # resolved loans (accounts + monthly level payment)
 
     def build( self ) -> ResolvedBaseline:
         """Build the chart and opening books from the parameters -- the baseline is encoded
@@ -239,7 +240,6 @@ class BaselineBuilder:
             draw_priority     = self._draw_priority,
             sweep_allocation  = self._sweep_allocation,
             loans             = self._loans,
-            periods_per_year  = self._periods_per_year,
             income_accounts   = self._income_accounts,
             expense_accounts  = self._expense_accounts,
         )
@@ -336,12 +336,12 @@ class BaselineBuilder:
         return postings
 
     def _create_loans( self, bookkeeper : Bookkeeper ) -> None:
-        """Create a liability account and an interest expense account per loan, and derive
-        its level payment (amortizing the opening balance over the term at the run's
-        granularity). Called before the opening seed, which credits each balance."""
+        """Create a liability account and an interest expense account per loan, and derive its
+        monthly level payment (amortizing the opening balance over the remaining term in months).
+        Loans amortize monthly at any run granularity. Called before the opening seed, which
+        credits each balance."""
         if not self._parameters.loans:
             return
-        self._periods_per_year = 12 // self._parameters.granularity.months()
         liability_root = bookkeeper.chart.root( AccountType.LIABILITY )
         expense_root = bookkeeper.chart.root( AccountType.EXPENSE )
         for loan in self._parameters.loans:
@@ -350,10 +350,9 @@ class BaselineBuilder:
             interest_account = bookkeeper.add_account(
                 Account( name = f'{loan.name} Interest', parent = expense_root,
                          expense_tax_class = loan.interest_class, handle = loan.interest_handle ) )
-            periodic_rate = loan.interest_rate.fraction / self._periods_per_year
-            periods = loan.term.months() // self._parameters.granularity.months()
-            payment = level_payment( loan.opening_balance, periodic_rate, periods )
-            self._loans.append( _ResolvedLoan( loan, account, interest_account, payment ) )
+            monthly_rate = loan.interest_rate.fraction / 12
+            monthly_payment = level_payment( loan.opening_balance, monthly_rate, loan.term.months() )
+            self._loans.append( _ResolvedLoan( loan, account, interest_account, monthly_payment ) )
             continue
         return
 
@@ -490,32 +489,53 @@ class Forecast:
             continue
         return result
 
-    def _liability_terms_for( self, bookkeeper : Bookkeeper ) -> list[ LiabilityTerm ]:
-        """Resolve each outstanding loan's payment for the interval from its running balance:
-        interest on the balance at the periodic rate, scheduled principal = level payment -
-        interest, plus the prorated extra principal -- all capped at the remaining balance so
-        the final payment pays it off. A loan with no balance left is skipped."""
+    def _liability_terms_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list[ LiabilityTerm ]:
+        """Resolve each outstanding loan's payment for the interval by amortizing it monthly across
+        the months `span` covers, then summing -- so the result is identical at any granularity (a
+        year is twelve monthly steps whether run as 1x12 or 12x1). Each month books interest on the
+        running balance at the monthly rate, scheduled principal = monthly payment - interest, plus
+        the monthly extra principal, each capped at the remaining balance so the final payment pays
+        it off. A loan with no balance left is skipped."""
         ledger = bookkeeper.ledger
         terms = list()
         for loan in self._baseline.loans:
-            balance = ledger.natural_balance( loan.account )
-            if balance <= 0:
+            opening = ledger.natural_balance( loan.account )
+            if opening <= 0:
                 continue
-            interest = balance * ( loan.parameters.interest_rate.fraction / self._baseline.periods_per_year )
-            principal = min( max( loan.payment - interest, Decimal( '0' ) ), balance )
-            per_period_extra = loan.parameters.annual_extra_principal / self._baseline.periods_per_year
-            extra = min( per_period_extra, balance - principal )
-            terms.append(
-                LiabilityTerm(
-                    liability_account = loan.account,
-                    interest_account  = loan.interest_account,
-                    principal         = principal,
-                    interest          = interest,
-                    extra_principal   = extra,
-                )
-            )
+            terms.append( self._amortize_months( loan, opening, span.months ) )
             continue
         return terms
+
+    def _amortize_months(
+            self, loan : '_ResolvedLoan', opening : Decimal, months : int ) -> LiabilityTerm:
+        """Step `loan` forward `months` monthly payments from `opening`, accumulating the period's
+        interest, scheduled principal, and extra principal. Each month is quantized to cents as it
+        is booked -- mirroring per-month granularity exactly -- and the running balance falls by the
+        quantized principal so the next month's interest is on the same balance. Stops early once
+        the balance is gone (a loan that pays off mid-period)."""
+        monthly_rate  = loan.parameters.interest_rate.fraction / 12
+        monthly_extra = loan.parameters.annual_extra_principal / 12
+        balance       = opening
+        interest = principal = extra = Decimal( '0' )
+        for _month in range( months ):
+            if balance <= 0:
+                break
+            month_interest  = quantize_money( balance * monthly_rate )
+            month_principal = min( quantize_money(
+                max( loan.monthly_payment - month_interest, Decimal( '0' ) ) ), balance )
+            month_extra     = min( quantize_money( monthly_extra ), balance - month_principal )
+            interest  += month_interest
+            principal += month_principal
+            extra     += month_extra
+            balance   -= month_principal + month_extra
+            continue
+        return LiabilityTerm(
+            liability_account = loan.account,
+            interest_account  = loan.interest_account,
+            principal         = principal,
+            interest          = interest,
+            extra_principal   = extra,
+        )
 
     def _income_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
         """All income IncomeLines for this interval: the smooth streams (prorated) plus the
@@ -723,7 +743,7 @@ class Forecast:
             asset_rates       = annual_rates.over_fraction( year_fraction ),
             income_lines      = self._income_lines_for( span, year_fraction ),
             expense_lines     = self._expense_lines_for( span, year_fraction ),
-            liability_terms   = self._liability_terms_for( bookkeeper ),
+            liability_terms   = self._liability_terms_for( span, bookkeeper ),
             contribution_lines = self._contribution_lines_for( span, year_fraction, bookkeeper ),
             events            = self._events_for( span, bookkeeper ),
             funding_policy    = self._funding_policy_for( span ),
