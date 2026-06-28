@@ -1,8 +1,9 @@
 """Tests for liabilities: a loan seeded at t0 and amortized over its term.
 
-Covers the opening balance in net worth, the interest = balance x rate split, and full
+Covers the opening balance in net worth, the interest = balance x rate split, full
 amortization to zero by the term (the derived level payment, with the final payment
-capped to the remaining balance).
+capped to the remaining balance), and a scheduled payoff that extinguishes the remaining
+balance at a date and stops further amortization.
 """
 import unittest
 from datetime import date
@@ -12,18 +13,20 @@ from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters,
     ForecastParameters,
     LoanParameters,
+    ScheduledLoanPayoff,
     Subject,
 )
 from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
 from ucfp.tax.law import TaxForecastProfile
 
 
-def _parameters( end_date ):
+def _parameters( end_date, events = () ):
     return ForecastParameters(
         start_date    = date( 2026, 1, 1 ),
         end_date      = end_date,
@@ -36,6 +39,7 @@ def _parameters( end_date ):
             'Mortgage', Decimal( '200000' ), Rate( Decimal( '0.05' ) ),
             Duration( 30, TimeUnit.YEAR ), ExpenseTaxClass.MORTGAGE_INTEREST,
             handle = 'mortgage', interest_handle = 'mortgage-interest' ) ],
+        events        = list( events ),
     )
 
 
@@ -61,6 +65,61 @@ class LiabilityTests( unittest.TestCase ):
         # run past the 30-year term; the level payment retires the balance, final payment capped
         reader = Bookkeeper( Forecast( _parameters( date( 2060, 12, 31 ) ) ).run().books )
         self.assertEqual( reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '0' ) )
+
+
+class LoanPayoffTests( unittest.TestCase ):
+    """A scheduled payoff extinguishes the loan's projected remaining balance at its date,
+    funded from cash, and the loan stops amortizing thereafter."""
+
+    _PAYOFF = ScheduledLoanPayoff( date( 2030, 6, 1 ), 'mortgage' )
+
+    def test_payoff_zeroes_balance_well_before_the_term( self ):
+        # Without the payoff the 30-year mortgage still has a balance in 2035; with it, zero --
+        # and the payoff transaction balances, so the liability reduction was funded from cash.
+        reader = Bookkeeper( Forecast( _parameters( date( 2035, 12, 31 ) ) ).run().books )
+        self.assertGreater(
+            reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '0' ) )
+        paid = Bookkeeper(
+            Forecast( _parameters( date( 2035, 12, 31 ), [ self._PAYOFF ] ) ).run().books )
+        paid.assert_balanced()
+        self.assertEqual( paid.ledger.natural_balance( _account( paid, 'mortgage' ) ), Decimal( '0' ) )
+
+    def test_early_payoff_saves_interest_raising_net_worth( self ):
+        # Clearing the loan early stops its interest expense, so terminal net worth is higher than
+        # letting it amortize on (the cash used would otherwise just sit, not earn).
+        without = Bookkeeper( Forecast( _parameters( date( 2035, 12, 31 ) ) ).run().books )
+        paid = Bookkeeper(
+            Forecast( _parameters( date( 2035, 12, 31 ), [ self._PAYOFF ] ) ).run().books )
+        self.assertGreater( paid.ledger.net_worth(), without.ledger.net_worth() )
+
+    def test_amortization_stops_after_payoff( self ):
+        # Interest accrues only until the payoff, so total interest is less than without it.
+        without = Bookkeeper( Forecast( _parameters( date( 2035, 12, 31 ) ) ).run().books )
+        paid = Bookkeeper(
+            Forecast( _parameters( date( 2035, 12, 31 ), [ self._PAYOFF ] ) ).run().books )
+        self.assertLess(
+            paid.ledger.natural_balance( _account( paid, 'mortgage-interest' ) ),
+            without.ledger.natural_balance( _account( without, 'mortgage-interest' ) ) )
+
+    def test_payoff_after_full_amortization_is_a_noop( self ):
+        # The term retires the loan by ~2056; a payoff in 2058 sees a zero balance and posts
+        # nothing, leaving the books balanced.
+        late_payoff = ScheduledLoanPayoff( date( 2058, 6, 1 ), 'mortgage' )
+        reader = Bookkeeper(
+            Forecast( _parameters( date( 2059, 12, 31 ), [ late_payoff ] ) ).run().books )
+        reader.assert_balanced()
+        self.assertEqual( reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '0' ) )
+
+    def test_payoff_naming_an_unknown_loan_is_rejected( self ):
+        bogus = ScheduledLoanPayoff( date( 2030, 6, 1 ), 'no-such-loan' )
+        with self.assertRaises( MissingAccountError ):
+            Forecast( _parameters( date( 2030, 12, 31 ), [ bogus ] ) ).run()
+
+    def test_payoff_naming_a_non_liability_is_rejected( self ):
+        # The mortgage's own interest expense account carries a handle but is not a liability.
+        non_liability = ScheduledLoanPayoff( date( 2030, 6, 1 ), 'mortgage-interest' )
+        with self.assertRaises( MissingAccountError ):
+            Forecast( _parameters( date( 2030, 12, 31 ), [ non_liability ] ) ).run()
 
 
 if __name__ == '__main__':

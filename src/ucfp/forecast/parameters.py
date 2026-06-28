@@ -23,6 +23,7 @@ from common.schedule import Schedule
 from ucfp.accounts.books import Account
 from ucfp.accounts.chart import Chart
 from ucfp.accounts.enums import (
+    AccountType,
     AssetClass,
     ExpenseTaxClass,
     IncomeTaxClass,
@@ -32,7 +33,8 @@ from ucfp.accounts.enums import (
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.schemas import Handle
 from ucfp.period.events import (
-    ExternalDisbursement, ExternalReceipt, PeriodEvent, Purchase, Realization, Transfer )
+    ExternalDisbursement, ExternalReceipt, LoanPayoff, PeriodEvent, Purchase, Realization,
+    Transfer )
 from ucfp.tax.engine import TaxState
 from ucfp.tax.law import TaxForecastProfile
 from ucfp.tax.enums import FilingStatus
@@ -286,6 +288,18 @@ class ScheduledEvent:
             raise MissingAccountError( f'No holding with handle "{handle}" for the scheduled event.' )
         return holding
 
+    def _liability( self, chart : Chart, handle : Handle ) -> Account:
+        """The liability account `handle` refers to, for an event that targets a loan. Resolved
+        through the chart (loans are not in `holdings`); a MissingAccountError if no such account
+        exists or the handle names something that is not a liability."""
+        account = chart.account( handle )
+        if account is None:
+            raise MissingAccountError( f'No account with handle "{handle}" for the scheduled event.' )
+        if account.effective_account_type is not AccountType.LIABILITY:
+            raise MissingAccountError(
+                f'The account with handle "{handle}" is not a liability; a loan payoff needs one.' )
+        return account
+
 
 @dataclass( frozen = True )
 class ScheduledTransfer( ScheduledEvent ):
@@ -301,6 +315,22 @@ class ScheduledTransfer( ScheduledEvent ):
         return Transfer(
             self.event_date, self._holding( holdings, self.source ),
             self._holding( holdings, self.target ), self.amount )
+
+
+@dataclass( frozen = True )
+class ScheduledLoanPayoff( ScheduledEvent ):
+    """Pay off a loan's remaining balance (the loan by handle) at a date, funded from cash --
+    extinguishing the liability so it stops amortizing. The amount is the loan's projected balance
+    on the date, which the engine reads from the books; the planner supplies only the loan and the
+    date. (A property sale that clears its mortgage is composed at the planning layer as a
+    realization plus this payoff; this event itself knows nothing of the property link.)"""
+
+    event_date : date
+    loan       : Handle
+
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
+        return LoanPayoff(
+            self.event_date, self._liability( chart, self.loan ), self._cash( chart ) )
 
 
 @dataclass( frozen = True )
