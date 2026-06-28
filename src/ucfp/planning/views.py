@@ -22,7 +22,6 @@ from common import antinode
 from common.dataclass_json import from_json_data
 from common.request_utils import is_ajax
 
-from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.profile.models import ProfileRecord
 from ucfp.profile.repository import (
@@ -32,6 +31,7 @@ from ucfp.scenario.models import ScenarioRecord
 from ucfp.scenario.repository import (
     create_scenario, latest_scenario, load_scenario, save_scenario, scenarios_for )
 
+from .books_table import build_run_books_table
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
 from .forms import GRANULARITY, RunForm
@@ -458,19 +458,19 @@ class EventDeleteView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class RunResultsView( View ):
-    """`/planning/run/<uuid>/` -- a captured run: net worth derived from its books, plus the
-    stop condition and notices from the persisted result."""
+    """`/planning/run/<uuid>/` -- a captured run: its Books of Account as a drill-down table
+    (through the user's column lens), plus the stop condition and notices from the persisted
+    result."""
 
     def get( self, request, run_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run = from_json_data( ProjectionRun, record.data )
-        ledger = Bookkeeper( BooksOfAccountRepository().load( record.books ) ).ledger
+        books = BooksOfAccountRepository().load( record.books )
         return render( request, _RESULTS_TEMPLATE, {
             'record'        : record,
             'stopped_early' : run.result.stopped_early,
-            'net_worth_rows': [ ( step.end_date.year, ledger.net_worth( through = step.end_date ) )
-                                for step in run.result.steps ],
+            'books_table'   : build_run_books_table( request, run, books ),
             'notices'       : [ ( step.end_date.year, notice.kind.label,
                                   notice.severity.label, notice.amount )
                                 for step in run.result.steps for notice in step.notices ],

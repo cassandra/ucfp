@@ -1,0 +1,28 @@
+{% comment %}
+The Books of Account drill-down table for a run, rendered as a single #books-table element so a
+column operation can swap it in place (antinode replace_map). Rows are the run's periods; columns
+come from the user's adapted lens. Asset/liability/equity and Net Worth read as a balance at
+period end; revenue/expense read as a flow over the period.
+{% endcomment %}
+<div id="books-table" class="table-responsive">
+  <table class="table table-sm w-auto">
+    <thead>
+      <tr>
+        <th>Period</th>
+        {% for column in books_table.columns %}
+        <th class="text-end">{{ column.label }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in books_table.rows %}
+      <tr>
+        <td class="text-nowrap">{{ row.span.end_date|date:"Y-m-d" }}</td>
+        {% for cell in row.cells %}
+        <td class="text-end">{{ cell.value|floatformat:0 }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
