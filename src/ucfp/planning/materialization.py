@@ -137,7 +137,7 @@ def _loan( loan : LoanProfile, as_of : date, extra_principal : Decimal ) -> Loan
     """The engine view of a loan as of the forecast start: amortize the original loan from its
     origination to the balance still owed (unless `current_balance` overrides it) and the
     remaining term, since the engine projects forward from an opening balance over a term. A
-    plans prepayment becomes the engine's annual extra principal."""
+    Plans prepayment becomes the engine's annual extra principal."""
     periods = loan.original_term.months()
     elapsed = min( _elapsed_months( loan.origination_date, as_of ), periods )
     opening = loan.current_balance if loan.current_balance is not None else remaining_balance(
@@ -184,7 +184,7 @@ def _entitlement_income(
         profile : Profile, plans : Plans, subjects_by_handle : dict[ str, Subject ],
         government_pension : GovernmentPension ) -> list[ IncomeStream ]:
     """The retirement entitlements as realized income streams: pension and Social Security, whose
-    amount and window depend on the plans's start/claiming timing."""
+    amount and window depend on the Plans' start/claiming timing."""
     timing = { entry.subject_handle: entry for entry in plans.timing }
     streams = list()
     for pension in profile.pensions:
@@ -229,7 +229,7 @@ def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:
 
 
 def _lifestyle_expenses( plans : Plans ) -> tuple[ list, list ]:
-    """The plans's lifestyle as (streams, items): load its chosen cost table from the
+    """The Plans' lifestyle as (streams, items): load its chosen cost table from the
     parameter-set library and step each expense by the level in effect across the timeline --
     a stream (no `interval`) smoothed, an item (an `interval`) placed at its cadence."""
     lifestyle = plans.lifestyle
@@ -274,7 +274,7 @@ def _level_schedule( amounts, segments : list ) -> Schedule:
 
 
 def _plans_expenses( plans : Plans ) -> tuple[ list, list ]:
-    """The plans's planned expenses as (streams, items): a flow with no interval is a smoothed
+    """The Plans' planned expenses as (streams, items): a flow with no interval is a smoothed
     stream, one with an interval an item placed at that cadence. Each is a flat amount for now;
     value-steps over time come later. The successor to `_lifestyle_expenses`."""
     streams, items = list(), list()

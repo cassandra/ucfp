@@ -9,7 +9,7 @@ Naming: a type that mirrors a Forecast engine concept keeps the engine noun with
 boundary, while staying a distinct type the profile layer owns (so the stored format is
 decoupled from engine churn). A type with no single engine analog -- the engine is
 deliberately generic for income and expenses -- takes its own user-facing name
-(`SalaryEntitlement`, `CommittedObligation`). Shared vocabulary (enums, `Rate`, `Duration`)
+(`IncomeFlow`, `CommittedObligation`). Shared vocabulary (enums, `Rate`, `Duration`)
 is imported from the engine; engine parameter dataclasses are not.
 
 Section comments mark the user-facing groupings; they are kept as a seam guide for a future
@@ -29,7 +29,7 @@ from ucfp.jurisdiction.enums import FilingStatus
 
 
 # Handles are stable string identities other sections reference; never display names. The subject
-# handles are canonical here -- the profile mints them and the scenario, interview, and engine
+# handles are canonical here -- the profile mints them and the plans, interview, and engine
 # materialization all refer back to these, never a re-typed literal.
 PRIMARY_SUBJECT_HANDLE = 'subject'
 PARTNER_SUBJECT_HANDLE = 'partner'
@@ -64,8 +64,8 @@ class PropertyProfile:
 class AssetProfile:
     """A holding at t0 -- the fact subset of the engine `AssetParameters`: class, opening
     value, and (for taxable holdings) cost basis. Zero-basis classes omit basis, and
-    materialization supplies the domain-required 0. Growth is a scenario assumption. Cash is
-    a CASH-class asset."""
+    materialization supplies the domain-required 0. Growth is an Assumptions economic factor.
+    Cash is a CASH-class asset."""
     handle: str
     name: str
     asset_class: AssetClass
@@ -83,9 +83,9 @@ class LoanProfile:
     `original_amount` borrowed, the `interest_rate`, and the `original_term`. The balance still
     owed at the forecast start -- and the remaining term -- are *derived* by materialization
     (amortizing from origination), unless `current_balance` overrides the balance, the way to
-    capture extra principal already paid down. Future extra-principal payments are a scenario
-    strategy, not here. `interest_class` (e.g. residence mortgage) defaults at materialization
-    when omitted. `property_handle` attaches the loan to the property it finances, so a property
+    capture extra principal already paid down. Future extra-principal payments are a Plans
+    strategy (`LoanPrepayment`), not here. `interest_class` (e.g. residence mortgage) defaults
+    at materialization when omitted. `property_handle` attaches the loan to the property it finances, so a property
     sale can find and end it; None for a non-property loan."""
     handle: str
     name: str
@@ -99,7 +99,7 @@ class LoanProfile:
 
 
 # --- Income flows ---------------------------------------------------------
-# Income the household receives -- the income twin of the scenario's `ExpenseFlow`. A flow is a
+# Income the household receives -- the income twin of the Plans' `ExpenseFlow`. A flow is a
 # fact (its amount over time), plural and independent per subject. Social Security and pensions are
 # the exception: their amount is actuarially derived from the claiming/start timing, so they stay
 # entitlement facts below, not flows.
@@ -107,7 +107,7 @@ class LoanProfile:
 @dataclass( frozen = True )
 class IncomeFlow:
     """One income the household receives -- salary, consulting, rental rent, or other ordinary
-    income -- the income twin of the scenario's `ExpenseFlow`. `subject_handle` is who receives it
+    income -- the income twin of the Plans' `ExpenseFlow`. `subject_handle` is who receives it
     (for per-subject tax); `income_tax_class` its treatment; `schedule` the amount over time spans (a
     `WindowedAmount` per span, one open-ended row a constant amount); `interval` None is a smoothed
     stream, a `Duration` an item placed at that cadence (rent is monthly). `property_handle` ties
@@ -124,13 +124,13 @@ class IncomeFlow:
 
 # --- Retirement entitlements ----------------------------------------------
 # Social Security and pensions stay entitlement *facts* (the benefit at normal age), each composed
-# with a scenario timing knob into a realized stream at materialization -- because the benefit
+# with a Plans timing knob into a realized stream at materialization -- because the benefit
 # amount depends on when it is claimed.
 
 @dataclass( frozen = True )
 class PensionEntitlement:
     """Base benefit and the age it is quoted at. The realized benefit depends on the
-    scenario start-date knob via plan reduction terms (detailed terms deferred)."""
+    Plans start-date knob via plan reduction terms (detailed terms deferred)."""
     subject_handle: str
     base_annual_amount: Decimal
     normal_start_age: int
@@ -142,7 +142,7 @@ class GovernmentPensionEntitlement:
     the jurisdiction's normal retirement age (the US PIA at full retirement age, the UK State
     Pension, ...). Named for the axis, not the US program -- the jurisdiction-neutral
     counterpart of the engine's `SubsidizedHealthCoverage`. The realized benefit depends on the
-    scenario's claiming-age knob via the jurisdiction's adjustment schedule
+    Plans claiming-age knob via the jurisdiction's adjustment schedule
     (`tax.government_pension`)."""
     subject_handle: str
     monthly_at_normal_age: Decimal

@@ -1,7 +1,7 @@
 """`/plan/` -- the planning features.
 
 All four perspectives are first-class from day one; the three unbuilt ones render a "coming soon"
-placeholder. The interview moved to `/inputs/` and the run views to `/run/` (see `run_urls.py`).
+placeholder. The feature-agnostic run views live under `/run/` (see `run_urls.py`).
 """
 from django.urls import path
 

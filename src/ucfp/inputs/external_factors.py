@@ -25,7 +25,7 @@ _FACTOR_NAMES = tuple(
 
 
 def default_economics() -> EconomicParameters:
-    """The economic-factors copy a new assumptions seeds with -- the Expected preset."""
+    """The economic-factors copy a new Assumptions aggregate seeds with -- the Expected preset."""
     return economic_parameters( EconomicOutlookVariant.EXPECTED.label )
 
 

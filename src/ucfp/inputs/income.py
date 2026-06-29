@@ -21,7 +21,7 @@ General income is hand-entered (a WAGES annual stream for now). Rental rent is a
 its property by `property_handle`. Social Security and pension are NOT free-form flows: their realized
 amount is the engine's job, derived from the stated benefit plus the claiming/start date -- so their
 rows capture only that benefit (FRA / base) and that date, and feed the profile entitlement facts and
-the plans timing rather than an `IncomeFlow`.
+the Plans timing rather than an `IncomeFlow`.
 """
 import json
 from dataclasses import replace
@@ -45,7 +45,7 @@ class IncomeTableForm( forms.Form ):
     and two entitlement rows per subject (Social Security, pension). `apply` rebuilds the profile's
     income flows (rental preserved by `property_handle`, general from the rows), writes the SS and
     pension entitlement facts from the entitlement rows, and writes the claiming/start dates into the
-    plans timing. Resolution is date-canonical with an age fallback (`_endpoint`)."""
+    Plans timing. Resolution is date-canonical with an age fallback (`_endpoint`)."""
 
     _EXTRA_ROWS = 1
 

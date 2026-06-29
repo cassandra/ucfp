@@ -9,9 +9,9 @@ this one uniform surface, so consistency holds without a registry of declarative
 
 A *reference* is the load-bearing concept: an entity the event points at, by `role`, with the valid
 candidates drawn from the profile. The picker auto-fills a single candidate and asks only when there
-is a real choice -- we never silently default. (Two later modes attach here additively: *provision*,
-to create an implied entity -- a Roth conversion's Roth account -- and *cascade*, to adjust other
-inputs -- a home sale ending its mortgage. Neither exists yet.)
+is a real choice -- we never silently default. (Two further modes build on this base: *provision*
+creates an implied entity -- a Roth conversion's Roth account -- and *cascade* adjusts other
+inputs -- a home sale ending its mortgage.)
 """
 from dataclasses import dataclass, replace
 from decimal import Decimal
@@ -197,7 +197,7 @@ def _money( amount ) -> str:
 # --- The materialization accumulator --------------------------------------
 
 class EventContributions:
-    """The engine inputs a plans's events contribute, bucketed by the `ForecastParameters` list
+    """The engine inputs the Plans' events contribute, bucketed by the `ForecastParameters` list
     each feeds; the materialization merges these into the parameters it assembles."""
 
     def __init__( self ):
@@ -462,7 +462,7 @@ def offerable_menu( profile ) -> list:
 
 
 def event_contributions( profile, plans, subjects : dict ) -> EventContributions:
-    """The engine inputs the plans's events contribute. `subjects` maps a subject handle to the
+    """The engine inputs the Plans' events contribute. `subjects` maps a subject handle to the
     materialized engine `Subject` (an income event credits the recipient subject)."""
     into = EventContributions()
     for event in plans.events:

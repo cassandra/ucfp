@@ -1,10 +1,10 @@
 """The seam between a `PlansRecord` and its typed `Plans` aggregate, plus minting and
 listing.
 
-All reads and writes of a plans's data go through here, so no caller handles the raw JSON
-dict -- the typed `Plans` is the only form the rest of the app sees. Unlike a profile, a
-plans is not month-versioned: many labelled plans coexist per organization, and a save
-overwrites the specific plans being edited.
+All reads and writes of a Plans set's data go through here, so no caller handles the raw JSON
+dict -- the typed `Plans` is the only form the rest of the app sees. Unlike a profile, a Plans
+set is not month-versioned: many labelled sets coexist per organization, and a save overwrites
+the specific set being edited.
 """
 from typing import Optional
 
@@ -38,26 +38,26 @@ def latest_plans( organization: Organization ) -> Optional[ PlansRecord ]:
 
 
 def save_plans( record: PlansRecord, plans: Plans ) -> PlansRecord:
-    """Persist `plans` into `record` -- a specific plans, with no monthly versioning."""
+    """Persist `plans` into `record` -- a specific set, with no monthly versioning."""
     store_plans( record, plans )
     record.save()
     return record
 
 
 def create_plans( organization: Organization ) -> PlansRecord:
-    """Mint a new plans for `organization` and return its record -- the single, extensible
-    place that decides a new plans's initial content and label."""
+    """Mint a new Plans set for `organization` and return its record -- the single, extensible
+    place that decides a new set's initial content and label."""
     record = PlansRecord(
         organization = organization, label = _default_label( organization ) )
     return save_plans( record, _initial_plans() )
 
 
 def _default_label( organization: Organization ) -> str:
-    """A distinguishable default name for a new plans, since many coexist per organization."""
+    """A distinguishable default name for a new set, since many coexist per organization."""
     return f'Plans {plans_for( organization ).count() + 1}'
 
 
 def _initial_plans() -> Plans:
-    """The content a new plans starts from -- the typed defaults (an Expected outlook, the
-    general lifestyle scope); the extension point for richer seeding later."""
+    """The content a new Plans set starts from -- empty; the extension point for richer
+    seeding later."""
     return Plans()

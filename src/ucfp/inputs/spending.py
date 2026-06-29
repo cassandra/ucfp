@@ -3,7 +3,7 @@ catalog-to-plans seeding behind both.
 
 §6 presents spending as a presumed annual total per applicable category, drawn from the curated
 catalog, which the user accepts or drills into to adjust the individual expenses. This module
-decides which categories apply from the plan's context, seeds the plans's expense flows from the
+decides which categories apply from the plan's context, seeds the Plans' expense flows from the
 catalog (preserving any amounts already set), and owns the annualization the totals use.
 """
 from dataclasses import dataclass, replace
@@ -113,7 +113,7 @@ def group_for_key( profile, key : str ) -> Optional[ SpendingGroup ]:
 
 
 def merged_expenses( profile, plans ) -> list:
-    """The applicable catalog expenses as plans flows -- existing amounts preserved, missing ones
+    """The applicable catalog expenses as Plans expense flows -- existing amounts preserved, missing ones
     seeded at the catalog default, and no-longer-applicable categories dropped. A property-scoped
     category seeds one flow per attached property (each rental its own set), and the `property_handle`
     binding is re-derived every merge, since it is structural, not a user edit."""
@@ -180,7 +180,7 @@ def cadence_label( interval ) -> str:
 
 class SpendingForm:
     """§6 L0 -- spending as a presumed annual total per applicable category. The user accepts the
-    defaults here and drills into a category to adjust its expenses. `apply` seeds the plans's
+    defaults here and drills into a category to adjust its expenses. `apply` seeds the Plans'
     expense flows from the catalog for the applicable categories, preserving any amounts set."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):

@@ -1,10 +1,11 @@
 """The guided interview that builds a plan's initial inputs.
 
-The interview is one *sequential* view over the same Profile (facts) and Plans (assumptions)
-aggregates the free-form edit pages own: a first-time user is walked section by section to populate
-them, then edits them directly afterward for surgical changes. This module defines the section
-spine -- the ordered steps, each bound to the `Aggregate` it edits and the form that drives it --
-and those per-section forms, which map input onto the typed aggregates.
+The interview is one *sequential* view over the same Profile (facts), Plans (the contemplated
+future), and Assumptions (the exogenous outlook) aggregates the free-form edit pages own: a
+first-time user is walked section by section to populate them, then edits them directly afterward
+for surgical changes. This module defines the section spine -- the ordered steps, each bound to the
+`Aggregate` it edits and the form that drives it -- and those per-section forms, which map input
+onto the typed aggregates.
 
 §1 (subjects) and §2 (retirement timing) are built; the rest are declared so the stepper shows the
 whole path, and a section becomes live simply by giving it a form.
@@ -43,8 +44,7 @@ class Aggregate( Enum ):
 @dataclass( frozen = True )
 class Section:
     """One step of the interview: a stable `key` (its URL segment), a user-facing `title`, the
-    `aggregates` it writes (the Profile, the Plans, or both), and the `form` that drives it
-    (None until the section is built)."""
+    `aggregates` it writes, and the `form` that drives it (None until the section is built)."""
     key: str
     title: str
     aggregates: tuple = ( Aggregate.PROFILE, )
