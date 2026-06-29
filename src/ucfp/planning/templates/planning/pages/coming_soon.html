@@ -1,0 +1,15 @@
+{% extends "pages/app_base.html" %}
+
+{% block app_content %}
+<div class="d-flex align-items-center mb-1">
+  <h1 class="mb-0 mr-2">{{ feature_title }}</h1>
+  <span class="badge badge-secondary">Coming soon</span>
+</div>
+<p class="text-muted">{{ feature_pitch }}</p>
+
+<div class="text-center text-muted py-5">
+  <h4>Not built yet</h4>
+  <p>It will share the same inputs and result views as
+    <a href="{% url 'financial_forecast' %}">Financial Forecast</a>.</p>
+</div>
+{% endblock %}

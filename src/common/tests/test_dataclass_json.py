@@ -1,6 +1,6 @@
 """Round-trip tests for the generic dataclass <-> JSON codec.
 
-Exercises every leaf and container type the profile/scenario aggregates use, so the codec is
+Exercises every leaf and container type the profile/plans aggregates use, so the codec is
 verified independently of either app: Decimal (lossless), date, Enum (by name), the `Rate`
 and `Duration` value objects, nested dataclasses, lists, tuples, and Optional/None.
 """
@@ -22,13 +22,14 @@ from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, Lifestyle
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile
 
-from ucfp.profile.schemas import (
+from ucfp.inputs.profile.schemas import (
     AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
-from ucfp.scenario.schemas import (
+from ucfp.inputs.plans.schemas import (
     Contribution, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption, LifestylePlan,
-    LifestyleSegment, PlanEvent, RetirementTiming, Scenario )
-from ucfp.scenario.enums import EventKind
+    LifestyleSegment, PlanEvent, RetirementTiming, Plans )
+from ucfp.inputs.plans.enums import EventKind
+from ucfp.inputs.assumptions.schemas import Assumptions
 
 
 def _sample_profile():
@@ -75,8 +76,8 @@ def _sample_profile():
     )
 
 
-def _sample_scenario():
-    return Scenario(
+def _sample_assumptions():
+    return Assumptions(
         economics = EconomicParameters(
             inflation = Rate( Decimal( '0.025' ) ), medical_inflation = Rate( Decimal( '0.045' ) ),
             wage_growth = Rate( Decimal( '0.03' ) ), savings_interest = Rate( Decimal( '0.02' ) ),
@@ -88,7 +89,11 @@ def _sample_scenario():
             rental_increase = Rate( Decimal( '0.03' ) ) ),
         statute = StatuteProfile(
             jurisdiction_type = JurisdictionType.US_FEDERAL,
-            forecast_type = StatuteForecastType.CURRENT_LAW ),
+            forecast_type = StatuteForecastType.CURRENT_LAW ) )
+
+
+def _sample_plans():
+    return Plans(
         timing = [ RetirementTiming(
             subject_handle = 'you',
             government_pension_claiming_date = date( 2040, 1, 1 ),
@@ -128,15 +133,23 @@ class DataclassJsonRoundTripTest( SimpleTestCase ):
         json.dumps( data )  # must be JSON-serializable
         self.assertEqual( from_json_data( Profile, data ), profile )
 
-    def test_scenario_round_trips( self ):
-        scenario = _sample_scenario()
-        data = to_json_data( scenario )
+    def test_plans_round_trips( self ):
+        plans = _sample_plans()
+        data = to_json_data( plans )
         json.dumps( data )
-        self.assertEqual( from_json_data( Scenario, data ), scenario )
+        self.assertEqual( from_json_data( Plans, data ), plans )
+
+    def test_assumptions_round_trips( self ):
+        assumptions = _sample_assumptions()
+        data = to_json_data( assumptions )
+        json.dumps( data )
+        self.assertEqual( from_json_data( Assumptions, data ), assumptions )
 
     def test_empty_aggregates_round_trip( self ):
         self.assertEqual( from_json_data( Profile, to_json_data( Profile() ) ), Profile() )
-        self.assertEqual( from_json_data( Scenario, to_json_data( Scenario() ) ), Scenario() )
+        self.assertEqual( from_json_data( Plans, to_json_data( Plans() ) ), Plans() )
+        self.assertEqual(
+            from_json_data( Assumptions, to_json_data( Assumptions() ) ), Assumptions() )
 
     def test_incompatible_stored_record_reports_clearly( self ):
         # A record missing a now-required field (an older schema) names the type and the field gap,

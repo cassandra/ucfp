@@ -1,9 +1,9 @@
-"""Forms for the retirement-planning hub.
+"""Forms for the Financial Forecast hub.
 
-The run form makes the whole forecast bundle explicit -- which profile, which scenario, and the
-frame (duration + interval). The profile is shown "as of {month year}" and defaults to the most
-recent; it is a real chooser as monthly versions accumulate. Profile and scenario choices are
-the organization's, injected by the view.
+The run form makes the whole forecast bundle explicit -- which profile, which plans, which
+assumptions, and the frame (duration + interval). The profile is shown "as of {month year}" and
+defaults to the most recent; it is a real chooser as monthly versions accumulate. Profile, plans,
+and assumptions choices are the organization's, injected by the view.
 """
 from django import forms
 
@@ -24,20 +24,23 @@ GRANULARITY = {
 
 
 class RunForm( forms.Form ):
-    """The forecast bundle: which profile and scenario to run, and the frame. Profile/scenario
-    choices are injected by the view from the organization's records; the profile defaults to the
-    most recent."""
+    """The forecast bundle: which profile, plans, and assumptions to run, and the frame. The choices
+    are injected by the view from the organization's records; the profile defaults to the most
+    recent."""
 
     profile        = forms.ChoiceField( label = 'Profile' )
-    scenario       = forms.ChoiceField( label = 'Scenario' )
+    plans          = forms.ChoiceField( label = 'Plans' )
+    assumptions    = forms.ChoiceField( label = 'Assumptions' )
     duration_years = forms.IntegerField( label = 'Duration (years)', min_value = 1, initial = 40 )
     interval       = forms.ChoiceField(
         label = 'Interval', choices = _INTERVAL_CHOICES, initial = 'year' )
 
-    def __init__( self, *args, profiles = None, scenarios = None, **kwargs ):
+    def __init__( self, *args, profiles = None, plans = None, assumptions = None, **kwargs ):
         super().__init__( *args, **kwargs )
         self.fields[ 'profile' ].choices = [
             ( str( profile.uuid ), f'as of {profile.effective_date:%B %Y}' )
             for profile in ( profiles or [] ) ]
-        self.fields[ 'scenario' ].choices = [
-            ( str( scenario.uuid ), scenario.label ) for scenario in ( scenarios or [] ) ]
+        self.fields[ 'plans' ].choices = [
+            ( str( plan.uuid ), plan.label ) for plan in ( plans or [] ) ]
+        self.fields[ 'assumptions' ].choices = [
+            ( str( item.uuid ), item.label ) for item in ( assumptions or [] ) ]

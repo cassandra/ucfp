@@ -1,11 +1,11 @@
-{% extends "pages/base.html" %}
+{% extends "pages/app_base.html" %}
 {% load common_tags %}
 
-{% block content %}
-<div class="container py-5 text-center">
+{% block app_content %}
+<div class="text-center py-5">
   <h1 class="text-primary mb-3">{% settings_value 'SITE_NAME' %}</h1>
   <p class="lead text-muted mb-4">Plan your financial future.</p>
-  <a href="{% url 'interview_home' %}" class="btn btn-primary btn-lg me-2">Set up / edit your plan</a>
-  <a href="{% url 'retirement_planning' %}" class="btn btn-outline-primary btn-lg">Run forecasts</a>
+  <a href="{% url 'inputs_home' %}" class="btn btn-primary btn-lg mr-2">Set up / edit your plan</a>
+  <a href="{% url 'financial_forecast' %}" class="btn btn-outline-primary btn-lg">Run a forecast</a>
 </div>
 {% endblock %}

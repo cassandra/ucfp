@@ -20,8 +20,9 @@ from ucfp.planning.orchestration import run_and_capture
 from ucfp.planning.schemas import ProjectionRun
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
-from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
-from ucfp.scenario.schemas import Scenario
+from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
+from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile
 
@@ -41,8 +42,11 @@ class RunAndCaptureTest( TestCase ):
                 handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
                 opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) ) ] )
 
-    def _scenario( self ) -> Scenario:
-        return Scenario(
+    def _plans( self ) -> Plans:
+        return Plans()
+
+    def _assumptions( self ) -> Assumptions:
+        return Assumptions(
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
             statute = StatuteProfile(
                 jurisdiction_type = JurisdictionType.US_FEDERAL,
@@ -53,7 +57,8 @@ class RunAndCaptureTest( TestCase ):
             start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ),
             granularity = Duration( 1, TimeUnit.YEAR ) )
         record = run_and_capture(
-            self.organization, self._profile(), self._scenario(), frame, label = 'Test run' )
+            self.organization, self._profile(), self._plans(), self._assumptions(), frame,
+            label = 'Test run' )
 
         self.assertEqual( ProjectionRunRecord.objects.count(), 1 )
         record = ProjectionRunRecord.objects.get( pk = record.pk )
