@@ -4,7 +4,7 @@ When a spouse dies, the survivor's filing status is not a simple immediate flip:
 death may still be filed jointly, and the two following years qualify for surviving-spouse
 treatment, which uses the same brackets and standard deduction as married-filing-jointly --
 so it is modeled here *as* MARRIED_JOINT (no separate enum value needed). Only after that does
-the survivor file SINGLE. This rule is US tax law, so it lives in tax/us; the engine applies
+the survivor file SINGLE. This rule is US tax law, so it lives in jurisdiction/us; the engine applies
 `resolve_filing_status` per year from the standing status and death year the Forecast supplies,
 and the Forecast never encodes the rule itself.
 """

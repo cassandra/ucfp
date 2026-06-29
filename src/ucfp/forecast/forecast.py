@@ -15,8 +15,8 @@ projection state -- per-period resolution that depends on the books, the feedbac
 state threading. Projection-independent expansion (profiles, ladders, segment timelines)
 is upstream materialization that builds the `ForecastParameters`.
 
-It selects the tax law via the parameters' `TaxForecastProfile` and treats the resulting
-engine as a black box: it asks the `TaxLaw` for each year's engine and never touches a
+It selects the tax law via the parameters' `StatuteProfile` and treats the resulting
+engine as a black box: it asks the `Statute` for each year's engine and never touches a
 tax knob.
 """
 import calendar
@@ -55,7 +55,7 @@ from ucfp.period.fiscal_window import EstimatedFiscalWindow, FiscalWindow
 from ucfp.period.period import Period
 from ucfp.period.results import Notice, NoticeKind, NoticeSeverity, PeriodResult
 from ucfp.jurisdiction.engine import ContributionKind, TaxEngine, TaxState
-from ucfp.jurisdiction.law import TaxLaw
+from ucfp.jurisdiction.law import Statute
 from ucfp.jurisdiction.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.jurisdiction.context import TaxContext, TaxSubject
 from ucfp.jurisdiction.property import PropertyDisposition, TaxProperty
@@ -193,7 +193,7 @@ class BaselineBuilder:
     from the time-stepping `Forecast`: `build()` runs the create/resolve/validate steps once and
     returns an immutable `ResolvedBaseline`."""
 
-    def __init__( self, parameters : ForecastParameters, tax_law : TaxLaw ):
+    def __init__( self, parameters : ForecastParameters, tax_law : Statute ):
         self._parameters = parameters
         self._tax_law    = tax_law
         self._income_accounts = None    # an IncomeAccounts, built with the books
@@ -461,7 +461,7 @@ class Forecast:
 
     def __init__( self, parameters : ForecastParameters ):
         self._parameters = parameters
-        self._tax_law    = TaxLaw( parameters.tax_forecast )
+        self._tax_law    = Statute( parameters.statute )
         self._baseline   = None         # the ResolvedBaseline, materialized once at the start of run()
 
     def run( self ) -> ForecastResult:

@@ -27,10 +27,10 @@ from ucfp.forecast.parameters import (
     WindowedAmount,
 )
 from ucfp.period.results import NoticeKind, NoticeSeverity
-from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.jurisdiction.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
-_PROFILE = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
+_PROFILE = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
 _SUBJECT = Subject( 'A', date( 1975, 1, 1 ), 'subject-a' )   # age 51 in 2026, working
 
 
@@ -53,7 +53,7 @@ def _parameters( contributions, assets = None, income = Decimal( '120000' ), end
         start_date    = date( 2026, 1, 1 ),
         end_date      = end,
         filing_status = FilingStatus.SINGLE,
-        tax_forecast  = _PROFILE,
+        statute  = _PROFILE,
         subjects      = [ _SUBJECT ],
         assets        = assets if assets is not None else [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ) ),
@@ -114,7 +114,7 @@ class ContributionMechanicsTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2027, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ _SUBJECT ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ) ),
@@ -172,7 +172,7 @@ class ContributionLimitTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2027, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ _SUBJECT ],
             assets        = assets if assets is not None else [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ),

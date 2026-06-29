@@ -24,8 +24,8 @@ from ucfp.forecast.parameters import (
     Subject,
     WindowedAmount,
 )
-from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.jurisdiction.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 
 def _run_two_pension_forecast():
@@ -36,7 +36,7 @@ def _run_two_pension_forecast():
         start_date    = date( 2026, 1, 1 ),
         end_date      = date( 2028, 12, 31 ),
         filing_status = FilingStatus.MARRIED_JOINT,
-        tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
         subjects      = [ alice, bob ],
         assets        = [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
@@ -65,7 +65,7 @@ def _run_stepped_wage_forecast():
         start_date    = date( 2026, 1, 1 ),
         end_date      = date( 2029, 12, 31 ),
         filing_status = FilingStatus.SINGLE,
-        tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
         subjects      = [ worker ],
         assets        = [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ) ) ],
@@ -83,7 +83,7 @@ def _run_recurring_income_forecast():
         start_date    = date( 2026, 1, 1 ),
         end_date      = date( 2027, 12, 31 ),
         filing_status = FilingStatus.SINGLE,
-        tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
         subjects      = [ worker ],
         assets        = [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ) ) ],
@@ -102,7 +102,7 @@ def _run_one_time_income_forecast():
         start_date    = date( 2026, 1, 1 ),
         end_date      = date( 2029, 12, 31 ),
         filing_status = FilingStatus.SINGLE,
-        tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
         subjects      = [ worker ],
         assets        = [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ) ) ],

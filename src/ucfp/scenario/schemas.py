@@ -12,7 +12,7 @@ presentation-original.
 
 The two **external factors** (economic outlook, tax) are exogenous engine concepts with no
 user-facing reframing, so they *reuse the engine's own types* -- `EconomicParameters` and
-`TaxForecastProfile` -- rather than a parallel scenario type, keeping the scenario in
+`StatuteProfile` -- rather than a parallel scenario type, keeping the scenario in
 lockstep with exactly what the engine projects under (no arbitrary subset, no silent drift).
 
 Section comments mark the two groupings -- exogenous external factors vs the personal
@@ -29,7 +29,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
-from ucfp.jurisdiction.law import TaxForecastProfile
+from ucfp.jurisdiction.law import StatuteProfile
 
 from .enums import EventKind
 
@@ -39,7 +39,7 @@ from .enums import EventKind
 # `EconomicOutlookVariant` (Optimistic / Expected / Pessimistic); the actual rates live in the
 # library (admin-curated, schedule-shaped) and are loaded at materialization -- so reasonable
 # defaults come from the database, never zero-filled here. Tax reuses the engine's own
-# `TaxForecastProfile` (a future kind may move it into the library too).
+# `StatuteProfile` (a future kind may move it into the library too).
 
 
 # ===== Personal choices (the levers a user turns) =====
@@ -173,7 +173,7 @@ class Scenario:
     # External factors (see note above): the scenario's own editable copy of the economic rates
     # (seeded from a library preset, then user-owned) and the tax forecast.
     economics: Optional[ EconomicParameters ] = None
-    tax_forecast: Optional[ TaxForecastProfile ] = None
+    statute: Optional[ StatuteProfile ] = None
     # Timing
     timing: list[ RetirementTiming ] = field( default_factory = list )
     # Lifestyle

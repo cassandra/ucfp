@@ -11,8 +11,8 @@ import unittest
 from decimal import Decimal
 
 from common.rate import Rate
-from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.jurisdiction.law import TaxForecastProfile, TaxLaw, TaxProjection
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile, Statute, StatuteProjection
 from ucfp.jurisdiction.us.parameters import BASE_YEAR, federal_2025
 
 _SINGLE = FilingStatus.SINGLE
@@ -71,34 +71,34 @@ class TaxParameterIndexingTests( unittest.TestCase ):
             self.base.contribution_limits.catch_up_age )
 
 
-class TaxLawProjectionTests( unittest.TestCase ):
+class StatuteProjectionTests( unittest.TestCase ):
 
     def _engine( self, forecast_type, year, cola = None ):
-        projection = TaxProjection( cola_rate = cola ) if cola is not None else None
-        profile = TaxForecastProfile( TaxLawType.US_FEDERAL, forecast_type, projection = projection )
-        return TaxLaw( profile ).engine_for( year )
+        projection = StatuteProjection( cola_rate = cola ) if cola is not None else None
+        profile = StatuteProfile( JurisdictionType.US_FEDERAL, forecast_type, projection = projection )
+        return Statute( profile ).engine_for( year )
 
     def test_current_law_is_static_across_years( self ):
-        engine = self._engine( TaxForecastType.CURRENT_LAW, BASE_YEAR + 50 )
+        engine = self._engine( StatuteForecastType.CURRENT_LAW, BASE_YEAR + 50 )
         self.assertEqual(
             engine._parameters.fica_rules.ss_wage_base, federal_2025().fica_rules.ss_wage_base )
 
     def test_cola_indexed_compounds_from_the_base_year( self ):
         engine = self._engine(
-            TaxForecastType.COLA_INDEXED, BASE_YEAR + 2, cola = Rate( Decimal( '0.10' ) ) )
+            StatuteForecastType.COLA_INDEXED, BASE_YEAR + 2, cola = Rate( Decimal( '0.10' ) ) )
         self.assertEqual(
             engine._parameters.fica_rules.ss_wage_base,
             federal_2025().fica_rules.ss_wage_base * Decimal( '1.10' ) ** 2 )
 
     def test_cola_indexed_at_the_base_year_is_unchanged( self ):
         engine = self._engine(
-            TaxForecastType.COLA_INDEXED, BASE_YEAR, cola = Rate( Decimal( '0.10' ) ) )
+            StatuteForecastType.COLA_INDEXED, BASE_YEAR, cola = Rate( Decimal( '0.10' ) ) )
         self.assertEqual(
             engine._parameters.fica_rules.ss_wage_base, federal_2025().fica_rules.ss_wage_base )
 
     def test_cola_indexed_without_a_rate_is_rejected( self ):
         with self.assertRaises( ValueError ):
-            self._engine( TaxForecastType.COLA_INDEXED, BASE_YEAR + 1 )
+            self._engine( StatuteForecastType.COLA_INDEXED, BASE_YEAR + 1 )
 
 
 if __name__ == '__main__':

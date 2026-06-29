@@ -2,7 +2,7 @@
 
 The resolved, single-year fact that a household holds income-subsidized health coverage,
 which a country's engine turns into its own subsidy (in the US, the ACA premium tax credit).
-It lives in the neutral `tax/` layer -- only `tax/us/` names "ACA" -- so any jurisdiction's
+It lives in the neutral `jurisdiction/` layer -- only `jurisdiction/us/` names "ACA" -- so any jurisdiction's
 engine can consume it. The Forecast resolves its windowed planning input into this per year.
 """
 from dataclasses import dataclass

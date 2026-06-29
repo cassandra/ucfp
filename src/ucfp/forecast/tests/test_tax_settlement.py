@@ -14,8 +14,8 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, IncomeStream, Subject, WindowedAmount )
-from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.jurisdiction.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 
 class TaxSettlementTests( unittest.TestCase ):
@@ -26,7 +26,7 @@ class TaxSettlementTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.MARRIED_JOINT,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ subject ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],

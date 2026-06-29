@@ -22,8 +22,8 @@ from ucfp.forecast.parameters import (
     ScheduledExternalReceipt,
     Subject,
 )
-from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.jurisdiction.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 
 def _holding( reader, handle ):
@@ -38,7 +38,7 @@ class ExternalFlowTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 6, 30 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1960, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ),

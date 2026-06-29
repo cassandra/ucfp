@@ -23,10 +23,10 @@ from ucfp.forecast.parameters import (
     ScheduledRealization,
     Subject,
 )
-from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.jurisdiction.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
-_PROFILE = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
+_PROFILE = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
 _SUBJECT = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
 
 
@@ -47,7 +47,7 @@ class CashSweepTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ _SUBJECT ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '200000' ), Decimal( '200000' ) ),
@@ -71,7 +71,7 @@ class CashSweepTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ _SUBJECT ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '30000' ), Decimal( '30000' ) ),
@@ -91,7 +91,7 @@ class CashSweepTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2027, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ _SUBJECT ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '150000' ), Decimal( '150000' ) ),
@@ -113,7 +113,7 @@ class CashSweepTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ _SUBJECT ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '250000' ), Decimal( '250000' ) ),
@@ -150,7 +150,7 @@ class CashSweepValidationTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ _SUBJECT ],
             assets        = assets,
             cash_account  = cash_account,

@@ -8,19 +8,19 @@ results — see `FORECAST_API.md`); not process (see `docs/dev/`). Each principl
 where it is enforced — if a change breaks one, update this line in the same change.
 
 Flow: `ForecastParameters → Forecast → PeriodParameters → Period → books + Notices`,
-with `Forecast → TaxLaw.engine_for(year) → TaxEngine`.
+with `Forecast → Statute.engine_for(year) → TaxEngine`.
 
 ## Actors
 - **`accounts/`** — double-entry ledger. `BooksOfAccount` aggregate, mutated only via `Bookkeeper`, read via `Chart` (structure) / `Ledger` (balances).
 - **`forecast/`** — walks the time frame; resolves planner inputs into a per-interval `PeriodParameters`; threads state. **Owns all time math.**
 - **`period/`** — computes one interval (accrue → settle/fund → close) against the running books. **No time math.**
-- **`jurisdiction/`** — agnostic `TaxEngine` interface (`jurisdiction/us/` = US federal); `TaxLaw` yields the year's engine. Treated as a black box.
+- **`jurisdiction/`** — agnostic `TaxEngine` interface (`jurisdiction/us/` = US federal); `Statute` yields the year's engine. Treated as a black box.
 
 ## Responsibility boundaries
 - **Forecast owns time; Period is myopic.** Forecast compounds rates, prorates flows, applies indexing; Period consumes resolved values only. → `forecast/forecast.py` vs `period/period.py`
 - **Engine reads facts, returns instructions; Period executes.** Engine reads book facts through the read-only `FiscalWindow` and returns charges / forced transactions / penalties; it never mutates books. → `jurisdiction/engine.py`, `period/fiscal_window.py`, `period/period.py`
 - **Tax law owns rules; Forecast owns mechanics + non-ledger facts** (ages, property attrs prepared in `tax_context`). → `jurisdiction/us/engine.py` vs `forecast/forecast.py` (`_tax_context_for`)
-- **Tax law does not leak.** The neutral `jurisdiction/` layer holds the general tax *concepts* — the engine interface, the taxpayer context (`TaxContext`/`TaxSubject`/`TaxProperty`/`PropertyDisposition`), and `FilingStatus`; forecast/period import only `jurisdiction/`. US tax *law* — brackets, parameters, the surviving-spouse filing rule, recovery periods — lives in `jurisdiction/us` and is reached only through the engine: the Forecast states facts (standing filing status, a spouse death year) and the engine derives the US specifics (the effective filing status). The Forecast maps its own vocabulary to neutral concepts (`ContributionSource`→`ContributionKind`); `TaxLaw` is the only importer of `jurisdiction/us`. → `jurisdiction/context.py`, `jurisdiction/engine.py`, `jurisdiction/law.py`
+- **Tax law does not leak.** The neutral `jurisdiction/` layer holds the general tax *concepts* — the engine interface, the taxpayer context (`TaxContext`/`TaxSubject`/`TaxProperty`/`PropertyDisposition`), and `FilingStatus`; forecast/period import only `jurisdiction/`. US tax *law* — brackets, parameters, the surviving-spouse filing rule, recovery periods — lives in `jurisdiction/us` and is reached only through the engine: the Forecast states facts (standing filing status, a spouse death year) and the engine derives the US specifics (the effective filing status). The Forecast maps its own vocabulary to neutral concepts (`ContributionSource`→`ContributionKind`); `Statute` is the only importer of `jurisdiction/us`. → `jurisdiction/context.py`, `jurisdiction/engine.py`, `jurisdiction/law.py`
 - **One writer.** `Bookkeeper` is the sole mutator (record/post/realize/build); everyone else reads via `Chart` / `Ledger` / `FiscalWindow`. → `accounts/bookkeeper.py`
 
 ## Invariants
@@ -49,7 +49,7 @@ with `Forecast → TaxLaw.engine_for(year) → TaxEngine`.
 
 ## Tax projection
 - **`engine_for(year)` projects the 2025 baseline.** Inflation-indexed figures scale by a COLA; statutorily fixed thresholds (SS taxability, NIIT, capital-loss cap, §121, SALT, passive-activity allowance) stay put — their erosion is *deliberate*, not an omission. Smooth scaling, no statutory rounding. → `jurisdiction/us/parameters.py` (`*.indexed`), `jurisdiction/brackets.py`
-- **COLA is a government-behaviour assumption** (`TaxProjection`), set once, held constant. → `jurisdiction/law.py`
+- **COLA is a government-behaviour assumption** (`StatuteProjection`), set once, held constant. → `jurisdiction/law.py`
 
 ## Cash & funding
 - **Cash band:** draw the waterfall to the floor *before* settling tax (so realized income is taxed same period); sweep surplus above the ceiling *after* settlement (a basis-establishing purchase, not taxable). Tax may pull cash negative; only net worth ≤ 0 ends the forecast. → `period/period.py` (`_settle_and_fund`), `period/parameters.py` (`FundingPolicy`)

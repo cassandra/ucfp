@@ -54,11 +54,11 @@ def materialize(
         profile : Profile, scenario : Scenario, frame : ForecastFrame ) -> ForecastParameters:
     if profile.filing_status is None:
         raise ValueError( 'A profile must set its filing status before a forecast can run.' )
-    tax_forecast = _tax_forecast( scenario )
+    statute = _statute( scenario )
     subjects = _subjects( profile )
     subjects_by_handle = { str( subject.handle ): subject
                            for subject in subjects if subject.handle is not None }
-    government_pension = GovernmentPension( tax_forecast.tax_law_type )
+    government_pension = GovernmentPension( statute.jurisdiction_type )
     lifestyle_streams, lifestyle_items = _lifestyle_expenses( scenario )
     expense_streams, expense_items = _scenario_expenses( scenario )
     flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
@@ -67,7 +67,7 @@ def materialize(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
         filing_status    = profile.filing_status,
-        tax_forecast     = tax_forecast,
+        statute     = statute,
         granularity      = frame.granularity,
         subjects         = subjects,
         assets           = _assets( profile ),
@@ -325,7 +325,7 @@ def _economic_outlook( scenario : Scenario ) -> EconomicOutlook:
     return EconomicOutlook.constant( scenario.economics )
 
 
-def _tax_forecast( scenario : Scenario ):
-    if scenario.tax_forecast is None:
+def _statute( scenario : Scenario ):
+    if scenario.statute is None:
         raise ValueError( 'A scenario must carry a tax forecast (from the default library).' )
-    return scenario.tax_forecast
+    return scenario.statute
