@@ -35,9 +35,9 @@ from ucfp.accounts.schemas import Handle
 from ucfp.period.events import (
     ExternalDisbursement, ExternalReceipt, LoanPayoff, PeriodEvent, Purchase, Realization,
     Transfer )
-from ucfp.tax.engine import TaxState
-from ucfp.tax.law import TaxForecastProfile
-from ucfp.tax.enums import FilingStatus
+from ucfp.jurisdiction.engine import TaxState
+from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.enums import FilingStatus
 
 from .economic_outlook import EconomicOutlook
 
@@ -485,7 +485,7 @@ class ForecastParameters:
     start_date        : date
     end_date          : date
     filing_status     : FilingStatus
-    tax_forecast      : TaxForecastProfile
+    statute      : StatuteProfile
     label             : str                                  = ''
     granularity       : Duration                             = Duration( 1, TimeUnit.YEAR )
     subjects          : list[ Subject ]                      = field( default_factory = list )

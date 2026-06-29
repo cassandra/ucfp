@@ -17,8 +17,8 @@ from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
 from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.scenario.schemas import LifestylePlan, LifestyleSegment, Scenario
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 _ECON     = ParameterSetKind.ECONOMIC_OUTLOOK
 _EXPECTED = EconomicOutlookVariant.EXPECTED.label
@@ -107,9 +107,9 @@ class MaterializeFromLibraryTest( TestCase ):
                 opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) ) ] )
         scenario = Scenario(   # the scenario carries its own economic-factors copy, seeded here
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            tax_forecast = TaxForecastProfile(
-                tax_law_type = TaxLawType.US_FEDERAL,
-                tax_forecast_type = TaxForecastType.CURRENT_LAW ) )
+            statute = StatuteProfile(
+                jurisdiction_type = JurisdictionType.US_FEDERAL,
+                forecast_type = StatuteForecastType.CURRENT_LAW ) )
         params = materialize(
             profile, scenario,
             ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ) ) )
@@ -129,9 +129,9 @@ class MaterializeFromLibraryTest( TestCase ):
                 opening_value = Decimal( '900000' ), cost_basis = Decimal( '900000' ) ) ] )
         scenario = Scenario(
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            tax_forecast = TaxForecastProfile(
-                tax_law_type = TaxLawType.US_FEDERAL,
-                tax_forecast_type = TaxForecastType.CURRENT_LAW ),
+            statute = StatuteProfile(
+                jurisdiction_type = JurisdictionType.US_FEDERAL,
+                forecast_type = StatuteForecastType.CURRENT_LAW ),
             lifestyle = LifestylePlan(
                 scope = LifestyleScope.GENERAL,
                 segments = [

@@ -1,7 +1,7 @@
 """End-to-end tests for rental real estate: the annual depreciation deduction and the
 §1250 depreciation recapture at sale.
 
-The depreciation *amounts* are exactly tested in ucfp.tax.us.tests.test_depreciation; here we
+The depreciation *amounts* are exactly tested in ucfp.jurisdiction.us.tests.test_depreciation; here we
 verify the integration through the Forecast: depreciation shields rental income while held,
 and a sale recaptures it. The recapture's effect lands in the income-tax charge (bracket
 math, not a book account), so it is verified directionally -- with vs. without an
@@ -33,8 +33,8 @@ from ucfp.forecast.parameters import (
     Subject,
     WindowedAmount,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 
 def _income_tax( reader ):
@@ -51,7 +51,7 @@ class RentalDepreciationDeductionTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ subject ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ),
@@ -88,7 +88,7 @@ class RentalLoanInterestNettingTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ subject ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ),
@@ -127,7 +127,7 @@ class RentalSaleRecaptureTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ subject ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ), handle = 'cash' ),

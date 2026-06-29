@@ -23,7 +23,7 @@ from ucfp.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
     AssetProfile, CommittedObligation, LoanProfile, Profile, SubjectProfile )
 from ucfp.scenario.schemas import LoanPrepayment, Scenario
-from ucfp.tax.enums import FilingStatus
+from ucfp.jurisdiction.enums import FilingStatus
 
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm

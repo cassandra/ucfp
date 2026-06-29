@@ -24,8 +24,8 @@ from ucfp.forecast.parameters import (
     ScheduledLoanPayoff,
     Subject,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 
 def _parameters( end_date, events = () ):
@@ -33,7 +33,7 @@ def _parameters( end_date, events = () ):
         start_date    = date( 2026, 1, 1 ),
         end_date      = end_date,
         filing_status = FilingStatus.MARRIED_JOINT,
-        tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
         subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
         assets        = [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
@@ -137,7 +137,7 @@ class NonAlignedTermTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = end_date,
             filing_status = FilingStatus.MARRIED_JOINT,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [ AssetParameters(
                 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],

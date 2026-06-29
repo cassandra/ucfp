@@ -61,6 +61,37 @@ class CurrencyType( LabeledEnum ):
     def default( cls ):
         return cls.USD
 
+    @property
+    def symbol( self ) -> str:
+        """The currency symbol that prefixes a formatted amount (e.g. '$')."""
+        return _CURRENCY_FORMAT[ self ][ 0 ]
+
+    @property
+    def minor_unit_digits( self ) -> int:
+        """The currency's fractional digits (2 for dollars/euros, 0 for yen)."""
+        return _CURRENCY_FORMAT[ self ][ 1 ]
+
+    def format( self, amount, with_minor_units : bool = False ) -> str:
+        """`amount` as a display string: the symbol, thousands separators, and -- by default --
+        whole units (the magnitude planning works in). Pass `with_minor_units` for the currency's
+        fractional digits. A negative amount carries a leading minus before the symbol."""
+        digits = self.minor_unit_digits if with_minor_units else 0
+        sign   = '-' if amount < 0 else ''
+        return f'{sign}{self.symbol}{abs( amount ):,.{digits}f}'
+
+
+# Display formatting per currency: (symbol that prefixes the amount, fractional digits). The single
+# source behind CurrencyType.symbol / .minor_unit_digits / .format.
+_CURRENCY_FORMAT = {
+    CurrencyType.USD : ( '$'    , 2 ),
+    CurrencyType.EUR : ( '€'    , 2 ),
+    CurrencyType.GBP : ( '£'    , 2 ),
+    CurrencyType.JPY : ( '¥'    , 0 ),
+    CurrencyType.CAD : ( 'CA$'  , 2 ),
+    CurrencyType.AUD : ( 'A$'   , 2 ),
+    CurrencyType.CHF : ( 'CHF ' , 2 ),
+}
+
 
 class SystemAccountRole( LabeledEnum ):
     """Well-known, app-managed accounts beyond the per-type roots.

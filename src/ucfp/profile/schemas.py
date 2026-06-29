@@ -25,7 +25,7 @@ from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import WindowedAmount
-from ucfp.tax.enums import FilingStatus
+from ucfp.jurisdiction.enums import FilingStatus
 
 
 # Handles are stable string identities other sections reference; never display names. The subject

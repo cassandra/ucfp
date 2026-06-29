@@ -24,8 +24,8 @@ from ucfp.forecast.parameters import (
     Subject,
     WindowedAmount,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 _MONTHLY = Recurrence( Duration( 1, TimeUnit.MONTH ) )
 _YEARLY = Recurrence( Duration( 1, TimeUnit.YEAR ) )
@@ -37,7 +37,7 @@ def _run():
         start_date    = date( 2026, 1, 1 ),
         end_date      = date( 2028, 12, 31 ),
         filing_status = FilingStatus.MARRIED_JOINT,
-        tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
         subjects      = [ Subject( 'Solo', date( 1960, 1, 1 ) ) ],
         assets        = [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],

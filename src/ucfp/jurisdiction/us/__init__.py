@@ -4,7 +4,7 @@ early-withdrawal penalty).
 
 `USFederalTaxEngine` supplies the rules and derives the US specifics (e.g. the effective filing
 status) from the neutral facts in the `TaxContext`; `parameters.py` holds the 2025 baseline
-values that `TaxLaw` projects forward -- inflation-indexed figures scale by a COLA while
-statutorily fixed thresholds stay put. Kept behind the neutral `tax/` interface; see
+values that `Statute` projects forward -- inflation-indexed figures scale by a COLA while
+statutorily fixed thresholds stay put. Kept behind the neutral `jurisdiction/` interface; see
 `ucfp/FORECAST_ENGINE.md`.
 """

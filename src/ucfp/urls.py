@@ -34,6 +34,8 @@ urlpatterns = [
 
     path( 'user/', include( 'user.urls' )),
 
+    path( 'organization/', include( 'organization.urls' )),
+
     path( 'planning/', include( 'ucfp.planning.urls' )),
 
     # Custom error pages

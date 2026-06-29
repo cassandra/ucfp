@@ -1,6 +1,6 @@
 """Social Security retirement-benefit adjustment for claiming date (US).
 
-A standalone `tax/us` helper the planning layer calls to turn a subject's PIA (primary
+A standalone `jurisdiction/us` helper the planning layer calls to turn a subject's PIA (primary
 insurance amount -- the monthly benefit at full retirement age) into the realized benefit for
 a chosen claiming date. The SSA schedule adjusts the benefit by the month: it reduces the
 benefit for each month claimed before full retirement age (FRA) and adds delayed-retirement

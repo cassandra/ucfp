@@ -12,7 +12,7 @@ worth) can read the assessment's MAGI without re-running the income pipeline.
 from dataclasses import dataclass
 from decimal import Decimal
 
-from ucfp.tax.engine import TaxFigures as NeutralTaxFigures
+from ucfp.jurisdiction.engine import TaxFigures as NeutralTaxFigures
 
 
 @dataclass( frozen = True )

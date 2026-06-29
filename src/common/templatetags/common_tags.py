@@ -18,6 +18,17 @@ def get_item(dictionary, key):
 
 
 @register.filter
+def money(amount, currency):
+    """Format `amount` in `currency` (a CurrencyType) for display; blank for a missing value.
+
+    `currency` comes from the template context (the organization's display currency, supplied by
+    the `current_currency` context processor)."""
+    if (amount is None) or (currency is None):
+        return ''
+    return currency.format(amount)
+
+
+@register.filter
 def linecount(value):
     """Count the number of lines in a text value"""
     if not value:

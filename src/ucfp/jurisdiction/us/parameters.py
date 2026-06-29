@@ -10,9 +10,9 @@ sees these; it treats tax as a black box.
 from dataclasses import dataclass, replace
 from decimal import Decimal
 
-from ucfp.tax.brackets import BracketTable
+from ucfp.jurisdiction.brackets import BracketTable
 
-from ucfp.tax.enums import FilingStatus
+from ucfp.jurisdiction.enums import FilingStatus
 
 
 @dataclass( frozen = True )

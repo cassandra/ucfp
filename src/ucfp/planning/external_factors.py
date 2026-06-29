@@ -15,8 +15,8 @@ from common.rate import Rate
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
-from ucfp.tax.enums import TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile, TaxProjection
+from ucfp.jurisdiction.enums import StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile, StatuteProjection
 
 # Every rate factor of the engine's EconomicParameters (all of them, adjustable). The non-rate
 # `window` is excluded -- it stays at its default, giving a constant outlook.
@@ -34,9 +34,9 @@ class ExternalFactorsForm( forms.Form ):
     (one more factor, defaulting to COLA-indexed). Each rate is entered as a percent; `apply` stores
     the factor copy and the tax forecast on the scenario."""
 
-    tax_forecast_type = forms.ChoiceField(
-        label = 'Tax brackets', choices = TaxForecastType.choices(),
-        initial = TaxForecastType.COLA_INDEXED.name.lower() )
+    forecast_type = forms.ChoiceField(
+        label = 'Tax brackets', choices = StatuteForecastType.choices(),
+        initial = StatuteForecastType.COLA_INDEXED.name.lower() )
 
     def __init__( self, data = None, *, profile = None, scenario = None ):
         super().__init__( data, initial = self._initial( scenario ) )
@@ -54,8 +54,8 @@ class ExternalFactorsForm( forms.Form ):
 
     @staticmethod
     def _initial( scenario ) -> dict:
-        if scenario is not None and scenario.tax_forecast is not None:
-            return { 'tax_forecast_type': scenario.tax_forecast.tax_forecast_type.name.lower() }
+        if scenario is not None and scenario.statute is not None:
+            return { 'forecast_type': scenario.statute.forecast_type.name.lower() }
         return dict()
 
     @property
@@ -65,16 +65,16 @@ class ExternalFactorsForm( forms.Form ):
     def apply( self, profile, scenario ):
         economics = EconomicParameters( **{
             name: Rate.percent( self.cleaned_data[ name ] ) for name in _FACTOR_NAMES } )
-        tax_type = TaxForecastType.from_name( self.cleaned_data[ 'tax_forecast_type' ] )
-        tax = TaxForecastProfile(
-            tax_law_type = TaxLawType.US_FEDERAL, tax_forecast_type = tax_type,
+        tax_type = StatuteForecastType.from_name( self.cleaned_data[ 'forecast_type' ] )
+        tax = StatuteProfile(
+            jurisdiction_type = JurisdictionType.US_FEDERAL, forecast_type = tax_type,
             projection = self._projection( tax_type, economics ) )
-        return profile, replace( scenario, economics = economics, tax_forecast = tax )
+        return profile, replace( scenario, economics = economics, statute = tax )
 
     @staticmethod
     def _projection( tax_type, economics ):
         """A COLA-indexed forecast indexes the tax figures at the economy's inflation -- the tax
         projection following the inflation factor; current law needs no projection."""
-        if tax_type is TaxForecastType.COLA_INDEXED:
-            return TaxProjection( cola_rate = economics.inflation )
+        if tax_type is StatuteForecastType.COLA_INDEXED:
+            return StatuteProjection( cola_rate = economics.inflation )
         return None

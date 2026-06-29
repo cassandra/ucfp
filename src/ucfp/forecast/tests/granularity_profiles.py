@@ -47,11 +47,11 @@ from ucfp.forecast.parameters import (
     SubsidizedHealthCoverage,
     WindowedAmount,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 D = Decimal
-_TAX = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
+_TAX = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
 _START = date( 2026, 1, 1 )
 _END = date( 2045, 12, 31 )
 
@@ -92,7 +92,7 @@ def _recurring(
 
 
 def _base( **overrides ) -> ForecastParameters:
-    defaults = dict( start_date = _START, end_date = _END, tax_forecast = _TAX )
+    defaults = dict( start_date = _START, end_date = _END, statute = _TAX )
     defaults.update( overrides )
     return ForecastParameters( **defaults )
 

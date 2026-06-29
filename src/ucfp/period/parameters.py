@@ -14,8 +14,8 @@ from common.date_span import DateSpan
 from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass
-from ucfp.tax.context import TaxContext
-from ucfp.tax.engine import ContributionKind, TaxEngine, TaxState
+from ucfp.jurisdiction.context import TaxContext
+from ucfp.jurisdiction.engine import ContributionKind, TaxEngine, TaxState
 
 from .events import PeriodEvent
 from .fiscal_window import EstimatedFiscalWindow, FiscalWindow

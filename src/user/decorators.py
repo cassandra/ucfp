@@ -12,7 +12,8 @@ def ensure_organization( view_func ):
     organization already selected in the session, else the user's only one, else -- when they
     have none -- auto-provisions one they own (the `organization` app owns the creation and
     naming policy). Until multi-organization selection exists, a user with several raises rather
-    than guess.
+    than guess. An anonymous user -- which only occurs when authentication is suppressed
+    (self-hosted single-user) -- resolves to the single shared, memberless organization.
 
     The resolved organization is attached as ``request.organization``; its uuid is stored via
     ``SessionState`` (``request.session_state.current_organization_uuid``).
@@ -31,10 +32,19 @@ def _resolve_current_organization( request ) -> Organization:
             uuid = state.current_organization_uuid ).first()
         if selected is not None:
             return selected
-    organization = _organization_for_user( request.user )
+    organization = _current_organization_for_request( request )
     state.current_organization_uuid = str( organization.uuid )
     state.to_session( request )
     return organization
+
+
+def _current_organization_for_request( request ) -> Organization:
+    """The organization for the request: an authenticated user's own (auto-provisioned if they
+    have none), or -- for an anonymous user, which only occurs when authentication is suppressed
+    -- the single shared, memberless organization."""
+    if not request.user.is_authenticated:
+        return Organization.objects.get_or_create_shared()
+    return _organization_for_user( request.user )
 
 
 def _organization_for_user( user ) -> Organization:

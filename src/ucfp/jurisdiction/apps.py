@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class TaxConfig( AppConfig ):
+class JurisdictionConfig( AppConfig ):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'ucfp.tax'
+    name = 'ucfp.jurisdiction'

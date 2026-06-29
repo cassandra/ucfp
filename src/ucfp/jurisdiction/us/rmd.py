@@ -1,6 +1,6 @@
 """Required minimum distributions (RMDs) for pre-tax retirement accounts (US).
 
-A standalone `tax/us` helper the Scenario calls to size the forced withdrawal each year
+A standalone `jurisdiction/us` helper the Scenario calls to size the forced withdrawal each year
 once the owner reaches the RMD age; the Period then executes the withdrawal through the
 existing draw mechanism (and the engine taxes it as ordinary income). Roth accounts have
 no lifetime RMDs, so the Scenario applies this only to pre-tax holdings.

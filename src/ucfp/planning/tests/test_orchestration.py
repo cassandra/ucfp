@@ -22,8 +22,8 @@ from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.scenario.schemas import Scenario
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 
 class RunAndCaptureTest( TestCase ):
@@ -44,9 +44,9 @@ class RunAndCaptureTest( TestCase ):
     def _scenario( self ) -> Scenario:
         return Scenario(
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            tax_forecast = TaxForecastProfile(
-                tax_law_type = TaxLawType.US_FEDERAL,
-                tax_forecast_type = TaxForecastType.CURRENT_LAW ) )
+            statute = StatuteProfile(
+                jurisdiction_type = JurisdictionType.US_FEDERAL,
+                forecast_type = StatuteForecastType.CURRENT_LAW ) )
 
     def test_runs_persists_and_reloads_a_coherent_package( self ):
         frame = ForecastFrame(

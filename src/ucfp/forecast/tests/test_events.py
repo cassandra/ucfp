@@ -23,8 +23,8 @@ from ucfp.forecast.parameters import (
     ScheduledTransfer,
     Subject,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
 
 def _holding( reader, handle ):
@@ -40,7 +40,7 @@ class EventResolutionTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 6, 30 ),
             filing_status = FilingStatus.MARRIED_JOINT,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ),
@@ -87,7 +87,7 @@ class EventResolutionTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 6, 30 ),
             filing_status = FilingStatus.MARRIED_JOINT,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ),
@@ -115,7 +115,7 @@ class EventResolutionTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.MARRIED_JOINT,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1970, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ),
@@ -143,7 +143,7 @@ class EventResolutionTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.MARRIED_JOINT,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ),
@@ -190,7 +190,7 @@ class HandleResolutionTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 6, 30 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
             subjects      = [ Subject( 'A', date( 1960, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'My Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),

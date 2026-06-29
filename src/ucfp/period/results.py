@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID
 
 from common.labeled_enum import LabeledEnum
-from ucfp.tax.engine import TaxState
+from ucfp.jurisdiction.engine import TaxState
 
 
 class NoticeSeverity( LabeledEnum ):

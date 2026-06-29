@@ -10,10 +10,10 @@ from datetime import date, timedelta
 
 from common.recurrence import Duration, TimeUnit
 from ucfp.forecast.parameters import ForecastParameters
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
-_TAX = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
+_TAX = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
 _YEARLY    = Duration( 1, TimeUnit.YEAR )
 _QUARTERLY = Duration( 3, TimeUnit.MONTH )
 _MONTHLY   = Duration( 1, TimeUnit.MONTH )
@@ -22,7 +22,7 @@ _MONTHLY   = Duration( 1, TimeUnit.MONTH )
 def _spans( start, end, granularity ):
     parameters = ForecastParameters(
         start_date = start, end_date = end, filing_status = FilingStatus.SINGLE,
-        tax_forecast = _TAX, granularity = granularity )
+        statute = _TAX, granularity = granularity )
     return [ ( span.start_date, span.end_date ) for span in parameters.period_spans() ]
 
 
@@ -94,7 +94,7 @@ class PeriodSpansTests( unittest.TestCase ):
         with self.assertRaises( ValueError ):
             ForecastParameters(
                 start_date = date( 2026, 4, 15 ), end_date = date( 2027, 12, 31 ),
-                filing_status = FilingStatus.SINGLE, tax_forecast = _TAX )
+                filing_status = FilingStatus.SINGLE, statute = _TAX )
 
 
 if __name__ == '__main__':

@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 
 from ucfp.accounts.enums import RealPropertyType
-from ucfp.tax.us.depreciation import accumulated_depreciation, period_depreciation
+from ucfp.jurisdiction.us.depreciation import accumulated_depreciation, period_depreciation
 
 _RESIDENTIAL = RealPropertyType.RESIDENTIAL
 

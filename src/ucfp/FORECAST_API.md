@@ -27,8 +27,8 @@ first four are required; the rest default to empty/None).
 ### Frame (required)
 - **`start_date`** — the first of any month (a mid-year start makes a partial first year).
 - **`end_date`** — Dec 31 for whole years; any date leaves a trailing partial year.
-- **`filing_status`** — `FilingStatus` (SINGLE, MARRIED_JOINT, …). → `tax/enums.py`
-- **`tax_forecast`** — `TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )`; the pluggable tax law + its projection (COLA). → `tax/law.py`
+- **`filing_status`** — `FilingStatus` (SINGLE, MARRIED_JOINT, …). → `jurisdiction/enums.py`
+- **`statute`** — `StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )`; the pluggable tax law + its projection (COLA). → `jurisdiction/law.py`
 - **`granularity`** — a `Duration`: `Duration(1, TimeUnit.YEAR)` (default), `Duration(3, TimeUnit.MONTH)` (quarterly), `Duration(1, TimeUnit.MONTH)` (monthly). Must divide 12. → `common/recurrence.py`
 
 ### Who — `subjects : list[Subject]`

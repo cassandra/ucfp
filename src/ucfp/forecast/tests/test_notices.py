@@ -25,10 +25,10 @@ from ucfp.forecast.parameters import (
     WindowedAmount,
 )
 from ucfp.period.results import NoticeKind, NoticeSeverity
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
-_PROFILE = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
+_PROFILE = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
 
 
 def _notices( result ):
@@ -56,7 +56,7 @@ class NoticeCatalogTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ Subject( 'A', date( 1951, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
@@ -76,7 +76,7 @@ class NoticeCatalogTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ Subject( 'A', date( 1970, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
@@ -96,7 +96,7 @@ class NoticeCatalogTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '5000' ), Decimal( '5000' ) ),
@@ -119,7 +119,7 @@ class NoticeCatalogTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ Subject( 'A', date( 1970, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '5000' ), Decimal( '5000' ) ),
@@ -140,7 +140,7 @@ class NoticeCatalogTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
@@ -161,7 +161,7 @@ class NoticeCatalogTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _PROFILE,
+            statute  = _PROFILE,
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ), 'subject-a' ) ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),

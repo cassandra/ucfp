@@ -19,10 +19,10 @@ from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, IncomeItem, IncomeStream, Subject, WindowedAmount )
 from ucfp.period.results import NoticeKind
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
+from ucfp.jurisdiction.law import StatuteProfile
 
-_TAX     = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
+_TAX     = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
 _NULL    = EconomicOutlook.constant( EconomicParameters() )
 _MONTHLY = Duration( 1, TimeUnit.MONTH )
 
@@ -39,7 +39,7 @@ class MidYearStartTests( unittest.TestCase ):
             start_date    = start,
             end_date      = end,
             filing_status = FilingStatus.SINGLE,
-            tax_forecast  = _TAX,
+            statute  = _TAX,
             granularity   = granularity,
             subjects      = [ subject ],
             economic_outlook = _NULL,

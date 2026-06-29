@@ -4,7 +4,7 @@ A `TaxEngine` is a black box to the Period: given the fiscal window's ledger fac
 the resolved taxpayer context, and the opening tax state (carryforwards), it returns
 the charges to book, any credits, and the updated tax state. Everything
 jurisdiction-specific -- the taxpayer-context shape, the tax-state shape, parameters,
-brackets, rules -- lives in a country package (e.g. `tax/us/`); this module stays
+brackets, rules -- lives in a country package (e.g. `jurisdiction/us/`); this module stays
 neutral. The `tax_context` and `tax_state` passed through `assess` are therefore
 engine-specific and opaque here.
 """
