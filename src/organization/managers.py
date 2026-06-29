@@ -13,6 +13,11 @@ if TYPE_CHECKING:
     from .models import Organization, OrganizationInvitation
 
 
+# The reserved name of the single shared, memberless organization used when authentication is
+# suppressed (self-hosted single-user). The name doubles as the lookup key for the singleton.
+_SHARED_ORGANIZATION_NAME = 'Self-Hosted'
+
+
 class OrganizationManager( models.Manager ):
 
     @transaction.atomic
@@ -52,6 +57,14 @@ class OrganizationManager( models.Manager ):
         an organization -- not encoded by the caller.
         """
         return self.create_for_owner( user, f'user-{user.uuid}' )
+
+    def get_or_create_shared( self ) -> 'Organization':
+        """The single shared, memberless organization used when authentication is suppressed
+        (self-hosted single-user). There is no user to own it, so it carries no
+        OrganizationMember; it is created on first use and thereafter found by its reserved name.
+        """
+        organization, _ = self.get_or_create( name = _SHARED_ORGANIZATION_NAME )
+        return organization
 
 
 class OrganizationMemberManager( models.Manager ):
