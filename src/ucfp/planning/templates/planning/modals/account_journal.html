@@ -1,4 +1,5 @@
 {% extends "modals/action_done.html" %}
+{% load common_tags %}
 {% comment %}
 One account's Journal -- its postings in transaction order, with a running balance -- shown in a
 modal opened from the account's results column (the modal wrapper and close behavior come from the
@@ -27,9 +28,9 @@ base).
       <td class="text-nowrap">{{ entry.date|date:"Y-m-d" }}</td>
       <td>{{ entry.description }}</td>
       <td>{{ entry.counterparts }}</td>
-      <td class="text-end">{% if entry.debit %}{{ entry.debit|floatformat:0 }}{% endif %}</td>
-      <td class="text-end">{% if entry.credit %}{{ entry.credit|floatformat:0 }}{% endif %}</td>
-      <td class="text-end">{{ entry.balance|floatformat:0 }}</td>
+      <td class="text-end">{% if entry.debit %}{{ entry.debit|money:currency }}{% endif %}</td>
+      <td class="text-end">{% if entry.credit %}{{ entry.credit|money:currency }}{% endif %}</td>
+      <td class="text-end">{{ entry.balance|money:currency }}</td>
     </tr>
     {% empty %}
     <tr><td colspan="6" class="text-muted">No entries for this account.</td></tr>

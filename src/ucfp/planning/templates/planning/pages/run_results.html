@@ -1,4 +1,5 @@
 {% extends "pages/base.html" %}
+{% load common_tags %}
 
 {% block content %}
 <div class="container py-4">
@@ -18,7 +19,7 @@
   <h2 class="h4 mt-4">Notices</h2>
   <ul>
     {% for year, kind, severity, amount in notices %}
-    <li>{{ year }}: {{ kind }} ({{ severity }}){% if amount %} &mdash; {{ amount|floatformat:0 }}{% endif %}</li>
+    <li>{{ year }}: {{ kind }} ({{ severity }}){% if amount %} &mdash; {{ amount|money:currency }}{% endif %}</li>
     {% endfor %}
   </ul>
   {% endif %}

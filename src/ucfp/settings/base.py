@@ -141,6 +141,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'ucfp.environment.context_processors.client_config',
                 'ucfp.environment.context_processors.shared_constants',
+                'organization.context_processors.current_currency',
             ],
         },
     },

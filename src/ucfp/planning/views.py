@@ -240,7 +240,8 @@ class SpendingGroupView( View ):
             self._EDITOR_TEMPLATE, { 'group_key': group, 'form': form }, request = request )
         total = form.group_total if form.is_bound and form.is_valid() else None
         insert_map = (
-            { f'spending-total-{group}': f'{total:.0f}' } if total is not None else None )
+            { f'spending-total-{group}': request.organization.currency.format( total ) }
+            if total is not None else None )
         return antinode.response( main_content = content, insert_map = insert_map )
 
 

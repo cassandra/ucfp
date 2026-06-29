@@ -2,12 +2,13 @@
 The rentals list (id=rentals-list, refreshed on add/edit/delete): each rental with Edit and Remove,
 plus the Add affordance. Edit/Add open the form in #rentals-form; Remove posts to the delete view.
 {% endcomment %}
+{% load common_tags %}
 <div id="rentals-list">
   {% if rentals %}
   <ul class="list-unstyled mb-2">
     {% for rental in rentals %}
     <li class="mb-1">
-      {{ rental.name }} &mdash; value {{ rental.value|floatformat:0 }}
+      {{ rental.name }} &mdash; value {{ rental.value|money:currency }}
       <a class="ms-2" data-async="#rentals-form"
          href="{% url 'rental_edit' handle=rental.handle %}">Edit</a>
       <form method="post" action="{% url 'rental_delete' handle=rental.handle %}"

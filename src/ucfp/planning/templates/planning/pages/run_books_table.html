@@ -5,6 +5,7 @@ come from the user's adapted lens. Asset/liability/equity and Net Worth read as 
 period end; revenue/expense read as a flow over the period. Each column header carries the
 structural controls (expand/collapse/hide/move); the add-column control follows the table.
 {% endcomment %}
+{% load common_tags %}
 <div id="books-table" class="table-responsive">
   <table class="table table-sm w-auto">
     <thead>
@@ -48,7 +49,7 @@ structural controls (expand/collapse/hide/move); the add-column control follows 
       <tr>
         <td class="text-nowrap">{{ row.span.end_date|date:"Y-m-d" }}</td>
         {% for cell in row.cells %}
-        <td class="text-end">{{ cell.value|floatformat:0 }}</td>
+        <td class="text-end">{{ cell.value|money:currency }}</td>
         {% endfor %}
       </tr>
       {% endfor %}
