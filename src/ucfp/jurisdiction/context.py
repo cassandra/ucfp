@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from ucfp.accounts.schemas import Handle
-from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
+from ucfp.jurisdiction.subsidized_health import SubsidizedHealthEnrollment
 
 from .enums import FilingStatus
 from .property import TaxProperty

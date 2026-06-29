@@ -29,7 +29,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 from .enums import EventKind
 

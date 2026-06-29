@@ -22,8 +22,8 @@ from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.scenario.schemas import Scenario
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 
 class RunAndCaptureTest( TestCase ):

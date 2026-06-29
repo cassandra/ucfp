@@ -10,7 +10,7 @@ and the Forecast never encodes the rule itself.
 """
 from typing import Optional
 
-from ucfp.tax.enums import FilingStatus
+from ucfp.jurisdiction.enums import FilingStatus
 
 
 def resolve_filing_status(

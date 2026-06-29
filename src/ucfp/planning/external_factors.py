@@ -15,8 +15,8 @@ from common.rate import Rate
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
-from ucfp.tax.enums import TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile, TaxProjection
+from ucfp.jurisdiction.enums import TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile, TaxProjection
 
 # Every rate factor of the engine's EconomicParameters (all of them, adjustable). The non-rate
 # `window` is excluded -- it stays at its default, giving a constant outlook.

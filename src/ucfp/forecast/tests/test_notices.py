@@ -25,8 +25,8 @@ from ucfp.forecast.parameters import (
     WindowedAmount,
 )
 from ucfp.period.results import NoticeKind, NoticeSeverity
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 _PROFILE = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
 

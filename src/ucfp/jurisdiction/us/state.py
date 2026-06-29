@@ -10,7 +10,7 @@ engine reads and returns.
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from ucfp.tax.engine import TaxState as NeutralTaxState
+from ucfp.jurisdiction.engine import TaxState as NeutralTaxState
 
 
 @dataclass( frozen = True )

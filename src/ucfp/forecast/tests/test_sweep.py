@@ -23,8 +23,8 @@ from ucfp.forecast.parameters import (
     ScheduledRealization,
     Subject,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 _PROFILE = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
 _SUBJECT = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )

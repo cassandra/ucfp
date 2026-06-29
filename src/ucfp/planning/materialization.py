@@ -31,7 +31,7 @@ from ucfp.forecast.parameters import (
 
 from ucfp.parameter_sets import repository as parameter_sets
 from ucfp.parameter_sets.enums import ParameterSetKind
-from ucfp.tax.government_pension import GovernmentPension
+from ucfp.jurisdiction.government_pension import GovernmentPension
 
 from ucfp.profile.schemas import AssetProfile, LoanProfile, Profile
 from ucfp.scenario.schemas import RetirementTiming, Scenario

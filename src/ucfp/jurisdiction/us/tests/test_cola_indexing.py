@@ -11,9 +11,9 @@ import unittest
 from decimal import Decimal
 
 from common.rate import Rate
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile, TaxLaw, TaxProjection
-from ucfp.tax.us.parameters import BASE_YEAR, federal_2025
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile, TaxLaw, TaxProjection
+from ucfp.jurisdiction.us.parameters import BASE_YEAR, federal_2025
 
 _SINGLE = FilingStatus.SINGLE
 

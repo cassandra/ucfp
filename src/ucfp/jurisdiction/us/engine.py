@@ -55,8 +55,8 @@ from typing import Iterator, NamedTuple, Optional
 from common.date_span import DateSpan
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
-from ucfp.tax.brackets import BracketTable
-from ucfp.tax.engine import (
+from ucfp.jurisdiction.brackets import BracketTable
+from ucfp.jurisdiction.engine import (
     ContributionKind,
     FiscalWindowView,
     ForcedTransaction,
@@ -67,9 +67,9 @@ from ucfp.tax.engine import (
     TaxPenalty,
 )
 
-from ucfp.tax.context import TaxContext, TaxSubject
-from ucfp.tax.enums import FilingStatus
-from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
+from ucfp.jurisdiction.context import TaxContext, TaxSubject
+from ucfp.jurisdiction.enums import FilingStatus
+from ucfp.jurisdiction.subsidized_health import SubsidizedHealthEnrollment
 
 from . import rmd
 from .depreciation import accumulated_depreciation, period_depreciation

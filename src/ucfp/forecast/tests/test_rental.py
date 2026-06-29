@@ -1,7 +1,7 @@
 """End-to-end tests for rental real estate: the annual depreciation deduction and the
 §1250 depreciation recapture at sale.
 
-The depreciation *amounts* are exactly tested in ucfp.tax.us.tests.test_depreciation; here we
+The depreciation *amounts* are exactly tested in ucfp.jurisdiction.us.tests.test_depreciation; here we
 verify the integration through the Forecast: depreciation shields rental income while held,
 and a sale recaptures it. The recapture's effect lands in the income-tax charge (bracket
 math, not a book account), so it is verified directionally -- with vs. without an
@@ -33,8 +33,8 @@ from ucfp.forecast.parameters import (
     Subject,
     WindowedAmount,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 
 def _income_tax( reader ):

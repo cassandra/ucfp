@@ -54,11 +54,11 @@ from ucfp.period.events import PeriodEvent
 from ucfp.period.fiscal_window import EstimatedFiscalWindow, FiscalWindow
 from ucfp.period.period import Period
 from ucfp.period.results import Notice, NoticeKind, NoticeSeverity, PeriodResult
-from ucfp.tax.engine import ContributionKind, TaxEngine, TaxState
-from ucfp.tax.law import TaxLaw
-from ucfp.tax.subsidized_health import SubsidizedHealthEnrollment
-from ucfp.tax.context import TaxContext, TaxSubject
-from ucfp.tax.property import PropertyDisposition, TaxProperty
+from ucfp.jurisdiction.engine import ContributionKind, TaxEngine, TaxState
+from ucfp.jurisdiction.law import TaxLaw
+from ucfp.jurisdiction.subsidized_health import SubsidizedHealthEnrollment
+from ucfp.jurisdiction.context import TaxContext, TaxSubject
+from ucfp.jurisdiction.property import PropertyDisposition, TaxProperty
 
 from .economic_outlook import EconomicParameters
 from .parameters import (

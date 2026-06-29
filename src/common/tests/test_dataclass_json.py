@@ -19,8 +19,8 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, Rea
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 from ucfp.profile.schemas import (
     AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile,

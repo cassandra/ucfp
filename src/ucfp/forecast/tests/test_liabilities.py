@@ -24,8 +24,8 @@ from ucfp.forecast.parameters import (
     ScheduledLoanPayoff,
     Subject,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 
 def _parameters( end_date, events = () ):

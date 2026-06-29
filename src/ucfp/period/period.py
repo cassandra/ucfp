@@ -26,7 +26,7 @@ from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import quantize_money
-from ucfp.tax.engine import ContributionKind
+from ucfp.jurisdiction.engine import ContributionKind
 
 from .events import Realization
 from .parameters import PeriodParameters

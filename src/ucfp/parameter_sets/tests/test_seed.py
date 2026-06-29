@@ -17,8 +17,8 @@ from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
 from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.scenario.schemas import LifestylePlan, LifestyleSegment, Scenario
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 _ECON     = ParameterSetKind.ECONOMIC_OUTLOOK
 _EXPECTED = EconomicOutlookVariant.EXPECTED.label

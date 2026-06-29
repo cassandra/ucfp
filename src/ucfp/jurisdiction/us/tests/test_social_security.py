@@ -3,7 +3,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from ucfp.tax.us.social_security import full_retirement_age_months, realized_annual_benefit
+from ucfp.jurisdiction.us.social_security import full_retirement_age_months, realized_annual_benefit
 
 
 class FullRetirementAgeTest( unittest.TestCase ):

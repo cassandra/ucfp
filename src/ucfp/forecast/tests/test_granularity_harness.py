@@ -10,8 +10,8 @@ from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, IncomeStream, Subject, WindowedAmount )
 from ucfp.forecast.tests.granularity_harness import GRANULARITIES, compare, render
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 _PROFILE = TaxForecastProfile( TaxLawType.US_FEDERAL, TaxForecastType.CURRENT_LAW )
 

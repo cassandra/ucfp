@@ -25,8 +25,8 @@ from ucfp.forecast.parameters import (
     Subject,
     WindowedAmount,
 )
-from ucfp.tax.enums import FilingStatus, TaxForecastType, TaxLawType
-from ucfp.tax.law import TaxForecastProfile
+from ucfp.jurisdiction.enums import FilingStatus, TaxForecastType, TaxLawType
+from ucfp.jurisdiction.law import TaxForecastProfile
 
 
 def _account( reader, name ):
