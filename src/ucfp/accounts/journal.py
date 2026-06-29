@@ -1,9 +1,8 @@
 """The Journal view: a `BooksOfAccount`'s entries in transaction order.
 
 The "book of original entry" -- postings by transaction, the counterpart to `Chart` (structure)
-and `Ledger` (balances). Minimal for now: one account's entries with a running balance, the form
-the results-page drill-down needs. A fuller Journal (all accounts, filtering, paging) is future
-work. A read-only view: it never mutates the books.
+and `Ledger` (balances). It presents one account's entries with a running balance, the form the
+results-page drill-down needs. A read-only view: it never mutates the books.
 """
 from dataclasses import dataclass
 from datetime import date

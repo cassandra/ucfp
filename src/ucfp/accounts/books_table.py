@@ -49,8 +49,7 @@ class BooksColumnKind( LabeledEnum ):
 
 
 class BooksDerivedFigure( LabeledEnum ):
-    """A figure derived across accounts -- not a rollup of any one type/class/account. The
-    catalog of derived columns; small and extensible (Net Worth is the only one today)."""
+    """A figure derived across accounts -- not a rollup of any one type/class/account."""
 
     NET_WORTH = ( 'Net Worth' , 'Total assets minus total liabilities.' )
 
@@ -134,7 +133,7 @@ class BooksColumnKey:
 @dataclass( frozen = True )
 class BooksColumn:
     """A column in a books' catalog: its identity, display label, and parent (the summary column
-    it is a member of, or None for a top-level column). The base of summary and leaf columns."""
+    it is a member of, or None for a top-level column)."""
 
     key        : BooksColumnKey
     label      : str
@@ -187,15 +186,12 @@ class BooksTableDefinition:
 
     @classmethod
     def from_storage( cls, data ) -> Optional[ 'BooksTableDefinition' ]:
-        """Rebuild a lens from a stored value (a list of key tokens), or None when absent or
-        malformed. Unknown tokens survive parsing and are dropped later, when the lens is adapted
-        to a books (`adapt`) -- so a stale token never breaks the read."""
+        """Rebuild a lens from a stored value (a list of key tokens), or None when absent. Unknown
+        tokens survive parsing and are dropped later, when the lens is adapted to a books (`adapt`)
+        -- so a stale token never breaks the read."""
         if not isinstance( data, list ):
             return None
-        try:
-            return cls( tuple( BooksColumnKey( str( token ) ) for token in data ) )
-        except ( TypeError, ValueError ):
-            return None
+        return cls( tuple( BooksColumnKey( str( token ) ) for token in data ) )
 
     def adapt( self, catalog : 'BooksTableColumnCatalog' ) -> 'BooksTableDefinition':
         """Fit to a books: drop any column it does not offer (an account that is not here, a class
@@ -305,14 +301,15 @@ class BooksTableColumnCatalog:
                 cls._append_accounts( columns, accounts, parent_key = class_key )
                 columns.append( BooksSummaryColumn(
                     key = class_key, label = account_class.label, parent_key = type_key,
-                    member_keys = tuple( BooksColumnKey.for_account( a.account_uuid ) for a in accounts ) ) )
+                    member_keys = tuple(
+                        BooksColumnKey.for_account( account.account_uuid ) for account in accounts ) ) )
                 member_keys.append( class_key )
                 continue
         else:
             accounts = [ account for account in chart.accounts( account_type = account_type )
                          if ( not account.is_root ) and ( not account.is_valuation ) ]
             cls._append_accounts( columns, accounts, parent_key = type_key )
-            member_keys = [ BooksColumnKey.for_account( a.account_uuid ) for a in accounts ]
+            member_keys = [ BooksColumnKey.for_account( account.account_uuid ) for account in accounts ]
         columns.append( BooksSummaryColumn(
             key = type_key, label = account_type.label, member_keys = tuple( member_keys ) ) )
         return
@@ -404,7 +401,9 @@ def _cell_value( key : BooksColumnKey, ledger : Ledger, chart : Chart, span : Da
     """One column's figure for one period: a flow over the span for revenue/expense, a balance at
     span end otherwise (assets at market value)."""
     if key.kind == BooksColumnKind.DERIVED:
-        return ledger.net_worth( through = span.end_date )
+        if key.derived_figure == BooksDerivedFigure.NET_WORTH:
+            return ledger.net_worth( through = span.end_date )
+        raise ValueError( f'Unsupported derived figure: {key.derived_figure}' )
     if key.kind == BooksColumnKind.TYPE:
         if key.account_type in _FLOW_TYPES:
             return ledger.type_flow( key.account_type, start = span.start_date, end = span.end_date )
