@@ -39,6 +39,12 @@ class Account:
 
     `handle` is the account's own planner-minted identity (distinct from the display
     `name`); `owner_handle` references the owning subject. Identity is by handle, not name.
+
+    `account_uuid` is a stable, user-facing identity for the account (the counterpart to
+    `Transaction.transaction_uuid`): it equals the persisted `AccountRecord.uuid` and is
+    round-tripped by the Repository, so an external reference to an account -- a results-table
+    column, say -- survives a reload. Not every account carries a `handle`, but every account
+    carries this.
     """
 
     name              : str
@@ -53,6 +59,7 @@ class Account:
     owner_handle      : Optional[ Handle ]           = None
     description       : str                          = ''
     closed            : bool                         = False
+    account_uuid      : UUID                         = field( default_factory = uuid4 )
 
     def __post_init__( self ):
         self._assert_valid_structure()

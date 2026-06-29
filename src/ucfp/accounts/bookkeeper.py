@@ -21,6 +21,7 @@ from .chart import Chart
 from .constants import DEFAULT_ROOT_ACCOUNT_NAMES
 from .enums import AccountType, AssetClass, SideType, SystemAccountRole
 from .exceptions import MissingAccountError, TransactionImbalanceError
+from .journal import Journal
 from .ledger import Ledger
 from .money_utils import quantize_money
 from .schemas import Handle
@@ -56,6 +57,10 @@ class Bookkeeper:
     @property
     def ledger( self ) -> Ledger:
         return Ledger( self )
+
+    @property
+    def journal( self ) -> Journal:
+        return Journal( self._books )
 
     # -- chart construction --------------------------------------------------
 

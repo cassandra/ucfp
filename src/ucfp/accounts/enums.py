@@ -250,3 +250,9 @@ _TAX_PAYMENT_EXPENSE_CLASSES = frozenset( (
     ExpenseTaxClass.NIIT,
     ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,
 ) )
+
+
+# The union of the three per-type "class" taxonomies -- the class axis of an account, named
+# where code handles a class generically (asset, income, or expense) rather than one kind.
+# Liability and Equity have no class taxonomy.
+AccountClass = AssetClass | IncomeTaxClass | ExpenseTaxClass

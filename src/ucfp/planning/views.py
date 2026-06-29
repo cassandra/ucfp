@@ -19,6 +19,7 @@ from django.views import View
 from user.decorators import ensure_organization
 
 from common import antinode
+from common.async_view import ModalView
 from common.dataclass_json import from_json_data
 from common.request_utils import is_ajax
 
@@ -32,6 +33,7 @@ from ucfp.scenario.models import ScenarioRecord
 from ucfp.scenario.repository import (
     create_scenario, latest_scenario, load_scenario, save_scenario, scenarios_for )
 
+from .books_table import apply_run_books_operation, run_books_table_context
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
 from .forms import GRANULARITY, RunForm
@@ -46,6 +48,8 @@ from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/retirement_hub.html'
 _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
+_BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
+_JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -458,20 +462,60 @@ class EventDeleteView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class RunResultsView( View ):
-    """`/planning/run/<uuid>/` -- a captured run: net worth derived from its books, plus the
-    stop condition and notices from the persisted result."""
+    """`/planning/run/<uuid>/` -- a captured run: its Books of Account as a drill-down table
+    (through the user's column lens), plus the stop condition and notices from the persisted
+    result."""
 
     def get( self, request, run_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run = from_json_data( ProjectionRun, record.data )
-        ledger = Bookkeeper( BooksOfAccountRepository().load( record.books ) ).ledger
-        return render( request, _RESULTS_TEMPLATE, {
+        books = BooksOfAccountRepository().load( record.books )
+        context = {
             'record'        : record,
             'stopped_early' : run.result.stopped_early,
-            'net_worth_rows': [ ( step.end_date.year, ledger.net_worth( through = step.end_date ) )
-                                for step in run.result.steps ],
             'notices'       : [ ( step.end_date.year, notice.kind.label,
                                   notice.severity.label, notice.amount )
                                 for step in run.result.steps for notice in step.notices ],
+        }
+        context.update( run_books_table_context( request, run, books ) )
+        return render( request, _RESULTS_TEMPLATE, context )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ProjectionRunBooksTableView( View ):
+    """`/planning/run/<uuid>/books/` -- apply a column operation to the user's BooksTable lens
+    (expand/collapse/hide/add/move), persist it, and swap the re-rendered table fragment."""
+
+    def post( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        run = from_json_data( ProjectionRun, record.data )
+        books = BooksOfAccountRepository().load( record.books )
+        context = apply_run_books_operation(
+            request, run, books, request.POST.get( 'op' ), request.POST.get( 'column' ) )
+        context[ 'record' ] = record
+        fragment = render_to_string( _BOOKS_TABLE_TEMPLATE, context, request = request )
+        return antinode.response( replace_map = { 'books-table': fragment } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class BooksTableJournalView( ModalView ):
+    """`/planning/run/<uuid>/books/account/<uuid>/journal/` -- one account's Journal (its entries in
+    transaction order) in a modal, reached from that account's results column."""
+
+    def get_template_name( self ):
+        return _JOURNAL_TEMPLATE
+
+    def get( self, request, run_uuid, account_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        bookkeeper = Bookkeeper( BooksOfAccountRepository().load( record.books ) )
+        account = bookkeeper.chart.account_by_uuid( account_uuid )
+        if account is None:
+            raise Http404( 'No such account in this run.' )
+        return self.modal_response( request, context = {
+            'record'  : record,
+            'account' : account,
+            'entries' : bookkeeper.journal.account_entries( account ),
         } )

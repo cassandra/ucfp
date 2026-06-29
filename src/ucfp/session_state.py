@@ -3,6 +3,8 @@ from typing import Optional
 
 from django.http import HttpRequest
 
+from ucfp.accounts.books_table import BooksTableDefinition
+
 
 @dataclass
 class SessionState:
@@ -44,12 +46,19 @@ class SessionState:
     # (many scenarios coexist per organization, unlike the single latest profile).
     current_scenario_uuid : Optional[ str ] = None
 
+    # The user's BooksTable column lens (a results-view preference): the ordered visible columns,
+    # carried across runs and adapted to each run's books on read. The definition owns its own
+    # session storage form (see BooksTableDefinition.to_storage / from_storage).
+    books_table_definition : Optional[ BooksTableDefinition ] = None
+
     def to_session( self, request : HttpRequest ):
         """Write this state back into the session (extend as fields are added)."""
         if not hasattr( request, 'session' ):
             return
         request.session[ 'current_organization_uuid' ] = self.current_organization_uuid
         request.session[ 'current_scenario_uuid' ] = self.current_scenario_uuid
+        request.session[ 'books_table_definition' ] = (
+            None if self.books_table_definition is None else self.books_table_definition.to_storage() )
         return
 
     @staticmethod
@@ -59,4 +68,6 @@ class SessionState:
             return SessionState()
         return SessionState(
             current_organization_uuid = request.session.get( 'current_organization_uuid' ),
-            current_scenario_uuid = request.session.get( 'current_scenario_uuid' ) )
+            current_scenario_uuid = request.session.get( 'current_scenario_uuid' ),
+            books_table_definition = BooksTableDefinition.from_storage(
+                request.session.get( 'books_table_definition' ) ) )

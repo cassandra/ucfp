@@ -19,4 +19,8 @@ urlpatterns = [
     path( 'interview/events/delete/<int:index>/', views.EventDeleteView.as_view(),
           name = 'event_delete' ),
     path( 'run/<uuid:run_uuid>/', views.RunResultsView.as_view(), name = 'run_results' ),
+    path( 'run/<uuid:run_uuid>/books/', views.ProjectionRunBooksTableView.as_view(),
+          name = 'run_books_table' ),
+    path( 'run/<uuid:run_uuid>/books/account/<uuid:account_uuid>/journal/',
+          views.BooksTableJournalView.as_view(), name = 'books_journal' ),
 ]

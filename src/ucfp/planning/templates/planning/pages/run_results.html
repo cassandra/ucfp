@@ -11,15 +11,8 @@
     {% endif %}
   </p>
 
-  <h2 class="h4 mt-4">Net worth by year</h2>
-  <table class="table table-sm w-auto">
-    <thead><tr><th>Year</th><th class="text-end">Net worth</th></tr></thead>
-    <tbody>
-      {% for year, net_worth in net_worth_rows %}
-      <tr><td>{{ year }}</td><td class="text-end">{{ net_worth|floatformat:0 }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <h2 class="h4 mt-4">Books of account</h2>
+  {% include "planning/pages/run_books_table.html" %}
 
   {% if notices %}
   <h2 class="h4 mt-4">Notices</h2>
