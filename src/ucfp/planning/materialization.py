@@ -71,7 +71,7 @@ def materialize(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
         filing_status    = profile.filing_status,
-        statute     = statute,
+        statute          = statute,
         granularity      = frame.granularity,
         subjects         = subjects,
         assets           = _assets( profile ),

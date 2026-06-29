@@ -84,12 +84,12 @@ class FlowEntryView( View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class InterviewView( View ):
     """`/inputs/interview/<section>/` -- one section of the guided setup: an antinode-swapped
-    linear flow over the organization's current Profile and Plans. A full GET renders the whole
-    page; an async GET (a stepper revisit) or a POST swaps just the section pane and refreshes the
-    stepper.
+    linear flow over the organization's current Profile, Plans, and Assumptions. A full GET renders
+    the whole page; an async GET (a stepper revisit) or a POST swaps just the section pane and
+    refreshes the stepper.
 
     On a valid POST the section is saved and the *next* section is recomputed from the now-updated
-    profile -- the conditional-flow payoff. Each section merges only its own part via `apply_to`,
+    profile -- the conditional-flow payoff. Each section merges only its own part via `apply`,
     so advancing (or revisiting) never clobbers another section's facts.
     """
 

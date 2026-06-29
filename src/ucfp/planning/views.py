@@ -106,8 +106,10 @@ class FinancialForecastView( View ):
         return redirect( 'run_results', run_uuid = run.uuid )
 
     def _frame( self, profile_record, form ) -> ForecastFrame:
-        start = profile_record.effective_date
-        end = start.replace( year = start.year + form.cleaned_data[ 'duration_years' ] ) - timedelta( days = 1 )
+        start       = profile_record.effective_date
+        years       = form.cleaned_data[ 'duration_years' ]
+        anniversary = start.replace( year = start.year + years )
+        end         = anniversary - timedelta( days = 1 )
         return ForecastFrame(
             start_date = start, end_date = end,
             granularity = GRANULARITY[ form.cleaned_data[ 'interval' ] ] )
@@ -123,7 +125,7 @@ class FinancialForecastView( View ):
             'has_assumptions' : assumptions.exists(),
             'form'            : form or RunForm(
                 profiles = profiles, plans = plans, assumptions = assumptions ),
-            'results'         : PlanningResultRecord.objects.filter(
+            'results'         : PlanningResultRecord.objects.select_related( 'run' ).filter(
                 organization = organization,
                 feature = PlanningFeature.FINANCIAL_FORECAST ).order_by( '-created_datetime' ),
             'error'           : error,

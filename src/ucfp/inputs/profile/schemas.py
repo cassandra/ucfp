@@ -85,8 +85,8 @@ class LoanProfile:
     (amortizing from origination), unless `current_balance` overrides the balance, the way to
     capture extra principal already paid down. Future extra-principal payments are a Plans
     strategy (`LoanPrepayment`), not here. `interest_class` (e.g. residence mortgage) defaults
-    at materialization when omitted. `property_handle` attaches the loan to the property it finances, so a property
-    sale can find and end it; None for a non-property loan."""
+    at materialization when omitted. `property_handle` attaches the loan to the property it
+    finances, so a property sale can find and end it; None for a non-property loan."""
     handle: str
     name: str
     origination_date: date

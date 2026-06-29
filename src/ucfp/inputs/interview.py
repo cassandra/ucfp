@@ -56,7 +56,7 @@ class Section:
 class SubjectsForm( forms.Form ):
     """§1 -- who the plan is for. Collects one subject, optionally a partner, and *infers* the
     filing status (joint when there is a partner) rather than asking it; the inferred status stays
-    editable later in the edit views. `apply_to` writes just this section onto the Profile, leaving
+    editable later in the edit views. `apply` writes just this section onto the Profile, leaving
     every other section's facts intact.
     """
 
@@ -122,7 +122,7 @@ class HomeForm( forms.Form ):
     already paid down. Renting captures the monthly rent. The residence is household-owned, so
     there is no "whose home".
 
-    `apply_to` merges only the residence asset, its mortgage, and the rent obligation into the
+    `apply` merges only the residence asset, its mortgage, and the rent obligation into the
     Profile by their stable handles, leaving the accounts and other sections' items intact.
     Associated home expenses (property tax, insurance) are seeded later in Spending.
     """
