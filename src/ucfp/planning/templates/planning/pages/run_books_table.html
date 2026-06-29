@@ -13,7 +13,14 @@ Control styling and a richer customize dialog are deferred to a later UX pass.
         <th>Period</th>
         {% for column in books_table.columns %}
         <th class="text-end">
-          <div>{{ column.label }}</div>
+          <div>
+            {{ column.label }}
+            {% if column.account_uuid %}
+            <a href="{% url 'books_journal' run_uuid=record.uuid account_uuid=column.account_uuid %}"
+               data-async="modal" class="small text-decoration-none"
+               title="Transaction history">&#8801;</a>
+            {% endif %}
+          </div>
           <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
                 data-async="#books-table" class="d-inline-flex gap-1">
             {% csrf_token %}

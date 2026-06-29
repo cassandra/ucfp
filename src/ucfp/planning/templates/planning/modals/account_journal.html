@@ -1,0 +1,39 @@
+{% extends "modals/action_done.html" %}
+{% comment %}
+One account's Journal -- its postings in transaction order, with a running balance -- shown in a
+modal opened from the account's results column (the modal wrapper and close behavior come from the
+base). A fuller Journal (filtering, paging, its own page) is future work.
+{% endcomment %}
+
+{% block modal_dialog_class %}modal-lg modal-dialog-scrollable{% endblock %}
+
+{% block title_text %}{{ account.name }} &mdash; transaction history{% endblock %}
+
+{% block body %}
+<table class="table table-sm">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Description</th>
+      <th>Other accounts</th>
+      <th class="text-end">Debit</th>
+      <th class="text-end">Credit</th>
+      <th class="text-end">Balance</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in entries %}
+    <tr>
+      <td class="text-nowrap">{{ entry.date|date:"Y-m-d" }}</td>
+      <td>{{ entry.description }}</td>
+      <td>{{ entry.counterparts }}</td>
+      <td class="text-end">{% if entry.debit %}{{ entry.debit|floatformat:0 }}{% endif %}</td>
+      <td class="text-end">{% if entry.credit %}{{ entry.credit|floatformat:0 }}{% endif %}</td>
+      <td class="text-end">{{ entry.balance|floatformat:0 }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" class="text-muted">No entries for this account.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

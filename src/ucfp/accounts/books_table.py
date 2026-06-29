@@ -144,6 +144,14 @@ class BooksColumn:
     def expandable( self ) -> bool:
         return False
 
+    @property
+    def account_uuid( self ) -> Optional[ UUID ]:
+        """The account this column is, when it is a single-account column -- else None. The drill to
+        an account's Journal applies only to account columns."""
+        if self.key.kind == BooksColumnKind.ACCOUNT:
+            return self.key.account_uuid
+        return None
+
 
 @dataclass( frozen = True )
 class BooksLeafColumn( BooksColumn ):
