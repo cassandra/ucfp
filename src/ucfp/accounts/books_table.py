@@ -164,9 +164,11 @@ class BooksSummaryColumn( BooksColumn ):
 
 @dataclass( frozen = True )
 class BooksTableDefinition:
-    """The view to render: the ordered, visible column keys. Expansion state is implicit -- an
-    expanded type is simply absent while its class keys are present. Persisted (per user) as the
-    list of tokens; adapted to a books before rendering (see `adapt`)."""
+    """The view to render: the ordered, visible column keys, plus the operations that evolve it.
+    Expansion state is implicit -- an expanded type is simply absent while its class keys are
+    present. The value object is immutable: every operation returns a new definition, and the ones
+    that consult column structure take the `catalog`. Persisted (per user) via `to_storage` /
+    `from_storage`; fitted to a books with `adapt` before rendering."""
 
     column_keys : tuple[ BooksColumnKey, ... ] = ()
 
@@ -186,6 +188,79 @@ class BooksTableDefinition:
             return cls( tuple( BooksColumnKey( str( token ) ) for token in data ) )
         except ( TypeError, ValueError ):
             return None
+
+    def adapt( self, catalog : 'BooksTableColumnCatalog' ) -> 'BooksTableDefinition':
+        """Fit to a books: drop any column it does not offer (an account that is not here, a class
+        it lacks), preserving order. Fall back to the default view if nothing survives. Only drops
+        -- never resurrects a deliberately hidden column."""
+        kept = tuple( key for key in self.column_keys if key in catalog )
+        if not kept:
+            return catalog.default_definition()
+        return BooksTableDefinition( kept )
+
+    def expand( self, catalog : 'BooksTableColumnCatalog',
+                key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Replace a visible summary column with its members (the type's classes, or its accounts
+        where it has no class rung; a class's accounts), in place. No-op if not applicable."""
+        column = catalog.get( key )
+        if not isinstance( column, BooksSummaryColumn ):
+            return self
+        members = [ member_key for member_key in column.member_keys if member_key in catalog ]
+        if not members:
+            return self
+        expanded : list[ BooksColumnKey ] = []
+        for visible_key in self.column_keys:
+            if visible_key == key:
+                expanded.extend( members )
+            else:
+                expanded.append( visible_key )
+            continue
+        return BooksTableDefinition( tuple( expanded ) )
+
+    def collapse( self, catalog : 'BooksTableColumnCatalog',
+                  key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Fold a column's level back into its parent: replace every visible descendant of the
+        column's parent with the single parent column, at the first such position. No-op for a
+        top-level column (no parent)."""
+        column = catalog.get( key )
+        if ( column is None ) or ( column.parent_key is None ):
+            return self
+        parent = column.parent_key
+        collapsed : list[ BooksColumnKey ] = []
+        inserted = False
+        for visible_key in self.column_keys:
+            if catalog.descends_from( visible_key, parent ):
+                if not inserted:
+                    collapsed.append( parent )
+                    inserted = True
+            else:
+                collapsed.append( visible_key )
+            continue
+        return BooksTableDefinition( tuple( collapsed ) )
+
+    def hide( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Remove a column from the visible set."""
+        return BooksTableDefinition(
+            tuple( visible_key for visible_key in self.column_keys if visible_key != key ) )
+
+    def add( self, catalog : 'BooksTableColumnCatalog',
+             key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Append a column the books offers and is not already showing (the unhide / add op)."""
+        if ( key not in catalog ) or ( key in self.column_keys ):
+            return self
+        return BooksTableDefinition( self.column_keys + ( key, ) )
+
+    def move( self, key : Optional[ BooksColumnKey ], offset : int ) -> 'BooksTableDefinition':
+        """Shift a column by `offset` positions (-1 left, +1 right), clamped within the row."""
+        keys = list( self.column_keys )
+        if key not in keys:
+            return self
+        index  = keys.index( key )
+        target = index + offset
+        if ( target < 0 ) or ( target >= len( keys ) ):
+            return self
+        keys[ index ], keys[ target ] = keys[ target ], keys[ index ]
+        return BooksTableDefinition( tuple( keys ) )
 
 
 class BooksTableColumnCatalog:
@@ -257,6 +332,17 @@ class BooksTableColumnCatalog:
         """The columns a summary expands into -- its members that this books actually has."""
         return [ self._by_key[ key ] for key in column.member_keys if key in self._by_key ]
 
+    def descends_from( self, key : BooksColumnKey, ancestor : BooksColumnKey ) -> bool:
+        """Whether `ancestor` is on `key`'s parent chain -- how a collapse finds the columns to
+        fold back into a parent."""
+        column = self.get( key )
+        while ( column is not None ) and ( column.parent_key is not None ):
+            if column.parent_key == ancestor:
+                return True
+            column = self.get( column.parent_key )
+            continue
+        return False
+
     def default_definition( self ) -> BooksTableDefinition:
         """The starting view: each derived figure, then one rollup per non-suppressed type
         (Equity is suppressed). The figures lead, as the headline summaries."""
@@ -267,17 +353,6 @@ class BooksTableColumnCatalog:
             keys.append( BooksColumnKey.for_type( account_type ) )
             continue
         return BooksTableDefinition( tuple( keys ) )
-
-
-def adapt( definition : BooksTableDefinition,
-           catalog : BooksTableColumnCatalog ) -> BooksTableDefinition:
-    """Fit a stored definition to a books: drop any column the books does not offer (an account
-    that is not here, a class it lacks), preserving order. If nothing survives, fall back to the
-    default view. Adaptation only drops -- it never resurrects a deliberately hidden column."""
-    kept = tuple( key for key in definition.column_keys if key in catalog )
-    if not kept:
-        return catalog.default_definition()
-    return BooksTableDefinition( kept )
 
 
 @dataclass( frozen = True )

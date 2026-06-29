@@ -31,7 +31,7 @@ from ucfp.scenario.models import ScenarioRecord
 from ucfp.scenario.repository import (
     create_scenario, latest_scenario, load_scenario, save_scenario, scenarios_for )
 
-from .books_table import build_run_books_table
+from .books_table import apply_run_books_operation, run_books_table_context
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
 from .forms import GRANULARITY, RunForm
@@ -46,6 +46,7 @@ from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/retirement_hub.html'
 _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
+_BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -467,11 +468,29 @@ class RunResultsView( View ):
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run = from_json_data( ProjectionRun, record.data )
         books = BooksOfAccountRepository().load( record.books )
-        return render( request, _RESULTS_TEMPLATE, {
+        context = {
             'record'        : record,
             'stopped_early' : run.result.stopped_early,
-            'books_table'   : build_run_books_table( request, run, books ),
             'notices'       : [ ( step.end_date.year, notice.kind.label,
                                   notice.severity.label, notice.amount )
                                 for step in run.result.steps for notice in step.notices ],
-        } )
+        }
+        context.update( run_books_table_context( request, run, books ) )
+        return render( request, _RESULTS_TEMPLATE, context )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ProjectionRunBooksTableView( View ):
+    """`/planning/run/<uuid>/books/` -- apply a column operation to the user's BooksTable lens
+    (expand/collapse/hide/add/move), persist it, and swap the re-rendered table fragment."""
+
+    def post( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        run = from_json_data( ProjectionRun, record.data )
+        books = BooksOfAccountRepository().load( record.books )
+        context = apply_run_books_operation(
+            request, run, books, request.POST.get( 'op' ), request.POST.get( 'column' ) )
+        context[ 'record' ] = record
+        fragment = render_to_string( _BOOKS_TABLE_TEMPLATE, context, request = request )
+        return antinode.response( replace_map = { 'books-table': fragment } )

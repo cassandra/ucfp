@@ -2,7 +2,9 @@
 The Books of Account drill-down table for a run, rendered as a single #books-table element so a
 column operation can swap it in place (antinode replace_map). Rows are the run's periods; columns
 come from the user's adapted lens. Asset/liability/equity and Net Worth read as a balance at
-period end; revenue/expense read as a flow over the period.
+period end; revenue/expense read as a flow over the period. Each column header carries the
+structural controls (expand/collapse/hide/move); the add-column control follows the table.
+Control styling and a richer customize dialog are deferred to a later UX pass.
 {% endcomment %}
 <div id="books-table" class="table-responsive">
   <table class="table table-sm w-auto">
@@ -10,7 +12,28 @@ period end; revenue/expense read as a flow over the period.
       <tr>
         <th>Period</th>
         {% for column in books_table.columns %}
-        <th class="text-end">{{ column.label }}</th>
+        <th class="text-end">
+          <div>{{ column.label }}</div>
+          <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+                data-async="#books-table" class="d-inline-flex gap-1">
+            {% csrf_token %}
+            <input type="hidden" name="column" value="{{ column.key.token }}">
+            <button type="submit" name="op" value="move_left" class="btn btn-link btn-sm p-0"
+                    title="Move left">&lsaquo;</button>
+            {% if column.expandable %}
+            <button type="submit" name="op" value="expand" class="btn btn-link btn-sm p-0"
+                    title="Expand">+</button>
+            {% endif %}
+            {% if column.parent_key %}
+            <button type="submit" name="op" value="collapse" class="btn btn-link btn-sm p-0"
+                    title="Collapse">&minus;</button>
+            {% endif %}
+            <button type="submit" name="op" value="hide" class="btn btn-link btn-sm p-0"
+                    title="Hide">&times;</button>
+            <button type="submit" name="op" value="move_right" class="btn btn-link btn-sm p-0"
+                    title="Move right">&rsaquo;</button>
+          </form>
+        </th>
         {% endfor %}
       </tr>
     </thead>
@@ -25,4 +48,19 @@ period end; revenue/expense read as a flow over the period.
       {% endfor %}
     </tbody>
   </table>
+
+  {% if addable_columns %}
+  <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+        data-async="#books-table" class="d-flex align-items-center gap-2 mt-2">
+    {% csrf_token %}
+    <input type="hidden" name="op" value="add">
+    <label class="small text-muted mb-0" for="books-table-add">Add column</label>
+    <select id="books-table-add" name="column" class="form-select form-select-sm w-auto">
+      {% for column in addable_columns %}
+      <option value="{{ column.key.token }}">{{ column.label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline-secondary btn-sm">Add</button>
+  </form>
+  {% endif %}
 </div>
