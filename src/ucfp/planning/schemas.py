@@ -1,7 +1,7 @@
 """Typed shapes for a captured forecast run.
 
 A `ProjectionRunRecord` persists a coherent package -- the inputs that produced a forecast
-(Profile, Scenario, run frame) and its outputs -- so a result can be inspected later and traced
+(Profile, Plans, run frame) and its outputs -- so a result can be inspected later and traced
 to exactly what produced it. The books are persisted separately (via the accounts repository);
 any figure derivable from them -- net worth, cash, balances over time -- is *not* duplicated
 here. The typed `ProjectionRun` below is the JSON-serialized part: the input snapshot and the
@@ -13,8 +13,9 @@ from decimal import Decimal
 from typing import Optional
 
 from ucfp.period.results import NoticeKind, NoticeSeverity
-from ucfp.profile.schemas import Profile
-from ucfp.scenario.schemas import Scenario
+from ucfp.inputs.profile.schemas import Profile
+from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.assumptions.schemas import Assumptions
 
 from .materialization import ForecastFrame
 
@@ -49,10 +50,11 @@ class ProjectionResult:
 @dataclass( frozen = True )
 class ProjectionRun:
     """The typed package a `ProjectionRunRecord` stores in its `data`: the inputs (snapshotted
-    for provenance, since profile and scenario drift over time) and the non-books result. The
-    persisted books are referenced separately, by the record's FK -- exactly as a `ProfileRecord`
+    for provenance, since profile, plans, and assumptions drift over time) and the non-books result.
+    The persisted books are referenced separately, by the record's FK -- exactly as a `ProfileRecord`
     holds a typed `Profile` plus its `organization` FK."""
     profile: Profile
-    scenario: Scenario
+    plans: Plans
+    assumptions: Assumptions
     frame: ForecastFrame
     result: ProjectionResult

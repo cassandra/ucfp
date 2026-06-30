@@ -1,9 +1,9 @@
-"""Materialize a Profile + Scenario + run frame into the engine's `ForecastParameters`.
+"""Materialize a Profile + Plans + Assumptions + run frame into the engine's `ForecastParameters`.
 
 The seam between the user-facing planning model and the Forecast engine: it composes the
-facts (`Profile`), the assumptions (`Scenario`), and the run frame into the single
-`ForecastParameters` the engine consumes. It lives in `planning` -- above profile, scenario,
-and the engine -- so neither input app depends on the other and the engine depends on neither.
+facts (`Profile`), the contemplated future (`Plans`), the external factors (`Assumptions`), and the
+run frame into the single `ForecastParameters` the engine consumes. It lives in `planning` -- above
+the input apps and the engine -- so no input app depends on another and the engine depends on none.
 
 Social Security composes the entitlement fact (PIA) with the claiming-age knob through the
 jurisdiction-neutral `tax.government_pension` layer (the statutory schedule lives behind it,
@@ -33,17 +33,19 @@ from ucfp.parameter_sets import repository as parameter_sets
 from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.jurisdiction.government_pension import GovernmentPension
 
-from ucfp.profile.schemas import AssetProfile, LoanProfile, Profile
-from ucfp.scenario.schemas import RetirementTiming, Scenario
+from ucfp.inputs.profile.schemas import AssetProfile, LoanProfile, Profile
+from ucfp.inputs.plans.schemas import RetirementTiming, Plans
+from ucfp.inputs.assumptions.schemas import Assumptions
+from ucfp.inputs.compatibility import assert_compatible
 
-from .events import event_contributions
+from ucfp.inputs.events import event_contributions
 
 
 @dataclass( frozen = True )
 class ForecastFrame:
     """The run configuration the engine needs that is neither a fact nor an assumption -- the
     horizon and granularity. Provided per run (often implied by the planning perspective), not
-    stored in a Profile or Scenario."""
+    stored in a Profile or Plans."""
 
     start_date  : date
     end_date    : date
@@ -51,39 +53,41 @@ class ForecastFrame:
 
 
 def materialize(
-        profile : Profile, scenario : Scenario, frame : ForecastFrame ) -> ForecastParameters:
+        profile : Profile, plans : Plans, assumptions : Assumptions,
+        frame : ForecastFrame ) -> ForecastParameters:
     if profile.filing_status is None:
         raise ValueError( 'A profile must set its filing status before a forecast can run.' )
-    statute = _statute( scenario )
+    assert_compatible( profile, plans )
+    statute = _statute( assumptions )
     subjects = _subjects( profile )
     subjects_by_handle = { str( subject.handle ): subject
                            for subject in subjects if subject.handle is not None }
     government_pension = GovernmentPension( statute.jurisdiction_type )
-    lifestyle_streams, lifestyle_items = _lifestyle_expenses( scenario )
-    expense_streams, expense_items = _scenario_expenses( scenario )
+    lifestyle_streams, lifestyle_items = _lifestyle_expenses( plans )
+    expense_streams, expense_items = _plans_expenses( plans )
     flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
-    events = event_contributions( profile, scenario, subjects_by_handle )
+    events = event_contributions( profile, plans, subjects_by_handle )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
         filing_status    = profile.filing_status,
-        statute     = statute,
+        statute          = statute,
         granularity      = frame.granularity,
         subjects         = subjects,
         assets           = _assets( profile ),
-        economic_outlook = _economic_outlook( scenario ),
+        economic_outlook = _economic_outlook( assumptions ),
         income_streams   = _entitlement_income(
-            profile, scenario, subjects_by_handle, government_pension ) + flow_streams,
+            profile, plans, subjects_by_handle, government_pension ) + flow_streams,
         income_items     = flow_items + events.income_items,
         expense_items    = (
             _committed_obligations( profile ) + lifestyle_items + expense_items
             + events.expense_items ),
         expense_streams  = lifestyle_streams + expense_streams,
-        loans            = _loans( profile, scenario, frame.start_date ),
-        contributions    = _contributions( scenario ),
+        loans            = _loans( profile, plans, frame.start_date ),
+        contributions    = _contributions( plans ),
         events           = events.scheduled_events,
-        cash_account     = _cash_account( scenario ),
-        health_coverage  = _health_coverage( scenario ),
+        cash_account     = _cash_account( plans ),
+        health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
     )
 
@@ -122,9 +126,9 @@ def _cost_basis( asset : AssetProfile ) -> Decimal:
     return asset.opening_value
 
 
-def _loans( profile : Profile, scenario : Scenario, as_of : date ) -> list[ LoanParameters ]:
+def _loans( profile : Profile, plans : Plans, as_of : date ) -> list[ LoanParameters ]:
     extra = { prepayment.loan_handle: prepayment.annual_amount
-              for prepayment in scenario.prepayments }
+              for prepayment in plans.prepayments }
     return [ _loan( loan, as_of, extra.get( loan.handle, Decimal( '0' ) ) )
              for loan in profile.loans ]
 
@@ -133,7 +137,7 @@ def _loan( loan : LoanProfile, as_of : date, extra_principal : Decimal ) -> Loan
     """The engine view of a loan as of the forecast start: amortize the original loan from its
     origination to the balance still owed (unless `current_balance` overrides it) and the
     remaining term, since the engine projects forward from an opening balance over a term. A
-    scenario prepayment becomes the engine's annual extra principal."""
+    Plans prepayment becomes the engine's annual extra principal."""
     periods = loan.original_term.months()
     elapsed = min( _elapsed_months( loan.origination_date, as_of ), periods )
     opening = loan.current_balance if loan.current_balance is not None else remaining_balance(
@@ -177,11 +181,11 @@ def _income_flows(
 
 
 def _entitlement_income(
-        profile : Profile, scenario : Scenario, subjects_by_handle : dict[ str, Subject ],
+        profile : Profile, plans : Plans, subjects_by_handle : dict[ str, Subject ],
         government_pension : GovernmentPension ) -> list[ IncomeStream ]:
     """The retirement entitlements as realized income streams: pension and Social Security, whose
-    amount and window depend on the scenario's start/claiming timing."""
-    timing = { entry.subject_handle: entry for entry in scenario.timing }
+    amount and window depend on the Plans' start/claiming timing."""
+    timing = { entry.subject_handle: entry for entry in plans.timing }
     streams = list()
     for pension in profile.pensions:
         streams.append( IncomeStream(
@@ -209,7 +213,7 @@ def _pension_start( timing : Optional[ RetirementTiming ] ) -> Optional[ date ]:
 def _claiming_date( timing : Optional[ RetirementTiming ], subject_handle : str ) -> date:
     if timing is None or timing.government_pension_claiming_date is None:
         raise ValueError(
-            f'The government pension for "{subject_handle}" needs a claiming date in the scenario '
+            f'The government pension for "{subject_handle}" needs a claiming date in the plans '
             'timing.' )
     return timing.government_pension_claiming_date
 
@@ -224,11 +228,11 @@ def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:
         for obligation in profile.obligations ]
 
 
-def _lifestyle_expenses( scenario : Scenario ) -> tuple[ list, list ]:
-    """The scenario's lifestyle as (streams, items): load its chosen cost table from the
+def _lifestyle_expenses( plans : Plans ) -> tuple[ list, list ]:
+    """The Plans' lifestyle as (streams, items): load its chosen cost table from the
     parameter-set library and step each expense by the level in effect across the timeline --
     a stream (no `interval`) smoothed, an item (an `interval`) placed at its cadence."""
-    lifestyle = scenario.lifestyle
+    lifestyle = plans.lifestyle
     if lifestyle is None:
         return list(), list()
     table = parameter_sets.load( ParameterSetKind.LIFESTYLE_COSTS, lifestyle.scope.label )
@@ -269,12 +273,12 @@ def _level_schedule( amounts, segments : list ) -> Schedule:
     return Schedule( tuple( windowed ) )
 
 
-def _scenario_expenses( scenario : Scenario ) -> tuple[ list, list ]:
-    """The scenario's planned expenses as (streams, items): a flow with no interval is a smoothed
+def _plans_expenses( plans : Plans ) -> tuple[ list, list ]:
+    """The Plans' planned expenses as (streams, items): a flow with no interval is a smoothed
     stream, one with an interval an item placed at that cadence. Each is a flat amount for now;
     value-steps over time come later. The successor to `_lifestyle_expenses`."""
     streams, items = list(), list()
-    for expense in scenario.expenses:
+    for expense in plans.expenses:
         amounts = Schedule( tuple( expense.schedule ) )
         if expense.interval is None:
             streams.append( ExpenseStream(
@@ -287,17 +291,17 @@ def _scenario_expenses( scenario : Scenario ) -> tuple[ list, list ]:
     return streams, items
 
 
-# --- Scenario: knobs -------------------------------------------------------
+# --- Plans: knobs -------------------------------------------------------
 
-def _contributions( scenario : Scenario ) -> list[ RetirementContribution ]:
+def _contributions( plans : Plans ) -> list[ RetirementContribution ]:
     return [ RetirementContribution(
         account = contribution.account_handle, amount = contribution.annual_amount,
         source = contribution.source, window = DateWindow( end = contribution.through ) )
-        for contribution in scenario.contributions ]
+        for contribution in plans.contributions ]
 
 
-def _cash_account( scenario : Scenario ) -> CashAccountParameters:
-    drawdown = scenario.drawdown
+def _cash_account( plans : Plans ) -> CashAccountParameters:
+    drawdown = plans.drawdown
     if drawdown is None:
         return CashAccountParameters()
     sweep = AssetAllocation( tuple( drawdown.sweep_allocation ) ) if drawdown.sweep_allocation else None
@@ -306,8 +310,8 @@ def _cash_account( scenario : Scenario ) -> CashAccountParameters:
         draw_order = list( drawdown.draw_order ), sweep_allocation = sweep )
 
 
-def _health_coverage( scenario : Scenario ) -> Optional[ SubsidizedHealthCoverage ]:
-    coverage = scenario.health_coverage
+def _health_coverage( plans : Plans ) -> Optional[ SubsidizedHealthCoverage ]:
+    coverage = plans.health_coverage
     if coverage is None:
         return None
     return SubsidizedHealthCoverage(
@@ -315,17 +319,17 @@ def _health_coverage( scenario : Scenario ) -> Optional[ SubsidizedHealthCoverag
         household_size = coverage.household_size, reference_premium = coverage.reference_premium )
 
 
-# --- Scenario: external factors (reuse engine types; no zero-fill) ---------
+# --- Assumptions: external factors (reuse engine types; no zero-fill) ---------
 
-def _economic_outlook( scenario : Scenario ) -> EconomicOutlook:
-    """The scenario's own economic-factors copy as the engine's outlook -- a constant outlook for
+def _economic_outlook( assumptions : Assumptions ) -> EconomicOutlook:
+    """The assumptions' own economic-factors copy as the engine's outlook -- a constant outlook for
     now. The copy is seeded from a library preset at input time, so there is no library load here."""
-    if scenario.economics is None:
-        raise ValueError( 'A scenario must carry economic factors (seed them from a preset).' )
-    return EconomicOutlook.constant( scenario.economics )
+    if assumptions.economics is None:
+        raise ValueError( 'Assumptions must carry economic factors (seed them from a preset).' )
+    return EconomicOutlook.constant( assumptions.economics )
 
 
-def _statute( scenario : Scenario ):
-    if scenario.statute is None:
-        raise ValueError( 'A scenario must carry a tax forecast (from the default library).' )
-    return scenario.statute
+def _statute( assumptions : Assumptions ):
+    if assumptions.statute is None:
+        raise ValueError( 'Assumptions must carry a tax forecast (from the default library).' )
+    return assumptions.statute

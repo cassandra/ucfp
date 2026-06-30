@@ -36,7 +36,9 @@ urlpatterns = [
 
     path( 'organization/', include( 'organization.urls' )),
 
-    path( 'planning/', include( 'ucfp.planning.urls' )),
+    path( 'inputs/', include( 'ucfp.inputs.urls' )),
+    path( 'plan/', include( 'ucfp.planning.urls' )),
+    path( 'run/', include( 'ucfp.planning.run_urls' )),
 
     # Custom error pages
     path( '400.html', views.bad_request_response, name = 'bad_request' ),

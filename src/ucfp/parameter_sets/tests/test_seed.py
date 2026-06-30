@@ -15,8 +15,9 @@ from ucfp.parameter_sets.enums import (
 from ucfp.parameter_sets.models import ParameterSet
 from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
-from ucfp.profile.schemas import AssetProfile, Profile, SubjectProfile
-from ucfp.scenario.schemas import LifestylePlan, LifestyleSegment, Scenario
+from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
+from ucfp.inputs.plans.schemas import LifestylePlan, LifestyleSegment, Plans
+from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile
 
@@ -105,14 +106,15 @@ class MaterializeFromLibraryTest( TestCase ):
             assets = [ AssetProfile(
                 handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
                 opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) ) ] )
-        scenario = Scenario(   # the scenario carries its own economic-factors copy, seeded here
+        plans = Plans()
+        assumptions = Assumptions(   # the economic-factors copy, seeded here
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
             statute = StatuteProfile(
                 jurisdiction_type = JurisdictionType.US_FEDERAL,
                 forecast_type = StatuteForecastType.CURRENT_LAW ) )
         params = materialize(
-            profile, scenario,
-            ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ) ) )
+            profile = profile, plans = plans, assumptions = assumptions,
+            frame = ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ) ) )
         self.assertEqual(
             params.economic_outlook.parameters_at( date( 2026, 1, 1 ) ).inflation.fraction,
             Decimal( '0.025' ) )
@@ -127,19 +129,20 @@ class MaterializeFromLibraryTest( TestCase ):
             assets = [ AssetProfile(
                 handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
                 opening_value = Decimal( '900000' ), cost_basis = Decimal( '900000' ) ) ] )
-        scenario = Scenario(
-            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            statute = StatuteProfile(
-                jurisdiction_type = JurisdictionType.US_FEDERAL,
-                forecast_type = StatuteForecastType.CURRENT_LAW ),
+        plans = Plans(
             lifestyle = LifestylePlan(
                 scope = LifestyleScope.GENERAL,
                 segments = [
                     LifestyleSegment( start = date( 2026, 1, 1 ), level = LifestyleLevel.LOW ),
                     LifestyleSegment( start = date( 2030, 1, 1 ), level = LifestyleLevel.HIGH ) ] ) )
+        assumptions = Assumptions(
+            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
+            statute = StatuteProfile(
+                jurisdiction_type = JurisdictionType.US_FEDERAL,
+                forecast_type = StatuteForecastType.CURRENT_LAW ) )
         params = materialize(
-            profile, scenario,
-            ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2031, 12, 31 ) ) )
+            profile = profile, plans = plans, assumptions = assumptions,
+            frame = ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2031, 12, 31 ) ) )
         self.assertIn( 'Home Insurance', { s.name for s in params.expense_streams } )   # a stream
         item_names = { i.name for i in params.expense_items }
         self.assertIn( 'Gas', item_names )                                              # an item

@@ -1,0 +1,16 @@
+{% extends "pages/app_base.html" %}
+
+{% block app_content %}
+<h1 class="mb-1">{{ flow_title }}</h1>
+<p class="text-muted mb-4">
+  <a href="{% url 'inputs_home' %}">Your inputs</a> &rsaquo; {{ flow_title }}
+</p>
+<div class="row">
+  <div class="col-md-3 mb-4">
+    {% include "inputs/interview/stepper.html" %}
+  </div>
+  <div class="col-md-9">
+    {% include "inputs/interview/section.html" %}
+  </div>
+</div>
+{% endblock %}

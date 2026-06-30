@@ -1,0 +1,61 @@
+{% extends "pages/base.html" %}
+{% load common_tags %}
+{% comment %}
+  The shared application shell: the top navbar + a content region, extended by every
+  authenticated app page (home, the planning features, the inputs area, settings). Sign-in,
+  error, and interstitial pages extend `pages/base.html` directly and get no app chrome.
+
+  Active nav state is derived from `request.resolver_match.url_name` (the `request` context
+  processor is enabled), so pages need not pass anything to highlight their nav item.
+{% endcomment %}
+
+{% block content %}
+{% with url_name=request.resolver_match.url_name %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+  <div class="container">
+    <a class="navbar-brand font-weight-bold" href="{% url 'home' %}">{% settings_value 'SITE_NAME' %}</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#app-nav"
+            aria-controls="app-nav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="app-nav">
+      <ul class="navbar-nav mr-auto">
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'financial_forecast' %}active{% endif %}"
+             href="{% url 'financial_forecast' %}">Financial Forecast</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'retirement_timing' %}active{% endif %}"
+             href="{% url 'retirement_timing' %}">Retirement Timing
+            <span class="badge badge-light align-middle">soon</span></a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'social_security' %}active{% endif %}"
+             href="{% url 'social_security' %}">Social Security
+            <span class="badge badge-light align-middle">soon</span></a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'cash_flow_planning' %}active{% endif %}"
+             href="{% url 'cash_flow_planning' %}">Cash Flow
+            <span class="badge badge-light align-middle">soon</span></a>
+        </li>
+      </ul>
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link {% if request.path|slice:':8' == '/inputs/' %}active{% endif %}"
+             href="{% url 'inputs_home' %}">Inputs</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'organization_settings' %}active{% endif %}"
+             href="{% url 'organization_settings' %}">Settings</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<main class="{% block main_container_class %}container{% endblock %} py-4">
+  {% block app_content %}{% endblock %}
+</main>
+{% endwith %}
+{% endblock %}
