@@ -23,7 +23,8 @@ def run_and_capture(
         organization: Organization, profile: Profile, plans: Plans, assumptions: Assumptions,
         frame: ForecastFrame, label: str ) -> ProjectionRunRecord:
     """Materialize, run, persist the books, and capture the run as a `ProjectionRunRecord`."""
-    parameters   = materialize( profile, plans, assumptions, frame )
+    parameters   = materialize(
+        profile = profile, plans = plans, assumptions = assumptions, frame = frame )
     result       = Forecast( parameters ).run()
     books_record = BooksOfAccountRepository().save( result.books, organization )
     captured     = ProjectionRun(

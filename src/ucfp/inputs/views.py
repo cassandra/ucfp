@@ -152,6 +152,10 @@ class InterviewView( View ):
         """The profile, plus the one non-profile aggregate this section edits (a Plans, an
         Assumptions, or neither) -- creating the record if absent so the form has something to bind.
         No section edits both Plans and Assumptions, so a single `other` suffices."""
+        assert not ( Aggregate.PLANS in section.aggregates
+                     and Aggregate.ASSUMPTIONS in section.aggregates ), (
+            f'Section {section.key!r} edits both Plans and Assumptions; the single-other dispatch '
+            'supports at most one non-profile aggregate per section.' )
         profile = load_profile( latest_profile( organization ) or create_profile( organization ) )
         if Aggregate.PLANS in section.aggregates:
             return profile, load_plans( latest_plans( organization ) or create_plans( organization ) )
@@ -205,14 +209,14 @@ class SpendingGroupView( View ):
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = render_to_string(
                 self._COLLAPSED_TEMPLATE, { 'group_key': group }, request = request ) )
-        profile, plans = _current_plan( request.organization )
+        profile, plans = _current_profile_and_plans( request.organization )
         form = GroupSpendingForm(
             profile = profile, plans = plans, group = self._group( profile, group ) )
         return self._editor_response( request, group, form )
 
     def post( self, request, group ):
         organization = request.organization
-        profile, plans = _current_plan( organization )
+        profile, plans = _current_profile_and_plans( organization )
         form = GroupSpendingForm(
             request.POST, profile = profile, plans = plans,
             group = self._group( profile, group ) )
@@ -238,7 +242,7 @@ class SpendingGroupView( View ):
         return antinode.response( main_content = content, insert_map = insert_map )
 
 
-def _current_plan( organization ):
+def _current_profile_and_plans( organization ):
     """The organization's current Profile and Plans, creating either if absent."""
     profile  = load_profile( latest_profile( organization ) or create_profile( organization ) )
     plans = load_plans( latest_plans( organization ) or create_plans( organization ) )
@@ -254,12 +258,12 @@ class ResidenceView( View ):
     _TEMPLATE = 'inputs/interview/sections/residence.html'
 
     def get( self, request ):
-        profile, plans = _current_plan( request.organization )
+        profile, plans = _current_profile_and_plans( request.organization )
         return self._response( request, HomeForm( profile = profile, plans = plans ) )
 
     def post( self, request ):
         organization = request.organization
-        profile, plans = _current_plan( organization )
+        profile, plans = _current_profile_and_plans( organization )
         form = HomeForm( request.POST, profile = profile, plans = plans )
         if form.is_valid():
             profile, plans = form.apply( profile, plans )
@@ -284,12 +288,12 @@ class IncomeTableView( View ):
     _TEMPLATE = 'inputs/interview/sections/income_table.html'
 
     def get( self, request ):
-        profile, plans = _current_plan( request.organization )
+        profile, plans = _current_profile_and_plans( request.organization )
         return self._rendered( request, IncomeTableForm( profile = profile, plans = plans ) )
 
     def post( self, request ):
         organization = request.organization
-        profile, plans = _current_plan( organization )
+        profile, plans = _current_profile_and_plans( organization )
         form = IncomeTableForm( request.POST, profile = profile, plans = plans )
         if not form.is_valid():
             return self._swap( request, form )                 # show field errors
@@ -329,7 +333,7 @@ class RentalFormView( View ):
     _LIST_TEMPLATE = 'inputs/interview/sections/rentals_list.html'
 
     def get( self, request, handle = None ):
-        profile, plans = _current_plan( request.organization )
+        profile, plans = _current_profile_and_plans( request.organization )
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = self._form( request, None, None ) )
         form = RentalForm( profile = profile, plans = plans, handle = handle )
@@ -337,7 +341,7 @@ class RentalFormView( View ):
 
     def post( self, request, handle = None ):
         organization = request.organization
-        profile, plans = _current_plan( organization )
+        profile, plans = _current_profile_and_plans( organization )
         form = RentalForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response( main_content = self._form( request, handle, form ) )
@@ -363,7 +367,7 @@ class RentalDeleteView( View ):
 
     def post( self, request, handle ):
         organization = request.organization
-        profile, plans = _current_plan( organization )
+        profile, plans = _current_profile_and_plans( organization )
         profile, plans = delete_rental( profile, plans, handle )
         save_profile( organization, profile )
         save_plans( latest_plans( organization ), plans )
@@ -383,7 +387,7 @@ class EventAddView( View ):
     _LIST_TEMPLATE = 'inputs/interview/sections/events_list.html'
 
     def get( self, request, kind ):
-        profile, _ = _current_plan( request.organization )
+        profile, _ = _current_profile_and_plans( request.organization )
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = self._menu( request, profile ) )
         form = EventForm( event_type = self._event_type( kind ), profile = profile )
@@ -391,7 +395,7 @@ class EventAddView( View ):
 
     def post( self, request, kind ):
         organization = request.organization
-        profile, plans = _current_plan( organization )
+        profile, plans = _current_profile_and_plans( organization )
         event_type = self._event_type( kind )
         form = EventForm( request.POST, event_type = event_type, profile = profile )
         if not form.is_valid():
@@ -437,7 +441,7 @@ class EventDeleteView( View ):
 
     def post( self, request, index ):
         organization = request.organization
-        profile, plans = _current_plan( organization )
+        profile, plans = _current_profile_and_plans( organization )
         events = list( plans.events )
         if 0 <= index < len( events ):
             original = profile

@@ -39,7 +39,7 @@ class PlanningResultRecord( JsonDocumentModel ):
         Organization, on_delete = models.CASCADE, related_name = 'planning_results' )
     feature = LabeledEnumField( PlanningFeature, verbose_name = 'Feature' )
     run = models.ForeignKey(
-        ProjectionRunRecord, on_delete = models.CASCADE, related_name = 'planning_results' )
+        ProjectionRunRecord, on_delete = models.CASCADE, related_name = 'results' )
 
     def __str__( self ):
         return f'{self.feature.label}: {self.label} ({self.organization})'

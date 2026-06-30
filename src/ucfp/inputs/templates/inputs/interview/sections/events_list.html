@@ -11,7 +11,7 @@ to event_delete, which swaps this list back in.
       <form method="post" action="{% url 'event_delete' index=event.index %}"
             data-async="#events-list" class="d-inline">
         {% csrf_token %}
-        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ms-2">Remove</button>
+        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-2">Remove</button>
       </form>
     </li>
     {% endfor %}

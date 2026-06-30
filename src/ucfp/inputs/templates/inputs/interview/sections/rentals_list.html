@@ -9,12 +9,12 @@ plus the Add affordance. Edit/Add open the form in #rentals-form; Remove posts t
     {% for rental in rentals %}
     <li class="mb-1">
       {{ rental.name }} &mdash; value {{ rental.value|money:currency }}
-      <a class="ms-2" data-async="#rentals-form"
+      <a class="ml-2" data-async="#rentals-form"
          href="{% url 'rental_edit' handle=rental.handle %}">Edit</a>
       <form method="post" action="{% url 'rental_delete' handle=rental.handle %}"
             data-async="#rentals-list" class="d-inline">
         {% csrf_token %}
-        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ms-1">Remove</button>
+        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1">Remove</button>
       </form>
     </li>
     {% endfor %}

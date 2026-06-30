@@ -8,6 +8,7 @@ early, and the notices. The guided interview and the input editors live in the `
 """
 from datetime import timedelta
 
+from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -93,16 +94,20 @@ class FinancialForecastView( View ):
         request.session_state.current_plans_uuid = str( plans_record.uuid )
         request.session_state.to_session( request )
         try:
-            run = run_and_capture(
-                organization, load_profile( profile_record ), load_plans( plans_record ),
-                load_assumptions( assumptions_record ),
-                self._frame( profile_record, form ), label = plans_record.label )
+            with transaction.atomic():
+                run = run_and_capture(
+                    organization = organization,
+                    profile      = load_profile( profile_record ),
+                    plans        = load_plans( plans_record ),
+                    assumptions  = load_assumptions( assumptions_record ),
+                    frame        = self._frame( profile_record, form ),
+                    label        = plans_record.label )
+                PlanningResultRecord.objects.create(
+                    organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
+                    run = run, label = run.label )
         except ValueError as error:
             return render(
                 request, _HUB_TEMPLATE, self._context( request, form = form, error = str( error ) ) )
-        PlanningResultRecord.objects.create(
-            organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
-            run = run, label = run.label )
         return redirect( 'run_results', run_uuid = run.uuid )
 
     def _frame( self, profile_record, form ) -> ForecastFrame:

@@ -113,8 +113,8 @@ class MaterializeFromLibraryTest( TestCase ):
                 jurisdiction_type = JurisdictionType.US_FEDERAL,
                 forecast_type = StatuteForecastType.CURRENT_LAW ) )
         params = materialize(
-            profile, plans, assumptions,
-            ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ) ) )
+            profile = profile, plans = plans, assumptions = assumptions,
+            frame = ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ) ) )
         self.assertEqual(
             params.economic_outlook.parameters_at( date( 2026, 1, 1 ) ).inflation.fraction,
             Decimal( '0.025' ) )
@@ -141,8 +141,8 @@ class MaterializeFromLibraryTest( TestCase ):
                 jurisdiction_type = JurisdictionType.US_FEDERAL,
                 forecast_type = StatuteForecastType.CURRENT_LAW ) )
         params = materialize(
-            profile, plans, assumptions,
-            ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2031, 12, 31 ) ) )
+            profile = profile, plans = plans, assumptions = assumptions,
+            frame = ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2031, 12, 31 ) ) )
         self.assertIn( 'Home Insurance', { s.name for s in params.expense_streams } )   # a stream
         item_names = { i.name for i in params.expense_items }
         self.assertIn( 'Gas', item_names )                                              # an item
