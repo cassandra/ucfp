@@ -18,6 +18,9 @@
 //     by its "remove" trigger, so the server infers the block's presence from its fields alone. Its
 //     open/collapsed state, like the pickers, is (re)applied on each antinode render.
 //
+//   SwitchGroup - a control (radio/select) whose value reveals one of several sibling case blocks
+//     and hides the rest (e.g. own vs rent). Presentation only; (re)applied on each render.
+//
 // The delegated behaviors are wired on `body`, so they survive an antinode pane swap and bind
 // exactly once. All the ids/classes/data-attributes shared with the templates come from
 // window.AppConst (see ucfp/environment/constants.py) rather than hard-coded strings, so the two
@@ -200,6 +203,33 @@ window.App.Inputs = (function () {
         } );
     }
 
+    // ----- SwitchGroup: reveal the case block matching a control's value -----
+    //
+    // A control (radio group or select) inside a `js-switch` wrapper picks which sibling case block
+    // shows; the rest hide. Every case renders visible without JS -- the server reads only the fields
+    // the chosen case makes relevant -- so this is pure presentation, (re)applied on load and after
+    // each render, plus live on the control's change.
+
+    function switchValue( $switch ) {
+        const $control = $switch.find( classSelector( C.SWITCH_CONTROL_CLASS ) );
+        const $checked = $control.filter( ':radio:checked' );
+        return $checked.length ? $checked.val() : $control.not( ':radio' ).val();
+    }
+
+    function applySwitch( $switch ) {
+        const value = switchValue( $switch );
+        $switch.find( '[' + dataAttr( C.SWITCH_CASE_DATA_ATTR ) + ']' ).each( function () {
+            const $case = $( this );
+            const cases = ( $case.attr( dataAttr( C.SWITCH_CASE_DATA_ATTR ) ) || '' ).split( /\s+/ );
+            $case.prop( 'hidden', cases.indexOf( value ) === -1 );
+        } );
+    }
+
+    function enhanceSwitches( $scope ) {
+        ( $scope || $( document.body ) ).find( classSelector( C.SWITCH_CLASS ) )
+            .each( function () { applySwitch( $( this ) ); } );
+    }
+
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs
@@ -229,25 +259,32 @@ window.App.Inputs = (function () {
             setOptionalOpen( $section, false );
         } );
 
-        // Pickers and optional-section state attach to concrete elements, so (unlike the delegated
-        // handlers above) they must be (re)applied to whatever DOM is present: once now, and again
-        // after each antinode render for swapped-in content. Pickers are also torn down before a
-        // subtree is removed. AN is absent under the test harness, so guard it.
+        // Flip a switch to the chosen case as its control changes.
+        $( 'body' ).on( 'change', classSelector( C.SWITCH_CLASS ) + ' ' + classSelector( C.SWITCH_CONTROL_CLASS ),
+            function () { applySwitch( $( this ).closest( classSelector( C.SWITCH_CLASS ) ) ); } );
+
+        // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike
+        // the delegated handlers above) they must be (re)applied to whatever DOM is present: once
+        // now, and again after each antinode render for swapped-in content. Pickers are also torn
+        // down before a subtree is removed. AN is absent under the test harness, so guard it.
         enhanceDates( $( document.body ) );
         enhanceOptionalSections( $( document.body ) );
+        enhanceSwitches( $( document.body ) );
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
                 enhanceOptionalSections( $( document.body ) );
+                enhanceSwitches( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }
     } );
 
     return {
-        syncField              : syncField,
-        saveForm               : saveForm,
-        enhanceDates           : enhanceDates,
+        syncField               : syncField,
+        saveForm                : saveForm,
+        enhanceDates            : enhanceDates,
         enhanceOptionalSections : enhanceOptionalSections,
+        enhanceSwitches         : enhanceSwitches,
     };
 } )();

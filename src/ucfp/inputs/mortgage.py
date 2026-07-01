@@ -60,12 +60,19 @@ class MortgageFields( forms.Form ):
 
     def _validate_mortgage( self ):
         """When a mortgage is present, require its core terms, so a half-entered one is rejected
-        rather than silently dropped."""
+        rather than silently dropped. Used by forms that save on an explicit submit; a background-
+        saving form omits this and relies on `_mortgage_complete` to materialize only a whole loan."""
         if not self._has_mortgage():
             return
         for field, message in self._CORE_TERMS:
             if self.cleaned_data.get( field ) is None:
                 self.add_error( field, message )
+
+    def _mortgage_complete( self ) -> bool:
+        """Whether all core loan terms are present -- the condition for materializing a mortgage. A
+        half-entered mortgage does not materialize (keeping it out of `LoanProfile` with None
+        fields); a validating form additionally flags it via `_validate_mortgage`."""
+        return all( self.cleaned_data.get( field ) is not None for field, _ in self._CORE_TERMS )
 
     @staticmethod
     def _mortgage_initial( mortgage, prepayment ) -> dict:
@@ -85,8 +92,9 @@ class MortgageFields( forms.Form ):
         return initial
 
     def _mortgage_loan( self, *, handle, name, interest_class, property_handle ):
-        """The `LoanProfile` for a present mortgage, or None when there is none."""
-        if not self._has_mortgage():
+        """The `LoanProfile` for a complete mortgage, or None when there is none or it is only
+        partly entered."""
+        if not self._mortgage_complete():
             return None
         cleaned = self.cleaned_data
         return LoanProfile(
@@ -102,6 +110,6 @@ class MortgageFields( forms.Form ):
         """The extra-principal `LoanPrepayment` when a mortgage is present and an extra amount was
         given, else None."""
         extra = self.cleaned_data.get( 'mortgage_extra_principal' )
-        if not self._has_mortgage() or not extra:
+        if not self._mortgage_complete() or not extra:
             return None
         return LoanPrepayment( loan_handle = loan_handle, annual_amount = extra * 12 )

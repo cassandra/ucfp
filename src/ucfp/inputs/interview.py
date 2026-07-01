@@ -169,7 +169,9 @@ class HomeForm( MortgageFields ):
     _MORTGAGE_HANDLE  = 'mortgage'
     _RENT_HANDLE      = RENT_OBLIGATION_HANDLE
 
-    tenure         = forms.ChoiceField( label = 'The residence is', choices = _TENURE_CHOICES )
+    tenure         = forms.ChoiceField(
+        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, initial = _OWN,
+        widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
     home_value     = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
     purchase_price = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
     monthly_rent   = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
@@ -207,19 +209,6 @@ class HomeForm( MortgageFields ):
             return False
         return super()._has_mortgage()
 
-    def clean( self ):
-        cleaned = super().clean()
-        if cleaned.get( 'tenure' ) == self._OWN:
-            self._require( 'home_value', 'Enter the current home value.' )
-        elif cleaned.get( 'tenure' ) == self._RENT:
-            self._require( 'monthly_rent', 'Enter the monthly rent.' )
-        self._validate_mortgage()
-        return cleaned
-
-    def _require( self, field : str, message : str ):
-        if self.cleaned_data.get( field ) is None:
-            self.add_error( field, message )
-
     def apply( self, profile : Profile, plans : Plans ):
         updated_profile = replace(
             profile,
@@ -231,8 +220,10 @@ class HomeForm( MortgageFields ):
         return updated_profile, updated_plans
 
     def _residence( self ) -> list:
+        # Non-blocking: an owned home materializes only once its value is entered; until then it
+        # simply is not written (no hard error mid-entry), the forecast run being the real gate.
         cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._OWN:
+        if cleaned.get( 'tenure' ) != self._OWN or cleaned.get( 'home_value' ) is None:
             return []
         return [ AssetProfile(
             handle = self._RESIDENCE_HANDLE, name = 'Home',
@@ -248,7 +239,7 @@ class HomeForm( MortgageFields ):
 
     def _rent( self ) -> list:
         cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._RENT:
+        if cleaned.get( 'tenure' ) != self._RENT or cleaned.get( 'monthly_rent' ) is None:
             return []
         return [ CommittedObligation(
             handle = self._RENT_HANDLE, name = 'Rent', amount = cleaned[ 'monthly_rent' ],
@@ -421,7 +412,7 @@ SECTIONS = [
              inner_template = 'inputs/interview/sections/accounts.html' ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
-    Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
+    Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
     # Declared but not yet live (no form): the consolidated liabilities view -- mortgages (also
     # entered on their property) plus standalone debts. Shows in the stepper as an upcoming step;

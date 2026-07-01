@@ -251,9 +251,11 @@ def _current_profile_and_plans( organization ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ResidenceView( View ):
-    """`/inputs/interview/properties/residence/` -- the residence sub-form of the §3 Properties
-    pane. GET renders it; POST applies and saves just the residence (its asset, mortgage, and rent),
-    then re-renders the sub-pane with the saved values."""
+    """`/inputs/interview/properties/residence/` -- the residence sub-form of the Property pane. POST
+    auto-saves a single edit in the background: it persists just the residence (its asset, mortgage,
+    and rent) and replies silently, re-rendering the sub-pane only on a genuine field error. Own/rent
+    and mortgage visibility are client-side (`inputs.js`); validation is non-blocking, so an
+    incomplete residence simply does not materialize (the forecast run is the real gate)."""
 
     _TEMPLATE = 'inputs/interview/sections/residence.html'
 
@@ -265,16 +267,22 @@ class ResidenceView( View ):
         organization = request.organization
         profile, plans = _current_profile_and_plans( organization )
         form = HomeForm( request.POST, profile = profile, plans = plans )
-        if form.is_valid():
-            profile, plans = form.apply( profile, plans )
-            save_profile( organization, profile )
-            save_plans( latest_plans( organization ), plans )
-            form = HomeForm( profile = profile, plans = plans )
-        return self._response( request, form )
+        if not form.is_valid():
+            return self._swap( request, form )                 # surface a genuine field error
+        profile, plans = form.apply( profile, plans )
+        save_profile( organization, profile )
+        save_plans( latest_plans( organization ), plans )
+        return antinode.response()                             # silent background save
 
     def _response( self, request, form ):
         return antinode.response( main_content = render_to_string(
             self._TEMPLATE, { 'residence_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        # Replace the pane by id (not a data-async target) so the loader-suppressed background POST,
+        # which carries no target, still applies the re-render.
+        return antinode.response( replace_map = { 'residence': render_to_string(
+            self._TEMPLATE, { 'residence_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

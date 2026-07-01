@@ -65,6 +65,14 @@ class AppConst:
     OPTIONAL_BODY_CLASS   = 'js-optional-body'    # the optional fields
     OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # clears + collapses the body
 
+    # A switch: a control (radio group / select) whose value reveals one of several sibling case
+    # blocks and hides the rest (e.g. own vs rent showing different fields). All blocks render
+    # visible without JS -- the server reads only the fields the chosen case makes relevant. Driven
+    # by inputs.js.
+    SWITCH_CLASS         = 'js-switch'          # the wrapper (control + cases)
+    SWITCH_CONTROL_CLASS = 'js-switch-control'  # the control whose value selects the case
+    SWITCH_CASE_DATA_ATTR = 'switch-case'       # a case block's value(s), space-separated
+
     @classmethod
     def to_json_dict_str( cls ):
         """
