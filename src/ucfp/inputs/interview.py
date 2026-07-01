@@ -24,7 +24,8 @@ from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
     AssetProfile, CommittedObligation, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import Plans
-from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
+from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
+from ucfp.jurisdiction.labels import local_label
 
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
@@ -295,53 +296,76 @@ class PropertiesForm:
 
 
 class AccountsForm( forms.Form ):
-    """§4 -- the household's financial accounts at a high level: a savings (cash) total, an
-    investment (taxable) total, and a retirement total per subject. Retirement accounts are
-    individual by law, so each is owned by its subject; savings and investments are household.
-    Itemizing into individual accounts, other account types, and cost basis is a later drill-down.
+    """§4 -- the household's financial accounts, one optional total per engine asset class the
+    projection distinguishes. Nothing is required: a user enters a single total or itemizes across
+    classes, as detailed as they care to be. The household's taxable holdings are shared; retirement
+    is individual by law, so each subject has their own pre-tax and tax-free (Roth) totals.
 
-    `apply` replaces the financial-account assets in the Profile, leaving the home and any other
-    holdings intact, so revisiting re-states just these buckets.
+    Splitting a class into named individual accounts, and cost basis, are later drill-downs. `apply`
+    replaces the financial-account assets in the Profile, leaving the home and other holdings intact.
     """
 
-    _SAVINGS_HANDLE    = 'savings'
-    _INVESTMENT_HANDLE = 'investment'
-    _RETIREMENT_PREFIX = 'retirement-'
-
-    _ACCOUNT_CLASSES = frozenset( (
-        AssetClass.CASH, AssetClass.STOCKS, AssetClass.DIVIDEND_STOCKS, AssetClass.BONDS,
-        AssetClass.CDS, AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
-
-    savings    = forms.DecimalField( label = 'Savings (cash)', required = False, min_value = 0 )
-    investment = forms.DecimalField( label = 'Investments', required = False, min_value = 0 )
+    # The household's taxable holdings: (field name, stable handle, engine asset class).
+    _TAXABLE = (
+        ( 'cash', 'cash', AssetClass.CASH ),
+        ( 'stocks', 'stocks', AssetClass.STOCKS ),
+        ( 'dividend_stocks', 'dividend-stocks', AssetClass.DIVIDEND_STOCKS ),
+        ( 'bonds', 'bonds', AssetClass.BONDS ),
+        ( 'cds', 'cds', AssetClass.CDS ),
+    )
+    # Each subject's tax-advantaged retirement, per wrapper the projection distinguishes:
+    # (field prefix, handle prefix, engine asset class, jurisdiction concept for the local label).
+    _RETIREMENT = (
+        ( 'pretax', 'pretax-', AssetClass.PRETAX_RETIREMENT, JurisdictionConcept.PRETAX_RETIREMENT ),
+        ( 'roth', 'roth-', AssetClass.ROTH, JurisdictionConcept.TAX_FREE_RETIREMENT ),
+    )
+    _ACCOUNT_CLASSES = frozenset(
+        [ item[ 2 ] for item in _TAXABLE ] + [ item[ 2 ] for item in _RETIREMENT ] )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__(
             data, initial = self._initial( profile ) if profile is not None else None )
         self._subjects = profile.subjects if profile is not None else []
+        jurisdiction   = ( profile.jurisdiction_type if profile is not None
+                           else JurisdictionType.US_FEDERAL )
+        for name, _handle, asset_class in self._TAXABLE:
+            self.fields[ name ] = forms.DecimalField(
+                label = asset_class.label, required = False, min_value = 0 )
         for subject in self._subjects:
-            self.fields[ self._retirement_field( subject.handle ) ] = forms.DecimalField(
-                label = f'{subject.name} retirement savings', required = False, min_value = 0 )
+            for prefix, _handle_prefix, _asset_class, concept in self._RETIREMENT:
+                self.fields[ self._retire_field( prefix, subject.handle ) ] = forms.DecimalField(
+                    label = local_label( jurisdiction, concept ), required = False, min_value = 0 )
 
     @staticmethod
-    def _retirement_field( handle : str ) -> str:
-        return f'retirement_{handle}'
+    def _retire_field( prefix : str, handle : str ) -> str:
+        return f'{prefix}_{handle}'
 
-    @classmethod
-    def _retirement_handle( cls, handle : str ) -> str:
-        return f'{cls._RETIREMENT_PREFIX}{handle}'
+    @property
+    def taxable_fields( self ) -> list:
+        """The household taxable-account fields, in class order (for the template)."""
+        return [ self[ name ] for name, _handle, _cls in self._TAXABLE ]
+
+    @property
+    def retirement_groups( self ) -> list:
+        """The retirement fields grouped one block per subject (for the template)."""
+        return [ { 'subject' : subject.name,
+                   'fields'  : [ self[ self._retire_field( prefix, subject.handle ) ]
+                                 for prefix, _hp, _cls, _c in self._RETIREMENT ] }
+                 for subject in self._subjects ]
 
     @classmethod
     def _initial( cls, profile : Profile ) -> dict:
-        by_handle = { asset.handle: asset for asset in profile.assets }
+        by_handle = { asset.handle : asset for asset in profile.assets }
         initial   = dict()
-        if cls._SAVINGS_HANDLE in by_handle:
-            initial[ 'savings' ] = by_handle[ cls._SAVINGS_HANDLE ].opening_value
-        if cls._INVESTMENT_HANDLE in by_handle:
-            initial[ 'investment' ] = by_handle[ cls._INVESTMENT_HANDLE ].opening_value
-        for asset in profile.assets:
-            if asset.handle.startswith( cls._RETIREMENT_PREFIX ):
-                initial[ cls._retirement_field( asset.owner_handle ) ] = asset.opening_value
+        for name, handle, _asset_class in cls._TAXABLE:
+            if handle in by_handle:
+                initial[ name ] = by_handle[ handle ].opening_value
+        for subject in profile.subjects:
+            for prefix, handle_prefix, _asset_class, _concept in cls._RETIREMENT:
+                handle = f'{handle_prefix}{subject.handle}'
+                if handle in by_handle:
+                    initial[ cls._retire_field( prefix, subject.handle ) ] = \
+                        by_handle[ handle ].opening_value
         return initial
 
     def apply( self, profile : Profile, plans : Plans ):
@@ -350,25 +374,23 @@ class AccountsForm( forms.Form ):
         return replace( profile, assets = kept + self._accounts() ), plans
 
     def _accounts( self ) -> list:
-        accounts  = self._bucket( 'savings', self._SAVINGS_HANDLE, 'Savings', AssetClass.CASH )
-        accounts += self._bucket(
-            'investment', self._INVESTMENT_HANDLE, 'Investments', AssetClass.STOCKS )
-        for subject in self._subjects:
-            value = self.cleaned_data.get( self._retirement_field( subject.handle ) )
+        accounts = []
+        for name, handle, asset_class in self._TAXABLE:
+            value = self.cleaned_data.get( name )
             if value is not None:
                 accounts.append( AssetProfile(
-                    handle = self._retirement_handle( subject.handle ),
-                    name = f'{subject.name} Retirement',
-                    asset_class = AssetClass.PRETAX_RETIREMENT,
-                    opening_value = value, owner_handle = subject.handle ) )
+                    handle = handle, name = asset_class.label,
+                    asset_class = asset_class, opening_value = value ) )
+        for subject in self._subjects:
+            for prefix, handle_prefix, asset_class, _concept in self._RETIREMENT:
+                value = self.cleaned_data.get( self._retire_field( prefix, subject.handle ) )
+                if value is not None:
+                    accounts.append( AssetProfile(
+                        handle = f'{handle_prefix}{subject.handle}',
+                        name = f'{subject.name} {asset_class.label}',
+                        asset_class = asset_class, opening_value = value,
+                        owner_handle = subject.handle ) )
         return accounts
-
-    def _bucket( self, field : str, handle : str, name : str, asset_class ) -> list:
-        value = self.cleaned_data.get( field )
-        if value is None:
-            return []
-        return [ AssetProfile(
-            handle = handle, name = name, asset_class = asset_class, opening_value = value ) ]
 
 
 class IncomeSectionForm:
@@ -395,7 +417,8 @@ class IncomeSectionForm:
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm,
              inner_template = 'inputs/interview/sections/subjects.html' ),
-    Section( 'accounts'    , 'Accounts', form = AccountsForm ),
+    Section( 'accounts'    , 'Accounts', form = AccountsForm,
+             inner_template = 'inputs/interview/sections/accounts.html' ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
