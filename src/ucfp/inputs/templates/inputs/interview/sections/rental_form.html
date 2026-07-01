@@ -8,7 +8,8 @@ form is open.
   <form method="post" class="mt-2" data-async="#rentals-form"
         action="{% if handle %}{% url 'rental_edit' handle=handle %}{% else %}{% url 'rental_add' %}{% endif %}">
     {% csrf_token %}
-    {{ rental_form.as_p }}
+    {% for field in rental_form.primary_fields %}{% include 'inputs/interview/_field.html' with field=field %}{% endfor %}
+    {% include 'inputs/interview/_mortgage_block.html' with form=rental_form %}
     <button type="submit" class="btn btn-sm btn-primary">Save rental</button>
     <a class="btn btn-sm btn-link" data-async="#rentals-form"
        href="{% url 'rental_add' %}?collapse=1">Cancel</a>

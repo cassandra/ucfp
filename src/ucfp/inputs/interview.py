@@ -16,20 +16,20 @@ from typing import Optional
 
 from django import forms
 
-from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
-    AssetProfile, CommittedObligation, LoanProfile, Profile, SubjectProfile )
-from ucfp.inputs.plans.schemas import LoanPrepayment, Plans
+    AssetProfile, CommittedObligation, Profile, SubjectProfile )
+from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus
 
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
 from .income import IncomeTableForm
+from .mortgage import MortgageFields
 from .properties import rentals_context
 from .spending import SpendingForm
 from .widgets import IsoDateInput
@@ -122,7 +122,7 @@ class SubjectsForm( forms.Form ):
         return FilingStatus.MARRIED_JOINT if self._has_partner() else FilingStatus.SINGLE
 
 
-class HomeForm( forms.Form ):
+class HomeForm( MortgageFields ):
     """§3 -- the household residence. Owning captures the home's current value and purchase price
     (its cost basis) and, if there is a mortgage, the loan the way a person knows it -- when it
     started, the original amount, the rate, the term -- from which materialization derives the
@@ -146,21 +146,7 @@ class HomeForm( forms.Form ):
     tenure         = forms.ChoiceField( label = 'The residence is', choices = _TENURE_CHOICES )
     home_value     = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
     purchase_price = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
-    has_mortgage   = forms.BooleanField( label = 'There is a mortgage', required = False )
-    mortgage_origination = forms.DateField(
-        label = 'Loan start date', required = False,
-        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
-    mortgage_original_amount = forms.DecimalField(
-        label = 'Original loan amount', required = False, min_value = 0 )
-    mortgage_rate = forms.DecimalField(
-        label = 'Interest rate (%)', required = False, min_value = 0 )
-    mortgage_term_years = forms.IntegerField(
-        label = 'Loan term (years)', required = False, min_value = 1 )
-    mortgage_current_balance = forms.DecimalField(
-        label = 'Balance owed now (optional)', required = False, min_value = 0 )
-    mortgage_extra_principal = forms.DecimalField(
-        label = 'Extra principal per month (optional)', required = False, min_value = 0 )
-    monthly_rent = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
+    monthly_rent   = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile, plans ) if profile is not None else None
@@ -179,24 +165,7 @@ class HomeForm( forms.Form ):
             'purchase_price': residence.cost_basis,
         }
         mortgage = cls._find( profile.loans, cls._MORTGAGE_HANDLE )
-        initial.update( cls._mortgage_initial( mortgage, plans ) )
-        return initial
-
-    @classmethod
-    def _mortgage_initial( cls, mortgage, plans : Plans ) -> dict:
-        if mortgage is None:
-            return dict()
-        initial = {
-            'has_mortgage'             : True,
-            'mortgage_origination'     : mortgage.origination_date,
-            'mortgage_original_amount' : mortgage.original_amount,
-            'mortgage_rate'            : mortgage.interest_rate.fraction * 100,
-            'mortgage_term_years'      : mortgage.original_term.months() // 12,
-            'mortgage_current_balance' : mortgage.current_balance,
-        }
-        prepayment = cls._prepayment_for( plans )
-        if prepayment is not None:
-            initial[ 'mortgage_extra_principal' ] = prepayment.annual_amount / 12
+        initial.update( cls._mortgage_initial( mortgage, cls._prepayment_for( plans ) ) )
         return initial
 
     @classmethod
@@ -205,17 +174,20 @@ class HomeForm( forms.Form ):
         return next(
             ( item for item in prepayments if item.loan_handle == cls._MORTGAGE_HANDLE ), None )
 
+    def _has_mortgage( self ) -> bool:
+        """A residence carries a mortgage only when owned; otherwise defer to the base field-filled
+        inference."""
+        if self.cleaned_data.get( 'tenure' ) != self._OWN:
+            return False
+        return super()._has_mortgage()
+
     def clean( self ):
         cleaned = super().clean()
         if cleaned.get( 'tenure' ) == self._OWN:
             self._require( 'home_value', 'Enter the current home value.' )
-            if cleaned.get( 'has_mortgage' ):
-                self._require( 'mortgage_origination', 'Enter the loan start date.' )
-                self._require( 'mortgage_original_amount', 'Enter the original loan amount.' )
-                self._require( 'mortgage_rate', 'Enter the interest rate.' )
-                self._require( 'mortgage_term_years', 'Enter the loan term.' )
         elif cleaned.get( 'tenure' ) == self._RENT:
             self._require( 'monthly_rent', 'Enter the monthly rent.' )
+        self._validate_mortgage()
         return cleaned
 
     def _require( self, field : str, message : str ):
@@ -242,18 +214,11 @@ class HomeForm( forms.Form ):
             opening_value = cleaned[ 'home_value' ], cost_basis = cleaned.get( 'purchase_price' ) ) ]
 
     def _mortgage( self ) -> list:
-        cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._OWN or not cleaned.get( 'has_mortgage' ):
-            return []
-        return [ LoanProfile(
+        loan = self._mortgage_loan(
             handle = self._MORTGAGE_HANDLE, name = 'Mortgage',
-            origination_date = cleaned[ 'mortgage_origination' ],
-            original_amount = cleaned[ 'mortgage_original_amount' ],
-            interest_rate = Rate.percent( cleaned[ 'mortgage_rate' ] ),
-            original_term = Duration( cleaned[ 'mortgage_term_years' ], TimeUnit.YEAR ),
-            current_balance = cleaned.get( 'mortgage_current_balance' ),
             interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
-            property_handle = self._RESIDENCE_HANDLE ) ]
+            property_handle = self._RESIDENCE_HANDLE )
+        return [ loan ] if loan is not None else []
 
     def _rent( self ) -> list:
         cleaned = self.cleaned_data
@@ -264,11 +229,8 @@ class HomeForm( forms.Form ):
             cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ]
 
     def _prepayment( self ) -> list:
-        cleaned = self.cleaned_data
-        extra   = cleaned.get( 'mortgage_extra_principal' )
-        if cleaned.get( 'tenure' ) != self._OWN or not cleaned.get( 'has_mortgage' ) or not extra:
-            return []
-        return [ LoanPrepayment( loan_handle = self._MORTGAGE_HANDLE, annual_amount = extra * 12 ) ]
+        prepayment = self._mortgage_prepayment( self._MORTGAGE_HANDLE )
+        return [ prepayment ] if prepayment is not None else []
 
     def _merged_prepayments( self, existing : list ) -> list:
         kept = [ item for item in existing if item.loan_handle != self._MORTGAGE_HANDLE ]

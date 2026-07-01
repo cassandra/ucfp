@@ -7,7 +7,11 @@ values. Rendered outside the section's Continue form, so its form is not nested.
   <h3 class="h6">Your home</h3>
   <form method="post" action="{% url 'residence' %}" data-async="#residence">
     {% csrf_token %}
-    {{ residence_form.as_p }}
+    {% include 'inputs/interview/_field.html' with field=residence_form.tenure %}
+    {% include 'inputs/interview/_field.html' with field=residence_form.home_value %}
+    {% include 'inputs/interview/_field.html' with field=residence_form.purchase_price %}
+    {% include 'inputs/interview/_mortgage_block.html' with form=residence_form %}
+    {% include 'inputs/interview/_field.html' with field=residence_form.monthly_rent %}
     <button type="submit" class="btn btn-sm btn-primary">Save home</button>
   </form>
 </div>

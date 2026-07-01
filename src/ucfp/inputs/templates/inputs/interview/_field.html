@@ -1,0 +1,9 @@
+{% comment %}
+One bound form field as a labeled paragraph with its errors -- the field-by-field equivalent of a
+row of `form.as_p`, for templates that lay fields out by hand (e.g. around an optional block).
+Usage: {% include 'inputs/interview/_field.html' with field=form.some_field %}
+{% endcomment %}
+<p>
+  {{ field.label_tag }} {{ field }}
+  {% if field.errors %}<span class="text-danger small d-block">{{ field.errors|join:" " }}</span>{% endif %}
+</p>

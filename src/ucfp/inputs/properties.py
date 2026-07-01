@@ -11,13 +11,10 @@ from dataclasses import replace
 
 from django import forms
 
-from common.rate import Rate
-from common.recurrence import Duration, TimeUnit
-
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.profile.schemas import AssetProfile, LoanProfile, PropertyProfile
-from ucfp.inputs.plans.schemas import LoanPrepayment
+from ucfp.inputs.mortgage import MortgageFields
+from ucfp.inputs.profile.schemas import AssetProfile, PropertyProfile
 from ucfp.inputs.widgets import IsoDateInput
 
 
@@ -62,11 +59,11 @@ def delete_rental( profile, plans, property_handle : str ):
     return profile, plans
 
 
-class RentalForm( forms.Form ):
+class RentalForm( MortgageFields ):
     """One rental property as a unit: the holding (value, basis, acquisition, owner, type) and an
-    optional mortgage. `apply` writes the asset and the mortgage (plus any extra-principal
-    prepayment) under one property handle -- a new one when adding, the given one when editing --
-    leaving other properties intact. The gross rent is set in the Income section, not here."""
+    optional mortgage (the shared `MortgageFields`). `apply` writes the asset and the mortgage (plus
+    any extra-principal prepayment) under one property handle -- a new one when adding, the given one
+    when editing -- leaving other properties intact. The gross rent is set in the Income section."""
 
     name             = forms.CharField( label = 'Name', max_length = 100 )
     value            = forms.DecimalField( label = 'Current value', min_value = 0 )
@@ -77,20 +74,6 @@ class RentalForm( forms.Form ):
         label = 'Building value, excludes land (for depreciation)', min_value = 0 )
     property_type    = forms.ChoiceField(
         label = 'Type', choices = [ ( kind.name, kind.label ) for kind in RealPropertyType ] )
-    has_mortgage     = forms.BooleanField( label = 'There is a mortgage', required = False )
-    mortgage_origination     = forms.DateField(
-        label = 'Loan start date', required = False,
-        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
-    mortgage_original_amount = forms.DecimalField(
-        label = 'Original loan amount', required = False, min_value = 0 )
-    mortgage_rate            = forms.DecimalField(
-        label = 'Interest rate (%)', required = False, min_value = 0 )
-    mortgage_term_years      = forms.IntegerField(
-        label = 'Loan term (years)', required = False, min_value = 1 )
-    mortgage_current_balance = forms.DecimalField(
-        label = 'Balance owed now (optional)', required = False, min_value = 0 )
-    mortgage_extra_principal = forms.DecimalField(
-        label = 'Extra principal per month (optional)', required = False, min_value = 0 )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__(
@@ -121,39 +104,28 @@ class RentalForm( forms.Form ):
             initial[ 'acquisition_date' ] = asset.property.acquisition_date
             initial[ 'building_basis' ]   = asset.property.depreciable_basis
             initial[ 'property_type' ]    = asset.property.property_type.name
-        initial.update( cls._mortgage_initial( profile, plans, handle ) )
+        initial.update( cls._mortgage_initial( *cls._saved_mortgage( profile, plans, handle ) ) )
         return initial
 
-    @classmethod
-    def _mortgage_initial( cls, profile, plans, handle : str ) -> dict:
-        mortgage = next( ( loan for loan in profile.loans
-                           if loan.handle == _mortgage_handle( handle ) ), None )
-        if mortgage is None:
-            return dict()
-        initial = {
-            'has_mortgage'             : True,
-            'mortgage_origination'     : mortgage.origination_date,
-            'mortgage_original_amount' : mortgage.original_amount,
-            'mortgage_rate'            : mortgage.interest_rate.fraction * 100,
-            'mortgage_term_years'      : mortgage.original_term.months() // 12,
-            'mortgage_current_balance' : mortgage.current_balance,
-        }
+    @staticmethod
+    def _saved_mortgage( profile, plans, handle : str ):
+        """This property's saved mortgage loan and its extra-principal prepayment (either may be
+        None), located by the property's mortgage handle."""
+        mortgage_handle = _mortgage_handle( handle )
+        mortgage   = next( ( loan for loan in profile.loans
+                             if loan.handle == mortgage_handle ), None )
         prepayment = next( ( p for p in plans.prepayments
-                             if p.loan_handle == _mortgage_handle( handle ) ), None )
-        if prepayment is not None:
-            initial[ 'mortgage_extra_principal' ] = prepayment.annual_amount / 12
-        return initial
+                             if p.loan_handle == mortgage_handle ), None )
+        return mortgage, prepayment
+
+    @property
+    def primary_fields( self ):
+        """The holding fields, rendered ahead of the optional mortgage block."""
+        return [ self[ name ] for name in self.fields if name not in self.MORTGAGE_FIELD_NAMES ]
 
     def clean( self ):
         cleaned = super().clean()
-        if cleaned.get( 'has_mortgage' ):
-            for field, message in (
-                    ( 'mortgage_origination'    , 'Enter the loan start date.' ),
-                    ( 'mortgage_original_amount', 'Enter the original loan amount.' ),
-                    ( 'mortgage_rate'           , 'Enter the interest rate.' ),
-                    ( 'mortgage_term_years'     , 'Enter the loan term.' ) ):
-                if cleaned.get( field ) is None:
-                    self.add_error( field, message )
+        self._validate_mortgage()
         return cleaned
 
     def apply( self, profile, plans ):
@@ -182,21 +154,12 @@ class RentalForm( forms.Form ):
                 property_type = RealPropertyType[ cleaned[ 'property_type' ] ] ) )
 
     def _mortgage( self, property_handle : str ) -> list:
-        cleaned = self.cleaned_data
-        if not cleaned.get( 'has_mortgage' ):
-            return []
-        return [ LoanProfile(
-            handle = _mortgage_handle( property_handle ), name = f"{cleaned[ 'name' ]} Mortgage",
-            origination_date = cleaned[ 'mortgage_origination' ],
-            original_amount = cleaned[ 'mortgage_original_amount' ],
-            interest_rate = Rate.percent( cleaned[ 'mortgage_rate' ] ),
-            original_term = Duration( cleaned[ 'mortgage_term_years' ], TimeUnit.YEAR ),
-            current_balance = cleaned.get( 'mortgage_current_balance' ),
-            interest_class = ExpenseTaxClass.RENTAL_EXPENSE, property_handle = property_handle ) ]
+        loan = self._mortgage_loan(
+            handle = _mortgage_handle( property_handle ),
+            name = f"{self.cleaned_data[ 'name' ]} Mortgage",
+            interest_class = ExpenseTaxClass.RENTAL_EXPENSE, property_handle = property_handle )
+        return [ loan ] if loan is not None else []
 
     def _prepayment( self, mortgage_handle : str ) -> list:
-        cleaned = self.cleaned_data
-        extra   = cleaned.get( 'mortgage_extra_principal' )
-        if not cleaned.get( 'has_mortgage' ) or not extra:
-            return []
-        return [ LoanPrepayment( loan_handle = mortgage_handle, annual_amount = extra * 12 ) ]
+        prepayment = self._mortgage_prepayment( mortgage_handle )
+        return [ prepayment ] if prepayment is not None else []
