@@ -48,10 +48,10 @@ from ucfp.forecast.parameters import (
     WindowedAmount,
 )
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
 D = Decimal
-_TAX = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
+_TAX = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 _START = date( 2026, 1, 1 )
 _END = date( 2045, 12, 31 )
 

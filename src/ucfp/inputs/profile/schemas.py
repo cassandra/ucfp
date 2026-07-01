@@ -25,7 +25,7 @@ from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import WindowedAmount
-from ucfp.jurisdiction.enums import FilingStatus
+from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
 
 
 # Handles are stable string identities other sections reference; never display names. The subject
@@ -173,6 +173,9 @@ class Profile:
     # People
     subjects: list[ SubjectProfile ] = field( default_factory = list )
     filing_status: Optional[ FilingStatus ] = None
+    # The household's tax jurisdiction -- a fact these facts are all expressed under (account tax
+    # classes, entitlements, filing status). US federal is the only one modeled today.
+    jurisdiction_type: JurisdictionType = JurisdictionType.US_FEDERAL
     # What you own
     assets: list[ AssetProfile ] = field( default_factory = list )
     # What you owe

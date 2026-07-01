@@ -25,7 +25,7 @@ from ucfp.forecast.parameters import (
     Subject,
 )
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
 
 def _parameters( end_date, events = () ):
@@ -33,7 +33,7 @@ def _parameters( end_date, events = () ):
         start_date    = date( 2026, 1, 1 ),
         end_date      = end_date,
         filing_status = FilingStatus.MARRIED_JOINT,
-        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
         subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
         assets        = [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],
@@ -137,7 +137,7 @@ class NonAlignedTermTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = end_date,
             filing_status = FilingStatus.MARRIED_JOINT,
-            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [ AssetParameters(
                 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ) ],

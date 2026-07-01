@@ -23,8 +23,8 @@ from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.assumptions.schemas import Assumptions
-from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
+from ucfp.jurisdiction.law import TaxProjection
 
 
 class RunAndCaptureTest( TestCase ):
@@ -48,8 +48,7 @@ class RunAndCaptureTest( TestCase ):
     def _assumptions( self ) -> Assumptions:
         return Assumptions(
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            statute = StatuteProfile(
-                jurisdiction_type = JurisdictionType.US_FEDERAL,
+            tax_projection = TaxProjection(
                 forecast_type = StatuteForecastType.CURRENT_LAW ) )
 
     def test_runs_persists_and_reloads_a_coherent_package( self ):

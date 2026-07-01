@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from common.rate import Rate
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile, Statute, StatuteProjection
+from ucfp.jurisdiction.law import StatuteProfile, Statute, StatuteProjection, TaxProjection
 from ucfp.jurisdiction.us.parameters import BASE_YEAR, federal_2025
 
 _SINGLE = FilingStatus.SINGLE
@@ -75,7 +75,8 @@ class StatuteProjectionTests( unittest.TestCase ):
 
     def _engine( self, forecast_type, year, cola = None ):
         projection = StatuteProjection( cola_rate = cola ) if cola is not None else None
-        profile = StatuteProfile( JurisdictionType.US_FEDERAL, forecast_type, projection = projection )
+        profile = StatuteProfile(
+            JurisdictionType.US_FEDERAL, TaxProjection( forecast_type, projection = projection ) )
         return Statute( profile ).engine_for( year )
 
     def test_current_law_is_static_across_years( self ):

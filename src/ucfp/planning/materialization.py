@@ -32,6 +32,7 @@ from ucfp.forecast.parameters import (
 from ucfp.parameter_sets import repository as parameter_sets
 from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.jurisdiction.government_pension import GovernmentPension
+from ucfp.jurisdiction.law import StatuteProfile
 
 from ucfp.inputs.profile.schemas import AssetProfile, LoanProfile, Profile
 from ucfp.inputs.plans.schemas import RetirementTiming, Plans
@@ -58,7 +59,7 @@ def materialize(
     if profile.filing_status is None:
         raise ValueError( 'A profile must set its filing status before a forecast can run.' )
     assert_compatible( profile, plans )
-    statute = _statute( assumptions )
+    statute = _statute( profile, assumptions )
     subjects = _subjects( profile )
     subjects_by_handle = { str( subject.handle ): subject
                            for subject in subjects if subject.handle is not None }
@@ -329,7 +330,11 @@ def _economic_outlook( assumptions : Assumptions ) -> EconomicOutlook:
     return EconomicOutlook.constant( assumptions.economics )
 
 
-def _statute( assumptions : Assumptions ):
-    if assumptions.statute is None:
-        raise ValueError( 'Assumptions must carry a tax forecast (from the default library).' )
-    return assumptions.statute
+def _statute( profile : Profile, assumptions : Assumptions ):
+    """Compose the engine's statute: the jurisdiction (a Profile fact) with the tax projection (an
+    Assumptions forward-view). Kept apart in the input aggregates, joined only here."""
+    if assumptions.tax_projection is None:
+        raise ValueError( 'Assumptions must carry a tax projection (from the default library).' )
+    return StatuteProfile(
+        jurisdiction_type = profile.jurisdiction_type,
+        tax_projection = assumptions.tax_projection )

@@ -18,8 +18,8 @@ from ucfp.planning.materialization import ForecastFrame, materialize
 from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.inputs.plans.schemas import LifestylePlan, LifestyleSegment, Plans
 from ucfp.inputs.assumptions.schemas import Assumptions
-from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
+from ucfp.jurisdiction.law import TaxProjection
 
 _ECON     = ParameterSetKind.ECONOMIC_OUTLOOK
 _EXPECTED = EconomicOutlookVariant.EXPECTED.label
@@ -109,8 +109,7 @@ class MaterializeFromLibraryTest( TestCase ):
         plans = Plans()
         assumptions = Assumptions(   # the economic-factors copy, seeded here
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            statute = StatuteProfile(
-                jurisdiction_type = JurisdictionType.US_FEDERAL,
+            tax_projection = TaxProjection(
                 forecast_type = StatuteForecastType.CURRENT_LAW ) )
         params = materialize(
             profile = profile, plans = plans, assumptions = assumptions,
@@ -137,8 +136,7 @@ class MaterializeFromLibraryTest( TestCase ):
                     LifestyleSegment( start = date( 2030, 1, 1 ), level = LifestyleLevel.HIGH ) ] ) )
         assumptions = Assumptions(
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            statute = StatuteProfile(
-                jurisdiction_type = JurisdictionType.US_FEDERAL,
+            tax_projection = TaxProjection(
                 forecast_type = StatuteForecastType.CURRENT_LAW ) )
         params = materialize(
             profile = profile, plans = plans, assumptions = assumptions,

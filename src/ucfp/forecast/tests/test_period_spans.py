@@ -11,9 +11,9 @@ from datetime import date, timedelta
 from common.recurrence import Duration, TimeUnit
 from ucfp.forecast.parameters import ForecastParameters
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
-_TAX = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
+_TAX = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 _YEARLY    = Duration( 1, TimeUnit.YEAR )
 _QUARTERLY = Duration( 3, TimeUnit.MONTH )
 _MONTHLY   = Duration( 1, TimeUnit.MONTH )
