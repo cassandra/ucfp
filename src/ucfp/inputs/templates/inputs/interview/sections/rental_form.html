@@ -1,18 +1,18 @@
 {% comment %}
-The add/edit form for one rental (id=rentals-form). Save posts to the add or edit view, which writes
-the rental as a unit, then clears this area and refreshes the list; Cancel clears it. Empty when no
-form is open.
+The add/edit form for one rental (id=rentals-form). It auto-saves in the background (js-autosave) and
+always edits a known handle (add mints one), so a new rental has a stable identity from the first
+keystroke. Non-blocking: the rental appears in the list once its fields are complete. "Done" closes
+the form; it is already saved. Empty when no form is open.
 {% endcomment %}
 <div id="rentals-form">
   {% if rental_form %}
-  <form method="post" class="mt-2" data-async="#rentals-form"
-        action="{% if handle %}{% url 'rental_edit' handle=handle %}{% else %}{% url 'rental_add' %}{% endif %}">
+  <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }}"
+        action="{% url 'rental_edit' handle=handle %}">
     {% csrf_token %}
     {% for field in rental_form.primary_fields %}{% include 'inputs/interview/_field.html' with field=field %}{% endfor %}
     {% include 'inputs/interview/_mortgage_block.html' with form=rental_form %}
-    <button type="submit" class="btn btn-sm btn-primary">Save rental</button>
-    <a class="btn btn-sm btn-link" data-async="#rentals-form"
-       href="{% url 'rental_add' %}?collapse=1">Cancel</a>
+    <a class="btn btn-sm btn-link px-0" data-async="#rentals-form"
+       href="{% url 'rental_add' %}?collapse=1">Done</a>
   </form>
   {% endif %}
 </div>

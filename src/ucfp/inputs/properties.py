@@ -65,15 +65,22 @@ class RentalForm( MortgageFields ):
     any extra-principal prepayment) under one property handle -- a new one when adding, the given one
     when editing -- leaving other properties intact. The gross rent is set in the Income section."""
 
-    name             = forms.CharField( label = 'Name', max_length = 100 )
-    value            = forms.DecimalField( label = 'Current value', min_value = 0 )
-    purchase_price   = forms.DecimalField( label = 'Purchase price', min_value = 0 )
+    # Every field is optional: the form background-saves and a rental materializes only once all of
+    # these are set (see `_rental_complete`), so a just-opened blank that is abandoned never appears.
+    _ASSET_FIELDS = ( 'name', 'value', 'purchase_price', 'acquisition_date',
+                      'building_basis', 'property_type', 'owner' )
+
+    name             = forms.CharField( label = 'Name', max_length = 100, required = False )
+    value            = forms.DecimalField( label = 'Current value', min_value = 0, required = False )
+    purchase_price   = forms.DecimalField( label = 'Purchase price', min_value = 0, required = False )
     acquisition_date = forms.DateField(
-        label = 'Purchase date', widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
+        label = 'Purchase date', required = False,
+        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
     building_basis   = forms.DecimalField(
-        label = 'Building value, excludes land (for depreciation)', min_value = 0 )
+        label = 'Building value, excludes land (for depreciation)', min_value = 0, required = False )
     property_type    = forms.ChoiceField(
-        label = 'Type', choices = [ ( kind.name, kind.label ) for kind in RealPropertyType ] )
+        label = 'Type', required = False,
+        choices = [ ( '', 'Type...' ) ] + [ ( k.name, k.label ) for k in RealPropertyType ] )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__(
@@ -82,7 +89,7 @@ class RentalForm( MortgageFields ):
         self._plans = plans
         self._handle   = handle
         self.fields[ 'owner' ] = forms.ChoiceField(
-            label = 'Owner', choices = self._owner_choices( profile ) )
+            label = 'Owner', required = False, choices = self._owner_choices( profile ) )
 
     @staticmethod
     def _owner_choices( profile ) -> list:
@@ -123,19 +130,28 @@ class RentalForm( MortgageFields ):
         """The holding fields, rendered ahead of the optional mortgage block."""
         return [ self[ name ] for name in self.fields if name not in self.MORTGAGE_FIELD_NAMES ]
 
-    def clean( self ):
-        cleaned = super().clean()
-        self._validate_mortgage()
-        return cleaned
+    def _rental_complete( self ) -> bool:
+        """All fields the rental asset needs are present -- the condition for materializing it. The
+        mortgage stays non-blocking on its own (`_mortgage_complete`); there is no hard validation,
+        so a partially-entered rental is simply not written rather than fighting a background save."""
+        cleaned = self.cleaned_data
+        return all( cleaned.get( field ) not in ( None, '' ) for field in self._ASSET_FIELDS )
 
     def apply( self, profile, plans ):
         handle   = self._handle or _minted_rental_handle( profile )
         mortgage = _mortgage_handle( handle )
-        assets   = self._without( profile.assets, 'handle', handle ) + [ self._asset( handle ) ]
-        loans    = self._without( profile.loans, 'handle', mortgage ) + self._mortgage( handle )
-        prepays  = self._without( plans.prepayments, 'loan_handle', mortgage )
+        # Non-blocking: an incomplete rental (and so its mortgage) materializes nothing, and editing
+        # an existing one to incomplete removes it; a complete rental writes its asset, mortgage, and
+        # any extra-principal prepayment as a unit.
+        complete = self._rental_complete()
+        assets   = self._without( profile.assets, 'handle', handle ) + (
+            [ self._asset( handle ) ] if complete else [] )
+        loans    = self._without( profile.loans, 'handle', mortgage ) + (
+            self._mortgage( handle ) if complete else [] )
+        prepays  = self._without( plans.prepayments, 'loan_handle', mortgage ) + (
+            self._prepayment( mortgage ) if complete else [] )
         profile  = replace( profile, assets = assets, loans = loans )
-        plans = replace( plans, prepayments = prepays + self._prepayment( mortgage ) )
+        plans = replace( plans, prepayments = prepays )
         return profile, plans
 
     @staticmethod

@@ -33,7 +33,8 @@ from .interview import (
     flow_title, next_flow_entry, next_section_after, section_for )
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
-from .properties import PossessionsForm, RentalForm, delete_rental, rentals_context
+from .properties import (
+    PossessionsForm, RentalForm, _minted_rental_handle, delete_rental, rentals_context )
 from .spending import GroupSpendingForm, group_for_key
 
 _HUB_TEMPLATE = 'inputs/hub.html'
@@ -372,9 +373,11 @@ class IncomeTableView( View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class RentalFormView( View ):
     """`/inputs/interview/properties/rentals/add/` and `.../<handle>/` -- the add/edit form for one
-    rental in the §3 Properties pane. GET opens the form (blank to add, prefilled to edit, empty on
-    cancel); POST validates and writes the rental as a unit, then refreshes the list and clears the
-    form area."""
+    rental in the Property pane. Add and edit converge: GET-add mints a fresh handle and opens the
+    editor for it, so the form always edits a known handle and a new rental has a stable identity from
+    the first keystroke. POST auto-saves in the background -- non-blocking, so an incomplete (or never-
+    filled) rental writes nothing -- and just refreshes the list; the open form is left untouched
+    except to surface a genuine field error."""
 
     _FORM_TEMPLATE = 'inputs/interview/sections/rental_form.html'
     _LIST_TEMPLATE = 'inputs/interview/sections/rentals_list.html'
@@ -383,6 +386,8 @@ class RentalFormView( View ):
         profile, plans = _current_profile_and_plans( request.organization )
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = self._form( request, None, None ) )
+        if handle is None:                             # add: mint a fresh handle, open its editor
+            handle = _minted_rental_handle( profile )
         form = RentalForm( profile = profile, plans = plans, handle = handle )
         return antinode.response( main_content = self._form( request, handle, form ) )
 
@@ -391,18 +396,22 @@ class RentalFormView( View ):
         profile, plans = _current_profile_and_plans( organization )
         form = RentalForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
-            return antinode.response( main_content = self._form( request, handle, form ) )
+            return self._form_swap( request, handle, form )    # surface a genuine field error
         profile, plans = form.apply( profile, plans )
         save_profile( organization, profile )
         save_plans( latest_plans( organization ), plans )
-        return antinode.response(
-            main_content = self._form( request, None, None ),
-            replace_map  = { 'rentals-list': render_to_string(
-                self._LIST_TEMPLATE, { 'rentals': rentals_context( profile ) }, request = request ) } )
+        # Leave the open form alone; just refresh the list by id, where a rental appears, updates its
+        # name/value, or -- if edited to incomplete -- drops out.
+        return antinode.response( replace_map = { 'rentals-list': render_to_string(
+            self._LIST_TEMPLATE, { 'rentals': rentals_context( profile ) }, request = request ) } )
 
     def _form( self, request, handle, form ):
         return render_to_string(
             self._FORM_TEMPLATE, { 'rental_form': form, 'handle': handle }, request = request )
+
+    def _form_swap( self, request, handle, form ):
+        return antinode.response(
+            replace_map = { 'rentals-form': self._form( request, handle, form ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
