@@ -24,7 +24,7 @@ from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
     AssetProfile, CommittedObligation, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import Plans
-from ucfp.jurisdiction.enums import FilingStatus
+from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
 
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
@@ -56,10 +56,11 @@ class Section:
 
 
 class SubjectsForm( forms.Form ):
-    """§1 -- who the plan is for. Collects one subject, optionally a partner, and *infers* the
-    filing status (joint when there is a partner) rather than asking it; the inferred status stays
-    editable later in the edit views. `apply` writes just this section onto the Profile, leaving
-    every other section's facts intact.
+    """§1 -- who the plan is for. Collects one subject and optionally a partner, and *infers* the
+    filing status (joint when there is a partner) rather than asking it -- the engine supports only
+    single vs joint, both fixed by whether a partner exists, so there is nothing to choose. The tax
+    basis (jurisdiction and that inferred filing status) is shown read-only beside the inputs.
+    `apply` writes just this section onto the Profile, leaving every other section's facts intact.
     """
 
     subject_name      = forms.CharField( label = 'Name', max_length = 100 )
@@ -73,6 +74,24 @@ class SubjectsForm( forms.Form ):
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile ) if profile is not None else None
         super().__init__( data, initial = initial )
+        self._profile = profile
+
+    # --- Tax-basis pane (read-only) ----------------------------------------
+
+    @property
+    def jurisdiction_label( self ) -> str:
+        """The household's tax jurisdiction, shown read-only (US federal is the only one today)."""
+        jurisdiction = self._profile.jurisdiction_type if self._profile else JurisdictionType.US_FEDERAL
+        return jurisdiction.label
+
+    @property
+    def filing_status_label( self ) -> str:
+        """The filing status the engine will use, derived from the saved household and shown
+        read-only. It reflects saved facts, so it updates on save rather than as the partner is
+        edited -- there is nothing to choose while single vs joint is fixed by whether a partner
+        exists."""
+        saved_has_partner = self._profile is not None and len( self._profile.subjects ) > 1
+        return self._filing_status_for( saved_has_partner ).label
 
     @staticmethod
     def _initial( profile : Profile ) -> dict:
@@ -119,7 +138,13 @@ class SubjectsForm( forms.Form ):
         return subjects
 
     def _filing_status( self ) -> FilingStatus:
-        return FilingStatus.MARRIED_JOINT if self._has_partner() else FilingStatus.SINGLE
+        return self._filing_status_for( self._has_partner() )
+
+    @staticmethod
+    def _filing_status_for( has_partner : bool ) -> FilingStatus:
+        """Single vs joint from partner presence -- the one mapping shared by `apply` (from submitted
+        data) and the read-only pane (from saved facts)."""
+        return FilingStatus.MARRIED_JOINT if has_partner else FilingStatus.SINGLE
 
 
 class HomeForm( MortgageFields ):
