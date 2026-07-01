@@ -29,6 +29,33 @@ class AppConst:
     Add shared constants below as features need them.
     """
 
+    # --- Inputs section (static/js/inputs.js) -----------------------------
+    # The income table's date/age convenience columns and its background
+    # auto-save. The date is canonical; each age field is kept in lockstep
+    # client-side. Autosave is keyed off a form marker class, not an id, so any
+    # inputs form opting in gets silent background saving.
+
+    AUTOSAVE_CLASS = 'js-autosave'  # marks a <form> whose edits auto-save
+    DATE_FIELD_CLASS = 'js-date'    # a date input: enhanced with a date picker
+    AGE_FIELD_CLASS  = 'js-age'     # the age input beside a date in a date/age pair
+
+    # A date input's planning context, which tunes where its picker opens and
+    # how far it ranges (dates here are routinely decades from today, so the
+    # picker must not be anchored to the current month). Read by inputs.js.
+    DATE_CONTEXT_DATA_ATTR = 'date-context'
+    DATE_CONTEXT_FUTURE    = 'future'     # opens today-forward (the common case)
+    DATE_CONTEXT_PAST      = 'past'       # no future dates; fast year navigation
+    DATE_CONTEXT_BIRTHDATE = 'birthdate'  # a past date bounded at today
+
+    # Data-attribute tokens (jQuery .data() keys; prepend ``data-`` for raw
+    # HTML). BIRTHDATES holds a handle->ISO-date map on the table container;
+    # the rest wire one date/age field to its partner and to a birthdate.
+    BIRTHDATES_DATA_ATTR    = 'birthdates'
+    BIRTHDATE_DATA_ATTR     = 'birthdate'
+    SUBJECT_FIELD_DATA_ATTR = 'subject-field'
+    AGE_FIELD_DATA_ATTR     = 'age-field'
+    DATE_FIELD_DATA_ATTR    = 'date-field'
+
     @classmethod
     def to_json_dict_str( cls ):
         """

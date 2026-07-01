@@ -20,6 +20,7 @@ from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
     AssetProfile, CommittedObligation, LoanProfile, Profile, SubjectProfile )
@@ -31,6 +32,7 @@ from .external_factors import ExternalFactorsForm
 from .income import IncomeTableForm
 from .properties import rentals_context
 from .spending import SpendingForm
+from .widgets import IsoDateInput
 
 
 class Aggregate( Enum ):
@@ -61,11 +63,14 @@ class SubjectsForm( forms.Form ):
     """
 
     subject_name      = forms.CharField( label = 'Name', max_length = 100 )
-    subject_birthdate = forms.DateField( label = 'Birthdate' )
+    subject_birthdate = forms.DateField(
+        label = 'Birthdate', widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
     has_partner       = forms.BooleanField(
         label = 'This plan includes a partner', required = False )
     partner_name      = forms.CharField( label = 'Partner name', max_length = 100, required = False )
-    partner_birthdate = forms.DateField( label = 'Partner birthdate', required = False )
+    partner_birthdate = forms.DateField(
+        label = 'Partner birthdate', required = False,
+        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile ) if profile is not None else None
@@ -139,7 +144,9 @@ class HomeForm( forms.Form ):
     home_value     = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
     purchase_price = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
     has_mortgage   = forms.BooleanField( label = 'There is a mortgage', required = False )
-    mortgage_origination = forms.DateField( label = 'Loan start date', required = False )
+    mortgage_origination = forms.DateField(
+        label = 'Loan start date', required = False,
+        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
     mortgage_original_amount = forms.DecimalField(
         label = 'Original loan amount', required = False, min_value = 0 )
     mortgage_rate = forms.DecimalField(

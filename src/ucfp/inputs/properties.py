@@ -15,8 +15,10 @@ from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
+from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.schemas import AssetProfile, LoanProfile, PropertyProfile
 from ucfp.inputs.plans.schemas import LoanPrepayment
+from ucfp.inputs.widgets import IsoDateInput
 
 
 _RENTAL_HANDLE_PREFIX = 'rental-'
@@ -69,13 +71,16 @@ class RentalForm( forms.Form ):
     name             = forms.CharField( label = 'Name', max_length = 100 )
     value            = forms.DecimalField( label = 'Current value', min_value = 0 )
     purchase_price   = forms.DecimalField( label = 'Purchase price', min_value = 0 )
-    acquisition_date = forms.DateField( label = 'Purchase date' )
+    acquisition_date = forms.DateField(
+        label = 'Purchase date', widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
     building_basis   = forms.DecimalField(
         label = 'Building value, excludes land (for depreciation)', min_value = 0 )
     property_type    = forms.ChoiceField(
         label = 'Type', choices = [ ( kind.name, kind.label ) for kind in RealPropertyType ] )
     has_mortgage     = forms.BooleanField( label = 'There is a mortgage', required = False )
-    mortgage_origination     = forms.DateField( label = 'Loan start date', required = False )
+    mortgage_origination     = forms.DateField(
+        label = 'Loan start date', required = False,
+        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
     mortgage_original_amount = forms.DecimalField(
         label = 'Original loan amount', required = False, min_value = 0 )
     mortgage_rate            = forms.DecimalField(

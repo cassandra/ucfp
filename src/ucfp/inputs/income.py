@@ -4,7 +4,7 @@ Income is a list of windowed flows -- the income twin of the expense side (see `
 module presents them as one editable table: a row per general income line (salary, consulting, ...),
 a row per rental property's rent, and two entitlement rows per subject (Social Security, pension).
 Each row carries an `amount` over a `from`/`until` window. The **date is canonical**; the `age`
-column beside it is a convenience that a small client-side helper (`income_table.js`) keeps in sync
+column beside it is a convenience that a small client-side helper (`inputs.js`) keeps in sync
 with the date both ways. The server therefore just reads the date, with one fallback for a JS-less
 client: a window endpoint with no date but a filled age is resolved from the subject's birthdate
 (`_endpoint`).
@@ -33,9 +33,11 @@ from common.date_window import DateWindow
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from ucfp.environment.constants import AppConst
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.inputs.profile.schemas import GovernmentPensionEntitlement, IncomeFlow, PensionEntitlement
 from ucfp.inputs.plans.schemas import RetirementTiming
+from ucfp.inputs.widgets import IsoDateInput
 
 _RENTAL_INTERVAL = Duration( 1, TimeUnit.MONTH )   # rent is a monthly item; general income a stream
 
@@ -113,7 +115,7 @@ class IncomeTableForm( forms.Form ):
         self.fields[ self._key( 's', m, f'{kind}amt' ) ] = forms.DecimalField(
             required = False, min_value = 0, initial = amount_initial )
         self.fields[ self._key( 's', m, f'{kind}_from' ) ] = forms.DateField(
-            required = False, initial = date_initial )
+            required = False, initial = date_initial, widget = IsoDateInput() )
         self.fields[ self._key( 's', m, f'{kind}_from_age' ) ] = forms.IntegerField(
             required = False, min_value = 0, max_value = 120,
             initial = self._derived_age( date_initial, birthdate ) )
@@ -129,9 +131,9 @@ class IncomeTableForm( forms.Form ):
         self.fields[ self._key( prefix, index, 'amount' ) ] = forms.DecimalField(
             required = False, min_value = 0, initial = row.amount if row is not None else None )
         self.fields[ self._key( prefix, index, 'from' ) ]  = forms.DateField(
-            required = False, initial = start_on )
+            required = False, initial = start_on, widget = IsoDateInput() )
         self.fields[ self._key( prefix, index, 'until' ) ] = forms.DateField(
-            required = False, initial = end_on )
+            required = False, initial = end_on, widget = IsoDateInput() )
         if with_age:
             self.fields[ self._key( prefix, index, 'from_age' ) ] = forms.IntegerField(
                 required = False, min_value = 0, max_value = 120,
@@ -148,18 +150,21 @@ class IncomeTableForm( forms.Form ):
                             self._key( prefix, index, 'until_age' ), subject_field = subject_field )
 
     def _link_age( self, date_key : str, age_key : str, *, subject_field = None, birthdate = None ):
-        """Tag a date/age pair so `income_table.js` can keep them in sync: each carries a class and a
+        """Tag a date/age pair so `inputs.js` can keep them in sync: each carries a class and a
         pointer to its partner's element id, plus how to find the subject's birthdate -- either a
-        live `subject_field` (general rows) or a fixed `birthdate` (entitlement rows)."""
+        live `subject_field` (general rows) or a fixed `birthdate` (entitlement rows). The shared
+        hooks come from `AppConst` so the client and this markup cannot drift."""
         shared = {}
         if subject_field is not None:
-            shared[ 'data-subject-field' ] = f'id_{subject_field}'
+            shared[ f'data-{AppConst.SUBJECT_FIELD_DATA_ATTR}' ] = f'id_{subject_field}'
         if birthdate is not None:
-            shared[ 'data-birthdate' ] = birthdate.isoformat()
+            shared[ f'data-{AppConst.BIRTHDATE_DATA_ATTR}' ] = birthdate.isoformat()
         self.fields[ date_key ].widget.attrs.update(
-            { 'class' : 'js-date', 'data-age-field' : f'id_{age_key}', **shared } )
+            { 'class' : AppConst.DATE_FIELD_CLASS,
+              f'data-{AppConst.AGE_FIELD_DATA_ATTR}' : f'id_{age_key}', **shared } )
         self.fields[ age_key ].widget.attrs.update(
-            { 'class' : 'js-age', 'data-date-field' : f'id_{date_key}', **shared } )
+            { 'class' : AppConst.AGE_FIELD_CLASS,
+              f'data-{AppConst.DATE_FIELD_DATA_ATTR}' : f'id_{date_key}', **shared } )
 
     def _birthdate( self, handle : str ):
         subject = next( ( s for s in self._subjects if s.handle == handle ), None )

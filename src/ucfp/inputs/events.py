@@ -29,6 +29,7 @@ from ucfp.forecast.parameters import (
 from ucfp.inputs.profile.schemas import AssetProfile
 from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import PlanEvent
+from ucfp.inputs.widgets import IsoDateInput
 
 
 # Selection roles -- the canonical keys an event's references, the add form, and its materialization
@@ -495,7 +496,7 @@ class EventForm( forms.Form ):
     user sees and confirms what the event acts on; more than one prepends a placeholder, so the user
     must choose (no silent default). `build_event` returns the `PlanEvent` to append."""
 
-    date = forms.DateField( label = 'Date' )
+    date = forms.DateField( label = 'Date', widget = IsoDateInput() )
 
     def __init__( self, data = None, *, event_type = None, profile = None ):
         super().__init__( data )

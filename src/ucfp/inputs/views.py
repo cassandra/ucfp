@@ -283,7 +283,7 @@ class IncomeTableView( View ):
     single edit in the background: it persists, then replies *silently* (an empty antinode response,
     no DOM swap) for a pure value edit so typing flow is undisturbed, and re-renders the pane only
     when the row set changed (a line added or removed) or a field failed validation -- cases the
-    client cannot reflect on its own. The age<->date sync is done client-side (`income_table.js`)."""
+    client cannot reflect on its own. The age<->date sync is done client-side (`inputs.js`)."""
 
     _TEMPLATE = 'inputs/interview/sections/income_table.html'
 
