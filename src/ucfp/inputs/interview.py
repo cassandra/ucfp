@@ -395,11 +395,15 @@ class IncomeSectionForm:
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm,
              inner_template = 'inputs/interview/sections/subjects.html' ),
-    Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
-             outer_template = 'inputs/interview/sections/properties.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsForm ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
+    Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
+             outer_template = 'inputs/interview/sections/properties.html' ),
+    # Declared but not yet live (no form): the consolidated liabilities view -- mortgages (also
+    # entered on their property) plus standalone debts. Shows in the stepper as an upcoming step;
+    # becomes live when given a form. Straddles Plans for extra-principal prepayments, like properties.
+    Section( 'debt'        , 'Debts', ( Aggregate.PROFILE, Aggregate.PLANS ) ),
     Section( 'spending'    , 'Spending', ( Aggregate.PLANS, ), SpendingForm,
              outer_template = 'inputs/interview/sections/spending.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
