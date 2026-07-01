@@ -1,0 +1,33 @@
+{% comment %}
+§1 subjects, rendered inside the Continue form. The primary person is always shown; the partner is
+an optional block (the js-optional pattern -- see inputs.js) revealed by "Add a partner" and cleared
+by "Remove partner". There is deliberately no "include a partner?" checkbox: the server infers a
+partner purely from the partner fields being filled, so clearing them (which Remove does) is what
+means "no partner". Without JavaScript the partner fields render visible and usable and the two
+triggers stay hidden.
+{% endcomment %}
+<p>
+  {{ form.subject_name.label_tag }} {{ form.subject_name }}
+  {% if form.subject_name.errors %}<span class="text-danger small d-block">{{ form.subject_name.errors|join:" " }}</span>{% endif %}
+</p>
+<p>
+  {{ form.subject_birthdate.label_tag }} {{ form.subject_birthdate }}
+  {% if form.subject_birthdate.errors %}<span class="text-danger small d-block">{{ form.subject_birthdate.errors|join:" " }}</span>{% endif %}
+</p>
+
+<div class="{{ AppConst.OPTIONAL_CLASS }} mt-3">
+  <button type="button" class="{{ AppConst.OPTIONAL_ADD_CLASS }} btn btn-sm btn-outline-secondary" hidden>Add a partner</button>
+  <div class="{{ AppConst.OPTIONAL_BODY_CLASS }}">
+    <p class="text-muted mb-1">Partner</p>
+    {% for error in form.non_field_errors %}<p class="text-danger small">{{ error }}</p>{% endfor %}
+    <p>
+      {{ form.partner_name.label_tag }} {{ form.partner_name }}
+      {% if form.partner_name.errors %}<span class="text-danger small d-block">{{ form.partner_name.errors|join:" " }}</span>{% endif %}
+    </p>
+    <p>
+      {{ form.partner_birthdate.label_tag }} {{ form.partner_birthdate }}
+      {% if form.partner_birthdate.errors %}<span class="text-danger small d-block">{{ form.partner_birthdate.errors|join:" " }}</span>{% endif %}
+    </p>
+    <button type="button" class="{{ AppConst.OPTIONAL_REMOVE_CLASS }} btn btn-sm btn-link text-muted px-0" hidden>Remove partner</button>
+  </div>
+</div>

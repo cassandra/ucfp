@@ -56,6 +56,15 @@ class AppConst:
     AGE_FIELD_DATA_ATTR     = 'age-field'
     DATE_FIELD_DATA_ATTR    = 'date-field'
 
+    # An optional block revealed on demand (e.g. a plan's second person): the
+    # body is collapsed until "add" is clicked and cleared when "remove" is,
+    # so the server infers the block's presence purely from whether its fields
+    # are filled -- no separate "include this?" checkbox. Driven by inputs.js.
+    OPTIONAL_CLASS        = 'js-optional'         # the wrapper
+    OPTIONAL_ADD_CLASS    = 'js-optional-add'     # reveals the body
+    OPTIONAL_BODY_CLASS   = 'js-optional-body'    # the optional fields
+    OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # clears + collapses the body
+
     @classmethod
     def to_json_dict_str( cls ):
         """

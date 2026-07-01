@@ -65,11 +65,9 @@ class SubjectsForm( forms.Form ):
     subject_name      = forms.CharField( label = 'Name', max_length = 100 )
     subject_birthdate = forms.DateField(
         label = 'Birthdate', widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
-    has_partner       = forms.BooleanField(
-        label = 'This plan includes a partner', required = False )
-    partner_name      = forms.CharField( label = 'Partner name', max_length = 100, required = False )
+    partner_name      = forms.CharField( label = 'Name', max_length = 100, required = False )
     partner_birthdate = forms.DateField(
-        label = 'Partner birthdate', required = False,
+        label = 'Birthdate', required = False,
         widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -85,17 +83,17 @@ class SubjectsForm( forms.Form ):
             initial[ 'subject_birthdate' ] = primary.birthdate
         if len( profile.subjects ) > 1:
             partner = profile.subjects[ 1 ]
-            initial[ 'has_partner' ]       = True
             initial[ 'partner_name' ]      = partner.name
             initial[ 'partner_birthdate' ] = partner.birthdate
         return initial
 
     def clean( self ):
         cleaned = super().clean()
-        if cleaned.get( 'has_partner' ) and not (
-                cleaned.get( 'partner_name' ) and cleaned.get( 'partner_birthdate' ) ):
+        # A partner is present exactly when both of their fields are filled; one alone is an
+        # incomplete entry, not a signal to drop the partner silently.
+        if bool( cleaned.get( 'partner_name' ) ) != bool( cleaned.get( 'partner_birthdate' ) ):
             raise forms.ValidationError(
-                "Add the partner's name and birthdate, or clear the partner option." )
+                "Enter both the partner's name and birthdate, or leave both blank." )
         return cleaned
 
     def apply( self, profile : Profile, plans : Plans ):
@@ -103,20 +101,25 @@ class SubjectsForm( forms.Form ):
             profile, subjects = self._subjects(), filing_status = self._filing_status() )
         return updated, plans
 
+    def _has_partner( self ) -> bool:
+        """A partner is inferred from filled fields -- no separate opt-in checkbox. `clean` has
+        already rejected the half-filled case, so both fields are set together or not at all."""
+        return bool( self.cleaned_data.get( 'partner_name' )
+                     and self.cleaned_data.get( 'partner_birthdate' ) )
+
     def _subjects( self ) -> list:
         cleaned  = self.cleaned_data
         subjects = [ SubjectProfile(
             handle = PRIMARY_SUBJECT_HANDLE,
             name = cleaned[ 'subject_name' ], birthdate = cleaned[ 'subject_birthdate' ] ) ]
-        if cleaned.get( 'has_partner' ):
+        if self._has_partner():
             subjects.append( SubjectProfile(
                 handle = PARTNER_SUBJECT_HANDLE,
                 name = cleaned[ 'partner_name' ], birthdate = cleaned[ 'partner_birthdate' ] ) )
         return subjects
 
     def _filing_status( self ) -> FilingStatus:
-        has_partner = self.cleaned_data.get( 'has_partner' )
-        return FilingStatus.MARRIED_JOINT if has_partner else FilingStatus.SINGLE
+        return FilingStatus.MARRIED_JOINT if self._has_partner() else FilingStatus.SINGLE
 
 
 class HomeForm( forms.Form ):
@@ -403,7 +406,8 @@ class IncomeSectionForm:
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
-    Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm ),
+    Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm,
+             inner_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsForm ),

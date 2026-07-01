@@ -14,8 +14,12 @@
 //     these dates routinely sit decades from today. Unlike the two behaviors above it attaches to
 //     concrete elements, so it is (re)applied on each antinode render rather than delegated.
 //
-// The first two are wired as delegated handlers on `body`, so they survive an antinode pane swap and
-// bind exactly once. All the ids/classes/data-attributes shared with the templates come from
+//   OptionalSection - a block of fields collapsed behind an "add" trigger until wanted and cleared
+//     by its "remove" trigger, so the server infers the block's presence from its fields alone. Its
+//     open/collapsed state, like the pickers, is (re)applied on each antinode render.
+//
+// The delegated behaviors are wired on `body`, so they survive an antinode pane swap and bind
+// exactly once. All the ids/classes/data-attributes shared with the templates come from
 // window.AppConst (see ucfp/environment/constants.py) rather than hard-coded strings, so the two
 // sides cannot drift.
 
@@ -150,6 +154,52 @@ window.App.Inputs = (function () {
         } );
     }
 
+    // ----- OptionalSection: a revealable block, cleared when dismissed -----
+    //
+    // An optional group of fields (e.g. a plan's second person) collapsed behind an "add" trigger
+    // until wanted, and cleared by its "remove" trigger. The server reads presence straight from the
+    // fields -- a filled body means present -- so removing MUST clear, or a hidden-but-filled field
+    // would silently resurrect the block. Without JS the body renders visible and usable; the two
+    // triggers render `hidden`, so no dead controls show.
+
+    function optionalParts( $section ) {
+        return {
+            add    : $section.children( classSelector( C.OPTIONAL_ADD_CLASS ) ),
+            body   : $section.children( classSelector( C.OPTIONAL_BODY_CLASS ) ),
+            remove : $section.find( classSelector( C.OPTIONAL_REMOVE_CLASS ) ),
+        };
+    }
+
+    function setOptionalOpen( $section, open ) {
+        const parts = optionalParts( $section );
+        parts.body.prop( 'hidden', ! open );
+        parts.add.prop( 'hidden', open );
+        parts.remove.prop( 'hidden', ! open );
+    }
+
+    // Whether any field in the body carries a value -- the same "is it present?" test the server
+    // applies, so the opened/collapsed state on load matches what a submit would infer.
+    function bodyIsFilled( $body ) {
+        let filled = false;
+        $body.find( ':input' ).each( function () {
+            const $input = $( this );
+            if ( $input.is( ':checkbox, :radio' ) ) {
+                if ( $input.prop( 'checked' ) ) { filled = true; }
+            } else if ( $.trim( $input.val() || '' ) !== '' ) {
+                filled = true;
+            }
+        } );
+        return filled;
+    }
+
+    function enhanceOptionalSections( $scope ) {
+        const $root = $scope || $( document.body );
+        $root.find( classSelector( C.OPTIONAL_CLASS ) ).each( function () {
+            const $section = $( this );
+            setOptionalOpen( $section, bodyIsFilled( optionalParts( $section ).body ) );
+        } );
+    }
+
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs
@@ -165,20 +215,39 @@ window.App.Inputs = (function () {
             saveForm( $( this ) );
         } );
 
-        // Pickers attach to concrete elements, so (unlike the delegated handlers above) they must be
-        // (re)applied to whatever DOM is present: once now, again after each antinode render for
-        // swapped-in inputs, and torn down before a subtree is removed. AN is absent under the test
-        // harness, so guard it.
+        // Reveal an optional block; land the caret on its first field so the user can type straight in.
+        $( 'body' ).on( 'click', classSelector( C.OPTIONAL_ADD_CLASS ), function () {
+            const $section = $( this ).closest( classSelector( C.OPTIONAL_CLASS ) );
+            setOptionalOpen( $section, true );
+            optionalParts( $section ).body.find( ':input' ).first().trigger( 'focus' );
+        } );
+        // Dismiss an optional block: clear it (so the server reads it as absent) then collapse.
+        $( 'body' ).on( 'click', classSelector( C.OPTIONAL_REMOVE_CLASS ), function () {
+            const $section = $( this ).closest( classSelector( C.OPTIONAL_CLASS ) );
+            optionalParts( $section ).body.find( ':input' )
+                .val( '' ).filter( ':checkbox, :radio' ).prop( 'checked', false );
+            setOptionalOpen( $section, false );
+        } );
+
+        // Pickers and optional-section state attach to concrete elements, so (unlike the delegated
+        // handlers above) they must be (re)applied to whatever DOM is present: once now, and again
+        // after each antinode render for swapped-in content. Pickers are also torn down before a
+        // subtree is removed. AN is absent under the test harness, so guard it.
         enhanceDates( $( document.body ) );
+        enhanceOptionalSections( $( document.body ) );
         if ( window.AN ) {
-            AN.addAfterAsyncRenderFunction( function () { enhanceDates( $( document.body ) ); } );
+            AN.addAfterAsyncRenderFunction( function () {
+                enhanceDates( $( document.body ) );
+                enhanceOptionalSections( $( document.body ) );
+            } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }
     } );
 
     return {
-        syncField    : syncField,
-        saveForm     : saveForm,
-        enhanceDates : enhanceDates,
+        syncField              : syncField,
+        saveForm               : saveForm,
+        enhanceDates           : enhanceDates,
+        enhanceOptionalSections : enhanceOptionalSections,
     };
 } )();
