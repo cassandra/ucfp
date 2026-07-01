@@ -163,3 +163,75 @@ class RentalForm( MortgageFields ):
     def _prepayment( self, mortgage_handle : str ) -> list:
         prepayment = self._mortgage_prepayment( mortgage_handle )
         return [ prepayment ] if prepayment is not None else []
+
+
+class PossessionsForm( forms.Form ):
+    """Other Possessions -- a background-saved list of tangible holdings the engine treats by class:
+    precious metals, collectibles, and depreciating assets (vehicles, boats). Each row is a named item
+    with a value and a type; a trailing blank row adds another, and an existing row's Remove box drops
+    it. Non-blocking: a row materializes only once its name, value, and type are all set, so a
+    half-filled row is simply ignored. `apply` replaces these holdings, leaving other assets intact.
+    """
+
+    _CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES, AssetClass.DEPRECIATING )
+    _TYPE_CHOICES = (
+        ( '', 'Type...' ),
+        ( AssetClass.PRECIOUS_METALS.name, 'Precious metals' ),
+        ( AssetClass.COLLECTIBLES.name, 'Collectibles' ),
+        ( AssetClass.DEPRECIATING.name, 'Vehicle or boat' ),
+    )
+    _HANDLE_PREFIX = 'possession-'
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        super().__init__( data )
+        self._items = self._existing( profile ) if profile is not None else []
+        for index in range( len( self._items ) + 1 ):   # existing rows, then one blank to add
+            self._build_row( index )
+
+    @classmethod
+    def _existing( cls, profile ) -> list:
+        return [ asset for asset in profile.assets if asset.asset_class in cls._CLASSES ]
+
+    def _build_row( self, index : int ):
+        item = self._items[ index ] if index < len( self._items ) else None
+        self.fields[ f'name_{index}' ]  = forms.CharField(
+            required = False, max_length = 100, initial = item.name if item else None )
+        self.fields[ f'value_{index}' ] = forms.DecimalField(
+            required = False, min_value = 0, initial = item.opening_value if item else None )
+        self.fields[ f'type_{index}' ]  = forms.ChoiceField(
+            required = False, choices = self._TYPE_CHOICES,
+            initial = item.asset_class.name if item else None )
+        if item is not None:
+            self.fields[ f'remove_{index}' ] = forms.BooleanField( required = False )
+
+    @property
+    def rows( self ) -> list:
+        rows = []
+        for index in range( len( self._items ) + 1 ):
+            remove = f'remove_{index}'
+            rows.append( {
+                'name'   : self[ f'name_{index}' ],
+                'type'   : self[ f'type_{index}' ],
+                'value'  : self[ f'value_{index}' ],
+                'remove' : self[ remove ] if remove in self.fields else None,
+            } )
+        return rows
+
+    def apply( self, profile, plans ):
+        kept = [ asset for asset in profile.assets if asset.asset_class not in self._CLASSES ]
+        return replace( profile, assets = kept + self._possessions() ), plans
+
+    def _possessions( self ) -> list:
+        possessions = []
+        for index in range( len( self._items ) + 1 ):
+            if self.cleaned_data.get( f'remove_{index}' ):
+                continue
+            name  = self.cleaned_data.get( f'name_{index}' )
+            value = self.cleaned_data.get( f'value_{index}' )
+            kind  = self.cleaned_data.get( f'type_{index}' )
+            if not name or value is None or not kind:
+                continue                                     # incomplete row -- not materialized
+            possessions.append( AssetProfile(
+                handle = f'{self._HANDLE_PREFIX}{len( possessions )}', name = name,
+                asset_class = AssetClass[ kind ], opening_value = value ) )
+        return possessions

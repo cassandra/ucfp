@@ -31,7 +31,7 @@ from .events import EventsForm
 from .external_factors import ExternalFactorsForm
 from .income import IncomeTableForm
 from .mortgage import MortgageFields
-from .properties import rentals_context
+from .properties import PossessionsForm, rentals_context
 from .spending import SpendingForm
 from .widgets import IsoDateInput
 
@@ -281,6 +281,10 @@ class PropertiesForm:
     @property
     def rentals( self ) -> list:
         return rentals_context( self._profile )
+
+    @property
+    def possessions_form( self ):
+        return PossessionsForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
         return profile, plans

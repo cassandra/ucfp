@@ -33,7 +33,7 @@ from .interview import (
     flow_title, next_flow_entry, next_section_after, section_for )
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
-from .properties import RentalForm, delete_rental, rentals_context
+from .properties import PossessionsForm, RentalForm, delete_rental, rentals_context
 from .spending import GroupSpendingForm, group_for_key
 
 _HUB_TEMPLATE = 'inputs/hub.html'
@@ -283,6 +283,45 @@ class ResidenceView( View ):
         # which carries no target, still applies the re-render.
         return antinode.response( replace_map = { 'residence': render_to_string(
             self._TEMPLATE, { 'residence_form': form }, request = request ) } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PossessionsView( View ):
+    """`/inputs/interview/properties/possessions/` -- the Other Possessions list of the Property pane.
+    POST auto-saves a single edit in the background: it persists and replies silently, re-rendering the
+    pane only when the item set changed (a row added or removed) or a field failed validation.
+    Validation is non-blocking, so an incomplete row simply does not materialize."""
+
+    _TEMPLATE = 'inputs/interview/sections/possessions.html'
+
+    def get( self, request ):
+        profile, plans = _current_profile_and_plans( request.organization )
+        return self._rendered( request, PossessionsForm( profile = profile, plans = plans ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, plans = _current_profile_and_plans( organization )
+        form = PossessionsForm( request.POST, profile = profile, plans = plans )
+        if not form.is_valid():
+            return self._swap( request, form )                 # show a bad value
+        before = self._count( profile )
+        profile, _plans = form.apply( profile, plans )
+        save_profile( organization, profile )
+        if self._count( profile ) != before:                   # a row was added or removed
+            return self._swap( request, PossessionsForm( profile = profile, plans = plans ) )
+        return antinode.response()                             # silent: nothing to re-render
+
+    @staticmethod
+    def _count( profile ) -> int:
+        return sum( 1 for asset in profile.assets if asset.asset_class in PossessionsForm._CLASSES )
+
+    def _rendered( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'possessions_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        return antinode.response( replace_map = { 'possessions': render_to_string(
+            self._TEMPLATE, { 'possessions_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

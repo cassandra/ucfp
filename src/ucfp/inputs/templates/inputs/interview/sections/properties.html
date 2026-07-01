@@ -1,10 +1,13 @@
 {% comment %}
-The Property pane: under "Real Estate", the residence sub-form and the rentals list, each managed by
-its own async view outside the section's Continue form (a nested form would be invalid HTML). "Other
-Possessions" (metals, collectibles, depreciating assets) is added in a later phase.
+The Property pane: "Real Estate" (the residence sub-form and the rentals list) and "Other
+Possessions" (a list of tangible holdings), each managed by its own async view outside the section's
+Continue form (a nested form would be invalid HTML).
 {% endcomment %}
 <h3 class="h5 mt-2">Real Estate</h3>
 <p class="text-muted">Your home and any rental properties. Changes save automatically; Continue moves
   on when you're done.</p>
 {% include 'inputs/interview/sections/residence.html' with residence_form=form.residence_form %}
 {% include 'inputs/interview/sections/rentals.html' %}
+
+<h3 class="h5 mt-4">Other Possessions</h3>
+{% include 'inputs/interview/sections/possessions.html' with possessions_form=form.possessions_form %}
