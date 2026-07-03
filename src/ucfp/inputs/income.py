@@ -50,6 +50,10 @@ class IncomeTableForm( forms.Form ):
     Plans timing. Resolution is date-canonical with an age fallback (`_endpoint`)."""
 
     _EXTRA_ROWS = 1
+    # A general row's subject may be a person (their wages, taxed per worker) or the whole household
+    # (other ordinary income with no per-worker attribution). This sentinel is the dropdown value for
+    # the latter -- distinct from any subject handle and from the blank "Choose..." placeholder.
+    _HOUSEHOLD = '__household__'
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
@@ -85,7 +89,7 @@ class IncomeTableForm( forms.Form ):
         subject = forms.ChoiceField( required = False, choices = self._subject_choices() )
         if flow is not None:
             name.initial    = flow.name
-            subject.initial  = flow.subject_handle
+            subject.initial  = flow.subject_handle if flow.subject_handle is not None else self._HOUSEHOLD
             self.fields[ self._key( 'g', i, 'remove' ) ] = forms.BooleanField( required = False )
         self.fields[ self._key( 'g', i, 'name' ) ]    = name
         self.fields[ self._key( 'g', i, 'subject' ) ] = subject
@@ -184,9 +188,10 @@ class IncomeTableForm( forms.Form ):
 
     def _subject_choices( self ) -> list:
         candidates = [ ( subject.handle, subject.name ) for subject in self._subjects ]
+        household  = [ ( self._HOUSEHOLD, 'Household' ) ]
         if len( candidates ) == 1:
-            return candidates
-        return [ ( '', 'Choose...' ) ] + candidates
+            return candidates + household
+        return [ ( '', 'Choose...' ) ] + candidates + household
 
     def _default_subject( self, subject : str ) -> str:
         """The chosen subject, or the sole subject when there is only one (so a single-subject plan
@@ -285,13 +290,17 @@ class IncomeTableForm( forms.Form ):
             subject = self._default_subject( self.cleaned_data.get( self._key( 'g', i, 'subject' ) ) )
             if amount is None or not subject:
                 continue
-            birthdate = self._birthdate( subject )
+            # A person's general income is their wages (taxed per worker); the household's is other
+            # ordinary income, aggregate-taxed with no subject and no per-subject age helper.
+            household = subject == self._HOUSEHOLD
+            birthdate = None if household else self._birthdate( subject )
             window    = DateWindow(
                 start = self._endpoint( 'g', i, 'from', birthdate ),
                 end   = self._endpoint( 'g', i, 'until', birthdate ) )
             flows.append( IncomeFlow(
                 name = self.cleaned_data.get( self._key( 'g', i, 'name' ) ) or 'Income',
-                subject_handle = subject, income_tax_class = IncomeTaxClass.WAGES,
+                subject_handle = None if household else subject,
+                income_tax_class = IncomeTaxClass.ORDINARY if household else IncomeTaxClass.WAGES,
                 schedule = [ WindowedAmount( amount, window ) ] ) )
         return flows
 
