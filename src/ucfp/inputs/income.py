@@ -229,12 +229,10 @@ class IncomeTableForm( forms.Form ):
                 'cadence'  : 'year',
                 'remove'   : self[ self._key( 'g', i, 'remove' ) ] if existing else None } )
         for k, rental in enumerate( self._rentals ):
-            owner = next( ( s.name for s in self._subjects
-                            if s.handle == rental.owner_handle ), rental.owner_handle )
             rows.append( {
                 'kind'         : 'rental',
                 'name'         : rental.name,
-                'subject_name' : owner,
+                'subject_name' : 'Household',
                 'amount'       : self[ self._key( 'r', k, 'amount' ) ],
                 'from'         : self[ self._key( 'r', k, 'from' ) ],
                 'until'        : self[ self._key( 'r', k, 'until' ) ],
@@ -307,7 +305,7 @@ class IncomeTableForm( forms.Form ):
                 start = self.cleaned_data.get( self._key( 'r', k, 'from' ) ),
                 end = self.cleaned_data.get( self._key( 'r', k, 'until' ) ) )
             flows.append( IncomeFlow(
-                name = rental.name, subject_handle = rental.owner_handle,
+                name = rental.name, subject_handle = None,   # rent is household income
                 income_tax_class = IncomeTaxClass.GROSS_RENTAL,
                 schedule = [ WindowedAmount( amount, window ) ],
                 interval = _RENTAL_INTERVAL, property_handle = rental.handle ) )

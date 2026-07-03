@@ -107,15 +107,16 @@ class LoanProfile:
 @dataclass( frozen = True )
 class IncomeFlow:
     """One income the household receives -- salary, consulting, rental rent, or other ordinary
-    income -- the income twin of the Plans' `ExpenseFlow`. `subject_handle` is who receives it
-    (for per-subject tax); `income_tax_class` its treatment; `schedule` the amount over time spans (a
+    income -- the income twin of the Plans' `ExpenseFlow`. `subject_handle` is who receives it (for
+    per-subject tax, e.g. the per-worker wage cap), or None for household income (rent, which the
+    engine taxes as one aggregate); `income_tax_class` its treatment; `schedule` the amount over time spans (a
     `WindowedAmount` per span, one open-ended row a constant amount); `interval` None is a smoothed
     stream, a `Duration` an item placed at that cadence (rent is monthly). `property_handle` ties
     rental income to its property -- carried through to the engine so a sale ends it and per-property
     tax can key on it; None for non-property income. A subject may have several (shifting jobs,
     overlapping incomes)."""
     name: str
-    subject_handle: str
+    subject_handle: Optional[ str ]
     income_tax_class: IncomeTaxClass
     schedule: list[ WindowedAmount ]
     interval: Optional[ Duration ] = None

@@ -60,24 +60,25 @@ def delete_rental( profile, plans, property_handle : str ):
 
 
 class RentalForm( MortgageFields ):
-    """One rental property as a unit: the holding (value, basis, acquisition, owner, type) and an
-    optional mortgage (the shared `MortgageFields`). `apply` writes the asset and the mortgage (plus
-    any extra-principal prepayment) under one property handle -- a new one when adding, the given one
-    when editing -- leaving other properties intact. The gross rent is set in the Income section."""
+    """One rental property as a unit: the holding (value, basis, acquisition, type) and an optional
+    mortgage (the shared `MortgageFields`). It is household-owned -- like the residence, and because
+    the engine taxes rentals as one aggregate passive activity, no per-owner rule applies -- so there
+    is no owner field. `apply` writes the asset and the mortgage (plus any extra-principal prepayment)
+    under one property handle, leaving other properties intact. The gross rent is set in Income."""
 
     # Every field is optional: the form background-saves and a rental materializes only once all of
     # these are set (see `_rental_complete`), so a just-opened blank that is abandoned never appears.
     _ASSET_FIELDS = ( 'name', 'value', 'purchase_price', 'acquisition_date',
-                      'building_basis', 'property_type', 'owner' )
+                      'building_basis', 'property_type' )
 
     name             = forms.CharField( label = 'Name', max_length = 100, required = False )
     value            = forms.DecimalField( label = 'Current value', min_value = 0, required = False )
+    building_basis   = forms.DecimalField(
+        label = 'Building value, excludes land (for depreciation)', min_value = 0, required = False )
     purchase_price   = forms.DecimalField( label = 'Purchase price', min_value = 0, required = False )
     acquisition_date = forms.DateField(
         label = 'Purchase date', required = False,
         widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
-    building_basis   = forms.DecimalField(
-        label = 'Building value, excludes land (for depreciation)', min_value = 0, required = False )
     property_type    = forms.ChoiceField(
         label = 'Type', required = False,
         choices = [ ( '', 'Type...' ) ] + [ ( k.name, k.label ) for k in RealPropertyType ] )
@@ -88,17 +89,6 @@ class RentalForm( MortgageFields ):
         self._profile  = profile
         self._plans = plans
         self._handle   = handle
-        self.fields[ 'owner' ] = forms.ChoiceField(
-            label = 'Owner', required = False, choices = self._owner_choices( profile ) )
-
-    @staticmethod
-    def _owner_choices( profile ) -> list:
-        """A lone subject is shown selected; more than one prepends a placeholder so the owner is a
-        deliberate choice."""
-        candidates = [ ( subject.handle, subject.name ) for subject in profile.subjects ]
-        if len( candidates ) == 1:
-            return candidates
-        return [ ( '', 'Choose...' ) ] + candidates
 
     @classmethod
     def _initial( cls, profile, plans, handle : str ) -> dict:
@@ -106,7 +96,7 @@ class RentalForm( MortgageFields ):
         if asset is None:
             return dict()
         initial = { 'name': asset.name, 'value': asset.opening_value,
-                    'purchase_price': asset.cost_basis, 'owner': asset.owner_handle }
+                    'purchase_price': asset.cost_basis }
         if asset.property is not None:
             initial[ 'acquisition_date' ] = asset.property.acquisition_date
             initial[ 'building_basis' ]   = asset.property.depreciable_basis
@@ -163,7 +153,6 @@ class RentalForm( MortgageFields ):
         return AssetProfile(
             handle = handle, name = cleaned[ 'name' ], asset_class = AssetClass.REAL_ESTATE_RENTAL,
             opening_value = cleaned[ 'value' ], cost_basis = cleaned[ 'purchase_price' ],
-            owner_handle = cleaned[ 'owner' ],
             property = PropertyProfile(
                 acquisition_date = cleaned[ 'acquisition_date' ],
                 depreciable_basis = cleaned[ 'building_basis' ],

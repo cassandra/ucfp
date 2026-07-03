@@ -114,27 +114,31 @@ class IncomeAccounts:
     """The revenue account for each `(subject, income tax-class)`, created on first request
     and reused after. It owns the account key, so creation and per-period posting resolve
     to the same account -- the key is defined here and nowhere else. Per subject so wages
-    stay per-worker (the FICA cap) and Social Security per person. Each account carries its
-    subject's handle as `owner_handle`, so the planner associates it by `(owner, class)` --
-    many streams of one (subject, class) share the account, so it bears no own handle."""
+    stay per-worker (the FICA cap) and Social Security per person; a None subject is household
+    income (rent), an unowned account. Each account carries its subject's handle as `owner_handle`
+    (None for household), so the planner associates it by `(owner, class)` -- many streams of one
+    (subject, class) share the account, so it bears no own handle."""
 
     def __init__( self, bookkeeper : Bookkeeper ):
         self._bookkeeper = bookkeeper
         self._revenue_root = bookkeeper.chart.root( AccountType.REVENUE )
         self._account_by_key = dict()
 
-    def account_for( self, subject : Subject, income_tax_class : IncomeTaxClass ) -> Account:
-        """The revenue account for `subject`'s `income_tax_class` income, creating it under
-        the Revenue root on first request."""
+    def account_for( self, subject : Optional[ Subject ],
+                     income_tax_class : IncomeTaxClass ) -> Account:
+        """The revenue account for `subject`'s `income_tax_class` income, creating it under the
+        Revenue root on first request. A None subject is household income (rent) -- an unowned
+        account carrying no per-worker handle."""
         key = ( subject, income_tax_class )
         account = self._account_by_key.get( key )
         if account is None:
             account = self._bookkeeper.add_account(
                 Account(
-                    name             = f'{subject.name} {income_tax_class.label}',
+                    name             = ( f'{subject.name} {income_tax_class.label}'
+                                         if subject is not None else income_tax_class.label ),
                     parent           = self._revenue_root,
                     income_tax_class = income_tax_class,
-                    owner_handle     = subject.handle,
+                    owner_handle     = subject.handle if subject is not None else None,
                 )
             )
             self._account_by_key[ key ] = account

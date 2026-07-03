@@ -167,7 +167,8 @@ def _income_flows(
     `source_handle` (rental income keeps its property link)."""
     streams, items = list(), list()
     for flow in profile.income_flows:
-        subject = subjects_by_handle[ flow.subject_handle ]
+        subject = ( subjects_by_handle[ flow.subject_handle ]
+                    if flow.subject_handle is not None else None )   # None -> household income
         amounts = Schedule( tuple( flow.schedule ) )
         if flow.interval is None:
             streams.append( IncomeStream(
