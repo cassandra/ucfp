@@ -33,7 +33,8 @@ from .interview import (
     flow_title, next_flow_entry, next_section_after, section_for )
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
-from .properties import RentalForm, delete_rental, rentals_context
+from .properties import (
+    PossessionsForm, RentalForm, _minted_rental_handle, delete_rental, rentals_context )
 from .spending import GroupSpendingForm, group_for_key
 
 _HUB_TEMPLATE = 'inputs/hub.html'
@@ -251,9 +252,11 @@ def _current_profile_and_plans( organization ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ResidenceView( View ):
-    """`/inputs/interview/properties/residence/` -- the residence sub-form of the §3 Properties
-    pane. GET renders it; POST applies and saves just the residence (its asset, mortgage, and rent),
-    then re-renders the sub-pane with the saved values."""
+    """`/inputs/interview/properties/residence/` -- the residence sub-form of the Property pane. POST
+    auto-saves a single edit in the background: it persists just the residence (its asset, mortgage,
+    and rent) and replies silently, re-rendering the sub-pane only on a genuine field error. Own/rent
+    and mortgage visibility are client-side (`inputs.js`); validation is non-blocking, so an
+    incomplete residence simply does not materialize (the forecast run is the real gate)."""
 
     _TEMPLATE = 'inputs/interview/sections/residence.html'
 
@@ -265,16 +268,61 @@ class ResidenceView( View ):
         organization = request.organization
         profile, plans = _current_profile_and_plans( organization )
         form = HomeForm( request.POST, profile = profile, plans = plans )
-        if form.is_valid():
-            profile, plans = form.apply( profile, plans )
-            save_profile( organization, profile )
-            save_plans( latest_plans( organization ), plans )
-            form = HomeForm( profile = profile, plans = plans )
-        return self._response( request, form )
+        if not form.is_valid():
+            return self._swap( request, form )                 # surface a genuine field error
+        profile, plans = form.apply( profile, plans )
+        save_profile( organization, profile )
+        save_plans( latest_plans( organization ), plans )
+        return antinode.response()                             # silent background save
 
     def _response( self, request, form ):
         return antinode.response( main_content = render_to_string(
             self._TEMPLATE, { 'residence_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        # Replace the pane by id (not a data-async target) so the loader-suppressed background POST,
+        # which carries no target, still applies the re-render.
+        return antinode.response( replace_map = { 'residence': render_to_string(
+            self._TEMPLATE, { 'residence_form': form }, request = request ) } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PossessionsView( View ):
+    """`/inputs/interview/properties/possessions/` -- the Other Possessions list of the Property pane.
+    POST auto-saves a single edit in the background: it persists and replies silently, re-rendering the
+    pane only when the item set changed (a row added or removed) or a field failed validation.
+    Validation is non-blocking, so an incomplete row simply does not materialize."""
+
+    _TEMPLATE = 'inputs/interview/sections/possessions.html'
+
+    def get( self, request ):
+        profile, plans = _current_profile_and_plans( request.organization )
+        return self._rendered( request, PossessionsForm( profile = profile, plans = plans ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, plans = _current_profile_and_plans( organization )
+        form = PossessionsForm( request.POST, profile = profile, plans = plans )
+        if not form.is_valid():
+            return self._swap( request, form )                 # show a bad value
+        before = self._count( profile )
+        profile, _plans = form.apply( profile, plans )
+        save_profile( organization, profile )
+        if self._count( profile ) != before:                   # a row was added or removed
+            return self._swap( request, PossessionsForm( profile = profile, plans = plans ) )
+        return antinode.response()                             # silent: nothing to re-render
+
+    @staticmethod
+    def _count( profile ) -> int:
+        return sum( 1 for asset in profile.assets if asset.asset_class in PossessionsForm._CLASSES )
+
+    def _rendered( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'possessions_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        return antinode.response( replace_map = { 'possessions': render_to_string(
+            self._TEMPLATE, { 'possessions_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -283,7 +331,7 @@ class IncomeTableView( View ):
     single edit in the background: it persists, then replies *silently* (an empty antinode response,
     no DOM swap) for a pure value edit so typing flow is undisturbed, and re-renders the pane only
     when the row set changed (a line added or removed) or a field failed validation -- cases the
-    client cannot reflect on its own. The age<->date sync is done client-side (`income_table.js`)."""
+    client cannot reflect on its own. The age<->date sync is done client-side (`inputs.js`)."""
 
     _TEMPLATE = 'inputs/interview/sections/income_table.html'
 
@@ -325,9 +373,11 @@ class IncomeTableView( View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class RentalFormView( View ):
     """`/inputs/interview/properties/rentals/add/` and `.../<handle>/` -- the add/edit form for one
-    rental in the §3 Properties pane. GET opens the form (blank to add, prefilled to edit, empty on
-    cancel); POST validates and writes the rental as a unit, then refreshes the list and clears the
-    form area."""
+    rental in the Property pane. Add and edit converge: GET-add mints a fresh handle and opens the
+    editor for it, so the form always edits a known handle and a new rental has a stable identity from
+    the first keystroke. POST auto-saves in the background -- non-blocking, so an incomplete (or never-
+    filled) rental writes nothing -- and just refreshes the list; the open form is left untouched
+    except to surface a genuine field error."""
 
     _FORM_TEMPLATE = 'inputs/interview/sections/rental_form.html'
     _LIST_TEMPLATE = 'inputs/interview/sections/rentals_list.html'
@@ -336,6 +386,8 @@ class RentalFormView( View ):
         profile, plans = _current_profile_and_plans( request.organization )
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = self._form( request, None, None ) )
+        if handle is None:                             # add: mint a fresh handle, open its editor
+            handle = _minted_rental_handle( profile )
         form = RentalForm( profile = profile, plans = plans, handle = handle )
         return antinode.response( main_content = self._form( request, handle, form ) )
 
@@ -344,18 +396,22 @@ class RentalFormView( View ):
         profile, plans = _current_profile_and_plans( organization )
         form = RentalForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
-            return antinode.response( main_content = self._form( request, handle, form ) )
+            return self._form_swap( request, handle, form )    # surface a genuine field error
         profile, plans = form.apply( profile, plans )
         save_profile( organization, profile )
         save_plans( latest_plans( organization ), plans )
-        return antinode.response(
-            main_content = self._form( request, None, None ),
-            replace_map  = { 'rentals-list': render_to_string(
-                self._LIST_TEMPLATE, { 'rentals': rentals_context( profile ) }, request = request ) } )
+        # Leave the open form alone; just refresh the list by id, where a rental appears, updates its
+        # name/value, or -- if edited to incomplete -- drops out.
+        return antinode.response( replace_map = { 'rentals-list': render_to_string(
+            self._LIST_TEMPLATE, { 'rentals': rentals_context( profile ) }, request = request ) } )
 
     def _form( self, request, handle, form ):
         return render_to_string(
             self._FORM_TEMPLATE, { 'rental_form': form, 'handle': handle }, request = request )
+
+    def _form_swap( self, request, handle, form ):
+        return antinode.response(
+            replace_map = { 'rentals-form': self._form( request, handle, form ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

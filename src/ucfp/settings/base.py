@@ -252,6 +252,7 @@ PIPELINE = {
         'css_head': {
             'source_filenames': (
                 'bootstrap/css/bootstrap.css',
+                'css/bootstrap-datepicker.standalone.min.css',
                 'css/main.css',
             ),
             'output_filename': 'css/css_head.css',
@@ -264,8 +265,9 @@ PIPELINE = {
                 'js/cookie.js',
                 'js/antinode.js',
                 'js/autosize.min.js',
+                'js/bootstrap-datepicker.min.js',
                 'js/main.js',
-                'js/income_table.js',
+                'js/inputs.js',
             ),
             'output_filename': 'js/js_before_content.js',
         },

@@ -15,8 +15,8 @@ from common.rate import Rate
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
-from ucfp.jurisdiction.enums import StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile, StatuteProjection
+from ucfp.jurisdiction.enums import StatuteForecastType
+from ucfp.jurisdiction.law import StatuteProjection, TaxProjection
 
 # Every rate factor of the engine's EconomicParameters (all of them, adjustable). The non-rate
 # `window` is excluded -- it stays at its default, giving a constant outlook.
@@ -54,8 +54,8 @@ class ExternalFactorsForm( forms.Form ):
 
     @staticmethod
     def _initial( assumptions ) -> dict:
-        if assumptions is not None and assumptions.statute is not None:
-            return { 'forecast_type': assumptions.statute.forecast_type.name.lower() }
+        if assumptions is not None and assumptions.tax_projection is not None:
+            return { 'forecast_type': assumptions.tax_projection.forecast_type.name.lower() }
         return dict()
 
     @property
@@ -66,10 +66,10 @@ class ExternalFactorsForm( forms.Form ):
         economics = EconomicParameters( **{
             name: Rate.percent( self.cleaned_data[ name ] ) for name in _FACTOR_NAMES } )
         tax_type = StatuteForecastType.from_name( self.cleaned_data[ 'forecast_type' ] )
-        tax = StatuteProfile(
-            jurisdiction_type = JurisdictionType.US_FEDERAL, forecast_type = tax_type,
-            projection = self._projection( tax_type, economics ) )
-        return profile, replace( assumptions, economics = economics, statute = tax )
+        tax_projection = TaxProjection(
+            forecast_type = tax_type, projection = self._projection( tax_type, economics ) )
+        return profile, replace(
+            assumptions, economics = economics, tax_projection = tax_projection )
 
     @staticmethod
     def _projection( tax_type, economics ):

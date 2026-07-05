@@ -20,9 +20,9 @@ from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, IncomeItem, IncomeStream, Subject, WindowedAmount )
 from ucfp.period.results import NoticeKind
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
-_TAX     = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
+_TAX     = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 _NULL    = EconomicOutlook.constant( EconomicParameters() )
 _MONTHLY = Duration( 1, TimeUnit.MONTH )
 

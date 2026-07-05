@@ -10,7 +10,7 @@ from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import AssetParameters, ForecastParameters, Subject
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
 
 class DepreciationTests( unittest.TestCase ):
@@ -20,7 +20,7 @@ class DepreciationTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2027, 12, 31 ),
             filing_status = FilingStatus.MARRIED_JOINT,
-            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
             subjects      = [ Subject( 'A', date( 1958, 1, 1 ) ) ],
             assets        = [
                 AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '30000' ), Decimal( '30000' ),

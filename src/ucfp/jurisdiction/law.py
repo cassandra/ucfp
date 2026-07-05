@@ -1,10 +1,10 @@
 """The statute layer the Forecast treats as a black box.
 
-A `StatuteProfile` selects a jurisdiction (`JurisdictionType`), a projection model
-(`StatuteForecastType`), and the optional knobs that model needs. `Statute` resolves a profile
-and yields the tax engine for any year -- `Statute( profile ).engine_for( year )` -- so the
-Forecast chooses *what* to project and drives it year by year without knowing which
-figures move or how the engine is built.
+A `StatuteProfile` pairs a jurisdiction (`JurisdictionType`, a Profile fact) with a `TaxProjection`
+(a projection model `StatuteForecastType` and its optional knobs, an Assumptions forward-view),
+composed at materialization. `Statute` resolves a profile and yields the tax engine for any year --
+`Statute( profile ).engine_for( year )` -- so the Forecast chooses *what* to project and drives it
+year by year without knowing which figures move or how the engine is built.
 
 This module is the composition point: it is the one place that maps a `JurisdictionType` to a
 concrete engine family (US federal today), so it depends on `jurisdiction.us`. The agnostic
@@ -35,15 +35,26 @@ class StatuteProjection:
 
 
 @dataclass( frozen = True )
-class StatuteProfile:
-    """How a forecast's statute is selected and projected: the jurisdiction (`jurisdiction_type`), the
-    projection model (`forecast_type`), and the model's knobs. `projection` carries the
-    projection assumptions a `COLA_INDEXED` forecast needs (see `StatuteProjection`); `CURRENT_LAW`
-    holds the law static and ignores it."""
+class TaxProjection:
+    """How a jurisdiction's tax law is projected forward -- the forward-view (assumption) half of a
+    statute, independent of which jurisdiction it applies to, so it lives with the Assumptions and can
+    be varied over one situation (an Optimistic vs Pessimistic outlook). `forecast_type` selects the
+    projection model; `projection` carries that model's knobs -- a `COLA_INDEXED` forecast needs a
+    `StatuteProjection`, while `CURRENT_LAW` holds the law static and ignores it."""
 
-    jurisdiction_type      : JurisdictionType
     forecast_type : StatuteForecastType
-    projection        : Optional[ StatuteProjection ] = None
+    projection    : Optional[ StatuteProjection ] = None
+
+
+@dataclass( frozen = True )
+class StatuteProfile:
+    """The statute the engine resolves: which jurisdiction's law (`jurisdiction_type` -- a fact about
+    the household, sourced from the Profile) projected how (`tax_projection` -- the forward view,
+    sourced from the Assumptions). Composed at materialization from those two aggregates; the engine
+    treats the result as a black box."""
+
+    jurisdiction_type : JurisdictionType
+    tax_projection    : TaxProjection
 
 
 class Statute:
@@ -62,18 +73,19 @@ class Statute:
         if self._profile.jurisdiction_type is not JurisdictionType.US_FEDERAL:
             raise NotImplementedError(
                 f'Tax law {self._profile.jurisdiction_type} has no engine yet.' )
-        if self._profile.forecast_type is StatuteForecastType.CURRENT_LAW:
+        forecast_type = self._profile.tax_projection.forecast_type
+        if forecast_type is StatuteForecastType.CURRENT_LAW:
             return USFederalTaxEngine( federal_2025() )
-        if self._profile.forecast_type is StatuteForecastType.COLA_INDEXED:
+        if forecast_type is StatuteForecastType.COLA_INDEXED:
             return USFederalTaxEngine( federal_2025().indexed( self._cola_factor( year ) ) )
         raise NotImplementedError(
-            f'Tax forecast {self._profile.forecast_type} is not supported.' )
+            f'Tax forecast {forecast_type} is not supported.' )
 
     def _cola_factor( self, year : int ) -> Decimal:
         """The cumulative COLA factor from the baseline year to `year` -- the projection's
         `cola_rate` compounded over the elapsed years. A COLA-indexed forecast must supply a
         `projection` (the deliberate government-behaviour assumption)."""
-        projection = self._profile.projection
+        projection = self._profile.tax_projection.projection
         if projection is None:
             raise ValueError(
                 'A COLA-indexed tax forecast requires a projection on the profile.' )

@@ -134,7 +134,7 @@ class IncomeStream:
     draws, so none of those are streams. `source_handle` is the holding this income is sourced from
     (a rental property), carried so per-property rental tax can key on it; None otherwise."""
 
-    subject          : Subject
+    subject          : Optional[ Subject ]
     income_tax_class : IncomeTaxClass
     amounts          : Schedule[ WindowedAmount ]
     window           : DateWindow         = DateWindow()
@@ -154,7 +154,7 @@ class IncomeItem:
     `IncomeStream` instead. `source_handle` is the holding this income is sourced from (a rental
     property), carried so per-property rental tax can key on it; None otherwise."""
 
-    subject          : Subject
+    subject          : Optional[ Subject ]
     income_tax_class : IncomeTaxClass
     amounts          : Schedule[ WindowedAmount ]
     cadence          : Cadence

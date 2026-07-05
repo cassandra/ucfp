@@ -18,6 +18,7 @@ from common.recurrence import TimeUnit
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.parameters import WindowedAmount
+from ucfp.inputs.widgets import IsoDateInput
 from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind
 from ucfp.parameter_sets.repository import load
 from ucfp.inputs.profile.schemas import RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE
@@ -230,8 +231,8 @@ class GroupSpendingForm( forms.Form ):
 
     def _add_row_fields( self, ei : int, ri : int, row ):
         amount = forms.DecimalField( required = False, min_value = 0 )
-        start  = forms.DateField( required = False )
-        end    = forms.DateField( required = False )
+        start  = forms.DateField( required = False, widget = IsoDateInput() )
+        end    = forms.DateField( required = False, widget = IsoDateInput() )
         if row is not None:
             amount.initial = row.amount
             start.initial  = row.window.start

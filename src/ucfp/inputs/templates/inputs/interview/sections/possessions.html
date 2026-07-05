@@ -1,0 +1,29 @@
+{% comment %}
+The Other Possessions list of the Property pane (id=possessions), auto-saved. Each row is a tangible
+holding: a name, a type (precious metals / collectibles / vehicle or boat -- classes the engine
+treats differently), and a value. Fill the blank row to add one; the Remove box drops one. Edits save
+in the background; only a row added/removed or a bad value re-renders here.
+{% endcomment %}
+<div id="possessions">
+  <h3 class="h6">Other Possessions</h3>
+  <form method="post" action="{% url 'possessions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <table class="table table-sm w-auto">
+      <thead>
+        <tr><th>Item</th><th>Type</th><th>Value</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in possessions_form.rows %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{{ row.type }}</td>
+          <td>{{ row.value }}{% if row.value.errors %}<span class="text-danger small d-block">{{ row.value.errors|join:" " }}</span>{% endif %}</td>
+          <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small">Gold, art, a vehicle or boat, and the like. Fill the blank row to add
+      one; changes save automatically.</p>
+  </form>
+</div>

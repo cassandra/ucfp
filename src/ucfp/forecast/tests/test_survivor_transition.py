@@ -21,7 +21,7 @@ from ucfp.forecast.parameters import (
     resolve_household_size,
 )
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 from ucfp.jurisdiction.us.filing import resolve_filing_status
 
 
@@ -64,7 +64,7 @@ class SubjectValidationTests( unittest.TestCase ):
                 start_date    = date( 2026, 1, 1 ),
                 end_date      = date( 2026, 12, 31 ),
                 filing_status = FilingStatus.MARRIED_JOINT,
-                statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
+                statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
                 subjects      = [
                     Subject( 'A', date( 1950, 1, 1 ), 'a' ),
                     Subject( 'B', date( 1951, 1, 1 ), 'b' ),
@@ -79,7 +79,7 @@ class SurvivorTransitionTests( unittest.TestCase ):
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2030, 12, 31 ),
             filing_status = FilingStatus.MARRIED_JOINT,
-            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
             subjects      = [
                 Subject( 'A', date( 1948, 1, 1 ), 'subject-a' ),
                 Subject( 'B', date( 1949, 1, 1 ), 'subject-b' ) ],

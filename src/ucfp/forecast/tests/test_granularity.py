@@ -24,7 +24,7 @@ from ucfp.forecast.parameters import (
     WindowedAmount,
 )
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
 _YEARLY = Duration( 1, TimeUnit.YEAR )
 _MONTHLY = Duration( 1, TimeUnit.MONTH )
@@ -36,7 +36,7 @@ def _parameters( granularity ):
         start_date    = date( 2026, 1, 1 ),
         end_date      = date( 2028, 12, 31 ),
         filing_status = FilingStatus.MARRIED_JOINT,
-        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW ),
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
         granularity   = granularity,
         subjects      = [ subject ],
         assets        = [

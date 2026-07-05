@@ -26,3 +26,19 @@ class FilingStatus( LabeledEnum ):
 
     MARRIED_JOINT = ( 'Married Filing Jointly' , 'A married couple filing one joint return.' )
     SINGLE        = ( 'Single'                 , 'An unmarried individual filing alone.' )
+
+
+class JurisdictionConcept( LabeledEnum ):
+    """A domain concept whose everyday name varies by jurisdiction. The label here is the neutral,
+    jurisdiction-agnostic name the app uses by default; a jurisdiction's local term (e.g. a government
+    pension is "Social Security" in the US) is resolved separately in `labels.py`, so US-specific
+    wording stays out of the shared forms and templates."""
+
+    GOVERNMENT_PENSION  = ( 'Government pension',
+                            'A government social-insurance retirement benefit.' )
+    SUBSIDIZED_HEALTH   = ( 'Subsidized health coverage',
+                            'Means-tested subsidized health insurance.' )
+    PRETAX_RETIREMENT   = ( 'Pre-tax retirement',
+                            'A tax-deferred retirement account; withdrawals are ordinary income.' )
+    TAX_FREE_RETIREMENT = ( 'Tax-free retirement',
+                            'An after-tax retirement account; qualified growth is tax-free.' )

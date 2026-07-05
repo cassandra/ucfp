@@ -25,7 +25,7 @@ from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import WindowedAmount
-from ucfp.jurisdiction.enums import FilingStatus
+from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
 
 
 # Handles are stable string identities other sections reference; never display names. The subject
@@ -107,15 +107,16 @@ class LoanProfile:
 @dataclass( frozen = True )
 class IncomeFlow:
     """One income the household receives -- salary, consulting, rental rent, or other ordinary
-    income -- the income twin of the Plans' `ExpenseFlow`. `subject_handle` is who receives it
-    (for per-subject tax); `income_tax_class` its treatment; `schedule` the amount over time spans (a
+    income -- the income twin of the Plans' `ExpenseFlow`. `subject_handle` is who receives it (for
+    per-subject tax, e.g. the per-worker wage cap), or None for household income (rent, which the
+    engine taxes as one aggregate); `income_tax_class` its treatment; `schedule` the amount over time spans (a
     `WindowedAmount` per span, one open-ended row a constant amount); `interval` None is a smoothed
     stream, a `Duration` an item placed at that cadence (rent is monthly). `property_handle` ties
     rental income to its property -- carried through to the engine so a sale ends it and per-property
     tax can key on it; None for non-property income. A subject may have several (shifting jobs,
     overlapping incomes)."""
     name: str
-    subject_handle: str
+    subject_handle: Optional[ str ]
     income_tax_class: IncomeTaxClass
     schedule: list[ WindowedAmount ]
     interval: Optional[ Duration ] = None
@@ -173,6 +174,9 @@ class Profile:
     # People
     subjects: list[ SubjectProfile ] = field( default_factory = list )
     filing_status: Optional[ FilingStatus ] = None
+    # The household's tax jurisdiction -- a fact these facts are all expressed under (account tax
+    # classes, entitlements, filing status). US federal is the only one modeled today.
+    jurisdiction_type: JurisdictionType = JurisdictionType.US_FEDERAL
     # What you own
     assets: list[ AssetProfile ] = field( default_factory = list )
     # What you owe

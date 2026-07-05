@@ -28,9 +28,9 @@ from ucfp.forecast.parameters import (
 )
 from ucfp.period.results import NoticeKind, NoticeSeverity
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
-_PROFILE = StatuteProfile( JurisdictionType.US_FEDERAL, StatuteForecastType.CURRENT_LAW )
+_PROFILE = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 _SUBJECT = Subject( 'A', date( 1975, 1, 1 ), 'subject-a' )   # age 51 in 2026, working
 
 

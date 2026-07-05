@@ -4,7 +4,7 @@ Income is a list of windowed flows -- the income twin of the expense side (see `
 module presents them as one editable table: a row per general income line (salary, consulting, ...),
 a row per rental property's rent, and two entitlement rows per subject (Social Security, pension).
 Each row carries an `amount` over a `from`/`until` window. The **date is canonical**; the `age`
-column beside it is a convenience that a small client-side helper (`income_table.js`) keeps in sync
+column beside it is a convenience that a small client-side helper (`inputs.js`) keeps in sync
 with the date both ways. The server therefore just reads the date, with one fallback for a JS-less
 client: a window endpoint with no date but a filled age is resolved from the subject's birthdate
 (`_endpoint`).
@@ -33,9 +33,11 @@ from common.date_window import DateWindow
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from ucfp.environment.constants import AppConst
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.inputs.profile.schemas import GovernmentPensionEntitlement, IncomeFlow, PensionEntitlement
 from ucfp.inputs.plans.schemas import RetirementTiming
+from ucfp.inputs.widgets import IsoDateInput
 
 _RENTAL_INTERVAL = Duration( 1, TimeUnit.MONTH )   # rent is a monthly item; general income a stream
 
@@ -48,6 +50,10 @@ class IncomeTableForm( forms.Form ):
     Plans timing. Resolution is date-canonical with an age fallback (`_endpoint`)."""
 
     _EXTRA_ROWS = 1
+    # A general row's subject may be a person (their wages, taxed per worker) or the whole household
+    # (other ordinary income with no per-worker attribution). This sentinel is the dropdown value for
+    # the latter -- distinct from any subject handle and from the blank "Choose..." placeholder.
+    _HOUSEHOLD = '__household__'
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
@@ -83,7 +89,7 @@ class IncomeTableForm( forms.Form ):
         subject = forms.ChoiceField( required = False, choices = self._subject_choices() )
         if flow is not None:
             name.initial    = flow.name
-            subject.initial  = flow.subject_handle
+            subject.initial  = flow.subject_handle if flow.subject_handle is not None else self._HOUSEHOLD
             self.fields[ self._key( 'g', i, 'remove' ) ] = forms.BooleanField( required = False )
         self.fields[ self._key( 'g', i, 'name' ) ]    = name
         self.fields[ self._key( 'g', i, 'subject' ) ] = subject
@@ -113,7 +119,7 @@ class IncomeTableForm( forms.Form ):
         self.fields[ self._key( 's', m, f'{kind}amt' ) ] = forms.DecimalField(
             required = False, min_value = 0, initial = amount_initial )
         self.fields[ self._key( 's', m, f'{kind}_from' ) ] = forms.DateField(
-            required = False, initial = date_initial )
+            required = False, initial = date_initial, widget = IsoDateInput() )
         self.fields[ self._key( 's', m, f'{kind}_from_age' ) ] = forms.IntegerField(
             required = False, min_value = 0, max_value = 120,
             initial = self._derived_age( date_initial, birthdate ) )
@@ -129,9 +135,9 @@ class IncomeTableForm( forms.Form ):
         self.fields[ self._key( prefix, index, 'amount' ) ] = forms.DecimalField(
             required = False, min_value = 0, initial = row.amount if row is not None else None )
         self.fields[ self._key( prefix, index, 'from' ) ]  = forms.DateField(
-            required = False, initial = start_on )
+            required = False, initial = start_on, widget = IsoDateInput() )
         self.fields[ self._key( prefix, index, 'until' ) ] = forms.DateField(
-            required = False, initial = end_on )
+            required = False, initial = end_on, widget = IsoDateInput() )
         if with_age:
             self.fields[ self._key( prefix, index, 'from_age' ) ] = forms.IntegerField(
                 required = False, min_value = 0, max_value = 120,
@@ -148,18 +154,21 @@ class IncomeTableForm( forms.Form ):
                             self._key( prefix, index, 'until_age' ), subject_field = subject_field )
 
     def _link_age( self, date_key : str, age_key : str, *, subject_field = None, birthdate = None ):
-        """Tag a date/age pair so `income_table.js` can keep them in sync: each carries a class and a
+        """Tag a date/age pair so `inputs.js` can keep them in sync: each carries a class and a
         pointer to its partner's element id, plus how to find the subject's birthdate -- either a
-        live `subject_field` (general rows) or a fixed `birthdate` (entitlement rows)."""
+        live `subject_field` (general rows) or a fixed `birthdate` (entitlement rows). The shared
+        hooks come from `AppConst` so the client and this markup cannot drift."""
         shared = {}
         if subject_field is not None:
-            shared[ 'data-subject-field' ] = f'id_{subject_field}'
+            shared[ f'data-{AppConst.SUBJECT_FIELD_DATA_ATTR}' ] = f'id_{subject_field}'
         if birthdate is not None:
-            shared[ 'data-birthdate' ] = birthdate.isoformat()
+            shared[ f'data-{AppConst.BIRTHDATE_DATA_ATTR}' ] = birthdate.isoformat()
         self.fields[ date_key ].widget.attrs.update(
-            { 'class' : 'js-date', 'data-age-field' : f'id_{age_key}', **shared } )
+            { 'class' : AppConst.DATE_FIELD_CLASS,
+              f'data-{AppConst.AGE_FIELD_DATA_ATTR}' : f'id_{age_key}', **shared } )
         self.fields[ age_key ].widget.attrs.update(
-            { 'class' : 'js-age', 'data-date-field' : f'id_{date_key}', **shared } )
+            { 'class' : AppConst.AGE_FIELD_CLASS,
+              f'data-{AppConst.DATE_FIELD_DATA_ATTR}' : f'id_{date_key}', **shared } )
 
     def _birthdate( self, handle : str ):
         subject = next( ( s for s in self._subjects if s.handle == handle ), None )
@@ -179,9 +188,10 @@ class IncomeTableForm( forms.Form ):
 
     def _subject_choices( self ) -> list:
         candidates = [ ( subject.handle, subject.name ) for subject in self._subjects ]
+        household  = [ ( self._HOUSEHOLD, 'Household' ) ]
         if len( candidates ) == 1:
-            return candidates
-        return [ ( '', 'Choose...' ) ] + candidates
+            return candidates + household
+        return [ ( '', 'Choose...' ) ] + candidates + household
 
     def _default_subject( self, subject : str ) -> str:
         """The chosen subject, or the sole subject when there is only one (so a single-subject plan
@@ -224,12 +234,10 @@ class IncomeTableForm( forms.Form ):
                 'cadence'  : 'year',
                 'remove'   : self[ self._key( 'g', i, 'remove' ) ] if existing else None } )
         for k, rental in enumerate( self._rentals ):
-            owner = next( ( s.name for s in self._subjects
-                            if s.handle == rental.owner_handle ), rental.owner_handle )
             rows.append( {
                 'kind'         : 'rental',
                 'name'         : rental.name,
-                'subject_name' : owner,
+                'subject_name' : 'Household',
                 'amount'       : self[ self._key( 'r', k, 'amount' ) ],
                 'from'         : self[ self._key( 'r', k, 'from' ) ],
                 'until'        : self[ self._key( 'r', k, 'until' ) ],
@@ -282,13 +290,17 @@ class IncomeTableForm( forms.Form ):
             subject = self._default_subject( self.cleaned_data.get( self._key( 'g', i, 'subject' ) ) )
             if amount is None or not subject:
                 continue
-            birthdate = self._birthdate( subject )
+            # A person's general income is their wages (taxed per worker); the household's is other
+            # ordinary income, aggregate-taxed with no subject and no per-subject age helper.
+            household = subject == self._HOUSEHOLD
+            birthdate = None if household else self._birthdate( subject )
             window    = DateWindow(
                 start = self._endpoint( 'g', i, 'from', birthdate ),
                 end   = self._endpoint( 'g', i, 'until', birthdate ) )
             flows.append( IncomeFlow(
                 name = self.cleaned_data.get( self._key( 'g', i, 'name' ) ) or 'Income',
-                subject_handle = subject, income_tax_class = IncomeTaxClass.WAGES,
+                subject_handle = None if household else subject,
+                income_tax_class = IncomeTaxClass.ORDINARY if household else IncomeTaxClass.WAGES,
                 schedule = [ WindowedAmount( amount, window ) ] ) )
         return flows
 
@@ -302,7 +314,7 @@ class IncomeTableForm( forms.Form ):
                 start = self.cleaned_data.get( self._key( 'r', k, 'from' ) ),
                 end = self.cleaned_data.get( self._key( 'r', k, 'until' ) ) )
             flows.append( IncomeFlow(
-                name = rental.name, subject_handle = rental.owner_handle,
+                name = rental.name, subject_handle = None,   # rent is household income
                 income_tax_class = IncomeTaxClass.GROSS_RENTAL,
                 schedule = [ WindowedAmount( amount, window ) ],
                 interval = _RENTAL_INTERVAL, property_handle = rental.handle ) )

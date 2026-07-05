@@ -16,21 +16,24 @@ from typing import Optional
 
 from django import forms
 
-from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
-    AssetProfile, CommittedObligation, LoanProfile, Profile, SubjectProfile )
-from ucfp.inputs.plans.schemas import LoanPrepayment, Plans
-from ucfp.jurisdiction.enums import FilingStatus
+    AssetProfile, CommittedObligation, Profile, SubjectProfile )
+from ucfp.inputs.plans.schemas import Plans
+from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
+from ucfp.jurisdiction.labels import local_label
 
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
 from .income import IncomeTableForm
-from .properties import rentals_context
+from .mortgage import MortgageFields
+from .properties import PossessionsForm, rentals_context
 from .spending import SpendingForm
+from .widgets import IsoDateInput
 
 
 class Aggregate( Enum ):
@@ -54,22 +57,42 @@ class Section:
 
 
 class SubjectsForm( forms.Form ):
-    """§1 -- who the plan is for. Collects one subject, optionally a partner, and *infers* the
-    filing status (joint when there is a partner) rather than asking it; the inferred status stays
-    editable later in the edit views. `apply` writes just this section onto the Profile, leaving
-    every other section's facts intact.
+    """§1 -- who the plan is for. Collects one subject and optionally a partner, and *infers* the
+    filing status (joint when there is a partner) rather than asking it -- the engine supports only
+    single vs joint, both fixed by whether a partner exists, so there is nothing to choose. The tax
+    basis (jurisdiction and that inferred filing status) is shown read-only beside the inputs.
+    `apply` writes just this section onto the Profile, leaving every other section's facts intact.
     """
 
     subject_name      = forms.CharField( label = 'Name', max_length = 100 )
-    subject_birthdate = forms.DateField( label = 'Birthdate' )
-    has_partner       = forms.BooleanField(
-        label = 'This plan includes a partner', required = False )
-    partner_name      = forms.CharField( label = 'Partner name', max_length = 100, required = False )
-    partner_birthdate = forms.DateField( label = 'Partner birthdate', required = False )
+    subject_birthdate = forms.DateField(
+        label = 'Birthdate', widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
+    partner_name      = forms.CharField( label = 'Name', max_length = 100, required = False )
+    partner_birthdate = forms.DateField(
+        label = 'Birthdate', required = False,
+        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile ) if profile is not None else None
         super().__init__( data, initial = initial )
+        self._profile = profile
+
+    # --- Tax-basis pane (read-only) ----------------------------------------
+
+    @property
+    def jurisdiction_label( self ) -> str:
+        """The household's tax jurisdiction, shown read-only (US federal is the only one today)."""
+        jurisdiction = self._profile.jurisdiction_type if self._profile else JurisdictionType.US_FEDERAL
+        return jurisdiction.label
+
+    @property
+    def filing_status_label( self ) -> str:
+        """The filing status the engine will use, derived from the saved household and shown
+        read-only. It reflects saved facts, so it updates on save rather than as the partner is
+        edited -- there is nothing to choose while single vs joint is fixed by whether a partner
+        exists."""
+        saved_has_partner = self._profile is not None and len( self._profile.subjects ) > 1
+        return self._filing_status_for( saved_has_partner ).label
 
     @staticmethod
     def _initial( profile : Profile ) -> dict:
@@ -80,17 +103,17 @@ class SubjectsForm( forms.Form ):
             initial[ 'subject_birthdate' ] = primary.birthdate
         if len( profile.subjects ) > 1:
             partner = profile.subjects[ 1 ]
-            initial[ 'has_partner' ]       = True
             initial[ 'partner_name' ]      = partner.name
             initial[ 'partner_birthdate' ] = partner.birthdate
         return initial
 
     def clean( self ):
         cleaned = super().clean()
-        if cleaned.get( 'has_partner' ) and not (
-                cleaned.get( 'partner_name' ) and cleaned.get( 'partner_birthdate' ) ):
+        # A partner is present exactly when both of their fields are filled; one alone is an
+        # incomplete entry, not a signal to drop the partner silently.
+        if bool( cleaned.get( 'partner_name' ) ) != bool( cleaned.get( 'partner_birthdate' ) ):
             raise forms.ValidationError(
-                "Add the partner's name and birthdate, or clear the partner option." )
+                "Enter both the partner's name and birthdate, or leave both blank." )
         return cleaned
 
     def apply( self, profile : Profile, plans : Plans ):
@@ -98,23 +121,34 @@ class SubjectsForm( forms.Form ):
             profile, subjects = self._subjects(), filing_status = self._filing_status() )
         return updated, plans
 
+    def _has_partner( self ) -> bool:
+        """A partner is inferred from filled fields -- no separate opt-in checkbox. `clean` has
+        already rejected the half-filled case, so both fields are set together or not at all."""
+        return bool( self.cleaned_data.get( 'partner_name' )
+                     and self.cleaned_data.get( 'partner_birthdate' ) )
+
     def _subjects( self ) -> list:
         cleaned  = self.cleaned_data
         subjects = [ SubjectProfile(
             handle = PRIMARY_SUBJECT_HANDLE,
             name = cleaned[ 'subject_name' ], birthdate = cleaned[ 'subject_birthdate' ] ) ]
-        if cleaned.get( 'has_partner' ):
+        if self._has_partner():
             subjects.append( SubjectProfile(
                 handle = PARTNER_SUBJECT_HANDLE,
                 name = cleaned[ 'partner_name' ], birthdate = cleaned[ 'partner_birthdate' ] ) )
         return subjects
 
     def _filing_status( self ) -> FilingStatus:
-        has_partner = self.cleaned_data.get( 'has_partner' )
+        return self._filing_status_for( self._has_partner() )
+
+    @staticmethod
+    def _filing_status_for( has_partner : bool ) -> FilingStatus:
+        """Single vs joint from partner presence -- the one mapping shared by `apply` (from submitted
+        data) and the read-only pane (from saved facts)."""
         return FilingStatus.MARRIED_JOINT if has_partner else FilingStatus.SINGLE
 
 
-class HomeForm( forms.Form ):
+class HomeForm( MortgageFields ):
     """§3 -- the household residence. Owning captures the home's current value and purchase price
     (its cost basis) and, if there is a mortgage, the loan the way a person knows it -- when it
     started, the original amount, the rate, the term -- from which materialization derives the
@@ -135,22 +169,12 @@ class HomeForm( forms.Form ):
     _MORTGAGE_HANDLE  = 'mortgage'
     _RENT_HANDLE      = RENT_OBLIGATION_HANDLE
 
-    tenure         = forms.ChoiceField( label = 'The residence is', choices = _TENURE_CHOICES )
+    tenure         = forms.ChoiceField(
+        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, initial = _OWN,
+        widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
     home_value     = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
     purchase_price = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
-    has_mortgage   = forms.BooleanField( label = 'There is a mortgage', required = False )
-    mortgage_origination = forms.DateField( label = 'Loan start date', required = False )
-    mortgage_original_amount = forms.DecimalField(
-        label = 'Original loan amount', required = False, min_value = 0 )
-    mortgage_rate = forms.DecimalField(
-        label = 'Interest rate (%)', required = False, min_value = 0 )
-    mortgage_term_years = forms.IntegerField(
-        label = 'Loan term (years)', required = False, min_value = 1 )
-    mortgage_current_balance = forms.DecimalField(
-        label = 'Balance owed now (optional)', required = False, min_value = 0 )
-    mortgage_extra_principal = forms.DecimalField(
-        label = 'Extra principal per month (optional)', required = False, min_value = 0 )
-    monthly_rent = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
+    monthly_rent   = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile, plans ) if profile is not None else None
@@ -169,24 +193,7 @@ class HomeForm( forms.Form ):
             'purchase_price': residence.cost_basis,
         }
         mortgage = cls._find( profile.loans, cls._MORTGAGE_HANDLE )
-        initial.update( cls._mortgage_initial( mortgage, plans ) )
-        return initial
-
-    @classmethod
-    def _mortgage_initial( cls, mortgage, plans : Plans ) -> dict:
-        if mortgage is None:
-            return dict()
-        initial = {
-            'has_mortgage'             : True,
-            'mortgage_origination'     : mortgage.origination_date,
-            'mortgage_original_amount' : mortgage.original_amount,
-            'mortgage_rate'            : mortgage.interest_rate.fraction * 100,
-            'mortgage_term_years'      : mortgage.original_term.months() // 12,
-            'mortgage_current_balance' : mortgage.current_balance,
-        }
-        prepayment = cls._prepayment_for( plans )
-        if prepayment is not None:
-            initial[ 'mortgage_extra_principal' ] = prepayment.annual_amount / 12
+        initial.update( cls._mortgage_initial( mortgage, cls._prepayment_for( plans ) ) )
         return initial
 
     @classmethod
@@ -195,22 +202,12 @@ class HomeForm( forms.Form ):
         return next(
             ( item for item in prepayments if item.loan_handle == cls._MORTGAGE_HANDLE ), None )
 
-    def clean( self ):
-        cleaned = super().clean()
-        if cleaned.get( 'tenure' ) == self._OWN:
-            self._require( 'home_value', 'Enter the current home value.' )
-            if cleaned.get( 'has_mortgage' ):
-                self._require( 'mortgage_origination', 'Enter the loan start date.' )
-                self._require( 'mortgage_original_amount', 'Enter the original loan amount.' )
-                self._require( 'mortgage_rate', 'Enter the interest rate.' )
-                self._require( 'mortgage_term_years', 'Enter the loan term.' )
-        elif cleaned.get( 'tenure' ) == self._RENT:
-            self._require( 'monthly_rent', 'Enter the monthly rent.' )
-        return cleaned
-
-    def _require( self, field : str, message : str ):
-        if self.cleaned_data.get( field ) is None:
-            self.add_error( field, message )
+    def _has_mortgage( self ) -> bool:
+        """A residence carries a mortgage only when owned; otherwise defer to the base field-filled
+        inference."""
+        if self.cleaned_data.get( 'tenure' ) != self._OWN:
+            return False
+        return super()._has_mortgage()
 
     def apply( self, profile : Profile, plans : Plans ):
         updated_profile = replace(
@@ -223,8 +220,10 @@ class HomeForm( forms.Form ):
         return updated_profile, updated_plans
 
     def _residence( self ) -> list:
+        # Non-blocking: an owned home materializes only once its value is entered; until then it
+        # simply is not written (no hard error mid-entry), the forecast run being the real gate.
         cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._OWN:
+        if cleaned.get( 'tenure' ) != self._OWN or cleaned.get( 'home_value' ) is None:
             return []
         return [ AssetProfile(
             handle = self._RESIDENCE_HANDLE, name = 'Home',
@@ -232,33 +231,23 @@ class HomeForm( forms.Form ):
             opening_value = cleaned[ 'home_value' ], cost_basis = cleaned.get( 'purchase_price' ) ) ]
 
     def _mortgage( self ) -> list:
-        cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._OWN or not cleaned.get( 'has_mortgage' ):
-            return []
-        return [ LoanProfile(
+        loan = self._mortgage_loan(
             handle = self._MORTGAGE_HANDLE, name = 'Mortgage',
-            origination_date = cleaned[ 'mortgage_origination' ],
-            original_amount = cleaned[ 'mortgage_original_amount' ],
-            interest_rate = Rate.percent( cleaned[ 'mortgage_rate' ] ),
-            original_term = Duration( cleaned[ 'mortgage_term_years' ], TimeUnit.YEAR ),
-            current_balance = cleaned.get( 'mortgage_current_balance' ),
             interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
-            property_handle = self._RESIDENCE_HANDLE ) ]
+            property_handle = self._RESIDENCE_HANDLE )
+        return [ loan ] if loan is not None else []
 
     def _rent( self ) -> list:
         cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._RENT:
+        if cleaned.get( 'tenure' ) != self._RENT or cleaned.get( 'monthly_rent' ) is None:
             return []
         return [ CommittedObligation(
             handle = self._RENT_HANDLE, name = 'Rent', amount = cleaned[ 'monthly_rent' ],
             cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ]
 
     def _prepayment( self ) -> list:
-        cleaned = self.cleaned_data
-        extra   = cleaned.get( 'mortgage_extra_principal' )
-        if cleaned.get( 'tenure' ) != self._OWN or not cleaned.get( 'has_mortgage' ) or not extra:
-            return []
-        return [ LoanPrepayment( loan_handle = self._MORTGAGE_HANDLE, annual_amount = extra * 12 ) ]
+        prepayment = self._mortgage_prepayment( self._MORTGAGE_HANDLE )
+        return [ prepayment ] if prepayment is not None else []
 
     def _merged_prepayments( self, existing : list ) -> list:
         kept = [ item for item in existing if item.loan_handle != self._MORTGAGE_HANDLE ]
@@ -293,58 +282,85 @@ class PropertiesForm:
     def rentals( self ) -> list:
         return rentals_context( self._profile )
 
+    @property
+    def possessions_form( self ):
+        return PossessionsForm( profile = self._profile, plans = self._plans )
+
     def apply( self, profile, plans ):
         return profile, plans
 
 
 class AccountsForm( forms.Form ):
-    """§4 -- the household's financial accounts at a high level: a savings (cash) total, an
-    investment (taxable) total, and a retirement total per subject. Retirement accounts are
-    individual by law, so each is owned by its subject; savings and investments are household.
-    Itemizing into individual accounts, other account types, and cost basis is a later drill-down.
+    """§4 -- the household's financial accounts, one optional total per engine asset class the
+    projection distinguishes. Nothing is required: a user enters a single total or itemizes across
+    classes, as detailed as they care to be. The household's taxable holdings are shared; retirement
+    is individual by law, so each subject has their own pre-tax and tax-free (Roth) totals.
 
-    `apply` replaces the financial-account assets in the Profile, leaving the home and any other
-    holdings intact, so revisiting re-states just these buckets.
+    Splitting a class into named individual accounts, and cost basis, are later drill-downs. `apply`
+    replaces the financial-account assets in the Profile, leaving the home and other holdings intact.
     """
 
-    _SAVINGS_HANDLE    = 'savings'
-    _INVESTMENT_HANDLE = 'investment'
-    _RETIREMENT_PREFIX = 'retirement-'
-
-    _ACCOUNT_CLASSES = frozenset( (
-        AssetClass.CASH, AssetClass.STOCKS, AssetClass.DIVIDEND_STOCKS, AssetClass.BONDS,
-        AssetClass.CDS, AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
-
-    savings    = forms.DecimalField( label = 'Savings (cash)', required = False, min_value = 0 )
-    investment = forms.DecimalField( label = 'Investments', required = False, min_value = 0 )
+    # The household's taxable holdings: (field name, stable handle, engine asset class).
+    _TAXABLE = (
+        ( 'cash', 'cash', AssetClass.CASH ),
+        ( 'stocks', 'stocks', AssetClass.STOCKS ),
+        ( 'dividend_stocks', 'dividend-stocks', AssetClass.DIVIDEND_STOCKS ),
+        ( 'bonds', 'bonds', AssetClass.BONDS ),
+        ( 'cds', 'cds', AssetClass.CDS ),
+    )
+    # Each subject's tax-advantaged retirement, per wrapper the projection distinguishes:
+    # (field prefix, handle prefix, engine asset class, jurisdiction concept for the local label).
+    _RETIREMENT = (
+        ( 'pretax', 'pretax-', AssetClass.PRETAX_RETIREMENT, JurisdictionConcept.PRETAX_RETIREMENT ),
+        ( 'roth', 'roth-', AssetClass.ROTH, JurisdictionConcept.TAX_FREE_RETIREMENT ),
+    )
+    _ACCOUNT_CLASSES = frozenset(
+        [ item[ 2 ] for item in _TAXABLE ] + [ item[ 2 ] for item in _RETIREMENT ] )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__(
             data, initial = self._initial( profile ) if profile is not None else None )
         self._subjects = profile.subjects if profile is not None else []
+        jurisdiction   = ( profile.jurisdiction_type if profile is not None
+                           else JurisdictionType.US_FEDERAL )
+        for name, _handle, asset_class in self._TAXABLE:
+            self.fields[ name ] = forms.DecimalField(
+                label = asset_class.label, required = False, min_value = 0 )
         for subject in self._subjects:
-            self.fields[ self._retirement_field( subject.handle ) ] = forms.DecimalField(
-                label = f'{subject.name} retirement savings', required = False, min_value = 0 )
+            for prefix, _handle_prefix, _asset_class, concept in self._RETIREMENT:
+                self.fields[ self._retire_field( prefix, subject.handle ) ] = forms.DecimalField(
+                    label = local_label( jurisdiction, concept ), required = False, min_value = 0 )
 
     @staticmethod
-    def _retirement_field( handle : str ) -> str:
-        return f'retirement_{handle}'
+    def _retire_field( prefix : str, handle : str ) -> str:
+        return f'{prefix}_{handle}'
 
-    @classmethod
-    def _retirement_handle( cls, handle : str ) -> str:
-        return f'{cls._RETIREMENT_PREFIX}{handle}'
+    @property
+    def taxable_fields( self ) -> list:
+        """The household taxable-account fields, in class order (for the template)."""
+        return [ self[ name ] for name, _handle, _cls in self._TAXABLE ]
+
+    @property
+    def retirement_groups( self ) -> list:
+        """The retirement fields grouped one block per subject (for the template)."""
+        return [ { 'subject' : subject.name,
+                   'fields'  : [ self[ self._retire_field( prefix, subject.handle ) ]
+                                 for prefix, _hp, _cls, _c in self._RETIREMENT ] }
+                 for subject in self._subjects ]
 
     @classmethod
     def _initial( cls, profile : Profile ) -> dict:
-        by_handle = { asset.handle: asset for asset in profile.assets }
+        by_handle = { asset.handle : asset for asset in profile.assets }
         initial   = dict()
-        if cls._SAVINGS_HANDLE in by_handle:
-            initial[ 'savings' ] = by_handle[ cls._SAVINGS_HANDLE ].opening_value
-        if cls._INVESTMENT_HANDLE in by_handle:
-            initial[ 'investment' ] = by_handle[ cls._INVESTMENT_HANDLE ].opening_value
-        for asset in profile.assets:
-            if asset.handle.startswith( cls._RETIREMENT_PREFIX ):
-                initial[ cls._retirement_field( asset.owner_handle ) ] = asset.opening_value
+        for name, handle, _asset_class in cls._TAXABLE:
+            if handle in by_handle:
+                initial[ name ] = by_handle[ handle ].opening_value
+        for subject in profile.subjects:
+            for prefix, handle_prefix, _asset_class, _concept in cls._RETIREMENT:
+                handle = f'{handle_prefix}{subject.handle}'
+                if handle in by_handle:
+                    initial[ cls._retire_field( prefix, subject.handle ) ] = \
+                        by_handle[ handle ].opening_value
         return initial
 
     def apply( self, profile : Profile, plans : Plans ):
@@ -353,25 +369,23 @@ class AccountsForm( forms.Form ):
         return replace( profile, assets = kept + self._accounts() ), plans
 
     def _accounts( self ) -> list:
-        accounts  = self._bucket( 'savings', self._SAVINGS_HANDLE, 'Savings', AssetClass.CASH )
-        accounts += self._bucket(
-            'investment', self._INVESTMENT_HANDLE, 'Investments', AssetClass.STOCKS )
-        for subject in self._subjects:
-            value = self.cleaned_data.get( self._retirement_field( subject.handle ) )
+        accounts = []
+        for name, handle, asset_class in self._TAXABLE:
+            value = self.cleaned_data.get( name )
             if value is not None:
                 accounts.append( AssetProfile(
-                    handle = self._retirement_handle( subject.handle ),
-                    name = f'{subject.name} Retirement',
-                    asset_class = AssetClass.PRETAX_RETIREMENT,
-                    opening_value = value, owner_handle = subject.handle ) )
+                    handle = handle, name = asset_class.label,
+                    asset_class = asset_class, opening_value = value ) )
+        for subject in self._subjects:
+            for prefix, handle_prefix, asset_class, _concept in self._RETIREMENT:
+                value = self.cleaned_data.get( self._retire_field( prefix, subject.handle ) )
+                if value is not None:
+                    accounts.append( AssetProfile(
+                        handle = f'{handle_prefix}{subject.handle}',
+                        name = f'{subject.name} {asset_class.label}',
+                        asset_class = asset_class, opening_value = value,
+                        owner_handle = subject.handle ) )
         return accounts
-
-    def _bucket( self, field : str, handle : str, name : str, asset_class ) -> list:
-        value = self.cleaned_data.get( field )
-        if value is None:
-            return []
-        return [ AssetProfile(
-            handle = handle, name = name, asset_class = asset_class, opening_value = value ) ]
 
 
 class IncomeSectionForm:
@@ -396,12 +410,18 @@ class IncomeSectionForm:
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
-    Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm ),
-    Section( 'properties'  , 'Properties', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
-             outer_template = 'inputs/interview/sections/properties.html' ),
-    Section( 'accounts'    , 'Accounts', form = AccountsForm ),
+    Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm,
+             inner_template = 'inputs/interview/sections/subjects.html' ),
+    Section( 'accounts'    , 'Accounts', form = AccountsForm,
+             inner_template = 'inputs/interview/sections/accounts.html' ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
+    Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
+             outer_template = 'inputs/interview/sections/properties.html' ),
+    # Declared but not yet live (no form): the consolidated liabilities view -- mortgages (also
+    # entered on their property) plus standalone debts. Shows in the stepper as an upcoming step;
+    # becomes live when given a form. Straddles Plans for extra-principal prepayments, like properties.
+    Section( 'debt'        , 'Debts', ( Aggregate.PROFILE, Aggregate.PLANS ) ),
     Section( 'spending'    , 'Spending', ( Aggregate.PLANS, ), SpendingForm,
              outer_template = 'inputs/interview/sections/spending.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,

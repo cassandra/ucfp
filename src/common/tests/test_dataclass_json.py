@@ -19,8 +19,8 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, Rea
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
-from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
-from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
+from ucfp.jurisdiction.law import TaxProjection
 
 from ucfp.inputs.profile.schemas import (
     AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile,
@@ -87,8 +87,7 @@ def _sample_assumptions():
             retirement_growth = Rate( Decimal( '0.055' ) ),
             social_security_cola = Rate( Decimal( '0.025' ) ), pension_cola = Rate( Decimal( '0.02' ) ),
             rental_increase = Rate( Decimal( '0.03' ) ) ),
-        statute = StatuteProfile(
-            jurisdiction_type = JurisdictionType.US_FEDERAL,
+        tax_projection = TaxProjection(
             forecast_type = StatuteForecastType.CURRENT_LAW ) )
 
 
