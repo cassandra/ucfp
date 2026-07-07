@@ -34,7 +34,7 @@ from .debts import DebtsForm
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
 from .income import IncomeTableForm
-from .properties import PossessionsForm, properties_context
+from .properties import PANES, PossessionsForm, properties_context
 from .spending import SpendingForm
 from .widgets import IsoDateInput
 
@@ -270,12 +270,15 @@ class PropertiesForm:
         return HomeForm( profile = self._profile, plans = self._plans )
 
     @property
-    def rentals( self ) -> list:
-        return properties_context( self._profile, AssetClass.REAL_ESTATE_RENTAL )
-
-    @property
-    def second_homes( self ) -> list:
-        return properties_context( self._profile, AssetClass.REAL_ESTATE_SECOND_HOME )
+    def property_panes( self ) -> list:
+        """Each mortgaged-property pane's render context for the Property section -- its heading, its
+        holdings, and the template config (ids, URL names, wording) from the shared `PropertyPane`.
+        The section loops over these, so a new property kind is one pane, not another hand-wired
+        block."""
+        return [ { 'heading': pane.heading,
+                   'properties': properties_context( self._profile, pane.asset_class ),
+                   **pane.template_context() }
+                 for pane in PANES ]
 
     @property
     def possessions_form( self ):

@@ -8,7 +8,7 @@ rental additionally carries depreciation attributes (a `PropertyProfile`) and, i
 rent; a second home is personal-use with neither. Operating expenses attach in spending (§6) by the
 same handle.
 """
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from django import forms
 
@@ -218,6 +218,51 @@ class SecondHomeForm( _PropertyForm ):
             handle = handle, name = cleaned[ 'name' ],
             asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
             opening_value = cleaned[ 'value' ], cost_basis = cleaned[ 'purchase_price' ] )
+
+
+@dataclass( frozen = True )
+class PropertyPane:
+    """Per-type configuration for a mortgaged-property pane (rentals, second homes), the single source
+    consumed by both the Property-section template (the initial render) and the pane's add/edit/delete
+    views (the async swaps): the form class, the holding asset class, the section heading, the DOM ids
+    the async swaps target, the URL names the generic list/form partials resolve, and the list's
+    wording. Holding it in one place keeps the initial render and the swaps from drifting. The handle
+    stem is not here -- it lives on the form (`form._PREFIX`), the single source for minting."""
+
+    form        : type
+    asset_class : AssetClass
+    heading     : str
+    list_id     : str
+    form_id     : str
+    add_url     : str
+    edit_url    : str
+    delete_url  : str
+    add_text    : str
+    empty_text  : str
+
+    def template_context( self ) -> dict:
+        """The context the generic `property_list.html` / `property_form.html` partials render from --
+        the ids, URL names, and wording (the holdings themselves are supplied by the caller)."""
+        return { 'list_id': self.list_id, 'form_id': self.form_id, 'add_url': self.add_url,
+                 'edit_url': self.edit_url, 'delete_url': self.delete_url,
+                 'add_text': self.add_text, 'empty_text': self.empty_text }
+
+
+RENTAL_PANE = PropertyPane(
+    form = RentalForm, asset_class = AssetClass.REAL_ESTATE_RENTAL, heading = 'Rental properties',
+    list_id = 'rentals-list', form_id = 'rentals-form',
+    add_url = 'rental_add', edit_url = 'rental_edit', delete_url = 'rental_delete',
+    add_text = 'Add a rental property', empty_text = 'No rental properties.' )
+
+SECOND_HOME_PANE = PropertyPane(
+    form = SecondHomeForm, asset_class = AssetClass.REAL_ESTATE_SECOND_HOME, heading = 'Second homes',
+    list_id = 'second-homes-list', form_id = 'second-homes-form',
+    add_url = 'second_home_add', edit_url = 'second_home_edit', delete_url = 'second_home_delete',
+    add_text = 'Add a second home', empty_text = 'No second homes.' )
+
+# The mortgaged-property panes in display order, iterated by the Property section and mapped to their
+# add/edit/delete views.
+PANES = ( RENTAL_PANE, SECOND_HOME_PANE )
 
 
 class PossessionsForm( forms.Form ):
