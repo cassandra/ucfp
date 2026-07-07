@@ -27,8 +27,10 @@ from .enums import PlanningFeature
 class ProjectionRunRecord( JsonDocumentModel ):
     organization = models.ForeignKey(
         Organization, on_delete = models.CASCADE, related_name = 'projection_runs' )
+    # CASCADE (not PROTECT): a run captured its books, and an organization's teardown deletes both,
+    # so a run must not block the deletion of the books it references (right-to-erasure, #47).
     books = models.ForeignKey(
-        BooksOfAccountRecord, on_delete = models.PROTECT, related_name = '+' )
+        BooksOfAccountRecord, on_delete = models.CASCADE, related_name = '+' )
 
     def __str__( self ):
         return f'{self.label} ({self.organization})'
