@@ -41,7 +41,8 @@ from ucfp.jurisdiction.law import StatuteProfile
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile
 from ucfp.inputs.plans.enums import CreditCardPlanMode
-from ucfp.inputs.plans.schemas import LoanRepayment, RetirementTiming, Plans
+from ucfp.inputs.plans.schemas import (
+    AutoPlan, CreditCardPlan, LoanRepayment, RetirementTiming, Plans )
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 
@@ -186,7 +187,8 @@ _CREDIT_CARD_APR = Rate.percent( Decimal( AppConst.CREDIT_CARD_APR_PERCENT ) )
 
 
 def _credit_card_expenses(
-        profile : Profile, plans : Plans, start : date ) -> tuple[ list, list ]:
+        profile : Profile, plans : Plans,
+        start : date ) -> tuple[ list[ ExpenseItem ], list[ ScheduledExternalDisbursement ] ]:
     """Every credit-card balance resolved into engine inputs at the assumed card APR. Carrying a
     balance costs its interest every month, so a card with no active paydown plan (or an explicit
     carry) becomes an indefinite interest expense; a LUMP plan carries it (interest only) until a
@@ -203,7 +205,9 @@ def _credit_card_expenses(
     return items, events
 
 
-def _resolve_card( debt : Debt, plan, rate : Decimal, start : date, items : list, events : list ):
+def _resolve_card(
+        debt : Debt, plan : Optional[ CreditCardPlan ], rate : Decimal, start : date,
+        items : list[ ExpenseItem ], events : list[ ScheduledExternalDisbursement ] ) -> None:
     balance = debt.balance
     mode    = plan.mode if plan is not None else None
     if mode is CreditCardPlanMode.MONTHLY:
@@ -229,7 +233,9 @@ def _resolve_card( debt : Debt, plan, rate : Decimal, start : date, items : list
                 event_date = plan.target_date, amount = balance ) )
 
 
-def _resolve_combo( debt : Debt, plan, rate : Decimal, start : date, items : list, events : list ):
+def _resolve_combo(
+        debt : Debt, plan : CreditCardPlan, rate : Decimal, start : date,
+        items : list[ ExpenseItem ], events : list[ ScheduledExternalDisbursement ] ) -> None:
     """A COMBO plan: pay `monthly_payment` down until the target date, then clear whatever remains in
     a lump. If the monthly clears the card before the date, it is just a paydown (no lump)."""
     balance = debt.balance
@@ -272,7 +278,7 @@ _AUTO_LOAN_APR         = Rate.percent( Decimal( AppConst.AUTO_LOAN_APR_PERCENT )
 _AUTO_LOAN_TERM_MONTHS = AppConst.AUTO_LOAN_TERM_YEARS * 12
 
 
-def _auto_expenses( plans : Plans ) -> list:
+def _auto_expenses( plans : Plans ) -> list[ ExpenseItem ]:
     """The household's car costs, smoothed: a lump every recurrence (the full price unfinanced, or the
     down payment financed) plus, when financed, a constant stream of the financed lifetime cost spread
     over the recurrence period. Both scale by the number of cars and begin at the plan's start date."""
@@ -298,7 +304,7 @@ def _auto_expenses( plans : Plans ) -> list:
     return items
 
 
-def _auto_costs( plan ) -> tuple:
+def _auto_costs( plan : AutoPlan ) -> tuple[ Decimal, Decimal ]:
     """The (per-car lump, per-car financed lifetime cost) of the plan. Unfinanced: the lump is the
     full price, nothing financed. Financed: the lump is the down payment and the financed lifetime
     cost is the total of the loan's payments (principal plus interest). The user gives the down

@@ -14,6 +14,7 @@ from django import forms
 
 from ucfp.accounts.enums import AssetClass, RealPropertyType
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.compatibility import plans_without_debts
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, PropertyProfile
 from ucfp.inputs.widgets import IsoDateInput
@@ -46,8 +47,8 @@ def rentals_context( profile ) -> list:
 
 
 def delete_rental( profile, plans, property_handle : str ):
-    """Remove a rental as a unit: its holding, gross income, any debts secured against it, those
-    debts' repayment/prepayment plans, and any operating expenses attached to it."""
+    """Remove a rental as a unit: its holding, gross income, any debts secured against it and their
+    full plan reap (repayment, extra principal, payoff), and any operating expenses attached to it."""
     secured = { debt.handle for debt in profile.debts
                 if debt.secured_asset == property_handle }
     profile = replace(
@@ -56,11 +57,9 @@ def delete_rental( profile, plans, property_handle : str ):
         income_flows = [ flow for flow in profile.income_flows
                          if flow.property_handle != property_handle ],
         debts        = [ debt for debt in profile.debts if debt.handle not in secured ] )
+    plans = plans_without_debts( plans, secured )
     plans = replace(
-        plans,
-        loan_repayments = [ r for r in plans.loan_repayments if r.debt_handle not in secured ],
-        prepayments     = [ p for p in plans.prepayments if p.loan_handle not in secured ],
-        expenses        = [ e for e in plans.expenses if e.property_handle != property_handle ] )
+        plans, expenses = [ e for e in plans.expenses if e.property_handle != property_handle ] )
     return profile, plans
 
 

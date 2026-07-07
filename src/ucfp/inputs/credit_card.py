@@ -8,6 +8,7 @@ figures are advisory, computed client-side (`inputs.js`) from the same shared AP
 resolution is server-side.
 """
 from dataclasses import replace
+from decimal import Decimal
 
 from django import forms
 
@@ -21,6 +22,10 @@ from ucfp.inputs.widgets import IsoDateInput
 
 # The modes whose plan includes a one-time payoff, surfaced in the events list as a CARD_PAYOFF.
 _PAYOFF_MODES = ( CreditCardPlanMode.LUMP, CreditCardPlanMode.COMBO )
+
+# The assumed monthly interest rate the calculator and materialization share -- used here only to warn
+# when a monthly payment would not cover it (materialization is authoritative).
+_CARD_MONTHLY_RATE = Decimal( AppConst.CREDIT_CARD_APR_PERCENT ) / Decimal( '1200' )
 
 
 # The "just keep carrying it" choice -- the absence of a plan, so it maps to no `CreditCardPlan`
@@ -39,10 +44,10 @@ class CreditCardPlanForm( forms.Form ):
         super().__init__( data )
         self._cards = ( [ debt for debt in profile.debts if debt.kind is DebtKind.CREDIT_CARD ]
                         if profile is not None else [] )
-        existing = { plan.card_handle : plan
-                     for plan in ( plans.credit_card_plans if plans else [] ) }
+        self._existing = { plan.card_handle : plan
+                           for plan in ( plans.credit_card_plans if plans else [] ) }
         for card in self._cards:
-            self._build_fields( card, existing.get( card.handle ) )
+            self._build_fields( card, self._existing.get( card.handle ) )
 
     def _build_fields( self, card, plan ):
         self.fields[ self._mode_field( card.handle ) ] = forms.ChoiceField(
@@ -92,8 +97,22 @@ class CreditCardPlanForm( forms.Form ):
                    'balance' : card.balance,
                    'mode'    : self[ self._mode_field( card.handle ) ],
                    'monthly' : self[ self._monthly_field( card.handle ) ],
-                   'date'    : self[ self._date_field( card.handle ) ] }
+                   'date'    : self[ self._date_field( card.handle ) ],
+                   'hint'    : self._payment_hint( card ) }
                  for card in self._cards ]
+
+    def _payment_hint( self, card ) -> str:
+        """A non-blocking warning when a saved monthly payment does not cover the card's interest, so
+        it never clears the balance. The materialization models the payment as entered (it does not
+        silently substitute the interest), so this tells the user the plan will not pay the card down.
+        Derived from the saved plan; the live equivalent is the client-side calculator readout."""
+        plan = self._existing.get( card.handle )
+        if ( plan is None or plan.mode is not CreditCardPlanMode.MONTHLY
+                or plan.monthly_payment is None ):
+            return ''
+        if plan.monthly_payment <= card.balance * _CARD_MONTHLY_RATE:
+            return "This payment doesn't cover the interest, so the balance won't clear."
+        return ''
 
     def apply( self, profile, plans ):
         handles   = { card.handle for card in self._cards }

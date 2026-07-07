@@ -14,8 +14,8 @@ from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
     AssetProfile, CommittedObligation, Debt, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    ExpenseFlow, LoanPrepayment, LoanRepayment, PlanEvent, Plans, RetirementTiming )
-from ucfp.inputs.plans.enums import EventKind
+    CreditCardPlan, ExpenseFlow, LoanPrepayment, LoanRepayment, PlanEvent, Plans, RetirementTiming )
+from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.compatibility import (
     PlansIncompatibleError, assert_compatible, compatibility_issues )
 
@@ -60,9 +60,12 @@ class CompatibilityTest( SimpleTestCase ):
                 debt_handle = 'sold-debt', interest_rate = Rate( Decimal( '0.04' ) ),
                 remaining_term = Duration( 25, TimeUnit.YEAR ) ) ],
             prepayments = [ LoanPrepayment( loan_handle = 'sold-loan',
-                                            annual_amount = Decimal( '6000' ) ) ] )
+                                            annual_amount = Decimal( '6000' ) ) ],
+            credit_card_plans = [ CreditCardPlan(
+                card_handle = 'sold-card', mode = CreditCardPlanMode.MONTHLY,
+                monthly_payment = Decimal( '200' ) ) ] )
         issues = compatibility_issues( _profile(), plans )
-        self.assertEqual( len( issues ), 3 )
+        self.assertEqual( len( issues ), 4 )
         with self.assertRaises( PlansIncompatibleError ):
             assert_compatible( _profile(), plans )
 

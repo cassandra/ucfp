@@ -23,6 +23,7 @@ re-rendering only to surface a bad value.
         {% include 'inputs/interview/_field.html' with field=row.date %}
       </div>
       <p class="{{ AppConst.CREDIT_CARD_READOUT_CLASS }} text-info small mb-0"></p>
+      {% if row.hint %}<p class="text-warning small mb-0">{{ row.hint }}</p>{% endif %}
     </div>
     {% endfor %}
     <p class="text-muted small">Estimates assume about {{ credit_card_form.apr_percent }}% APR.

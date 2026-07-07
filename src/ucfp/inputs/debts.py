@@ -15,8 +15,7 @@ from dataclasses import replace
 
 from django import forms
 
-from ucfp.inputs.events import CARD_ROLE, LOAN_ROLE
-from ucfp.inputs.plans.enums import EventKind
+from ucfp.inputs.compatibility import plans_without_debts
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import Debt
 
@@ -31,16 +30,6 @@ def _minted_debt_handle( taken : set ) -> str:
     while f'{_HANDLE_PREFIX}{index}' in taken:
         index += 1
     return f'{_HANDLE_PREFIX}{index}'
-
-
-def _reaped_event( event, removed : set ) -> bool:
-    """Whether a plan event should be dropped because the debt it targets was removed -- a loan or
-    card payoff whose debt is gone."""
-    if event.kind is EventKind.LOAN_PAYOFF:
-        return event.selections.get( LOAN_ROLE ) in removed
-    if event.kind is EventKind.CARD_PAYOFF:
-        return event.selections.get( CARD_ROLE ) in removed
-    return False
 
 
 class DebtsForm( forms.Form ):
@@ -95,21 +84,8 @@ class DebtsForm( forms.Form ):
         rebuilt = self._debts_from_rows()
         removed = ( { debt.handle for debt in self._profile.debts }
                     - { debt.handle for debt in rebuilt } )
-        plans   = self._reap( plans, removed ) if removed else plans
+        plans   = plans_without_debts( plans, removed ) if removed else plans
         return replace( profile, debts = rebuilt ), plans
-
-    @staticmethod
-    def _reap( plans, removed : set ):
-        """Drop any plan that referenced a debt the user just removed -- a loan's repayment, extra
-        principal, and payoff, or a card's paydown plan and payoff -- so a deleted debt leaves
-        nothing dangling behind it."""
-        return replace(
-            plans,
-            loan_repayments   = [ r for r in plans.loan_repayments if r.debt_handle not in removed ],
-            prepayments       = [ p for p in plans.prepayments if p.loan_handle not in removed ],
-            credit_card_plans = [ c for c in plans.credit_card_plans
-                                  if c.card_handle not in removed ],
-            events            = [ event for event in plans.events if not _reaped_event( event, removed ) ] )
 
     def _debts_from_rows( self ) -> list:
         # New rows mint a handle free among every debt already in play; existing rows keep the handle

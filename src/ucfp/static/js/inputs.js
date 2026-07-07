@@ -311,7 +311,7 @@ window.App.Inputs = (function () {
             if ( !( payment > 0 ) ) { return ''; }
             const months = monthsToClear( balance, payment );
             return months === null
-                ? 'That won’t cover the interest, so the balance never clears.'
+                ? 'That won\'t cover the interest, so the balance never clears.'
                 : 'Clears in ' + describeMonths( months ) + '.';
         }
         if ( mode === 'BY_DATE' ) {
