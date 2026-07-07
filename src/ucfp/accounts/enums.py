@@ -121,18 +121,19 @@ class AssetClass( LabeledEnum ):
     tax-free bucket. Set on asset accounts only (see Account.asset_class).
     """
 
-    CASH                  = ( 'Cash & Savings'          , 'Cash and savings; the income/expense hub.' )
-    STOCKS                = ( 'Stocks'                  , 'Growth equities; appreciation only.' )
-    DIVIDEND_STOCKS       = ( 'Dividend Stocks'         , 'Dividend equities, plus appreciation.' )
-    BONDS                 = ( 'Bonds'                   , 'Bonds paying interest, with appreciation.' )
-    CDS                   = ( 'CDs'                     , 'Certificates of deposit paying interest.' )
-    REAL_ESTATE_RESIDENCE = ( 'Real Estate (Residence)' , 'A primary residence held for appreciation.' )
-    REAL_ESTATE_RENTAL    = ( 'Real Estate (Rental)'    , 'Rental property: income and depreciation.' )
-    PRETAX_RETIREMENT     = ( 'Pre-Tax Retirement'      , 'IRA/401(k); withdrawals are ordinary income.' )
-    ROTH                  = ( 'Roth Retirement'         , 'Qualified withdrawals tax-free; no RMDs.' )
-    PRECIOUS_METALS       = ( 'Precious Metals'         , 'Gold, silver; taxed as collectibles.' )
-    COLLECTIBLES          = ( 'Collectibles'            , 'Art, jewelry and similar collectibles.' )
-    DEPRECIATING          = ( 'Depreciating Assets'     , 'Vehicles, boats; depreciate over time.' )
+    CASH                    = ( 'Cash & Savings'            , 'Cash and savings; the income/expense hub.' )
+    STOCKS                  = ( 'Stocks'                    , 'Growth equities; appreciation only.' )
+    DIVIDEND_STOCKS         = ( 'Dividend Stocks'           , 'Dividend equities, plus appreciation.' )
+    BONDS                   = ( 'Bonds'                     , 'Bonds paying interest, with appreciation.' )
+    CDS                     = ( 'CDs'                       , 'Certificates of deposit paying interest.' )
+    REAL_ESTATE_RESIDENCE   = ( 'Real Estate (Residence)'   , 'A primary residence held for appreciation.' )
+    REAL_ESTATE_RENTAL      = ( 'Real Estate (Rental)'      , 'Rental property: income and depreciation.' )
+    REAL_ESTATE_SECOND_HOME = ( 'Real Estate (Second Home)' , 'A personal-use second home: appreciates, no depreciation or residence exclusion.' )
+    PRETAX_RETIREMENT       = ( 'Pre-Tax Retirement'        , 'IRA/401(k); withdrawals are ordinary income.' )
+    ROTH                    = ( 'Roth Retirement'           , 'Qualified withdrawals tax-free; no RMDs.' )
+    PRECIOUS_METALS         = ( 'Precious Metals'           , 'Gold, silver; taxed as collectibles.' )
+    COLLECTIBLES            = ( 'Collectibles'              , 'Art, jewelry and similar collectibles.' )
+    DEPRECIATING            = ( 'Depreciating Assets'       , 'Vehicles, boats; depreciate over time.' )
 
     @property
     def accrues_unrealized_gains( self ) -> bool:
@@ -204,6 +205,7 @@ class IncomeTaxClass( LabeledEnum ):
     SHORT_TERM_GAINS    = ( 'Short-Term Gains', 'Ordinary rate; netted separately.' )
     RESIDENCE_SECTION_121_GAIN = (
         'Residence Gain', 'Primary-residence gain; §121 exclusion, remainder long-term.' )
+    SECOND_HOME_GAIN    = ( 'Second Home Gain', 'Personal-use second-home gain; long-term, no exclusion, loss non-deductible.' )
     SECTION_1250_GAIN   = ( 'Section 1250 Gain', 'Unrecaptured depreciation; 25% max rate.' )
     COLLECTIBLES_GAINS  = ( 'Collectibles Gains', 'Collectibles; 28% max rate.' )
     SOCIAL_SECURITY     = ( 'Social Security', 'Benefits; partial-inclusion rule.' )
@@ -229,16 +231,17 @@ _DISTRIBUTION_INCOME_CLASS = {
 # but not taxable (a personal-use loss is non-deductible, gains are rare), so it is
 # recognized and then excluded from tax -- a deliberate simplification.
 _REALIZED_GAIN_INCOME_CLASS = {
-    AssetClass.STOCKS                : IncomeTaxClass.LONG_TERM_GAINS,
-    AssetClass.DIVIDEND_STOCKS       : IncomeTaxClass.LONG_TERM_GAINS,
-    AssetClass.BONDS                 : IncomeTaxClass.LONG_TERM_GAINS,
-    AssetClass.REAL_ESTATE_RESIDENCE : IncomeTaxClass.RESIDENCE_SECTION_121_GAIN,
-    AssetClass.REAL_ESTATE_RENTAL    : IncomeTaxClass.LONG_TERM_GAINS,
-    AssetClass.PRETAX_RETIREMENT     : IncomeTaxClass.ORDINARY,
-    AssetClass.ROTH                  : IncomeTaxClass.TAX_FREE,
-    AssetClass.PRECIOUS_METALS       : IncomeTaxClass.COLLECTIBLES_GAINS,
-    AssetClass.COLLECTIBLES          : IncomeTaxClass.COLLECTIBLES_GAINS,
-    AssetClass.DEPRECIATING          : IncomeTaxClass.TAX_FREE,
+    AssetClass.STOCKS                  : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.DIVIDEND_STOCKS         : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.BONDS                   : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.REAL_ESTATE_RESIDENCE   : IncomeTaxClass.RESIDENCE_SECTION_121_GAIN,
+    AssetClass.REAL_ESTATE_RENTAL      : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.REAL_ESTATE_SECOND_HOME : IncomeTaxClass.SECOND_HOME_GAIN,
+    AssetClass.PRETAX_RETIREMENT       : IncomeTaxClass.ORDINARY,
+    AssetClass.ROTH                    : IncomeTaxClass.TAX_FREE,
+    AssetClass.PRECIOUS_METALS         : IncomeTaxClass.COLLECTIBLES_GAINS,
+    AssetClass.COLLECTIBLES            : IncomeTaxClass.COLLECTIBLES_GAINS,
+    AssetClass.DEPRECIATING            : IncomeTaxClass.TAX_FREE,
 }
 
 

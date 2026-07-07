@@ -38,7 +38,8 @@ from .debts import DebtsForm
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
 from .properties import (
-    PossessionsForm, RentalForm, _minted_rental_handle, delete_rental, rentals_context )
+    RENTAL_PANE, SECOND_HOME_PANE, PossessionsForm, PropertyPane, _minted_handle, delete_property,
+    properties_context )
 from .spending import GroupSpendingForm, group_for_key
 
 _HUB_TEMPLATE = 'inputs/hub.html'
@@ -506,64 +507,98 @@ class IncomeTableView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class RentalFormView( View ):
-    """`/inputs/interview/properties/rentals/add/` and `.../<handle>/` -- the add/edit form for one
-    rental in the Property pane. Add and edit converge: GET-add mints a fresh handle and opens the
-    editor for it, so the form always edits a known handle and a new rental has a stable identity from
-    the first keystroke. POST auto-saves in the background -- non-blocking, so an incomplete (or never-
-    filled) rental writes nothing -- and just refreshes the list; the open form is left untouched
-    except to surface a genuine field error."""
+class _PropertyView( View ):
+    """Shared, org-scoped base for the mortgaged-property panes: it renders the property list from the
+    pane's holdings and template config. A concrete view binds a `_PANE` (see `PropertyPane`) that
+    supplies the form class, holding asset class, DOM ids, and URL names."""
 
-    _FORM_TEMPLATE = 'inputs/interview/sections/rental_form.html'
-    _LIST_TEMPLATE = 'inputs/interview/sections/rentals_list.html'
+    _PANE          : PropertyPane
+    _LIST_TEMPLATE = 'inputs/interview/sections/property_list.html'
+
+    def _list( self, request, profile ):
+        return render_to_string(
+            self._LIST_TEMPLATE,
+            { 'properties': properties_context( profile, self._PANE.asset_class ),
+              **self._PANE.template_context() },
+            request = request )
+
+
+class _PropertyFormView( _PropertyView ):
+    """The add/edit form for one mortgaged property in the Property pane. Add and edit converge:
+    GET-add mints a fresh handle and opens the editor for it, so the form always edits a known handle
+    and a new property has a stable identity from the first keystroke. POST auto-saves in the
+    background -- non-blocking, so an incomplete (or never-filled) property writes nothing -- and just
+    refreshes the list; the open form is left untouched except to surface a genuine field error."""
+
+    _FORM_TEMPLATE = 'inputs/interview/sections/property_form.html'
 
     def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request.organization )
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = self._form( request, None, None ) )
         if handle is None:                             # add: mint a fresh handle, open its editor
-            handle = _minted_rental_handle( profile )
-        form = RentalForm( profile = profile, plans = plans, handle = handle )
+            handle = _minted_handle( profile, self._PANE.form._PREFIX )
+        form = self._PANE.form( profile = profile, plans = plans, handle = handle )
         return antinode.response( main_content = self._form( request, handle, form ) )
 
     def post( self, request, handle = None ):
         organization = request.organization
         profile, plans = _current_profile_and_plans( organization )
-        form = RentalForm( request.POST, profile = profile, plans = plans, handle = handle )
+        form = self._PANE.form( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
-            return self._form_swap( request, handle, form )    # surface a genuine field error
+            return antinode.response(                          # surface a genuine field error
+                replace_map = { self._PANE.form_id: self._form( request, handle, form ) } )
         profile, plans = form.apply( profile, plans )
         save_profile( organization, profile )
         save_plans( latest_plans( organization ), plans )
-        # Leave the open form alone; just refresh the list by id, where a rental appears, updates its
+        # Leave the open form alone; just refresh the list by id, where a property appears, updates its
         # name/value, or -- if edited to incomplete -- drops out.
-        return antinode.response( replace_map = { 'rentals-list': render_to_string(
-            self._LIST_TEMPLATE, { 'rentals': rentals_context( profile ) }, request = request ) } )
+        return antinode.response( replace_map = { self._PANE.list_id: self._list( request, profile ) } )
 
     def _form( self, request, handle, form ):
         return render_to_string(
-            self._FORM_TEMPLATE, { 'rental_form': form, 'handle': handle }, request = request )
-
-    def _form_swap( self, request, handle, form ):
-        return antinode.response(
-            replace_map = { 'rentals-form': self._form( request, handle, form ) } )
+            self._FORM_TEMPLATE,
+            { 'property_form': form, 'handle': handle, **self._PANE.template_context() },
+            request = request )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class RentalDeleteView( View ):
-    """`/inputs/interview/properties/rentals/<handle>/delete/` -- remove a rental as a unit, then
-    refresh the list."""
-
-    _LIST_TEMPLATE = 'inputs/interview/sections/rentals_list.html'
+class _PropertyDeleteView( _PropertyView ):
+    """Remove a mortgaged property as a unit, then refresh its list in place."""
 
     def post( self, request, handle ):
         organization = request.organization
         profile, plans = _current_profile_and_plans( organization )
-        profile, plans = delete_rental( profile, plans, handle )
+        profile, plans = delete_property( profile, plans, handle )
         save_profile( organization, profile )
         save_plans( latest_plans( organization ), plans )
-        return antinode.response( main_content = render_to_string(
-            self._LIST_TEMPLATE, { 'rentals': rentals_context( profile ) }, request = request ) )
+        # Refresh the list by id (replace, not insert) so the re-rendered `<div id=list_id>` swaps the
+        # existing one rather than nesting inside it.
+        return antinode.response(
+            replace_map = { self._PANE.list_id: self._list( request, profile ) } )
+
+
+class RentalFormView( _PropertyFormView ):
+    """`/inputs/interview/properties/rentals/add/` and `.../<handle>/`."""
+
+    _PANE = RENTAL_PANE
+
+
+class RentalDeleteView( _PropertyDeleteView ):
+    """`/inputs/interview/properties/rentals/<handle>/delete/`."""
+
+    _PANE = RENTAL_PANE
+
+
+class SecondHomeFormView( _PropertyFormView ):
+    """`/inputs/interview/properties/second-homes/add/` and `.../<handle>/`."""
+
+    _PANE = SECOND_HOME_PANE
+
+
+class SecondHomeDeleteView( _PropertyDeleteView ):
+    """`/inputs/interview/properties/second-homes/<handle>/delete/`."""
+
+    _PANE = SECOND_HOME_PANE
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

@@ -80,5 +80,75 @@ class Section121Tests( unittest.TestCase ):
         self.assertEqual( ledger.net_worth( through = date( 2026, 12, 31 ) ), Decimal( '600000' ) )
 
 
+class SecondHomeSaleTests( unittest.TestCase ):
+    """A second (vacation) home is personal-use like the residence -- its gain floors at zero (loss
+    non-deductible) -- but gets no §121 exclusion, so the whole gain is taxed as long-term."""
+
+    _STATUTE = StatuteProfile(
+        JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
+    _SUBJECTS = [ Subject( 'A', date( 1958, 1, 1 ) ), Subject( 'B', date( 1959, 1, 1 ) ) ]
+
+    def test_second_home_gain_is_taxed_with_no_exclusion( self ):
+        # Bought for 200k, worth 600k at t0 (a 400k embedded gain), sold for 600k with no further
+        # appreciation. The 400k realizes into its own account and -- unlike a residence under the
+        # §121 cap -- is taxed, so net worth ends below the 600k proceeds.
+        parameters = ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.MARRIED_JOINT,
+            statute       = self._STATUTE,
+            subjects      = self._SUBJECTS,
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                AssetParameters(
+                    'Cabin', AssetClass.REAL_ESTATE_SECOND_HOME,
+                    Decimal( '600000' ), Decimal( '200000' ), handle = 'Cabin' ),
+            ],
+            events        = [ ScheduledRealization( date( 2026, 7, 1 ), 'Cabin', Decimal( '600000' ) ) ],
+        )
+        reader = Bookkeeper( Forecast( parameters ).run().books )
+        ledger = reader.ledger
+        second_home_gain = reader.chart.income_account( IncomeTaxClass.SECOND_HOME_GAIN )
+        # the gain realizes into its own account, distinct from long-term gains
+        self.assertEqual( ledger.natural_balance( second_home_gain ), Decimal( '400000' ) )
+        # No exclusion: the whole 400k is a long-term gain and is taxed. The exact ending net worth
+        # pins that -- a §121-style exclusion would leave materially more, so this discriminates the
+        # no-exclusion rule rather than merely asserting "some tax was taken".
+        self.assertEqual( ledger.net_worth( through = date( 2026, 12, 31 ) ), Decimal( '554010.00000' ) )
+
+    def test_second_home_loss_does_not_offset_other_gains( self ):
+        # A stock realizes a 200k long-term gain; a second home bought for 200k but worth only 100k
+        # is sold at a 100k loss. The personal-use loss is non-deductible (floored), so it must not
+        # net against the stock gain -- the ending net worth is identical whether or not the
+        # loss-making cabin is sold (were the loss deductible, selling it would cut the tax). The
+        # stock gain is 200k (not 100k) deliberately: it clears the MFJ 0% long-term-gains bracket
+        # into a taxpaying regime, so a wrongly-deducted loss would actually move the tax -- at a
+        # smaller gain both branches sit at 0% and the test would pass vacuously.
+        def net_worth( sell_cabin : bool ) -> Decimal:
+            events = [ ScheduledRealization( date( 2026, 7, 1 ), 'Stock', Decimal( '200000' ) ) ]
+            if sell_cabin:
+                events.append( ScheduledRealization( date( 2026, 7, 1 ), 'Cabin', Decimal( '100000' ) ) )
+            parameters = ForecastParameters(
+                start_date    = date( 2026, 1, 1 ),
+                end_date      = date( 2026, 12, 31 ),
+                filing_status = FilingStatus.MARRIED_JOINT,
+                statute       = self._STATUTE,
+                subjects      = self._SUBJECTS,
+                assets        = [
+                    AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                    AssetParameters(
+                        'Stock', AssetClass.STOCKS, Decimal( '200000' ), Decimal( '0' ), handle = 'Stock' ),
+                    AssetParameters(
+                        'Cabin', AssetClass.REAL_ESTATE_SECOND_HOME,
+                        Decimal( '100000' ), Decimal( '200000' ), handle = 'Cabin' ),
+                ],
+                events        = events,
+            )
+            reader = Bookkeeper( Forecast( parameters ).run().books )
+            return reader.ledger.net_worth( through = date( 2026, 12, 31 ) )
+
+        self.assertEqual( net_worth( sell_cabin = True ), net_worth( sell_cabin = False ) )
+
+
 if __name__ == '__main__':
     unittest.main()

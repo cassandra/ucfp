@@ -32,6 +32,12 @@ urlpatterns = [
           views.RentalDeleteView.as_view(), name = 'rental_delete' ),
     path( 'interview/properties/rentals/<str:handle>/', views.RentalFormView.as_view(),
           name = 'rental_edit' ),
+    path( 'interview/properties/second-homes/add/', views.SecondHomeFormView.as_view(),
+          name = 'second_home_add' ),
+    path( 'interview/properties/second-homes/<str:handle>/delete/',
+          views.SecondHomeDeleteView.as_view(), name = 'second_home_delete' ),
+    path( 'interview/properties/second-homes/<str:handle>/', views.SecondHomeFormView.as_view(),
+          name = 'second_home_edit' ),
     # A specific segment (not a spending group), so it must precede the group catch-all below and
     # not collide with the 'auto' expense category's own `spending/auto/` group route.
     path( 'interview/spending/auto-purchases/', views.AutoPlanView.as_view(),

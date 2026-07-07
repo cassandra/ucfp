@@ -144,9 +144,13 @@ class USFederalTaxEngine( TaxEngine ):
         # §1250 adds rental depreciation recapture to the 25% bucket.
         residence_gain   = max( _ZERO, fiscal_window.income( IncomeTaxClass.RESIDENCE_SECTION_121_GAIN ) )
         residence_exclusion = min( self._parameters.section_121_exclusion[ status ], residence_gain )
-        long_term_gains   = (
+        # A second home is personal-use like the residence -- its gain floors at zero (a loss is
+        # non-deductible) -- but gets no exclusion, so the whole floored gain is long-term.
+        second_home_gain = max( _ZERO, fiscal_window.income( IncomeTaxClass.SECOND_HOME_GAIN ) )
+        long_term_gains  = (
             fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS )
-            + ( residence_gain - residence_exclusion ) )
+            + ( residence_gain - residence_exclusion )
+            + second_home_gain )
         section_1250_gain = (
             fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN )
             + self._depreciation_recapture( tax_context ) )

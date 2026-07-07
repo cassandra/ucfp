@@ -34,7 +34,7 @@ from .debts import DebtsForm
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
 from .income import IncomeTableForm
-from .properties import PossessionsForm, rentals_context
+from .properties import PANES, PossessionsForm, properties_context
 from .spending import SpendingForm
 from .widgets import IsoDateInput
 
@@ -253,9 +253,10 @@ class HomeForm( forms.Form ):
 
 
 class PropertiesForm:
-    """§3 L0 -- the Properties pane. A no-op section form: the residence and the rentals are each
-    edited through their own async view, so Continue just advances. It exposes the residence
-    sub-form for the pane (the rentals manage themselves)."""
+    """§3 L0 -- the Properties pane. A no-op section form: the residence, the rentals, and the second
+    homes are each edited through their own async view, so Continue just advances. It exposes the
+    residence sub-form and the property lists for the pane (the rentals and second homes manage
+    themselves)."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile  = profile
@@ -269,8 +270,15 @@ class PropertiesForm:
         return HomeForm( profile = self._profile, plans = self._plans )
 
     @property
-    def rentals( self ) -> list:
-        return rentals_context( self._profile )
+    def property_panes( self ) -> list:
+        """Each mortgaged-property pane's render context for the Property section -- its heading, its
+        holdings, and the template config (ids, URL names, wording) from the shared `PropertyPane`.
+        The section loops over these, so a new property kind is one pane, not another hand-wired
+        block."""
+        return [ { 'heading': pane.heading,
+                   'properties': properties_context( self._profile, pane.asset_class ),
+                   **pane.template_context() }
+                 for pane in PANES ]
 
     @property
     def possessions_form( self ):
