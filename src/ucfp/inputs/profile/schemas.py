@@ -9,7 +9,7 @@ Naming: a type that mirrors a Forecast engine concept keeps the engine noun with
 boundary, while staying a distinct type the profile layer owns (so the stored format is
 decoupled from engine churn). A type with no single engine analog -- the engine is
 deliberately generic for income and expenses -- takes its own user-facing name
-(`IncomeFlow`, `CommittedObligation`). Shared vocabulary (enums, `Rate`, `Duration`)
+(`IncomeFlow`, `CommittedObligation`). Shared vocabulary (enums, `Duration`)
 is imported from the engine; engine parameter dataclasses are not.
 
 Section comments mark the user-facing groupings; they are kept as a seam guide for a future
@@ -20,12 +20,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from common.rate import Rate
 from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
+
+from .enums import DebtKind
 
 
 # Handles are stable string identities other sections reference; never display names. The subject
@@ -37,6 +38,9 @@ PARTNER_SUBJECT_HANDLE = 'partner'
 # The residence asset and rent obligation the home section mints, shared with the spending section.
 RESIDENCE_ASSET_HANDLE = 'residence'
 RENT_OBLIGATION_HANDLE = 'rent'
+# The mortgage debt secured against the residence, minted by the home section and surfaced (read-only)
+# in the Debts section. A rental's mortgage handle is derived from its own property handle instead.
+RESIDENCE_MORTGAGE_HANDLE = 'residence-mortgage'
 
 
 # --- People ---------------------------------------------------------------
@@ -78,24 +82,20 @@ class AssetProfile:
 # --- What you owe ---------------------------------------------------------
 
 @dataclass( frozen = True )
-class LoanProfile:
-    """A loan contract, stored as a person knows it: when it started (`origination_date`), the
-    `original_amount` borrowed, the `interest_rate`, and the `original_term`. The balance still
-    owed at the forecast start -- and the remaining term -- are *derived* by materialization
-    (amortizing from origination), unless `current_balance` overrides the balance, the way to
-    capture extra principal already paid down. Future extra-principal payments are a Plans
-    strategy (`LoanPrepayment`), not here. `interest_class` (e.g. residence mortgage) defaults
-    at materialization when omitted. `property_handle` attaches the loan to the property it
-    finances, so a property sale can find and end it; None for a non-property loan."""
+class Debt:
+    """A debt as a fact: its `kind`, a `name`, and the current `balance` owed -- and nothing about
+    how it will be repaid. Everything about the future (rate, term, extra principal, payoff, or a
+    monthly-servicing expense) is a Plans strategy, composed with this balance at materialization;
+    that is why we ask the *current* balance directly rather than an original amount (which would
+    amortize wrong once it has been paid down). An amortizing kind becomes a real loan on the balance
+    sheet; the trigger kind (a credit card) is not materialized here -- it drives the debt plan.
+    `secured_asset` links a mortgage to the property it finances (so a sale can end it); None
+    otherwise."""
     handle: str
     name: str
-    origination_date: date
-    original_amount: Decimal
-    interest_rate: Rate
-    original_term: Duration
-    current_balance: Optional[ Decimal ] = None
-    interest_class: Optional[ ExpenseTaxClass ] = None
-    property_handle: Optional[ str ] = None
+    kind: DebtKind
+    balance: Decimal
+    secured_asset: Optional[ str ] = None
 
 
 # --- Income flows ---------------------------------------------------------
@@ -180,7 +180,7 @@ class Profile:
     # What you own
     assets: list[ AssetProfile ] = field( default_factory = list )
     # What you owe
-    loans: list[ LoanProfile ] = field( default_factory = list )
+    debts: list[ Debt ] = field( default_factory = list )
     # Income flows
     income_flows: list[ IncomeFlow ] = field( default_factory = list )
     # Retirement entitlements

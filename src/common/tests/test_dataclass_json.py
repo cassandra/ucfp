@@ -22,13 +22,14 @@ from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, Lifestyle
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 
+from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
-    AssetProfile, CommittedObligation, GovernmentPensionEntitlement, LoanProfile,
+    AssetProfile, CommittedObligation, Debt, GovernmentPensionEntitlement,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    Contribution, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption, LifestylePlan,
-    LifestyleSegment, PlanEvent, RetirementTiming, Plans )
-from ucfp.inputs.plans.enums import EventKind
+    AutoPlan, Contribution, CreditCardPlan, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption,
+    LifestylePlan, LifestyleSegment, LoanRepayment, PlanEvent, RetirementTiming, Plans )
+from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
 
 
@@ -47,14 +48,8 @@ def _sample_profile():
                                                       depreciable_basis = Decimal( '0' ),
                                                       property_type = RealPropertyType.RESIDENTIAL ) ),
         ],
-        loans = [ LoanProfile( handle = 'mort', name = 'Mortgage',
-                               origination_date = date( 2005, 6, 1 ),
-                               original_amount = Decimal( '300000' ),
-                               interest_rate = Rate( Decimal( '0.0425' ) ),
-                               original_term = Duration( 30, TimeUnit.YEAR ),
-                               current_balance = Decimal( '250000' ),
-                               interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
-                               property_handle = 'home' ) ],
+        debts = [ Debt( handle = 'mort', name = 'Mortgage', kind = DebtKind.MORTGAGE,
+                        balance = Decimal( '250000' ), secured_asset = 'home' ) ],
         income_flows = [
             IncomeFlow( name = 'Salary', subject_handle = 'you',
                         income_tax_class = IncomeTaxClass.WAGES,
@@ -108,6 +103,19 @@ def _sample_plans():
             schedule = [ WindowedAmount( Decimal( '6000' ) ) ], property_handle = 'home' ) ],
         contributions = [ Contribution( account_handle = '401k', annual_amount = Decimal( '23000' ),
                                         source = ContributionSource.WAGE ) ],
+        loan_repayments = [ LoanRepayment( debt_handle = 'mort',
+                                           interest_rate = Rate( Decimal( '0.0425' ) ),
+                                           remaining_term = Duration( 25, TimeUnit.YEAR ) ) ],
+        credit_card_plans = [
+            CreditCardPlan( card_handle = 'visa', mode = CreditCardPlanMode.MONTHLY,
+                            monthly_payment = Decimal( '250' ) ),
+            CreditCardPlan( card_handle = 'amex', mode = CreditCardPlanMode.LUMP,
+                            target_date = date( 2029, 3, 1 ) ),
+            CreditCardPlan( card_handle = 'disc', mode = CreditCardPlanMode.COMBO,
+                            monthly_payment = Decimal( '150' ), target_date = date( 2030, 1, 1 ) ) ],
+        auto_plan = AutoPlan(
+            num_cars = 2, purchase_price = Decimal( '35000' ), recurrence_years = 8,
+            start_date = date( 2031, 1, 1 ), down_payment = Decimal( '7000' ) ),
         drawdown = DrawdownPolicy( cash_floor = Decimal( '20000' ), cash_ceiling = Decimal( '50000' ),
                                    draw_order = [ AssetClass.STOCKS, AssetClass.BONDS ],
                                    sweep_allocation = [ ( 'brok', Decimal( '0.6' ) ),

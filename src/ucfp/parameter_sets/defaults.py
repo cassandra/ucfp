@@ -163,7 +163,6 @@ def _general_expense_catalog() -> ExpenseCatalog:
     semiannual = Duration( 6, TimeUnit.MONTH )
     yearly     = Duration( 1, TimeUnit.YEAR )
     every_2y   = Duration( 2, TimeUnit.YEAR )
-    every_10y  = Duration( 10, TimeUnit.YEAR )
     every_15y  = Duration( 15, TimeUnit.YEAR )
     every_20y  = Duration( 20, TimeUnit.YEAR )
     everyday      = ExpenseCategory.EVERYDAY
@@ -206,8 +205,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Lawn Maintenance', home, '125', living, monthly ),
         _expense( 'Lawn Tools', home, '100', living, flex = True ),
         _expense( 'Umbrella Insurance', home, '500', living, flex = True ),
-        # Auto
-        _expense( 'Automobile Purchase', auto, '25000', living, every_10y, flex = True ),
+        # Auto (the car purchase/financing itself is the parameterized auto plan, not a catalog item)
         _expense( 'Auto Insurance', auto, '750', living, semiannual, flex = True ),
         _expense( 'Auto Maintenance', auto, '300', living, yearly, flex = True ),
         _expense( 'Auto Repair', auto, '1000', living ),

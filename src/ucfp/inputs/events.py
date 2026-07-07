@@ -27,7 +27,7 @@ from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
     ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
 from ucfp.inputs.profile.schemas import AssetProfile
-from ucfp.inputs.plans.enums import EventKind
+from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.widgets import IsoDateInput
 
@@ -39,6 +39,8 @@ RECIPIENT_ROLE = 'recipient'
 SOURCE_ROLE    = 'source'
 TARGET_ROLE    = 'target'
 PROPERTY_ROLE  = 'property'
+LOAN_ROLE      = 'loan'
+CARD_ROLE      = 'card'
 
 # Menu groups, in display order.
 _ACCOUNTS_GROUP  = 'Accounts'
@@ -81,9 +83,9 @@ def _properties( profile ) -> list:
 
 
 def _mortgages( profile, property_handle : str ) -> list:
-    """The handles of the loans secured by `property_handle` -- the mortgages a sale pays off. A
+    """The handles of the debts secured by `property_handle` -- the mortgages a sale pays off. A
     property may carry more than one (e.g. a first and a second), so this is a list, not a flag."""
-    return [ loan.handle for loan in profile.loans if loan.property_handle == property_handle ]
+    return [ debt.handle for debt in profile.debts if debt.secured_asset == property_handle ]
 
 
 def _end_schedule( schedule : list, end_date ) -> list:
@@ -188,6 +190,7 @@ def _ensure_roth_account( profile, owner_handle : str ):
 def _names( profile ) -> dict:
     names = { subject.handle: subject.name for subject in profile.subjects }
     names.update( { asset.handle: asset.name for asset in profile.assets } )
+    names.update( { debt.handle: debt.name for debt in profile.debts } )
     return names
 
 
@@ -250,6 +253,13 @@ class EventType:
     def cascade_on_remove( self, event : PlanEvent, profile, plans ):
         """Best-effort reverse of `cascade_on_add` when the event is removed."""
         return profile, plans
+
+    def is_materializable( self, event : PlanEvent, profile, plans ) -> bool:
+        """Whether this event should contribute to the engine given the current plan -- the guard for
+        an event whose target may have gone away or was never realized. The default is always (most
+        events stand alone); a loan payoff needs its debt to actually be a materialized loan, else the
+        engine has no liability to pay off."""
+        return True
 
     def summary( self, event : PlanEvent, profile ) -> str:
         raise NotImplementedError
@@ -346,6 +356,70 @@ class SellPropertyEvent( EventType ):
             profile, plans, event.selections[ PROPERTY_ROLE ], event.date )
 
 
+class LoanPayoffEvent( EventType ):
+    """Pay off an amortizing loan in full on a date -- the engine clears the loan's projected balance
+    from cash, so the event carries no amount. Created and edited in the Debt plan step (which holds a
+    debt's repayment terms), and shown and removable in the events list, but not offered in the add
+    menu: choosing which loan to pay off belongs next to its terms, where the plan knows which debts
+    are loans. It contributes only when the debt is actually a materialized loan (its terms are set);
+    otherwise there is no liability for the engine to clear."""
+
+    kind       = EventKind.LOAN_PAYOFF
+    group      = _MONEY_OUT_GROUP
+    has_amount = False
+
+    def offerable( self, profile ) -> bool:
+        return False   # created in the Debt plan step, not from the add menu
+
+    def is_materializable( self, event : PlanEvent, profile, plans ) -> bool:
+        debt_handle = event.selections.get( LOAN_ROLE )
+        return any( repayment.debt_handle == debt_handle for repayment in plans.loan_repayments )
+
+    def summary( self, event : PlanEvent, profile ) -> str:
+        name = _names( profile ).get( event.selections.get( LOAN_ROLE ), 'a loan' )
+        return f'Pay off {name} in {event.date.year}'
+
+    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        into.scheduled_events.append( ScheduledLoanPayoff(
+            event_date = event.date, loan = event.selections[ LOAN_ROLE ] ) )
+
+
+class CardPayoffEvent( EventType ):
+    """A credit-card lump payoff, in the events list for parity with a loan payoff -- shown, not
+    editable, but removable. Unlike a loan, a card is not on the books, so its payoff amount comes
+    from the card's plan; this event therefore contributes nothing itself (the payoff is materialized
+    from the plan, see `_credit_card_expenses`) and serves only to surface the payoff here and, when
+    removed, to clear it from the plan. Created in the card's paydown calculator (the Debt plan
+    step), not offered in the add menu."""
+
+    kind       = EventKind.CARD_PAYOFF
+    group      = _MONEY_OUT_GROUP
+    has_amount = False
+
+    def offerable( self, profile ) -> bool:
+        return False   # created in the card paydown calculator, not from the add menu
+
+    def summary( self, event : PlanEvent, profile ) -> str:
+        name = _names( profile ).get( event.selections.get( CARD_ROLE ), 'a card' )
+        return f'Pay off {name} in {event.date.year}'
+
+    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        pass   # the payoff is materialized from the card's plan, not from this events-list marker
+
+    def cascade_on_remove( self, event : PlanEvent, profile, plans ):
+        """Removing the payoff from the events list clears it from the card's plan: a lump (LUMP)
+        reverts to carrying the balance, a monthly-plus-lump (COMBO) to the monthly paydown alone."""
+        card_handle = event.selections.get( CARD_ROLE )
+        kept = list()
+        for plan in plans.credit_card_plans:
+            if plan.card_handle != card_handle:
+                kept.append( plan )
+            elif plan.mode is CreditCardPlanMode.COMBO:
+                kept.append( replace( plan, mode = CreditCardPlanMode.MONTHLY, target_date = None ) )
+            # a LUMP plan is dropped entirely -- the card reverts to being carried
+        return profile, replace( plans, credit_card_plans = kept )
+
+
 class TaxableReceiptEvent( EventType ):
     kind  = EventKind.TAXABLE_RECEIPT
     group = _MONEY_IN_GROUP
@@ -439,9 +513,9 @@ class DeathEvent( EventType ):
 # --- Registry -------------------------------------------------------------
 
 _EVENT_TYPES = (
-    TransferEvent(), RothConversionEvent(), SellPropertyEvent(), TaxableReceiptEvent(),
-    TaxFreeReceiptEvent(), GeneralPaymentEvent(), CharitablePaymentEvent(), MedicalPaymentEvent(),
-    DeathEvent() )
+    TransferEvent(), RothConversionEvent(), SellPropertyEvent(), LoanPayoffEvent(),
+    CardPayoffEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(), GeneralPaymentEvent(),
+    CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
 
 _BY_KIND = { event_type.kind: event_type for event_type in _EVENT_TYPES }
 
@@ -467,7 +541,9 @@ def event_contributions( profile, plans, subjects : dict ) -> EventContributions
     materialized engine `Subject` (an income event credits the recipient subject)."""
     into = EventContributions()
     for event in plans.events:
-        handler_for( event.kind ).contribute( event, profile, subjects, into )
+        handler = handler_for( event.kind )
+        if handler.is_materializable( event, profile, plans ):
+            handler.contribute( event, profile, subjects, into )
     return into
 
 

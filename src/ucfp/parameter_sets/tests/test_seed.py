@@ -88,7 +88,7 @@ class LoadPathTest( TestCase ):
     def test_load_returns_the_expense_catalog( self ):
         call_command( 'seed_parameter_sets' )
         catalog = load( ParameterSetKind.EXPENSE_CATALOG, CatalogScope.GENERAL.label )
-        self.assertEqual( len( catalog.expenses ), 39 )
+        self.assertEqual( len( catalog.expenses ), 38 )
         food = next( expense for expense in catalog.expenses if expense.name == 'Food' )
         self.assertEqual( food.default_amount, Decimal( '150' ) )
         self.assertEqual( food.category, ExpenseCategory.EVERYDAY )

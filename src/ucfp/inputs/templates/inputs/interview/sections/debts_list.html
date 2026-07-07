@@ -1,0 +1,29 @@
+{% comment %}
+The debts list of the Debts section (id=debts-list), auto-saved. Each row is a debt: a kind, a name,
+and the current balance owed -- mortgages included, alongside loans and cards. Fill the blank row to
+add one; the Remove box drops one. Edits save in the background; only a row added/removed or a bad
+value re-renders here. Each row's hidden handle keeps the debt's identity stable across edits (Plans
+reference debts by handle), and its hidden secured link keeps a mortgage tied to its property.
+{% endcomment %}
+<div id="debts-list">
+  <form method="post" action="{% url 'debts' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <table class="table table-sm w-auto">
+      <thead>
+        <tr><th>Type</th><th>Name</th><th>Balance owed</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in debts_form.rows %}
+        <tr>
+          <td>{{ row.handle }}{{ row.secured }}{{ row.kind }}</td>
+          <td>{{ row.name }}</td>
+          <td>{{ row.balance }}{% if row.balance.errors %}<span class="text-danger small d-block">{{ row.balance.errors|join:" " }}</span>{% endif %}</td>
+          <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small">Mortgages, student and personal loans, credit cards, auto loans, and
+      the like. Fill the blank row to add one; changes save automatically.</p>
+  </form>
+</div>
