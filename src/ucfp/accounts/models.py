@@ -222,8 +222,11 @@ class EntryRecord( TimestampedModel ):
     account = models.ForeignKey(
         AccountRecord,
         verbose_name = 'Account',
+        # CASCADE (not PROTECT): the books is the aggregate root owning its accounts and entries, and
+        # tearing down the books (e.g. an organization's deletion) must erase both -- an entry cannot
+        # protect the account it posts to (right-to-erasure, #47).
         related_name = 'entries',
-        on_delete = models.PROTECT,
+        on_delete = models.CASCADE,
         null = False,
         blank = False,
     )
