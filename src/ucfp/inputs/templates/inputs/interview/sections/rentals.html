@@ -1,9 +1,0 @@
-{% comment %}
-The rentals area of the §3 Properties pane: the list of rental properties and the (initially empty)
-add/edit form area, each swapped by its own async view, outside the section's Continue form.
-{% endcomment %}
-<div class="mt-4">
-  <h3 class="h6">Rental properties</h3>
-  {% include 'inputs/interview/sections/rentals_list.html' with rentals=form.rentals %}
-  <div id="rentals-form"></div>
-</div>

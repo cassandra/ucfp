@@ -1,0 +1,29 @@
+{% comment %}
+A mortgaged-property list (rentals, second homes), refreshed on add/edit/delete: each holding with
+Edit and Remove, plus the Add affordance. Edit/Add open the form in the pane's form area; Remove posts
+to the delete view. The pane's DOM ids, URL names, and wording come from its view config (see
+`_PropertyPane`); `properties` is the holdings to list.
+{% endcomment %}
+{% load common_tags %}
+<div id="{{ list_id }}">
+  {% if properties %}
+  <ul class="list-unstyled mb-2">
+    {% for prop in properties %}
+    <li class="mb-1">
+      {{ prop.name }} &mdash; value {{ prop.value|money:currency }}
+      <a class="ml-2" data-async="#{{ form_id }}"
+         href="{% url edit_url handle=prop.handle %}">Edit</a>
+      <form method="post" action="{% url delete_url handle=prop.handle %}"
+            data-async="#{{ list_id }}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1">Remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted mb-2">{{ empty_text }}</p>
+  {% endif %}
+  <a class="btn btn-sm btn-outline-secondary" data-async="#{{ form_id }}"
+     href="{% url add_url %}">{{ add_text }}</a>
+</div>

@@ -1,13 +1,26 @@
 {% comment %}
-The Property pane: "Real Estate" (the residence sub-form and the rentals list) and "Other
-Possessions" (a list of tangible holdings), each managed by its own async view outside the section's
-Continue form (a nested form would be invalid HTML).
+The Property pane: "Real Estate" (the residence sub-form, the rentals list, and the second-homes list)
+and "Other Possessions" (a list of tangible holdings), each managed by its own async view outside the
+section's Continue form (a nested form would be invalid HTML). Each property list and its (initially
+empty) add/edit form area is the generic `property_list.html` / form area, parameterized by the pane's
+ids, URL names, and wording -- kept in step with each pane's view config (`_PropertyPane`).
 {% endcomment %}
 <h3 class="h5 mt-2">Real Estate</h3>
-<p class="text-muted">Your home and any rental properties. Changes save automatically; Continue moves
-  on when you're done.</p>
+<p class="text-muted">Your home and any rental or second homes. Changes save automatically; Continue
+  moves on when you're done.</p>
 {% include 'inputs/interview/sections/residence.html' with residence_form=form.residence_form %}
-{% include 'inputs/interview/sections/rentals.html' %}
+
+<div class="mt-4">
+  <h3 class="h6">Rental properties</h3>
+  {% include 'inputs/interview/sections/property_list.html' with properties=form.rentals list_id='rentals-list' form_id='rentals-form' add_url='rental_add' edit_url='rental_edit' delete_url='rental_delete' add_text='Add a rental property' empty_text='No rental properties.' %}
+  <div id="rentals-form"></div>
+</div>
+
+<div class="mt-4">
+  <h3 class="h6">Second homes</h3>
+  {% include 'inputs/interview/sections/property_list.html' with properties=form.second_homes list_id='second-homes-list' form_id='second-homes-form' add_url='second_home_add' edit_url='second_home_edit' delete_url='second_home_delete' add_text='Add a second home' empty_text='No second homes.' %}
+  <div id="second-homes-form"></div>
+</div>
 
 <h3 class="h5 mt-4">Other Possessions</h3>
 {% include 'inputs/interview/sections/possessions.html' with possessions_form=form.possessions_form %}

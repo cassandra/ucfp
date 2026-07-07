@@ -1,0 +1,18 @@
+{% comment %}
+The add/edit form for one mortgaged property (rentals, second homes), rendered into the pane's form
+area (id from `form_id`). It auto-saves in the background (js-autosave) and always edits a known handle
+(add mints one), so a new property has a stable identity from the first keystroke. Non-blocking: the
+property appears in the list once its fields are complete. "Done" closes the form; it is already saved.
+Empty when no form is open. The pane's `form_id`, `edit_url`, and `add_url` come from its view config.
+{% endcomment %}
+<div id="{{ form_id }}">
+  {% if property_form %}
+  <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }}"
+        action="{% url edit_url handle=handle %}">
+    {% csrf_token %}
+    {% for field in property_form.primary_fields %}{% include 'inputs/interview/_field.html' with field=field %}{% endfor %}
+    <a class="btn btn-sm btn-link px-0" data-async="#{{ form_id }}"
+       href="{% url add_url %}?collapse=1">Done</a>
+  </form>
+  {% endif %}
+</div>
