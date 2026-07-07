@@ -31,8 +31,8 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
     references, so neither materialization nor a selection surface re-spells them."""
     subjects = { subject.handle for subject in profile.subjects }
     accounts = { asset.handle for asset in profile.assets }
-    loans    = { loan.handle for loan in profile.loans }
-    entities = subjects | accounts | loans | { obligation.handle for obligation in profile.obligations }
+    debts    = { debt.handle for debt in profile.debts }
+    entities = subjects | accounts | debts | { obligation.handle for obligation in profile.obligations }
 
     issues = list()
     for timing in plans.timing:
@@ -46,9 +46,12 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
         if contribution.account_handle not in accounts:
             issues.append(
                 f'a contribution to an unknown account "{contribution.account_handle}";' )
+    for repayment in plans.loan_repayments:
+        if repayment.debt_handle not in debts:
+            issues.append( f'a repayment plan for an unknown debt "{repayment.debt_handle}";' )
     for prepayment in plans.prepayments:
-        if prepayment.loan_handle not in loans:
-            issues.append( f'extra principal on an unknown loan "{prepayment.loan_handle}";' )
+        if prepayment.loan_handle not in debts:
+            issues.append( f'extra principal on an unknown debt "{prepayment.loan_handle}";' )
     if plans.drawdown is not None:
         for handle, _ in plans.drawdown.sweep_allocation:
             if handle not in accounts:

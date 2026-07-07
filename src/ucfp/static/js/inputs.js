@@ -230,6 +230,114 @@ window.App.Inputs = (function () {
             .each( function () { applySwitch( $( this ) ); } );
     }
 
+    // ----- CreditCardCalculator: a live, advisory paydown figure per card -----
+    // Display-only. As a card's mode/inputs change, write a "how long / how much" figure into its
+    // readout at the shared assumed APR (the same one materialization uses, via AppConst). The
+    // authoritative resolution of a card plan into expenses is server-side; this only guides entry.
+
+    const CARD_MONTHLY_RATE = ( parseFloat( C.CREDIT_CARD_APR_PERCENT ) / 100 ) / 12;
+
+    function cardBalance( $card ) {
+        return parseFloat( $card.attr( dataAttr( C.CREDIT_CARD_BALANCE_DATA_ATTR ) ) ) || 0;
+    }
+
+    function cardMode( $card ) {
+        return $card.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).filter( ':checked' ).val();
+    }
+
+    // Months of `payment` to clear `balance` at the card rate, or null when it never does (the
+    // payment does not cover the interest) -- the client mirror of common.amortization.periods_to_repay.
+    function monthsToClear( balance, payment ) {
+        if ( balance <= 0 ) { return 0; }
+        if ( CARD_MONTHLY_RATE > 0 && payment <= balance * CARD_MONTHLY_RATE ) { return null; }
+        let remaining = balance, months = 0;
+        while ( remaining > 0 && months < 1200 ) {
+            months += 1;
+            const payoff = remaining + remaining * CARD_MONTHLY_RATE;
+            if ( payment >= payoff ) { return months; }
+            remaining = payoff - payment;
+        }
+        return months < 1200 ? months : null;
+    }
+
+    // The level payment that clears `balance` over `months` at the card rate (mirror of level_payment).
+    function paymentForMonths( balance, months ) {
+        if ( months <= 0 ) { return null; }
+        if ( CARD_MONTHLY_RATE === 0 ) { return balance / months; }
+        const discount = Math.pow( 1 + CARD_MONTHLY_RATE, -months );
+        return balance * CARD_MONTHLY_RATE / ( 1 - discount );
+    }
+
+    // The balance left after `months` payments of `payment` at the card rate (mirror of balance_after).
+    function balanceAfter( balance, payment, months ) {
+        let remaining = balance;
+        for ( let i = 0; i < months && remaining > 0; i += 1 ) {
+            remaining = remaining + remaining * CARD_MONTHLY_RATE - payment;
+        }
+        return Math.max( remaining, 0 );
+    }
+
+    function monthsUntil( iso ) {
+        const parts = ( iso || '' ).split( '-' );
+        if ( parts.length !== 3 ) { return null; }
+        const now = new Date();
+        return ( parseInt( parts[ 0 ], 10 ) - now.getFullYear() ) * 12
+             + ( parseInt( parts[ 1 ], 10 ) - 1 - now.getMonth() );
+    }
+
+    function money( amount ) { return '$' + Math.round( amount ).toLocaleString(); }
+
+    function describeMonths( months ) {
+        if ( months < 12 ) { return months + ( months === 1 ? ' month' : ' months' ); }
+        const years = Math.round( months / 12 );
+        return 'about ' + years + ( years === 1 ? ' year' : ' years' );
+    }
+
+    function cardReadout( $card ) {
+        const balance = cardBalance( $card );
+        const mode = cardMode( $card );
+        const monthly = function () {
+            return parseFloat( $card.find( classSelector( C.CREDIT_CARD_MONTHLY_CLASS ) ).val() );
+        };
+        const targetMonths = function () {
+            return monthsUntil( $card.find( classSelector( C.CREDIT_CARD_DATE_CLASS ) ).val() );
+        };
+        // Carrying it (the default) and a lump payoff both cost only the interest each month.
+        if ( mode === 'carry' || mode === 'LUMP' || !mode ) {
+            return 'Carrying it costs about ' + money( balance * CARD_MONTHLY_RATE ) + '/month in interest.';
+        }
+        if ( mode === 'MONTHLY' ) {
+            const payment = monthly();
+            if ( !( payment > 0 ) ) { return ''; }
+            const months = monthsToClear( balance, payment );
+            return months === null
+                ? 'That won’t cover the interest, so the balance never clears.'
+                : 'Clears in ' + describeMonths( months ) + '.';
+        }
+        if ( mode === 'BY_DATE' ) {
+            const months = targetMonths();
+            if ( !months || months <= 0 ) { return ''; }
+            return 'That needs about ' + money( paymentForMonths( balance, months ) ) + '/month.';
+        }
+        if ( mode === 'COMBO' ) {
+            const payment = monthly(), months = targetMonths();
+            if ( !( payment > 0 ) || !months || months <= 0 ) { return ''; }
+            const cleared = monthsToClear( balance, payment );
+            if ( cleared !== null && cleared <= months ) { return 'Paid off before that date at this rate.'; }
+            return 'Leaves about ' + money( balanceAfter( balance, payment, months ) ) + ' to pay off then.';
+        }
+        return '';
+    }
+
+    function updateCard( $card ) {
+        $card.find( classSelector( C.CREDIT_CARD_READOUT_CLASS ) ).first().text( cardReadout( $card ) );
+    }
+
+    function enhanceCreditCards( $scope ) {
+        ( $scope || $( document.body ) ).find( classSelector( C.CREDIT_CARD_CLASS ) )
+            .each( function () { updateCard( $( this ) ); } );
+    }
+
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs
@@ -263,6 +371,10 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'change', classSelector( C.SWITCH_CLASS ) + ' ' + classSelector( C.SWITCH_CONTROL_CLASS ),
             function () { applySwitch( $( this ).closest( classSelector( C.SWITCH_CLASS ) ) ); } );
 
+        // Refresh a credit card's advisory readout as its mode or inputs change.
+        $( 'body' ).on( 'input change', classSelector( C.CREDIT_CARD_CLASS ) + ' :input',
+            function () { updateCard( $( this ).closest( classSelector( C.CREDIT_CARD_CLASS ) ) ); } );
+
         // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike
         // the delegated handlers above) they must be (re)applied to whatever DOM is present: once
         // now, and again after each antinode render for swapped-in content. Pickers are also torn
@@ -270,11 +382,13 @@ window.App.Inputs = (function () {
         enhanceDates( $( document.body ) );
         enhanceOptionalSections( $( document.body ) );
         enhanceSwitches( $( document.body ) );
+        enhanceCreditCards( $( document.body ) );
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
                 enhanceOptionalSections( $( document.body ) );
                 enhanceSwitches( $( document.body ) );
+                enhanceCreditCards( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }
@@ -286,5 +400,6 @@ window.App.Inputs = (function () {
         enhanceDates            : enhanceDates,
         enhanceOptionalSections : enhanceOptionalSections,
         enhanceSwitches         : enhanceSwitches,
+        enhanceCreditCards      : enhanceCreditCards,
     };
 } )();

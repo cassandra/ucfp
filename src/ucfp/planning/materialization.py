@@ -12,30 +12,36 @@ chosen start date; plan-specific actuarial reduction is deferred (it is plan dat
 general rule). Lifestyle expenses materialize per the engine's 2x2 -- smoothed categories to
 expense streams, cadenced ones to placed items -- each stepping as the scheduled level changes.
 """
+from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from common.amortization import remaining_balance
+from common.amortization import balance_after, level_payment, periods_to_repay, present_value
 from common.date_window import DateWindow
+from common.rate import Rate
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
 
-from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.environment.constants import AppConst
 from ucfp.forecast.economic_outlook import EconomicOutlook
 from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
     ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
-    RetirementContribution, Subject, SubsidizedHealthCoverage, WindowedAmount )
+    RetirementContribution, ScheduledExternalDisbursement, Subject, SubsidizedHealthCoverage,
+    WindowedAmount )
 
 from ucfp.parameter_sets import repository as parameter_sets
 from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
 
-from ucfp.inputs.profile.schemas import AssetProfile, LoanProfile, Profile
-from ucfp.inputs.plans.schemas import RetirementTiming, Plans
+from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile
+from ucfp.inputs.plans.enums import CreditCardPlanMode
+from ucfp.inputs.plans.schemas import LoanRepayment, RetirementTiming, Plans
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 
@@ -68,6 +74,7 @@ def materialize(
     expense_streams, expense_items = _plans_expenses( plans )
     flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
     events = event_contributions( profile, plans, subjects_by_handle )
+    card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -82,11 +89,11 @@ def materialize(
         income_items     = flow_items + events.income_items,
         expense_items    = (
             _committed_obligations( profile ) + lifestyle_items + expense_items
-            + events.expense_items ),
+            + events.expense_items + card_items + _auto_expenses( plans ) ),
         expense_streams  = lifestyle_streams + expense_streams,
-        loans            = _loans( profile, plans, frame.start_date ),
+        loans            = _loans( profile, plans ),
         contributions    = _contributions( plans ),
-        events           = events.scheduled_events,
+        events           = events.scheduled_events + card_events,
         cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
@@ -127,34 +134,186 @@ def _cost_basis( asset : AssetProfile ) -> Decimal:
     return asset.opening_value
 
 
-def _loans( profile : Profile, plans : Plans, as_of : date ) -> list[ LoanParameters ]:
-    extra = { prepayment.loan_handle: prepayment.annual_amount
-              for prepayment in plans.prepayments }
-    return [ _loan( loan, as_of, extra.get( loan.handle, Decimal( '0' ) ) )
-             for loan in profile.loans ]
+def _loans( profile : Profile, plans : Plans ) -> list[ LoanParameters ]:
+    """The amortizing debts as engine loans, each composed from a Profile `Debt` (its current
+    balance) and the Plans `LoanRepayment` that says how to repay it (rate + remaining term). A
+    trigger debt (a credit card) is not `is_amortizing` and is skipped -- the debt plan, not the
+    balance sheet, models it. An amortizing debt with no repayment plan yet is also skipped; it
+    becomes a loan once the plan supplies its terms."""
+    repayments = { repayment.debt_handle : repayment for repayment in plans.loan_repayments }
+    extra      = { prepayment.loan_handle : prepayment.annual_amount
+                   for prepayment in plans.prepayments }
+    assets     = { asset.handle : asset for asset in profile.assets }
+    loans = []
+    for debt in profile.debts:
+        repayment = repayments.get( debt.handle )
+        if not debt.kind.is_amortizing or repayment is None:
+            continue
+        interest_class = _debt_interest_class( debt, assets.get( debt.secured_asset ) )
+        loans.append(
+            _loan( debt, repayment, interest_class, extra.get( debt.handle, Decimal( '0' ) ) ) )
+    return loans
 
 
-def _loan( loan : LoanProfile, as_of : date, extra_principal : Decimal ) -> LoanParameters:
-    """The engine view of a loan as of the forecast start: amortize the original loan from its
-    origination to the balance still owed (unless `current_balance` overrides it) and the
-    remaining term, since the engine projects forward from an opening balance over a term. A
-    Plans prepayment becomes the engine's annual extra principal."""
-    periods = loan.original_term.months()
-    elapsed = min( _elapsed_months( loan.origination_date, as_of ), periods )
-    opening = loan.current_balance if loan.current_balance is not None else remaining_balance(
-        loan.original_amount, loan.interest_rate.fraction / 12, periods, elapsed )
+def _loan( debt : Debt, repayment : LoanRepayment, interest_class : ExpenseTaxClass,
+           extra_principal : Decimal ) -> LoanParameters:
+    """The engine view of an amortizing debt: its current balance is the opening balance, repaid at
+    the plan's rate over its remaining term (the engine projects forward from there). A Plans
+    prepayment becomes the engine's annual extra principal."""
     return LoanParameters(
-        name = loan.name, opening_balance = opening, interest_rate = loan.interest_rate,
-        term = Duration( max( periods - elapsed, 1 ), TimeUnit.MONTH ),
-        interest_class = loan.interest_class or ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST,
-        annual_extra_principal = extra_principal, handle = loan.handle )
+        name = debt.name, opening_balance = debt.balance, interest_rate = repayment.interest_rate,
+        term = repayment.remaining_term, interest_class = interest_class,
+        annual_extra_principal = extra_principal, handle = debt.handle )
 
 
-def _elapsed_months( origination : date, as_of : date ) -> int:
-    """Whole months from `origination` to `as_of`, floored at zero (a not-yet-originated loan has
-    not begun amortizing)."""
-    months = ( as_of.year - origination.year ) * 12 + ( as_of.month - origination.month )
-    return max( months, 0 )
+def _debt_interest_class( debt : Debt, secured_asset : Optional[ AssetProfile ] ) -> ExpenseTaxClass:
+    """The tax treatment of a debt's interest, by kind and (for a mortgage) what it finances: a
+    rental mortgage's interest nets against rental income, a home mortgage's is an itemizable
+    deduction, and every other debt kind's is non-deductible. Kept here in materialization (not on
+    `DebtKind`) so the input-layer enum stays free of engine tax classes."""
+    if debt.kind is not DebtKind.MORTGAGE:
+        return ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST
+    if secured_asset is not None and secured_asset.asset_class is AssetClass.REAL_ESTATE_RENTAL:
+        return ExpenseTaxClass.RENTAL_EXPENSE
+    return ExpenseTaxClass.MORTGAGE_INTEREST
+
+
+# --- Plans: credit-card paydown ------------------------------------------
+
+# The nominal APR the paydown calculator and this resolver assume, shared via AppConst so the
+# client-side estimate and the server-side materialization cannot drift.
+_CREDIT_CARD_APR = Rate.percent( Decimal( AppConst.CREDIT_CARD_APR_PERCENT ) )
+
+
+def _credit_card_expenses(
+        profile : Profile, plans : Plans, start : date ) -> tuple[ list, list ]:
+    """Every credit-card balance resolved into engine inputs at the assumed card APR. Carrying a
+    balance costs its interest every month, so a card with no active paydown plan (or an explicit
+    carry) becomes an indefinite interest expense; a LUMP plan carries it (interest only) until a
+    date, then pays the whole balance off; MONTHLY and BY_DATE pay it down (payment covers interest
+    and principal) until it clears; COMBO pays a set amount down until a date, then clears the
+    remaining balance in a lump. A zero-balance card contributes nothing."""
+    by_card = { plan.card_handle : plan for plan in plans.credit_card_plans }
+    rate    = _CREDIT_CARD_APR.fraction / 12
+    items, events = list(), list()
+    for debt in profile.debts:
+        if debt.kind is not DebtKind.CREDIT_CARD or debt.balance <= 0:
+            continue
+        _resolve_card( debt, by_card.get( debt.handle ), rate, start, items, events )
+    return items, events
+
+
+def _resolve_card( debt : Debt, plan, rate : Decimal, start : date, items : list, events : list ):
+    balance = debt.balance
+    mode    = plan.mode if plan is not None else None
+    if mode is CreditCardPlanMode.MONTHLY:
+        periods = periods_to_repay( balance, rate, plan.monthly_payment )
+        end     = _months_after( start, periods ) if periods else None
+        items.append( _card_expense( debt.name, 'paydown', plan.monthly_payment, end ) )
+    elif mode is CreditCardPlanMode.BY_DATE:
+        months = _months_between( start, plan.target_date )
+        if months > 0:
+            items.append( _card_expense(
+                debt.name, 'paydown', level_payment( balance, rate, months ), plan.target_date ) )
+    elif mode is CreditCardPlanMode.COMBO:
+        _resolve_combo( debt, plan, rate, start, items, events )
+    else:
+        # Carrying it (no plan) or a lump payoff: pay only the interest, indefinitely for a carry, or
+        # until the payoff date for a lump -- which then clears the whole (undiminished) balance.
+        end = plan.target_date if mode is CreditCardPlanMode.LUMP else None
+        interest = balance * rate
+        if interest > 0:
+            items.append( _card_expense( debt.name, 'interest', interest, end ) )
+        if mode is CreditCardPlanMode.LUMP:
+            events.append( ScheduledExternalDisbursement(
+                event_date = plan.target_date, amount = balance ) )
+
+
+def _resolve_combo( debt : Debt, plan, rate : Decimal, start : date, items : list, events : list ):
+    """A COMBO plan: pay `monthly_payment` down until the target date, then clear whatever remains in
+    a lump. If the monthly clears the card before the date, it is just a paydown (no lump)."""
+    balance = debt.balance
+    months  = _months_between( start, plan.target_date )
+    if months <= 0:
+        return
+    cleared = periods_to_repay( balance, rate, plan.monthly_payment )
+    if cleared is not None and cleared <= months:
+        items.append( _card_expense(
+            debt.name, 'paydown', plan.monthly_payment, _months_after( start, cleared ) ) )
+        return
+    items.append( _card_expense( debt.name, 'paydown', plan.monthly_payment, plan.target_date ) )
+    remaining = balance_after( balance, rate, plan.monthly_payment, months )
+    if remaining > 0:
+        events.append(
+            ScheduledExternalDisbursement( event_date = plan.target_date, amount = remaining ) )
+
+
+def _card_expense( name : str, kind : str, monthly : Decimal, end : Optional[ date ] ) -> ExpenseItem:
+    return ExpenseItem(
+        name = f'{name} {kind}', expense_tax_class = ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST,
+        amounts = Schedule.constant( WindowedAmount( monthly ) ),
+        cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ), window = DateWindow( end = end ) )
+
+
+def _months_between( start : date, end : date ) -> int:
+    return ( end.year - start.year ) * 12 + ( end.month - start.month )
+
+
+def _months_after( start : date, months : int ) -> date:
+    total = start.month - 1 + months
+    year  = start.year + total // 12
+    month = total % 12 + 1
+    return date( year, month, min( start.day, monthrange( year, month )[ 1 ] ) )
+
+
+# --- Plans: auto (car ownership) -----------------------------------------
+
+_AUTO_LOAN_APR         = Rate.percent( Decimal( AppConst.AUTO_LOAN_APR_PERCENT ) )
+_AUTO_LOAN_TERM_MONTHS = AppConst.AUTO_LOAN_TERM_YEARS * 12
+
+
+def _auto_expenses( plans : Plans ) -> list:
+    """The household's car costs, smoothed: a lump every recurrence (the full price unfinanced, or the
+    down payment financed) plus, when financed, a constant stream of the financed lifetime cost spread
+    over the recurrence period. Both scale by the number of cars and begin at the plan's start date."""
+    plan = plans.auto_plan
+    if plan is None or plan.num_cars <= 0 or plan.purchase_price <= 0 or plan.recurrence_years <= 0:
+        return list()
+    cars   = Decimal( plan.num_cars )
+    window = DateWindow( start = plan.start_date )
+    lump, financed_lifetime = _auto_costs( plan )
+    items = list()
+    if lump > 0:
+        items.append( ExpenseItem(
+            name = 'Car purchase', expense_tax_class = ExpenseTaxClass.LIVING,
+            amounts = Schedule.constant( WindowedAmount( lump * cars ) ),
+            cadence = Recurrence( Duration( plan.recurrence_years, TimeUnit.YEAR ) ),
+            window = window ) )
+    if financed_lifetime > 0:
+        monthly = financed_lifetime * cars / ( plan.recurrence_years * 12 )
+        items.append( ExpenseItem(
+            name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
+            amounts = Schedule.constant( WindowedAmount( monthly ) ),
+            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ), window = window ) )
+    return items
+
+
+def _auto_costs( plan ) -> tuple:
+    """The (per-car lump, per-car financed lifetime cost) of the plan. Unfinanced: the lump is the
+    full price, nothing financed. Financed: the lump is the down payment and the financed lifetime
+    cost is the total of the loan's payments (principal plus interest). The user gives the down
+    payment or the monthly payment; the other is derived at the assumed rate and term."""
+    rate  = _AUTO_LOAN_APR.fraction / 12
+    term  = _AUTO_LOAN_TERM_MONTHS
+    price = plan.purchase_price
+    if plan.down_payment is not None:
+        financed = max( price - plan.down_payment, Decimal( '0' ) )
+        payment  = level_payment( financed, rate, term ) if financed > 0 else Decimal( '0' )
+        return plan.down_payment, payment * term
+    if plan.monthly_payment is not None:
+        financed = present_value( plan.monthly_payment, rate, term )
+        return max( price - financed, Decimal( '0' ) ), plan.monthly_payment * term
+    return price, Decimal( '0' )   # unfinanced: the whole price is the lump
 
 
 # --- Profile: flows (income entitlements, committed obligations) -----------

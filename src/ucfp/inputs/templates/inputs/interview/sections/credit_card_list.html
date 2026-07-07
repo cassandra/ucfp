@@ -1,0 +1,31 @@
+{% comment %}
+The per-card paydown calculators of the Debt plan section (id=credit-card-plan), auto-saved. One
+block per credit-card debt, each a mode switch (carry / pay monthly / clear by a date / lump payoff)
+that reveals the inputs its mode needs. As those inputs change, inputs.js writes a live, advisory
+figure into the readout ("clears in ~N years", "needs ~$X/month", "carrying it costs ~$Y/month") at
+the shared assumed APR; the authoritative resolution into expenses is server-side. The card set is
+fixed by the declared debts, so this never adds or removes a card; edits save in the background,
+re-rendering only to surface a bad value.
+{% endcomment %}
+<div id="credit-card-plan">
+  <form method="post" action="{% url 'credit_card_plan' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    {% for row in credit_card_form.rows %}
+    <div class="{{ AppConst.SWITCH_CLASS }} {{ AppConst.CREDIT_CARD_CLASS }} border rounded p-2 mb-2"
+         data-{{ AppConst.CREDIT_CARD_BALANCE_DATA_ATTR }}="{{ row.balance }}">
+      <div class="fw-semibold">{{ row.name }}
+        <span class="text-muted small">balance {{ row.balance }}</span></div>
+      {{ row.mode }}
+      <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="MONTHLY COMBO">
+        {% include 'inputs/interview/_field.html' with field=row.monthly %}
+      </div>
+      <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="BY_DATE COMBO LUMP">
+        {% include 'inputs/interview/_field.html' with field=row.date %}
+      </div>
+      <p class="{{ AppConst.CREDIT_CARD_READOUT_CLASS }} text-info small mb-0"></p>
+    </div>
+    {% endfor %}
+    <p class="text-muted small">Estimates assume about {{ credit_card_form.apr_percent }}% APR.
+      Changes save automatically.</p>
+  </form>
+</div>

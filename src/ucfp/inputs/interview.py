@@ -20,17 +20,20 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
-    AssetProfile, CommittedObligation, Profile, SubjectProfile )
+    RESIDENCE_MORTGAGE_HANDLE, AssetProfile, CommittedObligation, Debt, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
 from ucfp.jurisdiction.labels import local_label
 
+from .credit_card import CreditCardPlanForm
+from .debt_plan import DebtPlanForm
+from .debts import DebtsForm
 from .events import EventsForm
 from .external_factors import ExternalFactorsForm
 from .income import IncomeTableForm
-from .mortgage import MortgageFields
 from .properties import PossessionsForm, rentals_context
 from .spending import SpendingForm
 from .widgets import IsoDateInput
@@ -148,15 +151,14 @@ class SubjectsForm( forms.Form ):
         return FilingStatus.MARRIED_JOINT if has_partner else FilingStatus.SINGLE
 
 
-class HomeForm( MortgageFields ):
-    """§3 -- the household residence. Owning captures the home's current value and purchase price
-    (its cost basis) and, if there is a mortgage, the loan the way a person knows it -- when it
-    started, the original amount, the rate, the term -- from which materialization derives the
-    balance still owed; an optional current balance overrides that to capture extra principal
-    already paid down. Renting captures the monthly rent. The residence is household-owned, so
-    there is no "whose home".
+class HomeForm( forms.Form ):
+    """§3 -- the household residence. Owning captures the home's current value, purchase price (its
+    cost basis), and any mortgage balance still owed; renting captures the monthly rent. The
+    residence is household-owned, so there is no "whose home". The mortgage balance is a convenience
+    surface on the home for the one `Debt` secured against the residence -- the same debt the Debts
+    section shows (read-only there, since it is owned here).
 
-    `apply` merges only the residence asset, its mortgage, and the rent obligation into the
+    `apply` merges only the residence asset, its mortgage debt, and the rent obligation into the
     Profile by their stable handles, leaving the accounts and other sections' items intact.
     Associated home expenses (property tax, insurance) are seeded later in Spending.
     """
@@ -166,58 +168,48 @@ class HomeForm( MortgageFields ):
     _TENURE_CHOICES = ( ( _OWN, 'Own' ), ( _RENT, 'Rent' ) )
 
     _RESIDENCE_HANDLE = RESIDENCE_ASSET_HANDLE
-    _MORTGAGE_HANDLE  = 'mortgage'
+    _MORTGAGE_HANDLE  = RESIDENCE_MORTGAGE_HANDLE
     _RENT_HANDLE      = RENT_OBLIGATION_HANDLE
 
-    tenure         = forms.ChoiceField(
+    tenure           = forms.ChoiceField(
         label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, initial = _OWN,
         widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
-    home_value     = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
-    purchase_price = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
-    monthly_rent   = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
+    home_value       = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
+    purchase_price   = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
+    mortgage_balance = forms.DecimalField(
+        label = 'Mortgage balance owed (optional)', required = False, min_value = 0 )
+    monthly_rent     = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
-        initial = self._initial( profile, plans ) if profile is not None else None
+        initial = self._initial( profile ) if profile is not None else None
         super().__init__( data, initial = initial )
 
     @classmethod
-    def _initial( cls, profile : Profile, plans : Plans ) -> dict:
+    def _initial( cls, profile : Profile ) -> dict:
         rent = cls._find( profile.obligations, cls._RENT_HANDLE )
         if rent is not None:
             return { 'tenure': cls._RENT, 'monthly_rent': rent.amount }
         residence = cls._find( profile.assets, cls._RESIDENCE_HANDLE )
         if residence is None:
             return dict()
-        initial = {
+        initial   = {
             'tenure': cls._OWN, 'home_value': residence.opening_value,
             'purchase_price': residence.cost_basis,
         }
-        mortgage = cls._find( profile.loans, cls._MORTGAGE_HANDLE )
-        initial.update( cls._mortgage_initial( mortgage, cls._prepayment_for( plans ) ) )
+        mortgage = cls._find( profile.debts, cls._MORTGAGE_HANDLE )
+        if mortgage is not None:
+            initial[ 'mortgage_balance' ] = mortgage.balance
         return initial
 
-    @classmethod
-    def _prepayment_for( cls, plans : Plans ):
-        prepayments = plans.prepayments if plans is not None else []
-        return next(
-            ( item for item in prepayments if item.loan_handle == cls._MORTGAGE_HANDLE ), None )
-
-    def _has_mortgage( self ) -> bool:
-        """A residence carries a mortgage only when owned; otherwise defer to the base field-filled
-        inference."""
-        if self.cleaned_data.get( 'tenure' ) != self._OWN:
-            return False
-        return super()._has_mortgage()
-
     def apply( self, profile : Profile, plans : Plans ):
+        existing_mortgage = self._find( profile.debts, self._MORTGAGE_HANDLE )
         updated_profile = replace(
             profile,
             assets      = self._merged( profile.assets, self._RESIDENCE_HANDLE, self._residence() ),
-            loans       = self._merged( profile.loans, self._MORTGAGE_HANDLE, self._mortgage() ),
+            debts       = self._merged(
+                profile.debts, self._MORTGAGE_HANDLE, self._mortgage( existing_mortgage ) ),
             obligations = self._merged( profile.obligations, self._RENT_HANDLE, self._rent() ) )
-        updated_plans = replace(
-            plans, prepayments = self._merged_prepayments( plans.prepayments ) )
-        return updated_profile, updated_plans
+        return updated_profile, plans
 
     def _residence( self ) -> list:
         # Non-blocking: an owned home materializes only once its value is entered; until then it
@@ -230,12 +222,18 @@ class HomeForm( MortgageFields ):
             asset_class = AssetClass.REAL_ESTATE_RESIDENCE,
             opening_value = cleaned[ 'home_value' ], cost_basis = cleaned.get( 'purchase_price' ) ) ]
 
-    def _mortgage( self ) -> list:
-        loan = self._mortgage_loan(
-            handle = self._MORTGAGE_HANDLE, name = 'Mortgage',
-            interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
-            property_handle = self._RESIDENCE_HANDLE )
-        return [ loan ] if loan is not None else []
+    def _mortgage( self, existing ) -> list:
+        # The residence-secured mortgage debt, present only for an owned home with a balance entered.
+        # The home is a balance-only convenience surface onto the one debt; the name and kind the
+        # Debts section may have set are preserved rather than overwritten here.
+        cleaned = self.cleaned_data
+        if cleaned.get( 'tenure' ) != self._OWN or cleaned.get( 'mortgage_balance' ) is None:
+            return []
+        return [ Debt(
+            handle = self._MORTGAGE_HANDLE,
+            name = existing.name if existing is not None else 'Mortgage',
+            kind = existing.kind if existing is not None else DebtKind.MORTGAGE,
+            balance = cleaned[ 'mortgage_balance' ], secured_asset = self._RESIDENCE_HANDLE ) ]
 
     def _rent( self ) -> list:
         cleaned = self.cleaned_data
@@ -244,14 +242,6 @@ class HomeForm( MortgageFields ):
         return [ CommittedObligation(
             handle = self._RENT_HANDLE, name = 'Rent', amount = cleaned[ 'monthly_rent' ],
             cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ]
-
-    def _prepayment( self ) -> list:
-        prepayment = self._mortgage_prepayment( self._MORTGAGE_HANDLE )
-        return [ prepayment ] if prepayment is not None else []
-
-    def _merged_prepayments( self, existing : list ) -> list:
-        kept = [ item for item in existing if item.loan_handle != self._MORTGAGE_HANDLE ]
-        return kept + self._prepayment()
 
     @staticmethod
     def _merged( existing : list, handle : str, replacement : list ) -> list:
@@ -407,6 +397,51 @@ class IncomeSectionForm:
         return profile, plans
 
 
+class DebtsSectionForm:
+    """§ Debts L0 -- the Debts pane. A no-op section form: the debts are edited and saved through
+    `DebtsView`, so Continue just advances. It exposes the one debts list -- every debt, mortgages
+    included, in the order the user thinks of them."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def debts_form( self ):
+        return DebtsForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class DebtPlanSectionForm:
+    """§ Debt plan L0 -- the pane. A no-op section form: the amortizing loans' repayment terms and
+    the credit cards' paydown strategies are each edited and saved through their own async view
+    (`DebtPlanView`, `CreditCardView`), so Continue just advances. It exposes both forms, which read
+    the declared debts."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def debt_plan_form( self ):
+        return DebtPlanForm( profile = self._profile, plans = self._plans )
+
+    @property
+    def credit_card_form( self ):
+        return CreditCardPlanForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
@@ -418,10 +453,15 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/income.html' ),
     Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
-    # Declared but not yet live (no form): the consolidated liabilities view -- mortgages (also
-    # entered on their property) plus standalone debts. Shows in the stepper as an upcoming step;
-    # becomes live when given a form. Straddles Plans for extra-principal prepayments, like properties.
-    Section( 'debt'        , 'Debts', ( Aggregate.PROFILE, Aggregate.PLANS ) ),
+    # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
+    # adjustable on its property. Facts only; the repayment plan per debt is the Debt plan step below,
+    # which opens the Plans flow.
+    Section( 'debt'        , 'Debts', form = DebtsSectionForm,
+             outer_template = 'inputs/interview/sections/debts.html' ),
+    # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal).
+    # Opens the Plans flow, reading the debts declared just above.
+    Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
+             outer_template = 'inputs/interview/sections/debt_plan.html' ),
     Section( 'spending'    , 'Spending', ( Aggregate.PLANS, ), SpendingForm,
              outer_template = 'inputs/interview/sections/spending.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,

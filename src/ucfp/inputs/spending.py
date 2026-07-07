@@ -23,6 +23,7 @@ from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSe
 from ucfp.parameter_sets.repository import load
 from ucfp.inputs.profile.schemas import RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE
 from ucfp.inputs.plans.schemas import ExpenseFlow
+from ucfp.inputs.auto import AutoPlanForm
 
 _WEEKS_PER_YEAR  = Decimal( '52' )
 _MONTHS_PER_YEAR = Decimal( '12' )
@@ -190,6 +191,13 @@ class SpendingForm:
 
     def is_valid( self ) -> bool:
         return True
+
+    @property
+    def auto_form( self ):
+        """The car-ownership pane -- purchases and financing, edited and saved through `AutoPlanView`
+        (the car purchase supersedes the old catalog line, so it lives here as its own structured
+        input rather than among the catalog expenses)."""
+        return AutoPlanForm( profile = self._profile, plans = self._plans )
 
     @property
     def group_totals( self ) -> list:

@@ -1,28 +1,25 @@
 """§3 rentals: a rental property handled as a unit.
 
 A rental is flat profile facts that belong together -- the holding (`AssetProfile`,
-`REAL_ESTATE_RENTAL`), an optional mortgage (`LoanProfile`), and its gross rent (an `IncomeFlow`
-carrying the property handle, set in the Income section) -- tied by a shared property handle. This
-module owns creating, editing, and removing the property as one, so the rest of the app keeps seeing
-flat lists while the user works with a whole property. Operating expenses attach in spending (§6),
-and the rent in income (§5), by the same handle.
+`REAL_ESTATE_RENTAL`) and its gross rent (an `IncomeFlow` carrying the property handle, set in the
+Income section) -- tied by a shared property handle. This module owns creating, editing, and removing
+the property as one, so the rest of the app keeps seeing flat lists while the user works with a whole
+property. Any mortgage is a `Debt` secured against the property (its balance entered here, shown
+read-only in Debts); operating expenses attach in spending (§6), and the rent in income (§5), by the
+same handle.
 """
 from dataclasses import replace
 
 from django import forms
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, RealPropertyType
+from ucfp.accounts.enums import AssetClass, RealPropertyType
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.mortgage import MortgageFields
-from ucfp.inputs.profile.schemas import AssetProfile, PropertyProfile
+from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, PropertyProfile
 from ucfp.inputs.widgets import IsoDateInput
 
 
 _RENTAL_HANDLE_PREFIX = 'rental-'
-
-
-def _mortgage_handle( property_handle : str ) -> str:
-    return f'{property_handle}-mortgage'
 
 
 def _minted_rental_handle( profile ) -> str:
@@ -34,6 +31,12 @@ def _minted_rental_handle( profile ) -> str:
     return f'{_RENTAL_HANDLE_PREFIX}{index}'
 
 
+def _rental_mortgage_handle( property_handle : str ) -> str:
+    """The stable handle of the mortgage debt secured against a rental -- derived from the property's
+    own handle, so the pair travels together and a sale (`delete_rental`) can find it."""
+    return f'{property_handle}-mortgage'
+
+
 def rentals_context( profile ) -> list:
     """The rentals for the list template: each rental's handle, name, and value. The rent is set in
     the Income section, not here."""
@@ -43,31 +46,36 @@ def rentals_context( profile ) -> list:
 
 
 def delete_rental( profile, plans, property_handle : str ):
-    """Remove a rental as a unit: its holding, gross income, mortgage, the mortgage's prepayment,
-    and any operating expenses attached to it."""
-    mortgage = _mortgage_handle( property_handle )
-    profile  = replace(
+    """Remove a rental as a unit: its holding, gross income, any debts secured against it, those
+    debts' repayment/prepayment plans, and any operating expenses attached to it."""
+    secured = { debt.handle for debt in profile.debts
+                if debt.secured_asset == property_handle }
+    profile = replace(
         profile,
         assets       = [ a for a in profile.assets if a.handle != property_handle ],
         income_flows = [ flow for flow in profile.income_flows
                          if flow.property_handle != property_handle ],
-        loans        = [ loan for loan in profile.loans if loan.handle != mortgage ] )
+        debts        = [ debt for debt in profile.debts if debt.handle not in secured ] )
     plans = replace(
         plans,
-        prepayments = [ p for p in plans.prepayments if p.loan_handle != mortgage ],
-        expenses    = [ e for e in plans.expenses if e.property_handle != property_handle ] )
+        loan_repayments = [ r for r in plans.loan_repayments if r.debt_handle not in secured ],
+        prepayments     = [ p for p in plans.prepayments if p.loan_handle not in secured ],
+        expenses        = [ e for e in plans.expenses if e.property_handle != property_handle ] )
     return profile, plans
 
 
-class RentalForm( MortgageFields ):
-    """One rental property as a unit: the holding (value, basis, acquisition, type) and an optional
-    mortgage (the shared `MortgageFields`). It is household-owned -- like the residence, and because
-    the engine taxes rentals as one aggregate passive activity, no per-owner rule applies -- so there
-    is no owner field. `apply` writes the asset and the mortgage (plus any extra-principal prepayment)
-    under one property handle, leaving other properties intact. The gross rent is set in Income."""
+class RentalForm( forms.Form ):
+    """One rental property as a unit: the holding (value, basis, acquisition, type) and any mortgage
+    balance still owed. It is household-owned -- like the residence, and because the engine taxes
+    rentals as one aggregate passive activity, no per-owner rule applies -- so there is no owner
+    field. `apply` writes the asset and its mortgage debt under one property handle, leaving other
+    properties intact. The mortgage is the same `Debt` the Debts section shows read-only; the gross
+    rent is set in Income."""
 
-    # Every field is optional: the form background-saves and a rental materializes only once all of
-    # these are set (see `_rental_complete`), so a just-opened blank that is abandoned never appears.
+    # The asset fields are all optional individually: the form background-saves and the rental
+    # materializes only once all of these are set (see `_rental_complete`), so a just-opened blank
+    # that is abandoned never appears. The mortgage balance is separate -- it rides along on a
+    # materialized rental but is not required to complete one.
     _ASSET_FIELDS = ( 'name', 'value', 'purchase_price', 'acquisition_date',
                       'building_basis', 'property_type' )
 
@@ -76,6 +84,8 @@ class RentalForm( MortgageFields ):
     building_basis   = forms.DecimalField(
         label = 'Building value, excludes land (for depreciation)', min_value = 0, required = False )
     purchase_price   = forms.DecimalField( label = 'Purchase price', min_value = 0, required = False )
+    mortgage_balance = forms.DecimalField(
+        label = 'Mortgage balance owed (optional)', min_value = 0, required = False )
     acquisition_date = forms.DateField(
         label = 'Purchase date', required = False,
         widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
@@ -101,52 +111,45 @@ class RentalForm( MortgageFields ):
             initial[ 'acquisition_date' ] = asset.property.acquisition_date
             initial[ 'building_basis' ]   = asset.property.depreciable_basis
             initial[ 'property_type' ]    = asset.property.property_type.name
-        initial.update( cls._mortgage_initial( *cls._saved_mortgage( profile, plans, handle ) ) )
+        mortgage = next( ( d for d in profile.debts
+                           if d.handle == _rental_mortgage_handle( handle ) ), None )
+        if mortgage is not None:
+            initial[ 'mortgage_balance' ] = mortgage.balance
         return initial
-
-    @staticmethod
-    def _saved_mortgage( profile, plans, handle : str ):
-        """This property's saved mortgage loan and its extra-principal prepayment (either may be
-        None), located by the property's mortgage handle."""
-        mortgage_handle = _mortgage_handle( handle )
-        mortgage   = next( ( loan for loan in profile.loans
-                             if loan.handle == mortgage_handle ), None )
-        prepayment = next( ( p for p in plans.prepayments
-                             if p.loan_handle == mortgage_handle ), None )
-        return mortgage, prepayment
 
     @property
     def primary_fields( self ):
-        """The holding fields, rendered ahead of the optional mortgage block."""
-        return [ self[ name ] for name in self.fields if name not in self.MORTGAGE_FIELD_NAMES ]
+        """The holding fields, in declaration order."""
+        return [ self[ name ] for name in self.fields ]
 
     def _rental_complete( self ) -> bool:
-        """All fields the rental asset needs are present -- the condition for materializing it. The
-        mortgage stays non-blocking on its own (`_mortgage_complete`); there is no hard validation,
-        so a partially-entered rental is simply not written rather than fighting a background save."""
+        """All fields the rental asset needs are present -- the condition for materializing it. There
+        is no hard validation, so a partially-entered rental is simply not written rather than
+        fighting a background save."""
         cleaned = self.cleaned_data
         return all( cleaned.get( field ) not in ( None, '' ) for field in self._ASSET_FIELDS )
 
     def apply( self, profile, plans ):
         handle   = self._handle or _minted_rental_handle( profile )
-        mortgage = _mortgage_handle( handle )
+        mortgage = _rental_mortgage_handle( handle )
+        existing = self._find( profile.debts, mortgage )
         # Non-blocking: an incomplete rental (and so its mortgage) materializes nothing, and editing
-        # an existing one to incomplete removes it; a complete rental writes its asset, mortgage, and
-        # any extra-principal prepayment as a unit.
+        # an existing one to incomplete removes both; a complete rental writes its asset and, if a
+        # balance is entered, its mortgage debt.
         complete = self._rental_complete()
         assets   = self._without( profile.assets, 'handle', handle ) + (
             [ self._asset( handle ) ] if complete else [] )
-        loans    = self._without( profile.loans, 'handle', mortgage ) + (
-            self._mortgage( handle ) if complete else [] )
-        prepays  = self._without( plans.prepayments, 'loan_handle', mortgage ) + (
-            self._prepayment( mortgage ) if complete else [] )
-        profile  = replace( profile, assets = assets, loans = loans )
-        plans = replace( plans, prepayments = prepays )
-        return profile, plans
+        debts    = self._without( profile.debts, 'handle', mortgage ) + (
+            self._mortgage( handle, existing ) if complete else [] )
+        return replace( profile, assets = assets, debts = debts ), plans
 
     @staticmethod
     def _without( items : list, attribute : str, value ) -> list:
         return [ item for item in items if getattr( item, attribute ) != value ]
+
+    @staticmethod
+    def _find( items : list, handle : str ):
+        return next( ( item for item in items if item.handle == handle ), None )
 
     def _asset( self, handle : str ) -> AssetProfile:
         cleaned = self.cleaned_data
@@ -158,16 +161,19 @@ class RentalForm( MortgageFields ):
                 depreciable_basis = cleaned[ 'building_basis' ],
                 property_type = RealPropertyType[ cleaned[ 'property_type' ] ] ) )
 
-    def _mortgage( self, property_handle : str ) -> list:
-        loan = self._mortgage_loan(
-            handle = _mortgage_handle( property_handle ),
-            name = f"{self.cleaned_data[ 'name' ]} Mortgage",
-            interest_class = ExpenseTaxClass.RENTAL_EXPENSE, property_handle = property_handle )
-        return [ loan ] if loan is not None else []
-
-    def _prepayment( self, mortgage_handle : str ) -> list:
-        prepayment = self._mortgage_prepayment( mortgage_handle )
-        return [ prepayment ] if prepayment is not None else []
+    def _mortgage( self, property_handle : str, existing ) -> list:
+        # The rental-secured mortgage debt, present only when a balance is entered. The rental is a
+        # balance-only convenience surface onto the one debt; the name and kind the Debts section may
+        # have set are preserved. Its interest is treated as a rental expense at materialization
+        # (keyed on the secured asset being a rental).
+        balance = self.cleaned_data.get( 'mortgage_balance' )
+        if balance is None:
+            return []
+        return [ Debt(
+            handle = _rental_mortgage_handle( property_handle ),
+            name = existing.name if existing is not None else f"{self.cleaned_data[ 'name' ]} Mortgage",
+            kind = existing.kind if existing is not None else DebtKind.MORTGAGE,
+            balance = balance, secured_asset = property_handle ) ]
 
 
 class PossessionsForm( forms.Form ):

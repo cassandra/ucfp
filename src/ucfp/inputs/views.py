@@ -31,6 +31,10 @@ from ucfp.inputs.plans.enums import EventKind
 from .interview import (
     SECTIONS, Aggregate, HomeForm, applicable_sections, first_section_of_flow, flow_of,
     flow_title, next_flow_entry, next_section_after, section_for )
+from .auto import AutoPlanForm
+from .credit_card import CreditCardPlanForm
+from .debt_plan import DebtPlanForm
+from .debts import DebtsForm
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
 from .properties import (
@@ -197,6 +201,34 @@ class InterviewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
+class AutoPlanView( View ):
+    """`/inputs/interview/spending/auto-purchases/` -- the car-purchase/financing pane of the Spending
+    section (a special case, distinct from the generic 'auto' expense category and its
+    `spending/auto/` route). POST auto-saves a single edit in the background: it persists the auto
+    plan and replies silently, re-rendering the pane only on a genuine field error. Validation is
+    non-blocking, so an incomplete plan simply stores nothing."""
+
+    _TEMPLATE = 'inputs/interview/sections/auto_plan.html'
+
+    def get( self, request ):
+        profile, plans = _current_profile_and_plans( request.organization )
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'auto_form': AutoPlanForm( profile = profile, plans = plans ) },
+            request = request ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, plans = _current_profile_and_plans( organization )
+        form = AutoPlanForm( request.POST, profile = profile, plans = plans )
+        if not form.is_valid():
+            return antinode.response( replace_map = { 'auto-purchases': render_to_string(
+                self._TEMPLATE, { 'auto_form': form }, request = request ) } )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( latest_plans( organization ), plans )
+        return antinode.response()                             # silent background save
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
 class SpendingGroupView( View ):
     """`/inputs/interview/spending/<group>/` -- the inline dense editor for one spending group
     (a category, scoped to a property for Home/Rental), drilled from the §6 totals. GET expands the
@@ -323,6 +355,109 @@ class PossessionsView( View ):
     def _swap( self, request, form ):
         return antinode.response( replace_map = { 'possessions': render_to_string(
             self._TEMPLATE, { 'possessions_form': form }, request = request ) } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class DebtsView( View ):
+    """`/inputs/interview/debt/list/` -- the debts list of the Debts section. POST auto-saves a
+    single edit in the background: it persists and replies silently, re-rendering the list only when
+    the debt set changed (a row added or removed) or a field failed validation. Validation is
+    non-blocking, so an incomplete row simply does not materialize. Mortgages edit here like any
+    other debt; each row preserves its stable handle and any property it is secured against."""
+
+    _TEMPLATE = 'inputs/interview/sections/debts_list.html'
+
+    def get( self, request ):
+        profile, plans = _current_profile_and_plans( request.organization )
+        return self._rendered( request, DebtsForm( profile = profile, plans = plans ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, plans = _current_profile_and_plans( organization )
+        form = DebtsForm( request.POST, profile = profile, plans = plans )
+        if not form.is_valid():
+            return self._swap( request, form )                 # show a bad value
+        before = len( profile.debts )
+        profile, plans = form.apply( profile, plans )
+        save_profile( organization, profile )
+        save_plans( latest_plans( organization ), plans )      # a removed debt reaps its plan too
+        if len( profile.debts ) != before:                     # a row was added or removed
+            return self._swap( request, DebtsForm( profile = profile, plans = plans ) )
+        return antinode.response()                             # silent: nothing to re-render
+
+    def _rendered( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'debts_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        return antinode.response( replace_map = { 'debts-list': render_to_string(
+            self._TEMPLATE, { 'debts_form': form }, request = request ) } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class DebtPlanView( View ):
+    """`/inputs/interview/debt/plan/` -- the per-debt repayment terms of the Debt plan section. POST
+    auto-saves a single edit in the background: it persists the repayment/prepayment plans and replies
+    silently, re-rendering the pane only on a genuine field error (the row set is fixed by the declared
+    debts, so nothing is added or removed here). Validation is non-blocking, so incomplete terms simply
+    do not materialize a loan."""
+
+    _TEMPLATE = 'inputs/interview/sections/debt_plan_list.html'
+
+    def get( self, request ):
+        profile, plans = _current_profile_and_plans( request.organization )
+        return self._rendered( request, DebtPlanForm( profile = profile, plans = plans ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, plans = _current_profile_and_plans( organization )
+        form = DebtPlanForm( request.POST, profile = profile, plans = plans )
+        if not form.is_valid():
+            return self._swap( request, form )                 # surface a genuine field error
+        _profile, plans = form.apply( profile, plans )
+        save_plans( latest_plans( organization ), plans )
+        return antinode.response()                             # silent background save
+
+    def _rendered( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'debt_plan_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        return antinode.response( replace_map = { 'debt-plan': render_to_string(
+            self._TEMPLATE, { 'debt_plan_form': form }, request = request ) } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class CreditCardView( View ):
+    """`/inputs/interview/debt/cards/` -- the per-card paydown calculators of the Debt plan section.
+    POST auto-saves a single edit in the background: it persists the card plans and replies silently,
+    re-rendering the pane only on a genuine field error (the card set is fixed by the declared debts;
+    the mode switch and the live readout are client-side). Validation is non-blocking, so a
+    half-entered strategy simply stores no plan."""
+
+    _TEMPLATE = 'inputs/interview/sections/credit_card_list.html'
+
+    def get( self, request ):
+        profile, plans = _current_profile_and_plans( request.organization )
+        return self._rendered( request, CreditCardPlanForm( profile = profile, plans = plans ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, plans = _current_profile_and_plans( organization )
+        form = CreditCardPlanForm( request.POST, profile = profile, plans = plans )
+        if not form.is_valid():
+            return self._swap( request, form )                 # surface a genuine field error
+        _profile, plans = form.apply( profile, plans )
+        save_plans( latest_plans( organization ), plans )
+        return antinode.response()                             # silent background save
+
+    def _rendered( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'credit_card_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        return antinode.response( replace_map = { 'credit-card-plan': render_to_string(
+            self._TEMPLATE, { 'credit_card_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

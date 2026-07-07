@@ -10,7 +10,6 @@ the form; it is already saved. Empty when no form is open.
         action="{% url 'rental_edit' handle=handle %}">
     {% csrf_token %}
     {% for field in rental_form.primary_fields %}{% include 'inputs/interview/_field.html' with field=field %}{% endfor %}
-    {% include 'inputs/interview/_mortgage_block.html' with form=rental_form %}
     <a class="btn btn-sm btn-link px-0" data-async="#rentals-form"
        href="{% url 'rental_add' %}?collapse=1">Done</a>
   </form>
