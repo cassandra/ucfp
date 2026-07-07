@@ -194,9 +194,9 @@ class SpendingForm:
 
     @property
     def auto_form( self ):
-        """The car-ownership pane -- purchases and financing, edited and saved through `AutoPlanView`
-        (the car purchase supersedes the old catalog line, so it lives here as its own structured
-        input rather than among the catalog expenses)."""
+        """The car-ownership pane -- purchases and financing, edited and saved through `AutoPlanView`.
+        The car purchase is its own structured input here rather than a catalog expense, since it is
+        large and sometimes financed."""
         return AutoPlanForm( profile = self._profile, plans = self._plans )
 
     @property
