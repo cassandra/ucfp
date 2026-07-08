@@ -36,7 +36,7 @@ def _profile() -> Profile:
 
 def _expense( name : str, property_handle ) -> ExpenseFlow:
     return ExpenseFlow(
-        name = name, category = ExpenseCategory.HOME, expense_tax_class = ExpenseTaxClass.LIVING,
+        name = name, category = ExpenseCategory.PROPERTY, expense_tax_class = ExpenseTaxClass.LIVING,
         schedule = [ WindowedAmount( Decimal( '100' ) ) ], property_handle = property_handle )
 
 

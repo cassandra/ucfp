@@ -19,9 +19,9 @@ from common.recurrence import TimeUnit
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.inputs.widgets import IsoDateInput
-from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind
+from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind, PropertyContext
 from ucfp.parameter_sets.repository import load
-from ucfp.inputs.profile.schemas import RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE
+from ucfp.inputs.profile.schemas import RENT_OBLIGATION_HANDLE
 from ucfp.inputs.plans.schemas import ExpenseFlow
 from ucfp.inputs.auto import AutoPlanForm
 
@@ -29,10 +29,18 @@ _WEEKS_PER_YEAR  = Decimal( '52' )
 _MONTHS_PER_YEAR = Decimal( '12' )
 _DAYS_PER_YEAR   = Decimal( '365' )
 
-# Categories that always apply; the rest attach to a decision. Auto is presumed for now -- gated on
-# a vehicle once a vehicle section exists.
+# Categories that always apply; Property attaches to owning or renting a dwelling. Auto is presumed
+# for now -- gated on a vehicle once a vehicle section exists.
 _ALWAYS = ( ExpenseCategory.EVERYDAY, ExpenseCategory.DISCRETIONARY, ExpenseCategory.HEALTH,
-            ExpenseCategory.AUTO )
+            ExpenseCategory.AUTO, ExpenseCategory.MISCELLANEOUS )
+
+# An owned real-property holding's asset class, mapped to the property context its expenses seed
+# against. A tenant's rented home (the rent obligation) maps to RENTED_HOME separately.
+_OWNED_PROPERTY_CONTEXT = {
+    AssetClass.REAL_ESTATE_RESIDENCE   : PropertyContext.RESIDENCE,
+    AssetClass.REAL_ESTATE_SECOND_HOME : PropertyContext.SECOND_HOME,
+    AssetClass.REAL_ESTATE_RENTAL      : PropertyContext.RENTAL,
+}
 
 
 def load_catalog():
@@ -41,8 +49,8 @@ def load_catalog():
 
 @dataclass( frozen = True )
 class SpendingGroup:
-    """One row of the §6 spending list: a category, optionally scoped to a property (the residence
-    for Home, a specific rental for Rental; None for the general living categories). Its `key`
+    """One row of the §6 spending list: a category, optionally scoped to a property -- one owned
+    dwelling (or the rented home) for Property, None for the household categories. Its `key`
     identifies the group in the URL and the inline editor's DOM, and its expenses are the merged
     flows matching both the category and the property."""
     category        : ExpenseCategory
@@ -56,49 +64,83 @@ class SpendingGroup:
 
 
 def applicable_categories( profile ) -> set:
-    applicable  = set( _ALWAYS )
-    assets      = { asset.handle for asset in profile.assets } if profile else set()
-    obligations = (
-        { obligation.handle for obligation in profile.obligations } if profile else set() )
-    if RESIDENCE_ASSET_HANDLE in assets or RENT_OBLIGATION_HANDLE in obligations:
-        applicable.add( ExpenseCategory.UTILITIES )
-    if RESIDENCE_ASSET_HANDLE in assets:
-        applicable.add( ExpenseCategory.HOME )
-    if _rental_handles( profile ):
-        applicable.add( ExpenseCategory.RENTAL )
+    """The categories that apply to this profile: the always-on set, plus Property if the household
+    owns any real property or rents its home."""
+    applicable = set( _ALWAYS )
+    if _owned_property_handles( profile ) or _renting( profile ):
+        applicable.add( ExpenseCategory.PROPERTY )
     return applicable
 
 
-def _rental_handles( profile ) -> list:
-    return ( [ asset.handle for asset in profile.assets
-               if asset.asset_class is AssetClass.REAL_ESTATE_RENTAL ] if profile else [] )
+def _owned_property_handles( profile ) -> list:
+    """The handles of owned real property -- residence, then second homes, then rentals (display
+    order); one Property expense set attaches to each."""
+    if profile is None:
+        return []
+    order = { asset_class: index for index, asset_class in enumerate( _OWNED_PROPERTY_CONTEXT ) }
+    owned = [ asset for asset in profile.assets if asset.asset_class in _OWNED_PROPERTY_CONTEXT ]
+    owned.sort( key = lambda asset: ( order[ asset.asset_class ], asset.handle ) )
+    return [ asset.handle for asset in owned ]
+
+
+def _renting( profile ) -> bool:
+    return profile is not None and any(
+        obligation.handle == RENT_OBLIGATION_HANDLE for obligation in profile.obligations )
+
+
+def _asset_for( profile, handle : str ):
+    return next( ( asset for asset in profile.assets if asset.handle == handle ), None )
+
+
+def _property_context( profile, handle : str ) -> Optional[ PropertyContext ]:
+    """The `PropertyContext` a Property handle represents: a tenant's rented home for the rent
+    obligation, else the owned holding's class mapped to its context (None if not real property)."""
+    if handle == RENT_OBLIGATION_HANDLE:
+        return PropertyContext.RENTED_HOME
+    asset = _asset_for( profile, handle )
+    return _OWNED_PROPERTY_CONTEXT.get( asset.asset_class ) if asset is not None else None
 
 
 def _property_handles_for( category, profile ) -> list:
-    """The property handles a category's operating expenses attach to: the residence for Home, each
-    rental for Rental (one expense set per rental -- there may be several), and a single unbound
-    `[None]` for the general living categories."""
-    if category is ExpenseCategory.HOME:
-        return [ RESIDENCE_ASSET_HANDLE ]
-    if category is ExpenseCategory.RENTAL:
-        return _rental_handles( profile )
-    return [ None ]
+    """The handles a category's expenses attach to: each owned property -- and, when the household
+    rents, its rented home -- for Property (one expense set per handle), and a single unbound `[None]`
+    for the household categories."""
+    if category is not ExpenseCategory.PROPERTY:
+        return [ None ]
+    handles = _owned_property_handles( profile )
+    return handles + [ RENT_OBLIGATION_HANDLE ] if _renting( profile ) else handles
 
 
 def _property_name( profile, handle : str ) -> str:
-    asset = next( ( a for a in profile.assets if a.handle == handle ), None )
+    asset = _asset_for( profile, handle )
     return asset.name if asset is not None else handle
 
 
+# The display label for each property context. The household's single home -- owned (RESIDENCE) or
+# rented (RENTED_HOME) -- is a bare label; a SECOND_HOME or RENTAL is one of several, so its own name
+# is appended (see `_group_label`).
+_PROPERTY_CONTEXT_LABEL = {
+    PropertyContext.RESIDENCE   : 'Home',
+    PropertyContext.RENTED_HOME : 'Home (rented)',
+    PropertyContext.SECOND_HOME : 'Second home',
+    PropertyContext.RENTAL      : 'Rental',
+}
+_NAMED_CONTEXTS = ( PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
+
+
 def _group_label( category, property_handle, profile ) -> str:
-    if category is ExpenseCategory.RENTAL:
-        return f'Rental — {_property_name( profile, property_handle )}'
-    return category.label
+    if category is not ExpenseCategory.PROPERTY:
+        return category.label
+    context = _property_context( profile, property_handle )
+    label   = _PROPERTY_CONTEXT_LABEL.get( context, 'Property' )
+    if context in _NAMED_CONTEXTS:
+        return f'{label} — {_property_name( profile, property_handle )}'
+    return label
 
 
 def spending_groups( profile ) -> list:
-    """The §6 spending groups in display order: each applicable category, with Rental expanded to one
-    group per rental property."""
+    """The §6 spending groups in display order: each applicable category, with Property expanded to
+    one group per owned dwelling (and the rented home, when renting)."""
     applicable = applicable_categories( profile )
     groups     = list()
     for category in ExpenseCategory:
@@ -116,9 +158,11 @@ def group_for_key( profile, key : str ) -> Optional[ SpendingGroup ]:
 
 def merged_expenses( profile, plans ) -> list:
     """The applicable catalog expenses as Plans expense flows -- existing amounts preserved, missing ones
-    seeded at the catalog default, and no-longer-applicable categories dropped. A property-scoped
-    category seeds one flow per attached property (each rental its own set), and the `property_handle`
-    binding is re-derived every merge, since it is structural, not a user edit."""
+    seeded at the catalog default, and no-longer-applicable categories dropped. A Property category
+    seeds one flow per attached property (each dwelling its own set), skipping rows whose `applies_to`
+    does not cover that property's context. The structural bindings -- `property_handle`, `category`,
+    and the personal `expense_tax_class` (materialization derives the rental swap) -- are re-derived
+    every merge, since they are not user edits; only the schedule amounts are preserved."""
     applicable = applicable_categories( profile )
     existing   = { ( expense.property_handle, expense.name ): expense
                    for expense in plans.expenses } if plans else dict()
@@ -127,9 +171,22 @@ def merged_expenses( profile, plans ) -> list:
         if catalog_expense.category not in applicable:
             continue
         for handle in _property_handles_for( catalog_expense.category, profile ):
+            if not _row_seeds( catalog_expense, profile, handle ):
+                continue
             flow = existing.get( ( handle, catalog_expense.name ) ) or _flow( catalog_expense )
-            merged.append( replace( flow, property_handle = handle ) )
+            merged.append( replace(
+                flow, property_handle = handle, category = catalog_expense.category,
+                expense_tax_class = catalog_expense.expense_tax_class ) )
     return merged
+
+
+def _row_seeds( catalog_expense, profile, handle ) -> bool:
+    """Whether a catalog row seeds a flow for this handle. A household row always does; a Property row
+    seeds only the property contexts in its `applies_to` -- so property management skips a residence,
+    and only utilities reach a rented home."""
+    if catalog_expense.category is not ExpenseCategory.PROPERTY:
+        return True
+    return _property_context( profile, handle ) in catalog_expense.applies_to
 
 
 def _flow( catalog_expense ) -> ExpenseFlow:
@@ -201,8 +258,8 @@ class SpendingForm:
 
     @property
     def group_totals( self ) -> list:
-        """(group, annual total) per spending group, in display order -- Rental expanded per
-        property."""
+        """(group, annual total) per spending group, in display order -- Property expanded per
+        owned dwelling."""
         all_expenses = merged_expenses( self._profile, self._plans )
         totals       = list()
         for group in spending_groups( self._profile ):
