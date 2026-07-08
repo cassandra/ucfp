@@ -443,7 +443,7 @@ class SpendingGroupView( View ):
             group = self._group( profile, group ) )
         if form.is_valid():
             _, updated = form.apply( profile, plans )
-            save_plans( current_plans_record( request ),updated )
+            save_plans( current_plans_record( request ), updated )
         return self._editor_response( request, group, form )
 
     @staticmethod
@@ -754,7 +754,7 @@ class _PropertyFormView( _PropertyView ):
                 replace_map = { self._PANE.form_id: self._form( request, handle, form ) } )
         profile, plans = form.apply( profile, plans )
         save_profile( organization, profile )
-        save_plans( current_plans_record( request ),plans )
+        save_plans( current_plans_record( request ), plans )
         # Leave the open form alone; just refresh the list by id, where a property appears, updates its
         # name/value, or -- if edited to incomplete -- drops out.
         return antinode.response( replace_map = { self._PANE.list_id: self._list( request, profile ) } )
@@ -774,7 +774,7 @@ class _PropertyDeleteView( _PropertyView ):
         profile, plans = _current_profile_and_plans( request )
         profile, plans = delete_property( profile, plans, handle )
         save_profile( organization, profile )
-        save_plans( current_plans_record( request ),plans )
+        save_plans( current_plans_record( request ), plans )
         # Refresh the list by id (replace, not insert) so the re-rendered `<div id=list_id>` swaps the
         # existing one rather than nesting inside it.
         return antinode.response(
@@ -836,7 +836,7 @@ class EventAddView( View ):
         plans = replace( plans, events = list( plans.events ) + [ event ] )
         if profile is not original:   # provision created an entity, or a cascade adjusted facts
             save_profile( organization, profile )
-        save_plans( current_plans_record( request ),plans )
+        save_plans( current_plans_record( request ), plans )
         return antinode.response(
             main_content = self._menu( request, profile ),
             replace_map  = { 'events-list': self._list( request, profile, plans ) } )
@@ -882,7 +882,7 @@ class EventDeleteView( View ):
             plans = replace( plans, events = events )
             if profile is not original:
                 save_profile( organization, profile )
-            save_plans( current_plans_record( request ),plans )
+            save_plans( current_plans_record( request ), plans )
         return antinode.response( main_content = render_to_string(
             self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) },
             request = request ) )
