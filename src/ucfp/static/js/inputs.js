@@ -360,11 +360,15 @@ window.App.Inputs = (function () {
             optionalParts( $section ).body.find( ':input' ).first().trigger( 'focus' );
         } );
         // Dismiss an optional block: clear it (so the server reads it as absent) then collapse.
+        // Clearing fields programmatically fires no `change`, so inside an autosave form the removal
+        // must be persisted explicitly -- otherwise a removed partner would linger until the next edit.
         $( 'body' ).on( 'click', classSelector( C.OPTIONAL_REMOVE_CLASS ), function () {
             const $section = $( this ).closest( classSelector( C.OPTIONAL_CLASS ) );
             optionalParts( $section ).body.find( ':input' )
                 .val( '' ).filter( ':checkbox, :radio' ).prop( 'checked', false );
             setOptionalOpen( $section, false );
+            const $form = $section.closest( 'form' + classSelector( C.AUTOSAVE_CLASS ) );
+            if ( $form.length ) { saveForm( $form ); }
         } );
 
         // Flip a switch to the chosen case as its control changes.

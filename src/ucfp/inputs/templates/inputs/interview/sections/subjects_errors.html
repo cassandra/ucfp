@@ -1,0 +1,10 @@
+{% comment %}
+The Subjects form's form-level (non-field) validation messages, in their own region (id=subjects-errors)
+so a successful save can clear a stale one -- left over from a half-entered partner -- without
+re-rendering the fields (which would disturb focus). Reads `subjects_form`.
+{% endcomment %}
+<div id="subjects-errors">
+  {% if subjects_form.non_field_errors %}
+  <div class="alert alert-warning">{{ subjects_form.non_field_errors }}</div>
+  {% endif %}
+</div>

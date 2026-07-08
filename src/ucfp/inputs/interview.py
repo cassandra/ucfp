@@ -65,11 +65,17 @@ class SubjectsForm( forms.Form ):
     single vs joint, both fixed by whether a partner exists, so there is nothing to choose. The tax
     basis (jurisdiction and that inferred filing status) is shown read-only beside the inputs.
     `apply` writes just this section onto the Profile, leaving every other section's facts intact.
+
+    Non-blocking, like every self-saving section: nothing is required, an incomplete person is simply
+    not held (its subject is built only once both name and birthdate are present), and the filing
+    status is left unset until a primary person exists -- the forecast readiness check is the gate
+    that a person and filing status are present.
     """
 
-    subject_name      = forms.CharField( label = 'Name', max_length = 100 )
+    subject_name      = forms.CharField( label = 'Name', max_length = 100, required = False )
     subject_birthdate = forms.DateField(
-        label = 'Birthdate', widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
+        label = 'Birthdate', required = False,
+        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
     partner_name      = forms.CharField( label = 'Name', max_length = 100, required = False )
     partner_birthdate = forms.DateField(
         label = 'Birthdate', required = False,
@@ -90,12 +96,12 @@ class SubjectsForm( forms.Form ):
 
     @property
     def filing_status_label( self ) -> str:
-        """The filing status the engine will use, derived from the saved household and shown
-        read-only. It reflects saved facts, so it updates on save rather than as the partner is
-        edited -- there is nothing to choose while single vs joint is fixed by whether a partner
-        exists."""
-        saved_has_partner = self._profile is not None and len( self._profile.subjects ) > 1
-        return self._filing_status_for( saved_has_partner ).label
+        """The filing status the engine will use, read from the saved profile and shown read-only. It
+        reflects saved facts, so it updates on save rather than as the partner is edited -- there is
+        nothing to choose while single vs joint is fixed by whether a partner exists. A dash until a
+        primary person is entered (the filing status is unset until then)."""
+        status = self._profile.filing_status if self._profile is not None else None
+        return status.label if status is not None else '—'
 
     @staticmethod
     def _initial( profile : Profile ) -> dict:
@@ -120,8 +126,9 @@ class SubjectsForm( forms.Form ):
         return cleaned
 
     def apply( self, profile : Profile, plans : Plans ):
-        updated = replace(
-            profile, subjects = self._subjects(), filing_status = self._filing_status() )
+        subjects = self._subjects()
+        updated  = replace(
+            profile, subjects = subjects, filing_status = self._filing_status( subjects ) )
         return updated, plans
 
     def _has_partner( self ) -> bool:
@@ -130,8 +137,16 @@ class SubjectsForm( forms.Form ):
         return bool( self.cleaned_data.get( 'partner_name' )
                      and self.cleaned_data.get( 'partner_birthdate' ) )
 
+    def _has_primary( self ) -> bool:
+        """A primary person is inferred from both of their fields being filled -- non-blocking, so a
+        half-entered person simply is not held (and no partner is held without a primary)."""
+        return bool( self.cleaned_data.get( 'subject_name' )
+                     and self.cleaned_data.get( 'subject_birthdate' ) )
+
     def _subjects( self ) -> list:
         cleaned  = self.cleaned_data
+        if not self._has_primary():
+            return list()
         subjects = [ SubjectProfile(
             handle = PRIMARY_SUBJECT_HANDLE,
             name = cleaned[ 'subject_name' ], birthdate = cleaned[ 'subject_birthdate' ] ) ]
@@ -141,14 +156,34 @@ class SubjectsForm( forms.Form ):
                 name = cleaned[ 'partner_name' ], birthdate = cleaned[ 'partner_birthdate' ] ) )
         return subjects
 
-    def _filing_status( self ) -> FilingStatus:
-        return self._filing_status_for( self._has_partner() )
+    @classmethod
+    def _filing_status( cls, subjects : list ) -> Optional[ FilingStatus ]:
+        """The filing status the built household implies -- unset with no primary person, else single
+        vs joint by whether a partner is present."""
+        if not subjects:
+            return None
+        return cls._filing_status_for( len( subjects ) > 1 )
 
     @staticmethod
     def _filing_status_for( has_partner : bool ) -> FilingStatus:
-        """Single vs joint from partner presence -- the one mapping shared by `apply` (from submitted
-        data) and the read-only pane (from saved facts)."""
+        """Single vs joint from partner presence."""
         return FilingStatus.MARRIED_JOINT if has_partner else FilingStatus.SINGLE
+
+
+class SubjectsSectionForm:
+    """§1 section wrapper. The Subjects pane self-saves through `SubjectsView`, so this section form
+    only carries the flow: it always validates and its `apply` is a no-op, leaving Next to advance
+    without re-saving. It exposes the editor (`subjects_form`) for the pane -- built once so the pane
+    and the read-only tax-basis readout beside it share one instance."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self.subjects_form = SubjectsForm( profile = profile )
+
+    def is_valid( self ) -> bool:
+        return True
+
+    def apply( self, profile, plans ):
+        return profile, plans
 
 
 class HomeForm( forms.Form ):
@@ -474,8 +509,8 @@ class DebtPlanSectionForm:
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
-    Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm,
-             inner_template = 'inputs/interview/sections/subjects.html' ),
+    Section( 'subjects'    , 'Who this plan is for', form = SubjectsSectionForm,
+             outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,

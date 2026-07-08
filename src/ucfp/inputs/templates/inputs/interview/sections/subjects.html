@@ -1,27 +1,14 @@
 {% comment %}
-§1 subjects, rendered inside the Continue form. The people inputs sit on the left; a read-only tax-
-basis pane (jurisdiction + inferred filing status) sits to their right -- a placeholder for a form
-once jurisdiction and filing status become selectable. The primary person is always shown; the
-partner is an optional block (the js-optional pattern -- see inputs.js) revealed by "Add a partner"
-and cleared by "Remove partner". There is deliberately no "include a partner?" checkbox: the server
-infers a partner purely from the partner fields being filled, so clearing them (which Remove does) is
-what means "no partner". Without JavaScript the partner fields render visible and usable and the two
-triggers stay hidden. The filing status reflects saved facts, so it updates on save.
+The Subjects section pane (Profile flow): the self-saving people form on the left, a read-only tax-
+basis pane (jurisdiction + inferred filing status) to its right. The people form renders outside the
+section's Next form (a nested form would be invalid HTML) and persists each edit on its own through
+`SubjectsView`; that view also refreshes the filing-status readout below (id=filing-status), which
+reflects saved facts. The editor comes from the section wrapper (`form.subjects_form`), shared with
+the readout so both read one instance.
 {% endcomment %}
 <div class="row">
   <div class="col-md-7">
-    {% include 'inputs/interview/_field.html' with field=form.subject_name %}
-    {% include 'inputs/interview/_field.html' with field=form.subject_birthdate %}
-
-    <div class="{{ AppConst.OPTIONAL_CLASS }} mt-3">
-      <button type="button" class="{{ AppConst.OPTIONAL_ADD_CLASS }} btn btn-sm btn-outline-secondary" hidden>Add a partner</button>
-      <div class="{{ AppConst.OPTIONAL_BODY_CLASS }}">
-        <p class="text-muted mb-1">Partner</p>
-        {% include 'inputs/interview/_field.html' with field=form.partner_name %}
-        {% include 'inputs/interview/_field.html' with field=form.partner_birthdate %}
-        <button type="button" class="{{ AppConst.OPTIONAL_REMOVE_CLASS }} btn btn-sm btn-link text-muted px-0" hidden>Remove partner</button>
-      </div>
-    </div>
+    {% include 'inputs/interview/sections/subjects_pane.html' with subjects_form=form.subjects_form %}
   </div>
 
   <div class="col-md-5">
@@ -30,11 +17,11 @@ triggers stay hidden. The filing status reflects saved facts, so it updates on s
         <h3 class="h6 mb-3">Jurisdiction</h3>
         <div class="mb-2">
           <div class="text-muted small">Tax jurisdiction</div>
-          <div>{{ form.jurisdiction_label }}</div>
+          <div>{{ form.subjects_form.jurisdiction_label }}</div>
         </div>
         <div>
           <div class="text-muted small">Filing status</div>
-          <div>{{ form.filing_status_label }}</div>
+          <div id="filing-status">{{ form.subjects_form.filing_status_label }}</div>
         </div>
       </div>
     </div>

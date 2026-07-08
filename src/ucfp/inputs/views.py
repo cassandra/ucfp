@@ -29,8 +29,8 @@ from ucfp.inputs.assumptions.repository import (
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
-    SECTIONS, Aggregate, AccountsForm, HomeForm, applicable_sections, first_section_of_flow, flow_of,
-    flow_title, next_flow_entry, next_section_after, section_for )
+    SECTIONS, Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
+    first_section_of_flow, flow_of, flow_title, next_flow_entry, next_section_after, section_for )
 from .auto import AutoPlanForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
@@ -390,6 +390,48 @@ class AccountsView( View ):
     def _swap( self, request, form ):
         return antinode.response( replace_map = { 'accounts': render_to_string(
             self._TEMPLATE, { 'accounts_form': form }, request = request ) } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class SubjectsView( View ):
+    """`/inputs/interview/subjects/edit/` -- the Subjects pane of the Profile flow. POST auto-saves a
+    single edit in the background: it persists the household (and the derived filing status) and
+    refreshes the read-only filing-status readout beside the form, re-rendering the pane itself only on
+    a genuine field error (a half-entered partner). Validation is non-blocking -- an incomplete person
+    is simply not held; the forecast readiness check is the completeness gate."""
+
+    _TEMPLATE        = 'inputs/interview/sections/subjects_pane.html'
+    _ERRORS_TEMPLATE = 'inputs/interview/sections/subjects_errors.html'
+    _FILING_STATUS   = 'filing-status'
+    _ERRORS          = 'subjects-errors'
+
+    def get( self, request ):
+        profile, _plans = _current_profile_and_plans( request.organization )
+        return self._response( request, SubjectsForm( profile = profile ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, _plans = _current_profile_and_plans( organization )
+        form = SubjectsForm( request.POST, profile = profile )
+        if not form.is_valid():
+            return self._swap( request, form )                 # a half-entered partner
+        profile, _plans = form.apply( profile, None )
+        save_profile( organization, profile )
+        # A clean save clears any stale half-entered-partner warning (the fields are left untouched, so
+        # focus is undisturbed) and refreshes the filing-status readout, which a partner change alters.
+        label = SubjectsForm( profile = profile ).filing_status_label
+        return antinode.response(
+            replace_map = { self._ERRORS: render_to_string(
+                self._ERRORS_TEMPLATE, { 'subjects_form': form }, request = request ) },
+            insert_map  = { self._FILING_STATUS: label } )
+
+    def _response( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'subjects_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        return antinode.response( replace_map = { 'subjects': render_to_string(
+            self._TEMPLATE, { 'subjects_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
