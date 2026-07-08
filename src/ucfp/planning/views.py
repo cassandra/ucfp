@@ -35,6 +35,7 @@ from .forms import GRANULARITY, RunForm
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture
+from .readiness import input_availability, readiness_issues
 from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
@@ -91,15 +92,22 @@ class FinancialForecastView( View ):
             PlansRecord, uuid = form.cleaned_data[ 'plans' ], organization = organization )
         assumptions_record = get_object_or_404(
             AssumptionsRecord, uuid = form.cleaned_data[ 'assumptions' ], organization = organization )
+        profile     = load_profile( profile_record )
+        plans       = load_plans( plans_record )
+        assumptions = load_assumptions( assumptions_record )
+        issues = readiness_issues( profile, plans, assumptions )
+        if issues:                                             # a doomed run: guide, do not run
+            return render(
+                request, _HUB_TEMPLATE, self._context( request, form = form, issues = issues ) )
         request.session_state.current_plans_uuid = str( plans_record.uuid )
         request.session_state.to_session( request )
         try:
             with transaction.atomic():
                 run = run_and_capture(
                     organization = organization,
-                    profile      = load_profile( profile_record ),
-                    plans        = load_plans( plans_record ),
-                    assumptions  = load_assumptions( assumptions_record ),
+                    profile      = profile,
+                    plans        = plans,
+                    assumptions  = assumptions,
                     frame        = self._frame( profile_record, form ),
                     label        = plans_record.label )
                 PlanningResultRecord.objects.create(
@@ -119,21 +127,20 @@ class FinancialForecastView( View ):
             start_date = start, end_date = end,
             granularity = GRANULARITY[ form.cleaned_data[ 'interval' ] ] )
 
-    def _context( self, request, form = None, error = None ) -> dict:
+    def _context( self, request, form = None, error = None, issues = None ) -> dict:
         organization = request.organization
         profiles    = profiles_for( organization )
         plans       = plans_for( organization )
         assumptions = assumptions_for( organization )
         return {
-            'has_profile'     : profiles.exists(),
-            'has_plans'       : plans.exists(),
-            'has_assumptions' : assumptions.exists(),
+            **input_availability( organization ),
             'form'            : form or RunForm(
                 profiles = profiles, plans = plans, assumptions = assumptions ),
             'results'         : PlanningResultRecord.objects.select_related( 'run' ).filter(
                 organization = organization,
                 feature = PlanningFeature.FINANCIAL_FORECAST ).order_by( '-created_datetime' ),
             'error'           : error,
+            'readiness_issues': issues,
         }
 
 

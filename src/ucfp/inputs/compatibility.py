@@ -23,14 +23,18 @@ from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import Profile
 
 
+# The shared lead-in for a plans-drift report, so the raise-at-use error and the pre-run readiness
+# check spell the drift the same way.
+DRIFT_LEAD_IN = 'These plans reference things your situation no longer has:'
+
+
 class PlansIncompatibleError( ValueError ):
     """A Plans names Profile entities that do not exist in the Profile it is run against. Carries the
     human-readable `issues` so the run surface can show exactly what to fix."""
 
     def __init__( self, issues: list[ str ] ):
         self.issues = issues
-        super().__init__(
-            'These plans reference things your situation no longer has: ' + ' '.join( issues ) )
+        super().__init__( DRIFT_LEAD_IN + ' ' + ' '.join( issues ) )
 
 
 def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:

@@ -15,6 +15,7 @@ from common.dataclass_json import from_json_data, to_json_data
 from organization.models import Organization
 
 from ..models import AssumptionsRecord
+from .defaults import default_assumptions
 from .schemas import Assumptions
 
 
@@ -59,6 +60,8 @@ def _default_label( organization: Organization ) -> str:
 
 
 def _initial_assumptions() -> Assumptions:
-    """The content a new assumptions set starts from -- empty; the external-factors section seeds the
-    economic-factors copy and tax forecast. The extension point for richer seeding later."""
-    return Assumptions()
+    """The content a new assumptions set starts from -- the default external factors (Expected economic
+    outlook, COLA-indexed tax projection), so a minted set is complete and runnable and the
+    external-factors section edits it rather than first populating it. The extension point for richer
+    seeding later."""
+    return default_assumptions()

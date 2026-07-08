@@ -6,17 +6,16 @@
 
 {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
 
-{% if has_profile and has_plans and has_assumptions %}
+{% include 'planning/panes/readiness_issues.html' %}
+
+{% if inputs_available %}
 <form method="post" class="mt-3">
   {% csrf_token %}
   {{ form.as_p }}
   <button type="submit" class="btn btn-primary">Run forecast</button>
 </form>
 {% else %}
-<p class="text-muted mt-3">
-  Set up your inputs to run a forecast.
-  <a href="{% url 'interview_home' %}">Start the guided interview</a>.
-</p>
+{% include 'planning/panes/missing_inputs.html' %}
 {% endif %}
 
 <h2 class="h4 mt-5">Past results</h2>
