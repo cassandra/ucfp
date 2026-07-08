@@ -23,9 +23,10 @@ from common.request_utils import is_ajax
 from ucfp.inputs.profile.repository import (
     create_profile, latest_profile, load_profile, save_profile )
 from ucfp.inputs.plans.repository import (
-    create_plans, latest_plans, load_plans, plans_for, save_plans )
+    clone_plans, create_plans, latest_plans, load_plans, plans_for, save_plans )
 from ucfp.inputs.assumptions.repository import (
-    assumptions_for, create_assumptions, latest_assumptions, load_assumptions, save_assumptions )
+    assumptions_for, clone_assumptions, create_assumptions, latest_assumptions, load_assumptions,
+    save_assumptions )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -136,6 +137,30 @@ class AssumptionsSelectView( View ):
         record = get_object_or_404(
             AssumptionsRecord, uuid = uuid, organization = request.organization )
         _select( request, 'current_assumptions_uuid', record )
+        return redirect( 'flow_assumptions' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PlansCloneView( View ):
+    """`/inputs/plans/<uuid>/clone/` -- duplicate a Plans set (its contents plus a "copy" name), make
+    the copy the current editing target, and open it for tweaking. POST, since it creates a record."""
+
+    def post( self, request, uuid ):
+        source = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+        _select( request, 'current_plans_uuid', clone_plans( source ) )
+        return redirect( 'flow_plans' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class AssumptionsCloneView( View ):
+    """`/inputs/assumptions/<uuid>/clone/` -- duplicate an Assumptions set (its contents plus a "copy"
+    name), make the copy the current editing target, and open it for tweaking. POST, since it creates
+    a record."""
+
+    def post( self, request, uuid ):
+        source = get_object_or_404(
+            AssumptionsRecord, uuid = uuid, organization = request.organization )
+        _select( request, 'current_assumptions_uuid', clone_assumptions( source ) )
         return redirect( 'flow_assumptions' )
 
 

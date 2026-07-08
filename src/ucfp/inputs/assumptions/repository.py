@@ -54,6 +54,15 @@ def create_assumptions( organization: Organization ) -> AssumptionsRecord:
     return save_assumptions( record, _initial_assumptions() )
 
 
+def clone_assumptions( record: AssumptionsRecord ) -> AssumptionsRecord:
+    """Mint a new assumptions set holding a copy of `record`'s contents, named "<label> copy" -- the
+    basis for tweaking a variant without disturbing the original. The copy goes through the typed
+    load/save seam, so it is fully independent of the source."""
+    clone = AssumptionsRecord(
+        organization = record.organization, label = f'{record.label} copy' )
+    return save_assumptions( clone, load_assumptions( record ) )
+
+
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new set, since many coexist per organization."""
     return f'Assumptions {assumptions_for( organization ).count() + 1}'

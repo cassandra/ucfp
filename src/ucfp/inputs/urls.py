@@ -15,10 +15,13 @@ urlpatterns = [
     path( 'profile/', views.FlowEntryView.as_view( flow = 'profile' ), name = 'flow_profile' ),
     path( 'plans/', views.FlowEntryView.as_view( flow = 'plans' ), name = 'flow_plans' ),
     path( 'plans/new/', views.PlansNewView.as_view(), name = 'plan_new' ),
+    path( 'plans/<uuid:uuid>/clone/', views.PlansCloneView.as_view(), name = 'plan_clone' ),
     path( 'plans/<uuid:uuid>/', views.PlansSelectView.as_view(), name = 'plan_select' ),
     path( 'assumptions/', views.FlowEntryView.as_view( flow = 'assumptions' ),
           name = 'flow_assumptions' ),
     path( 'assumptions/new/', views.AssumptionsNewView.as_view(), name = 'assumptions_new' ),
+    path( 'assumptions/<uuid:uuid>/clone/', views.AssumptionsCloneView.as_view(),
+          name = 'assumptions_clone' ),
     path( 'assumptions/<uuid:uuid>/', views.AssumptionsSelectView.as_view(),
           name = 'assumptions_select' ),
 

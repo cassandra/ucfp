@@ -44,7 +44,13 @@
         {% for plan in plans %}
         <li class="list-group-item d-flex align-items-center py-2">
           <span>{{ plan.label }}</span>
-          <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link ml-auto p-0">Edit</a>
+          <span class="ml-auto d-flex align-items-center">
+            <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'plan_clone' plan.uuid %}" class="m-0">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+            </form>
+          </span>
         </li>
         {% empty %}
         <li class="list-group-item text-muted small">No plans yet.</li>
@@ -69,7 +75,13 @@
         {% for item in assumptions %}
         <li class="list-group-item d-flex align-items-center py-2">
           <span>{{ item.label }}</span>
-          <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link ml-auto p-0">Edit</a>
+          <span class="ml-auto d-flex align-items-center">
+            <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'assumptions_clone' item.uuid %}" class="m-0">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+            </form>
+          </span>
         </li>
         {% empty %}
         <li class="list-group-item text-muted small">No assumptions yet.</li>
