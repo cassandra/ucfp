@@ -1,13 +1,7 @@
 {% comment %}
-One section pane. A section's standard fields render via form.as_p inside the Next form. A section
-may instead supply a custom template: an `inner_template` renders inside the Next form (custom-laid-out
-inputs), while an `outer_template` renders outside it (a self-saving pane that manages its own inner
-forms, e.g. external factors or the spending drill -- nesting a form inside the Next form would be
-invalid HTML). The Next button only advances the flow; an outer_template pane persists its own edits.
-
-Form-level (non-field) errors are shown for a hand-laid inner_template, which otherwise renders no
-error feedback; form.as_p renders its own, and an outer_template's data is saved by its own inner
-forms, so neither needs the shared block here.
+One section pane: the section's self-saving `outer_template` -- a pane that persists its own edits
+through its own async view -- above a Next form that only advances the flow. The pane renders outside
+the Next form because nesting a form inside it would be invalid HTML.
 {% endcomment %}
 <div id="{{ section_target }}">
   <h2 class="h4 mb-3">{{ current_section.title }}</h2>
@@ -16,14 +10,6 @@ forms, so neither needs the shared block here.
         action="{% url 'interview_section' section=current_section.key %}"
         data-async="#{{ section_target }}">
     {% csrf_token %}
-    {% if current_section.inner_template %}
-    {% if form.non_field_errors %}
-    <div class="alert alert-warning">{{ form.non_field_errors }}</div>
-    {% endif %}
-    {% include current_section.inner_template %}
-    {% elif not current_section.outer_template %}
-    {{ form.as_p }}
-    {% endif %}
     <button type="submit" class="btn btn-primary mt-3">Next</button>
   </form>
 </div>

@@ -55,8 +55,7 @@ class Section:
     title: str
     aggregates: tuple = ( Aggregate.PROFILE, )
     form: Optional[ type ] = None
-    inner_template: Optional[ str ] = None   # custom content rendered inside the Continue form
-    outer_template: Optional[ str ] = None   # custom pane outside the form (manages its own forms)
+    outer_template: Optional[ str ] = None   # the section's self-saving pane, rendered above Next
 
 
 class SubjectsForm( forms.Form ):
@@ -289,7 +288,7 @@ class HomeForm( forms.Form ):
 
 class PropertiesForm:
     """§3 L0 -- the Properties pane. A no-op section form: the residence, the rentals, and the second
-    homes are each edited through their own async view, so Continue just advances. It exposes the
+    homes are each edited through their own async view, so Next just advances. It exposes the
     residence sub-form and the property lists for the pane (the rentals and second homes manage
     themselves)."""
 
@@ -444,7 +443,7 @@ class AccountsSectionForm:
 
 class IncomeSectionForm:
     """§5 L0 -- the income pane. A no-op section form: income is edited and saved through the
-    `IncomeTableView`, so Continue just advances. It exposes the income table for the pane."""
+    `IncomeTableView`, so Next just advances. It exposes the income table for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile  = profile
@@ -463,7 +462,7 @@ class IncomeSectionForm:
 
 class DebtsSectionForm:
     """§ Debts L0 -- the Debts pane. A no-op section form: the debts are edited and saved through
-    `DebtsView`, so Continue just advances. It exposes the one debts list -- every debt, mortgages
+    `DebtsView`, so Next just advances. It exposes the one debts list -- every debt, mortgages
     included, in the order the user thinks of them."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -484,7 +483,7 @@ class DebtsSectionForm:
 class DebtPlanSectionForm:
     """§ Debt plan L0 -- the pane. A no-op section form: the amortizing loans' repayment terms and
     the credit cards' paydown strategies are each edited and saved through their own async view
-    (`DebtPlanView`, `CreditCardView`), so Continue just advances. It exposes both forms, which read
+    (`DebtPlanView`, `CreditCardView`), so Next just advances. It exposes both forms, which read
     the declared debts."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -549,7 +548,7 @@ def applicable_sections( profile : Profile ) -> list:
 
 def next_section_after( sections : list, key : str ) -> Optional[ Section ]:
     """The next live (form-backed) section after `key` within `sections`, or None when the
-    interview is complete -- where Continue goes."""
+    interview is complete -- where Next goes."""
     keys      = [ section.key for section in sections ]
     following = sections[ keys.index( key ) + 1 : ] if key in keys else []
     return next( ( section for section in following if section.form is not None ), None )

@@ -1,9 +1,9 @@
 {% comment %}
 The Debts pane: one flat list of every debt (an auto-saving list, managed by its own async view
-outside the section's Continue form). Mortgages appear here too, alongside loans and cards -- the
+outside the section's Next form). Mortgages appear here too, alongside loans and cards -- the
 same debt can also have its balance adjusted on its property. A repayment plan per debt is added
 later, in the Plans flow.
 {% endcomment %}
 <p class="text-muted">What you owe -- loans, mortgages, and cards. Enter each debt's current balance;
-  changes save automatically, and Continue moves on when you're done.</p>
+  changes save automatically, and Next moves on when you're done.</p>
 {% include 'inputs/interview/sections/debts_list.html' with debts_form=form.debts_form %}
