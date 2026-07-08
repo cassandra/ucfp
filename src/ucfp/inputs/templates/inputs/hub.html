@@ -43,8 +43,13 @@
       <ul class="list-group list-group-flush">
         {% for plan in plans %}
         <li class="list-group-item d-flex align-items-center py-2">
-          <span>{{ plan.label }}</span>
-          <span class="ml-auto d-flex align-items-center">
+          <form method="post" action="{% url 'plan_rename' plan.uuid %}"
+                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
+            {% csrf_token %}
+            <input type="text" name="label" value="{{ plan.label }}" aria-label="Plan name"
+                   class="form-control form-control-sm border-0 bg-transparent px-1">
+          </form>
+          <span class="d-flex align-items-center flex-shrink-0">
             <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
             <form method="post" action="{% url 'plan_clone' plan.uuid %}" class="m-0">
               {% csrf_token %}
@@ -74,8 +79,13 @@
       <ul class="list-group list-group-flush">
         {% for item in assumptions %}
         <li class="list-group-item d-flex align-items-center py-2">
-          <span>{{ item.label }}</span>
-          <span class="ml-auto d-flex align-items-center">
+          <form method="post" action="{% url 'assumptions_rename' item.uuid %}"
+                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
+            {% csrf_token %}
+            <input type="text" name="label" value="{{ item.label }}" aria-label="Assumptions name"
+                   class="form-control form-control-sm border-0 bg-transparent px-1">
+          </form>
+          <span class="d-flex align-items-center flex-shrink-0">
             <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
             <form method="post" action="{% url 'assumptions_clone' item.uuid %}" class="m-0">
               {% csrf_token %}

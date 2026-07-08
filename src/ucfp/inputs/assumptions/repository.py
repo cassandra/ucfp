@@ -54,6 +54,13 @@ def create_assumptions( organization: Organization ) -> AssumptionsRecord:
     return save_assumptions( record, _initial_assumptions() )
 
 
+def rename_assumptions( record: AssumptionsRecord, label: str ) -> AssumptionsRecord:
+    """Rename an assumptions set, leaving its contents untouched."""
+    record.label = label
+    record.save()
+    return record
+
+
 def clone_assumptions( record: AssumptionsRecord ) -> AssumptionsRecord:
     """Mint a new assumptions set holding a copy of `record`'s contents, named "<label> copy" -- the
     basis for tweaking a variant without disturbing the original. The copy goes through the typed

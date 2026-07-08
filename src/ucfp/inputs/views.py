@@ -23,10 +23,10 @@ from common.request_utils import is_ajax
 from ucfp.inputs.profile.repository import (
     create_profile, latest_profile, load_profile, save_profile )
 from ucfp.inputs.plans.repository import (
-    clone_plans, create_plans, latest_plans, load_plans, plans_for, save_plans )
+    clone_plans, create_plans, latest_plans, load_plans, plans_for, rename_plans, save_plans )
 from ucfp.inputs.assumptions.repository import (
     assumptions_for, clone_assumptions, create_assumptions, latest_assumptions, load_assumptions,
-    save_assumptions )
+    rename_assumptions, save_assumptions )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -138,6 +138,33 @@ class AssumptionsSelectView( View ):
             AssumptionsRecord, uuid = uuid, organization = request.organization )
         _select( request, 'current_assumptions_uuid', record )
         return redirect( 'flow_assumptions' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PlansRenameView( View ):
+    """`/inputs/plans/<uuid>/rename/` -- rename a Plans set from the hub's inline editor. Saves the new
+    label in the background and replies silently; a blank name is ignored (non-blocking)."""
+
+    def post( self, request, uuid ):
+        record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+        label  = request.POST.get( 'label', '' ).strip()
+        if label:
+            rename_plans( record, label )
+        return antinode.response()
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class AssumptionsRenameView( View ):
+    """`/inputs/assumptions/<uuid>/rename/` -- rename an assumptions set from the hub's inline editor.
+    Saves the new label in the background and replies silently; a blank name is ignored."""
+
+    def post( self, request, uuid ):
+        record = get_object_or_404(
+            AssumptionsRecord, uuid = uuid, organization = request.organization )
+        label  = request.POST.get( 'label', '' ).strip()
+        if label:
+            rename_assumptions( record, label )
+        return antinode.response()
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
