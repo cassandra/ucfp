@@ -1,0 +1,28 @@
+{% comment %}
+The self-saving External Factors form (id=external-factors): the assumptions' economic-factors copy
+and the tax projection. The js-autosave form posts each edit to `ExternalFactorsView`, which persists
+silently and re-renders only on a genuine field error. The tax projection is shown as one more factor;
+the economic rates are tucked behind a native disclosure. A percent per factor. Reads `factors_form`.
+{% endcomment %}
+<div id="external-factors">
+  <form method="post" action="{% url 'external_factors' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    {% include 'inputs/interview/_field.html' with field=factors_form.forecast_type %}
+    <details class="mt-2">
+      <summary>Economic factors (percent per year)</summary>
+      <table class="table table-sm w-auto mt-2">
+        <tbody>
+          {% for field in factors_form.factors %}
+          <tr>
+            <td>{{ field.label }}</td>
+            <td>
+              {{ field }}
+              {% if field.errors %}<span class="text-danger small d-block">{{ field.errors|join:" " }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  </form>
+</div>

@@ -32,7 +32,7 @@ from .credit_card import CreditCardPlanForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
 from .events import EventsForm
-from .external_factors import ExternalFactorsForm
+from .external_factors import ExternalFactorsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
 from .spending import SpendingForm
@@ -474,8 +474,9 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/spending.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
-    Section( 'external-factors', 'External Factors', ( Aggregate.ASSUMPTIONS, ), ExternalFactorsForm,
-             inner_template = 'inputs/interview/sections/external_factors.html' ),
+    Section( 'external-factors', 'External Factors', ( Aggregate.ASSUMPTIONS, ),
+             ExternalFactorsSectionForm,
+             outer_template = 'inputs/interview/sections/external_factors.html' ),
 ]
 
 

@@ -64,3 +64,24 @@ class ExternalFactorsForm( forms.Form ):
         return profile, replace(
             assumptions, economics = economics,
             tax_projection = tax_projection( tax_type, economics ) )
+
+
+class ExternalFactorsSectionForm:
+    """§8 section wrapper. The External Factors pane self-saves through `ExternalFactorsView`, so this
+    section form only carries the flow: it always validates and its `apply` is a no-op, leaving Next to
+    advance without re-saving. It exposes the editor (`factors_form`) for the pane to render -- the
+    same shape the outer sections use (e.g. `SpendingForm`/`EventsForm`)."""
+
+    def __init__( self, data = None, *, profile = None, assumptions = None ):
+        self._profile     = profile
+        self._assumptions = assumptions
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def factors_form( self ) -> ExternalFactorsForm:
+        return ExternalFactorsForm( profile = self._profile, assumptions = self._assumptions )
+
+    def apply( self, profile, assumptions ):
+        return profile, assumptions

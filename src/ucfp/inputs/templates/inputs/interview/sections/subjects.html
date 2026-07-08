@@ -17,7 +17,6 @@ triggers stay hidden. The filing status reflects saved facts, so it updates on s
       <button type="button" class="{{ AppConst.OPTIONAL_ADD_CLASS }} btn btn-sm btn-outline-secondary" hidden>Add a partner</button>
       <div class="{{ AppConst.OPTIONAL_BODY_CLASS }}">
         <p class="text-muted mb-1">Partner</p>
-        {% for error in form.non_field_errors %}<p class="text-danger small">{{ error }}</p>{% endfor %}
         {% include 'inputs/interview/_field.html' with field=form.partner_name %}
         {% include 'inputs/interview/_field.html' with field=form.partner_birthdate %}
         <button type="button" class="{{ AppConst.OPTIONAL_REMOVE_CLASS }} btn btn-sm btn-link text-muted px-0" hidden>Remove partner</button>

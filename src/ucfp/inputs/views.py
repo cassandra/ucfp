@@ -33,6 +33,7 @@ from .interview import (
     flow_title, next_flow_entry, next_section_after, section_for )
 from .auto import AutoPlanForm
 from .credit_card import CreditCardPlanForm
+from .external_factors import ExternalFactorsForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
 from .events import EventForm, events_context, handler_for, menu_context
@@ -283,6 +284,11 @@ def _current_profile_and_plans( organization ):
     return profile, plans
 
 
+def _current_assumptions( organization ):
+    """The organization's current Assumptions set, creating it (seeded with defaults) if absent."""
+    return load_assumptions( latest_assumptions( organization ) or create_assumptions( organization ) )
+
+
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ResidenceView( View ):
     """`/inputs/interview/properties/residence/` -- the residence sub-form of the Property pane. POST
@@ -317,6 +323,41 @@ class ResidenceView( View ):
         # which carries no target, still applies the re-render.
         return antinode.response( replace_map = { 'residence': render_to_string(
             self._TEMPLATE, { 'residence_form': form }, request = request ) } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ExternalFactorsView( View ):
+    """`/inputs/interview/external-factors/edit/` -- the External Factors pane of the Assumptions flow.
+    POST auto-saves a single edit in the background: it persists the assumptions' economic factors and
+    tax projection and replies silently, re-rendering the pane only on a genuine field error.
+    Validation is non-blocking -- an incomplete factor simply is not saved; the forecast readiness
+    check is the completeness gate."""
+
+    _TEMPLATE = 'inputs/interview/sections/external_factors_pane.html'
+
+    def get( self, request ):
+        return self._response(
+            request, ExternalFactorsForm( assumptions = _current_assumptions( request.organization ) ) )
+
+    def post( self, request ):
+        organization = request.organization
+        assumptions  = _current_assumptions( organization )
+        form = ExternalFactorsForm( request.POST, assumptions = assumptions )
+        if not form.is_valid():
+            return self._swap( request, form )                 # surface a genuine field error
+        _profile, assumptions = form.apply( None, assumptions )
+        save_assumptions( latest_assumptions( organization ), assumptions )
+        return antinode.response()                             # silent background save
+
+    def _response( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'factors_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        # Replace the pane by id (not a data-async target) so the loader-suppressed background POST,
+        # which carries no target, still applies the re-render.
+        return antinode.response( replace_map = { 'external-factors': render_to_string(
+            self._TEMPLATE, { 'factors_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
