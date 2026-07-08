@@ -1,26 +1,8 @@
 {% comment %}
-§4 accounts, rendered inside the Continue form. A flat, all-optional set of the account classes the
-projection distinguishes: the household's taxable holdings, then each subject's tax-advantaged
-retirement. Enter as few or as many as you have -- nothing is required. Retirement labels carry the
-jurisdiction's local term (see jurisdiction/labels.py). Individual accounts and cost basis are later
-drill-downs.
+The Accounts section pane (Profile flow): an intro and the self-saving accounts form. The form renders
+outside the section's Next form (a nested form would be invalid HTML) and persists each edit on its own
+through `AccountsView`. The editor comes from the section wrapper (`form.accounts_form`); the same
+partial is re-rendered by the view on a field error.
 {% endcomment %}
 <p class="text-muted">Enter what you have in any of these; leave the rest blank.</p>
-
-<div class="row">
-  <div class="col-md-6">
-    <h3 class="h6 mt-3">Savings &amp; investments</h3>
-    {% for field in form.taxable_fields %}
-    {% include 'inputs/interview/_field.html' with field=field %}
-    {% endfor %}
-  </div>
-
-  <div class="col-md-6">
-    {% for group in form.retirement_groups %}
-    <h3 class="h6 mt-3">Retirement &mdash; {{ group.subject }}</h3>
-    {% for field in group.fields %}
-    {% include 'inputs/interview/_field.html' with field=field %}
-    {% endfor %}
-    {% endfor %}
-  </div>
-</div>
+{% include 'inputs/interview/sections/accounts_pane.html' with accounts_form=form.accounts_form %}

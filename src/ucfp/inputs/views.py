@@ -29,7 +29,7 @@ from ucfp.inputs.assumptions.repository import (
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
-    SECTIONS, Aggregate, HomeForm, applicable_sections, first_section_of_flow, flow_of,
+    SECTIONS, Aggregate, AccountsForm, HomeForm, applicable_sections, first_section_of_flow, flow_of,
     flow_title, next_flow_entry, next_section_after, section_for )
 from .auto import AutoPlanForm
 from .credit_card import CreditCardPlanForm
@@ -358,6 +358,38 @@ class ExternalFactorsView( View ):
         # which carries no target, still applies the re-render.
         return antinode.response( replace_map = { 'external-factors': render_to_string(
             self._TEMPLATE, { 'factors_form': form }, request = request ) } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class AccountsView( View ):
+    """`/inputs/interview/accounts/edit/` -- the Accounts pane of the Profile flow. POST auto-saves a
+    single edit in the background: it persists the household's account balances and replies silently,
+    re-rendering the pane only on a genuine field error. Validation is non-blocking -- a blank account
+    is simply not held; the forecast readiness check is the completeness gate."""
+
+    _TEMPLATE = 'inputs/interview/sections/accounts_pane.html'
+
+    def get( self, request ):
+        profile, _plans = _current_profile_and_plans( request.organization )
+        return self._response( request, AccountsForm( profile = profile ) )
+
+    def post( self, request ):
+        organization = request.organization
+        profile, _plans = _current_profile_and_plans( organization )
+        form = AccountsForm( request.POST, profile = profile )
+        if not form.is_valid():
+            return self._swap( request, form )                 # surface a genuine field error
+        profile, _plans = form.apply( profile, None )
+        save_profile( organization, profile )
+        return antinode.response()                             # silent background save
+
+    def _response( self, request, form ):
+        return antinode.response( main_content = render_to_string(
+            self._TEMPLATE, { 'accounts_form': form }, request = request ) )
+
+    def _swap( self, request, form ):
+        return antinode.response( replace_map = { 'accounts': render_to_string(
+            self._TEMPLATE, { 'accounts_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

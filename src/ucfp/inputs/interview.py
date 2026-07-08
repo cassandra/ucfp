@@ -386,6 +386,27 @@ class AccountsForm( forms.Form ):
         return accounts
 
 
+class AccountsSectionForm:
+    """§4 section wrapper. The Accounts pane self-saves through `AccountsView`, so this section form
+    only carries the flow: it always validates and its `apply` is a no-op, leaving Next to advance
+    without re-saving. It exposes the editor (`accounts_form`) for the pane -- the same shape the other
+    self-saving sections use."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def accounts_form( self ) -> AccountsForm:
+        return AccountsForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
 class IncomeSectionForm:
     """§5 L0 -- the income pane. A no-op section form: income is edited and saved through the
     `IncomeTableView`, so Continue just advances. It exposes the income table for the pane."""
@@ -455,8 +476,8 @@ class DebtPlanSectionForm:
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm,
              inner_template = 'inputs/interview/sections/subjects.html' ),
-    Section( 'accounts'    , 'Accounts', form = AccountsForm,
-             inner_template = 'inputs/interview/sections/accounts.html' ),
+    Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
+             outer_template = 'inputs/interview/sections/accounts.html' ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,

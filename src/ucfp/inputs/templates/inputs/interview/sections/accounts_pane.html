@@ -1,0 +1,29 @@
+{% comment %}
+The self-saving Accounts form (id=accounts): one optional total per account class the projection
+distinguishes -- the household's taxable holdings, then each subject's tax-advantaged retirement. The
+js-autosave form posts each edit to `AccountsView`, which persists silently and re-renders only on a
+genuine field error. Nothing is required; retirement labels carry the jurisdiction's local term.
+Individual accounts and cost basis are later drill-downs. Reads `accounts_form`.
+{% endcomment %}
+<div id="accounts">
+  <form method="post" action="{% url 'accounts' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <div class="row">
+      <div class="col-md-6">
+        <h3 class="h6 mt-3">Savings &amp; investments</h3>
+        {% for field in accounts_form.taxable_fields %}
+        {% include 'inputs/interview/_field.html' with field=field %}
+        {% endfor %}
+      </div>
+
+      <div class="col-md-6">
+        {% for group in accounts_form.retirement_groups %}
+        <h3 class="h6 mt-3">Retirement &mdash; {{ group.subject }}</h3>
+        {% for field in group.fields %}
+        {% include 'inputs/interview/_field.html' with field=field %}
+        {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+  </form>
+</div>
