@@ -341,6 +341,52 @@ window.App.Inputs = (function () {
             .each( function () { updateCard( $( this ) ); } );
     }
 
+    // ----- LoanCalculator: a live, advisory monthly-payment estimate per loan -----
+    // Display-only. As a loan's rate/term/extra change, write the level payment its terms imply into
+    // its readout, reusing the amortization mirrors above. Materialization is authoritative.
+
+    function loanField( $loan, cls ) {
+        return parseFloat( $loan.find( classSelector( cls ) ).val() );
+    }
+
+    // A whole-month term as "29 yr 11 mo" (either part dropped when zero, but never both).
+    function describeTerm( months ) {
+        const whole = Math.round( months );
+        const years = Math.floor( whole / 12 ), rest = whole % 12;
+        const parts = [];
+        if ( years ) { parts.push( years + ' yr' ); }
+        if ( rest || !years ) { parts.push( rest + ' mo' ); }
+        return parts.join( ' ' );
+    }
+
+    function loanReadout( $loan ) {
+        const balance = parseFloat( $loan.attr( dataAttr( C.LOAN_BALANCE_DATA_ATTR ) ) ) || 0;
+        const ratePercent = loanField( $loan, C.LOAN_RATE_CLASS );
+        const months = loanField( $loan, C.LOAN_TERM_CLASS );
+        if ( !( balance > 0 ) || !( ratePercent >= 0 ) || !( months > 0 ) ) { return ''; }
+        const rate = ( ratePercent / 100 ) / 12;
+        const payment = paymentForMonths( balance, months, rate );
+        let text = 'About ' + money( payment ) + '/month over ' + describeTerm( months ) + '.';
+        const extra = loanField( $loan, C.LOAN_EXTRA_CLASS );
+        if ( extra > 0 ) {
+            const payoff = monthsToClear( balance, payment + extra, rate );
+            if ( payoff !== null ) {
+                text += ' With ' + money( extra ) + ' extra/month, pays off in about '
+                    + describeTerm( payoff ) + '.';
+            }
+        }
+        return text;
+    }
+
+    function updateLoan( $loan ) {
+        $loan.find( classSelector( C.LOAN_READOUT_CLASS ) ).first().text( loanReadout( $loan ) );
+    }
+
+    function enhanceLoans( $scope ) {
+        ( $scope || $( document.body ) ).find( classSelector( C.LOAN_CLASS ) )
+            .each( function () { updateLoan( $( this ) ); } );
+    }
+
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs
@@ -388,6 +434,10 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'input change', classSelector( C.CREDIT_CARD_CLASS ) + ' :input',
             function () { updateCard( $( this ).closest( classSelector( C.CREDIT_CARD_CLASS ) ) ); } );
 
+        // Refresh a loan's advisory payment estimate as its rate/term/extra change.
+        $( 'body' ).on( 'input change', classSelector( C.LOAN_CLASS ) + ' :input',
+            function () { updateLoan( $( this ).closest( classSelector( C.LOAN_CLASS ) ) ); } );
+
         // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike
         // the delegated handlers above) they must be (re)applied to whatever DOM is present: once
         // now, and again after each antinode render for swapped-in content. Pickers are also torn
@@ -396,12 +446,14 @@ window.App.Inputs = (function () {
         enhanceOptionalSections( $( document.body ) );
         enhanceSwitches( $( document.body ) );
         enhanceCreditCards( $( document.body ) );
+        enhanceLoans( $( document.body ) );
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
                 enhanceOptionalSections( $( document.body ) );
                 enhanceSwitches( $( document.body ) );
                 enhanceCreditCards( $( document.body ) );
+                enhanceLoans( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }

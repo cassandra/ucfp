@@ -87,6 +87,16 @@ class AppConst:
     # calculator reads the same value the engine uses; the server renders it onto the wrapper.
     CREDIT_CARD_APR_DATA_ATTR     = 'card-apr'                # the assumed APR (percent), on the wrapper
 
+    # The loan payment calculator (one per amortizing debt, in the debt-plan step). The wrapper carries
+    # the current balance (a Profile fact); these mark the rate/term/extra inputs the calculator reads
+    # to show a live, advisory monthly-payment estimate. Display-only -- materialization is authoritative.
+    LOAN_CLASS              = 'js-loan'          # the per-loan widget wrapper
+    LOAN_RATE_CLASS         = 'js-loan-rate'     # the interest-rate input (percent)
+    LOAN_TERM_CLASS         = 'js-loan-term'     # the remaining-term input (months)
+    LOAN_EXTRA_CLASS        = 'js-loan-extra'    # the extra-principal-per-month input
+    LOAN_READOUT_CLASS      = 'js-loan-readout'  # where the live estimate is written
+    LOAN_BALANCE_DATA_ATTR  = 'loan-balance'     # the loan's current balance, on the wrapper
+
     @classmethod
     def to_json_dict_str( cls ):
         """
