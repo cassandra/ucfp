@@ -187,10 +187,11 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Clothes', everyday, '1250', living, flex = True ),
         _expense( 'Grooming', everyday, '960', living, flex = True ),
         # Discretionary
-        _expense( 'Major Vacation', discretionary, '7500', living, flex = True ),
-        _expense( 'Minor Vacation', discretionary, '3000', living, flex = True ),
-        _expense( 'Travel', discretionary, '900', living, quarterly, flex = True ),
+        _expense( 'Vacations', discretionary, '10000', living, flex = True ),
+        _expense( 'Transportation / Travel', discretionary, '900', living, quarterly, flex = True ),
+        _expense( 'Dining Out', discretionary, '75', living, weekly, flex = True ),
         _expense( 'Entertainment', discretionary, '50', living, weekly, flex = True ),
+        _expense( 'Cable TV / Streaming', discretionary, '100', living, monthly, flex = True ),
         _expense( 'Hobbies', discretionary, '150', living, quarterly, flex = True ),
         _expense( 'Computer Purchase', discretionary, '1500', living, every_2y, flex = True ),
         _expense( 'Computer Services', discretionary, '300', living, flex = True ),
@@ -202,6 +203,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         # a rental. Utilities also seed a tenant's rented home; property management, owned rentals only.
         _expense( 'Property Tax', prop, '6000', salt, yearly, applies_to = owned ),
         _expense( 'Property Insurance', prop, '2500', living, applies_to = owned ),
+        _expense( 'HOA / Coop Fee', prop, '300', living, monthly, applies_to = owned ),
         _expense( 'Maintenance / Repair', prop, '200', living, monthly, applies_to = owned ),
         _expense( 'A/C Cost', prop, '9000', living, every_15y, flex = True, applies_to = owned ),
         _expense( 'Appliance', prop, '580', living, flex = True, applies_to = owned ),
@@ -212,6 +214,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Lawn Tools', prop, '100', living, flex = True, applies_to = owned ),
         _expense( 'Water / Wastewater', prop, '200', living, monthly, applies_to = occupied ),
         _expense( 'Electric', prop, '250', living, monthly, applies_to = occupied ),
+        _expense( 'Gas Utility', prop, '80', living, monthly, applies_to = occupied ),
         _expense( 'Phone Service', prop, '100', living, monthly, applies_to = occupied ),
         _expense( 'Internet', prop, '100', living, monthly, applies_to = occupied ),
         _expense( 'Property Management', prop, '240', rental_expense, monthly, applies_to = rental_only ),
@@ -219,12 +222,13 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Auto Insurance', auto, '750', living, semiannual, flex = True ),
         _expense( 'Auto Maintenance', auto, '300', living, yearly, flex = True ),
         _expense( 'Auto Repair', auto, '1000', living ),
-        _expense( 'Gas', auto, '20', living, weekly, flex = True ),
+        _expense( 'Gasoline', auto, '20', living, weekly, flex = True ),
         # Health
         _expense( 'Medical Expenses', health, '7200', medical, flex = True ),
         _expense( 'Health Insurance', health, '26400', medical, flex = True ),
         # Miscellaneous -- household costs not tied to a single dwelling
         _expense( 'Umbrella Insurance', misc, '500', living, flex = True ),
+        _expense( 'Professional Fees', misc, '500', living, yearly ),
     ] )
 
 
