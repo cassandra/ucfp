@@ -23,10 +23,11 @@ from common.request_utils import is_ajax
 from ucfp.inputs.profile.repository import (
     create_profile, latest_profile, load_profile, save_profile )
 from ucfp.inputs.plans.repository import (
-    clone_plans, create_plans, latest_plans, load_plans, plans_for, rename_plans, save_plans )
+    clone_plans, create_plans, delete_plans, latest_plans, load_plans, plans_for, rename_plans,
+    save_plans )
 from ucfp.inputs.assumptions.repository import (
-    assumptions_for, clone_assumptions, create_assumptions, latest_assumptions, load_assumptions,
-    rename_assumptions, save_assumptions )
+    assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
+    load_assumptions, rename_assumptions, save_assumptions )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -95,6 +96,14 @@ def _select( request, field, record ):
     edits it. The single place a plans/assumptions selection is recorded."""
     setattr( request.session_state, field, str( record.uuid ) )
     request.session_state.to_session( request )
+
+
+def _forget_if_current( request, field, record ):
+    """Clear the session editing target for its aggregate if it points at `record` -- called before a
+    delete, so a stale selection does not outlive the record (the resolver then falls back to latest)."""
+    if getattr( request.session_state, field ) == str( record.uuid ):
+        setattr( request.session_state, field, None )
+        request.session_state.to_session( request )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -189,6 +198,33 @@ class AssumptionsCloneView( View ):
             AssumptionsRecord, uuid = uuid, organization = request.organization )
         _select( request, 'current_assumptions_uuid', clone_assumptions( source ) )
         return redirect( 'flow_assumptions' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PlansDeleteView( View ):
+    """`/inputs/plans/<uuid>/delete/` -- delete a Plans set (destructive; the hub asks first). If it
+    was the current editing target, the selection is cleared so the next visit falls back to the
+    latest (or a fresh) set."""
+
+    def post( self, request, uuid ):
+        record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+        _forget_if_current( request, 'current_plans_uuid', record )
+        delete_plans( record )
+        return redirect( 'inputs_home' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class AssumptionsDeleteView( View ):
+    """`/inputs/assumptions/<uuid>/delete/` -- delete an assumptions set (destructive; the hub asks
+    first). If it was the current editing target, the selection is cleared so the next visit falls
+    back to the latest (or a fresh) set."""
+
+    def post( self, request, uuid ):
+        record = get_object_or_404(
+            AssumptionsRecord, uuid = uuid, organization = request.organization )
+        _forget_if_current( request, 'current_assumptions_uuid', record )
+        delete_assumptions( record )
+        return redirect( 'inputs_home' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

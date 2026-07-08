@@ -51,9 +51,14 @@
           </form>
           <span class="d-flex align-items-center flex-shrink-0">
             <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
-            <form method="post" action="{% url 'plan_clone' plan.uuid %}" class="m-0">
+            <form method="post" action="{% url 'plan_clone' plan.uuid %}" class="m-0 mr-3">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+            </form>
+            <form method="post" action="{% url 'plan_delete' plan.uuid %}" class="m-0"
+                  data-confirm="Delete &quot;{{ plan.label }}&quot;? This cannot be undone.">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
             </form>
           </span>
         </li>
@@ -87,9 +92,14 @@
           </form>
           <span class="d-flex align-items-center flex-shrink-0">
             <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
-            <form method="post" action="{% url 'assumptions_clone' item.uuid %}" class="m-0">
+            <form method="post" action="{% url 'assumptions_clone' item.uuid %}" class="m-0 mr-3">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+            </form>
+            <form method="post" action="{% url 'assumptions_delete' item.uuid %}" class="m-0"
+                  data-confirm="Delete &quot;{{ item.label }}&quot;? This cannot be undone.">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
             </form>
           </span>
         </li>

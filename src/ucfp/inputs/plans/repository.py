@@ -52,6 +52,11 @@ def create_plans( organization: Organization ) -> PlansRecord:
     return save_plans( record, _initial_plans() )
 
 
+def delete_plans( record: PlansRecord ) -> None:
+    """Delete a Plans set. Captured runs snapshot their inputs, so nothing downstream depends on it."""
+    record.delete()
+
+
 def rename_plans( record: PlansRecord, label: str ) -> PlansRecord:
     """Rename a Plans set, leaving its contents untouched."""
     record.label = label

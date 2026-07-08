@@ -353,6 +353,12 @@ window.App.Inputs = (function () {
             saveForm( $( this ) );
         } );
 
+        // A form marked data-confirm asks before it submits -- the guard for destructive actions
+        // (deleting a plans/assumptions set). Cancelling stops the submission.
+        $( 'body' ).on( 'submit', 'form[data-confirm]', function ( event ) {
+            if ( ! window.confirm( $( this ).data( 'confirm' ) ) ) { event.preventDefault(); }
+        } );
+
         // Reveal an optional block; land the caret on its first field so the user can type straight in.
         $( 'body' ).on( 'click', classSelector( C.OPTIONAL_ADD_CLASS ), function () {
             const $section = $( this ).closest( classSelector( C.OPTIONAL_CLASS ) );

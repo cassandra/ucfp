@@ -17,6 +17,7 @@ urlpatterns = [
     path( 'plans/new/', views.PlansNewView.as_view(), name = 'plan_new' ),
     path( 'plans/<uuid:uuid>/clone/', views.PlansCloneView.as_view(), name = 'plan_clone' ),
     path( 'plans/<uuid:uuid>/rename/', views.PlansRenameView.as_view(), name = 'plan_rename' ),
+    path( 'plans/<uuid:uuid>/delete/', views.PlansDeleteView.as_view(), name = 'plan_delete' ),
     path( 'plans/<uuid:uuid>/', views.PlansSelectView.as_view(), name = 'plan_select' ),
     path( 'assumptions/', views.FlowEntryView.as_view( flow = 'assumptions' ),
           name = 'flow_assumptions' ),
@@ -25,6 +26,8 @@ urlpatterns = [
           name = 'assumptions_clone' ),
     path( 'assumptions/<uuid:uuid>/rename/', views.AssumptionsRenameView.as_view(),
           name = 'assumptions_rename' ),
+    path( 'assumptions/<uuid:uuid>/delete/', views.AssumptionsDeleteView.as_view(),
+          name = 'assumptions_delete' ),
     path( 'assumptions/<uuid:uuid>/', views.AssumptionsSelectView.as_view(),
           name = 'assumptions_select' ),
 

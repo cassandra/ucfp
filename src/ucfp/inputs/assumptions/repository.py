@@ -54,6 +54,12 @@ def create_assumptions( organization: Organization ) -> AssumptionsRecord:
     return save_assumptions( record, _initial_assumptions() )
 
 
+def delete_assumptions( record: AssumptionsRecord ) -> None:
+    """Delete an assumptions set. Captured runs snapshot their inputs, so nothing downstream depends
+    on it."""
+    record.delete()
+
+
 def rename_assumptions( record: AssumptionsRecord, label: str ) -> AssumptionsRecord:
     """Rename an assumptions set, leaving its contents untouched."""
     record.label = label
