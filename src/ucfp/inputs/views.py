@@ -355,30 +355,66 @@ class InterviewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class AutoPlanView( View ):
-    """`/inputs/interview/spending/auto-purchases/` -- the car-purchase/financing pane of the Spending
-    section (a special case, distinct from the generic 'auto' expense category and its
-    `spending/auto/` route). POST auto-saves a single edit in the background: it persists the auto
-    plan and replies silently, re-rendering the pane only on a genuine field error. Validation is
-    non-blocking, so an incomplete plan simply stores nothing."""
+class SelfSavingPaneView( View ):
+    """Shared shape for a self-saving input pane: GET renders the pane; POST validates the edit and
+    re-renders the pane only on a genuine field error, otherwise persisting it silently so typing is
+    undisturbed. A pane whose row set can change re-renders after a save that added or removed a row.
 
-    _TEMPLATE = 'inputs/interview/sections/auto_plan.html'
+    A concrete pane declares its `template`, the pane's DOM `target` id, and the `context_name` the
+    template reads its form under, and implements `build_form` (construct the form from the current
+    aggregates) and `persist` (apply the valid form and save). `persist` returns truthy only when the
+    row set changed, so the pane is re-rendered; a plain value edit returns None and stays silent.
+    Non-blocking throughout -- an incomplete entry simply is not saved; the forecast readiness check
+    is the completeness gate. Panes with a non-silent success (Subjects, the spending drill) do not
+    use this base."""
+
+    template     : str
+    target       : str
+    context_name : str
 
     def get( self, request ):
-        profile, plans = _current_profile_and_plans( request )
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'auto_form': AutoPlanForm( profile = profile, plans = plans ) },
-            request = request ) )
+        return antinode.response( main_content = self._pane( request, self.build_form( request ) ) )
 
     def post( self, request ):
-        profile, plans = _current_profile_and_plans( request )
-        form = AutoPlanForm( request.POST, profile = profile, plans = plans )
+        form = self.build_form( request, request.POST )
         if not form.is_valid():
-            return antinode.response( replace_map = { 'auto-purchases': render_to_string(
-                self._TEMPLATE, { 'auto_form': form }, request = request ) } )
-        _profile, plans = form.apply( profile, plans )
-        save_plans( current_plans_record( request ),plans )
+            return self._swap( request, form )                 # surface a genuine field error
+        if self.persist( request, form ):                      # a row was added or removed
+            return self._swap( request, self.build_form( request ) )
         return antinode.response()                             # silent background save
+
+    def build_form( self, request, data = None ):
+        raise NotImplementedError
+
+    def persist( self, request, form ):
+        raise NotImplementedError
+
+    def _pane( self, request, form ) -> str:
+        return render_to_string( self.template, { self.context_name: form }, request = request )
+
+    def _swap( self, request, form ):
+        # Replace the pane by id (not a data-async target) so the loader-suppressed background POST,
+        # which carries no target, still applies the re-render.
+        return antinode.response( replace_map = { self.target: self._pane( request, form ) } )
+
+
+class AutoPlanView( SelfSavingPaneView ):
+    """`/inputs/interview/spending/auto-purchases/` -- the car-purchase/financing pane of the Spending
+    section (a special case, distinct from the generic 'auto' expense category and its
+    `spending/auto/` route)."""
+
+    template     = 'inputs/interview/sections/auto_plan.html'
+    target       = 'auto-purchases'
+    context_name = 'auto_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return AutoPlanForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -464,106 +500,58 @@ def _current_assumptions( request ):
     return load_assumptions( current_assumptions_record( request ) )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class ResidenceView( View ):
-    """`/inputs/interview/properties/residence/` -- the residence sub-form of the Property pane. POST
-    auto-saves a single edit in the background: it persists just the residence (its asset, mortgage,
-    and rent) and replies silently, re-rendering the sub-pane only on a genuine field error. Own/rent
-    and mortgage visibility are client-side (`inputs.js`); validation is non-blocking, so an
-    incomplete residence simply does not materialize (the forecast run is the real gate)."""
+class ResidenceView( SelfSavingPaneView ):
+    """`/inputs/interview/properties/residence/` -- the residence sub-form of the Property pane. It
+    persists just the residence (its asset, mortgage, and rent). Own/rent and mortgage visibility are
+    client-side (`inputs.js`); an incomplete residence simply does not materialize."""
 
-    _TEMPLATE = 'inputs/interview/sections/residence.html'
+    template     = 'inputs/interview/sections/residence.html'
+    target       = 'residence'
+    context_name = 'residence_form'
 
-    def get( self, request ):
+    def build_form( self, request, data = None ):
         profile, plans = _current_profile_and_plans( request )
-        return self._response( request, HomeForm( profile = profile, plans = plans ) )
+        return HomeForm( data, profile = profile, plans = plans )
 
-    def post( self, request ):
-        organization = request.organization
+    def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
-        form = HomeForm( request.POST, profile = profile, plans = plans )
-        if not form.is_valid():
-            return self._swap( request, form )                 # surface a genuine field error
         profile, plans = form.apply( profile, plans )
-        save_profile( organization, profile )
-        save_plans( current_plans_record( request ),plans )
-        return antinode.response()                             # silent background save
-
-    def _response( self, request, form ):
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'residence_form': form }, request = request ) )
-
-    def _swap( self, request, form ):
-        # Replace the pane by id (not a data-async target) so the loader-suppressed background POST,
-        # which carries no target, still applies the re-render.
-        return antinode.response( replace_map = { 'residence': render_to_string(
-            self._TEMPLATE, { 'residence_form': form }, request = request ) } )
+        save_profile( request.organization, profile )
+        save_plans( current_plans_record( request ), plans )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class ExternalFactorsView( View ):
-    """`/inputs/interview/external-factors/edit/` -- the External Factors pane of the Assumptions flow.
-    POST auto-saves a single edit in the background: it persists the assumptions' economic factors and
-    tax projection and replies silently, re-rendering the pane only on a genuine field error.
-    Validation is non-blocking -- an incomplete factor simply is not saved; the forecast readiness
-    check is the completeness gate."""
+class ExternalFactorsView( SelfSavingPaneView ):
+    """`/inputs/interview/external-factors/edit/` -- the External Factors pane of the Assumptions
+    flow. It persists the assumptions' economic factors and tax projection."""
 
-    _TEMPLATE = 'inputs/interview/sections/external_factors_pane.html'
+    template     = 'inputs/interview/sections/external_factors_pane.html'
+    target       = 'external-factors'
+    context_name = 'factors_form'
 
-    def get( self, request ):
-        return self._response(
-            request, ExternalFactorsForm( assumptions = _current_assumptions( request ) ) )
+    def build_form( self, request, data = None ):
+        return ExternalFactorsForm( data, assumptions = _current_assumptions( request ) )
 
-    def post( self, request ):
-        assumptions = _current_assumptions( request )
-        form = ExternalFactorsForm( request.POST, assumptions = assumptions )
-        if not form.is_valid():
-            return self._swap( request, form )                 # surface a genuine field error
-        _profile, assumptions = form.apply( None, assumptions )
+    def persist( self, request, form ):
+        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
         save_assumptions( current_assumptions_record( request ), assumptions )
-        return antinode.response()                             # silent background save
-
-    def _response( self, request, form ):
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'factors_form': form }, request = request ) )
-
-    def _swap( self, request, form ):
-        # Replace the pane by id (not a data-async target) so the loader-suppressed background POST,
-        # which carries no target, still applies the re-render.
-        return antinode.response( replace_map = { 'external-factors': render_to_string(
-            self._TEMPLATE, { 'factors_form': form }, request = request ) } )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class AccountsView( View ):
-    """`/inputs/interview/accounts/edit/` -- the Accounts pane of the Profile flow. POST auto-saves a
-    single edit in the background: it persists the household's account balances and replies silently,
-    re-rendering the pane only on a genuine field error. Validation is non-blocking -- a blank account
-    is simply not held; the forecast readiness check is the completeness gate."""
+class AccountsView( SelfSavingPaneView ):
+    """`/inputs/interview/accounts/edit/` -- the Accounts pane of the Profile flow. It persists the
+    household's account balances; a blank account is simply not held."""
 
-    _TEMPLATE = 'inputs/interview/sections/accounts_pane.html'
+    template     = 'inputs/interview/sections/accounts_pane.html'
+    target       = 'accounts'
+    context_name = 'accounts_form'
 
-    def get( self, request ):
+    def build_form( self, request, data = None ):
         profile, _plans = _current_profile_and_plans( request )
-        return self._response( request, AccountsForm( profile = profile ) )
+        return AccountsForm( data, profile = profile )
 
-    def post( self, request ):
-        organization = request.organization
+    def persist( self, request, form ):
         profile, _plans = _current_profile_and_plans( request )
-        form = AccountsForm( request.POST, profile = profile )
-        if not form.is_valid():
-            return self._swap( request, form )                 # surface a genuine field error
-        profile, _plans = form.apply( profile, None )
-        save_profile( organization, profile )
-        return antinode.response()                             # silent background save
-
-    def _response( self, request, form ):
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'accounts_form': form }, request = request ) )
-
-    def _swap( self, request, form ):
-        return antinode.response( replace_map = { 'accounts': render_to_string(
-            self._TEMPLATE, { 'accounts_form': form }, request = request ) } )
+        profile, _ = form.apply( profile, None )
+        save_profile( request.organization, profile )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -608,189 +596,118 @@ class SubjectsView( View ):
             self._TEMPLATE, { 'subjects_form': form }, request = request ) } )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class PossessionsView( View ):
+class PossessionsView( SelfSavingPaneView ):
     """`/inputs/interview/properties/possessions/` -- the Other Possessions list of the Property pane.
-    POST auto-saves a single edit in the background: it persists and replies silently, re-rendering the
-    pane only when the item set changed (a row added or removed) or a field failed validation.
-    Validation is non-blocking, so an incomplete row simply does not materialize."""
+    Its item set can change, so a save that adds or removes a row re-renders the pane; an incomplete
+    row simply does not materialize."""
 
-    _TEMPLATE = 'inputs/interview/sections/possessions.html'
+    template     = 'inputs/interview/sections/possessions.html'
+    target       = 'possessions'
+    context_name = 'possessions_form'
 
-    def get( self, request ):
+    def build_form( self, request, data = None ):
         profile, plans = _current_profile_and_plans( request )
-        return self._rendered( request, PossessionsForm( profile = profile, plans = plans ) )
+        return PossessionsForm( data, profile = profile, plans = plans )
 
-    def post( self, request ):
-        organization = request.organization
+    def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
-        form = PossessionsForm( request.POST, profile = profile, plans = plans )
-        if not form.is_valid():
-            return self._swap( request, form )                 # show a bad value
         before = self._count( profile )
         profile, _plans = form.apply( profile, plans )
-        save_profile( organization, profile )
-        if self._count( profile ) != before:                   # a row was added or removed
-            return self._swap( request, PossessionsForm( profile = profile, plans = plans ) )
-        return antinode.response()                             # silent: nothing to re-render
+        save_profile( request.organization, profile )
+        return self._count( profile ) != before                # a row was added or removed
 
     @staticmethod
     def _count( profile ) -> int:
         return sum( 1 for asset in profile.assets if asset.asset_class in PossessionsForm._CLASSES )
 
-    def _rendered( self, request, form ):
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'possessions_form': form }, request = request ) )
 
-    def _swap( self, request, form ):
-        return antinode.response( replace_map = { 'possessions': render_to_string(
-            self._TEMPLATE, { 'possessions_form': form }, request = request ) } )
+class DebtsView( SelfSavingPaneView ):
+    """`/inputs/interview/debt/list/` -- the debts list of the Debts section. Its debt set can change,
+    so a save that adds or removes a row re-renders the list; an incomplete row simply does not
+    materialize. Mortgages edit here like any other debt; each row preserves its stable handle and any
+    property it is secured against."""
 
+    template     = 'inputs/interview/sections/debts_list.html'
+    target       = 'debts-list'
+    context_name = 'debts_form'
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class DebtsView( View ):
-    """`/inputs/interview/debt/list/` -- the debts list of the Debts section. POST auto-saves a
-    single edit in the background: it persists and replies silently, re-rendering the list only when
-    the debt set changed (a row added or removed) or a field failed validation. Validation is
-    non-blocking, so an incomplete row simply does not materialize. Mortgages edit here like any
-    other debt; each row preserves its stable handle and any property it is secured against."""
-
-    _TEMPLATE = 'inputs/interview/sections/debts_list.html'
-
-    def get( self, request ):
+    def build_form( self, request, data = None ):
         profile, plans = _current_profile_and_plans( request )
-        return self._rendered( request, DebtsForm( profile = profile, plans = plans ) )
+        return DebtsForm( data, profile = profile, plans = plans )
 
-    def post( self, request ):
-        organization = request.organization
+    def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
-        form = DebtsForm( request.POST, profile = profile, plans = plans )
-        if not form.is_valid():
-            return self._swap( request, form )                 # show a bad value
         before = len( profile.debts )
         profile, plans = form.apply( profile, plans )
-        save_profile( organization, profile )
-        save_plans( current_plans_record( request ),plans )      # a removed debt reaps its plan too
-        if len( profile.debts ) != before:                     # a row was added or removed
-            return self._swap( request, DebtsForm( profile = profile, plans = plans ) )
-        return antinode.response()                             # silent: nothing to re-render
-
-    def _rendered( self, request, form ):
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'debts_form': form }, request = request ) )
-
-    def _swap( self, request, form ):
-        return antinode.response( replace_map = { 'debts-list': render_to_string(
-            self._TEMPLATE, { 'debts_form': form }, request = request ) } )
+        save_profile( request.organization, profile )
+        save_plans( current_plans_record( request ), plans )   # a removed debt reaps its plan too
+        return len( profile.debts ) != before                  # a row was added or removed
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class DebtPlanView( View ):
-    """`/inputs/interview/debt/plan/` -- the per-debt repayment terms of the Debt plan section. POST
-    auto-saves a single edit in the background: it persists the repayment/prepayment plans and replies
-    silently, re-rendering the pane only on a genuine field error (the row set is fixed by the declared
-    debts, so nothing is added or removed here). Validation is non-blocking, so incomplete terms simply
-    do not materialize a loan."""
+class DebtPlanView( SelfSavingPaneView ):
+    """`/inputs/interview/debt/plan/` -- the per-debt repayment terms of the Debt plan section. It
+    persists the repayment/prepayment plans; the row set is fixed by the declared debts, so incomplete
+    terms simply do not materialize a loan."""
 
-    _TEMPLATE = 'inputs/interview/sections/debt_plan_list.html'
+    template     = 'inputs/interview/sections/debt_plan_list.html'
+    target       = 'debt-plan'
+    context_name = 'debt_plan_form'
 
-    def get( self, request ):
+    def build_form( self, request, data = None ):
         profile, plans = _current_profile_and_plans( request )
-        return self._rendered( request, DebtPlanForm( profile = profile, plans = plans ) )
+        return DebtPlanForm( data, profile = profile, plans = plans )
 
-    def post( self, request ):
+    def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
-        form = DebtPlanForm( request.POST, profile = profile, plans = plans )
-        if not form.is_valid():
-            return self._swap( request, form )                 # surface a genuine field error
         _profile, plans = form.apply( profile, plans )
-        save_plans( current_plans_record( request ),plans )
-        return antinode.response()                             # silent background save
-
-    def _rendered( self, request, form ):
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'debt_plan_form': form }, request = request ) )
-
-    def _swap( self, request, form ):
-        return antinode.response( replace_map = { 'debt-plan': render_to_string(
-            self._TEMPLATE, { 'debt_plan_form': form }, request = request ) } )
+        save_plans( current_plans_record( request ), plans )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class CreditCardView( View ):
-    """`/inputs/interview/debt/cards/` -- the per-card paydown calculators of the Debt plan section.
-    POST auto-saves a single edit in the background: it persists the card plans and replies silently,
-    re-rendering the pane only on a genuine field error (the card set is fixed by the declared debts;
-    the mode switch and the live readout are client-side). Validation is non-blocking, so a
-    half-entered strategy simply stores no plan."""
+class CreditCardView( SelfSavingPaneView ):
+    """`/inputs/interview/debt/cards/` -- the per-card paydown calculators of the Debt plan section. It
+    persists the card plans; the card set is fixed by the declared debts (the mode switch and the live
+    readout are client-side), so a half-entered strategy simply stores no plan."""
 
-    _TEMPLATE = 'inputs/interview/sections/credit_card_list.html'
+    template     = 'inputs/interview/sections/credit_card_list.html'
+    target       = 'credit-card-plan'
+    context_name = 'credit_card_form'
 
-    def get( self, request ):
+    def build_form( self, request, data = None ):
         profile, plans = _current_profile_and_plans( request )
-        return self._rendered( request, CreditCardPlanForm( profile = profile, plans = plans ) )
+        return CreditCardPlanForm( data, profile = profile, plans = plans )
 
-    def post( self, request ):
+    def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
-        form = CreditCardPlanForm( request.POST, profile = profile, plans = plans )
-        if not form.is_valid():
-            return self._swap( request, form )                 # surface a genuine field error
         _profile, plans = form.apply( profile, plans )
-        save_plans( current_plans_record( request ),plans )
-        return antinode.response()                             # silent background save
-
-    def _rendered( self, request, form ):
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'credit_card_form': form }, request = request ) )
-
-    def _swap( self, request, form ):
-        return antinode.response( replace_map = { 'credit-card-plan': render_to_string(
-            self._TEMPLATE, { 'credit_card_form': form }, request = request ) } )
+        save_plans( current_plans_record( request ), plans )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class IncomeTableView( View ):
-    """`/inputs/interview/income/table/` -- the §5 income table. GET renders it. POST auto-saves a
-    single edit in the background: it persists, then replies *silently* (an empty antinode response,
-    no DOM swap) for a pure value edit so typing flow is undisturbed, and re-renders the pane only
-    when the row set changed (a line added or removed) or a field failed validation -- cases the
-    client cannot reflect on its own. The age<->date sync is done client-side (`inputs.js`)."""
+class IncomeTableView( SelfSavingPaneView ):
+    """`/inputs/interview/income/table/` -- the §5 income table. Its line set can change, so a save
+    that adds or removes a line re-renders the pane; a pure value edit stays silent. The age<->date
+    sync is done client-side (`inputs.js`)."""
 
-    _TEMPLATE = 'inputs/interview/sections/income_table.html'
+    template     = 'inputs/interview/sections/income_table.html'
+    target       = 'income-table'
+    context_name = 'income_form'
 
-    def get( self, request ):
+    def build_form( self, request, data = None ):
         profile, plans = _current_profile_and_plans( request )
-        return self._rendered( request, IncomeTableForm( profile = profile, plans = plans ) )
+        return IncomeTableForm( data, profile = profile, plans = plans )
 
-    def post( self, request ):
-        organization = request.organization
+    def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
-        form = IncomeTableForm( request.POST, profile = profile, plans = plans )
-        if not form.is_valid():
-            return self._swap( request, form )                 # show field errors
         before = self._line_count( profile )
         profile, plans = form.apply( profile, plans )
-        save_profile( organization, profile )
-        save_plans( current_plans_record( request ),plans )
-        if self._line_count( profile ) != before:              # a line was added or removed
-            return self._swap( request, IncomeTableForm( profile = profile, plans = plans ) )
-        return antinode.response()                             # silent: nothing to re-render
+        save_profile( request.organization, profile )
+        save_plans( current_plans_record( request ), plans )
+        return self._line_count( profile ) != before           # a line was added or removed
 
     @staticmethod
     def _line_count( profile ) -> int:
         """The general income lines (the only rows whose count changes); rental and entitlement rows
         are fixed by the properties and subjects."""
         return sum( 1 for flow in profile.income_flows if flow.property_handle is None )
-
-    def _rendered( self, request, form ) -> str:
-        return antinode.response( main_content = render_to_string(
-            self._TEMPLATE, { 'income_form': form }, request = request ) )
-
-    def _swap( self, request, form ):
-        # Replace the pane by id (not the data-async target) so the loader-suppressed background
-        # POST -- which carries no target -- still applies the update.
-        return antinode.response( replace_map = { 'income-table': render_to_string(
-            self._TEMPLATE, { 'income_form': form }, request = request ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
