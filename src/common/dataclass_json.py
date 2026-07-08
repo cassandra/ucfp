@@ -62,7 +62,7 @@ def from_json_data( target_type: Any, data: Any ) -> Any:
         return None
     if isinstance( target_type, type ):
         if issubclass( target_type, Enum ):
-            return target_type[ data ]
+            return _from_enum( target_type, data )
         if issubclass( target_type, Decimal ):
             return Decimal( data )
         if issubclass( target_type, date ):
@@ -88,6 +88,15 @@ def _from_sequence( origin: Any, args: tuple, data: Any ) -> Any:
     if len( args ) == 2 and args[ 1 ] is Ellipsis:
         return tuple( from_json_data( args[ 0 ], item ) for item in data )
     return tuple( from_json_data( arg, item ) for arg, item in zip( args, data ) )
+
+
+def _from_enum( target_type: Any, data: Any ) -> Any:
+    try:
+        return target_type[ data ]
+    except KeyError as error:
+        raise DataclassJsonError(
+            f'{data!r} is not a member of {target_type.__name__} -- the stored value may predate a '
+            f'schema change (a member removed or renamed since it was saved).' ) from error
 
 
 def _from_dataclass( target_type: Any, data: dict ) -> Any:

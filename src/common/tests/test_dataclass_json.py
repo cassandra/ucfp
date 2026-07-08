@@ -193,6 +193,16 @@ class DataclassJsonRoundTripTest( SimpleTestCase ):
         self.assertIn( 'SubjectProfile', message )
         self.assertIn( 'schema change', message )
 
+    def test_removed_enum_member_reports_clearly( self ):
+        # A stored enum value that no longer exists (a member removed or renamed since it was saved)
+        # names the enum and the missing value, not a raw KeyError from deep in construction.
+        with self.assertRaises( DataclassJsonError ) as caught:
+            from_json_data( ExpenseCategory, 'UTILITIES' )   # a category the model no longer defines
+        message = str( caught.exception )
+        self.assertIn( 'UTILITIES', message )
+        self.assertIn( 'ExpenseCategory', message )
+        self.assertIn( 'schema change', message )
+
 
 class DataclassJsonLeafTest( SimpleTestCase ):
 
