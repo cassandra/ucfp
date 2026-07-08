@@ -15,7 +15,8 @@ from ucfp.accounts.enums import ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 
 from .enums import (
-    CatalogScope, EconomicOutlookVariant, ExpenseCategory, LifestyleScope, ParameterSetKind )
+    CatalogScope, EconomicOutlookVariant, ExpenseCategory, LifestyleScope, ParameterSetKind,
+    PropertyContext )
 from .schemas import (
     EconomicOutlookSchedule, ExpenseCatalog, ExpenseType, LifestyleAmounts, LifestyleCostTable,
     LifestyleExpense )
@@ -142,20 +143,23 @@ def _general_lifestyle_table() -> LifestyleCostTable:
 
 
 def _expense( name : str, category, amount : str, tax_class, interval = None,
-              flex : bool = False ) -> ExpenseType:
+              flex : bool = False, applies_to : tuple = () ) -> ExpenseType:
     return ExpenseType(
         name = name, category = category, expense_tax_class = tax_class,
-        default_amount = Decimal( amount ), interval = interval, lifestyle_dependent = flex )
+        default_amount = Decimal( amount ), interval = interval, lifestyle_dependent = flex,
+        applies_to = applies_to )
 
 
 def _general_expense_catalog() -> ExpenseCatalog:
-    """The general expense catalog: the 35 spreadsheet rows restructured into typed, grouped
-    entries, each collapsed to its medium value as the default and flagged lifestyle-dependent where
-    the original tiers differed. Grouping follows the decision each cost attaches to; only the
-    genuinely discretionary rows flex. Property tax, charitable giving, and the rental-context
-    variants are added with the sections that introduce their context."""
+    """The general expense catalog: the spreadsheet rows restructured into typed, grouped entries, each
+    collapsed to its medium value as the default and flagged lifestyle-dependent where the original
+    tiers differed. Grouping follows the decision each cost attaches to; only the genuinely
+    discretionary rows flex. The `PROPERTY` rows are one operating-cost set seeded per owned dwelling;
+    each carries its *personal* tax class (materialization swaps it to a rental expense for a rental)
+    and an `applies_to` set of the property contexts it seeds against."""
     living         = ExpenseTaxClass.LIVING
     medical        = ExpenseTaxClass.MEDICAL
+    salt           = ExpenseTaxClass.SALT
     rental_expense = ExpenseTaxClass.RENTAL_EXPENSE
     weekly     = Duration( 1, TimeUnit.WEEK )
     monthly    = Duration( 1, TimeUnit.MONTH )
@@ -167,11 +171,15 @@ def _general_expense_catalog() -> ExpenseCatalog:
     every_20y  = Duration( 20, TimeUnit.YEAR )
     everyday      = ExpenseCategory.EVERYDAY
     discretionary = ExpenseCategory.DISCRETIONARY
-    utilities     = ExpenseCategory.UTILITIES
-    home          = ExpenseCategory.HOME
+    prop          = ExpenseCategory.PROPERTY
     auto          = ExpenseCategory.AUTO
     health        = ExpenseCategory.HEALTH
-    rental        = ExpenseCategory.RENTAL
+    misc          = ExpenseCategory.MISCELLANEOUS
+    # Property-context sets: every owned dwelling; owned dwellings plus a tenant's rented home
+    # (utilities); an owned rental alone (property management).
+    owned       = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
+    occupied    = owned + ( PropertyContext.RENTED_HOME, )
+    rental_only = ( PropertyContext.RENTAL, )
     return ExpenseCatalog( [
         # Everyday living
         _expense( 'Food', everyday, '150', living, weekly, flex = True ),
@@ -189,22 +197,24 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Gifts', discretionary, '3000', living, flex = True ),
         _expense( 'Health & Fitness', discretionary, '40', living, monthly, flex = True ),
         _expense( 'Furniture', discretionary, '500', living, flex = True ),
-        # Utilities
-        _expense( 'Water / Wastewater', utilities, '200', living, monthly ),
-        _expense( 'Electric', utilities, '250', living, monthly ),
-        _expense( 'Phone Service', utilities, '100', living, monthly ),
-        _expense( 'Internet', utilities, '100', living, monthly ),
-        # Home
-        _expense( 'Home Insurance', home, '2500', living ),
-        _expense( 'House Maintenance / Repair', home, '200', living, monthly ),
-        _expense( 'A/C Cost', home, '9000', living, every_15y, flex = True ),
-        _expense( 'Appliance', home, '580', living, flex = True ),
-        _expense( 'Pest Control', home, '110', living, quarterly ),
-        _expense( 'Roof Cost', home, '15000', living, every_20y ),
-        _expense( 'Pool Maintenance', home, '125', living, monthly ),
-        _expense( 'Lawn Maintenance', home, '125', living, monthly ),
-        _expense( 'Lawn Tools', home, '100', living, flex = True ),
-        _expense( 'Umbrella Insurance', home, '500', living, flex = True ),
+        # Property -- one operating-cost set per owned dwelling. Tax class is the PERSONAL class
+        # (property tax -> SALT, the rest -> living); materialization swaps it to a rental expense for
+        # a rental. Utilities also seed a tenant's rented home; property management, owned rentals only.
+        _expense( 'Property Tax', prop, '6000', salt, yearly, applies_to = owned ),
+        _expense( 'Property Insurance', prop, '2500', living, applies_to = owned ),
+        _expense( 'Maintenance / Repair', prop, '200', living, monthly, applies_to = owned ),
+        _expense( 'A/C Cost', prop, '9000', living, every_15y, flex = True, applies_to = owned ),
+        _expense( 'Appliance', prop, '580', living, flex = True, applies_to = owned ),
+        _expense( 'Pest Control', prop, '110', living, quarterly, applies_to = owned ),
+        _expense( 'Roof Cost', prop, '15000', living, every_20y, applies_to = owned ),
+        _expense( 'Pool Maintenance', prop, '125', living, monthly, applies_to = owned ),
+        _expense( 'Lawn Maintenance', prop, '125', living, monthly, applies_to = owned ),
+        _expense( 'Lawn Tools', prop, '100', living, flex = True, applies_to = owned ),
+        _expense( 'Water / Wastewater', prop, '200', living, monthly, applies_to = occupied ),
+        _expense( 'Electric', prop, '250', living, monthly, applies_to = occupied ),
+        _expense( 'Phone Service', prop, '100', living, monthly, applies_to = occupied ),
+        _expense( 'Internet', prop, '100', living, monthly, applies_to = occupied ),
+        _expense( 'Property Management', prop, '240', rental_expense, monthly, applies_to = rental_only ),
         # Auto (the car purchase/financing itself is the parameterized auto plan, not a catalog item)
         _expense( 'Auto Insurance', auto, '750', living, semiannual, flex = True ),
         _expense( 'Auto Maintenance', auto, '300', living, yearly, flex = True ),
@@ -213,11 +223,8 @@ def _general_expense_catalog() -> ExpenseCatalog:
         # Health
         _expense( 'Medical Expenses', health, '7200', medical, flex = True ),
         _expense( 'Health Insurance', health, '26400', medical, flex = True ),
-        # Rental (a landlord's deductible operating costs, netted against the rent)
-        _expense( 'Rental Property Tax', rental, '4800', rental_expense, yearly ),
-        _expense( 'Rental Insurance', rental, '1800', rental_expense, yearly ),
-        _expense( 'Rental Maintenance', rental, '200', rental_expense, monthly ),
-        _expense( 'Property Management', rental, '240', rental_expense, monthly ),
+        # Miscellaneous -- household costs not tied to a single dwelling
+        _expense( 'Umbrella Insurance', misc, '500', living, flex = True ),
     ] )
 
 

@@ -29,17 +29,28 @@ class LifestyleScope( LabeledEnum ):
 
 class ExpenseCategory( LabeledEnum ):
     """How curated expenses group in the interview -- the user-facing buckets, and the decision each
-    attaches to: Home costs to owning a home, Auto to a vehicle, Utilities to a residence; Everyday,
-    Discretionary, and Health always apply."""
+    attaches to: Property costs to a dwelling one owns or rents, Auto to a vehicle; Everyday,
+    Discretionary, Health, and Miscellaneous always apply."""
 
     EVERYDAY      = ( 'Everyday Living', 'Food, clothing, and the recurring basics.' )
     DISCRETIONARY = ( 'Discretionary', 'Travel, entertainment, hobbies -- the lifestyle spend.' )
-    UTILITIES     = ( 'Utilities', 'Water, power, phone, and internet for a residence.' )
-    HOME          = ( 'Home', 'Costs of owning a home: insurance, upkeep, property tax.' )
+    PROPERTY      = ( 'Property', 'Operating costs of a dwelling -- upkeep, insurance, utilities, property tax -- one set per owned property, taxed by its type.' )
     AUTO          = ( 'Auto', 'Costs of owning a vehicle.' )
     HEALTH        = ( 'Health', 'Medical care and health insurance.' )
     GIVING        = ( 'Giving', 'Charitable contributions.' )
-    RENTAL        = ( 'Rental', 'Operating costs of a rental property.' )
+    MISCELLANEOUS = ( 'Miscellaneous', 'Household costs not tied to a single dwelling (e.g. umbrella insurance).' )
+
+
+class PropertyContext( LabeledEnum ):
+    """A property situation a catalog `PROPERTY` expense can attach to -- the owned dwelling kinds plus
+    a tenant's rented home. A row's `applies_to` names the contexts it seeds against (a roof applies to
+    any owned dwelling; utilities also to a rented home; property management only to a rental). The tax
+    class is still derived from the actual property at materialization, not from this."""
+
+    RESIDENCE   = ( 'Residence', 'An owned primary residence.' )
+    SECOND_HOME = ( 'Second Home', 'An owned second (vacation) home.' )
+    RENTAL      = ( 'Rental', 'An owned rental property.' )
+    RENTED_HOME = ( 'Rented Home', 'A rented residence a tenant occupies but does not own.' )
 
 
 class CatalogScope( LabeledEnum ):

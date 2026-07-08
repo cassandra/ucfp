@@ -13,7 +13,7 @@ from common.recurrence import Duration
 from ucfp.accounts.enums import ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 
-from .enums import ExpenseCategory, LifestyleLevel
+from .enums import ExpenseCategory, LifestyleLevel, PropertyContext
 
 
 @dataclass( frozen = True )
@@ -61,13 +61,20 @@ class ExpenseType:
     """One catalog expense: its `category` (the user-facing bucket and the decision it attaches to),
     tax class, cadence, and a single `default_amount` -- the typical value (annual for a stream,
     per-occurrence for an item). `lifestyle_dependent` marks the ones whose amount a user would vary
-    over time; `interval` None is a smoothed stream, a `Duration` an item placed at its cadence."""
+    over time; `interval` None is a smoothed stream, a `Duration` an item placed at its cadence.
+
+    For a `PROPERTY` row, `expense_tax_class` is the row's *personal* class (`LIVING`, or `SALT` for
+    property tax); materialization swaps it to `RENTAL_EXPENSE` for a rental-owned property. `applies_to`
+    names the `PropertyContext`s the row seeds against -- e.g. a roof against every owned dwelling,
+    utilities also against a rented home, property management only against a rental. It is empty for a
+    non-property (household) row. A tuple, not a set, because the JSON codec round-trips tuples."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     default_amount: Decimal
     interval: Optional[ Duration ] = None
     lifestyle_dependent: bool = False
+    applies_to: tuple[ PropertyContext, ... ] = ()
 
 
 @dataclass( frozen = True )

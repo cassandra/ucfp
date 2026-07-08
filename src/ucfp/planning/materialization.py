@@ -72,7 +72,8 @@ def materialize(
                            for subject in subjects if subject.handle is not None }
     government_pension = GovernmentPension( statute.jurisdiction_type )
     lifestyle_streams, lifestyle_items = _lifestyle_expenses( plans )
-    expense_streams, expense_items = _plans_expenses( plans )
+    assets_by_handle = { asset.handle : asset for asset in profile.assets }
+    expense_streams, expense_items = _plans_expenses( plans, assets_by_handle )
     flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
     events = event_contributions( profile, plans, subjects_by_handle )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
@@ -440,22 +441,34 @@ def _level_schedule( amounts, segments : list ) -> Schedule:
     return Schedule( tuple( windowed ) )
 
 
-def _plans_expenses( plans : Plans ) -> tuple[ list, list ]:
+def _plans_expenses( plans : Plans, assets : dict ) -> tuple[ list, list ]:
     """The Plans' planned expenses as (streams, items): a flow with no interval is a smoothed
     stream, one with an interval an item placed at that cadence. Each is a flat amount for now;
-    value-steps over time come later. The successor to `_lifestyle_expenses`."""
+    value-steps over time come later. The successor to `_lifestyle_expenses`. A property-scoped flow's
+    stored class is its personal class; `_property_expense_tax_class` swaps it for a rental."""
     streams, items = list(), list()
     for expense in plans.expenses:
-        amounts = Schedule( tuple( expense.schedule ) )
+        amounts    = Schedule( tuple( expense.schedule ) )
+        tax_class  = _property_expense_tax_class( expense, assets.get( expense.property_handle ) )
         if expense.interval is None:
             streams.append( ExpenseStream(
-                name = expense.name, expense_tax_class = expense.expense_tax_class,
-                amounts = amounts ) )
+                name = expense.name, expense_tax_class = tax_class, amounts = amounts ) )
         else:
             items.append( ExpenseItem(
-                name = expense.name, expense_tax_class = expense.expense_tax_class,
+                name = expense.name, expense_tax_class = tax_class,
                 amounts = amounts, cadence = Recurrence( expense.interval ) ) )
     return streams, items
+
+
+def _property_expense_tax_class( expense, asset : Optional[ AssetProfile ] ) -> ExpenseTaxClass:
+    """The tax treatment of a property-scoped expense: on a rental it is a rental expense (netted
+    against the rent), otherwise the flow's stored personal class (`LIVING`, or `SALT` for property
+    tax -- capped in aggregate). A household flow (no property, `asset` None) keeps its stored class.
+    The mirror of `_debt_interest_class`: a property-linked flow's class is derived from the property,
+    not stored, so both live here in materialization."""
+    if asset is not None and asset.asset_class is AssetClass.REAL_ESTATE_RENTAL:
+        return ExpenseTaxClass.RENTAL_EXPENSE
+    return expense.expense_tax_class
 
 
 # --- Plans: knobs -------------------------------------------------------

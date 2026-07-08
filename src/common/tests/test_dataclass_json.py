@@ -98,7 +98,7 @@ def _sample_plans():
                 LifestyleSegment( start = date( 2035, 1, 1 ), level = LifestyleLevel.HIGH ),
                 LifestyleSegment( start = date( 2050, 1, 1 ), level = LifestyleLevel.MEDIUM ) ] ),
         expenses = [ ExpenseFlow(
-            name = 'Property tax', category = ExpenseCategory.HOME,
+            name = 'Property tax', category = ExpenseCategory.PROPERTY,
             expense_tax_class = ExpenseTaxClass.SALT,
             schedule = [ WindowedAmount( Decimal( '6000' ) ) ], property_handle = 'home' ) ],
         contributions = [ Contribution( account_handle = '401k', annual_amount = Decimal( '23000' ),
