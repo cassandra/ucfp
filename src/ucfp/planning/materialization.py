@@ -20,12 +20,10 @@ from typing import Optional
 
 from common.amortization import balance_after, level_payment, periods_to_repay, present_value
 from common.date_window import DateWindow
-from common.rate import Rate
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
-from ucfp.environment.constants import AppConst
 from ucfp.forecast.economic_outlook import EconomicOutlook
 from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
@@ -38,6 +36,7 @@ from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
 
+from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile
 from ucfp.inputs.plans.enums import CreditCardPlanMode
@@ -182,9 +181,9 @@ def _debt_interest_class( debt : Debt, secured_asset : Optional[ AssetProfile ] 
 
 # --- Plans: credit-card paydown ------------------------------------------
 
-# The nominal APR the paydown calculator and this resolver assume, shared via AppConst so the
-# client-side estimate and the server-side materialization cannot drift.
-_CREDIT_CARD_APR = Rate.percent( Decimal( AppConst.CREDIT_CARD_APR_PERCENT ) )
+# The nominal APR the paydown calculator and this resolver assume; the client-side estimate reads the
+# same literal (via AppConst), so the two cannot drift.
+_CREDIT_CARD_APR = BUILTIN_ASSUMPTIONS.credit_card_apr
 
 
 def _credit_card_expenses(
@@ -275,8 +274,8 @@ def _months_after( start : date, months : int ) -> date:
 
 # --- Plans: auto (car ownership) -----------------------------------------
 
-_AUTO_LOAN_APR         = Rate.percent( Decimal( AppConst.AUTO_LOAN_APR_PERCENT ) )
-_AUTO_LOAN_TERM_MONTHS = AppConst.AUTO_LOAN_TERM_YEARS * 12
+_AUTO_LOAN_APR         = BUILTIN_ASSUMPTIONS.auto_loan_apr
+_AUTO_LOAN_TERM_MONTHS = BUILTIN_ASSUMPTIONS.auto_loan_term_years * 12
 
 
 def _auto_expenses( plans : Plans ) -> list[ ExpenseItem ]:

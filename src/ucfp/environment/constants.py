@@ -83,13 +83,9 @@ class AppConst:
     CREDIT_CARD_DATE_CLASS        = 'js-credit-card-date'     # the target/payoff date input
     CREDIT_CARD_READOUT_CLASS     = 'js-credit-card-readout'  # where the live figure is written
     CREDIT_CARD_BALANCE_DATA_ATTR = 'card-balance'            # the card's balance, on the wrapper
-    CREDIT_CARD_APR_PERCENT       = 18                        # assumed card APR (calculator + engine)
-
-    # The auto-loan terms the smoothed car model assumes when a future car is financed: the financed
-    # amount (price minus down payment, or backed out from a monthly payment) is amortized at this
-    # rate over this term, and the lifetime cost is spread over the purchase recurrence.
-    AUTO_LOAN_APR_PERCENT  = 6    # assumed auto-loan APR
-    AUTO_LOAN_TERM_YEARS   = 5    # assumed auto-loan term
+    # The assumed card APR (from inputs.builtin_assumptions) rides here as a percent so the client
+    # calculator reads the same value the engine uses; the server renders it onto the wrapper.
+    CREDIT_CARD_APR_DATA_ATTR     = 'card-apr'                # the assumed APR (percent), on the wrapper
 
     @classmethod
     def to_json_dict_str( cls ):
