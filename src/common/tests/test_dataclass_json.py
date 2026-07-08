@@ -18,7 +18,9 @@ from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
+from ucfp.parameter_sets.enums import (
+    ExpenseCategory, LifestyleLevel, LifestyleScope, PropertyContext )
+from ucfp.parameter_sets.schemas import ExpenseCatalog, ExpenseType
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 
@@ -151,6 +153,29 @@ class DataclassJsonRoundTripTest( SimpleTestCase ):
         data = to_json_data( assumptions )
         json.dumps( data )
         self.assertEqual( from_json_data( Assumptions, data ), assumptions )
+
+    def test_expense_catalog_applies_to_round_trips( self ):
+        # The catalog's tuple-of-enum `applies_to` is the codec branch this rework relies on: a
+        # non-empty tuple serializes to a JSON list of names and rebuilds as a tuple, and an empty
+        # tuple (a household row) survives as ().
+        catalog = ExpenseCatalog( expenses = [
+            ExpenseType(
+                name = 'Property Tax', category = ExpenseCategory.PROPERTY,
+                expense_tax_class = ExpenseTaxClass.SALT, default_amount = Decimal( '6000' ),
+                interval = Duration( 1, TimeUnit.YEAR ),
+                applies_to = ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ) ),
+            ExpenseType(
+                name = 'Umbrella Insurance', category = ExpenseCategory.MISCELLANEOUS,
+                expense_tax_class = ExpenseTaxClass.LIVING, default_amount = Decimal( '500' ) ) ] )
+        data = to_json_data( catalog )
+        json.dumps( data )
+        self.assertEqual( data[ 'expenses' ][ 0 ][ 'applies_to' ], [ 'RESIDENCE', 'RENTAL' ] )
+        self.assertEqual( data[ 'expenses' ][ 1 ][ 'applies_to' ], [] )
+        restored = from_json_data( ExpenseCatalog, data )
+        self.assertEqual( restored, catalog )
+        self.assertEqual(
+            restored.expenses[ 0 ].applies_to,
+            ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ) )
 
     def test_empty_aggregates_round_trip( self ):
         self.assertEqual( from_json_data( Profile, to_json_data( Profile() ) ), Profile() )

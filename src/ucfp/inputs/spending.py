@@ -49,8 +49,8 @@ def load_catalog():
 
 @dataclass( frozen = True )
 class SpendingGroup:
-    """One row of the §6 spending list: a category, optionally scoped to a property (the residence
-    for Home, a specific rental for Rental; None for the general living categories). Its `key`
+    """One row of the §6 spending list: a category, optionally scoped to a property -- one owned
+    dwelling (or the rented home) for Property, None for the household categories. Its `key`
     identifies the group in the URL and the inline editor's DOM, and its expenses are the merged
     flows matching both the category and the property."""
     category        : ExpenseCategory
@@ -88,12 +88,16 @@ def _renting( profile ) -> bool:
         obligation.handle == RENT_OBLIGATION_HANDLE for obligation in profile.obligations )
 
 
+def _asset_for( profile, handle : str ):
+    return next( ( asset for asset in profile.assets if asset.handle == handle ), None )
+
+
 def _property_context( profile, handle : str ) -> Optional[ PropertyContext ]:
     """The `PropertyContext` a Property handle represents: a tenant's rented home for the rent
     obligation, else the owned holding's class mapped to its context (None if not real property)."""
     if handle == RENT_OBLIGATION_HANDLE:
         return PropertyContext.RENTED_HOME
-    asset = next( ( a for a in profile.assets if a.handle == handle ), None )
+    asset = _asset_for( profile, handle )
     return _OWNED_PROPERTY_CONTEXT.get( asset.asset_class ) if asset is not None else None
 
 
@@ -108,26 +112,35 @@ def _property_handles_for( category, profile ) -> list:
 
 
 def _property_name( profile, handle : str ) -> str:
-    asset = next( ( a for a in profile.assets if a.handle == handle ), None )
+    asset = _asset_for( profile, handle )
     return asset.name if asset is not None else handle
+
+
+# The display label for each property context. The household's single home -- owned (RESIDENCE) or
+# rented (RENTED_HOME) -- is a bare label; a SECOND_HOME or RENTAL is one of several, so its own name
+# is appended (see `_group_label`).
+_PROPERTY_CONTEXT_LABEL = {
+    PropertyContext.RESIDENCE   : 'Home',
+    PropertyContext.RENTED_HOME : 'Home (rented)',
+    PropertyContext.SECOND_HOME : 'Second home',
+    PropertyContext.RENTAL      : 'Rental',
+}
+_NAMED_CONTEXTS = ( PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
 
 
 def _group_label( category, property_handle, profile ) -> str:
     if category is not ExpenseCategory.PROPERTY:
         return category.label
-    if property_handle == RENT_OBLIGATION_HANDLE:
-        return 'Home (rented)'
     context = _property_context( profile, property_handle )
-    if context is PropertyContext.RESIDENCE:
-        return 'Home'
-    prefix = { PropertyContext.SECOND_HOME: 'Second home',
-               PropertyContext.RENTAL: 'Rental' }.get( context, 'Property' )
-    return f'{prefix} — {_property_name( profile, property_handle )}'
+    label   = _PROPERTY_CONTEXT_LABEL.get( context, 'Property' )
+    if context in _NAMED_CONTEXTS:
+        return f'{label} — {_property_name( profile, property_handle )}'
+    return label
 
 
 def spending_groups( profile ) -> list:
-    """The §6 spending groups in display order: each applicable category, with Rental expanded to one
-    group per rental property."""
+    """The §6 spending groups in display order: each applicable category, with Property expanded to
+    one group per owned dwelling (and the rented home, when renting)."""
     applicable = applicable_categories( profile )
     groups     = list()
     for category in ExpenseCategory:
@@ -245,8 +258,8 @@ class SpendingForm:
 
     @property
     def group_totals( self ) -> list:
-        """(group, annual total) per spending group, in display order -- Rental expanded per
-        property."""
+        """(group, annual total) per spending group, in display order -- Property expanded per
+        owned dwelling."""
         all_expenses = merged_expenses( self._profile, self._plans )
         totals       = list()
         for group in spending_groups( self._profile ):

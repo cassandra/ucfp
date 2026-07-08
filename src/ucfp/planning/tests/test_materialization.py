@@ -35,6 +35,7 @@ def _property_tax( handle ) -> ExpenseFlow:
 class PropertyExpenseTaxClassTests( unittest.TestCase ):
 
     _ASSETS = { 'residence': _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ),
+                'second-home': _property( 'second-home', AssetClass.REAL_ESTATE_SECOND_HOME ),
                 'rental': _property( 'rental', AssetClass.REAL_ESTATE_RENTAL ) }
 
     def _materialized_classes( self, *handles ) -> list:
@@ -43,10 +44,13 @@ class PropertyExpenseTaxClassTests( unittest.TestCase ):
         return [ stream.expense_tax_class for stream in streams ]
 
     def test_rental_property_expense_derives_rental_expense( self ):
-        # Same stored SALT class on both; the rental's derives to a (rent-netting) rental expense,
-        # the residence's stays SALT (an itemizable, aggregate-capped deduction).
-        residence, rental = self._materialized_classes( 'residence', 'rental' )
+        # Same stored SALT class on all three; only the rental's derives to a (rent-netting) rental
+        # expense. A second home is personal-use like the residence, so its property tax stays SALT --
+        # the non-obvious fall-through (it is not netted like a rental).
+        residence, second_home, rental = self._materialized_classes(
+            'residence', 'second-home', 'rental' )
         self.assertEqual( residence, ExpenseTaxClass.SALT )
+        self.assertEqual( second_home, ExpenseTaxClass.SALT )
         self.assertEqual( rental, ExpenseTaxClass.RENTAL_EXPENSE )
 
     def test_flow_without_an_owned_asset_keeps_its_personal_class( self ):
