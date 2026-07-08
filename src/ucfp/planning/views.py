@@ -127,6 +127,22 @@ class FinancialForecastView( View ):
             start_date = start, end_date = end,
             granularity = GRANULARITY[ form.cleaned_data[ 'interval' ] ] )
 
+    def _default_selection( self, request, profiles, plans, assumptions ) -> dict:
+        """The run form's default bundle: the plans and assumptions the user last selected or edited
+        (from the session), each falling back to the most recent; the profile defaults to the most
+        recent (the single current one). A stale session uuid simply falls through to no preselection."""
+        state = request.session_state
+        return {
+            'profile'     : self._first_uuid( profiles ),
+            'plans'       : state.current_plans_uuid or self._first_uuid( plans ),
+            'assumptions' : state.current_assumptions_uuid or self._first_uuid( assumptions ),
+        }
+
+    @staticmethod
+    def _first_uuid( queryset ):
+        record = queryset.first()
+        return str( record.uuid ) if record is not None else None
+
     def _context( self, request, form = None, error = None, issues = None ) -> dict:
         organization = request.organization
         profiles    = profiles_for( organization )
@@ -135,7 +151,8 @@ class FinancialForecastView( View ):
         return {
             **input_availability( organization ),
             'form'            : form or RunForm(
-                profiles = profiles, plans = plans, assumptions = assumptions ),
+                profiles = profiles, plans = plans, assumptions = assumptions,
+                initial = self._default_selection( request, profiles, plans, assumptions ) ),
             'results'         : PlanningResultRecord.objects.select_related( 'run' ).filter(
                 organization = organization,
                 feature = PlanningFeature.FINANCIAL_FORECAST ).order_by( '-created_datetime' ),

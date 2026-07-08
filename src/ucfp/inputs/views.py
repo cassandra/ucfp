@@ -9,7 +9,7 @@ sub-editors each section pane drills into.
 from dataclasses import replace
 
 from django.http import Http404
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -31,6 +31,7 @@ from ucfp.inputs.plans.enums import EventKind
 from .interview import (
     SECTIONS, Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
     first_section_of_flow, flow_of, flow_title, next_flow_entry, next_section_after, section_for )
+from .models import AssumptionsRecord, PlansRecord
 from .auto import AutoPlanForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
@@ -88,6 +89,56 @@ class FlowEntryView( View ):
         return redirect( 'interview_section', section = first.key )
 
 
+def _select( request, field, record ):
+    """Make `record` the current editing target for its aggregate (by session `field`), so the flow
+    edits it. The single place a plans/assumptions selection is recorded."""
+    setattr( request.session_state, field, str( record.uuid ) )
+    request.session_state.to_session( request )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PlansNewView( View ):
+    """`/inputs/plans/new/` -- mint a new Plans set, make it the current editing target, and open the
+    plans flow on it. POST, since it creates a record."""
+
+    def post( self, request ):
+        _select( request, 'current_plans_uuid', create_plans( request.organization ) )
+        return redirect( 'flow_plans' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PlansSelectView( View ):
+    """`/inputs/plans/<uuid>/` -- make an existing Plans set the current editing target and open the
+    plans flow on it."""
+
+    def get( self, request, uuid ):
+        record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+        _select( request, 'current_plans_uuid', record )
+        return redirect( 'flow_plans' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class AssumptionsNewView( View ):
+    """`/inputs/assumptions/new/` -- mint a new Assumptions set, make it the current editing target,
+    and open the assumptions flow on it. POST, since it creates a record."""
+
+    def post( self, request ):
+        _select( request, 'current_assumptions_uuid', create_assumptions( request.organization ) )
+        return redirect( 'flow_assumptions' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class AssumptionsSelectView( View ):
+    """`/inputs/assumptions/<uuid>/` -- make an existing Assumptions set the current editing target
+    and open the assumptions flow on it."""
+
+    def get( self, request, uuid ):
+        record = get_object_or_404(
+            AssumptionsRecord, uuid = uuid, organization = request.organization )
+        _select( request, 'current_assumptions_uuid', record )
+        return redirect( 'flow_assumptions' )
+
+
 @method_decorator( ensure_organization, name = 'dispatch' )
 class InterviewView( View ):
     """`/inputs/interview/<section>/` -- one section of the guided setup: an antinode-swapped
@@ -108,29 +159,28 @@ class InterviewView( View ):
 
     def get( self, request, section ):
         current  = self._live_section( section )
-        profile, other = self._load( request.organization, current )
+        profile, other = self._load( request, current )
         sections = self._flow_sections( profile, flow_of( current ) )
         form     = self._form( current, profile, other )
         if is_ajax( request ):
             return self._swap( request, sections, current, form )
-        return render( request, self._PAGE_TEMPLATE, self._context( sections, current, form ) )
+        return render( request, self._PAGE_TEMPLATE, self._context( request, sections, current, form ) )
 
     def post( self, request, section ):
         current = self._live_section( section )
-        organization = request.organization
         flow = flow_of( current )
-        profile, other = self._load( organization, current )
+        profile, other = self._load( request, current )
         form = self._form( current, profile, other, request.POST )
         if not form.is_valid():
             return self._swap( request, self._flow_sections( profile, flow ), current, form )
-        profile   = self._store( organization, current, form, profile, other )
+        profile   = self._store( request, current, form, profile, other )
         following = next_section_after( self._flow_sections( profile, flow ), current.key )
         if following is None and request.session.get( 'interview_guided' ):
             following = next_flow_entry( flow )         # guided: advance into the next flow
         if following is None:
             return antinode.redirect_response( reverse( 'inputs_home' ) )
         next_sections = self._flow_sections( profile, flow_of( following ) )
-        next_profile, next_other = self._load( organization, following )
+        next_profile, next_other = self._load( request, following )
         next_form = self._form( following, next_profile, next_other )
         return self._swap( request, next_sections, following, next_form )
 
@@ -155,35 +205,35 @@ class InterviewView( View ):
         return section.form( data, profile = profile, **{ keyword: other } )
 
     @staticmethod
-    def _load( organization, section ):
+    def _load( request, section ):
         """The profile, plus the one non-profile aggregate this section edits (a Plans, an
-        Assumptions, or neither) -- creating the record if absent so the form has something to bind.
-        No section edits both Plans and Assumptions, so a single `other` suffices."""
+        Assumptions, or neither) -- the session-selected record, creating it if absent so the form has
+        something to bind. No section edits both Plans and Assumptions, so a single `other` suffices."""
         assert not ( Aggregate.PLANS in section.aggregates
                      and Aggregate.ASSUMPTIONS in section.aggregates ), (
             f'Section {section.key!r} edits both Plans and Assumptions; the single-other dispatch '
             'supports at most one non-profile aggregate per section.' )
+        organization = request.organization
         profile = load_profile( latest_profile( organization ) or create_profile( organization ) )
         if Aggregate.PLANS in section.aggregates:
-            return profile, load_plans( latest_plans( organization ) or create_plans( organization ) )
+            return profile, load_plans( current_plans_record( request ) )
         if Aggregate.ASSUMPTIONS in section.aggregates:
-            return profile, load_assumptions(
-                latest_assumptions( organization ) or create_assumptions( organization ) )
+            return profile, load_assumptions( current_assumptions_record( request ) )
         return profile, None
 
     @staticmethod
-    def _store( organization, section, form, profile, other ):
+    def _store( request, section, form, profile, other ):
         new_profile, new_other = form.apply( profile, other )
         if Aggregate.PROFILE in section.aggregates:
-            save_profile( organization, new_profile )
+            save_profile( request.organization, new_profile )
         if Aggregate.PLANS in section.aggregates:
-            save_plans( latest_plans( organization ), new_other )
+            save_plans( current_plans_record( request ), new_other )
         elif Aggregate.ASSUMPTIONS in section.aggregates:
-            save_assumptions( latest_assumptions( organization ), new_other )
+            save_assumptions( current_assumptions_record( request ), new_other )
         return new_profile
 
     def _swap( self, request, sections, section, form ):
-        context = self._context( sections, section, form )
+        context = self._context( request, sections, section, form )
         return antinode.response(
             main_content = render_to_string( self._SECTION_TEMPLATE, context, request = request ),
             replace_map = { self._STEPPER_TARGET: render_to_string(
@@ -191,15 +241,29 @@ class InterviewView( View ):
             push_url = reverse( 'interview_section', kwargs = { 'section': section.key } ),
             scroll_to = self._SECTION_TARGET )
 
-    def _context( self, sections, section, form ):
+    def _context( self, request, sections, section, form ):
+        flow = flow_of( section )
         return {
             'sections'        : sections,
             'current_section' : section,
-            'flow_title'      : flow_title( flow_of( section ) ),
+            'flow_title'      : flow_title( flow ),
+            'flow_heading'    : self._flow_heading( request, flow ),
             'form'            : form,
             'section_target'  : self._SECTION_TARGET,
             'stepper_target'  : self._STEPPER_TARGET,
         }
+
+    @staticmethod
+    def _flow_heading( request, flow ) -> str:
+        """The flow's title with the record being edited named, for the page heading -- "Plans: Base
+        case", "Assumptions: Optimistic" -- so the user sees which of several they are editing. The
+        single-record Profile shows just its title."""
+        title = flow_title( flow )
+        if flow == 'plans':
+            return f'{title}: {current_plans_record( request ).label}'
+        if flow == 'assumptions':
+            return f'{title}: {current_assumptions_record( request ).label}'
+        return title
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -213,20 +277,19 @@ class AutoPlanView( View ):
     _TEMPLATE = 'inputs/interview/sections/auto_plan.html'
 
     def get( self, request ):
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         return antinode.response( main_content = render_to_string(
             self._TEMPLATE, { 'auto_form': AutoPlanForm( profile = profile, plans = plans ) },
             request = request ) )
 
     def post( self, request ):
-        organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = AutoPlanForm( request.POST, profile = profile, plans = plans )
         if not form.is_valid():
             return antinode.response( replace_map = { 'auto-purchases': render_to_string(
                 self._TEMPLATE, { 'auto_form': form }, request = request ) } )
         _profile, plans = form.apply( profile, plans )
-        save_plans( latest_plans( organization ), plans )
+        save_plans( current_plans_record( request ),plans )
         return antinode.response()                             # silent background save
 
 
@@ -244,20 +307,19 @@ class SpendingGroupView( View ):
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = render_to_string(
                 self._COLLAPSED_TEMPLATE, { 'group_key': group }, request = request ) )
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         form = GroupSpendingForm(
             profile = profile, plans = plans, group = self._group( profile, group ) )
         return self._editor_response( request, group, form )
 
     def post( self, request, group ):
-        organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = GroupSpendingForm(
             request.POST, profile = profile, plans = plans,
             group = self._group( profile, group ) )
         if form.is_valid():
             _, updated = form.apply( profile, plans )
-            save_plans( latest_plans( organization ), updated )
+            save_plans( current_plans_record( request ),updated )
         return self._editor_response( request, group, form )
 
     @staticmethod
@@ -277,16 +339,41 @@ class SpendingGroupView( View ):
         return antinode.response( main_content = content, insert_map = insert_map )
 
 
-def _current_profile_and_plans( organization ):
-    """The organization's current Profile and Plans, creating either if absent."""
-    profile  = load_profile( latest_profile( organization ) or create_profile( organization ) )
-    plans = load_plans( latest_plans( organization ) or create_plans( organization ) )
-    return profile, plans
+def current_plans_record( request ):
+    """The Plans record the user is editing: the session-selected one (scoped to the org), else the
+    latest, minting one if the org has none. The single resolver every plans surface loads and saves
+    through, so a selection made on the hub drives the whole flow."""
+    organization = request.organization
+    uuid = request.session_state.current_plans_uuid
+    if uuid is not None:
+        selected = plans_for( organization ).filter( uuid = uuid ).first()
+        if selected is not None:
+            return selected
+    return latest_plans( organization ) or create_plans( organization )
 
 
-def _current_assumptions( organization ):
-    """The organization's current Assumptions set, creating it (seeded with defaults) if absent."""
-    return load_assumptions( latest_assumptions( organization ) or create_assumptions( organization ) )
+def current_assumptions_record( request ):
+    """The Assumptions record the user is editing -- the session-selected one (scoped to the org),
+    else the latest, minting one if the org has none. The twin of `current_plans_record`."""
+    organization = request.organization
+    uuid = request.session_state.current_assumptions_uuid
+    if uuid is not None:
+        selected = assumptions_for( organization ).filter( uuid = uuid ).first()
+        if selected is not None:
+            return selected
+    return latest_assumptions( organization ) or create_assumptions( organization )
+
+
+def _current_profile_and_plans( request ):
+    """The user's current Profile and the contents of the Plans record they are editing, creating
+    either if absent."""
+    profile = load_profile( latest_profile( request.organization ) or create_profile( request.organization ) )
+    return profile, load_plans( current_plans_record( request ) )
+
+
+def _current_assumptions( request ):
+    """The contents of the Assumptions record the user is editing, creating it if absent."""
+    return load_assumptions( current_assumptions_record( request ) )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -300,18 +387,18 @@ class ResidenceView( View ):
     _TEMPLATE = 'inputs/interview/sections/residence.html'
 
     def get( self, request ):
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         return self._response( request, HomeForm( profile = profile, plans = plans ) )
 
     def post( self, request ):
         organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = HomeForm( request.POST, profile = profile, plans = plans )
         if not form.is_valid():
             return self._swap( request, form )                 # surface a genuine field error
         profile, plans = form.apply( profile, plans )
         save_profile( organization, profile )
-        save_plans( latest_plans( organization ), plans )
+        save_plans( current_plans_record( request ),plans )
         return antinode.response()                             # silent background save
 
     def _response( self, request, form ):
@@ -337,16 +424,15 @@ class ExternalFactorsView( View ):
 
     def get( self, request ):
         return self._response(
-            request, ExternalFactorsForm( assumptions = _current_assumptions( request.organization ) ) )
+            request, ExternalFactorsForm( assumptions = _current_assumptions( request ) ) )
 
     def post( self, request ):
-        organization = request.organization
-        assumptions  = _current_assumptions( organization )
+        assumptions = _current_assumptions( request )
         form = ExternalFactorsForm( request.POST, assumptions = assumptions )
         if not form.is_valid():
             return self._swap( request, form )                 # surface a genuine field error
         _profile, assumptions = form.apply( None, assumptions )
-        save_assumptions( latest_assumptions( organization ), assumptions )
+        save_assumptions( current_assumptions_record( request ), assumptions )
         return antinode.response()                             # silent background save
 
     def _response( self, request, form ):
@@ -370,12 +456,12 @@ class AccountsView( View ):
     _TEMPLATE = 'inputs/interview/sections/accounts_pane.html'
 
     def get( self, request ):
-        profile, _plans = _current_profile_and_plans( request.organization )
+        profile, _plans = _current_profile_and_plans( request )
         return self._response( request, AccountsForm( profile = profile ) )
 
     def post( self, request ):
         organization = request.organization
-        profile, _plans = _current_profile_and_plans( organization )
+        profile, _plans = _current_profile_and_plans( request )
         form = AccountsForm( request.POST, profile = profile )
         if not form.is_valid():
             return self._swap( request, form )                 # surface a genuine field error
@@ -406,12 +492,12 @@ class SubjectsView( View ):
     _ERRORS          = 'subjects-errors'
 
     def get( self, request ):
-        profile, _plans = _current_profile_and_plans( request.organization )
+        profile, _plans = _current_profile_and_plans( request )
         return self._response( request, SubjectsForm( profile = profile ) )
 
     def post( self, request ):
         organization = request.organization
-        profile, _plans = _current_profile_and_plans( organization )
+        profile, _plans = _current_profile_and_plans( request )
         form = SubjectsForm( request.POST, profile = profile )
         if not form.is_valid():
             return self._swap( request, form )                 # a half-entered partner
@@ -444,12 +530,12 @@ class PossessionsView( View ):
     _TEMPLATE = 'inputs/interview/sections/possessions.html'
 
     def get( self, request ):
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         return self._rendered( request, PossessionsForm( profile = profile, plans = plans ) )
 
     def post( self, request ):
         organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = PossessionsForm( request.POST, profile = profile, plans = plans )
         if not form.is_valid():
             return self._swap( request, form )                 # show a bad value
@@ -484,19 +570,19 @@ class DebtsView( View ):
     _TEMPLATE = 'inputs/interview/sections/debts_list.html'
 
     def get( self, request ):
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         return self._rendered( request, DebtsForm( profile = profile, plans = plans ) )
 
     def post( self, request ):
         organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = DebtsForm( request.POST, profile = profile, plans = plans )
         if not form.is_valid():
             return self._swap( request, form )                 # show a bad value
         before = len( profile.debts )
         profile, plans = form.apply( profile, plans )
         save_profile( organization, profile )
-        save_plans( latest_plans( organization ), plans )      # a removed debt reaps its plan too
+        save_plans( current_plans_record( request ),plans )      # a removed debt reaps its plan too
         if len( profile.debts ) != before:                     # a row was added or removed
             return self._swap( request, DebtsForm( profile = profile, plans = plans ) )
         return antinode.response()                             # silent: nothing to re-render
@@ -521,17 +607,16 @@ class DebtPlanView( View ):
     _TEMPLATE = 'inputs/interview/sections/debt_plan_list.html'
 
     def get( self, request ):
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         return self._rendered( request, DebtPlanForm( profile = profile, plans = plans ) )
 
     def post( self, request ):
-        organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = DebtPlanForm( request.POST, profile = profile, plans = plans )
         if not form.is_valid():
             return self._swap( request, form )                 # surface a genuine field error
         _profile, plans = form.apply( profile, plans )
-        save_plans( latest_plans( organization ), plans )
+        save_plans( current_plans_record( request ),plans )
         return antinode.response()                             # silent background save
 
     def _rendered( self, request, form ):
@@ -554,17 +639,16 @@ class CreditCardView( View ):
     _TEMPLATE = 'inputs/interview/sections/credit_card_list.html'
 
     def get( self, request ):
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         return self._rendered( request, CreditCardPlanForm( profile = profile, plans = plans ) )
 
     def post( self, request ):
-        organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = CreditCardPlanForm( request.POST, profile = profile, plans = plans )
         if not form.is_valid():
             return self._swap( request, form )                 # surface a genuine field error
         _profile, plans = form.apply( profile, plans )
-        save_plans( latest_plans( organization ), plans )
+        save_plans( current_plans_record( request ),plans )
         return antinode.response()                             # silent background save
 
     def _rendered( self, request, form ):
@@ -587,19 +671,19 @@ class IncomeTableView( View ):
     _TEMPLATE = 'inputs/interview/sections/income_table.html'
 
     def get( self, request ):
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         return self._rendered( request, IncomeTableForm( profile = profile, plans = plans ) )
 
     def post( self, request ):
         organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = IncomeTableForm( request.POST, profile = profile, plans = plans )
         if not form.is_valid():
             return self._swap( request, form )                 # show field errors
         before = self._line_count( profile )
         profile, plans = form.apply( profile, plans )
         save_profile( organization, profile )
-        save_plans( latest_plans( organization ), plans )
+        save_plans( current_plans_record( request ),plans )
         if self._line_count( profile ) != before:              # a line was added or removed
             return self._swap( request, IncomeTableForm( profile = profile, plans = plans ) )
         return antinode.response()                             # silent: nothing to re-render
@@ -648,7 +732,7 @@ class _PropertyFormView( _PropertyView ):
     _FORM_TEMPLATE = 'inputs/interview/sections/property_form.html'
 
     def get( self, request, handle = None ):
-        profile, plans = _current_profile_and_plans( request.organization )
+        profile, plans = _current_profile_and_plans( request )
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = self._form( request, None, None ) )
         if handle is None:                             # add: mint a fresh handle, open its editor
@@ -658,14 +742,14 @@ class _PropertyFormView( _PropertyView ):
 
     def post( self, request, handle = None ):
         organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         form = self._PANE.form( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
                 replace_map = { self._PANE.form_id: self._form( request, handle, form ) } )
         profile, plans = form.apply( profile, plans )
         save_profile( organization, profile )
-        save_plans( latest_plans( organization ), plans )
+        save_plans( current_plans_record( request ),plans )
         # Leave the open form alone; just refresh the list by id, where a property appears, updates its
         # name/value, or -- if edited to incomplete -- drops out.
         return antinode.response( replace_map = { self._PANE.list_id: self._list( request, profile ) } )
@@ -682,10 +766,10 @@ class _PropertyDeleteView( _PropertyView ):
 
     def post( self, request, handle ):
         organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         profile, plans = delete_property( profile, plans, handle )
         save_profile( organization, profile )
-        save_plans( latest_plans( organization ), plans )
+        save_plans( current_plans_record( request ),plans )
         # Refresh the list by id (replace, not insert) so the re-rendered `<div id=list_id>` swaps the
         # existing one rather than nesting inside it.
         return antinode.response(
@@ -728,7 +812,7 @@ class EventAddView( View ):
     _LIST_TEMPLATE = 'inputs/interview/sections/events_list.html'
 
     def get( self, request, kind ):
-        profile, _ = _current_profile_and_plans( request.organization )
+        profile, _ = _current_profile_and_plans( request )
         if request.GET.get( 'collapse' ):
             return antinode.response( main_content = self._menu( request, profile ) )
         form = EventForm( event_type = self._event_type( kind ), profile = profile )
@@ -736,7 +820,7 @@ class EventAddView( View ):
 
     def post( self, request, kind ):
         organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         event_type = self._event_type( kind )
         form = EventForm( request.POST, event_type = event_type, profile = profile )
         if not form.is_valid():
@@ -747,7 +831,7 @@ class EventAddView( View ):
         plans = replace( plans, events = list( plans.events ) + [ event ] )
         if profile is not original:   # provision created an entity, or a cascade adjusted facts
             save_profile( organization, profile )
-        save_plans( latest_plans( organization ), plans )
+        save_plans( current_plans_record( request ),plans )
         return antinode.response(
             main_content = self._menu( request, profile ),
             replace_map  = { 'events-list': self._list( request, profile, plans ) } )
@@ -782,7 +866,7 @@ class EventDeleteView( View ):
 
     def post( self, request, index ):
         organization = request.organization
-        profile, plans = _current_profile_and_plans( organization )
+        profile, plans = _current_profile_and_plans( request )
         events = list( plans.events )
         if 0 <= index < len( events ):
             original = profile
@@ -793,7 +877,7 @@ class EventDeleteView( View ):
             plans = replace( plans, events = events )
             if profile is not original:
                 save_profile( organization, profile )
-            save_plans( latest_plans( organization ), plans )
+            save_plans( current_plans_record( request ),plans )
         return antinode.response( main_content = render_to_string(
             self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) },
             request = request ) )

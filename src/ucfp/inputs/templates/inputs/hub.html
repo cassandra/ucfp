@@ -44,14 +44,17 @@
         {% for plan in plans %}
         <li class="list-group-item d-flex align-items-center py-2">
           <span>{{ plan.label }}</span>
-          <a href="{% url 'flow_plans' %}" class="btn btn-sm btn-link ml-auto p-0">Edit</a>
+          <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link ml-auto p-0">Edit</a>
         </li>
         {% empty %}
         <li class="list-group-item text-muted small">No plans yet.</li>
         {% endfor %}
       </ul>
       <div class="card-footer bg-white border-0">
-        <a href="{% url 'flow_plans' %}" class="btn btn-outline-primary btn-sm btn-block">+ New plan</a>
+        <form method="post" action="{% url 'plan_new' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New plan</button>
+        </form>
       </div>
     </div>
   </div>
@@ -66,14 +69,17 @@
         {% for item in assumptions %}
         <li class="list-group-item d-flex align-items-center py-2">
           <span>{{ item.label }}</span>
-          <a href="{% url 'flow_assumptions' %}" class="btn btn-sm btn-link ml-auto p-0">Edit</a>
+          <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link ml-auto p-0">Edit</a>
         </li>
         {% empty %}
         <li class="list-group-item text-muted small">No assumptions yet.</li>
         {% endfor %}
       </ul>
       <div class="card-footer bg-white border-0">
-        <a href="{% url 'flow_assumptions' %}" class="btn btn-outline-primary btn-sm btn-block">+ New assumptions</a>
+        <form method="post" action="{% url 'assumptions_new' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New assumptions</button>
+        </form>
       </div>
     </div>
   </div>

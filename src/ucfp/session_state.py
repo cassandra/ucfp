@@ -42,9 +42,11 @@ class SessionState:
     # `ensure_organization` view decorator). String form, since the session is JSON-backed.
     current_organization_uuid : Optional[ str ] = None
 
-    # The plans the user is currently working on, by uuid -- the plans pages select it
-    # (many plans coexist per organization, unlike the single latest profile).
+    # The plans and assumptions the user is currently working on, by uuid -- the inputs pages select
+    # them (many of each coexist per organization, unlike the single latest profile). These are the
+    # editing target for the flows and the default selection for a forecast run.
     current_plans_uuid : Optional[ str ] = None
+    current_assumptions_uuid : Optional[ str ] = None
 
     # The user's BooksTable column lens (a results-view preference): the ordered visible columns,
     # carried across runs and adapted to each run's books on read. The definition owns its own
@@ -57,6 +59,7 @@ class SessionState:
             return
         request.session[ 'current_organization_uuid' ] = self.current_organization_uuid
         request.session[ 'current_plans_uuid' ] = self.current_plans_uuid
+        request.session[ 'current_assumptions_uuid' ] = self.current_assumptions_uuid
         request.session[ 'books_table_definition' ] = (
             None if self.books_table_definition is None else self.books_table_definition.to_storage() )
         return
@@ -69,5 +72,6 @@ class SessionState:
         return SessionState(
             current_organization_uuid = request.session.get( 'current_organization_uuid' ),
             current_plans_uuid = request.session.get( 'current_plans_uuid' ),
+            current_assumptions_uuid = request.session.get( 'current_assumptions_uuid' ),
             books_table_definition = BooksTableDefinition.from_storage(
                 request.session.get( 'books_table_definition' ) ) )
