@@ -34,14 +34,15 @@ from ucfp.forecast.parameters import (
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
 
-from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
-from ucfp.inputs.profile.enums import DebtKind
 from ucfp.parameter_sets.enums import PropertyContext
-from ucfp.inputs.profile.enums import HousingTenure
+
+from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
+from ucfp.inputs.expenses import OWNED_PROPERTY_CONTEXT
+from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENTED_HOME_HANDLE
 from ucfp.inputs.plans.enums import CreditCardPlanMode
 from ucfp.inputs.plans.schemas import (
-    VehiclePlan, CreditCardPlan, LoanRepayment, RetirementTiming, Plans )
+    CreditCardPlan, LoanRepayment, Plans, RetirementTiming, VehiclePlan )
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 
@@ -465,18 +466,12 @@ def _primary_birthdate( profile : Profile ) -> Optional[ date ]:
     return profile.subjects[ 0 ].birthdate if profile.subjects else None
 
 
-_PROPERTY_CONTEXT_BY_CLASS = {
-    AssetClass.REAL_ESTATE_RESIDENCE   : PropertyContext.RESIDENCE,
-    AssetClass.REAL_ESTATE_SECOND_HOME : PropertyContext.SECOND_HOME,
-    AssetClass.REAL_ESTATE_RENTAL      : PropertyContext.RENTAL,
-}
-
-
 def _property_contexts( profile : Profile ) -> list:
     """(handle, context, asset) for each property the household has -- owned dwellings, then the tenant's
-    rented home (no owned asset) -- so a property expense can be applied by context."""
-    result = [ ( asset.handle, _PROPERTY_CONTEXT_BY_CLASS[ asset.asset_class ], asset )
-               for asset in profile.assets if asset.asset_class in _PROPERTY_CONTEXT_BY_CLASS ]
+    rented home (no owned asset) -- so a property expense can be applied by context. The owned-class ->
+    context map is the same one the Home Expenses matrix keys on, imported so it has one owner."""
+    result = [ ( asset.handle, OWNED_PROPERTY_CONTEXT[ asset.asset_class ], asset )
+               for asset in profile.assets if asset.asset_class in OWNED_PROPERTY_CONTEXT ]
     if profile.home_tenure is HousingTenure.RENT:
         result.append( ( RENTED_HOME_HANDLE, PropertyContext.RENTED_HOME, None ) )
     return result

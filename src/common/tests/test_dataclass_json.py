@@ -221,6 +221,18 @@ class DataclassJsonLeafTest( SimpleTestCase ):
         self.assertEqual( from_json_data( Rate, to_json_data( rate ) ), rate )
         self.assertEqual( from_json_data( Duration, to_json_data( duration ) ), duration )
 
+    def test_typed_dict_values_coerce_to_their_declared_type( self ):
+        # A `dict[str, Decimal]` (e.g. PropertyExpense.overrides) must bring its VALUES back as Decimal,
+        # not leave them as the strings serialization produced -- the codec deserializes each value by
+        # the declared value type rather than copying the dict verbatim.
+        restored = from_json_data( dict[ str, Decimal ], { 'home': '6500', 'rental': '9000.50' } )
+        self.assertEqual( restored, { 'home': Decimal( '6500' ), 'rental': Decimal( '9000.50' ) } )
+        self.assertIsInstance( restored[ 'home' ], Decimal )
+
+    def test_untyped_dict_passes_values_through( self ):
+        # A bare `dict` (no type args) has no value type to coerce to, so values pass through unchanged.
+        self.assertEqual( from_json_data( dict, { 'a': 1, 'b': 'x' } ), { 'a': 1, 'b': 'x' } )
+
     def test_unsupported_type_raises( self ):
         with self.assertRaises( TypeError ):
             to_json_data( object() )

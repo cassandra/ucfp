@@ -48,6 +48,8 @@
             {% csrf_token %}
             <input type="text" name="label" value="{{ plan.label }}" aria-label="Plan name"
                    class="form-control form-control-sm border-0 bg-transparent px-1">
+            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
+            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
           </form>
           <span class="d-flex align-items-center flex-shrink-0">
             <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
@@ -89,6 +91,8 @@
             {% csrf_token %}
             <input type="text" name="label" value="{{ item.label }}" aria-label="Assumptions name"
                    class="form-control form-control-sm border-0 bg-transparent px-1">
+            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
+            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
           </form>
           <span class="d-flex align-items-center flex-shrink-0">
             <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>

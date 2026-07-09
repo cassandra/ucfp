@@ -126,6 +126,7 @@ class PropertyExpensesForm( forms.Form ):
             default.initial = self._collapsed_value( expense ) if self._collapsed else expense.default_amount
             default.widget.attrs[ 'placeholder' ] = '0'
             default.widget.attrs[ 'class' ] = AppConst.PROPERTY_DEFAULT_CLASS
+            default.widget.attrs[ 'aria-label' ] = self._cell_label( expense, self._default_column_label() )
             self.fields[ self._default_key( ri ) ] = default
             if self._collapsed:
                 continue
@@ -136,6 +137,8 @@ class PropertyExpensesForm( forms.Form ):
                 override.initial = expense.overrides.get( handle )
                 override.widget.attrs[ 'placeholder' ] = self._placeholder( expense.default_amount )
                 override.widget.attrs[ 'class' ] = AppConst.PROPERTY_OVERRIDE_CLASS
+                override.widget.attrs[ 'aria-label' ] = self._cell_label(
+                    expense, _column_label( profile, handle ) )
                 self.fields[ self._override_key( ri, hi ) ] = override
 
     @staticmethod
@@ -165,6 +168,19 @@ class PropertyExpensesForm( forms.Form ):
         '0' when the default itself is blank (the expense is then not charged)."""
         return str( default ) if default is not None else '0'
 
+    def _default_column_label( self ) -> str:
+        """The first column's header: 'Default' with several properties, or the lone property's name
+        when collapsed (the shared default is then that property's amount)."""
+        if not self._collapsed:
+            return 'Default'
+        return _column_label( self._profile, self._handles[ 0 ] ) if self._handles else 'Amount'
+
+    @staticmethod
+    def _cell_label( expense, column_label : str ) -> str:
+        """A cell input's accessible name -- its row (expense) and column, since the bare numeric input
+        carries no visible label of its own."""
+        return f'{expense.name} — {column_label}'
+
     @property
     def collapsed( self ) -> bool:
         """Whether the Default column has collapsed into a single value column (the household has at most
@@ -176,9 +192,8 @@ class PropertyExpensesForm( forms.Form ):
         """The header cells: a single value column (the lone property's name) when collapsed, otherwise
         the shared 'Default' followed by one column per property."""
         if self._collapsed:
-            label = _column_label( self._profile, self._handles[ 0 ] ) if self._handles else 'Amount'
-            return [ { 'label': label, 'is_default': True } ]
-        columns = [ { 'label': 'Default', 'is_default': True } ]
+            return [ { 'label': self._default_column_label(), 'is_default': True } ]
+        columns = [ { 'label': self._default_column_label(), 'is_default': True } ]
         columns += [ { 'label': _column_label( self._profile, handle ), 'is_default': False }
                      for handle in self._handles ]
         return columns

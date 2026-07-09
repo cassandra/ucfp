@@ -8,6 +8,7 @@ sub-editors each section pane drills into.
 """
 from dataclasses import replace
 
+from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -313,12 +314,13 @@ class InterviewView( View ):
     @staticmethod
     def _store( request, section, form, profile, other ):
         new_profile, new_other = form.apply( profile, other )
-        if Aggregate.PROFILE in section.aggregates:
-            save_profile( request.organization, new_profile )
-        if Aggregate.PLANS in section.aggregates:
-            save_plans( current_plans_record( request ), new_other )
-        elif Aggregate.ASSUMPTIONS in section.aggregates:
-            save_assumptions( current_assumptions_record( request ), new_other )
+        with transaction.atomic():                             # a straddle section writes both; keep them in step
+            if Aggregate.PROFILE in section.aggregates:
+                save_profile( request.organization, new_profile )
+            if Aggregate.PLANS in section.aggregates:
+                save_plans( current_plans_record( request ), new_other )
+            elif Aggregate.ASSUMPTIONS in section.aggregates:
+                save_assumptions( current_assumptions_record( request ), new_other )
         return new_profile
 
     def _swap( self, request, sections, section, form ):
@@ -490,6 +492,15 @@ def _current_profile_and_plans( request ):
     return profile, load_plans( current_plans_record( request ) )
 
 
+def _save_profile_and_plans( request, profile, plans ):
+    """Persist a paired profile+plans edit atomically -- both commit together or neither does, so a
+    failed second write cannot leave the Profile and Plans out of step (the very drift the
+    `compatibility` module guards against). The single seam the paired-save panes write through."""
+    with transaction.atomic():
+        save_profile( request.organization, profile )
+        save_plans( current_plans_record( request ), plans )
+
+
 def _current_assumptions( request ):
     """The contents of the Assumptions record the user is editing, creating it if absent."""
     return load_assumptions( current_assumptions_record( request ) )
@@ -511,8 +522,7 @@ class ResidenceView( SelfSavingPaneView ):
     def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
         profile, plans = form.apply( profile, plans )
-        save_profile( request.organization, profile )
-        save_plans( current_plans_record( request ), plans )
+        _save_profile_and_plans( request, profile, plans )
 
 
 class ExternalFactorsView( SelfSavingPaneView ):
@@ -634,8 +644,7 @@ class DebtsView( SelfSavingPaneView ):
         profile, plans = _current_profile_and_plans( request )
         before = len( profile.debts )
         profile, plans = form.apply( profile, plans )
-        save_profile( request.organization, profile )
-        save_plans( current_plans_record( request ), plans )   # a removed debt reaps its plan too
+        _save_profile_and_plans( request, profile, plans )     # a removed debt reaps its plan too
         return len( profile.debts ) != before                  # a row was added or removed
 
 
@@ -694,8 +703,7 @@ class IncomeTableView( SelfSavingPaneView ):
         profile, plans = _current_profile_and_plans( request )
         before = self._line_count( profile )
         profile, plans = form.apply( profile, plans )
-        save_profile( request.organization, profile )
-        save_plans( current_plans_record( request ), plans )
+        _save_profile_and_plans( request, profile, plans )
         return self._line_count( profile ) != before           # a line was added or removed
 
     @staticmethod
@@ -741,15 +749,13 @@ class _PropertyFormView( _PropertyView ):
         return antinode.response( main_content = self._form( request, handle, form ) )
 
     def post( self, request, handle = None ):
-        organization = request.organization
         profile, plans = _current_profile_and_plans( request )
         form = self._PANE.form( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
                 replace_map = { self._PANE.form_id: self._form( request, handle, form ) } )
         profile, plans = form.apply( profile, plans )
-        save_profile( organization, profile )
-        save_plans( current_plans_record( request ), plans )
+        _save_profile_and_plans( request, profile, plans )
         # Leave the open form alone; just refresh the list by id, where a property appears, updates its
         # name/value, or -- if edited to incomplete -- drops out.
         return antinode.response( replace_map = { self._PANE.list_id: self._list( request, profile ) } )
@@ -765,11 +771,9 @@ class _PropertyDeleteView( _PropertyView ):
     """Remove a mortgaged property as a unit, then refresh its list in place."""
 
     def post( self, request, handle ):
-        organization = request.organization
         profile, plans = _current_profile_and_plans( request )
         profile, plans = delete_property( profile, plans, handle )
-        save_profile( organization, profile )
-        save_plans( current_plans_record( request ), plans )
+        _save_profile_and_plans( request, profile, plans )
         # Refresh the list by id (replace, not insert) so the re-rendered `<div id=list_id>` swaps the
         # existing one rather than nesting inside it.
         return antinode.response(
@@ -829,9 +833,10 @@ class EventAddView( View ):
         profile, event = event_type.provision( form.build_event(), profile )
         profile, plans = event_type.cascade_on_add( event, profile, plans )
         plans = replace( plans, events = list( plans.events ) + [ event ] )
-        if profile is not original:   # provision created an entity, or a cascade adjusted facts
-            save_profile( organization, profile )
-        save_plans( current_plans_record( request ), plans )
+        with transaction.atomic():
+            if profile is not original:   # provision created an entity, or a cascade adjusted facts
+                save_profile( organization, profile )
+            save_plans( current_plans_record( request ), plans )
         return antinode.response(
             main_content = self._menu( request, profile ),
             replace_map  = { 'events-list': self._list( request, profile, plans ) } )
@@ -875,9 +880,10 @@ class EventDeleteView( View ):
                 removed, profile, plans )
             del events[ index ]
             plans = replace( plans, events = events )
-            if profile is not original:
-                save_profile( organization, profile )
-            save_plans( current_plans_record( request ), plans )
+            with transaction.atomic():
+                if profile is not original:
+                    save_profile( organization, profile )
+                save_plans( current_plans_record( request ), plans )
         return antinode.response( main_content = render_to_string(
             self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) },
             request = request ) )

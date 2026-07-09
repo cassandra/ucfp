@@ -11,16 +11,16 @@ property the Default column collapses into one value column. Reads `property_for
     <table class="table table-sm w-auto align-middle">
       <thead>
         <tr>
-          <th>Expense</th>
+          <th scope="col">Expense</th>
           {% for column in property_form.columns %}
-          <th class="text-right small">{{ column.label }}</th>
+          <th scope="col" class="text-right small">{{ column.label }}</th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for row in property_form.rows %}
         <tr>
-          <td>{{ row.name }} <span class="text-muted small">{{ row.cadence }}</span></td>
+          <th scope="row" class="font-weight-normal text-left">{{ row.name }} <span class="text-muted small">{{ row.cadence }}</span></th>
           {% for cell in row.cells %}
           {% if cell %}
           <td class="text-right">{{ cell }}{% if cell.errors %}<span class="text-danger small d-block">{{ cell.errors|join:" " }}</span>{% endif %}</td>
