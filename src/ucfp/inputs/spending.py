@@ -482,21 +482,33 @@ class RecurringExpensesForm( forms.Form ):
         return [ until for until, _ in self._columns() ] != list( self._spans )
 
     def _columns( self ) -> list:
-        """The edited (until_age, [amount per expense]) columns: a non-last span whose age was cleared is
-        dropped; the open span (last, no age) is always kept, and a fresh open span duplicating it is
-        appended when the user gave it an age (splitting it). Sorted by age, the open span last."""
+        """The edited (until_age, [amount per expense]) columns after this POST's one structural action,
+        if any: an explicit column delete (a row's ×) or splitting the open span (giving it an age).
+        The last column is always the open 'thereafter' span -- deleting the open span leaves the new
+        last ageless (so it becomes the thereafter). A non-last span left ageless is dropped, keeping
+        the timeline continuous. Ordered by age, the open span last."""
         cleaned = self.cleaned_data
-        last    = len( self._spans ) - 1
-        columns = list()
-        for si in range( len( self._spans ) ):
-            until = cleaned.get( self._until_key( si ) )
-            if si < last and until is None:
-                continue                                   # a middle span cleared -> deleted
-            amounts = [ cleaned.get( self._amount_key( ei, si ) ) or Decimal( '0' )
-                        for ei in range( len( self._expenses ) ) ]
-            columns.append( ( until, amounts ) )
-        if not columns or columns[ -1 ][ 0 ] is not None:  # the open span was given an age -> re-open
-            duplicate = list( columns[ -1 ][ 1 ] ) if columns else [ Decimal( '0' ) ] * len( self._expenses )
-            columns.append( ( None, duplicate ) )
-        columns.sort( key = lambda column: ( column[ 0 ] is None, column[ 0 ] or 0 ) )
-        return columns
+        columns = [ [ cleaned.get( self._until_key( si ) ),
+                      [ cleaned.get( self._amount_key( ei, si ) ) or Decimal( '0' )
+                        for ei in range( len( self._expenses ) ) ] ]
+                    for si in range( len( self._spans ) ) ]
+        delete = self._delete_index()
+        if delete is not None and 0 <= delete < len( columns ):
+            del columns[ delete ]                          # the row's × control
+        elif columns and columns[ -1 ][ 0 ] is not None:
+            columns.append( [ None, list( columns[ -1 ][ 1 ] ) ] )   # split the open span
+        if not columns:
+            columns = [ [ None, [ Decimal( '0' ) ] * len( self._expenses ) ] ]
+        columns[ -1 ][ 0 ] = None                          # the last span is always the open one
+        kept = [ ( until, amounts ) for index, ( until, amounts ) in enumerate( columns )
+                 if until is not None or index == len( columns ) - 1 ]
+        kept.sort( key = lambda column: ( column[ 0 ] is None, column[ 0 ] or 0 ) )
+        return kept
+
+    def _delete_index( self ):
+        """The span index the row's × control asked to delete (a raw `delete_span` field, not a form
+        field), or None when this save carried no delete."""
+        try:
+            return int( ( self.data or {} ).get( 'delete_span' ) )
+        except ( TypeError, ValueError ):
+            return None

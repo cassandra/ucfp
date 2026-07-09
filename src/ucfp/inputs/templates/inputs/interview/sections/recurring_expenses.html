@@ -8,12 +8,17 @@ an age to split it, clear a span's age to delete it. Ages are the primary person
 <div id="recurring-expenses">
   <form method="post" action="{% url 'recurring_expenses' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
+    <input type="hidden" name="delete_span" value="">
     <table class="table table-sm w-auto align-middle">
       <thead>
         <tr>
           <th>Expense</th>
           {% for header in recurring_form.span_headers %}
           <th class="text-right small">Until age {{ header.field }}
+            {% if recurring_form.span_count > 1 %}
+            <button type="button" class="{{ AppConst.RECURRING_DELETE_CLASS }} btn btn-sm btn-link text-danger p-0 ml-1"
+                    data-span="{{ forloop.counter0 }}" aria-label="Delete this span" title="Delete this span">&times;</button>
+            {% endif %}
             {% if header.year %}<span class="text-muted d-block">reaches {{ header.year }}</span>{% endif %}</th>
           {% endfor %}
         </tr>

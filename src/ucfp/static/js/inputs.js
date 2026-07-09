@@ -438,6 +438,14 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'input change', classSelector( C.LOAN_CLASS ) + ' :input',
             function () { updateLoan( $( this ).closest( classSelector( C.LOAN_CLASS ) ) ); } );
 
+        // Delete a recurring-expenses column: stamp its span index into the form's hidden field, then
+        // save -- the server drops the span and re-renders the table.
+        $( 'body' ).on( 'click', classSelector( C.RECURRING_DELETE_CLASS ), function () {
+            const $form = $( this ).closest( 'form' + classSelector( C.AUTOSAVE_CLASS ) );
+            $form.find( 'input[name="delete_span"]' ).val( $( this ).data( 'span' ) );
+            saveForm( $form );
+        } );
+
         // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike
         // the delegated handlers above) they must be (re)applied to whatever DOM is present: once
         // now, and again after each antinode render for swapped-in content. Pickers are also torn

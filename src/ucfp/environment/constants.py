@@ -97,6 +97,10 @@ class AppConst:
     LOAN_READOUT_CLASS      = 'js-loan-readout'  # where the live estimate is written
     LOAN_BALANCE_DATA_ATTR  = 'loan-balance'     # the loan's current balance, on the wrapper
 
+    # The recurring-expenses table's per-column delete: the × stamps its span index into the form's
+    # hidden `delete_span` field, then triggers the autosave, so the server drops that span.
+    RECURRING_DELETE_CLASS  = 'js-recurring-delete'  # the per-column × control (carries data-span)
+
     @classmethod
     def to_json_dict_str( cls ):
         """
