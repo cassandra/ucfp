@@ -37,7 +37,7 @@ PARTNER_SUBJECT_HANDLE = 'partner'
 
 # The residence asset the home section mints, and the stable identity of a tenant's rented home --
 # a synthetic handle (there is no owned asset behind it) that keys the rented-home column and its
-# overrides in the property-expenses matrix. Both are shared with the spending section.
+# overrides in the property-expenses matrix. Both are shared with the Home Expenses step.
 RESIDENCE_ASSET_HANDLE = 'residence'
 RENTED_HOME_HANDLE     = 'rented-home'
 # The mortgage debt secured against the residence, minted by the home section and surfaced (read-only)

@@ -34,7 +34,7 @@ from .interview import (
     SECTIONS, Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
     first_section_of_flow, flow_of, flow_title, next_flow_entry, next_section_after, section_for )
 from .models import AssumptionsRecord, PlansRecord
-from .auto import AutoPlanForm
+from .vehicle import VehiclePlanForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
 from .debt_plan import DebtPlanForm
@@ -44,7 +44,8 @@ from .income import IncomeTableForm
 from .properties import (
     RENTAL_PANE, SECOND_HOME_PANE, PossessionsForm, PropertyPane, _minted_handle, delete_property,
     properties_context )
-from .spending import PropertyExpensesForm, RecurringExpensesForm
+from .property_expenses import PropertyExpensesForm
+from .recurring_expenses import RecurringExpensesForm
 
 _HUB_TEMPLATE = 'inputs/hub.html'
 
@@ -365,8 +366,7 @@ class SelfSavingPaneView( View ):
     aggregates) and `persist` (apply the valid form and save). `persist` returns truthy only when the
     row set changed, so the pane is re-rendered; a plain value edit returns None and stays silent.
     Non-blocking throughout -- an incomplete entry simply is not saved; the forecast readiness check
-    is the completeness gate. Panes with a non-silent success (Subjects, the spending drill) do not
-    use this base."""
+    is the completeness gate. Panes with a non-silent success (Subjects) do not use this base."""
 
     template     : str
     target       : str
@@ -398,18 +398,17 @@ class SelfSavingPaneView( View ):
         return antinode.response( replace_map = { self.target: self._pane( request, form ) } )
 
 
-class AutoPlanView( SelfSavingPaneView ):
-    """`/inputs/interview/spending/auto-purchases/` -- the car-purchase/financing pane of the Spending
-    section (a special case, distinct from the generic 'auto' expense category and its
-    `spending/auto/` route)."""
+class VehiclePlanView( SelfSavingPaneView ):
+    """`/inputs/interview/vehicle-purchase/edit/` -- the car-purchase/financing pane of the Vehicle
+    Purchase step (a special case, distinct from the recurring Vehicle running-cost category)."""
 
-    template     = 'inputs/interview/sections/auto_plan.html'
-    target       = 'auto-purchases'
-    context_name = 'auto_form'
+    template     = 'inputs/interview/sections/vehicle_plan.html'
+    target       = 'vehicle-purchase'
+    context_name = 'vehicle_form'
 
     def build_form( self, request, data = None ):
         profile, plans = _current_profile_and_plans( request )
-        return AutoPlanForm( data, profile = profile, plans = plans )
+        return VehiclePlanForm( data, profile = profile, plans = plans )
 
     def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
@@ -418,8 +417,8 @@ class AutoPlanView( SelfSavingPaneView ):
 
 
 class RecurringExpensesView( SelfSavingPaneView ):
-    """`/inputs/interview/spending/recurring/` -- the recurring-expenses table of the Spending section:
-    the regular (non-property) expenses over the shared age-span timeline. Auto-saves each edit; a
+    """`/inputs/interview/living-expenses/edit/` -- the recurring-expenses table of the Living Expenses
+    step: the regular (non-property) expenses over the shared age-span timeline. Auto-saves each edit; a
     structural change (a span added, removed, or re-aged) re-renders the table, a pure amount edit
     stays silent."""
 
@@ -440,8 +439,8 @@ class RecurringExpensesView( SelfSavingPaneView ):
 
 
 class PropertyExpensesView( SelfSavingPaneView ):
-    """`/inputs/interview/spending/property/` -- the property-expenses matrix of the Spending section:
-    the household's per-property operating costs as one shared default with per-property overrides.
+    """`/inputs/interview/home-expenses/edit/` -- the property-expenses matrix of the Home Expenses
+    step: the household's per-property operating costs as one shared default with per-property overrides.
     Auto-saves each edit silently; the row and column sets change only when a property is added or
     removed (in the Property section), so this pane never restructures itself."""
 

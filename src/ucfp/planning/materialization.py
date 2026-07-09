@@ -41,7 +41,7 @@ from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENTED_HOME_HANDLE
 from ucfp.inputs.plans.enums import CreditCardPlanMode
 from ucfp.inputs.plans.schemas import (
-    AutoPlan, CreditCardPlan, LoanRepayment, RetirementTiming, Plans )
+    VehiclePlan, CreditCardPlan, LoanRepayment, RetirementTiming, Plans )
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 
@@ -92,7 +92,7 @@ def materialize(
         income_items     = flow_items + events.income_items,
         expense_items    = (
             _committed_obligations( profile ) + recurring_items + expense_items
-            + events.expense_items + card_items + _auto_expenses( plans ) ),
+            + events.expense_items + card_items + _vehicle_expenses( plans ) ),
         expense_streams  = recurring_streams + expense_streams,
         loans            = _loans( profile, plans ),
         contributions    = _contributions( plans ),
@@ -274,22 +274,22 @@ def _months_after( start : date, months : int ) -> date:
     return date( year, month, min( start.day, monthrange( year, month )[ 1 ] ) )
 
 
-# --- Plans: auto (car ownership) -----------------------------------------
+# --- Plans: vehicle (car ownership) --------------------------------------
 
 _AUTO_LOAN_APR         = BUILTIN_ASSUMPTIONS.auto_loan_apr
 _AUTO_LOAN_TERM_MONTHS = BUILTIN_ASSUMPTIONS.auto_loan_term_years * 12
 
 
-def _auto_expenses( plans : Plans ) -> list[ ExpenseItem ]:
+def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
     """The household's car costs, smoothed: a lump every recurrence (the full price unfinanced, or the
     down payment financed) plus, when financed, a constant stream of the financed lifetime cost spread
     over the recurrence period. Both scale by the number of cars and begin at the plan's start date."""
-    plan = plans.auto_plan
+    plan = plans.vehicle_plan
     if plan is None or plan.num_cars <= 0 or plan.purchase_price <= 0 or plan.recurrence_years <= 0:
         return list()
     cars   = Decimal( plan.num_cars )
     window = DateWindow( start = plan.start_date )
-    lump, financed_lifetime = _auto_costs( plan )
+    lump, financed_lifetime = _vehicle_costs( plan )
     items = list()
     if lump > 0:
         items.append( ExpenseItem(
@@ -306,7 +306,7 @@ def _auto_expenses( plans : Plans ) -> list[ ExpenseItem ]:
     return items
 
 
-def _auto_costs( plan : AutoPlan ) -> tuple[ Decimal, Decimal ]:
+def _vehicle_costs( plan : VehiclePlan ) -> tuple[ Decimal, Decimal ]:
     """The (per-car lump, per-car financed lifetime cost) of the plan. Unfinanced: the lump is the
     full price, nothing financed. Financed: the lump is the down payment and the financed lifetime
     cost is the total of the loan's payments (principal plus interest). The user gives the down

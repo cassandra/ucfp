@@ -28,7 +28,7 @@ from ucfp.inputs.profile.schemas import (
     AssetProfile, CommittedObligation, Debt, GovernmentPensionEntitlement,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    AutoPlan, Contribution, CreditCardPlan, DrawdownPolicy, HealthCoverageAssumption,
+    VehiclePlan, Contribution, CreditCardPlan, DrawdownPolicy, HealthCoverageAssumption,
     LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense, RetirementTiming, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
@@ -116,7 +116,7 @@ def _sample_plans():
                             target_date = date( 2029, 3, 1 ) ),
             CreditCardPlan( card_handle = 'disc', mode = CreditCardPlanMode.COMBO,
                             monthly_payment = Decimal( '150' ), target_date = date( 2030, 1, 1 ) ) ],
-        auto_plan = AutoPlan(
+        vehicle_plan = VehiclePlan(
             num_cars = 2, purchase_price = Decimal( '35000' ), recurrence_years = 8,
             start_date = date( 2031, 1, 1 ), down_payment = Decimal( '7000' ) ),
         drawdown = DrawdownPolicy( cash_floor = Decimal( '20000' ), cash_ceiling = Decimal( '50000' ),

@@ -5,7 +5,7 @@ any mortgage (a `Debt` secured against it, its balance entered here and shown re
 tied by a shared property handle. This module owns creating, editing, and removing such a property as
 one, so the rest of the app keeps seeing flat lists while the user works with a whole property. A
 rental additionally carries depreciation attributes (a `PropertyProfile`) and, in Income, a gross
-rent; a second home is personal-use with neither. Operating expenses attach in spending (§6) by the
+rent; a second home is personal-use with neither. Operating expenses attach in Home Expenses by the
 same handle.
 """
 from dataclasses import dataclass, replace

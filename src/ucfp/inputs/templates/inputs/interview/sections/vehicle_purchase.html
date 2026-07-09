@@ -1,0 +1,10 @@
+{% comment %}
+The Vehicle Purchase step (Plans flow): the household's car purchase and financing pattern -- large
+and sometimes financed, so it is its own structured input rather than a catalog expense. The pane
+renders outside the section's Next form and persists each edit on its own through `VehiclePlanView`.
+The pane comes from the section wrapper (`form.vehicle_form`). The recurring running costs of owning a
+car (fuel, insurance) live with the other regular costs in Living Expenses.
+{% endcomment %}
+<p class="text-muted">Buying and replacing cars over time -- the purchase and any financing, smoothed
+  across the years. Running costs like fuel and insurance are entered with your Living Expenses.</p>
+{% include 'inputs/interview/sections/vehicle_plan.html' with vehicle_form=form.vehicle_form %}

@@ -33,7 +33,10 @@ from .events import EventsForm
 from .external_factors import ExternalFactorsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
-from .spending import SpendingForm
+from .expenses import has_property
+from .property_expenses import PropertyExpensesForm, merged_property_expenses
+from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
+from .vehicle import VehiclePlanForm
 from .widgets import IsoDateInput
 
 
@@ -494,6 +497,69 @@ class DebtPlanSectionForm:
         return profile, plans
 
 
+class HomeExpensesSectionForm:
+    """Home Expenses -- the per-property operating-cost matrix. It exposes the matrix pane (saved on
+    its own through `PropertyExpensesView`); `apply` seeds the property expenses from the catalog on
+    Next, so a household that accepts the defaults still gets them without opening the pane."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def property_form( self ):
+        return PropertyExpensesForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, replace(
+            plans, property_expenses = merged_property_expenses( profile, plans ) )
+
+
+class VehiclePurchaseSectionForm:
+    """Vehicle Purchase -- the car purchase/financing pane. A no-op section form: the plan is edited
+    and saved through `VehiclePlanView`, and there are no catalog defaults to seed (the pattern is
+    entirely user-entered), so Next just advances."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def vehicle_form( self ):
+        return VehiclePlanForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class LivingExpensesSectionForm:
+    """Living Expenses -- the recurring-expenses table (everyday, discretionary, health, vehicle
+    running costs, miscellaneous) over the shared age-span timeline. It exposes the table pane (saved
+    on its own through `RecurringExpensesView`); `apply` seeds the recurring expenses from the catalog
+    on Next, so accepting the defaults still records them."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def recurring_form( self ):
+        return RecurringExpensesForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, replace(
+            plans, recurring_expenses = merged_recurring_expenses( profile, plans ) )
+
+
 # The interview's order, from the input model in issue #4. A section with a form is live; the rest
 # are declared so the stepper shows the full path ahead.
 SECTIONS = [
@@ -514,8 +580,14 @@ SECTIONS = [
     # Opens the Plans flow, reading the debts declared just above.
     Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
              outer_template = 'inputs/interview/sections/debt_plan.html' ),
-    Section( 'spending'    , 'Spending', ( Aggregate.PLANS, ), SpendingForm,
-             outer_template = 'inputs/interview/sections/spending.html' ),
+    # Spending, split into three focused steps ordered largest cost to smallest. Home Expenses shows
+    # only when the household has a dwelling with operating costs (see `applicable_sections`).
+    Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
+             outer_template = 'inputs/interview/sections/home_expenses.html' ),
+    Section( 'vehicle-purchase', 'Vehicle Purchase', ( Aggregate.PLANS, ), VehiclePurchaseSectionForm,
+             outer_template = 'inputs/interview/sections/vehicle_purchase.html' ),
+    Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
+             outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
     Section( 'external-factors', 'External Factors', ( Aggregate.ASSUMPTIONS, ),
@@ -530,9 +602,10 @@ def section_for( key : str ) -> Optional[ Section ]:
 
 def applicable_sections( profile : Profile ) -> list:
     """The sections that apply given what's been entered so far -- the conditionality hook, and the
-    real payoff of a linear flow. Every section applies for now; later this prunes or adds sections
-    from prior answers (a partner expands the people detail, owning a home adds the home section)."""
-    return list( SECTIONS )
+    real payoff of a linear flow. Today the one conditional step is Home Expenses, shown only when the
+    household has a dwelling with operating costs (owns property or rents); the rest always apply."""
+    return [ section for section in SECTIONS
+             if section.key != 'home-expenses' or has_property( profile ) ]
 
 
 def next_section_after( sections : list, key : str ) -> Optional[ Section ]:

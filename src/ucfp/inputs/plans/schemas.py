@@ -132,7 +132,7 @@ class CreditCardPlan:
 # --- Auto (car ownership) -------------------------------------------------
 
 @dataclass( frozen = True )
-class AutoPlan:
+class VehiclePlan:
     """The household's ongoing car-ownership costs, smoothed so the forecast carries no start/stop
     lumps. Every `recurrence_years` from `start_date`, `num_cars` cars are bought at `purchase_price`
     each. Unfinanced (no down or monthly payment given), the whole price lands as a lump each cycle.
@@ -212,7 +212,7 @@ class Plans:
     # Credit-card paydown plans (per card, resolved to expenses at materialization)
     credit_card_plans: list[ CreditCardPlan ] = field( default_factory = list )
     # The household's car-ownership costs (smoothed to expenses at materialization)
-    auto_plan: Optional[ AutoPlan ] = None
+    vehicle_plan: Optional[ VehiclePlan ] = None
     # Drawdown
     drawdown: Optional[ DrawdownPolicy ] = None
     # Plan events (§7)

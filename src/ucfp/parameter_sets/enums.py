@@ -12,13 +12,13 @@ class ParameterSetKind( LabeledEnum ):
 
 class ExpenseCategory( LabeledEnum ):
     """How curated expenses group in the interview -- the user-facing buckets, and the decision each
-    attaches to: Property costs to a dwelling one owns or rents, Auto to a vehicle; Everyday,
+    attaches to: Property costs to a dwelling one owns or rents, Vehicle to a car; Everyday,
     Discretionary, Health, and Miscellaneous always apply."""
 
     EVERYDAY      = ( 'Everyday Living', 'Food, clothing, and the recurring basics.' )
     DISCRETIONARY = ( 'Discretionary', 'Travel, entertainment, hobbies -- the lifestyle spend.' )
     PROPERTY      = ( 'Property', 'Operating costs of a dwelling -- upkeep, insurance, utilities, property tax -- one set per owned property, taxed by its type.' )
-    AUTO          = ( 'Auto', 'Costs of owning a vehicle.' )
+    VEHICLE       = ( 'Vehicle', 'Running costs of owning a car.' )
     HEALTH        = ( 'Health', 'Medical care and health insurance.' )
     GIVING        = ( 'Giving', 'Charitable contributions.' )
     MISCELLANEOUS = ( 'Miscellaneous', 'Household costs not tied to a single dwelling (e.g. umbrella insurance).' )

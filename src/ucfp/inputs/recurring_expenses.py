@@ -1,0 +1,157 @@
+"""Living Expenses -- the household's regular (non-property, non-vehicle-purchase) recurring costs.
+
+The step presents the applicable catalog categories (everyday, discretionary, health, vehicle running
+costs, miscellaneous) as a table over a shared age-span timeline, so a level can rise or fall with
+age. This module seeds those expenses from the catalog (preserving amounts already set) and drives the
+self-saving table.
+"""
+from dataclasses import replace
+from decimal import Decimal
+
+from django import forms
+
+from ucfp.parameter_sets.enums import ExpenseCategory
+from ucfp.inputs.plans.schemas import RecurringExpense
+from ucfp.inputs.expenses import applicable_categories, cadence_label, load_catalog
+
+
+def merged_recurring_expenses( profile, plans ) -> list:
+    """The applicable regular (non-property) catalog expenses as `RecurringExpense`s -- existing amounts
+    preserved (aligned to the plan's span count), missing ones seeded at the catalog default across
+    every span. The category and personal tax class are re-derived each merge (not user edits)."""
+    applicable = applicable_categories( profile )
+    span_count = len( plans.expense_spans ) if plans and plans.expense_spans else 1
+    existing   = { expense.name: expense
+                   for expense in plans.recurring_expenses } if plans else dict()
+    merged = list()
+    for catalog_expense in load_catalog().expenses:
+        if ( catalog_expense.category is ExpenseCategory.PROPERTY
+                or catalog_expense.category not in applicable ):
+            continue
+        merged.append( RecurringExpense(
+            name = catalog_expense.name, category = catalog_expense.category,
+            expense_tax_class = catalog_expense.expense_tax_class,
+            amounts = _aligned_amounts(
+                existing.get( catalog_expense.name ), catalog_expense.default_amount, span_count ),
+            interval = catalog_expense.interval ) )
+    return merged
+
+
+def _aligned_amounts( prior, default : Decimal, span_count : int ) -> list:
+    """`prior`'s amounts padded (with its last) or truncated to `span_count`, or the catalog `default`
+    across every span when there is no prior expense."""
+    if prior is None:
+        return [ default ] * span_count
+    amounts = list( prior.amounts )
+    if len( amounts ) < span_count:
+        amounts += [ amounts[ -1 ] if amounts else default ] * ( span_count - len( amounts ) )
+    return amounts[ :span_count ]
+
+
+class RecurringExpensesForm( forms.Form ):
+    """The recurring-expenses table: rows are the regular (non-property) expenses grouped by category,
+    columns are the spans of the shared timeline. Each span carries an "until age" (the last blank, the
+    open "thereafter" span); each cell is an amount at the row's cadence. Filling the open span's age
+    splits it (a new open span duplicates it); clearing a span's age deletes that span. Ages are the
+    primary subject's. `apply` writes the shared `expense_spans` and every recurring expense's per-span
+    amounts; `spans_changed` reports when the span set changed, so the pane re-renders."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        super().__init__( data )
+        self._birthdate = ( profile.subjects[ 0 ].birthdate
+                            if profile is not None and profile.subjects else None )
+        self._expenses  = merged_recurring_expenses( profile, plans )
+        self._spans     = list( plans.expense_spans ) if plans and plans.expense_spans else [ None ]
+        for si, until in enumerate( self._spans ):
+            field = forms.IntegerField( required = False, min_value = 0 )
+            field.initial = until
+            self.fields[ self._until_key( si ) ] = field
+        for ei, expense in enumerate( self._expenses ):
+            for si in range( len( self._spans ) ):
+                cell = forms.DecimalField( required = False, min_value = 0 )
+                cell.initial = expense.amounts[ si ] if si < len( expense.amounts ) else (
+                    expense.amounts[ -1 ] if expense.amounts else None )
+                self.fields[ self._amount_key( ei, si ) ] = cell
+
+    @staticmethod
+    def _until_key( si : int ) -> str:
+        return f'until_{si}'
+
+    @staticmethod
+    def _amount_key( ei : int, si : int ) -> str:
+        return f'amt_{ei}_{si}'
+
+    @property
+    def span_count( self ) -> int:
+        return len( self._spans )
+
+    @property
+    def span_headers( self ) -> list:
+        """The 'until age' header field per span, with the calendar year the primary reaches that age
+        (when a birthdate is known) -- the last span's age is blank (the open 'thereafter')."""
+        headers = list()
+        for si, until in enumerate( self._spans ):
+            year = ( self._birthdate.year + until
+                     if until is not None and self._birthdate is not None else None )
+            headers.append( { 'field': self[ self._until_key( si ) ], 'year': year } )
+        return headers
+
+    @property
+    def sections( self ) -> list:
+        """The expense rows grouped by category (a section header per category), each row its name,
+        cadence, and one amount cell per span."""
+        sections, current = list(), None
+        for ei, expense in enumerate( self._expenses ):
+            if expense.category is not current:
+                current = expense.category
+                sections.append( { 'label': current.label, 'rows': list() } )
+            sections[ -1 ][ 'rows' ].append( {
+                'name'    : expense.name,
+                'cadence' : cadence_label( expense.interval ),
+                'cells'   : [ self[ self._amount_key( ei, si ) ]
+                              for si in range( len( self._spans ) ) ] } )
+        return sections
+
+    def apply( self, profile, plans ):
+        columns  = self._columns()
+        spans    = [ until for until, _ in columns ]
+        expenses = [ replace( expense, amounts = [ amounts[ ei ] for _, amounts in columns ] )
+                     for ei, expense in enumerate( self._expenses ) ]
+        return profile, replace( plans, expense_spans = spans, recurring_expenses = expenses )
+
+    def spans_changed( self ) -> bool:
+        """Whether the applied span timeline differs from the current one -- a span added, removed, or
+        re-aged -- so the pane must re-render; a pure amount edit leaves it unchanged (a silent save)."""
+        return [ until for until, _ in self._columns() ] != list( self._spans )
+
+    def _columns( self ) -> list:
+        """The edited (until_age, [amount per expense]) columns after this POST's one structural action,
+        if any: an explicit column delete (a row's ×) or splitting the open span (giving it an age).
+        The last column is always the open 'thereafter' span -- deleting the open span leaves the new
+        last ageless (so it becomes the thereafter). A non-last span left ageless is dropped, keeping
+        the timeline continuous. Ordered by age, the open span last."""
+        cleaned = self.cleaned_data
+        columns = [ [ cleaned.get( self._until_key( si ) ),
+                      [ cleaned.get( self._amount_key( ei, si ) ) or Decimal( '0' )
+                        for ei in range( len( self._expenses ) ) ] ]
+                    for si in range( len( self._spans ) ) ]
+        delete = self._delete_index()
+        if delete is not None and 0 <= delete < len( columns ):
+            del columns[ delete ]                          # the row's × control
+        elif columns and columns[ -1 ][ 0 ] is not None:
+            columns.append( [ None, list( columns[ -1 ][ 1 ] ) ] )   # split the open span
+        if not columns:
+            columns = [ [ None, [ Decimal( '0' ) ] * len( self._expenses ) ] ]
+        columns[ -1 ][ 0 ] = None                          # the last span is always the open one
+        kept = [ ( until, amounts ) for index, ( until, amounts ) in enumerate( columns )
+                 if until is not None or index == len( columns ) - 1 ]
+        kept.sort( key = lambda column: ( column[ 0 ] is None, column[ 0 ] or 0 ) )
+        return kept
+
+    def _delete_index( self ):
+        """The span index the row's × control asked to delete (a raw `delete_span` field, not a form
+        field), or None when this save carried no delete."""
+        try:
+            return int( ( self.data or {} ).get( 'delete_span' ) )
+        except ( TypeError, ValueError ):
+            return None

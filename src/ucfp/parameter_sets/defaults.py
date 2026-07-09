@@ -101,7 +101,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
     everyday      = ExpenseCategory.EVERYDAY
     discretionary = ExpenseCategory.DISCRETIONARY
     prop          = ExpenseCategory.PROPERTY
-    auto          = ExpenseCategory.AUTO
+    vehicle       = ExpenseCategory.VEHICLE
     health        = ExpenseCategory.HEALTH
     misc          = ExpenseCategory.MISCELLANEOUS
     # Property-context sets: every owned dwelling; owned dwellings plus a tenant's rented home
@@ -150,11 +150,12 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Phone Service', prop, '100', living, monthly, applies_to = occupied ),
         _expense( 'Internet', prop, '100', living, monthly, applies_to = occupied ),
         _expense( 'Property Management', prop, '240', rental_expense, monthly, applies_to = rental_only ),
-        # Auto (the car purchase/financing itself is the parameterized auto plan, not a catalog item)
-        _expense( 'Auto Insurance', auto, '750', living, semiannual ),
-        _expense( 'Auto Maintenance', auto, '300', living, yearly ),
-        _expense( 'Auto Repair', auto, '1000', living ),
-        _expense( 'Gasoline', auto, '20', living, weekly ),
+        # Vehicle running costs (the car purchase/financing itself is the parameterized vehicle plan,
+        # not a catalog item)
+        _expense( 'Auto Insurance', vehicle, '750', living, semiannual ),
+        _expense( 'Auto Maintenance', vehicle, '300', living, yearly ),
+        _expense( 'Auto Repair', vehicle, '1000', living ),
+        _expense( 'Gasoline', vehicle, '20', living, weekly ),
         # Health
         _expense( 'Medical Expenses', health, '7200', medical ),
         _expense( 'Health Insurance', health, '26400', medical ),
