@@ -12,13 +12,13 @@ from django import forms
 
 from ucfp.parameter_sets.enums import ExpenseCategory
 from ucfp.inputs.plans.schemas import RecurringExpense
-from ucfp.inputs.expenses import applicable_categories, cadence_label, load_catalog
+from ucfp.inputs.expenses import applicable_categories, cadence_label, kept_interval, load_catalog
 
 
 def merged_recurring_expenses( profile, plans ) -> list:
     """The applicable regular (non-property) catalog expenses as `RecurringExpense`s -- existing amounts
-    preserved (aligned to the plan's span count), missing ones seeded at the catalog default across
-    every span. The category and personal tax class are re-derived each merge (not user edits)."""
+    (and any chosen cadence) preserved, missing ones seeded at the catalog default across every span.
+    The category, personal tax class, and realization are re-derived each merge (not user edits)."""
     applicable = applicable_categories( profile )
     span_count = len( plans.expense_spans ) if plans and plans.expense_spans else 1
     existing   = { expense.name: expense
@@ -28,12 +28,13 @@ def merged_recurring_expenses( profile, plans ) -> list:
         if ( catalog_expense.category is ExpenseCategory.PROPERTY
                 or catalog_expense.category not in applicable ):
             continue
+        prior = existing.get( catalog_expense.name )
         merged.append( RecurringExpense(
             name = catalog_expense.name, category = catalog_expense.category,
             expense_tax_class = catalog_expense.expense_tax_class,
-            amounts = _aligned_amounts(
-                existing.get( catalog_expense.name ), catalog_expense.default_amount, span_count ),
-            interval = catalog_expense.interval ) )
+            amounts = _aligned_amounts( prior, catalog_expense.default_amount, span_count ),
+            interval = kept_interval( prior, catalog_expense ),
+            realization = catalog_expense.realization ) )
     return merged
 
 

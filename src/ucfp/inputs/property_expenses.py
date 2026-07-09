@@ -16,8 +16,8 @@ from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense
 from ucfp.inputs.expenses import (
-    OWNED_PROPERTY_CONTEXT, applicable_categories, cadence_label, is_renting, load_catalog,
-    owned_property_handles )
+    OWNED_PROPERTY_CONTEXT, applicable_categories, cadence_label, is_renting, kept_interval,
+    load_catalog, owned_property_handles )
 
 
 def _asset_for( profile, handle : str ):
@@ -84,7 +84,9 @@ def merged_property_expenses( profile, plans ) -> list:
         merged.append( PropertyExpense(
             name = catalog_expense.name, category = catalog_expense.category,
             expense_tax_class = catalog_expense.expense_tax_class,
-            applies_to = catalog_expense.applies_to, interval = catalog_expense.interval,
+            applies_to = catalog_expense.applies_to,
+            interval = kept_interval( prior, catalog_expense ),
+            realization = catalog_expense.realization,
             default_amount = prior.default_amount if prior is not None else catalog_expense.default_amount,
             overrides = _live_overrides( prior, profile, catalog_expense, live_handles ) ) )
     return merged

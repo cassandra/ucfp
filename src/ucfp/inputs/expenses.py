@@ -58,6 +58,15 @@ def has_property( profile ) -> bool:
     return bool( owned_property_handles( profile ) ) or is_renting( profile )
 
 
+def kept_interval( prior, catalog_expense ):
+    """The cadence to seed on a merge: the prior expense's `interval` when it has one (a preserved user
+    edit), else the catalog default. Only the cadence is a user edit -- the realization is fixed and
+    always re-derived from the catalog."""
+    if prior is not None and prior.interval is not None:
+        return prior.interval
+    return catalog_expense.interval
+
+
 def cadence_label( interval ) -> str:
     if interval is None:
         return 'per year'

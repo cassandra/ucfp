@@ -34,7 +34,7 @@ from ucfp.forecast.parameters import (
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
 
-from ucfp.parameter_sets.enums import PropertyContext
+from ucfp.parameter_sets.enums import PropertyContext, Realization
 
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.expenses import OWNED_PROPERTY_CONTEXT
@@ -398,20 +398,29 @@ def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:
         for obligation in profile.obligations ]
 
 
+def _annualized( amounts : Schedule, interval : Optional[ Duration ] ) -> Schedule:
+    """A per-occurrence schedule scaled to an annual rate -- each segment's amount times the interval's
+    occurrences per year -- so a SMOOTH expense enters the engine as a yearly stream level. A missing
+    interval is treated as annual, leaving the amounts unchanged."""
+    factor = interval.occurrences_per_year() if interval is not None else Decimal( 1 )
+    return Schedule( tuple(
+        WindowedAmount( segment.amount * factor, segment.window ) for segment in amounts.segments ) )
+
+
 def _recurring_expenses( plans : Plans, primary_birthdate : Optional[ date ],
                          frame : 'ForecastFrame' ) -> tuple[ list, list ]:
     """The Plans' regular recurring expenses as (streams, items): each expense's per-span `amounts`
     stepped over the shared `expense_spans` timeline (until-ages relative to the primary subject,
-    resolved year-precise) and clipped to the frame. A flow with no interval is a smoothed stream, one
-    with an interval an item at that cadence."""
+    resolved year-precise) and clipped to the frame. A SMOOTH expense enters as an annualized stream (its
+    per-occurrence amount scaled to a yearly rate); a DISCRETE one as an item placed at its cadence."""
     boundaries = _span_boundaries( plans.expense_spans, primary_birthdate )
     streams, items = list(), list()
     for expense in plans.recurring_expenses:
         amounts = _span_schedule( expense.amounts, boundaries, frame )
-        if expense.interval is None:
+        if expense.realization is Realization.SMOOTH:
             streams.append( ExpenseStream(
                 name = expense.name, expense_tax_class = expense.expense_tax_class,
-                amounts = amounts ) )
+                amounts = _annualized( amounts, expense.interval ) ) )
         else:
             items.append( ExpenseItem(
                 name = expense.name, expense_tax_class = expense.expense_tax_class,
@@ -482,8 +491,8 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
     """The Plans' property operating expenses as (streams, items): each expense applied to every property
     its `applies_to` reaches, at that property's override or the shared default (skipped when both are
     blank or zero), with the tax class derived from the property and the amount clipped to the property's
-    ownership window -- its sale date, when it is sold. A flow with no interval is a smoothed stream, one
-    with an interval an item at that cadence."""
+    ownership window -- its sale date, when it is sold. A SMOOTH expense enters as an annualized stream; a
+    DISCRETE one as an item placed at its cadence."""
     streams, items = list(), list()
     for expense in plans.property_expenses:
         for handle, context, asset in _property_contexts( profile ):
@@ -494,9 +503,10 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
                 continue
             tax_class = _property_expense_tax_class( expense, asset )
             amounts   = _property_schedule( amount, sale_dates.get( handle ) )
-            if expense.interval is None:
+            if expense.realization is Realization.SMOOTH:
                 streams.append( ExpenseStream(
-                    name = expense.name, expense_tax_class = tax_class, amounts = amounts ) )
+                    name = expense.name, expense_tax_class = tax_class,
+                    amounts = _annualized( amounts, expense.interval ) ) )
             else:
                 items.append( ExpenseItem(
                     name = expense.name, expense_tax_class = tax_class,

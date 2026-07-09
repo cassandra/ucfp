@@ -36,6 +36,28 @@ class PropertyContext( LabeledEnum ):
     RENTED_HOME = ( 'Rented Home', 'A rented residence a tenant occupies but does not own.' )
 
 
+class Realization( LabeledEnum ):
+    """How an expense's (amount, cadence) becomes engine input -- fixed per expense type, not
+    user-editable. `SMOOTH` annualizes and spreads it evenly as a stream (continuous consumption, and
+    unpredictable costs where a discrete date would misrepresent). `DISCRETE` places it as a real
+    charge at its cadence (predictable, timing-meaningful costs). The two only diverge at yearly+
+    cadences; at weekly/monthly they are indistinguishable at forecast granularities."""
+
+    SMOOTH   = ( 'Smoothed', 'Annualized and spread evenly as a continuous stream.' )
+    DISCRETE = ( 'Discrete', 'Placed as a charge at its cadence.' )
+
+
+class CadenceDomain( LabeledEnum ):
+    """Which cadences the user may choose for an expense -- the editable input domain, distinct from the
+    fixed `Realization`. `FIXED` is not editable (the amount only; the cadence is the seeded one); the
+    others let the user pick a magnitude and unit within the named range, reading "Every N units"."""
+
+    FIXED   = ( 'Fixed', 'Not editable; the seeded cadence, amount only.' )
+    WK_MO   = ( 'Weekly to monthly', 'Every N weeks or months.' )
+    MO_YR   = ( 'Monthly to yearly', 'Every N months or years.' )
+    N_YEARS = ( 'Every N years', 'Every N years.' )
+
+
 class CatalogScope( LabeledEnum ):
     """Which curated expense catalog a scenario draws from -- `GENERAL` is the non-regional default;
     regional catalogs are added as more scopes (the new structure's take on the regional idea the

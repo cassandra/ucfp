@@ -22,7 +22,7 @@ from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource
-from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
+from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
 
 from .enums import CreditCardPlanMode, EventKind
 
@@ -49,15 +49,16 @@ class RetirementTiming:
 
 @dataclass( frozen = True )
 class RecurringExpense:
-    """One regular recurring expense: its name, catalog `category`, tax class, cadence (`interval`),
-    and an `amounts` list -- one amount per span of the Plans' shared `expense_spans` timeline (a
-    single amount when no spans are defined). `interval` None is a smoothed stream, a `Duration` an
-    item placed at that cadence. Property operating expenses are a separate class (`PropertyExpense`)."""
+    """One regular recurring expense: its name, catalog `category`, tax class, `interval` (its cadence),
+    `realization` (how it hits the engine -- smoothed vs placed at its cadence), and an `amounts` list --
+    one amount per span of the Plans' shared `expense_spans` timeline (a single amount when no spans are
+    defined). Property operating expenses are a separate class (`PropertyExpense`)."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     amounts: list[ Decimal ]
     interval: Optional[ Duration ] = None
+    realization: Realization = Realization.SMOOTH
 
 
 # --- Property expenses ----------------------------------------------------
@@ -69,15 +70,17 @@ class RecurringExpense:
 @dataclass( frozen = True )
 class PropertyExpense:
     """One property operating expense across the household's properties: its name, catalog `category`,
-    the *personal* `expense_tax_class` (materialization derives the rental swap), cadence (`interval`),
-    and the `applies_to` property contexts it reaches. `default_amount` (None when blank) applies to
-    every reached property unless `overrides` gives that property (by handle) its own amount; a property
-    with neither is not charged. Amounts are constant; a sale ends a property's instance at materialize."""
+    the *personal* `expense_tax_class` (materialization derives the rental swap), `interval` (its
+    cadence), `realization` (smoothed vs placed at its cadence), and the `applies_to` property contexts
+    it reaches. `default_amount` (None when blank) applies to every reached property unless `overrides`
+    gives that property (by handle) its own amount; a property with neither is not charged. Amounts are
+    constant; a sale ends a property's instance at materialize."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     applies_to: tuple[ PropertyContext, ... ]
     interval: Optional[ Duration ] = None
+    realization: Realization = Realization.SMOOTH
     default_amount: Optional[ Decimal ] = None
     overrides: dict[ str, Decimal ] = field( default_factory = dict )
 

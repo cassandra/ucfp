@@ -10,7 +10,8 @@ from django.test import TestCase
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.forecast import Forecast
 from ucfp.parameter_sets.enums import (
-    CatalogScope, EconomicOutlookVariant, ExpenseCategory, ParameterSetKind )
+    CadenceDomain, CatalogScope, EconomicOutlookVariant, ExpenseCategory, ParameterSetKind,
+    Realization )
 from ucfp.parameter_sets.models import ParameterSet
 from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
@@ -93,6 +94,13 @@ class LoadPathTest( TestCase ):
         food = next( expense for expense in catalog.expenses if expense.name == 'Food' )
         self.assertEqual( food.default_amount, Decimal( '150' ) )
         self.assertEqual( food.category, ExpenseCategory.EVERYDAY )
+        # The cadence attributes seed too: Food is a smoothed weekly/monthly consumable, while a
+        # property tax is a discrete bill the user may re-express monthly or yearly.
+        self.assertEqual( food.realization, Realization.SMOOTH )
+        self.assertEqual( food.cadence_domain, CadenceDomain.WK_MO )
+        tax = next( expense for expense in catalog.expenses if expense.name == 'Property Tax' )
+        self.assertEqual( tax.realization, Realization.DISCRETE )
+        self.assertEqual( tax.cadence_domain, CadenceDomain.MO_YR )
 
 
 class MaterializeFromLibraryTest( TestCase ):
