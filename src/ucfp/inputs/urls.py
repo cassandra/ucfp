@@ -56,10 +56,12 @@ urlpatterns = [
           views.SecondHomeDeleteView.as_view(), name = 'second_home_delete' ),
     path( 'interview/properties/second-homes/<str:handle>/', views.SecondHomeFormView.as_view(),
           name = 'second_home_edit' ),
-    # A specific segment (not a spending group), so it must precede the group catch-all below and
-    # not collide with the 'auto' expense category's own `spending/auto/` group route.
+    # Specific segments (not spending groups), so they must precede the group catch-all below and not
+    # collide with the 'auto' expense category's own `spending/auto/` group route.
     path( 'interview/spending/auto-purchases/', views.AutoPlanView.as_view(),
           name = 'auto_purchases' ),
+    path( 'interview/spending/recurring/', views.RecurringExpensesView.as_view(),
+          name = 'recurring_expenses' ),
     path( 'interview/spending/<str:group>/', views.SpendingGroupView.as_view(),
           name = 'spending_group' ),
     path( 'interview/events/add/<str:kind>/', views.EventAddView.as_view(), name = 'event_add' ),

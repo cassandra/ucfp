@@ -44,7 +44,7 @@ from .income import IncomeTableForm
 from .properties import (
     RENTAL_PANE, SECOND_HOME_PANE, PossessionsForm, PropertyPane, _minted_handle, delete_property,
     properties_context )
-from .spending import GroupSpendingForm, group_for_key
+from .spending import GroupSpendingForm, RecurringExpensesForm, group_for_key
 
 _HUB_TEMPLATE = 'inputs/hub.html'
 
@@ -415,6 +415,28 @@ class AutoPlanView( SelfSavingPaneView ):
         profile, plans = _current_profile_and_plans( request )
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
+
+
+class RecurringExpensesView( SelfSavingPaneView ):
+    """`/inputs/interview/spending/recurring/` -- the recurring-expenses table of the Spending section:
+    the regular (non-property) expenses over the shared age-span timeline. Auto-saves each edit; a
+    structural change (a span added, removed, or re-aged) re-renders the table, a pure amount edit
+    stays silent."""
+
+    template     = 'inputs/interview/sections/recurring_expenses.html'
+    target       = 'recurring-expenses'
+    context_name = 'recurring_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return RecurringExpensesForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        changed = form.spans_changed()
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return changed                                     # a span changed -> re-render the table
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

@@ -308,22 +308,19 @@ class SpendingForm:
         return AutoPlanForm( profile = self._profile, plans = self._plans )
 
     @property
-    def group_totals( self ) -> list:
-        """(group, annual total) per spending group, in display order -- Property expanded per owned
-        dwelling. Property groups total their schedule-based flows; the regular categories total their
-        recurring expenses (their first-span amount)."""
+    def recurring_form( self ):
+        """The editable recurring-expenses table (the regular, non-property categories over the shared
+        span timeline), saved on its own through `RecurringExpensesView`."""
+        return RecurringExpensesForm( profile = self._profile, plans = self._plans )
+
+    @property
+    def property_group_totals( self ) -> list:
+        """(group, annual total) per property group -- one per owned dwelling -- for the drill-in list.
+        The regular categories are the recurring-expenses table, not this list."""
         property_expenses = merged_expenses( self._profile, self._plans )
-        recurring         = merged_recurring_expenses( self._profile, self._plans )
-        totals            = list()
-        for group in spending_groups( self._profile ):
-            if group.category is ExpenseCategory.PROPERTY:
-                expenses = [ e for e in property_expenses
-                             if e.property_handle == group.property_handle ]
-                totals.append( ( group, category_annual_total( expenses ) ) )
-            else:
-                expenses = [ e for e in recurring if e.category is group.category ]
-                totals.append( ( group, recurring_annual_total( expenses ) ) )
-        return totals
+        return [ ( group, category_annual_total(
+                   [ e for e in property_expenses if e.property_handle == group.property_handle ] ) )
+                 for group in spending_groups( self._profile ) if group.is_property ]
 
     def apply( self, profile, plans ):
         return profile, replace(
@@ -406,3 +403,100 @@ class GroupSpendingForm( forms.Form ):
             rows.append( WindowedAmount( amount, window ) )
         rows.sort( key = lambda windowed: windowed.window.start or date.min )
         return rows
+
+
+class RecurringExpensesForm( forms.Form ):
+    """The recurring-expenses table: rows are the regular (non-property) expenses grouped by category,
+    columns are the spans of the shared timeline. Each span carries an "until age" (the last blank, the
+    open "thereafter" span); each cell is an amount at the row's cadence. Filling the open span's age
+    splits it (a new open span duplicates it); clearing a span's age deletes that span. Ages are the
+    primary subject's. `apply` writes the shared `expense_spans` and every recurring expense's per-span
+    amounts; `spans_changed` reports when the span set changed, so the pane re-renders."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        super().__init__( data )
+        self._birthdate = ( profile.subjects[ 0 ].birthdate
+                            if profile is not None and profile.subjects else None )
+        self._expenses  = merged_recurring_expenses( profile, plans )
+        self._spans     = list( plans.expense_spans ) if plans and plans.expense_spans else [ None ]
+        for si, until in enumerate( self._spans ):
+            field = forms.IntegerField( required = False, min_value = 0 )
+            field.initial = until
+            self.fields[ self._until_key( si ) ] = field
+        for ei, expense in enumerate( self._expenses ):
+            for si in range( len( self._spans ) ):
+                cell = forms.DecimalField( required = False, min_value = 0 )
+                cell.initial = expense.amounts[ si ] if si < len( expense.amounts ) else (
+                    expense.amounts[ -1 ] if expense.amounts else None )
+                self.fields[ self._amount_key( ei, si ) ] = cell
+
+    @staticmethod
+    def _until_key( si : int ) -> str:
+        return f'until_{si}'
+
+    @staticmethod
+    def _amount_key( ei : int, si : int ) -> str:
+        return f'amt_{ei}_{si}'
+
+    @property
+    def span_count( self ) -> int:
+        return len( self._spans )
+
+    @property
+    def span_headers( self ) -> list:
+        """The 'until age' header field per span, with the calendar year the primary reaches that age
+        (when a birthdate is known) -- the last span's age is blank (the open 'thereafter')."""
+        headers = list()
+        for si, until in enumerate( self._spans ):
+            year = ( self._birthdate.year + until
+                     if until is not None and self._birthdate is not None else None )
+            headers.append( { 'field': self[ self._until_key( si ) ], 'year': year } )
+        return headers
+
+    @property
+    def sections( self ) -> list:
+        """The expense rows grouped by category (a section header per category), each row its name,
+        cadence, and one amount cell per span."""
+        sections, current = list(), None
+        for ei, expense in enumerate( self._expenses ):
+            if expense.category is not current:
+                current = expense.category
+                sections.append( { 'label': current.label, 'rows': list() } )
+            sections[ -1 ][ 'rows' ].append( {
+                'name'    : expense.name,
+                'cadence' : cadence_label( expense.interval ),
+                'cells'   : [ self[ self._amount_key( ei, si ) ]
+                              for si in range( len( self._spans ) ) ] } )
+        return sections
+
+    def apply( self, profile, plans ):
+        columns  = self._columns()
+        spans    = [ until for until, _ in columns ]
+        expenses = [ replace( expense, amounts = [ amounts[ ei ] for _, amounts in columns ] )
+                     for ei, expense in enumerate( self._expenses ) ]
+        return profile, replace( plans, expense_spans = spans, recurring_expenses = expenses )
+
+    def spans_changed( self ) -> bool:
+        """Whether the applied span timeline differs from the current one -- a span added, removed, or
+        re-aged -- so the pane must re-render; a pure amount edit leaves it unchanged (a silent save)."""
+        return [ until for until, _ in self._columns() ] != list( self._spans )
+
+    def _columns( self ) -> list:
+        """The edited (until_age, [amount per expense]) columns: a non-last span whose age was cleared is
+        dropped; the open span (last, no age) is always kept, and a fresh open span duplicating it is
+        appended when the user gave it an age (splitting it). Sorted by age, the open span last."""
+        cleaned = self.cleaned_data
+        last    = len( self._spans ) - 1
+        columns = list()
+        for si in range( len( self._spans ) ):
+            until = cleaned.get( self._until_key( si ) )
+            if si < last and until is None:
+                continue                                   # a middle span cleared -> deleted
+            amounts = [ cleaned.get( self._amount_key( ei, si ) ) or Decimal( '0' )
+                        for ei in range( len( self._expenses ) ) ]
+            columns.append( ( until, amounts ) )
+        if not columns or columns[ -1 ][ 0 ] is not None:  # the open span was given an age -> re-open
+            duplicate = list( columns[ -1 ][ 1 ] ) if columns else [ Decimal( '0' ) ] * len( self._expenses )
+            columns.append( ( None, duplicate ) )
+        columns.sort( key = lambda column: ( column[ 0 ] is None, column[ 0 ] or 0 ) )
+        return columns
