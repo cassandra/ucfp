@@ -37,7 +37,8 @@ from ucfp.jurisdiction.law import StatuteProfile
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.parameter_sets.enums import PropertyContext
-from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENT_OBLIGATION_HANDLE
+from ucfp.inputs.profile.enums import HousingTenure
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENTED_HOME_HANDLE
 from ucfp.inputs.plans.enums import CreditCardPlanMode
 from ucfp.inputs.plans.schemas import (
     AutoPlan, CreditCardPlan, LoanRepayment, RetirementTiming, Plans )
@@ -476,8 +477,8 @@ def _property_contexts( profile : Profile ) -> list:
     rented home (no owned asset) -- so a property expense can be applied by context."""
     result = [ ( asset.handle, _PROPERTY_CONTEXT_BY_CLASS[ asset.asset_class ], asset )
                for asset in profile.assets if asset.asset_class in _PROPERTY_CONTEXT_BY_CLASS ]
-    if any( obligation.handle == RENT_OBLIGATION_HANDLE for obligation in profile.obligations ):
-        result.append( ( RENT_OBLIGATION_HANDLE, PropertyContext.RENTED_HOME, None ) )
+    if profile.home_tenure is HousingTenure.RENT:
+        result.append( ( RENTED_HOME_HANDLE, PropertyContext.RENTED_HOME, None ) )
     return result
 
 

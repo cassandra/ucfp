@@ -16,14 +16,12 @@ from typing import Optional
 
 from django import forms
 
-from common.recurrence import Duration, TimeUnit
-
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
-    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
-    RESIDENCE_MORTGAGE_HANDLE, AssetProfile, CommittedObligation, Debt, Profile, SubjectProfile )
+    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RESIDENCE_ASSET_HANDLE,
+    RESIDENCE_MORTGAGE_HANDLE, AssetProfile, Debt, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
 from ucfp.jurisdiction.labels import local_label
@@ -186,33 +184,31 @@ class SubjectsSectionForm:
 
 
 class HomeForm( forms.Form ):
-    """§3 -- the household residence. Owning captures the home's current value, purchase price (its
-    cost basis), and any mortgage balance still owed; renting captures the monthly rent. The
-    residence is household-owned, so there is no "whose home". The mortgage balance is a convenience
-    surface on the home for the one `Debt` secured against the residence -- the same debt the Debts
-    section shows (read-only there, since it is owned here).
+    """§3 -- the household residence. The tenure switch (own / rent / neither) is the fact recorded
+    here; owning also captures the home's current value, purchase price (its cost basis), and any
+    mortgage balance still owed. The residence is household-owned, so there is no "whose home". The
+    mortgage balance is a convenience surface on the home for the one `Debt` secured against the
+    residence -- the same debt the Debts section shows (read-only there, since it is owned here).
 
-    `apply` merges only the residence asset, its mortgage debt, and the rent obligation into the
-    Profile by their stable handles, leaving the accounts and other sections' items intact.
-    Associated home expenses (property tax, insurance) are seeded later in Spending.
+    `apply` records the tenure and merges only the residence asset and its mortgage debt into the
+    Profile by their stable handles, leaving other sections' items intact. The monthly rent is a plan,
+    not a fact: it is set in Spending (the property-expenses matrix) when the tenure is rent.
+    Associated home expenses (property tax, insurance) are likewise seeded in Spending.
     """
 
-    _OWN  = 'own'
-    _RENT = 'rent'
-    _TENURE_CHOICES = ( ( _OWN, 'Own' ), ( _RENT, 'Rent' ) )
+    _TENURE_CHOICES = tuple( ( member.name.lower(), member.label ) for member in HousingTenure )
 
     _RESIDENCE_HANDLE = RESIDENCE_ASSET_HANDLE
     _MORTGAGE_HANDLE  = RESIDENCE_MORTGAGE_HANDLE
-    _RENT_HANDLE      = RENT_OBLIGATION_HANDLE
 
     tenure           = forms.ChoiceField(
-        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, initial = _OWN,
+        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES,
+        initial = HousingTenure.OWN.name.lower(),
         widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
     home_value       = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
     purchase_price   = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
     mortgage_balance = forms.DecimalField(
         label = 'Mortgage balance owed (optional)', required = False, min_value = 0 )
-    monthly_rent     = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile ) if profile is not None else None
@@ -220,16 +216,11 @@ class HomeForm( forms.Form ):
 
     @classmethod
     def _initial( cls, profile : Profile ) -> dict:
-        rent = cls._find( profile.obligations, cls._RENT_HANDLE )
-        if rent is not None:
-            return { 'tenure': cls._RENT, 'monthly_rent': rent.amount }
+        initial   = { 'tenure': profile.home_tenure.name.lower() }
         residence = cls._find( profile.assets, cls._RESIDENCE_HANDLE )
-        if residence is None:
-            return dict()
-        initial   = {
-            'tenure': cls._OWN, 'home_value': residence.opening_value,
-            'purchase_price': residence.cost_basis,
-        }
+        if residence is not None:
+            initial[ 'home_value' ]     = residence.opening_value
+            initial[ 'purchase_price' ] = residence.cost_basis
         mortgage = cls._find( profile.debts, cls._MORTGAGE_HANDLE )
         if mortgage is not None:
             initial[ 'mortgage_balance' ] = mortgage.balance
@@ -239,17 +230,23 @@ class HomeForm( forms.Form ):
         existing_mortgage = self._find( profile.debts, self._MORTGAGE_HANDLE )
         updated_profile = replace(
             profile,
+            home_tenure = self._tenure(),
             assets      = self._merged( profile.assets, self._RESIDENCE_HANDLE, self._residence() ),
             debts       = self._merged(
-                profile.debts, self._MORTGAGE_HANDLE, self._mortgage( existing_mortgage ) ),
-            obligations = self._merged( profile.obligations, self._RENT_HANDLE, self._rent() ) )
+                profile.debts, self._MORTGAGE_HANDLE, self._mortgage( existing_mortgage ) ) )
         return updated_profile, plans
+
+    def _tenure( self ) -> HousingTenure:
+        return HousingTenure[ self.cleaned_data[ 'tenure' ].upper() ]
+
+    def _owns( self ) -> bool:
+        return self._tenure() is HousingTenure.OWN
 
     def _residence( self ) -> list:
         # Non-blocking: an owned home materializes only once its value is entered; until then it
         # simply is not written (no hard error mid-entry), the forecast run being the real gate.
         cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._OWN or cleaned.get( 'home_value' ) is None:
+        if not self._owns() or cleaned.get( 'home_value' ) is None:
             return []
         return [ AssetProfile(
             handle = self._RESIDENCE_HANDLE, name = 'Home',
@@ -261,21 +258,13 @@ class HomeForm( forms.Form ):
         # The home is a balance-only convenience surface onto the one debt; the name and kind the
         # Debts section may have set are preserved rather than overwritten here.
         cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._OWN or cleaned.get( 'mortgage_balance' ) is None:
+        if not self._owns() or cleaned.get( 'mortgage_balance' ) is None:
             return []
         return [ Debt(
             handle = self._MORTGAGE_HANDLE,
             name = existing.name if existing is not None else 'Mortgage',
             kind = existing.kind if existing is not None else DebtKind.MORTGAGE,
             balance = cleaned[ 'mortgage_balance' ], secured_asset = self._RESIDENCE_HANDLE ) ]
-
-    def _rent( self ) -> list:
-        cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._RENT or cleaned.get( 'monthly_rent' ) is None:
-            return []
-        return [ CommittedObligation(
-            handle = self._RENT_HANDLE, name = 'Rent', amount = cleaned[ 'monthly_rent' ],
-            cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ]
 
     @staticmethod
     def _merged( existing : list, handle : str, replacement : list ) -> list:

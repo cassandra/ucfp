@@ -65,7 +65,7 @@ def _sample_profile():
                                          normal_start_age = 65 ) ],
         government_pension = [ GovernmentPensionEntitlement(
             subject_handle = 'you', monthly_at_normal_age = Decimal( '2800.50' ) ) ],
-        obligations = [ CommittedObligation( handle = 'rent', name = 'Rent',
+        obligations = [ CommittedObligation( handle = 'tuition', name = 'Tuition',
                                              amount = Decimal( '1500' ),
                                              cadence = Duration( 1, TimeUnit.MONTH ),
                                              expense_tax_class = ExpenseTaxClass.LIVING ) ],

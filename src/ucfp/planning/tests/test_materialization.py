@@ -9,12 +9,10 @@ derivation tested end-to-end in `ucfp.forecast.tests.test_rental`.
 import unittest
 from decimal import Decimal
 
-from common.recurrence import Duration, TimeUnit
-
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.inputs.plans.schemas import Plans, PropertyExpense
-from ucfp.inputs.profile.schemas import (
-    AssetProfile, CommittedObligation, Profile, RENT_OBLIGATION_HANDLE )
+from ucfp.inputs.profile.enums import HousingTenure
+from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 from ucfp.planning.materialization import _property_expenses
 
@@ -53,11 +51,10 @@ class PropertyExpenseTaxClassTests( unittest.TestCase ):
             [ ExpenseTaxClass.SALT, ExpenseTaxClass.SALT, ExpenseTaxClass.RENTAL_EXPENSE ] )
 
     def test_rented_home_flow_keeps_its_personal_class( self ):
-        # A tenant's rented home (a handle with no owned asset) takes occupied expenses (utilities) and
-        # falls through to the stored personal class -- never a rental expense.
-        profile = Profile( obligations = [ CommittedObligation(
-            handle = RENT_OBLIGATION_HANDLE, name = 'Rent', amount = Decimal( '1500' ),
-            cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ] )
+        # A tenant's rented home (a handle with no owned asset, present when the tenure is RENT) takes
+        # occupied expenses (utilities, rent) and falls through to the stored personal class -- never a
+        # rental expense.
+        profile = Profile( home_tenure = HousingTenure.RENT )
         plans = Plans( property_expenses = [ _expense( _OCCUPIED, ExpenseTaxClass.LIVING ) ] )
         streams, _items = _property_expenses( profile, plans, dict(), dict() )
         self.assertEqual( [ s.expense_tax_class for s in streams ], [ ExpenseTaxClass.LIVING ] )

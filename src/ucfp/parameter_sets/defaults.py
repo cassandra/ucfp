@@ -109,6 +109,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
     owned       = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
     occupied    = owned + ( PropertyContext.RENTED_HOME, )
     rental_only = ( PropertyContext.RENTAL, )
+    rented_only = ( PropertyContext.RENTED_HOME, )
     return ExpenseCatalog( [
         # Everyday living
         _expense( 'Food', everyday, '150', living, weekly ),
@@ -129,7 +130,9 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Furniture', discretionary, '500', living ),
         # Property -- one operating-cost set per owned dwelling. Tax class is the PERSONAL class
         # (property tax -> SALT, the rest -> living); materialization swaps it to a rental expense for
-        # a rental. Utilities also seed a tenant's rented home; property management, owned rentals only.
+        # a rental. Utilities also seed a tenant's rented home; rent and property management apply to a
+        # single context only -- the rented home and an owned rental respectively.
+        _expense( 'Rent', prop, '1500', living, monthly, applies_to = rented_only ),
         _expense( 'Property Tax', prop, '6000', salt, yearly, applies_to = owned ),
         _expense( 'Property Insurance', prop, '2500', living, applies_to = owned ),
         _expense( 'HOA / Coop Fee', prop, '300', living, monthly, applies_to = owned ),

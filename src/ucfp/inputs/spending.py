@@ -16,7 +16,8 @@ from django import forms
 from ucfp.accounts.enums import AssetClass
 from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind, PropertyContext
 from ucfp.parameter_sets.repository import load
-from ucfp.inputs.profile.schemas import RENT_OBLIGATION_HANDLE
+from ucfp.inputs.profile.enums import HousingTenure
+from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense, RecurringExpense
 from ucfp.inputs.auto import AutoPlanForm
 
@@ -59,8 +60,7 @@ def _owned_property_handles( profile ) -> list:
 
 
 def _renting( profile ) -> bool:
-    return profile is not None and any(
-        obligation.handle == RENT_OBLIGATION_HANDLE for obligation in profile.obligations )
+    return profile is not None and profile.home_tenure is HousingTenure.RENT
 
 
 def _asset_for( profile, handle : str ):
@@ -68,22 +68,24 @@ def _asset_for( profile, handle : str ):
 
 
 def _property_context( profile, handle : str ) -> Optional[ PropertyContext ]:
-    """The `PropertyContext` a Property handle represents: a tenant's rented home for the rent
-    obligation, else the owned holding's class mapped to its context (None if not real property)."""
-    if handle == RENT_OBLIGATION_HANDLE:
+    """The `PropertyContext` a Property handle represents: a tenant's rented home for the synthetic
+    rented-home handle, else the owned holding's class mapped to its context (None if not real
+    property)."""
+    if handle == RENTED_HOME_HANDLE:
         return PropertyContext.RENTED_HOME
     asset = _asset_for( profile, handle )
     return _OWNED_PROPERTY_CONTEXT.get( asset.asset_class ) if asset is not None else None
 
 
 def _property_handles_for( category, profile ) -> list:
-    """The handles a category's expenses attach to: each owned property -- and, when the household
-    rents, its rented home -- for Property (one expense set per handle), and a single unbound `[None]`
-    for the household categories."""
+    """The handles a category's expenses attach to: the household's home first -- its owned residence,
+    or, when it rents, the rented home -- then second homes and rentals (`_owned_property_handles`
+    already orders owned holdings), for Property (one column per handle); a single unbound `[None]` for
+    the household categories."""
     if category is not ExpenseCategory.PROPERTY:
         return [ None ]
-    handles = _owned_property_handles( profile )
-    return handles + [ RENT_OBLIGATION_HANDLE ] if _renting( profile ) else handles
+    owned = _owned_property_handles( profile )
+    return [ RENTED_HOME_HANDLE ] + owned if _renting( profile ) else owned
 
 
 def _property_name( profile, handle : str ) -> str:
