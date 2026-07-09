@@ -22,7 +22,7 @@ from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
-from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
+from ucfp.parameter_sets.enums import ExpenseCategory
 
 from .enums import CreditCardPlanMode, EventKind
 
@@ -42,46 +42,39 @@ class RetirementTiming:
     pension_start: Optional[ date ] = None
 
 
-# --- Lifestyle ------------------------------------------------------------
-# The discretionary cost table itself is curated in the parameter-set library (chosen by
-# `LifestyleScope`); the plans holds only the personal timeline of levels that selects each
-# expense's value over time. The first segment's level applies from the start of the horizon.
+# --- Recurring expenses ---------------------------------------------------
+# The user's regular (non-property) recurring expenses, each seeded from the curated catalog (its
+# category, tax class, and cadence) with an amount per span. The spans are the Plans' shared
+# `expense_spans` timeline (until-ages relative to the primary subject); `amounts` aligns 1:1 with it.
 
 @dataclass( frozen = True )
-class LifestyleSegment:
-    """A span beginning at `start` over which one lifestyle level applies."""
-    start: date
-    level: LifestyleLevel
+class RecurringExpense:
+    """One regular recurring expense: its name, catalog `category`, tax class, cadence (`interval`),
+    and an `amounts` list -- one amount per span of the Plans' shared `expense_spans` timeline (a
+    single amount when no spans are defined). `interval` None is a smoothed stream, a `Duration` an
+    item placed at that cadence. Property operating expenses are a separate class (`ExpenseFlow`)."""
+    name: str
+    category: ExpenseCategory
+    expense_tax_class: ExpenseTaxClass
+    amounts: list[ Decimal ]
+    interval: Optional[ Duration ] = None
 
 
-@dataclass( frozen = True )
-class LifestylePlan:
-    """A reference to a curated cost table (`scope`) plus the timeline of levels (`segments`)
-    that selects each expense's value over the horizon."""
-    scope: LifestyleScope = LifestyleScope.GENERAL
-    segments: list[ LifestyleSegment ] = field( default_factory = list )
-
-
-# --- Spending -------------------------------------------------------------
-# The new expense model: the user's planned expenses, each seeded from the curated catalog (so it
-# carries the catalog's category, tax class, and cadence) with the user's amount. Supersedes the
-# lifestyle cost-table above, which is retired once this reaches parity.
+# --- Property expenses ----------------------------------------------------
+# A dwelling's operating expenses: dynamic, per-property, and ended by a property-sale event. Kept in
+# their current schedule-based form (pending their own redesign), distinct from the recurring expenses
+# above. Materialized unchanged; the sale cascade ends them by capping the schedule.
 
 @dataclass( frozen = True )
 class ExpenseFlow:
-    """One planned expense -- its name, catalog `category`, tax class, cadence (`interval`), and a
-    `schedule`: the amount over time spans, a `WindowedAmount` per span (one open-ended row is a
-    constant amount; reuses the engine's segment type, so it materializes with no conversion).
-    `interval` None is a smoothed stream, a `Duration` an item placed at that cadence;
-    `lifestyle_dependent` marks the ones a user would vary over time. `property_handle` attaches an
-    operating expense to the property it belongs to (so a sale can find and end it); None for a
-    general living expense."""
+    """One property operating expense -- its name, catalog `category`, tax class, cadence (`interval`),
+    a `schedule` (a `WindowedAmount` per span, reusing the engine's segment type so it materializes with
+    no conversion), and the `property_handle` it belongs to (so a sale can find and end it)."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     schedule: list[ WindowedAmount ]
     interval: Optional[ Duration ] = None
-    lifestyle_dependent: bool = False
     property_handle: Optional[ str ] = None
 
 
@@ -202,9 +195,10 @@ class Plans:
     `ForecastParameters`."""
     # Timing
     timing: list[ RetirementTiming ] = field( default_factory = list )
-    # Lifestyle
-    lifestyle: Optional[ LifestylePlan ] = None
-    # Spending
+    # Recurring expenses (regular, non-property) and the shared span timeline (until-ages, last None)
+    expense_spans: list[ Optional[ int ] ] = field( default_factory = lambda: [ None ] )
+    recurring_expenses: list[ RecurringExpense ] = field( default_factory = list )
+    # Property operating expenses (schedule-based, per dwelling; pending their own redesign)
     expenses: list[ ExpenseFlow ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )

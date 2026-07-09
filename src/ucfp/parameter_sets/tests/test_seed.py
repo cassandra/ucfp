@@ -10,13 +10,12 @@ from django.test import TestCase
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.forecast import Forecast
 from ucfp.parameter_sets.enums import (
-    CatalogScope, EconomicOutlookVariant, ExpenseCategory, LifestyleLevel, LifestyleScope,
-    ParameterSetKind )
+    CatalogScope, EconomicOutlookVariant, ExpenseCategory, ParameterSetKind )
 from ucfp.parameter_sets.models import ParameterSet
 from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
 from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
-from ucfp.inputs.plans.schemas import LifestylePlan, LifestyleSegment, Plans
+from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
@@ -92,7 +91,6 @@ class LoadPathTest( TestCase ):
         food = next( expense for expense in catalog.expenses if expense.name == 'Food' )
         self.assertEqual( food.default_amount, Decimal( '150' ) )
         self.assertEqual( food.category, ExpenseCategory.EVERYDAY )
-        self.assertTrue( food.lifestyle_dependent )
 
 
 class MaterializeFromLibraryTest( TestCase ):
@@ -117,35 +115,4 @@ class MaterializeFromLibraryTest( TestCase ):
         self.assertEqual(
             params.economic_outlook.parameters_at( date( 2026, 1, 1 ) ).inflation.fraction,
             Decimal( '0.025' ) )
-        self.assertEqual( type( Forecast( params ).run() ).__name__, 'ForecastResult' )
-
-    def test_lifestyle_table_resolves_into_stepped_streams_and_items( self ):
-        call_command( 'seed_parameter_sets' )
-        profile = Profile(
-            subjects = [ SubjectProfile(
-                handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
-            filing_status = FilingStatus.SINGLE,
-            assets = [ AssetProfile(
-                handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
-                opening_value = Decimal( '900000' ), cost_basis = Decimal( '900000' ) ) ] )
-        plans = Plans(
-            lifestyle = LifestylePlan(
-                scope = LifestyleScope.GENERAL,
-                segments = [
-                    LifestyleSegment( start = date( 2026, 1, 1 ), level = LifestyleLevel.LOW ),
-                    LifestyleSegment( start = date( 2030, 1, 1 ), level = LifestyleLevel.HIGH ) ] ) )
-        assumptions = Assumptions(
-            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            tax_projection = TaxProjection(
-                forecast_type = StatuteForecastType.CURRENT_LAW ) )
-        params = materialize(
-            profile = profile, plans = plans, assumptions = assumptions,
-            frame = ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2031, 12, 31 ) ) )
-        self.assertIn( 'Home Insurance', { s.name for s in params.expense_streams } )   # a stream
-        item_names = { i.name for i in params.expense_items }
-        self.assertIn( 'Gas', item_names )                                              # an item
-        self.assertIn( 'Automobile Purchase', item_names )
-        gas = next( item for item in params.expense_items if item.name == 'Gas' )
-        stepped = [ segment.amount for segment in gas.amounts.segments ]
-        self.assertEqual( stepped, [ Decimal( '10' ), Decimal( '50' ) ] )               # low -> high
         self.assertEqual( type( Forecast( params ).run() ).__name__, 'ForecastResult' )

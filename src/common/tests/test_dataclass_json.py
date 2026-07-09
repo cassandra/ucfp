@@ -18,8 +18,7 @@ from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.parameter_sets.enums import (
-    ExpenseCategory, LifestyleLevel, LifestyleScope, PropertyContext )
+from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 from ucfp.parameter_sets.schemas import ExpenseCatalog, ExpenseType
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
@@ -30,7 +29,7 @@ from ucfp.inputs.profile.schemas import (
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
     AutoPlan, Contribution, CreditCardPlan, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption,
-    LifestylePlan, LifestyleSegment, LoanRepayment, PlanEvent, RetirementTiming, Plans )
+    LoanRepayment, PlanEvent, RecurringExpense, RetirementTiming, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
 
@@ -94,11 +93,11 @@ def _sample_plans():
             subject_handle = 'you',
             government_pension_claiming_date = date( 2040, 1, 1 ),
             pension_start = date( 2038, 1, 1 ) ) ],
-        lifestyle = LifestylePlan(
-            scope = LifestyleScope.GENERAL,
-            segments = [
-                LifestyleSegment( start = date( 2035, 1, 1 ), level = LifestyleLevel.HIGH ),
-                LifestyleSegment( start = date( 2050, 1, 1 ), level = LifestyleLevel.MEDIUM ) ] ),
+        expense_spans = [ 70, 80, None ],
+        recurring_expenses = [ RecurringExpense(
+            name = 'Travel', category = ExpenseCategory.DISCRETIONARY,
+            expense_tax_class = ExpenseTaxClass.LIVING,
+            amounts = [ Decimal( '900' ), Decimal( '500' ), Decimal( '200' ) ] ) ],
         expenses = [ ExpenseFlow(
             name = 'Property tax', category = ExpenseCategory.PROPERTY,
             expense_tax_class = ExpenseTaxClass.SALT,

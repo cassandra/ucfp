@@ -1,8 +1,4 @@
-"""Enums local to the planning-assumptions domain.
-
-(`LifestyleLevel` and `LifestyleScope` live in `parameter_sets.enums` with the cost-table
-payload they index, since the plans references that library.)
-"""
+"""Enums local to the planning-assumptions domain."""
 from common.labeled_enum import LabeledEnum
 
 

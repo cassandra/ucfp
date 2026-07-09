@@ -7,24 +7,7 @@ class ParameterSetKind( LabeledEnum ):
     the registry key for its typed schema."""
 
     ECONOMIC_OUTLOOK = ( 'Economic Outlook', 'A schedule of economic rate assumptions.' )
-    LIFESTYLE_COSTS  = ( 'Lifestyle Costs', 'A table of discretionary expenses by lifestyle level.' )
     EXPENSE_CATALOG  = ( 'Expense Catalog', 'The curated catalog of expense types and defaults.' )
-
-
-class LifestyleLevel( LabeledEnum ):
-    """A spending tier a user schedules over time -- the uniform selector that indexes each
-    lifestyle expense's low/medium/high value."""
-
-    HIGH   = ( 'High'  , 'An expansive lifestyle: more travel, dining, discretionary spend.' )
-    MEDIUM = ( 'Medium', 'A moderate, typical lifestyle.' )
-    LOW    = ( 'Low'   , 'A lean lifestyle: reduced discretionary spend.' )
-
-
-class LifestyleScope( LabeledEnum ):
-    """Which curated lifestyle cost table a scenario draws from -- the table's identity, not a
-    level. `GENERAL` is the non-regional default; regional tables are added as more scopes."""
-
-    GENERAL = ( 'General', 'The general, non-regional cost table.' )
 
 
 class ExpenseCategory( LabeledEnum ):

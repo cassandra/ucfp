@@ -79,19 +79,14 @@ def _assumptions_issues( assumptions : Assumptions ) -> list[ ReadinessIssue ]:
 
 
 def _plans_issues( profile : Profile, plans : Plans ) -> list[ ReadinessIssue ]:
-    """Every plans-side reason a run is blocked: drift against the profile, an unscheduled lifestyle,
-    and any government pension left without a claiming date."""
+    """Every plans-side reason a run is blocked: drift against the profile, and any government pension
+    left without a claiming date."""
     issues = list()
     drift = compatibility_issues( profile, plans )
     if drift:
         issues.append( ReadinessIssue(
             message   = DRIFT_LEAD_IN + ' ' + ' '.join( drift ),
             fix_label = 'Review your plans',
-            fix_route = 'flow_plans' ) )
-    if plans.lifestyle is not None and not plans.lifestyle.segments:
-        issues.append( ReadinessIssue(
-            message   = 'Your spending plan needs at least one schedule segment to apply its cost table.',
-            fix_label = 'Set up your spending',
             fix_route = 'flow_plans' ) )
     issues.extend( _claiming_issues( profile, plans ) )
     return issues

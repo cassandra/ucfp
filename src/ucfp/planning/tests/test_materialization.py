@@ -14,7 +14,7 @@ from ucfp.forecast.parameters import WindowedAmount
 from ucfp.inputs.plans.schemas import ExpenseFlow, Plans
 from ucfp.inputs.profile.schemas import AssetProfile
 from ucfp.parameter_sets.enums import ExpenseCategory
-from ucfp.planning.materialization import _plans_expenses
+from ucfp.planning.materialization import _property_expenses
 
 
 def _property( handle : str, asset_class : AssetClass ) -> AssetProfile:
@@ -40,7 +40,7 @@ class PropertyExpenseTaxClassTests( unittest.TestCase ):
 
     def _materialized_classes( self, *handles ) -> list:
         plans = Plans( expenses = [ _property_tax( handle ) for handle in handles ] )
-        streams, _items = _plans_expenses( plans, self._ASSETS )
+        streams, _items = _property_expenses( plans, self._ASSETS )
         return [ stream.expense_tax_class for stream in streams ]
 
     def test_rental_property_expense_derives_rental_expense( self ):

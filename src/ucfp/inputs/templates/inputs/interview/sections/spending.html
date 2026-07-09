@@ -13,8 +13,8 @@ The two parts are unrelated -- the car-purchase pane is not one of the expense g
 {% include 'inputs/interview/sections/auto_plan.html' with auto_form=form.auto_form %}
 
 <h3 class="h6 mt-4">Spending by group</h3>
-<p class="text-muted">Your spending by group, using typical values. Adjust a group's individual
-  expenses if a total looks off.</p>
+<p class="text-muted">Your spending by group, using typical values. Property groups drill into their
+  individual expenses; the recurring-expense groups are being reworked into an editable table.</p>
 <table class="table table-sm w-auto">
   <thead><tr><th>Group</th><th class="text-right">Per year</th><th></th></tr></thead>
   <tbody>
@@ -23,8 +23,10 @@ The two parts are unrelated -- the car-purchase pane is not one of the expense g
       <td>{{ group.label }}</td>
       <td class="text-right" id="spending-total-{{ group.key }}">{{ total|money:currency }}</td>
       <td>
+        {% if group.is_property %}
         <a data-async="#spending-cat-{{ group.key }}"
            href="{% url 'spending_group' group=group.key %}">Adjust</a>
+        {% endif %}
       </td>
     </tr>
     <tr id="spending-cat-{{ group.key }}"></tr>

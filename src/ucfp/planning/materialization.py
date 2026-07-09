@@ -31,8 +31,6 @@ from ucfp.forecast.parameters import (
     RetirementContribution, ScheduledExternalDisbursement, Subject, SubsidizedHealthCoverage,
     WindowedAmount )
 
-from ucfp.parameter_sets import repository as parameter_sets
-from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
 
@@ -70,9 +68,10 @@ def materialize(
     subjects_by_handle = { str( subject.handle ): subject
                            for subject in subjects if subject.handle is not None }
     government_pension = GovernmentPension( statute.jurisdiction_type )
-    lifestyle_streams, lifestyle_items = _lifestyle_expenses( plans )
+    recurring_streams, recurring_items = _recurring_expenses(
+        plans, _primary_birthdate( profile ), frame )
     assets_by_handle = { asset.handle : asset for asset in profile.assets }
-    expense_streams, expense_items = _plans_expenses( plans, assets_by_handle )
+    expense_streams, expense_items = _property_expenses( plans, assets_by_handle )
     flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
     events = event_contributions( profile, plans, subjects_by_handle )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
@@ -89,9 +88,9 @@ def materialize(
             profile, plans, subjects_by_handle, government_pension ) + flow_streams,
         income_items     = flow_items + events.income_items,
         expense_items    = (
-            _committed_obligations( profile ) + lifestyle_items + expense_items
+            _committed_obligations( profile ) + recurring_items + expense_items
             + events.expense_items + card_items + _auto_expenses( plans ) ),
-        expense_streams  = lifestyle_streams + expense_streams,
+        expense_streams  = recurring_streams + expense_streams,
         loans            = _loans( profile, plans ),
         contributions    = _contributions( plans ),
         events           = events.scheduled_events + card_events,
@@ -395,20 +394,16 @@ def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:
         for obligation in profile.obligations ]
 
 
-def _lifestyle_expenses( plans : Plans ) -> tuple[ list, list ]:
-    """The Plans' lifestyle as (streams, items): load its chosen cost table from the
-    parameter-set library and step each expense by the level in effect across the timeline --
-    a stream (no `interval`) smoothed, an item (an `interval`) placed at its cadence."""
-    lifestyle = plans.lifestyle
-    if lifestyle is None:
-        return list(), list()
-    table = parameter_sets.load( ParameterSetKind.LIFESTYLE_COSTS, lifestyle.scope.label )
-    if not table.expenses:
-        return list(), list()
-    segments = _lifestyle_segments( lifestyle )
+def _recurring_expenses( plans : Plans, primary_birthdate : Optional[ date ],
+                         frame : 'ForecastFrame' ) -> tuple[ list, list ]:
+    """The Plans' regular recurring expenses as (streams, items): each expense's per-span `amounts`
+    stepped over the shared `expense_spans` timeline (until-ages relative to the primary subject,
+    resolved year-precise) and clipped to the frame. A flow with no interval is a smoothed stream, one
+    with an interval an item at that cadence."""
+    boundaries = _span_boundaries( plans.expense_spans, primary_birthdate )
     streams, items = list(), list()
-    for expense in table.expenses:
-        amounts = _level_schedule( expense.amounts, segments )
+    for expense in plans.recurring_expenses:
+        amounts = _span_schedule( expense.amounts, boundaries, frame )
         if expense.interval is None:
             streams.append( ExpenseStream(
                 name = expense.name, expense_tax_class = expense.expense_tax_class,
@@ -420,31 +415,58 @@ def _lifestyle_expenses( plans : Plans ) -> tuple[ list, list ]:
     return streams, items
 
 
-def _lifestyle_segments( lifestyle ) -> list:
-    if not lifestyle.segments:
-        raise ValueError(
-            'A lifestyle plan needs at least one schedule segment to apply the cost table.' )
-    return sorted( lifestyle.segments, key = lambda segment: segment.start )
+def _span_boundaries( spans : list, primary_birthdate : Optional[ date ] ) -> list:
+    """The finite span boundaries (the `until_age`s of `expense_spans`) resolved to dates -- the year
+    the primary reaches each age. Empty when ages cannot resolve (no primary birthdate), so the whole
+    forecast is one span."""
+    if primary_birthdate is None:
+        return list()
+    return [ _at_year( primary_birthdate, age ) for age in spans if age is not None ]
 
 
-def _level_schedule( amounts, segments : list ) -> Schedule:
-    """A `Schedule[WindowedAmount]` stepping `amounts` by the level in effect across each
-    schedule span. The first span runs from the start of the horizon, the last to its end."""
-    windowed = list()
-    for index, segment in enumerate( segments ):
-        start = None if index == 0 else segment.start
-        end = ( segments[ index + 1 ].start - timedelta( days = 1 )
-                if index + 1 < len( segments ) else None )
-        windowed.append( WindowedAmount(
-            amounts.for_level( segment.level ), DateWindow( start = start, end = end ) ) )
-    return Schedule( tuple( windowed ) )
+def _span_schedule( amounts : list, boundaries : list, frame : 'ForecastFrame' ) -> Schedule:
+    """A `Schedule[WindowedAmount]` stepping `amounts` over the spans the `boundaries` (span end dates,
+    ascending) carve the frame into: `amounts[i]` applies until `boundaries[i]`, the last amount to the
+    frame end. Windows are clipped to the frame, so a span the frame excludes contributes nothing;
+    `amounts` is padded to the span count (a desynced document cannot crash a run)."""
+    span_count = len( boundaries ) + 1
+    segments   = list()
+    previous   = frame.start_date
+    for index in range( span_count ):
+        boundary = boundaries[ index ] if index < len( boundaries ) else None
+        window_start = max( previous, frame.start_date )
+        window_end   = min( ( boundary - timedelta( days = 1 ) ) if boundary is not None
+                            else frame.end_date, frame.end_date )
+        amount = amounts[ index ] if index < len( amounts ) else (
+            amounts[ -1 ] if amounts else Decimal( '0' ) )
+        if window_start <= window_end:
+            segments.append( WindowedAmount(
+                amount, DateWindow( start = window_start, end = window_end ) ) )
+        if boundary is not None:
+            previous = boundary
+    return Schedule( tuple( segments ) )
 
 
-def _plans_expenses( plans : Plans, assets : dict ) -> tuple[ list, list ]:
-    """The Plans' planned expenses as (streams, items): a flow with no interval is a smoothed
-    stream, one with an interval an item placed at that cadence. Each is a flat amount for now;
-    value-steps over time come later. The successor to `_lifestyle_expenses`. A property-scoped flow's
-    stored class is its personal class; `_property_expense_tax_class` swaps it for a rental."""
+def _at_year( birthdate : date, age : int ) -> date:
+    """The date the person turns `age` -- their birthday that year (year-precise; long-term forecasting
+    needs no month precision)."""
+    try:
+        return birthdate.replace( year = birthdate.year + age )
+    except ValueError:                                     # 29 Feb in a non-leap target year
+        return birthdate.replace( year = birthdate.year + age, day = 28 )
+
+
+def _primary_birthdate( profile : Profile ) -> Optional[ date ]:
+    """The primary subject's birthdate (the household's first person), or None if none is set yet --
+    the anchor the recurring-expense span ages resolve against."""
+    return profile.subjects[ 0 ].birthdate if profile.subjects else None
+
+
+def _property_expenses( plans : Plans, assets : dict ) -> tuple[ list, list ]:
+    """The Plans' property operating expenses as (streams, items): a flow with no interval is a smoothed
+    stream, one with an interval an item placed at that cadence, each over its (sale-capped) schedule. A
+    property-scoped flow's stored class is its personal class; `_property_expense_tax_class` swaps it for
+    a rental."""
     streams, items = list(), list()
     for expense in plans.expenses:
         amounts    = Schedule( tuple( expense.schedule ) )
