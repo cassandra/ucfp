@@ -15,9 +15,10 @@ from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense
+from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, read_cadence
 from ucfp.inputs.expenses import (
-    OWNED_PROPERTY_CONTEXT, applicable_categories, cadence_label, is_renting, kept_interval,
-    load_catalog, owned_property_handles )
+    OWNED_PROPERTY_CONTEXT, applicable_categories, is_renting, kept_interval, load_catalog,
+    owned_property_handles )
 
 
 def _asset_for( profile, handle : str ):
@@ -87,6 +88,7 @@ def merged_property_expenses( profile, plans ) -> list:
             applies_to = catalog_expense.applies_to,
             interval = kept_interval( prior, catalog_expense ),
             realization = catalog_expense.realization,
+            cadence_domain = catalog_expense.cadence_domain,
             default_amount = prior.default_amount if prior is not None else catalog_expense.default_amount,
             overrides = _live_overrides( prior, profile, catalog_expense, live_handles ) ) )
     return merged
@@ -130,6 +132,7 @@ class PropertyExpensesForm( forms.Form ):
             default.widget.attrs[ 'class' ] = AppConst.PROPERTY_DEFAULT_CLASS
             default.widget.attrs[ 'aria-label' ] = self._cell_label( expense, self._default_column_label() )
             self.fields[ self._default_key( ri ) ] = default
+            add_cadence_fields( self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain )
             if self._collapsed:
                 continue
             for hi, handle in enumerate( self._handles ):
@@ -150,6 +153,10 @@ class PropertyExpensesForm( forms.Form ):
     @staticmethod
     def _override_key( ri : int, hi : int ) -> str:
         return f'override_{ri}_{hi}'
+
+    @staticmethod
+    def _cad_prefix( ri : int ) -> str:
+        return f'cad_{ri}'
 
     def _applies( self, expense, handle : str ) -> bool:
         return _property_context( self._profile, handle ) in expense.applies_to
@@ -213,7 +220,8 @@ class PropertyExpensesForm( forms.Form ):
                            for hi in range( len( self._handles ) ) ]
             result.append( {
                 'name'    : expense.name,
-                'cadence' : cadence_label( expense.interval ),
+                'cadence' : cadence_cells(
+                    self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain ),
                 'cells'   : cells } )
         return result
 
@@ -227,13 +235,14 @@ class PropertyExpensesForm( forms.Form ):
         """`expense` with its default and overrides taken from the matrix. Collapsed, the one column is
         the shared default and overrides are cleared; otherwise the Default cell is the default and each
         filled property cell an override (a blank cell drops back to the default)."""
-        cleaned = self.cleaned_data
-        default = cleaned.get( self._default_key( ri ) )
+        cleaned  = self.cleaned_data
+        default  = cleaned.get( self._default_key( ri ) )
+        interval = read_cadence( self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain )
         if self._collapsed:
-            return replace( expense, default_amount = default, overrides = dict() )
+            return replace( expense, interval = interval, default_amount = default, overrides = dict() )
         overrides = dict()
         for hi, handle in enumerate( self._handles ):
             key = self._override_key( ri, hi )
             if key in self.fields and cleaned.get( key ) is not None:
                 overrides[ handle ] = cleaned[ key ]
-        return replace( expense, default_amount = default, overrides = overrides )
+        return replace( expense, interval = interval, default_amount = default, overrides = overrides )

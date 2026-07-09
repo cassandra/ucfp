@@ -22,7 +22,7 @@ from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource
-from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
+from ucfp.parameter_sets.enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
 
 from .enums import CreditCardPlanMode, EventKind
 
@@ -59,6 +59,7 @@ class RecurringExpense:
     amounts: list[ Decimal ]
     interval: Optional[ Duration ] = None
     realization: Realization = Realization.SMOOTH
+    cadence_domain: CadenceDomain = CadenceDomain.FIXED
 
 
 # --- Property expenses ----------------------------------------------------
@@ -81,6 +82,7 @@ class PropertyExpense:
     applies_to: tuple[ PropertyContext, ... ]
     interval: Optional[ Duration ] = None
     realization: Realization = Realization.SMOOTH
+    cadence_domain: CadenceDomain = CadenceDomain.FIXED
     default_amount: Optional[ Decimal ] = None
     overrides: dict[ str, Decimal ] = field( default_factory = dict )
 

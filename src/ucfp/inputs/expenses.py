@@ -1,8 +1,9 @@
 """Shared expense-catalog plumbing the Home and Living expense steps both build on.
 
-It loads the curated catalog, decides which categories and properties apply to a household, and
-formats an expense's cadence. No forms and no view: each step owns its own pane (`property_expenses`,
-`recurring_expenses`); this holds only what the two genuinely share.
+It loads the curated catalog, decides which categories and properties apply to a household, and keeps
+a merged expense's cadence in step with the catalog. No forms and no view: each step owns its own pane
+(`property_expenses`, `recurring_expenses`); this holds only what the two genuinely share. The cadence
+*control* (its editor and label) lives in `cadence`.
 """
 from ucfp.accounts.enums import AssetClass
 from ucfp.parameter_sets.enums import (
@@ -67,9 +68,3 @@ def kept_interval( prior, catalog_expense ):
     return catalog_expense.interval
 
 
-def cadence_label( interval ) -> str:
-    if interval is None:
-        return 'per year'
-    if interval.count == 1:
-        return f'per {interval.unit.label.lower()}'
-    return f'every {interval.count} {interval.unit.label.lower()}s'

@@ -12,7 +12,8 @@ from django import forms
 
 from ucfp.parameter_sets.enums import ExpenseCategory
 from ucfp.inputs.plans.schemas import RecurringExpense
-from ucfp.inputs.expenses import applicable_categories, cadence_label, kept_interval, load_catalog
+from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, read_cadence
+from ucfp.inputs.expenses import applicable_categories, kept_interval, load_catalog
 
 
 def merged_recurring_expenses( profile, plans ) -> list:
@@ -34,7 +35,8 @@ def merged_recurring_expenses( profile, plans ) -> list:
             expense_tax_class = catalog_expense.expense_tax_class,
             amounts = _aligned_amounts( prior, catalog_expense.default_amount, span_count ),
             interval = kept_interval( prior, catalog_expense ),
-            realization = catalog_expense.realization ) )
+            realization = catalog_expense.realization,
+            cadence_domain = catalog_expense.cadence_domain ) )
     return merged
 
 
@@ -68,6 +70,7 @@ class RecurringExpensesForm( forms.Form ):
             field.initial = until
             self.fields[ self._until_key( si ) ] = field
         for ei, expense in enumerate( self._expenses ):
+            add_cadence_fields( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
             for si in range( len( self._spans ) ):
                 cell = forms.DecimalField( required = False, min_value = 0 )
                 cell.initial = expense.amounts[ si ] if si < len( expense.amounts ) else (
@@ -81,6 +84,10 @@ class RecurringExpensesForm( forms.Form ):
     @staticmethod
     def _amount_key( ei : int, si : int ) -> str:
         return f'amt_{ei}_{si}'
+
+    @staticmethod
+    def _cad_prefix( ei : int ) -> str:
+        return f'cad_{ei}'
 
     @property
     def span_count( self ) -> int:
@@ -108,7 +115,8 @@ class RecurringExpensesForm( forms.Form ):
                 sections.append( { 'label': current.label, 'rows': list() } )
             sections[ -1 ][ 'rows' ].append( {
                 'name'    : expense.name,
-                'cadence' : cadence_label( expense.interval ),
+                'cadence' : cadence_cells(
+                    self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ),
                 'cells'   : [ self[ self._amount_key( ei, si ) ]
                               for si in range( len( self._spans ) ) ] } )
         return sections
@@ -116,9 +124,15 @@ class RecurringExpensesForm( forms.Form ):
     def apply( self, profile, plans ):
         columns  = self._columns()
         spans    = [ until for until, _ in columns ]
-        expenses = [ replace( expense, amounts = [ amounts[ ei ] for _, amounts in columns ] )
-                     for ei, expense in enumerate( self._expenses ) ]
+        expenses = [ self._edited( ei, expense, columns ) for ei, expense in enumerate( self._expenses ) ]
         return profile, replace( plans, expense_spans = spans, recurring_expenses = expenses )
+
+    def _edited( self, ei : int, expense, columns : list ):
+        """`expense` with its per-span amounts re-read from the columns and its cadence from this row's
+        magnitude/unit fields (unchanged when the row is a fixed cadence)."""
+        interval = read_cadence( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
+        return replace(
+            expense, interval = interval, amounts = [ amounts[ ei ] for _, amounts in columns ] )
 
     def spans_changed( self ) -> bool:
         """Whether the applied span timeline differs from the current one -- a span added, removed, or

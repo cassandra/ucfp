@@ -28,7 +28,8 @@ an age to split it, clear a span's age to delete it. Ages are the primary person
         <tr class="table-light"><th colspan="{{ recurring_form.span_count|add:1 }}">{{ section.label }}</th></tr>
         {% for row in section.rows %}
         <tr>
-          <th scope="row" class="font-weight-normal text-left">{{ row.name }} <span class="text-muted small">{{ row.cadence }}</span></th>
+          <th scope="row" class="font-weight-normal text-left">{{ row.name }}
+            {% include 'inputs/interview/sections/_cadence.html' with cadence=row.cadence %}</th>
           {% for cell in row.cells %}
           <td class="text-right">{{ cell }}{% if cell.errors %}<span class="text-danger small d-block">{{ cell.errors|join:" " }}</span>{% endif %}</td>
           {% endfor %}
