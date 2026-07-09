@@ -449,6 +449,8 @@ window.App.Inputs = (function () {
         // Mirror a property-expense row's Default into its blank per-property cells' placeholders as it
         // is typed, so a changed default is visible where a cell falls back to it. The pane saves
         // silently and does not re-render these placeholders, so this keeps them current client-side.
+        // A single-property matrix collapses the Default column, so its row has no override cells and
+        // this is a harmless no-op.
         $( 'body' ).on( 'input change', classSelector( C.PROPERTY_DEFAULT_CLASS ), function () {
             const placeholder = ( $( this ).val() || '' ).trim() || '0';
             $( this ).closest( 'tr' ).find( classSelector( C.PROPERTY_OVERRIDE_CLASS ) )

@@ -485,11 +485,16 @@ def current_assumptions_record( request ):
     return latest_assumptions( organization ) or create_assumptions( organization )
 
 
+def _current_profile( request ):
+    """The user's current Profile -- the latest month's, creating one if the org has none yet."""
+    organization = request.organization
+    return load_profile( latest_profile( organization ) or create_profile( organization ) )
+
+
 def _current_profile_and_plans( request ):
     """The user's current Profile and the contents of the Plans record they are editing, creating
     either if absent."""
-    profile = load_profile( latest_profile( request.organization ) or create_profile( request.organization ) )
-    return profile, load_plans( current_plans_record( request ) )
+    return _current_profile( request ), load_plans( current_plans_record( request ) )
 
 
 def _save_profile_and_plans( request, profile, plans ):

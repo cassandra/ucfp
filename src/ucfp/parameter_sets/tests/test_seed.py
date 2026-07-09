@@ -87,6 +87,8 @@ class LoadPathTest( TestCase ):
     def test_load_returns_the_expense_catalog( self ):
         call_command( 'seed_parameter_sets' )
         catalog = load( ParameterSetKind.EXPENSE_CATALOG, CatalogScope.GENERAL.label )
+        # A deliberate tripwire -- bump this when the catalog gains or loses an expense, so an
+        # accidental change to the seeded set is caught.
         self.assertEqual( len( catalog.expenses ), 41 )
         food = next( expense for expense in catalog.expenses if expense.name == 'Food' )
         self.assertEqual( food.default_amount, Decimal( '150' ) )

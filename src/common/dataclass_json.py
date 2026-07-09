@@ -44,6 +44,8 @@ def to_json_data( obj: Any ) -> Any:
     if isinstance( obj, ( list, tuple ) ):
         return [ to_json_data( item ) for item in obj ]
     if isinstance( obj, dict ):
+        # Keys are emitted verbatim (a JSON object key must be a string), so a dict key type must be
+        # JSON-native -- str/int. `from_json_data` still coerces keys back by their declared type.
         return { key: to_json_data( value ) for key, value in obj.items() }
     raise TypeError( f'Cannot serialize value of type {type( obj ).__name__!r}.' )
 
