@@ -446,6 +446,15 @@ window.App.Inputs = (function () {
             saveForm( $form );
         } );
 
+        // Mirror a property-expense row's Default into its blank per-property cells' placeholders as it
+        // is typed, so a changed default is visible where a cell falls back to it. The pane saves
+        // silently and does not re-render these placeholders, so this keeps them current client-side.
+        $( 'body' ).on( 'input change', classSelector( C.PROPERTY_DEFAULT_CLASS ), function () {
+            const placeholder = ( $( this ).val() || '' ).trim() || '0';
+            $( this ).closest( 'tr' ).find( classSelector( C.PROPERTY_OVERRIDE_CLASS ) )
+                .attr( 'placeholder', placeholder );
+        } );
+
         // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike
         // the delegated handlers above) they must be (re)applied to whatever DOM is present: once
         // now, and again after each antinode render for swapped-in content. Pickers are also torn

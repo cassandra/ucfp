@@ -101,6 +101,12 @@ class AppConst:
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.
     RECURRING_DELETE_CLASS  = 'js-recurring-delete'  # the per-column × control (carries data-span)
 
+    # The property-expenses matrix's live default->placeholder mirror. A per-property cell shows the
+    # row's shared Default as its placeholder (what a blank cell falls back to); editing the Default
+    # updates those placeholders client-side, since the pane saves silently and never re-renders them.
+    PROPERTY_DEFAULT_CLASS  = 'js-property-default'   # a row's Default amount input
+    PROPERTY_OVERRIDE_CLASS = 'js-property-override'  # a per-property override input in the same row
+
     @classmethod
     def to_json_dict_str( cls ):
         """

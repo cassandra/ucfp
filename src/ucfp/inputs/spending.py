@@ -14,6 +14,7 @@ from typing import Optional
 from django import forms
 
 from ucfp.accounts.enums import AssetClass
+from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind, PropertyContext
 from ucfp.parameter_sets.repository import load
 from ucfp.inputs.profile.enums import HousingTenure
@@ -362,6 +363,7 @@ class PropertyExpensesForm( forms.Form ):
             default = forms.DecimalField( required = False, min_value = 0 )
             default.initial = self._collapsed_value( expense ) if self._collapsed else expense.default_amount
             default.widget.attrs[ 'placeholder' ] = '0'
+            default.widget.attrs[ 'class' ] = AppConst.PROPERTY_DEFAULT_CLASS
             self.fields[ self._default_key( ri ) ] = default
             if self._collapsed:
                 continue
@@ -371,6 +373,7 @@ class PropertyExpensesForm( forms.Form ):
                 override = forms.DecimalField( required = False, min_value = 0 )
                 override.initial = expense.overrides.get( handle )
                 override.widget.attrs[ 'placeholder' ] = self._placeholder( expense.default_amount )
+                override.widget.attrs[ 'class' ] = AppConst.PROPERTY_OVERRIDE_CLASS
                 self.fields[ self._override_key( ri, hi ) ] = override
 
     @staticmethod
