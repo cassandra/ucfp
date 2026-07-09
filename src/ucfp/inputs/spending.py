@@ -1,28 +1,25 @@
-"""The spending section: the L0 category totals, the per-category dense editor, and the
+"""The spending section: the recurring-expenses table, the per-property operating costs, and the
 catalog-to-plans seeding behind both.
 
-§6 presents spending as a presumed annual total per applicable category, drawn from the curated
-catalog, which the user accepts or drills into to adjust the individual expenses. This module
-decides which categories apply from the plan's context, seeds the Plans' expense flows from the
-catalog (preserving any amounts already set), and owns the annualization the totals use.
+§6 presents spending drawn from the curated catalog: the regular categories as a recurring-expenses
+table over the shared age-span timeline, and the household's property operating costs as one shared
+set with per-property overrides. This module decides which categories/properties apply from the plan's
+context, seeds the Plans' expenses from the catalog (preserving any amounts already set), and owns the
+annualization the totals use.
 """
 from dataclasses import dataclass, replace
-from datetime import date
 from decimal import Decimal
 from typing import Optional
 
 from django import forms
 
-from common.date_window import DateWindow
 from common.recurrence import TimeUnit
 
 from ucfp.accounts.enums import AssetClass
-from ucfp.forecast.parameters import WindowedAmount
-from ucfp.inputs.widgets import IsoDateInput
 from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind, PropertyContext
 from ucfp.parameter_sets.repository import load
 from ucfp.inputs.profile.schemas import RENT_OBLIGATION_HANDLE
-from ucfp.inputs.plans.schemas import ExpenseFlow, RecurringExpense
+from ucfp.inputs.plans.schemas import PropertyExpense, RecurringExpense
 from ucfp.inputs.auto import AutoPlanForm
 
 _WEEKS_PER_YEAR  = Decimal( '52' )
@@ -158,34 +155,37 @@ def spending_groups( profile ) -> list:
     return groups
 
 
-def group_for_key( profile, key : str ) -> Optional[ SpendingGroup ]:
-    return next( ( group for group in spending_groups( profile ) if group.key == key ), None )
-
-
-def merged_expenses( profile, plans ) -> list:
-    """The applicable PROPERTY operating expenses as Plans expense flows -- one flow per attached
-    dwelling, existing schedules preserved and missing ones seeded at the catalog default, skipping
-    rows whose `applies_to` does not cover that property's context. The structural bindings --
-    `property_handle`, `category`, and the personal `expense_tax_class` (materialization derives the
-    rental swap) -- are re-derived every merge, since they are not user edits; only the schedule amounts
-    are preserved. Regular (non-property) recurring expenses are a separate class -- see
-    `merged_recurring_expenses`."""
+def merged_property_expenses( profile, plans ) -> list:
+    """The catalog's PROPERTY expenses as `PropertyExpense`s -- one per catalog row, its structural
+    fields (category, personal tax class, cadence, `applies_to`) re-derived each merge; the user's
+    `default_amount` and per-property `overrides` preserved, with overrides pruned to the properties
+    that currently exist and that the row applies to. Empty when the household has no property."""
     if ExpenseCategory.PROPERTY not in applicable_categories( profile ):
         return list()
-    existing = { ( expense.property_handle, expense.name ): expense
-                 for expense in plans.expenses } if plans else dict()
+    existing     = { expense.name: expense for expense in plans.property_expenses } if plans else dict()
+    live_handles = set( _property_handles_for( ExpenseCategory.PROPERTY, profile ) )
     merged = list()
     for catalog_expense in load_catalog().expenses:
         if catalog_expense.category is not ExpenseCategory.PROPERTY:
             continue
-        for handle in _property_handles_for( catalog_expense.category, profile ):
-            if not _row_seeds( catalog_expense, profile, handle ):
-                continue
-            flow = existing.get( ( handle, catalog_expense.name ) ) or _flow( catalog_expense )
-            merged.append( replace(
-                flow, property_handle = handle, category = catalog_expense.category,
-                expense_tax_class = catalog_expense.expense_tax_class ) )
+        prior = existing.get( catalog_expense.name )
+        merged.append( PropertyExpense(
+            name = catalog_expense.name, category = catalog_expense.category,
+            expense_tax_class = catalog_expense.expense_tax_class,
+            applies_to = catalog_expense.applies_to, interval = catalog_expense.interval,
+            default_amount = prior.default_amount if prior is not None else catalog_expense.default_amount,
+            overrides = _live_overrides( prior, profile, catalog_expense, live_handles ) ) )
     return merged
+
+
+def _live_overrides( prior, profile, catalog_expense, live_handles : set ) -> dict:
+    """A prior property expense's overrides kept only for properties that still exist and that the row
+    applies to; empty when there is no prior expense."""
+    if prior is None:
+        return dict()
+    return { handle: amount for handle, amount in prior.overrides.items()
+             if handle in live_handles
+             and _property_context( profile, handle ) in catalog_expense.applies_to }
 
 
 def merged_recurring_expenses( profile, plans ) -> list:
@@ -221,29 +221,6 @@ def _aligned_amounts( prior, default : Decimal, span_count : int ) -> list:
     return amounts[ :span_count ]
 
 
-def _row_seeds( catalog_expense, profile, handle ) -> bool:
-    """Whether a catalog row seeds a flow for this handle. A household row always does; a Property row
-    seeds only the property contexts in its `applies_to` -- so property management skips a residence,
-    and only utilities reach a rented home."""
-    if catalog_expense.category is not ExpenseCategory.PROPERTY:
-        return True
-    return _property_context( profile, handle ) in catalog_expense.applies_to
-
-
-def _flow( catalog_expense ) -> ExpenseFlow:
-    return ExpenseFlow(
-        name = catalog_expense.name, category = catalog_expense.category,
-        expense_tax_class = catalog_expense.expense_tax_class,
-        schedule = [ WindowedAmount( catalog_expense.default_amount ) ],
-        interval = catalog_expense.interval )
-
-
-def current_amount( flow ) -> Decimal:
-    """The amount in effect at the start of the plan -- the first (earliest) schedule row. The L0
-    total shows what you spend now; the rest of the schedule lives in the drill."""
-    return flow.schedule[ 0 ].amount if flow.schedule else Decimal( '0' )
-
-
 def recurring_current_amount( expense ) -> Decimal:
     """A recurring expense's amount in the first span -- what it costs now."""
     return expense.amounts[ 0 ] if expense.amounts else Decimal( '0' )
@@ -273,10 +250,17 @@ def annual_amount( amount : Decimal, interval ) -> Decimal:
     return amount * _occurrences_per_year( interval )
 
 
-def category_annual_total( expenses ) -> Decimal:
-    total = Decimal( '0' )
+def property_annual_total( expenses, profile, handle : str ) -> Decimal:
+    """The annual property cost for one property -- each applicable expense's effective amount (its
+    per-property override or the shared default), annualized. An expense with neither is not charged."""
+    context = _property_context( profile, handle )
+    total   = Decimal( '0' )
     for expense in expenses:
-        total += annual_amount( current_amount( expense ), expense.interval )
+        if context not in expense.applies_to:
+            continue
+        amount = expense.overrides.get( handle, expense.default_amount )
+        if amount:
+            total += annual_amount( amount, expense.interval )
     return total
 
 
@@ -315,94 +299,18 @@ class SpendingForm:
 
     @property
     def property_group_totals( self ) -> list:
-        """(group, annual total) per property group -- one per owned dwelling -- for the drill-in list.
-        The regular categories are the recurring-expenses table, not this list."""
-        property_expenses = merged_expenses( self._profile, self._plans )
-        return [ ( group, category_annual_total(
-                   [ e for e in property_expenses if e.property_handle == group.property_handle ] ) )
+        """(group, annual total) per property -- one per owned dwelling (and the rented home), read-only
+        for now (the editable matrix is Phase B). Each total sums the property's applicable expenses at
+        their override-or-default amount."""
+        expenses = merged_property_expenses( self._profile, self._plans )
+        return [ ( group, property_annual_total( expenses, self._profile, group.property_handle ) )
                  for group in spending_groups( self._profile ) if group.is_property ]
 
     def apply( self, profile, plans ):
         return profile, replace(
             plans,
-            expenses = merged_expenses( profile, plans ),
+            property_expenses = merged_property_expenses( profile, plans ),
             recurring_expenses = merged_recurring_expenses( profile, plans ) )
-
-
-class GroupSpendingForm( forms.Form ):
-    """The dense editor for one spending group -- per expense, a schedule of amount-over-span rows
-    (`amount · start · end`), its existing rows plus one blank to add. `apply` rebuilds each
-    expense's schedule from the filled rows, leaving the other groups' expenses untouched (a
-    property-scoped group edits only its own property's expenses)."""
-
-    _EXTRA_ROWS = 1
-
-    def __init__( self, data = None, *, profile = None, plans = None, group = None ):
-        super().__init__( data )
-        self._all        = merged_expenses( profile, plans )
-        self._expenses   = [ expense for expense in self._all
-                             if expense.category is group.category
-                             and expense.property_handle == group.property_handle ]
-        self._row_counts = [ len( expense.schedule ) + self._EXTRA_ROWS
-                             for expense in self._expenses ]
-        for ei, expense in enumerate( self._expenses ):
-            for ri in range( self._row_counts[ ei ] ):
-                row = expense.schedule[ ri ] if ri < len( expense.schedule ) else None
-                self._add_row_fields( ei, ri, row )
-
-    def _add_row_fields( self, ei : int, ri : int, row ):
-        amount = forms.DecimalField( required = False, min_value = 0 )
-        start  = forms.DateField( required = False, widget = IsoDateInput() )
-        end    = forms.DateField( required = False, widget = IsoDateInput() )
-        if row is not None:
-            amount.initial = row.amount
-            start.initial  = row.window.start
-            end.initial    = row.window.end
-        self.fields[ self._key( ei, ri, 'amount' ) ] = amount
-        self.fields[ self._key( ei, ri, 'start' ) ]  = start
-        self.fields[ self._key( ei, ri, 'end' ) ]    = end
-
-    @staticmethod
-    def _key( ei : int, ri : int, part : str ) -> str:
-        return f'e{ei}_r{ri}_{part}'
-
-    @property
-    def expense_rows( self ) -> list:
-        blocks = list()
-        for ei, expense in enumerate( self._expenses ):
-            rows = [ { 'amount' : self[ self._key( ei, ri, 'amount' ) ],
-                       'start'  : self[ self._key( ei, ri, 'start' ) ],
-                       'end'    : self[ self._key( ei, ri, 'end' ) ] }
-                     for ri in range( self._row_counts[ ei ] ) ]
-            blocks.append( {
-                'name': expense.name, 'cadence': cadence_label( expense.interval ), 'rows': rows } )
-        return blocks
-
-    @property
-    def group_total( self ) -> Decimal:
-        return category_annual_total( self._edited_expenses() )
-
-    def apply( self, profile, plans ):
-        edited   = { ( e.property_handle, e.name ): e for e in self._edited_expenses() }
-        expenses = [ edited.get( ( e.property_handle, e.name ), e ) for e in self._all ]
-        return profile, replace( plans, expenses = expenses )
-
-    def _edited_expenses( self ) -> list:
-        return [ replace( expense, schedule = self._schedule( ei ) )
-                 for ei, expense in enumerate( self._expenses ) ]
-
-    def _schedule( self, ei : int ) -> list:
-        rows = list()
-        for ri in range( self._row_counts[ ei ] ):
-            amount = self.cleaned_data.get( self._key( ei, ri, 'amount' ) )
-            if amount is None:
-                continue
-            window = DateWindow(
-                start = self.cleaned_data.get( self._key( ei, ri, 'start' ) ),
-                end = self.cleaned_data.get( self._key( ei, ri, 'end' ) ) )
-            rows.append( WindowedAmount( amount, window ) )
-        rows.sort( key = lambda windowed: windowed.window.start or date.min )
-        return rows
 
 
 class RecurringExpensesForm( forms.Form ):

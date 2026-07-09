@@ -36,7 +36,8 @@ from ucfp.jurisdiction.law import StatuteProfile
 
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile
+from ucfp.parameter_sets.enums import PropertyContext
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENT_OBLIGATION_HANDLE
 from ucfp.inputs.plans.enums import CreditCardPlanMode
 from ucfp.inputs.plans.schemas import (
     AutoPlan, CreditCardPlan, LoanRepayment, RetirementTiming, Plans )
@@ -71,9 +72,10 @@ def materialize(
     recurring_streams, recurring_items = _recurring_expenses(
         plans, _primary_birthdate( profile ), frame )
     assets_by_handle = { asset.handle : asset for asset in profile.assets }
-    expense_streams, expense_items = _property_expenses( plans, assets_by_handle )
-    flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
     events = event_contributions( profile, plans, subjects_by_handle )
+    expense_streams, expense_items = _property_expenses(
+        profile, plans, assets_by_handle, events.property_sales )
+    flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
     return ForecastParameters(
         start_date       = frame.start_date,
@@ -462,23 +464,55 @@ def _primary_birthdate( profile : Profile ) -> Optional[ date ]:
     return profile.subjects[ 0 ].birthdate if profile.subjects else None
 
 
-def _property_expenses( plans : Plans, assets : dict ) -> tuple[ list, list ]:
-    """The Plans' property operating expenses as (streams, items): a flow with no interval is a smoothed
-    stream, one with an interval an item placed at that cadence, each over its (sale-capped) schedule. A
-    property-scoped flow's stored class is its personal class; `_property_expense_tax_class` swaps it for
-    a rental."""
+_PROPERTY_CONTEXT_BY_CLASS = {
+    AssetClass.REAL_ESTATE_RESIDENCE   : PropertyContext.RESIDENCE,
+    AssetClass.REAL_ESTATE_SECOND_HOME : PropertyContext.SECOND_HOME,
+    AssetClass.REAL_ESTATE_RENTAL      : PropertyContext.RENTAL,
+}
+
+
+def _property_contexts( profile : Profile ) -> list:
+    """(handle, context, asset) for each property the household has -- owned dwellings, then the tenant's
+    rented home (no owned asset) -- so a property expense can be applied by context."""
+    result = [ ( asset.handle, _PROPERTY_CONTEXT_BY_CLASS[ asset.asset_class ], asset )
+               for asset in profile.assets if asset.asset_class in _PROPERTY_CONTEXT_BY_CLASS ]
+    if any( obligation.handle == RENT_OBLIGATION_HANDLE for obligation in profile.obligations ):
+        result.append( ( RENT_OBLIGATION_HANDLE, PropertyContext.RENTED_HOME, None ) )
+    return result
+
+
+def _property_expenses( profile : Profile, plans : Plans, assets : dict,
+                        sale_dates : dict ) -> tuple[ list, list ]:
+    """The Plans' property operating expenses as (streams, items): each expense applied to every property
+    its `applies_to` reaches, at that property's override or the shared default (skipped when both are
+    blank or zero), with the tax class derived from the property and the amount clipped to the property's
+    ownership window -- its sale date, when it is sold. A flow with no interval is a smoothed stream, one
+    with an interval an item at that cadence."""
     streams, items = list(), list()
-    for expense in plans.expenses:
-        amounts    = Schedule( tuple( expense.schedule ) )
-        tax_class  = _property_expense_tax_class( expense, assets.get( expense.property_handle ) )
-        if expense.interval is None:
-            streams.append( ExpenseStream(
-                name = expense.name, expense_tax_class = tax_class, amounts = amounts ) )
-        else:
-            items.append( ExpenseItem(
-                name = expense.name, expense_tax_class = tax_class,
-                amounts = amounts, cadence = Recurrence( expense.interval ) ) )
+    for expense in plans.property_expenses:
+        for handle, context, asset in _property_contexts( profile ):
+            if context not in expense.applies_to:
+                continue
+            amount = expense.overrides.get( handle, expense.default_amount )
+            if not amount:
+                continue
+            tax_class = _property_expense_tax_class( expense, asset )
+            amounts   = _property_schedule( amount, sale_dates.get( handle ) )
+            if expense.interval is None:
+                streams.append( ExpenseStream(
+                    name = expense.name, expense_tax_class = tax_class, amounts = amounts ) )
+            else:
+                items.append( ExpenseItem(
+                    name = expense.name, expense_tax_class = tax_class,
+                    amounts = amounts, cadence = Recurrence( expense.interval ) ) )
     return streams, items
+
+
+def _property_schedule( amount : Decimal, sale_date ) -> Schedule:
+    """A constant `amount` over the property's ownership window -- the whole forecast, or capped at its
+    sale date when it is sold (the same cap the rental income takes)."""
+    window = DateWindow( end = sale_date ) if sale_date is not None else DateWindow()
+    return Schedule( ( WindowedAmount( amount, window ), ) )
 
 
 def _property_expense_tax_class( expense, asset : Optional[ AssetProfile ] ) -> ExpenseTaxClass:

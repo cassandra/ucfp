@@ -56,7 +56,12 @@ def from_json_data( target_type: Any, data: Any ) -> Any:
     if origin in ( list, tuple ):
         return _from_sequence( origin, get_args( target_type ), data )
     if origin is dict:
-        return dict( data )
+        args = get_args( target_type )
+        if not args:
+            return dict( data )
+        key_type, value_type = args
+        return { from_json_data( key_type, key ): from_json_data( value_type, value )
+                 for key, value in data.items() }
 
     if data is None:
         return None

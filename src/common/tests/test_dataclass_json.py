@@ -28,8 +28,8 @@ from ucfp.inputs.profile.schemas import (
     AssetProfile, CommittedObligation, Debt, GovernmentPensionEntitlement,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    AutoPlan, Contribution, CreditCardPlan, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption,
-    LoanRepayment, PlanEvent, RecurringExpense, RetirementTiming, Plans )
+    AutoPlan, Contribution, CreditCardPlan, DrawdownPolicy, HealthCoverageAssumption,
+    LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense, RetirementTiming, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
 
@@ -98,10 +98,12 @@ def _sample_plans():
             name = 'Travel', category = ExpenseCategory.DISCRETIONARY,
             expense_tax_class = ExpenseTaxClass.LIVING,
             amounts = [ Decimal( '900' ), Decimal( '500' ), Decimal( '200' ) ] ) ],
-        expenses = [ ExpenseFlow(
+        property_expenses = [ PropertyExpense(
             name = 'Property tax', category = ExpenseCategory.PROPERTY,
             expense_tax_class = ExpenseTaxClass.SALT,
-            schedule = [ WindowedAmount( Decimal( '6000' ) ) ], property_handle = 'home' ) ],
+            applies_to = ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ),
+            default_amount = Decimal( '6000' ),
+            overrides = { 'home': Decimal( '6500' ) } ) ],
         contributions = [ Contribution( account_handle = '401k', annual_amount = Decimal( '23000' ),
                                         source = ContributionSource.WAGE ) ],
         loan_repayments = [ LoanRepayment( debt_handle = 'mort',

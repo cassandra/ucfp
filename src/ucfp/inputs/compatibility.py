@@ -50,10 +50,8 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
     for timing in plans.timing:
         if timing.subject_handle not in subjects:
             issues.append( f'retirement timing for an unknown person "{timing.subject_handle}";' )
-    for expense in plans.expenses:
-        if expense.property_handle is not None and expense.property_handle not in accounts:
-            issues.append(
-                f'spending "{expense.name}" on an unknown property "{expense.property_handle}";' )
+    # Property-expense overrides key by property handle, but a removed property's override is pruned on
+    # merge and ignored at materialize, so it needs no drift check here.
     for contribution in plans.contributions:
         if contribution.account_handle not in accounts:
             issues.append(

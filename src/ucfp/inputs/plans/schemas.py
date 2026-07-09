@@ -21,8 +21,8 @@ from common.rate import Rate
 from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
-from ucfp.forecast.parameters import ContributionSource, WindowedAmount
-from ucfp.parameter_sets.enums import ExpenseCategory
+from ucfp.forecast.parameters import ContributionSource
+from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 
 from .enums import CreditCardPlanMode, EventKind
 
@@ -52,7 +52,7 @@ class RecurringExpense:
     """One regular recurring expense: its name, catalog `category`, tax class, cadence (`interval`),
     and an `amounts` list -- one amount per span of the Plans' shared `expense_spans` timeline (a
     single amount when no spans are defined). `interval` None is a smoothed stream, a `Duration` an
-    item placed at that cadence. Property operating expenses are a separate class (`ExpenseFlow`)."""
+    item placed at that cadence. Property operating expenses are a separate class (`PropertyExpense`)."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
@@ -61,21 +61,25 @@ class RecurringExpense:
 
 
 # --- Property expenses ----------------------------------------------------
-# A dwelling's operating expenses: dynamic, per-property, and ended by a property-sale event. Kept in
-# their current schedule-based form (pending their own redesign), distinct from the recurring expenses
-# above. Materialized unchanged; the sale cascade ends them by capping the schedule.
+# A dwelling's operating expenses: one shared set of amounts applied to every property the expense's
+# `applies_to` reaches, with per-property overrides where they differ. Constant over the forecast (no
+# spans); each property instance ends at that property's sale, clipped at materialize. Distinct from the
+# recurring expenses above.
 
 @dataclass( frozen = True )
-class ExpenseFlow:
-    """One property operating expense -- its name, catalog `category`, tax class, cadence (`interval`),
-    a `schedule` (a `WindowedAmount` per span, reusing the engine's segment type so it materializes with
-    no conversion), and the `property_handle` it belongs to (so a sale can find and end it)."""
+class PropertyExpense:
+    """One property operating expense across the household's properties: its name, catalog `category`,
+    the *personal* `expense_tax_class` (materialization derives the rental swap), cadence (`interval`),
+    and the `applies_to` property contexts it reaches. `default_amount` (None when blank) applies to
+    every reached property unless `overrides` gives that property (by handle) its own amount; a property
+    with neither is not charged. Amounts are constant; a sale ends a property's instance at materialize."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
-    schedule: list[ WindowedAmount ]
+    applies_to: tuple[ PropertyContext, ... ]
     interval: Optional[ Duration ] = None
-    property_handle: Optional[ str ] = None
+    default_amount: Optional[ Decimal ] = None
+    overrides: dict[ str, Decimal ] = field( default_factory = dict )
 
 
 # --- Saving ---------------------------------------------------------------
@@ -198,8 +202,8 @@ class Plans:
     # Recurring expenses (regular, non-property) and the shared span timeline (until-ages, last None)
     expense_spans: list[ Optional[ int ] ] = field( default_factory = lambda: [ None ] )
     recurring_expenses: list[ RecurringExpense ] = field( default_factory = list )
-    # Property operating expenses (schedule-based, per dwelling; pending their own redesign)
-    expenses: list[ ExpenseFlow ] = field( default_factory = list )
+    # Property operating expenses (one shared set with per-property overrides)
+    property_expenses: list[ PropertyExpense ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
     # Loan repayment (rate/term per amortizing debt) and extra-principal paydown

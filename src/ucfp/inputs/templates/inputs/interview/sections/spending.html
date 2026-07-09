@@ -19,21 +19,16 @@ pending their own redesign.
 
 {% if form.property_group_totals %}
 <h3 class="h6 mt-4">Property expenses</h3>
-<p class="text-muted">Operating costs per property. Adjust a property's individual expenses if a total
-  looks off.</p>
+<p class="text-muted">Operating costs per property, using typical values. These are being reworked
+  into an editable table (a shared set with per-property overrides).</p>
 <table class="table table-sm w-auto">
-  <thead><tr><th>Property</th><th class="text-right">Per year</th><th></th></tr></thead>
+  <thead><tr><th>Property</th><th class="text-right">Per year</th></tr></thead>
   <tbody>
     {% for group, total in form.property_group_totals %}
     <tr>
       <td>{{ group.label }}</td>
-      <td class="text-right" id="spending-total-{{ group.key }}">{{ total|money:currency }}</td>
-      <td>
-        <a data-async="#spending-cat-{{ group.key }}"
-           href="{% url 'spending_group' group=group.key %}">Adjust</a>
-      </td>
+      <td class="text-right">{{ total|money:currency }}</td>
     </tr>
-    <tr id="spending-cat-{{ group.key }}"></tr>
     {% endfor %}
   </tbody>
 </table>

@@ -44,7 +44,7 @@ from .income import IncomeTableForm
 from .properties import (
     RENTAL_PANE, SECOND_HOME_PANE, PossessionsForm, PropertyPane, _minted_handle, delete_property,
     properties_context )
-from .spending import GroupSpendingForm, RecurringExpensesForm, group_for_key
+from .spending import RecurringExpensesForm
 
 _HUB_TEMPLATE = 'inputs/hub.html'
 
@@ -437,52 +437,6 @@ class RecurringExpensesView( SelfSavingPaneView ):
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
         return changed                                     # a span changed -> re-render the table
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class SpendingGroupView( View ):
-    """`/inputs/interview/spending/<group>/` -- the inline dense editor for one spending group
-    (a category, scoped to a property for Home/Rental), drilled from the §6 totals. GET expands the
-    editor (or, with `collapse`, removes it); POST saves the edited amounts and refreshes the
-    group's total cell, leaving the editor open."""
-
-    _EDITOR_TEMPLATE    = 'inputs/interview/sections/group_editor.html'
-    _COLLAPSED_TEMPLATE = 'inputs/interview/sections/group_collapsed.html'
-
-    def get( self, request, group ):
-        if request.GET.get( 'collapse' ):
-            return antinode.response( main_content = render_to_string(
-                self._COLLAPSED_TEMPLATE, { 'group_key': group }, request = request ) )
-        profile, plans = _current_profile_and_plans( request )
-        form = GroupSpendingForm(
-            profile = profile, plans = plans, group = self._group( profile, group ) )
-        return self._editor_response( request, group, form )
-
-    def post( self, request, group ):
-        profile, plans = _current_profile_and_plans( request )
-        form = GroupSpendingForm(
-            request.POST, profile = profile, plans = plans,
-            group = self._group( profile, group ) )
-        if form.is_valid():
-            _, updated = form.apply( profile, plans )
-            save_plans( current_plans_record( request ), updated )
-        return self._editor_response( request, group, form )
-
-    @staticmethod
-    def _group( profile, key ):
-        resolved = group_for_key( profile, key )
-        if resolved is None:
-            raise Http404( f'No spending group {key!r}.' )
-        return resolved
-
-    def _editor_response( self, request, group, form ):
-        content = render_to_string(
-            self._EDITOR_TEMPLATE, { 'group_key': group, 'form': form }, request = request )
-        total = form.group_total if form.is_bound and form.is_valid() else None
-        insert_map = (
-            { f'spending-total-{group}': request.organization.currency.format( total ) }
-            if total is not None else None )
-        return antinode.response( main_content = content, insert_map = insert_map )
 
 
 def current_plans_record( request ):

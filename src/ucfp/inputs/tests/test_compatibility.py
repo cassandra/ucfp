@@ -8,13 +8,11 @@ from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
-from ucfp.parameter_sets.enums import ExpenseCategory
-from ucfp.forecast.parameters import WindowedAmount
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
     AssetProfile, CommittedObligation, Debt, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    CreditCardPlan, ExpenseFlow, LoanPrepayment, LoanRepayment, PlanEvent, Plans, RetirementTiming )
+    CreditCardPlan, LoanPrepayment, LoanRepayment, PlanEvent, Plans, RetirementTiming )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.compatibility import (
     PlansIncompatibleError, assert_compatible, compatibility_issues )
@@ -32,12 +30,6 @@ def _profile() -> Profile:
         obligations = [ CommittedObligation(
             handle = 'rent', name = 'Rent', amount = Decimal( '1500' ),
             cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ] )
-
-
-def _expense( name : str, property_handle ) -> ExpenseFlow:
-    return ExpenseFlow(
-        name = name, category = ExpenseCategory.PROPERTY, expense_tax_class = ExpenseTaxClass.LIVING,
-        schedule = [ WindowedAmount( Decimal( '100' ) ) ], property_handle = property_handle )
 
 
 class CompatibilityTest( SimpleTestCase ):
@@ -68,16 +60,6 @@ class CompatibilityTest( SimpleTestCase ):
         self.assertEqual( len( issues ), 4 )
         with self.assertRaises( PlansIncompatibleError ):
             assert_compatible( _profile(), plans )
-
-    def test_optional_property_reference_resolves_or_is_reported( self ):
-        # `property_handle` is the only optional reference: None is always fine; a set handle must
-        # resolve to a holding.
-        compatible = Plans( expenses = [
-            _expense( 'General living', None ),     # no property -- the optional branch, always fine
-            _expense( 'Upkeep', 'savings' ) ] )     # resolves to a real holding
-        self.assertEqual( compatibility_issues( _profile(), compatible ), [] )
-        dangling = Plans( expenses = [ _expense( 'Upkeep', 'sold-property' ) ] )
-        self.assertEqual( len( compatibility_issues( _profile(), dangling ) ), 1 )
 
     def test_event_selection_resolves_across_every_entity_type( self ):
         # An event role may point at a subject, account, debt, or obligation -- the only check that
