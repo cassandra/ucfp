@@ -1,0 +1,16 @@
+{% comment %}
+Shared pane: the pre-run readiness issues for a chosen input bundle, shown above a planning feature's
+run controls when the selected Profile/Plans/Assumptions is present but incomplete. Reads
+`readiness_issues` (a list of ReadinessIssue) from the surrounding context, so every planning feature
+surfaces incompleteness the same way. Renders nothing when the bundle is ready.
+{% endcomment %}
+{% if readiness_issues %}
+<div class="alert alert-warning mt-3">
+  <p class="mb-2">These inputs need finishing first:</p>
+  <ul class="mb-0">
+    {% for issue in readiness_issues %}
+    <li>{{ issue.message }} <a href="{% url issue.fix_route %}">{{ issue.fix_label }}</a>.</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

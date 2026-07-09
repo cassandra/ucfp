@@ -1,0 +1,40 @@
+{% comment %}
+The property-expenses matrix (id=property-expenses): the household's per-property operating costs as
+one shared Default column plus one column per property. The js-autosave form posts each edit to
+`PropertyExpensesView`, which persists silently. A per-property cell overrides the Default (blank falls
+back to it, shown as the placeholder); a "—" cell is not applicable to that property. With a single
+property the Default column collapses into one value column. Reads `property_form`.
+{% endcomment %}
+<div id="property-expenses">
+  <form method="post" action="{% url 'property_expenses' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <table class="table table-sm w-auto align-middle">
+      <thead>
+        <tr>
+          <th scope="col">Expense</th>
+          {% for column in property_form.columns %}
+          <th scope="col" class="text-right small">{{ column.label }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in property_form.rows %}
+        <tr>
+          <th scope="row" class="font-weight-normal text-left">{{ row.name }} <span class="text-muted small">{{ row.cadence }}</span></th>
+          {% for cell in row.cells %}
+          {% if cell %}
+          <td class="text-right">{{ cell }}{% if cell.errors %}<span class="text-danger small d-block">{{ cell.errors|join:" " }}</span>{% endif %}</td>
+          {% else %}
+          <td class="text-right text-muted">&mdash;</td>
+          {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small">One amount per property, at each expense's cadence.
+      {% if not property_form.collapsed %}The Default applies to every property; fill a property's cell to
+      override it. {% endif %}Leave {% if property_form.collapsed %}an amount{% else %}both{% endif %} blank
+      to skip an expense. Changes save automatically.</p>
+  </form>
+</div>

@@ -232,10 +232,12 @@ window.App.Inputs = (function () {
 
     // ----- CreditCardCalculator: a live, advisory paydown figure per card -----
     // Display-only. As a card's mode/inputs change, write a "how long / how much" figure into its
-    // readout at the shared assumed APR (the same one materialization uses, via AppConst). The
-    // authoritative resolution of a card plan into expenses is server-side; this only guides entry.
+    // readout at the assumed APR the card widget carries (rendered from BUILTIN_ASSUMPTIONS, the same
+    // value materialization resolves at). The authoritative resolution is server-side; this guides entry.
 
-    const CARD_MONTHLY_RATE = ( parseFloat( C.CREDIT_CARD_APR_PERCENT ) / 100 ) / 12;
+    function cardMonthlyRate( $card ) {
+        return ( parseFloat( $card.attr( dataAttr( C.CREDIT_CARD_APR_DATA_ATTR ) ) ) || 0 ) / 100 / 12;
+    }
 
     function cardBalance( $card ) {
         return parseFloat( $card.attr( dataAttr( C.CREDIT_CARD_BALANCE_DATA_ATTR ) ) ) || 0;
@@ -247,13 +249,13 @@ window.App.Inputs = (function () {
 
     // Months of `payment` to clear `balance` at the card rate, or null when it never does (the
     // payment does not cover the interest) -- the client mirror of common.amortization.periods_to_repay.
-    function monthsToClear( balance, payment ) {
+    function monthsToClear( balance, payment, rate ) {
         if ( balance <= 0 ) { return 0; }
-        if ( CARD_MONTHLY_RATE > 0 && payment <= balance * CARD_MONTHLY_RATE ) { return null; }
+        if ( rate > 0 && payment <= balance * rate ) { return null; }
         let remaining = balance, months = 0;
         while ( remaining > 0 && months < 1200 ) {
             months += 1;
-            const payoff = remaining + remaining * CARD_MONTHLY_RATE;
+            const payoff = remaining + remaining * rate;
             if ( payment >= payoff ) { return months; }
             remaining = payoff - payment;
         }
@@ -261,18 +263,18 @@ window.App.Inputs = (function () {
     }
 
     // The level payment that clears `balance` over `months` at the card rate (mirror of level_payment).
-    function paymentForMonths( balance, months ) {
+    function paymentForMonths( balance, months, rate ) {
         if ( months <= 0 ) { return null; }
-        if ( CARD_MONTHLY_RATE === 0 ) { return balance / months; }
-        const discount = Math.pow( 1 + CARD_MONTHLY_RATE, -months );
-        return balance * CARD_MONTHLY_RATE / ( 1 - discount );
+        if ( rate === 0 ) { return balance / months; }
+        const discount = Math.pow( 1 + rate, -months );
+        return balance * rate / ( 1 - discount );
     }
 
     // The balance left after `months` payments of `payment` at the card rate (mirror of balance_after).
-    function balanceAfter( balance, payment, months ) {
+    function balanceAfter( balance, payment, months, rate ) {
         let remaining = balance;
         for ( let i = 0; i < months && remaining > 0; i += 1 ) {
-            remaining = remaining + remaining * CARD_MONTHLY_RATE - payment;
+            remaining = remaining + remaining * rate - payment;
         }
         return Math.max( remaining, 0 );
     }
@@ -295,6 +297,7 @@ window.App.Inputs = (function () {
 
     function cardReadout( $card ) {
         const balance = cardBalance( $card );
+        const rate = cardMonthlyRate( $card );
         const mode = cardMode( $card );
         const monthly = function () {
             return parseFloat( $card.find( classSelector( C.CREDIT_CARD_MONTHLY_CLASS ) ).val() );
@@ -304,12 +307,12 @@ window.App.Inputs = (function () {
         };
         // Carrying it (the default) and a lump payoff both cost only the interest each month.
         if ( mode === 'carry' || mode === 'LUMP' || !mode ) {
-            return 'Carrying it costs about ' + money( balance * CARD_MONTHLY_RATE ) + '/month in interest.';
+            return 'Carrying it costs about ' + money( balance * rate ) + '/month in interest.';
         }
         if ( mode === 'MONTHLY' ) {
             const payment = monthly();
             if ( !( payment > 0 ) ) { return ''; }
-            const months = monthsToClear( balance, payment );
+            const months = monthsToClear( balance, payment, rate );
             return months === null
                 ? 'That won\'t cover the interest, so the balance never clears.'
                 : 'Clears in ' + describeMonths( months ) + '.';
@@ -317,14 +320,14 @@ window.App.Inputs = (function () {
         if ( mode === 'BY_DATE' ) {
             const months = targetMonths();
             if ( !months || months <= 0 ) { return ''; }
-            return 'That needs about ' + money( paymentForMonths( balance, months ) ) + '/month.';
+            return 'That needs about ' + money( paymentForMonths( balance, months, rate ) ) + '/month.';
         }
         if ( mode === 'COMBO' ) {
             const payment = monthly(), months = targetMonths();
             if ( !( payment > 0 ) || !months || months <= 0 ) { return ''; }
-            const cleared = monthsToClear( balance, payment );
+            const cleared = monthsToClear( balance, payment, rate );
             if ( cleared !== null && cleared <= months ) { return 'Paid off before that date at this rate.'; }
-            return 'Leaves about ' + money( balanceAfter( balance, payment, months ) ) + ' to pay off then.';
+            return 'Leaves about ' + money( balanceAfter( balance, payment, months, rate ) ) + ' to pay off then.';
         }
         return '';
     }
@@ -336,6 +339,52 @@ window.App.Inputs = (function () {
     function enhanceCreditCards( $scope ) {
         ( $scope || $( document.body ) ).find( classSelector( C.CREDIT_CARD_CLASS ) )
             .each( function () { updateCard( $( this ) ); } );
+    }
+
+    // ----- LoanCalculator: a live, advisory monthly-payment estimate per loan -----
+    // Display-only. As a loan's rate/term/extra change, write the level payment its terms imply into
+    // its readout, reusing the amortization mirrors above. Materialization is authoritative.
+
+    function loanField( $loan, cls ) {
+        return parseFloat( $loan.find( classSelector( cls ) ).val() );
+    }
+
+    // A whole-month term as "29 yr 11 mo" (either part dropped when zero, but never both).
+    function describeTerm( months ) {
+        const whole = Math.round( months );
+        const years = Math.floor( whole / 12 ), rest = whole % 12;
+        const parts = [];
+        if ( years ) { parts.push( years + ' yr' ); }
+        if ( rest || !years ) { parts.push( rest + ' mo' ); }
+        return parts.join( ' ' );
+    }
+
+    function loanReadout( $loan ) {
+        const balance = parseFloat( $loan.attr( dataAttr( C.LOAN_BALANCE_DATA_ATTR ) ) ) || 0;
+        const ratePercent = loanField( $loan, C.LOAN_RATE_CLASS );
+        const months = loanField( $loan, C.LOAN_TERM_CLASS );
+        if ( !( balance > 0 ) || !( ratePercent >= 0 ) || !( months > 0 ) ) { return ''; }
+        const rate = ( ratePercent / 100 ) / 12;
+        const payment = paymentForMonths( balance, months, rate );
+        let text = 'About ' + money( payment ) + '/month over ' + describeTerm( months ) + '.';
+        const extra = loanField( $loan, C.LOAN_EXTRA_CLASS );
+        if ( extra > 0 ) {
+            const payoff = monthsToClear( balance, payment + extra, rate );
+            if ( payoff !== null ) {
+                text += ' With ' + money( extra ) + ' extra/month, pays off in about '
+                    + describeTerm( payoff ) + '.';
+            }
+        }
+        return text;
+    }
+
+    function updateLoan( $loan ) {
+        $loan.find( classSelector( C.LOAN_READOUT_CLASS ) ).first().text( loanReadout( $loan ) );
+    }
+
+    function enhanceLoans( $scope ) {
+        ( $scope || $( document.body ) ).find( classSelector( C.LOAN_CLASS ) )
+            .each( function () { updateLoan( $( this ) ); } );
     }
 
     $( function () {
@@ -353,6 +402,12 @@ window.App.Inputs = (function () {
             saveForm( $( this ) );
         } );
 
+        // A form marked data-confirm asks before it submits -- the guard for destructive actions
+        // (deleting a plans/assumptions set). Cancelling stops the submission.
+        $( 'body' ).on( 'submit', 'form[data-confirm]', function ( event ) {
+            if ( ! window.confirm( $( this ).data( 'confirm' ) ) ) { event.preventDefault(); }
+        } );
+
         // Reveal an optional block; land the caret on its first field so the user can type straight in.
         $( 'body' ).on( 'click', classSelector( C.OPTIONAL_ADD_CLASS ), function () {
             const $section = $( this ).closest( classSelector( C.OPTIONAL_CLASS ) );
@@ -360,11 +415,15 @@ window.App.Inputs = (function () {
             optionalParts( $section ).body.find( ':input' ).first().trigger( 'focus' );
         } );
         // Dismiss an optional block: clear it (so the server reads it as absent) then collapse.
+        // Clearing fields programmatically fires no `change`, so inside an autosave form the removal
+        // must be persisted explicitly -- otherwise a removed partner would linger until the next edit.
         $( 'body' ).on( 'click', classSelector( C.OPTIONAL_REMOVE_CLASS ), function () {
             const $section = $( this ).closest( classSelector( C.OPTIONAL_CLASS ) );
             optionalParts( $section ).body.find( ':input' )
                 .val( '' ).filter( ':checkbox, :radio' ).prop( 'checked', false );
             setOptionalOpen( $section, false );
+            const $form = $section.closest( 'form' + classSelector( C.AUTOSAVE_CLASS ) );
+            if ( $form.length ) { saveForm( $form ); }
         } );
 
         // Flip a switch to the chosen case as its control changes.
@@ -375,6 +434,29 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'input change', classSelector( C.CREDIT_CARD_CLASS ) + ' :input',
             function () { updateCard( $( this ).closest( classSelector( C.CREDIT_CARD_CLASS ) ) ); } );
 
+        // Refresh a loan's advisory payment estimate as its rate/term/extra change.
+        $( 'body' ).on( 'input change', classSelector( C.LOAN_CLASS ) + ' :input',
+            function () { updateLoan( $( this ).closest( classSelector( C.LOAN_CLASS ) ) ); } );
+
+        // Delete a recurring-expenses column: stamp its span index into the form's hidden field, then
+        // save -- the server drops the span and re-renders the table.
+        $( 'body' ).on( 'click', classSelector( C.RECURRING_DELETE_CLASS ), function () {
+            const $form = $( this ).closest( 'form' + classSelector( C.AUTOSAVE_CLASS ) );
+            $form.find( 'input[name="delete_span"]' ).val( $( this ).data( 'span' ) );
+            saveForm( $form );
+        } );
+
+        // Mirror a property-expense row's Default into its blank per-property cells' placeholders as it
+        // is typed, so a changed default is visible where a cell falls back to it. The pane saves
+        // silently and does not re-render these placeholders, so this keeps them current client-side.
+        // A single-property matrix collapses the Default column, so its row has no override cells and
+        // this is a harmless no-op.
+        $( 'body' ).on( 'input change', classSelector( C.PROPERTY_DEFAULT_CLASS ), function () {
+            const placeholder = ( $( this ).val() || '' ).trim() || '0';
+            $( this ).closest( 'tr' ).find( classSelector( C.PROPERTY_OVERRIDE_CLASS ) )
+                .attr( 'placeholder', placeholder );
+        } );
+
         // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike
         // the delegated handlers above) they must be (re)applied to whatever DOM is present: once
         // now, and again after each antinode render for swapped-in content. Pickers are also torn
@@ -383,12 +465,14 @@ window.App.Inputs = (function () {
         enhanceOptionalSections( $( document.body ) );
         enhanceSwitches( $( document.body ) );
         enhanceCreditCards( $( document.body ) );
+        enhanceLoans( $( document.body ) );
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
                 enhanceOptionalSections( $( document.body ) );
                 enhanceSwitches( $( document.body ) );
                 enhanceCreditCards( $( document.body ) );
+                enhanceLoans( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }

@@ -16,14 +16,12 @@ from typing import Optional
 
 from django import forms
 
-from common.recurrence import Duration, TimeUnit
-
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
-    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RENT_OBLIGATION_HANDLE, RESIDENCE_ASSET_HANDLE,
-    RESIDENCE_MORTGAGE_HANDLE, AssetProfile, CommittedObligation, Debt, Profile, SubjectProfile )
+    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RESIDENCE_ASSET_HANDLE,
+    RESIDENCE_MORTGAGE_HANDLE, AssetProfile, Debt, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
 from ucfp.jurisdiction.labels import local_label
@@ -32,10 +30,13 @@ from .credit_card import CreditCardPlanForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
 from .events import EventsForm
-from .external_factors import ExternalFactorsForm
+from .external_factors import ExternalFactorsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
-from .spending import SpendingForm
+from .expenses import has_property
+from .property_expenses import PropertyExpensesForm, merged_property_expenses
+from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
+from .vehicle import VehiclePlanForm
 from .widgets import IsoDateInput
 
 
@@ -55,8 +56,7 @@ class Section:
     title: str
     aggregates: tuple = ( Aggregate.PROFILE, )
     form: Optional[ type ] = None
-    inner_template: Optional[ str ] = None   # custom content rendered inside the Continue form
-    outer_template: Optional[ str ] = None   # custom pane outside the form (manages its own forms)
+    outer_template: Optional[ str ] = None   # the section's self-saving pane, rendered above Next
 
 
 class SubjectsForm( forms.Form ):
@@ -65,11 +65,17 @@ class SubjectsForm( forms.Form ):
     single vs joint, both fixed by whether a partner exists, so there is nothing to choose. The tax
     basis (jurisdiction and that inferred filing status) is shown read-only beside the inputs.
     `apply` writes just this section onto the Profile, leaving every other section's facts intact.
+
+    Non-blocking, like every self-saving section: nothing is required, an incomplete person is simply
+    not held (its subject is built only once both name and birthdate are present), and the filing
+    status is left unset until a primary person exists -- the forecast readiness check is the gate
+    that a person and filing status are present.
     """
 
-    subject_name      = forms.CharField( label = 'Name', max_length = 100 )
+    subject_name      = forms.CharField( label = 'Name', max_length = 100, required = False )
     subject_birthdate = forms.DateField(
-        label = 'Birthdate', widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
+        label = 'Birthdate', required = False,
+        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
     partner_name      = forms.CharField( label = 'Name', max_length = 100, required = False )
     partner_birthdate = forms.DateField(
         label = 'Birthdate', required = False,
@@ -90,12 +96,12 @@ class SubjectsForm( forms.Form ):
 
     @property
     def filing_status_label( self ) -> str:
-        """The filing status the engine will use, derived from the saved household and shown
-        read-only. It reflects saved facts, so it updates on save rather than as the partner is
-        edited -- there is nothing to choose while single vs joint is fixed by whether a partner
-        exists."""
-        saved_has_partner = self._profile is not None and len( self._profile.subjects ) > 1
-        return self._filing_status_for( saved_has_partner ).label
+        """The filing status the engine will use, read from the saved profile and shown read-only. It
+        reflects saved facts, so it updates on save rather than as the partner is edited -- there is
+        nothing to choose while single vs joint is fixed by whether a partner exists. A dash until a
+        primary person is entered (the filing status is unset until then)."""
+        status = self._profile.filing_status if self._profile is not None else None
+        return status.label if status is not None else '—'
 
     @staticmethod
     def _initial( profile : Profile ) -> dict:
@@ -120,8 +126,9 @@ class SubjectsForm( forms.Form ):
         return cleaned
 
     def apply( self, profile : Profile, plans : Plans ):
-        updated = replace(
-            profile, subjects = self._subjects(), filing_status = self._filing_status() )
+        subjects = self._subjects()
+        updated  = replace(
+            profile, subjects = subjects, filing_status = self._filing_status( subjects ) )
         return updated, plans
 
     def _has_partner( self ) -> bool:
@@ -130,8 +137,16 @@ class SubjectsForm( forms.Form ):
         return bool( self.cleaned_data.get( 'partner_name' )
                      and self.cleaned_data.get( 'partner_birthdate' ) )
 
+    def _has_primary( self ) -> bool:
+        """A primary person is inferred from both of their fields being filled -- non-blocking, so a
+        half-entered person simply is not held (and no partner is held without a primary)."""
+        return bool( self.cleaned_data.get( 'subject_name' )
+                     and self.cleaned_data.get( 'subject_birthdate' ) )
+
     def _subjects( self ) -> list:
         cleaned  = self.cleaned_data
+        if not self._has_primary():
+            return list()
         subjects = [ SubjectProfile(
             handle = PRIMARY_SUBJECT_HANDLE,
             name = cleaned[ 'subject_name' ], birthdate = cleaned[ 'subject_birthdate' ] ) ]
@@ -141,44 +156,61 @@ class SubjectsForm( forms.Form ):
                 name = cleaned[ 'partner_name' ], birthdate = cleaned[ 'partner_birthdate' ] ) )
         return subjects
 
-    def _filing_status( self ) -> FilingStatus:
-        return self._filing_status_for( self._has_partner() )
+    @classmethod
+    def _filing_status( cls, subjects : list ) -> Optional[ FilingStatus ]:
+        """The filing status the built household implies -- unset with no primary person, else single
+        vs joint by whether a partner is present."""
+        if not subjects:
+            return None
+        return cls._filing_status_for( len( subjects ) > 1 )
 
     @staticmethod
     def _filing_status_for( has_partner : bool ) -> FilingStatus:
-        """Single vs joint from partner presence -- the one mapping shared by `apply` (from submitted
-        data) and the read-only pane (from saved facts)."""
         return FilingStatus.MARRIED_JOINT if has_partner else FilingStatus.SINGLE
 
 
-class HomeForm( forms.Form ):
-    """§3 -- the household residence. Owning captures the home's current value, purchase price (its
-    cost basis), and any mortgage balance still owed; renting captures the monthly rent. The
-    residence is household-owned, so there is no "whose home". The mortgage balance is a convenience
-    surface on the home for the one `Debt` secured against the residence -- the same debt the Debts
-    section shows (read-only there, since it is owned here).
+class SubjectsSectionForm:
+    """§1 section wrapper. The Subjects pane self-saves through `SubjectsView`, so this section form
+    only carries the flow: it always validates and its `apply` is a no-op, leaving Next to advance
+    without re-saving. It exposes the editor (`subjects_form`) for the pane -- built once so the pane
+    and the read-only tax-basis readout beside it share one instance."""
 
-    `apply` merges only the residence asset, its mortgage debt, and the rent obligation into the
-    Profile by their stable handles, leaving the accounts and other sections' items intact.
-    Associated home expenses (property tax, insurance) are seeded later in Spending.
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self.subjects_form = SubjectsForm( profile = profile )
+
+    def is_valid( self ) -> bool:
+        return True
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class HomeForm( forms.Form ):
+    """§3 -- the household residence. The tenure switch (own / rent / neither) is the fact recorded
+    here; owning also captures the home's current value, purchase price (its cost basis), and any
+    mortgage balance still owed. The residence is household-owned, so there is no "whose home". The
+    mortgage balance is a convenience surface on the home for the one `Debt` secured against the
+    residence -- the same debt the Debts section shows (read-only there, since it is owned here).
+
+    `apply` records the tenure and merges only the residence asset and its mortgage debt into the
+    Profile by their stable handles, leaving other sections' items intact. The monthly rent is a plan,
+    not a fact: it is set in Spending (the property-expenses matrix) when the tenure is rent.
+    Associated home expenses (property tax, insurance) are likewise seeded in Spending.
     """
 
-    _OWN  = 'own'
-    _RENT = 'rent'
-    _TENURE_CHOICES = ( ( _OWN, 'Own' ), ( _RENT, 'Rent' ) )
+    _TENURE_CHOICES = tuple( ( member.name.lower(), member.label ) for member in HousingTenure )
 
     _RESIDENCE_HANDLE = RESIDENCE_ASSET_HANDLE
     _MORTGAGE_HANDLE  = RESIDENCE_MORTGAGE_HANDLE
-    _RENT_HANDLE      = RENT_OBLIGATION_HANDLE
 
     tenure           = forms.ChoiceField(
-        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, initial = _OWN,
+        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES,
+        initial = HousingTenure.OWN.name.lower(),
         widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
     home_value       = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
     purchase_price   = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
     mortgage_balance = forms.DecimalField(
         label = 'Mortgage balance owed (optional)', required = False, min_value = 0 )
-    monthly_rent     = forms.DecimalField( label = 'Monthly rent', required = False, min_value = 0 )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile ) if profile is not None else None
@@ -186,16 +218,11 @@ class HomeForm( forms.Form ):
 
     @classmethod
     def _initial( cls, profile : Profile ) -> dict:
-        rent = cls._find( profile.obligations, cls._RENT_HANDLE )
-        if rent is not None:
-            return { 'tenure': cls._RENT, 'monthly_rent': rent.amount }
+        initial   = { 'tenure': profile.home_tenure.name.lower() }
         residence = cls._find( profile.assets, cls._RESIDENCE_HANDLE )
-        if residence is None:
-            return dict()
-        initial   = {
-            'tenure': cls._OWN, 'home_value': residence.opening_value,
-            'purchase_price': residence.cost_basis,
-        }
+        if residence is not None:
+            initial[ 'home_value' ]     = residence.opening_value
+            initial[ 'purchase_price' ] = residence.cost_basis
         mortgage = cls._find( profile.debts, cls._MORTGAGE_HANDLE )
         if mortgage is not None:
             initial[ 'mortgage_balance' ] = mortgage.balance
@@ -205,17 +232,23 @@ class HomeForm( forms.Form ):
         existing_mortgage = self._find( profile.debts, self._MORTGAGE_HANDLE )
         updated_profile = replace(
             profile,
+            home_tenure = self._tenure(),
             assets      = self._merged( profile.assets, self._RESIDENCE_HANDLE, self._residence() ),
             debts       = self._merged(
-                profile.debts, self._MORTGAGE_HANDLE, self._mortgage( existing_mortgage ) ),
-            obligations = self._merged( profile.obligations, self._RENT_HANDLE, self._rent() ) )
+                profile.debts, self._MORTGAGE_HANDLE, self._mortgage( existing_mortgage ) ) )
         return updated_profile, plans
+
+    def _tenure( self ) -> HousingTenure:
+        return HousingTenure[ self.cleaned_data[ 'tenure' ].upper() ]
+
+    def _owns( self ) -> bool:
+        return self._tenure() is HousingTenure.OWN
 
     def _residence( self ) -> list:
         # Non-blocking: an owned home materializes only once its value is entered; until then it
         # simply is not written (no hard error mid-entry), the forecast run being the real gate.
         cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._OWN or cleaned.get( 'home_value' ) is None:
+        if not self._owns() or cleaned.get( 'home_value' ) is None:
             return []
         return [ AssetProfile(
             handle = self._RESIDENCE_HANDLE, name = 'Home',
@@ -227,21 +260,13 @@ class HomeForm( forms.Form ):
         # The home is a balance-only convenience surface onto the one debt; the name and kind the
         # Debts section may have set are preserved rather than overwritten here.
         cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._OWN or cleaned.get( 'mortgage_balance' ) is None:
+        if not self._owns() or cleaned.get( 'mortgage_balance' ) is None:
             return []
         return [ Debt(
             handle = self._MORTGAGE_HANDLE,
             name = existing.name if existing is not None else 'Mortgage',
             kind = existing.kind if existing is not None else DebtKind.MORTGAGE,
             balance = cleaned[ 'mortgage_balance' ], secured_asset = self._RESIDENCE_HANDLE ) ]
-
-    def _rent( self ) -> list:
-        cleaned = self.cleaned_data
-        if cleaned.get( 'tenure' ) != self._RENT or cleaned.get( 'monthly_rent' ) is None:
-            return []
-        return [ CommittedObligation(
-            handle = self._RENT_HANDLE, name = 'Rent', amount = cleaned[ 'monthly_rent' ],
-            cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ]
 
     @staticmethod
     def _merged( existing : list, handle : str, replacement : list ) -> list:
@@ -254,7 +279,7 @@ class HomeForm( forms.Form ):
 
 class PropertiesForm:
     """§3 L0 -- the Properties pane. A no-op section form: the residence, the rentals, and the second
-    homes are each edited through their own async view, so Continue just advances. It exposes the
+    homes are each edited through their own async view, so Next just advances. It exposes the
     residence sub-form and the property lists for the pane (the rentals and second homes manage
     themselves)."""
 
@@ -386,9 +411,29 @@ class AccountsForm( forms.Form ):
         return accounts
 
 
+class AccountsSectionForm:
+    """§4 section wrapper. The Accounts pane self-saves through `AccountsView`, so this section form
+    only carries the flow: it always validates and its `apply` is a no-op, leaving Next to advance
+    without re-saving. It exposes the editor (`accounts_form`) for the pane."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def accounts_form( self ) -> AccountsForm:
+        return AccountsForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
 class IncomeSectionForm:
     """§5 L0 -- the income pane. A no-op section form: income is edited and saved through the
-    `IncomeTableView`, so Continue just advances. It exposes the income table for the pane."""
+    `IncomeTableView`, so Next just advances. It exposes the income table for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile  = profile
@@ -407,7 +452,7 @@ class IncomeSectionForm:
 
 class DebtsSectionForm:
     """§ Debts L0 -- the Debts pane. A no-op section form: the debts are edited and saved through
-    `DebtsView`, so Continue just advances. It exposes the one debts list -- every debt, mortgages
+    `DebtsView`, so Next just advances. It exposes the one debts list -- every debt, mortgages
     included, in the order the user thinks of them."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -428,7 +473,7 @@ class DebtsSectionForm:
 class DebtPlanSectionForm:
     """§ Debt plan L0 -- the pane. A no-op section form: the amortizing loans' repayment terms and
     the credit cards' paydown strategies are each edited and saved through their own async view
-    (`DebtPlanView`, `CreditCardView`), so Continue just advances. It exposes both forms, which read
+    (`DebtPlanView`, `CreditCardView`), so Next just advances. It exposes both forms, which read
     the declared debts."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -450,13 +495,76 @@ class DebtPlanSectionForm:
         return profile, plans
 
 
-# The interview's order, from the input model in issue #4. A section with a form is live; the rest
-# are declared so the stepper shows the full path ahead.
+class HomeExpensesSectionForm:
+    """Home Expenses -- the per-property operating-cost matrix. It exposes the matrix pane (saved on
+    its own through `PropertyExpensesView`); `apply` seeds the property expenses from the catalog on
+    Next, so a household that accepts the defaults still gets them without opening the pane."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def property_form( self ):
+        return PropertyExpensesForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, replace(
+            plans, property_expenses = merged_property_expenses( profile, plans ) )
+
+
+class VehiclePurchaseSectionForm:
+    """Vehicle Purchase -- the car purchase/financing pane. A no-op section form: the plan is edited
+    and saved through `VehiclePlanView`, and there are no catalog defaults to seed (the pattern is
+    entirely user-entered), so Next just advances."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def vehicle_form( self ):
+        return VehiclePlanForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class LivingExpensesSectionForm:
+    """Living Expenses -- the recurring-expenses table (everyday, discretionary, health, vehicle
+    running costs, miscellaneous) over the shared age-span timeline. It exposes the table pane (saved
+    on its own through `RecurringExpensesView`); `apply` seeds the recurring expenses from the catalog
+    on Next, so accepting the defaults still records them."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def recurring_form( self ):
+        return RecurringExpensesForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, replace(
+            plans, recurring_expenses = merged_recurring_expenses( profile, plans ) )
+
+
+# The interview's order. A section with a form is live; the rest are declared so the stepper shows
+# the full path ahead.
 SECTIONS = [
-    Section( 'subjects'    , 'Who this plan is for', form = SubjectsForm,
-             inner_template = 'inputs/interview/sections/subjects.html' ),
-    Section( 'accounts'    , 'Accounts', form = AccountsForm,
-             inner_template = 'inputs/interview/sections/accounts.html' ),
+    Section( 'subjects'    , 'Who this plan is for', form = SubjectsSectionForm,
+             outer_template = 'inputs/interview/sections/subjects.html' ),
+    Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
+             outer_template = 'inputs/interview/sections/accounts.html' ),
     Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
@@ -470,12 +578,19 @@ SECTIONS = [
     # Opens the Plans flow, reading the debts declared just above.
     Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
              outer_template = 'inputs/interview/sections/debt_plan.html' ),
-    Section( 'spending'    , 'Spending', ( Aggregate.PLANS, ), SpendingForm,
-             outer_template = 'inputs/interview/sections/spending.html' ),
+    # Spending, split into three focused steps ordered largest cost to smallest. Home Expenses shows
+    # only when the household has a dwelling with operating costs (see `applicable_sections`).
+    Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
+             outer_template = 'inputs/interview/sections/home_expenses.html' ),
+    Section( 'vehicle-purchase', 'Vehicle Purchase', ( Aggregate.PLANS, ), VehiclePurchaseSectionForm,
+             outer_template = 'inputs/interview/sections/vehicle_purchase.html' ),
+    Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
+             outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
-    Section( 'external-factors', 'External Factors', ( Aggregate.ASSUMPTIONS, ), ExternalFactorsForm,
-             inner_template = 'inputs/interview/sections/external_factors.html' ),
+    Section( 'external-factors', 'External Factors', ( Aggregate.ASSUMPTIONS, ),
+             ExternalFactorsSectionForm,
+             outer_template = 'inputs/interview/sections/external_factors.html' ),
 ]
 
 
@@ -485,14 +600,15 @@ def section_for( key : str ) -> Optional[ Section ]:
 
 def applicable_sections( profile : Profile ) -> list:
     """The sections that apply given what's been entered so far -- the conditionality hook, and the
-    real payoff of a linear flow. Every section applies for now; later this prunes or adds sections
-    from prior answers (a partner expands the people detail, owning a home adds the home section)."""
-    return list( SECTIONS )
+    real payoff of a linear flow. The one conditional step is Home Expenses, shown only when the
+    household has a dwelling with operating costs (owns property or rents); the rest always apply."""
+    return [ section for section in SECTIONS
+             if section.key != 'home-expenses' or has_property( profile ) ]
 
 
 def next_section_after( sections : list, key : str ) -> Optional[ Section ]:
     """The next live (form-backed) section after `key` within `sections`, or None when the
-    interview is complete -- where Continue goes."""
+    interview is complete -- where Next goes."""
     keys      = [ section.key for section in sections ]
     following = sections[ keys.index( key ) + 1 : ] if key in keys else []
     return next( ( section for section in following if section.form is not None ), None )

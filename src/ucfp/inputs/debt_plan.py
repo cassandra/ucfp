@@ -13,6 +13,7 @@ from django import forms
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
+from ucfp.environment.constants import AppConst
 from ucfp.inputs.events import LOAN_ROLE
 from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import LoanPrepayment, LoanRepayment, PlanEvent
@@ -21,7 +22,7 @@ from ucfp.inputs.widgets import IsoDateInput
 
 class DebtPlanForm( forms.Form ):
     """The repayment terms for each amortizing debt, as one auto-saving pane: per debt an interest
-    rate, a remaining term in years, optional extra principal per month, and an optional full-payoff
+    rate, a remaining term in months, optional extra principal per month, and an optional full-payoff
     date. Non-blocking: a debt's loan materializes only once both its rate and term are set (an
     incomplete pair writes nothing), and the extra principal and payoff ride only on complete terms.
     `apply` rebuilds the repayment and prepayment plans for these debts, plus their payoff events
@@ -50,12 +51,15 @@ class DebtPlanForm( forms.Form ):
     def _build_fields( self, debt, repayment, extra_annual, payoff_date ):
         self.fields[ self._rate_field( debt.handle ) ] = forms.DecimalField(
             label = 'Interest rate (%)', required = False, min_value = 0,
+            widget = forms.NumberInput( attrs = { 'class' : AppConst.LOAN_RATE_CLASS } ),
             initial = repayment.interest_rate.fraction * 100 if repayment is not None else None )
         self.fields[ self._term_field( debt.handle ) ] = forms.IntegerField(
-            label = 'Years remaining', required = False, min_value = 1,
-            initial = repayment.remaining_term.months() // 12 if repayment is not None else None )
+            label = 'Months remaining', required = False, min_value = 1,
+            widget = forms.NumberInput( attrs = { 'class' : AppConst.LOAN_TERM_CLASS } ),
+            initial = repayment.remaining_term.months() if repayment is not None else None )
         self.fields[ self._extra_field( debt.handle ) ] = forms.DecimalField(
             label = 'Extra principal per month (optional)', required = False, min_value = 0,
+            widget = forms.NumberInput( attrs = { 'class' : AppConst.LOAN_EXTRA_CLASS } ),
             initial = extra_annual / 12 if extra_annual else None )
         self.fields[ self._payoff_field( debt.handle ) ] = forms.DateField(
             label = 'Pay off in full on (optional)', required = False,
@@ -83,12 +87,13 @@ class DebtPlanForm( forms.Form ):
 
     @property
     def rows( self ) -> list:
-        return [ { 'name'   : debt.name,
-                   'kind'   : debt.kind.label,
-                   'rate'   : self[ self._rate_field( debt.handle ) ],
-                   'term'   : self[ self._term_field( debt.handle ) ],
-                   'extra'  : self[ self._extra_field( debt.handle ) ],
-                   'payoff' : self[ self._payoff_field( debt.handle ) ] }
+        return [ { 'name'    : debt.name,
+                   'kind'    : debt.kind.label,
+                   'balance' : debt.balance,
+                   'rate'    : self[ self._rate_field( debt.handle ) ],
+                   'term'    : self[ self._term_field( debt.handle ) ],
+                   'extra'   : self[ self._extra_field( debt.handle ) ],
+                   'payoff'  : self[ self._payoff_field( debt.handle ) ] }
                  for debt in self._debts ]
 
     def apply( self, profile, plans ):
@@ -125,7 +130,7 @@ class DebtPlanForm( forms.Form ):
             return None, None
         repayment  = LoanRepayment(
             debt_handle = debt.handle, interest_rate = Rate.percent( rate ),
-            remaining_term = Duration( term, TimeUnit.YEAR ) )
+            remaining_term = Duration( term, TimeUnit.MONTH ) )
         prepayment = ( LoanPrepayment( loan_handle = debt.handle, annual_amount = extra * 12 )
                        if extra else None )
         return repayment, prepayment

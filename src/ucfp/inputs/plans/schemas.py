@@ -21,8 +21,8 @@ from common.rate import Rate
 from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
-from ucfp.forecast.parameters import ContributionSource, WindowedAmount
-from ucfp.parameter_sets.enums import ExpenseCategory, LifestyleLevel, LifestyleScope
+from ucfp.forecast.parameters import ContributionSource
+from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 
 from .enums import CreditCardPlanMode, EventKind
 
@@ -42,47 +42,44 @@ class RetirementTiming:
     pension_start: Optional[ date ] = None
 
 
-# --- Lifestyle ------------------------------------------------------------
-# The discretionary cost table itself is curated in the parameter-set library (chosen by
-# `LifestyleScope`); the plans holds only the personal timeline of levels that selects each
-# expense's value over time. The first segment's level applies from the start of the horizon.
+# --- Recurring expenses ---------------------------------------------------
+# The user's regular (non-property) recurring expenses, each seeded from the curated catalog (its
+# category, tax class, and cadence) with an amount per span. The spans are the Plans' shared
+# `expense_spans` timeline (until-ages relative to the primary subject); `amounts` aligns 1:1 with it.
 
 @dataclass( frozen = True )
-class LifestyleSegment:
-    """A span beginning at `start` over which one lifestyle level applies."""
-    start: date
-    level: LifestyleLevel
-
-
-@dataclass( frozen = True )
-class LifestylePlan:
-    """A reference to a curated cost table (`scope`) plus the timeline of levels (`segments`)
-    that selects each expense's value over the horizon."""
-    scope: LifestyleScope = LifestyleScope.GENERAL
-    segments: list[ LifestyleSegment ] = field( default_factory = list )
-
-
-# --- Spending -------------------------------------------------------------
-# The new expense model: the user's planned expenses, each seeded from the curated catalog (so it
-# carries the catalog's category, tax class, and cadence) with the user's amount. Supersedes the
-# lifestyle cost-table above, which is retired once this reaches parity.
-
-@dataclass( frozen = True )
-class ExpenseFlow:
-    """One planned expense -- its name, catalog `category`, tax class, cadence (`interval`), and a
-    `schedule`: the amount over time spans, a `WindowedAmount` per span (one open-ended row is a
-    constant amount; reuses the engine's segment type, so it materializes with no conversion).
-    `interval` None is a smoothed stream, a `Duration` an item placed at that cadence;
-    `lifestyle_dependent` marks the ones a user would vary over time. `property_handle` attaches an
-    operating expense to the property it belongs to (so a sale can find and end it); None for a
-    general living expense."""
+class RecurringExpense:
+    """One regular recurring expense: its name, catalog `category`, tax class, cadence (`interval`),
+    and an `amounts` list -- one amount per span of the Plans' shared `expense_spans` timeline (a
+    single amount when no spans are defined). `interval` None is a smoothed stream, a `Duration` an
+    item placed at that cadence. Property operating expenses are a separate class (`PropertyExpense`)."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
-    schedule: list[ WindowedAmount ]
+    amounts: list[ Decimal ]
     interval: Optional[ Duration ] = None
-    lifestyle_dependent: bool = False
-    property_handle: Optional[ str ] = None
+
+
+# --- Property expenses ----------------------------------------------------
+# A dwelling's operating expenses: one shared set of amounts applied to every property the expense's
+# `applies_to` reaches, with per-property overrides where they differ. Constant over the forecast (no
+# spans); each property instance ends at that property's sale, clipped at materialize. Distinct from the
+# recurring expenses above.
+
+@dataclass( frozen = True )
+class PropertyExpense:
+    """One property operating expense across the household's properties: its name, catalog `category`,
+    the *personal* `expense_tax_class` (materialization derives the rental swap), cadence (`interval`),
+    and the `applies_to` property contexts it reaches. `default_amount` (None when blank) applies to
+    every reached property unless `overrides` gives that property (by handle) its own amount; a property
+    with neither is not charged. Amounts are constant; a sale ends a property's instance at materialize."""
+    name: str
+    category: ExpenseCategory
+    expense_tax_class: ExpenseTaxClass
+    applies_to: tuple[ PropertyContext, ... ]
+    interval: Optional[ Duration ] = None
+    default_amount: Optional[ Decimal ] = None
+    overrides: dict[ str, Decimal ] = field( default_factory = dict )
 
 
 # --- Saving ---------------------------------------------------------------
@@ -135,7 +132,7 @@ class CreditCardPlan:
 # --- Auto (car ownership) -------------------------------------------------
 
 @dataclass( frozen = True )
-class AutoPlan:
+class VehiclePlan:
     """The household's ongoing car-ownership costs, smoothed so the forecast carries no start/stop
     lumps. Every `recurrence_years` from `start_date`, `num_cars` cars are bought at `purchase_price`
     each. Unfinanced (no down or monthly payment given), the whole price lands as a lump each cycle.
@@ -202,10 +199,11 @@ class Plans:
     `ForecastParameters`."""
     # Timing
     timing: list[ RetirementTiming ] = field( default_factory = list )
-    # Lifestyle
-    lifestyle: Optional[ LifestylePlan ] = None
-    # Spending
-    expenses: list[ ExpenseFlow ] = field( default_factory = list )
+    # Recurring expenses (regular, non-property) and the shared span timeline (until-ages, last None)
+    expense_spans: list[ Optional[ int ] ] = field( default_factory = lambda: [ None ] )
+    recurring_expenses: list[ RecurringExpense ] = field( default_factory = list )
+    # Property operating expenses (one shared set with per-property overrides)
+    property_expenses: list[ PropertyExpense ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
     # Loan repayment (rate/term per amortizing debt) and extra-principal paydown
@@ -214,7 +212,7 @@ class Plans:
     # Credit-card paydown plans (per card, resolved to expenses at materialization)
     credit_card_plans: list[ CreditCardPlan ] = field( default_factory = list )
     # The household's car-ownership costs (smoothed to expenses at materialization)
-    auto_plan: Optional[ AutoPlan ] = None
+    vehicle_plan: Optional[ VehiclePlan ] = None
     # Drawdown
     drawdown: Optional[ DrawdownPolicy ] = None
     # Plan events (§7)

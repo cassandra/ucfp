@@ -18,8 +18,7 @@ from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.parameter_sets.enums import (
-    ExpenseCategory, LifestyleLevel, LifestyleScope, PropertyContext )
+from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 from ucfp.parameter_sets.schemas import ExpenseCatalog, ExpenseType
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
@@ -29,8 +28,8 @@ from ucfp.inputs.profile.schemas import (
     AssetProfile, CommittedObligation, Debt, GovernmentPensionEntitlement,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    AutoPlan, Contribution, CreditCardPlan, DrawdownPolicy, ExpenseFlow, HealthCoverageAssumption,
-    LifestylePlan, LifestyleSegment, LoanRepayment, PlanEvent, RetirementTiming, Plans )
+    VehiclePlan, Contribution, CreditCardPlan, DrawdownPolicy, HealthCoverageAssumption,
+    LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense, RetirementTiming, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
 
@@ -66,7 +65,7 @@ def _sample_profile():
                                          normal_start_age = 65 ) ],
         government_pension = [ GovernmentPensionEntitlement(
             subject_handle = 'you', monthly_at_normal_age = Decimal( '2800.50' ) ) ],
-        obligations = [ CommittedObligation( handle = 'rent', name = 'Rent',
+        obligations = [ CommittedObligation( handle = 'tuition', name = 'Tuition',
                                              amount = Decimal( '1500' ),
                                              cadence = Duration( 1, TimeUnit.MONTH ),
                                              expense_tax_class = ExpenseTaxClass.LIVING ) ],
@@ -94,15 +93,17 @@ def _sample_plans():
             subject_handle = 'you',
             government_pension_claiming_date = date( 2040, 1, 1 ),
             pension_start = date( 2038, 1, 1 ) ) ],
-        lifestyle = LifestylePlan(
-            scope = LifestyleScope.GENERAL,
-            segments = [
-                LifestyleSegment( start = date( 2035, 1, 1 ), level = LifestyleLevel.HIGH ),
-                LifestyleSegment( start = date( 2050, 1, 1 ), level = LifestyleLevel.MEDIUM ) ] ),
-        expenses = [ ExpenseFlow(
+        expense_spans = [ 70, 80, None ],
+        recurring_expenses = [ RecurringExpense(
+            name = 'Travel', category = ExpenseCategory.DISCRETIONARY,
+            expense_tax_class = ExpenseTaxClass.LIVING,
+            amounts = [ Decimal( '900' ), Decimal( '500' ), Decimal( '200' ) ] ) ],
+        property_expenses = [ PropertyExpense(
             name = 'Property tax', category = ExpenseCategory.PROPERTY,
             expense_tax_class = ExpenseTaxClass.SALT,
-            schedule = [ WindowedAmount( Decimal( '6000' ) ) ], property_handle = 'home' ) ],
+            applies_to = ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ),
+            default_amount = Decimal( '6000' ),
+            overrides = { 'home': Decimal( '6500' ) } ) ],
         contributions = [ Contribution( account_handle = '401k', annual_amount = Decimal( '23000' ),
                                         source = ContributionSource.WAGE ) ],
         loan_repayments = [ LoanRepayment( debt_handle = 'mort',
@@ -115,7 +116,7 @@ def _sample_plans():
                             target_date = date( 2029, 3, 1 ) ),
             CreditCardPlan( card_handle = 'disc', mode = CreditCardPlanMode.COMBO,
                             monthly_payment = Decimal( '150' ), target_date = date( 2030, 1, 1 ) ) ],
-        auto_plan = AutoPlan(
+        vehicle_plan = VehiclePlan(
             num_cars = 2, purchase_price = Decimal( '35000' ), recurrence_years = 8,
             start_date = date( 2031, 1, 1 ), down_payment = Decimal( '7000' ) ),
         drawdown = DrawdownPolicy( cash_floor = Decimal( '20000' ), cash_ceiling = Decimal( '50000' ),
@@ -219,6 +220,18 @@ class DataclassJsonLeafTest( SimpleTestCase ):
         duration = Duration( 3, TimeUnit.MONTH )
         self.assertEqual( from_json_data( Rate, to_json_data( rate ) ), rate )
         self.assertEqual( from_json_data( Duration, to_json_data( duration ) ), duration )
+
+    def test_typed_dict_values_coerce_to_their_declared_type( self ):
+        # A `dict[str, Decimal]` (e.g. PropertyExpense.overrides) must bring its VALUES back as Decimal,
+        # not leave them as the strings serialization produced -- the codec deserializes each value by
+        # the declared value type rather than copying the dict verbatim.
+        restored = from_json_data( dict[ str, Decimal ], { 'home': '6500', 'rental': '9000.50' } )
+        self.assertEqual( restored, { 'home': Decimal( '6500' ), 'rental': Decimal( '9000.50' ) } )
+        self.assertIsInstance( restored[ 'home' ], Decimal )
+
+    def test_untyped_dict_passes_values_through( self ):
+        # A bare `dict` (no type args) has no value type to coerce to, so values pass through unchanged.
+        self.assertEqual( from_json_data( dict, { 'a': 1, 'b': 'x' } ), { 'a': 1, 'b': 'x' } )
 
     def test_unsupported_type_raises( self ):
         with self.assertRaises( TypeError ):

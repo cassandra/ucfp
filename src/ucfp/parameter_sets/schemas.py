@@ -13,7 +13,7 @@ from common.recurrence import Duration
 from ucfp.accounts.enums import ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 
-from .enums import ExpenseCategory, LifestyleLevel, PropertyContext
+from .enums import ExpenseCategory, PropertyContext
 
 
 @dataclass( frozen = True )
@@ -25,43 +25,11 @@ class EconomicOutlookSchedule:
 
 
 @dataclass( frozen = True )
-class LifestyleAmounts:
-    """A lifestyle expense's value at each level -- the uniform low/medium/high selector indexes
-    here. Per occurrence for an item, annual for a stream."""
-    low: Decimal
-    medium: Decimal
-    high: Decimal
-
-    def for_level( self, level : LifestyleLevel ) -> Decimal:
-        return { LifestyleLevel.LOW: self.low, LifestyleLevel.MEDIUM: self.medium,
-                 LifestyleLevel.HIGH: self.high }[ level ]
-
-
-@dataclass( frozen = True )
-class LifestyleExpense:
-    """One discretionary expense category: a name, a low/medium/high value triple, a tax class,
-    and a cadence. `interval` None is a stream (an annual magnitude, smoothed); a `Duration` is
-    an item placed at that recurrence (weekly gas, an every-ten-years car) -- never amortized."""
-    name: str
-    amounts: LifestyleAmounts
-    expense_tax_class: ExpenseTaxClass = ExpenseTaxClass.LIVING
-    interval: Optional[ Duration ] = None
-
-
-@dataclass( frozen = True )
-class LifestyleCostTable:
-    """A curated table of discretionary expenses -- the payload of a LIFESTYLE_COSTS set. The
-    scenario's lifestyle level selects each expense's value; materialization steps it over the
-    schedule timeline."""
-    expenses: list[ LifestyleExpense ] = field( default_factory = list )
-
-
-@dataclass( frozen = True )
 class ExpenseType:
     """One catalog expense: its `category` (the user-facing bucket and the decision it attaches to),
     tax class, cadence, and a single `default_amount` -- the typical value (annual for a stream,
-    per-occurrence for an item). `lifestyle_dependent` marks the ones whose amount a user would vary
-    over time; `interval` None is a smoothed stream, a `Duration` an item placed at its cadence.
+    per-occurrence for an item). `interval` None is a smoothed stream, a `Duration` an item placed at
+    its cadence.
 
     For a `PROPERTY` row, `expense_tax_class` is the row's *personal* class (`LIVING`, or `SALT` for
     property tax); materialization swaps it to `RENTAL_EXPENSE` for a rental-owned property. `applies_to`
@@ -73,7 +41,6 @@ class ExpenseType:
     expense_tax_class: ExpenseTaxClass
     default_amount: Decimal
     interval: Optional[ Duration ] = None
-    lifestyle_dependent: bool = False
     applies_to: tuple[ PropertyContext, ... ] = ()
 
 

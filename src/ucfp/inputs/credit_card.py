@@ -13,6 +13,7 @@ from decimal import Decimal
 from django import forms
 
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.events import CARD_ROLE
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.plans.schemas import CreditCardPlan, PlanEvent
@@ -25,7 +26,7 @@ _PAYOFF_MODES = ( CreditCardPlanMode.LUMP, CreditCardPlanMode.COMBO )
 
 # The assumed monthly interest rate the calculator and materialization share -- used here only to warn
 # when a monthly payment would not cover it (materialization is authoritative).
-_CARD_MONTHLY_RATE = Decimal( AppConst.CREDIT_CARD_APR_PERCENT ) / Decimal( '1200' )
+_CARD_MONTHLY_RATE = BUILTIN_ASSUMPTIONS.credit_card_apr.fraction / Decimal( '12' )
 
 
 # The "just keep carrying it" choice -- the absence of a plan, so it maps to no `CreditCardPlan`
@@ -87,9 +88,10 @@ class CreditCardPlanForm( forms.Form ):
 
     @property
     def apr_percent( self ) -> int:
-        """The assumed card APR the client-side readout uses -- shared with materialization via
-        AppConst so the estimate and the forecast agree."""
-        return AppConst.CREDIT_CARD_APR_PERCENT
+        """The assumed card APR as a percent -- rendered onto each card widget for the client readout
+        and shown in the note, from the same `BUILTIN_ASSUMPTIONS` value materialization resolves at,
+        so the estimate and the forecast agree."""
+        return int( BUILTIN_ASSUMPTIONS.credit_card_apr.fraction * 100 )
 
     @property
     def rows( self ) -> list:

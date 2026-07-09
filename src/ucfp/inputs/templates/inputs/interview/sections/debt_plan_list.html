@@ -1,31 +1,30 @@
 {% comment %}
-The per-debt repayment terms of the Debt plan section (id=debt-plan), auto-saved. One row per
-amortizing debt: its interest rate, remaining term in years, optional extra principal per month, and
-an optional date to pay it off in full (a loan-payoff plan event the events list also shows). The row
-set is fixed by the declared debts, so editing here never adds or removes a row; edits save in the
-background, re-rendering only to surface a bad value. A loan starts amortizing once both its rate and
-term are set.
+The per-debt repayment terms of the Debt plan section (id=debt-plan), auto-saved -- one card per
+amortizing debt. Each shows the current balance (a Profile fact, edited in the Debts step) and takes
+an interest rate, the months remaining, optional extra principal per month, and an optional
+full-payoff date (a loan-payoff plan event the events list also shows). The card set is fixed by the
+declared debts, so editing here never adds or removes one; edits
+save in the background, re-rendering only to surface a bad value. A loan starts amortizing once both
+its rate and term are set; the js-loan calculator then writes a live, advisory monthly-payment estimate.
 {% endcomment %}
 <div id="debt-plan">
   <form method="post" action="{% url 'debt_plan' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    <table class="table table-sm w-auto">
-      <thead>
-        <tr><th>Loan</th><th>Rate (%)</th><th>Years left</th><th>Extra / month</th><th>Pay off on</th></tr>
-      </thead>
-      <tbody>
-        {% for row in debt_plan_form.rows %}
-        <tr>
-          <td>{{ row.name }}<div class="small text-muted">{{ row.kind }}</div></td>
-          <td>{{ row.rate }}{% if row.rate.errors %}<span class="text-danger small d-block">{{ row.rate.errors|join:" " }}</span>{% endif %}</td>
-          <td>{{ row.term }}{% if row.term.errors %}<span class="text-danger small d-block">{{ row.term.errors|join:" " }}</span>{% endif %}</td>
-          <td>{{ row.extra }}{% if row.extra.errors %}<span class="text-danger small d-block">{{ row.extra.errors|join:" " }}</span>{% endif %}</td>
-          <td>{{ row.payoff }}{% if row.payoff.errors %}<span class="text-danger small d-block">{{ row.payoff.errors|join:" " }}</span>{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <p class="text-muted small">A loan starts amortizing once its rate and years remaining are both
+    {% for row in debt_plan_form.rows %}
+    <div class="{{ AppConst.LOAN_CLASS }} border rounded p-2 mb-2"
+         data-{{ AppConst.LOAN_BALANCE_DATA_ATTR }}="{{ row.balance }}">
+      <div class="fw-semibold">{{ row.name }}
+        <span class="text-muted small">{{ row.kind }} &middot; balance {{ row.balance }}</span></div>
+      <div class="row">
+        <div class="col-sm-6 col-lg-3">{% include 'inputs/interview/_field.html' with field=row.rate %}</div>
+        <div class="col-sm-6 col-lg-3">{% include 'inputs/interview/_field.html' with field=row.term %}</div>
+        <div class="col-sm-6 col-lg-3">{% include 'inputs/interview/_field.html' with field=row.extra %}</div>
+        <div class="col-sm-6 col-lg-3">{% include 'inputs/interview/_field.html' with field=row.payoff %}</div>
+      </div>
+      <p class="{{ AppConst.LOAN_READOUT_CLASS }} text-info small mb-0"></p>
+    </div>
+    {% endfor %}
+    <p class="text-muted small">A loan starts amortizing once its rate and months remaining are both
       set; extra principal and a full-payoff date are optional. Changes save automatically.</p>
   </form>
 </div>

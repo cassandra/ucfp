@@ -1,12 +1,12 @@
 {% comment %}
 The Debt plan pane: repayment terms for each amortizing loan, and a paydown calculator for each
-credit card -- each an auto-saving form managed by its own async view outside the section's Continue
+credit card -- each an auto-saving form managed by its own async view outside the section's Next
 form. Reads the debts declared in the Debts step. When there are no debts to plan, it says so rather
 than showing empty tables.
 {% endcomment %}
 {% if form.debt_plan_form.has_debts %}
 <h3 class="h6">Loans</h3>
-<p class="text-muted">For each loan, how you'll pay it down. Changes save automatically, and Continue
+<p class="text-muted">For each loan, how you'll pay it down. Changes save automatically, and Next
   moves on when you're done.</p>
 {% include 'inputs/interview/sections/debt_plan_list.html' with debt_plan_form=form.debt_plan_form %}
 {% endif %}

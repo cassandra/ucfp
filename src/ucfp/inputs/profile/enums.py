@@ -2,6 +2,17 @@
 from common.labeled_enum import LabeledEnum
 
 
+class HousingTenure( LabeledEnum ):
+    """How the household holds its home -- a current fact, distinct from the rent amount (a plan, set
+    in Spending). Owning is also carried by the residence asset; this positively marks renting and the
+    rent-free case, which an asset's absence alone cannot. Renting drives the rented-home column and
+    the monthly-rent row in the property-expenses matrix."""
+
+    OWN     = ( 'Own', 'The household owns its primary residence.' )
+    RENT    = ( 'Rent', 'The household rents the home it occupies.' )
+    NEITHER = ( 'Neither', 'No recurring housing cost (e.g. living rent-free).' )
+
+
 class DebtKind( LabeledEnum ):
     """How a debt is treated for planning -- a user-facing classification, not an engine concept.
     Amortizing kinds (mortgage, student, personal, auto, other) are real loans that pay down on a

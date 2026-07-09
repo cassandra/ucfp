@@ -7,35 +7,18 @@ class ParameterSetKind( LabeledEnum ):
     the registry key for its typed schema."""
 
     ECONOMIC_OUTLOOK = ( 'Economic Outlook', 'A schedule of economic rate assumptions.' )
-    LIFESTYLE_COSTS  = ( 'Lifestyle Costs', 'A table of discretionary expenses by lifestyle level.' )
     EXPENSE_CATALOG  = ( 'Expense Catalog', 'The curated catalog of expense types and defaults.' )
-
-
-class LifestyleLevel( LabeledEnum ):
-    """A spending tier a user schedules over time -- the uniform selector that indexes each
-    lifestyle expense's low/medium/high value."""
-
-    HIGH   = ( 'High'  , 'An expansive lifestyle: more travel, dining, discretionary spend.' )
-    MEDIUM = ( 'Medium', 'A moderate, typical lifestyle.' )
-    LOW    = ( 'Low'   , 'A lean lifestyle: reduced discretionary spend.' )
-
-
-class LifestyleScope( LabeledEnum ):
-    """Which curated lifestyle cost table a scenario draws from -- the table's identity, not a
-    level. `GENERAL` is the non-regional default; regional tables are added as more scopes."""
-
-    GENERAL = ( 'General', 'The general, non-regional cost table.' )
 
 
 class ExpenseCategory( LabeledEnum ):
     """How curated expenses group in the interview -- the user-facing buckets, and the decision each
-    attaches to: Property costs to a dwelling one owns or rents, Auto to a vehicle; Everyday,
+    attaches to: Property costs to a dwelling one owns or rents, Vehicle to a car; Everyday,
     Discretionary, Health, and Miscellaneous always apply."""
 
     EVERYDAY      = ( 'Everyday Living', 'Food, clothing, and the recurring basics.' )
     DISCRETIONARY = ( 'Discretionary', 'Travel, entertainment, hobbies -- the lifestyle spend.' )
     PROPERTY      = ( 'Property', 'Operating costs of a dwelling -- upkeep, insurance, utilities, property tax -- one set per owned property, taxed by its type.' )
-    AUTO          = ( 'Auto', 'Costs of owning a vehicle.' )
+    VEHICLE       = ( 'Vehicle', 'Running costs of owning a car.' )
     HEALTH        = ( 'Health', 'Medical care and health insurance.' )
     GIVING        = ( 'Giving', 'Charitable contributions.' )
     MISCELLANEOUS = ( 'Miscellaneous', 'Household costs not tied to a single dwelling (e.g. umbrella insurance).' )

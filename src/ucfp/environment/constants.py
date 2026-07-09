@@ -83,13 +83,29 @@ class AppConst:
     CREDIT_CARD_DATE_CLASS        = 'js-credit-card-date'     # the target/payoff date input
     CREDIT_CARD_READOUT_CLASS     = 'js-credit-card-readout'  # where the live figure is written
     CREDIT_CARD_BALANCE_DATA_ATTR = 'card-balance'            # the card's balance, on the wrapper
-    CREDIT_CARD_APR_PERCENT       = 18                        # assumed card APR (calculator + engine)
+    # The assumed card APR (from inputs.builtin_assumptions) rides here as a percent so the client
+    # calculator reads the same value the engine uses; the server renders it onto the wrapper.
+    CREDIT_CARD_APR_DATA_ATTR     = 'card-apr'                # the assumed APR (percent), on the wrapper
 
-    # The auto-loan terms the smoothed car model assumes when a future car is financed: the financed
-    # amount (price minus down payment, or backed out from a monthly payment) is amortized at this
-    # rate over this term, and the lifetime cost is spread over the purchase recurrence.
-    AUTO_LOAN_APR_PERCENT  = 6    # assumed auto-loan APR
-    AUTO_LOAN_TERM_YEARS   = 5    # assumed auto-loan term
+    # The loan payment calculator (one per amortizing debt, in the debt-plan step). The wrapper carries
+    # the current balance (a Profile fact); these mark the rate/term/extra inputs the calculator reads
+    # to show a live, advisory monthly-payment estimate. Display-only -- materialization is authoritative.
+    LOAN_CLASS              = 'js-loan'          # the per-loan widget wrapper
+    LOAN_RATE_CLASS         = 'js-loan-rate'     # the interest-rate input (percent)
+    LOAN_TERM_CLASS         = 'js-loan-term'     # the remaining-term input (months)
+    LOAN_EXTRA_CLASS        = 'js-loan-extra'    # the extra-principal-per-month input
+    LOAN_READOUT_CLASS      = 'js-loan-readout'  # where the live estimate is written
+    LOAN_BALANCE_DATA_ATTR  = 'loan-balance'     # the loan's current balance, on the wrapper
+
+    # The recurring-expenses table's per-column delete: the x stamps its span index into the form's
+    # hidden `delete_span` field, then triggers the autosave, so the server drops that span.
+    RECURRING_DELETE_CLASS  = 'js-recurring-delete'  # the per-column x control (carries data-span)
+
+    # The property-expenses matrix's live default->placeholder mirror. A per-property cell shows the
+    # row's shared Default as its placeholder (what a blank cell falls back to); editing the Default
+    # updates those placeholders client-side, since the pane saves silently and never re-renders them.
+    PROPERTY_DEFAULT_CLASS  = 'js-property-default'   # a row's Default amount input
+    PROPERTY_OVERRIDE_CLASS = 'js-property-override'  # a per-property override input in the same row
 
     @classmethod
     def to_json_dict_str( cls ):

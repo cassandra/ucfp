@@ -43,15 +43,36 @@
       <ul class="list-group list-group-flush">
         {% for plan in plans %}
         <li class="list-group-item d-flex align-items-center py-2">
-          <span>{{ plan.label }}</span>
-          <a href="{% url 'flow_plans' %}" class="btn btn-sm btn-link ml-auto p-0">Edit</a>
+          <form method="post" action="{% url 'plan_rename' plan.uuid %}"
+                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
+            {% csrf_token %}
+            <input type="text" name="label" value="{{ plan.label }}" aria-label="Plan name"
+                   class="form-control form-control-sm border-0 bg-transparent px-1">
+            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
+            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
+          </form>
+          <span class="d-flex align-items-center flex-shrink-0">
+            <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'plan_clone' plan.uuid %}" class="m-0 mr-3">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+            </form>
+            <form method="post" action="{% url 'plan_delete' plan.uuid %}" class="m-0"
+                  data-confirm="Delete &quot;{{ plan.label }}&quot;? This cannot be undone.">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
+            </form>
+          </span>
         </li>
         {% empty %}
         <li class="list-group-item text-muted small">No plans yet.</li>
         {% endfor %}
       </ul>
       <div class="card-footer bg-white border-0">
-        <a href="{% url 'flow_plans' %}" class="btn btn-outline-primary btn-sm btn-block">+ New plan</a>
+        <form method="post" action="{% url 'plan_new' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New plan</button>
+        </form>
       </div>
     </div>
   </div>
@@ -65,15 +86,36 @@
       <ul class="list-group list-group-flush">
         {% for item in assumptions %}
         <li class="list-group-item d-flex align-items-center py-2">
-          <span>{{ item.label }}</span>
-          <a href="{% url 'flow_assumptions' %}" class="btn btn-sm btn-link ml-auto p-0">Edit</a>
+          <form method="post" action="{% url 'assumptions_rename' item.uuid %}"
+                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
+            {% csrf_token %}
+            <input type="text" name="label" value="{{ item.label }}" aria-label="Assumptions name"
+                   class="form-control form-control-sm border-0 bg-transparent px-1">
+            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
+            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
+          </form>
+          <span class="d-flex align-items-center flex-shrink-0">
+            <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'assumptions_clone' item.uuid %}" class="m-0 mr-3">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+            </form>
+            <form method="post" action="{% url 'assumptions_delete' item.uuid %}" class="m-0"
+                  data-confirm="Delete &quot;{{ item.label }}&quot;? This cannot be undone.">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
+            </form>
+          </span>
         </li>
         {% empty %}
         <li class="list-group-item text-muted small">No assumptions yet.</li>
         {% endfor %}
       </ul>
       <div class="card-footer bg-white border-0">
-        <a href="{% url 'flow_assumptions' %}" class="btn btn-outline-primary btn-sm btn-block">+ New assumptions</a>
+        <form method="post" action="{% url 'assumptions_new' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New assumptions</button>
+        </form>
       </div>
     </div>
   </div>

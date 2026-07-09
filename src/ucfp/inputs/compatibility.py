@@ -23,14 +23,18 @@ from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import Profile
 
 
+# The shared lead-in for a plans-drift report, so the raise-at-use error and the pre-run readiness
+# check spell the drift the same way.
+DRIFT_LEAD_IN = 'These plans reference things your situation no longer has:'
+
+
 class PlansIncompatibleError( ValueError ):
     """A Plans names Profile entities that do not exist in the Profile it is run against. Carries the
     human-readable `issues` so the run surface can show exactly what to fix."""
 
     def __init__( self, issues: list[ str ] ):
         self.issues = issues
-        super().__init__(
-            'These plans reference things your situation no longer has: ' + ' '.join( issues ) )
+        super().__init__( DRIFT_LEAD_IN + ' ' + ' '.join( issues ) )
 
 
 def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
@@ -46,10 +50,8 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
     for timing in plans.timing:
         if timing.subject_handle not in subjects:
             issues.append( f'retirement timing for an unknown person "{timing.subject_handle}";' )
-    for expense in plans.expenses:
-        if expense.property_handle is not None and expense.property_handle not in accounts:
-            issues.append(
-                f'spending "{expense.name}" on an unknown property "{expense.property_handle}";' )
+    # Property-expense overrides key by property handle, but a removed property's override is pruned on
+    # merge and ignored at materialize, so it needs no drift check here.
     for contribution in plans.contributions:
         if contribution.account_handle not in accounts:
             issues.append(

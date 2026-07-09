@@ -1,9 +1,10 @@
 """The external-factors section: the assumptions' economic-factors copy and the tax projection.
 
-§8 seeds the assumptions' own copy of the economic rates from a library preset (Expected by default),
-then lets the user edit any rate; the tax projection is shown as one more factor, defaulting to
-COLA-indexed. Each rate is entered as a percent. The library preset is consulted only here (to seed
-the copy) -- materialization reads the copy, not the library.
+§8 shows the assumptions' own copy of the economic rates (seeded from a library preset, Expected by
+default) and lets the user edit any rate; the tax projection is shown as one more factor, defaulting
+to COLA-indexed. Each rate is entered as a percent. The default seed and the tax-projection
+composition are shared with minting through `assumptions.defaults` -- materialization reads the copy
+stored here, not the library.
 """
 from dataclasses import fields, replace
 from decimal import Decimal
@@ -13,20 +14,14 @@ from django import forms
 from common.rate import Rate
 
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.parameter_sets.enums import EconomicOutlookVariant
-from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.jurisdiction.enums import StatuteForecastType
-from ucfp.jurisdiction.law import StatuteProjection, TaxProjection
+
+from .assumptions.defaults import DEFAULT_TAX_FORECAST_TYPE, default_economics, tax_projection
 
 # Every rate factor of the engine's EconomicParameters (all of them, adjustable). The non-rate
 # `window` is excluded -- it stays at its default, giving a constant outlook.
 _FACTOR_NAMES = tuple(
     spec.name for spec in fields( EconomicParameters ) if isinstance( spec.default, Rate ) )
-
-
-def default_economics() -> EconomicParameters:
-    """The economic-factors copy a new Assumptions aggregate seeds with -- the Expected preset."""
-    return economic_parameters( EconomicOutlookVariant.EXPECTED.label )
 
 
 class ExternalFactorsForm( forms.Form ):
@@ -36,7 +31,7 @@ class ExternalFactorsForm( forms.Form ):
 
     forecast_type = forms.ChoiceField(
         label = 'Tax brackets', choices = StatuteForecastType.choices(),
-        initial = StatuteForecastType.COLA_INDEXED.name.lower() )
+        initial = DEFAULT_TAX_FORECAST_TYPE.name.lower() )
 
     def __init__( self, data = None, *, profile = None, assumptions = None ):
         super().__init__( data, initial = self._initial( assumptions ) )
@@ -66,15 +61,26 @@ class ExternalFactorsForm( forms.Form ):
         economics = EconomicParameters( **{
             name: Rate.percent( self.cleaned_data[ name ] ) for name in _FACTOR_NAMES } )
         tax_type = StatuteForecastType.from_name( self.cleaned_data[ 'forecast_type' ] )
-        tax_projection = TaxProjection(
-            forecast_type = tax_type, projection = self._projection( tax_type, economics ) )
         return profile, replace(
-            assumptions, economics = economics, tax_projection = tax_projection )
+            assumptions, economics = economics,
+            tax_projection = tax_projection( tax_type, economics ) )
 
-    @staticmethod
-    def _projection( tax_type, economics ):
-        """A COLA-indexed forecast indexes the tax figures at the economy's inflation -- the tax
-        projection following the inflation factor; current law needs no projection."""
-        if tax_type is StatuteForecastType.COLA_INDEXED:
-            return StatuteProjection( cola_rate = economics.inflation )
-        return None
+
+class ExternalFactorsSectionForm:
+    """§8 section wrapper. The External Factors pane self-saves through `ExternalFactorsView`, so this
+    section form only carries the flow: it always validates and its `apply` is a no-op, leaving Next to
+    advance without re-saving. It exposes the editor (`factors_form`) for the pane to render."""
+
+    def __init__( self, data = None, *, profile = None, assumptions = None ):
+        self._profile     = profile
+        self._assumptions = assumptions
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def factors_form( self ) -> ExternalFactorsForm:
+        return ExternalFactorsForm( profile = self._profile, assumptions = self._assumptions )
+
+    def apply( self, profile, assumptions ):
+        return profile, assumptions

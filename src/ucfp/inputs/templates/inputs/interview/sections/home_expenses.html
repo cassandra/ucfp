@@ -1,0 +1,10 @@
+{% comment %}
+The Home Expenses step (Plans flow): the household's per-property operating costs -- property tax,
+insurance, utilities, and (when renting) rent -- as a shared-default-with-overrides matrix. The matrix
+renders outside the section's Next form and persists each edit on its own through `PropertyExpensesView`.
+The pane comes from the section wrapper (`form.property_form`); this step is shown only when the
+household has a dwelling with operating costs, so the matrix always has rows.
+{% endcomment %}
+<p class="text-muted">Operating costs per property, using typical values -- property tax, insurance, and
+  the like. Set one shared amount and override it where a property differs.</p>
+{% include 'inputs/interview/sections/property_expenses.html' with property_form=form.property_form %}

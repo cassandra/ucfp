@@ -110,26 +110,21 @@ def _reopen_schedule( schedule : list, end_date ) -> list:
 
 
 def _end_property_flows( profile, plans, property_handle : str, sale_date ):
-    """End the sold property's rental income and operating expenses at `sale_date` -- both are
-    amount-over-span schedules, capped the same way. The mortgage is not ended here: the sale's
-    `contribute` emits a scheduled loan payoff that clears it from the proceeds at the sale date."""
-    incomes  = [ replace( flow, schedule = _end_schedule( flow.schedule, sale_date ) )
-                 if flow.property_handle == property_handle else flow
-                 for flow in profile.income_flows ]
-    expenses = [ replace( expense, schedule = _end_schedule( expense.schedule, sale_date ) )
-                 if expense.property_handle == property_handle else expense
-                 for expense in plans.expenses ]
-    return replace( profile, income_flows = incomes ), replace( plans, expenses = expenses )
+    """End the sold property's rental income at `sale_date` -- an amount-over-span schedule, capped at
+    the sale. Its operating expenses are constant amounts clipped to the sale at materialize (from the
+    sale event), not here. The mortgage is not ended here either: the sale's `contribute` emits a
+    scheduled loan payoff that clears it from the proceeds at the sale date."""
+    incomes = [ replace( flow, schedule = _end_schedule( flow.schedule, sale_date ) )
+                if flow.property_handle == property_handle else flow
+                for flow in profile.income_flows ]
+    return replace( profile, income_flows = incomes ), plans
 
 
 def _reopen_property_flows( profile, plans, property_handle : str, sale_date ):
-    incomes  = [ replace( flow, schedule = _reopen_schedule( flow.schedule, sale_date ) )
-                 if flow.property_handle == property_handle else flow
-                 for flow in profile.income_flows ]
-    expenses = [ replace( expense, schedule = _reopen_schedule( expense.schedule, sale_date ) )
-                 if expense.property_handle == property_handle else expense
-                 for expense in plans.expenses ]
-    return replace( profile, income_flows = incomes ), replace( plans, expenses = expenses )
+    incomes = [ replace( flow, schedule = _reopen_schedule( flow.schedule, sale_date ) )
+                if flow.property_handle == property_handle else flow
+                for flow in profile.income_flows ]
+    return replace( profile, income_flows = incomes ), plans
 
 
 def _pretax_accounts( profile ) -> list:
@@ -209,6 +204,7 @@ class EventContributions:
         self.income_items     = list()
         self.expense_items    = list()
         self.subject_removals = list()
+        self.property_sales   = dict()   # property handle -> sale date, for clipping its operating costs
 
 
 # --- The handler base + the kinds -----------------------------------------
@@ -341,6 +337,7 @@ class SellPropertyEvent( EventType ):
         # No amount: a sale realizes the entire holding at its projected value, then pays off any
         # mortgage secured by it from the proceeds (the engine clears the projected balance).
         property_handle = event.selections[ PROPERTY_ROLE ]
+        into.property_sales[ property_handle ] = event.date
         into.scheduled_events.append( ScheduledRealization(
             event_date = event.date, holding = property_handle ) )
         for loan_handle in _mortgages( profile, property_handle ):
@@ -617,8 +614,8 @@ class EventForm( forms.Form ):
 
 class EventsForm:
     """§7 L0 -- the plan's events. A no-op section form: events are added and removed through the
-    `EventAddView`/`EventDeleteView`, so Continue just advances. It exposes the current events and
-    the offerable kinds for the pane."""
+    `EventAddView`/`EventDeleteView`, so advancing does nothing but move on. It exposes the current
+    events and the offerable kinds for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile  = profile

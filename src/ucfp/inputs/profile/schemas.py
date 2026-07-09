@@ -26,7 +26,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, Rea
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
 
-from .enums import DebtKind
+from .enums import DebtKind, HousingTenure
 
 
 # Handles are stable string identities other sections reference; never display names. The subject
@@ -35,9 +35,11 @@ from .enums import DebtKind
 PRIMARY_SUBJECT_HANDLE = 'subject'
 PARTNER_SUBJECT_HANDLE = 'partner'
 
-# The residence asset and rent obligation the home section mints, shared with the spending section.
+# The residence asset the home section mints, and the stable identity of a tenant's rented home --
+# a synthetic handle (there is no owned asset behind it) that keys the rented-home column and its
+# overrides in the property-expenses matrix. Both are shared with the Home Expenses step.
 RESIDENCE_ASSET_HANDLE = 'residence'
-RENT_OBLIGATION_HANDLE = 'rent'
+RENTED_HOME_HANDLE     = 'rented-home'
 # The mortgage debt secured against the residence, minted by the home section and surfaced (read-only)
 # in the Debts section. A rental's mortgage handle is derived from its own property handle instead.
 RESIDENCE_MORTGAGE_HANDLE = 'residence-mortgage'
@@ -174,6 +176,9 @@ class Profile:
     # People
     subjects: list[ SubjectProfile ] = field( default_factory = list )
     filing_status: Optional[ FilingStatus ] = None
+    # How the household holds its home. Owning is also carried by the residence asset; renting and the
+    # rent-free case have no asset, so this fact carries them (and gates the rented-home housing costs).
+    home_tenure: HousingTenure = HousingTenure.OWN
     # The household's tax jurisdiction -- a fact these facts are all expressed under (account tax
     # classes, entitlements, filing status). US federal is the only one modeled today.
     jurisdiction_type: JurisdictionType = JurisdictionType.US_FEDERAL

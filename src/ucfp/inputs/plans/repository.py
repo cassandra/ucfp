@@ -52,6 +52,26 @@ def create_plans( organization: Organization ) -> PlansRecord:
     return save_plans( record, _initial_plans() )
 
 
+def delete_plans( record: PlansRecord ) -> None:
+    """Delete a Plans set. Captured runs snapshot their inputs, so nothing downstream depends on it."""
+    record.delete()
+
+
+def rename_plans( record: PlansRecord, label: str ) -> PlansRecord:
+    """Rename a Plans set, leaving its contents untouched."""
+    record.label = label
+    record.save()
+    return record
+
+
+def clone_plans( record: PlansRecord ) -> PlansRecord:
+    """Mint a new Plans set holding a copy of `record`'s contents, named "<label> copy" -- the basis
+    for tweaking a variant without disturbing the original. The copy goes through the typed load/save
+    seam, so it is fully independent of the source."""
+    clone = PlansRecord( organization = record.organization, label = f'{record.label} copy' )
+    return save_plans( clone, load_plans( record ) )
+
+
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new set, since many coexist per organization."""
     return f'Plans {plans_for( organization ).count() + 1}'

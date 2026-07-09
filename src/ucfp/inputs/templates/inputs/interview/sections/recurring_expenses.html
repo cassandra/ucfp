@@ -1,0 +1,43 @@
+{% comment %}
+The recurring-expenses table (id=recurring-expenses): the regular (non-property) expenses over the
+shared age-span timeline. The js-autosave form posts each edit to `RecurringExpensesView`, which
+persists silently and re-renders the table only when a span is added, removed, or re-aged. Each span's
+"Until age" header sets its boundary; the last (blank) header is the open "thereafter" span -- give it
+an age to split it, clear a span's age to delete it. Ages are the primary person's. Reads `recurring_form`.
+{% endcomment %}
+<div id="recurring-expenses">
+  <form method="post" action="{% url 'recurring_expenses' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <input type="hidden" name="delete_span" value="">
+    <table class="table table-sm w-auto align-middle">
+      <thead>
+        <tr>
+          <th scope="col">Expense</th>
+          {% for header in recurring_form.span_headers %}
+          <th scope="col" class="text-right small">Until age {{ header.field }}
+            {% if recurring_form.span_count > 1 %}
+            <button type="button" class="{{ AppConst.RECURRING_DELETE_CLASS }} btn btn-sm btn-link text-danger p-0 ml-1"
+                    data-span="{{ forloop.counter0 }}" aria-label="Delete this span" title="Delete this span">&times;</button>
+            {% endif %}
+            {% if header.year %}<span class="text-muted d-block">reaches {{ header.year }}</span>{% endif %}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for section in recurring_form.sections %}
+        <tr class="table-light"><th colspan="{{ recurring_form.span_count|add:1 }}">{{ section.label }}</th></tr>
+        {% for row in section.rows %}
+        <tr>
+          <th scope="row" class="font-weight-normal text-left">{{ row.name }} <span class="text-muted small">{{ row.cadence }}</span></th>
+          {% for cell in row.cells %}
+          <td class="text-right">{{ cell }}{% if cell.errors %}<span class="text-danger small d-block">{{ cell.errors|join:" " }}</span>{% endif %}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small">An amount per age span, at each expense's cadence. Set an "Until age" to
+      split a span; clear it to remove that span. Ages are the primary person's. Changes save automatically.</p>
+  </form>
+</div>

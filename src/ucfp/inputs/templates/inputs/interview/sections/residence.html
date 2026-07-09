@@ -1,10 +1,11 @@
 {% comment %}
 The residence sub-form of the Property pane (id=residence). It auto-saves in the background (the
 js-autosave form posts each edit to the residence view, which persists silently and re-renders only
-on a genuine field error). "Own or rent?" is a switch: the Own case (value, purchase, mortgage
-balance) or the Rent case (monthly rent) shows per the choice. Rendered outside the section's Continue form, so
-its form is not nested. Without JavaScript both cases render, and the server reads only the fields
-the chosen tenure makes relevant.
+on a genuine field error). "Own or rent?" is a switch that records the tenure fact: the Own case
+(value, purchase, mortgage balance) shows its fields; Rent and Neither carry no fields here (the
+monthly rent is a plan, set in Spending). Rendered outside the section's Next form, so its form is not
+nested. Without JavaScript every case renders, and the server reads only the fields the chosen tenure
+makes relevant.
 {% endcomment %}
 <div id="residence">
   <h3 class="h6">Your home</h3>
@@ -18,7 +19,10 @@ the chosen tenure makes relevant.
         {% include 'inputs/interview/_field.html' with field=residence_form.mortgage_balance %}
       </div>
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="rent">
-        {% include 'inputs/interview/_field.html' with field=residence_form.monthly_rent %}
+        <p class="text-muted small">Your monthly rent is set with your other housing costs in Spending.</p>
+      </div>
+      <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="neither">
+        <p class="text-muted small">No recurring housing cost recorded.</p>
       </div>
     </div>
   </form>

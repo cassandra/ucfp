@@ -5,7 +5,7 @@ any mortgage (a `Debt` secured against it, its balance entered here and shown re
 tied by a shared property handle. This module owns creating, editing, and removing such a property as
 one, so the rest of the app keeps seeing flat lists while the user works with a whole property. A
 rental additionally carries depreciation attributes (a `PropertyProfile`) and, in Income, a gross
-rent; a second home is personal-use with neither. Operating expenses attach in spending (§6) by the
+rent; a second home is personal-use with neither. Operating expenses attach in Home Expenses by the
 same handle.
 """
 from dataclasses import dataclass, replace
@@ -44,8 +44,10 @@ def properties_context( profile, asset_class : AssetClass ) -> list:
 
 
 def delete_property( profile, plans, property_handle : str ):
-    """Remove a property as a unit: its holding, any gross income, any debts secured against it and
-    their full plan reap (repayment, extra principal, payoff), and any operating expenses attached."""
+    """Remove a property as a unit: its holding, any gross income, and any debts secured against it with
+    their full plan reap (repayment, extra principal, payoff). Its operating expenses need no reap here
+    -- property-expense overrides key by handle and are pruned on the next merge, and materialization
+    only reaches properties that still exist."""
     secured = { debt.handle for debt in profile.debts
                 if debt.secured_asset == property_handle }
     profile = replace(
@@ -55,8 +57,6 @@ def delete_property( profile, plans, property_handle : str ):
                          if flow.property_handle != property_handle ],
         debts        = [ debt for debt in profile.debts if debt.handle not in secured ] )
     plans = plans_without_debts( plans, secured )
-    plans = replace(
-        plans, expenses = [ e for e in plans.expenses if e.property_handle != property_handle ] )
     return profile, plans
 
 
