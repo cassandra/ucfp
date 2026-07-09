@@ -84,6 +84,5 @@ def _default_label( organization: Organization ) -> str:
 def _initial_assumptions() -> Assumptions:
     """The content a new assumptions set starts from -- the default external factors (Expected economic
     outlook, COLA-indexed tax projection), so a minted set is complete and runnable and the
-    external-factors section edits it rather than first populating it. The extension point for richer
-    seeding later."""
+    external-factors section edits it rather than first populating it."""
     return default_assumptions()

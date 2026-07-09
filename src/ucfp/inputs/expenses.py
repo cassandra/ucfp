@@ -11,7 +11,7 @@ from ucfp.parameter_sets.repository import load
 from ucfp.inputs.profile.enums import HousingTenure
 
 # Categories that always apply; Property attaches to owning or renting a dwelling (added by
-# `applicable_categories`). Vehicle running costs are presumed for now -- gated on a vehicle later.
+# `applicable_categories`). Vehicle running costs are presumed applicable, not gated on owning a vehicle.
 _ALWAYS = ( ExpenseCategory.EVERYDAY, ExpenseCategory.DISCRETIONARY, ExpenseCategory.HEALTH,
             ExpenseCategory.VEHICLE, ExpenseCategory.MISCELLANEOUS )
 

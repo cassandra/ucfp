@@ -473,7 +473,7 @@ def current_plans_record( request ):
 
 def current_assumptions_record( request ):
     """The Assumptions record the user is editing -- the session-selected one (scoped to the org),
-    else the latest, minting one if the org has none. The twin of `current_plans_record`."""
+    else the latest, minting one if the org has none."""
     organization = request.organization
     uuid = request.session_state.current_assumptions_uuid
     if uuid is not None:

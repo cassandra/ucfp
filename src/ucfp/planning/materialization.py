@@ -183,8 +183,8 @@ def _debt_interest_class( debt : Debt, secured_asset : Optional[ AssetProfile ] 
 
 # --- Plans: credit-card paydown ------------------------------------------
 
-# The nominal APR the paydown calculator and this resolver assume; the client-side estimate reads the
-# same literal (via AppConst), so the two cannot drift.
+# The nominal APR the paydown calculator and this resolver assume. The client-side estimate reads the
+# same assumption (the server renders it onto each card), so the two cannot drift.
 _CREDIT_CARD_APR = BUILTIN_ASSUMPTIONS.credit_card_apr
 
 
@@ -511,7 +511,7 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
 
 def _property_schedule( amount : Decimal, sale_date ) -> Schedule:
     """A constant `amount` over the property's ownership window -- the whole forecast, or capped at its
-    sale date when it is sold (the same cap the rental income takes)."""
+    sale date when it is sold."""
     window = DateWindow( end = sale_date ) if sale_date is not None else DateWindow()
     return Schedule( ( WindowedAmount( amount, window ), ) )
 

@@ -1,5 +1,5 @@
 """The forecast's built-in assumptions -- default rates and terms the engine applies that are not
-(yet) user-editable.
+user-editable.
 
 Consolidated as one named bundle so a new built-in assumption has an obvious home, and so both the
 inputs layer (the credit-card form) and the planning engine read them from a single place. Defined
@@ -9,8 +9,7 @@ client on a `data-` attribute of the card widget (see `credit_card.py` / `inputs
 in `AppConst`.
 
 Distinct from the user-editable `Assumptions` aggregate (the economic outlook and tax projection):
-these are values the app assumes on the user's behalf. Making one editable later means lifting it into
-`Assumptions` and seeding its default from here.
+these are values the app assumes on the user's behalf.
 """
 from dataclasses import dataclass
 from decimal import Decimal

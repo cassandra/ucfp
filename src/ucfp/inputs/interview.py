@@ -166,7 +166,6 @@ class SubjectsForm( forms.Form ):
 
     @staticmethod
     def _filing_status_for( has_partner : bool ) -> FilingStatus:
-        """Single vs joint from partner presence."""
         return FilingStatus.MARRIED_JOINT if has_partner else FilingStatus.SINGLE
 
 
@@ -415,8 +414,7 @@ class AccountsForm( forms.Form ):
 class AccountsSectionForm:
     """§4 section wrapper. The Accounts pane self-saves through `AccountsView`, so this section form
     only carries the flow: it always validates and its `apply` is a no-op, leaving Next to advance
-    without re-saving. It exposes the editor (`accounts_form`) for the pane -- the same shape the other
-    self-saving sections use."""
+    without re-saving. It exposes the editor (`accounts_form`) for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -560,8 +558,8 @@ class LivingExpensesSectionForm:
             plans, recurring_expenses = merged_recurring_expenses( profile, plans ) )
 
 
-# The interview's order, from the input model in issue #4. A section with a form is live; the rest
-# are declared so the stepper shows the full path ahead.
+# The interview's order. A section with a form is live; the rest are declared so the stepper shows
+# the full path ahead.
 SECTIONS = [
     Section( 'subjects'    , 'Who this plan is for', form = SubjectsSectionForm,
              outer_template = 'inputs/interview/sections/subjects.html' ),
@@ -602,7 +600,7 @@ def section_for( key : str ) -> Optional[ Section ]:
 
 def applicable_sections( profile : Profile ) -> list:
     """The sections that apply given what's been entered so far -- the conditionality hook, and the
-    real payoff of a linear flow. Today the one conditional step is Home Expenses, shown only when the
+    real payoff of a linear flow. The one conditional step is Home Expenses, shown only when the
     household has a dwelling with operating costs (owns property or rents); the rest always apply."""
     return [ section for section in SECTIONS
              if section.key != 'home-expenses' or has_property( profile ) ]

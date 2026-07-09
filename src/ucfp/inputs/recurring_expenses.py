@@ -126,7 +126,7 @@ class RecurringExpensesForm( forms.Form ):
 
     def _columns( self ) -> list:
         """The edited (until_age, [amount per expense]) columns after this POST's one structural action,
-        if any: an explicit column delete (a row's ×) or splitting the open span (giving it an age).
+        if any: an explicit column delete (a row's x) or splitting the open span (giving it an age).
         The last column is always the open 'thereafter' span -- deleting the open span leaves the new
         last ageless (so it becomes the thereafter). A non-last span left ageless is dropped, keeping
         the timeline continuous. Ordered by age, the open span last."""
@@ -137,7 +137,7 @@ class RecurringExpensesForm( forms.Form ):
                     for si in range( len( self._spans ) ) ]
         delete = self._delete_index()
         if delete is not None and 0 <= delete < len( columns ):
-            del columns[ delete ]                          # the row's × control
+            del columns[ delete ]                          # the row's x control
         elif columns and columns[ -1 ][ 0 ] is not None:
             columns.append( [ None, list( columns[ -1 ][ 1 ] ) ] )   # split the open span
         if not columns:
@@ -149,7 +149,7 @@ class RecurringExpensesForm( forms.Form ):
         return kept
 
     def _delete_index( self ):
-        """The span index the row's × control asked to delete (a raw `delete_span` field, not a form
+        """The span index the row's x control asked to delete (a raw `delete_span` field, not a form
         field), or None when this save carried no delete."""
         try:
             return int( ( self.data or {} ).get( 'delete_span' ) )

@@ -7,10 +7,10 @@ inputs the organization even has (the existence gate, shown before any bundle is
 user-facing messages each linked to the input flow that fixes it -- so a feature can stop a doomed run
 with actionable guidance instead of surfacing a raw materialization exception.
 
-`readiness_issues` mirrors the compatibility module's split: it enumerates the issues (and reuses
-`compatibility_issues` for the Plans->Profile drift it already owns), while materialization stays the
-structural backstop that raises at use. Each issue names the flow (`fix_route`) that resolves it -- a
-URL name taking no arguments, so a template can link straight to it.
+`readiness_issues` enumerates the issues (reusing `compatibility_issues` for the Plans->Profile drift
+it owns), while materialization stays the structural backstop that raises at use. Each issue names the
+flow (`fix_route`) that resolves it -- a URL name taking no arguments, so a template can link straight
+to it.
 """
 from dataclasses import dataclass
 

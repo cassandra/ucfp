@@ -69,8 +69,7 @@ class ExternalFactorsForm( forms.Form ):
 class ExternalFactorsSectionForm:
     """§8 section wrapper. The External Factors pane self-saves through `ExternalFactorsView`, so this
     section form only carries the flow: it always validates and its `apply` is a no-op, leaving Next to
-    advance without re-saving. It exposes the editor (`factors_form`) for the pane to render -- the
-    same shape the outer sections use (e.g. `LivingExpensesSectionForm`/`EventsForm`)."""
+    advance without re-saving. It exposes the editor (`factors_form`) for the pane to render."""
 
     def __init__( self, data = None, *, profile = None, assumptions = None ):
         self._profile     = profile

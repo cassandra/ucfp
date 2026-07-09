@@ -1,9 +1,9 @@
 {% comment %}
 The per-debt repayment terms of the Debt plan section (id=debt-plan), auto-saved -- one card per
-amortizing debt, mirroring the credit-card widgets below. Each shows the current balance (a Profile
-fact, edited in the Debts step) and takes an interest rate, the months remaining, optional extra
-principal per month, and an optional full-payoff date (a loan-payoff plan event the events list also
-shows). The card set is fixed by the declared debts, so editing here never adds or removes one; edits
+amortizing debt. Each shows the current balance (a Profile fact, edited in the Debts step) and takes
+an interest rate, the months remaining, optional extra principal per month, and an optional
+full-payoff date (a loan-payoff plan event the events list also shows). The card set is fixed by the
+declared debts, so editing here never adds or removes one; edits
 save in the background, re-rendering only to surface a bad value. A loan starts amortizing once both
 its rate and term are set; the js-loan calculator then writes a live, advisory monthly-payment estimate.
 {% endcomment %}

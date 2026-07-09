@@ -614,8 +614,8 @@ class EventForm( forms.Form ):
 
 class EventsForm:
     """§7 L0 -- the plan's events. A no-op section form: events are added and removed through the
-    `EventAddView`/`EventDeleteView`, so Next just advances. It exposes the current events and
-    the offerable kinds for the pane."""
+    `EventAddView`/`EventDeleteView`, so advancing does nothing but move on. It exposes the current
+    events and the offerable kinds for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile  = profile
