@@ -44,7 +44,7 @@ from .income import IncomeTableForm
 from .properties import (
     RENTAL_PANE, SECOND_HOME_PANE, PossessionsForm, PropertyPane, _minted_handle, delete_property,
     properties_context )
-from .spending import RecurringExpensesForm
+from .spending import PropertyExpensesForm, RecurringExpensesForm
 
 _HUB_TEMPLATE = 'inputs/hub.html'
 
@@ -437,6 +437,26 @@ class RecurringExpensesView( SelfSavingPaneView ):
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
         return changed                                     # a span changed -> re-render the table
+
+
+class PropertyExpensesView( SelfSavingPaneView ):
+    """`/inputs/interview/spending/property/` -- the property-expenses matrix of the Spending section:
+    the household's per-property operating costs as one shared default with per-property overrides.
+    Auto-saves each edit silently; the row and column sets change only when a property is added or
+    removed (in the Property section), so this pane never restructures itself."""
+
+    template     = 'inputs/interview/sections/property_expenses.html'
+    target       = 'property-expenses'
+    context_name = 'property_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return PropertyExpensesForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
 
 
 def current_plans_record( request ):

@@ -60,6 +60,8 @@ urlpatterns = [
           name = 'auto_purchases' ),
     path( 'interview/spending/recurring/', views.RecurringExpensesView.as_view(),
           name = 'recurring_expenses' ),
+    path( 'interview/spending/property/', views.PropertyExpensesView.as_view(),
+          name = 'property_expenses' ),
     path( 'interview/events/add/<str:kind>/', views.EventAddView.as_view(), name = 'event_add' ),
     path( 'interview/events/delete/<int:index>/', views.EventDeleteView.as_view(),
           name = 'event_delete' ),

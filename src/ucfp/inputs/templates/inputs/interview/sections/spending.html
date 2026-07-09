@@ -1,12 +1,10 @@
 {% comment %}
-The spending L0 pane. Three independent parts: a self-contained car-purchase/financing special case
-(large, sometimes-financed, so it does not fit the generic amount-per-cadence expense format); the
-recurring-expenses table (the regular, non-property categories over the shared age-span timeline,
-self-saving through its own view); and, when the household owns property, the per-property operating
-expenses -- each drills into its dense schedule editor inline. Property expenses are a distinct class,
-pending their own redesign.
+The spending L0 pane. Three independent parts, each self-saving through its own view: a self-contained
+car-purchase/financing special case (large, sometimes-financed, so it does not fit the generic
+amount-per-cadence expense format); the recurring-expenses table (the regular, non-property categories
+over the shared age-span timeline); and, when the household owns or rents a dwelling, the per-property
+operating expenses as a shared-default-with-overrides matrix.
 {% endcomment %}
-{% load common_tags %}
 <h3 class="h6">Car purchases &amp; financing</h3>
 <p class="text-muted">Buying and replacing cars over time -- the purchase and any financing, smoothed
   across the years. Handled on its own, apart from the recurring expenses below.</p>
@@ -17,19 +15,9 @@ pending their own redesign.
   spending can rise or fall as you age.</p>
 {% include 'inputs/interview/sections/recurring_expenses.html' with recurring_form=form.recurring_form %}
 
-{% if form.property_group_totals %}
+{% if form.property_form.rows %}
 <h3 class="h6 mt-4">Property expenses</h3>
-<p class="text-muted">Operating costs per property, using typical values. These are being reworked
-  into an editable table (a shared set with per-property overrides).</p>
-<table class="table table-sm w-auto">
-  <thead><tr><th>Property</th><th class="text-right">Per year</th></tr></thead>
-  <tbody>
-    {% for group, total in form.property_group_totals %}
-    <tr>
-      <td>{{ group.label }}</td>
-      <td class="text-right">{{ total|money:currency }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<p class="text-muted">Operating costs per property, using typical values -- property tax, insurance, and
+  the like. Set one shared amount and override it where a property differs.</p>
+{% include 'inputs/interview/sections/property_expenses.html' with property_form=form.property_form %}
 {% endif %}

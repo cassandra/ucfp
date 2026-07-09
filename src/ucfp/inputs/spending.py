@@ -3,17 +3,15 @@ catalog-to-plans seeding behind both.
 
 §6 presents spending drawn from the curated catalog: the regular categories as a recurring-expenses
 table over the shared age-span timeline, and the household's property operating costs as one shared
-set with per-property overrides. This module decides which categories/properties apply from the plan's
-context, seeds the Plans' expenses from the catalog (preserving any amounts already set), and owns the
-annualization the totals use.
+default with per-property overrides, edited as a matrix (expense types down, properties across). This
+module decides which categories/properties apply from the plan's context and seeds the Plans' expenses
+from the catalog, preserving any amounts already set.
 """
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from decimal import Decimal
 from typing import Optional
 
 from django import forms
-
-from common.recurrence import TimeUnit
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.parameter_sets.enums import CatalogScope, ExpenseCategory, ParameterSetKind, PropertyContext
@@ -21,10 +19,6 @@ from ucfp.parameter_sets.repository import load
 from ucfp.inputs.profile.schemas import RENT_OBLIGATION_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense, RecurringExpense
 from ucfp.inputs.auto import AutoPlanForm
-
-_WEEKS_PER_YEAR  = Decimal( '52' )
-_MONTHS_PER_YEAR = Decimal( '12' )
-_DAYS_PER_YEAR   = Decimal( '365' )
 
 # Categories that always apply; Property attaches to owning or renting a dwelling. Auto is presumed
 # for now -- gated on a vehicle once a vehicle section exists.
@@ -42,28 +36,6 @@ _OWNED_PROPERTY_CONTEXT = {
 
 def load_catalog():
     return load( ParameterSetKind.EXPENSE_CATALOG, CatalogScope.GENERAL.label )
-
-
-@dataclass( frozen = True )
-class SpendingGroup:
-    """One row of the §6 spending list: a category, optionally scoped to a property -- one owned
-    dwelling (or the rented home) for Property, None for the household categories. Its `key`
-    identifies the group in the URL and the inline editor's DOM, and its expenses are the merged
-    flows matching both the category and the property."""
-    category        : ExpenseCategory
-    property_handle : Optional[ str ]
-    label           : str
-
-    @property
-    def key( self ) -> str:
-        base = self.category.name.lower()
-        return base if self.property_handle is None else f'{base}-{self.property_handle}'
-
-    @property
-    def is_property( self ) -> bool:
-        """Whether this group's expenses are property operating costs (drillable into the schedule
-        editor). The regular categories are recurring expenses, edited elsewhere."""
-        return self.category is ExpenseCategory.PROPERTY
 
 
 def applicable_categories( profile ) -> set:
@@ -141,20 +113,6 @@ def _group_label( category, property_handle, profile ) -> str:
     return label
 
 
-def spending_groups( profile ) -> list:
-    """The §6 spending groups in display order: each applicable category, with Property expanded to
-    one group per owned dwelling (and the rented home, when renting)."""
-    applicable = applicable_categories( profile )
-    groups     = list()
-    for category in ExpenseCategory:
-        if category not in applicable:
-            continue
-        for handle in _property_handles_for( category, profile ):
-            groups.append( SpendingGroup(
-                category, handle, _group_label( category, handle, profile ) ) )
-    return groups
-
-
 def merged_property_expenses( profile, plans ) -> list:
     """The catalog's PROPERTY expenses as `PropertyExpense`s -- one per catalog row, its structural
     fields (category, personal tax class, cadence, `applies_to`) re-derived each merge; the user's
@@ -221,49 +179,6 @@ def _aligned_amounts( prior, default : Decimal, span_count : int ) -> list:
     return amounts[ :span_count ]
 
 
-def recurring_current_amount( expense ) -> Decimal:
-    """A recurring expense's amount in the first span -- what it costs now."""
-    return expense.amounts[ 0 ] if expense.amounts else Decimal( '0' )
-
-
-def recurring_annual_total( expenses ) -> Decimal:
-    return sum(
-        ( annual_amount( recurring_current_amount( e ), e.interval ) for e in expenses ),
-        Decimal( '0' ) )
-
-
-def _occurrences_per_year( interval ) -> Decimal:
-    if interval.unit is TimeUnit.YEAR:
-        return Decimal( 1 ) / interval.count
-    if interval.unit is TimeUnit.MONTH:
-        return _MONTHS_PER_YEAR / interval.count
-    if interval.unit is TimeUnit.WEEK:
-        return _WEEKS_PER_YEAR / interval.count
-    return _DAYS_PER_YEAR / interval.count
-
-
-def annual_amount( amount : Decimal, interval ) -> Decimal:
-    """An expense's annual magnitude: a stream amount is already annual; an item amount is
-    per-occurrence, so it scales by its occurrences per year."""
-    if interval is None:
-        return amount
-    return amount * _occurrences_per_year( interval )
-
-
-def property_annual_total( expenses, profile, handle : str ) -> Decimal:
-    """The annual property cost for one property -- each applicable expense's effective amount (its
-    per-property override or the shared default), annualized. An expense with neither is not charged."""
-    context = _property_context( profile, handle )
-    total   = Decimal( '0' )
-    for expense in expenses:
-        if context not in expense.applies_to:
-            continue
-        amount = expense.overrides.get( handle, expense.default_amount )
-        if amount:
-            total += annual_amount( amount, expense.interval )
-    return total
-
-
 def cadence_label( interval ) -> str:
     if interval is None:
         return 'per year'
@@ -298,13 +213,11 @@ class SpendingForm:
         return RecurringExpensesForm( profile = self._profile, plans = self._plans )
 
     @property
-    def property_group_totals( self ) -> list:
-        """(group, annual total) per property -- one per owned dwelling (and the rented home), read-only
-        for now (the editable matrix is Phase B). Each total sums the property's applicable expenses at
-        their override-or-default amount."""
-        expenses = merged_property_expenses( self._profile, self._plans )
-        return [ ( group, property_annual_total( expenses, self._profile, group.property_handle ) )
-                 for group in spending_groups( self._profile ) if group.is_property ]
+    def property_form( self ):
+        """The editable property-expenses matrix (the household's per-property operating costs as one
+        shared default with per-property overrides), saved on its own through `PropertyExpensesView`.
+        Empty of rows when the household has no property, in which case the section hides it."""
+        return PropertyExpensesForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
         return profile, replace(
@@ -420,3 +333,126 @@ class RecurringExpensesForm( forms.Form ):
             return int( ( self.data or {} ).get( 'delete_span' ) )
         except ( TypeError, ValueError ):
             return None
+
+
+class PropertyExpensesForm( forms.Form ):
+    """The property-expenses matrix: rows are the property operating-cost types (property tax,
+    insurance, ...), columns are the shared Default plus one per property (owned dwellings, then the
+    rented home). The Default cell sets the amount every applicable property inherits; a per-property
+    cell overrides it (blank falls back to the default, shown as its placeholder). A cell is N/A where
+    the row does not apply to that property's context, and a row is shown only when it applies to at
+    least one property the household has. With a single property the Default column collapses into one
+    value column: it shows that property's effective amount and saves it as the shared default.
+
+    `apply` writes back every property expense -- the displayed rows updated from the matrix, the rest
+    (rows for property kinds the household lacks) passed through so their latent amounts survive. The
+    row and column sets change only when a property is added or removed (done in the Property section),
+    so this pane saves silently and never restructures itself."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        super().__init__( data )
+        self._profile   = profile
+        self._all       = merged_property_expenses( profile, plans )
+        self._handles   = _property_handles_for( ExpenseCategory.PROPERTY, profile )
+        self._rows      = [ expense for expense in self._all if self._any_applicable( expense ) ]
+        self._collapsed = len( self._handles ) <= 1
+        for ri, expense in enumerate( self._rows ):
+            default = forms.DecimalField( required = False, min_value = 0 )
+            default.initial = self._collapsed_value( expense ) if self._collapsed else expense.default_amount
+            default.widget.attrs[ 'placeholder' ] = '0'
+            self.fields[ self._default_key( ri ) ] = default
+            if self._collapsed:
+                continue
+            for hi, handle in enumerate( self._handles ):
+                if not self._applies( expense, handle ):
+                    continue
+                override = forms.DecimalField( required = False, min_value = 0 )
+                override.initial = expense.overrides.get( handle )
+                override.widget.attrs[ 'placeholder' ] = self._placeholder( expense.default_amount )
+                self.fields[ self._override_key( ri, hi ) ] = override
+
+    @staticmethod
+    def _default_key( ri : int ) -> str:
+        return f'default_{ri}'
+
+    @staticmethod
+    def _override_key( ri : int, hi : int ) -> str:
+        return f'override_{ri}_{hi}'
+
+    def _applies( self, expense, handle : str ) -> bool:
+        return _property_context( self._profile, handle ) in expense.applies_to
+
+    def _any_applicable( self, expense ) -> bool:
+        return any( self._applies( expense, handle ) for handle in self._handles )
+
+    def _collapsed_value( self, expense ) -> Optional[ Decimal ]:
+        """The single property's effective amount -- its override if it set one, else the shared default
+        -- so the collapsed one-column view shows what actually applies before it is saved as the
+        default."""
+        handle = self._handles[ 0 ]
+        return expense.overrides.get( handle, expense.default_amount )
+
+    @staticmethod
+    def _placeholder( default : Optional[ Decimal ] ) -> str:
+        """A per-property cell's placeholder: the shared default it falls back to when left blank, or
+        '0' when the default itself is blank (the expense is then not charged)."""
+        return str( default ) if default is not None else '0'
+
+    @property
+    def collapsed( self ) -> bool:
+        """Whether the Default column has collapsed into a single value column (the household has at most
+        one property), so the help text drops the shared-default/override language."""
+        return self._collapsed
+
+    @property
+    def columns( self ) -> list:
+        """The header cells: a single value column (the lone property's name) when collapsed, otherwise
+        the shared 'Default' followed by one column per property."""
+        if self._collapsed:
+            label = self._column_label( self._handles[ 0 ] ) if self._handles else 'Amount'
+            return [ { 'label': label, 'is_default': True } ]
+        columns = [ { 'label': 'Default', 'is_default': True } ]
+        columns += [ { 'label': self._column_label( handle ), 'is_default': False }
+                     for handle in self._handles ]
+        return columns
+
+    def _column_label( self, handle : str ) -> str:
+        return _group_label( ExpenseCategory.PROPERTY, handle, self._profile )
+
+    @property
+    def rows( self ) -> list:
+        """One row per displayed expense: its name, cadence, and a cell per column -- the bound Default
+        field, then each property's override field, or None where the row is N/A for that property."""
+        result = list()
+        for ri, expense in enumerate( self._rows ):
+            cells = [ self[ self._default_key( ri ) ] ]
+            if not self._collapsed:
+                cells += [ self[ self._override_key( ri, hi ) ]
+                           if self._override_key( ri, hi ) in self.fields else None
+                           for hi in range( len( self._handles ) ) ]
+            result.append( {
+                'name'    : expense.name,
+                'cadence' : cadence_label( expense.interval ),
+                'cells'   : cells } )
+        return result
+
+    def apply( self, profile, plans ):
+        edited   = { expense.name: self._edited( ri, expense )
+                     for ri, expense in enumerate( self._rows ) }
+        expenses = [ edited.get( expense.name, expense ) for expense in self._all ]
+        return profile, replace( plans, property_expenses = expenses )
+
+    def _edited( self, ri : int, expense ) -> PropertyExpense:
+        """`expense` with its default and overrides taken from the matrix. Collapsed, the one column is
+        the shared default and overrides are cleared; otherwise the Default cell is the default and each
+        filled property cell an override (a blank cell drops back to the default)."""
+        cleaned = self.cleaned_data
+        default = cleaned.get( self._default_key( ri ) )
+        if self._collapsed:
+            return replace( expense, default_amount = default, overrides = dict() )
+        overrides = dict()
+        for hi, handle in enumerate( self._handles ):
+            key = self._override_key( ri, hi )
+            if key in self.fields and cleaned.get( key ) is not None:
+                overrides[ handle ] = cleaned[ key ]
+        return replace( expense, default_amount = default, overrides = overrides )
