@@ -37,6 +37,7 @@ from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import VehiclePlanForm
+from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
 from .widgets import IsoDateInput
 
 
@@ -516,10 +517,12 @@ class HomeExpensesSectionForm:
             plans, property_expenses = merged_property_expenses( profile, plans ) )
 
 
-class VehiclePurchaseSectionForm:
-    """Vehicle Purchase -- the car purchase/financing pane. A no-op section form: the plan is edited
-    and saved through `VehiclePlanView`, and there are no catalog defaults to seed (the pattern is
-    entirely user-entered), so Next just advances."""
+class VehicleExpensesSectionForm:
+    """Vehicle Expenses -- the household's car costs: the purchase/financing pane and the per-car
+    running-costs table. Both save on their own (through `VehiclePlanView` and `VehicleExpensesView`).
+    `apply` seeds the running costs from the catalog on Next once a vehicle plan exists, so a household
+    that set up a plan and accepts the default running costs still records them; with no plan (no car),
+    Next just advances."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -532,15 +535,24 @@ class VehiclePurchaseSectionForm:
     def vehicle_form( self ):
         return VehiclePlanForm( profile = self._profile, plans = self._plans )
 
+    @property
+    def vehicle_costs_form( self ):
+        return VehicleExpensesForm( profile = self._profile, plans = self._plans )
+
     def apply( self, profile, plans ):
-        return profile, plans
+        if plans.vehicle_plan is None:
+            return profile, plans
+        return profile, replace(
+            plans, vehicle_plan = replace(
+                plans.vehicle_plan, running_costs = merged_vehicle_costs( plans ) ) )
 
 
 class LivingExpensesSectionForm:
-    """Living Expenses -- the recurring-expenses table (everyday, discretionary, health, vehicle
-    running costs, miscellaneous) over the shared age-span timeline. It exposes the table pane (saved
-    on its own through `RecurringExpensesView`); `apply` seeds the recurring expenses from the catalog
-    on Next, so accepting the defaults still records them."""
+    """Living Expenses -- the recurring-expenses table (everyday, discretionary, health, miscellaneous)
+    over the shared age-span timeline. It exposes the table pane (saved on its own through
+    `RecurringExpensesView`); `apply` seeds the recurring expenses from the catalog on Next, so accepting
+    the defaults still records them. Vehicle running costs are a separate per-car model (Vehicle
+    Expenses)."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -582,8 +594,8 @@ SECTIONS = [
     # only when the household has a dwelling with operating costs (see `applicable_sections`).
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
              outer_template = 'inputs/interview/sections/home_expenses.html' ),
-    Section( 'vehicle-purchase', 'Vehicle Purchase', ( Aggregate.PLANS, ), VehiclePurchaseSectionForm,
-             outer_template = 'inputs/interview/sections/vehicle_purchase.html' ),
+    Section( 'vehicle-expenses', 'Vehicle Expenses', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
+             outer_template = 'inputs/interview/sections/vehicle_expenses.html' ),
     Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,

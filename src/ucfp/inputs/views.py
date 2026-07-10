@@ -36,6 +36,7 @@ from .interview import (
     first_section_of_flow, flow_of, flow_title, next_flow_entry, next_section_after, section_for )
 from .models import AssumptionsRecord, PlansRecord
 from .vehicle import VehiclePlanForm
+from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
 from .debt_plan import DebtPlanForm
@@ -401,8 +402,8 @@ class SelfSavingPaneView( View ):
 
 
 class VehiclePlanView( SelfSavingPaneView ):
-    """`/inputs/interview/vehicle-purchase/edit/` -- the car-purchase/financing pane of the Vehicle
-    Purchase step (a special case, distinct from the recurring Vehicle running-cost category)."""
+    """`/inputs/interview/vehicle-expenses/purchase/edit/` -- the car-purchase/financing pane of the
+    Vehicle Expenses step (the per-car running costs are the sibling `VehicleExpensesView` pane)."""
 
     template     = 'inputs/interview/sections/vehicle_plan.html'
     target       = 'vehicle-purchase'
@@ -453,6 +454,25 @@ class PropertyExpensesView( SelfSavingPaneView ):
     def build_form( self, request, data = None ):
         profile, plans = _current_profile_and_plans( request )
         return PropertyExpensesForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+
+
+class VehicleExpensesView( SelfSavingPaneView ):
+    """`/inputs/interview/vehicle-expenses/costs/edit/` -- the per-car running-costs table of the
+    Vehicle Expenses step. Auto-saves each edit onto the vehicle plan's running costs; the row set is
+    fixed (the catalog's vehicle costs), so it saves silently and never restructures."""
+
+    template     = 'inputs/interview/sections/_vehicle_expenses.html'
+    target       = 'vehicle-running-costs'
+    context_name = 'vehicle_costs_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return VehicleExpensesForm( data, profile = profile, plans = plans )
 
     def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )

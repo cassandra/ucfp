@@ -1,9 +1,9 @@
-"""Living Expenses -- the household's regular (non-property, non-vehicle-purchase) recurring costs.
+"""Living Expenses -- the household's regular (non-property, non-vehicle) recurring costs.
 
-The step presents the applicable catalog categories (everyday, discretionary, health, vehicle running
-costs, miscellaneous) as a table over a shared age-span timeline, so a level can rise or fall with
-age. This module seeds those expenses from the catalog (preserving amounts already set) and drives the
-self-saving table.
+The step presents the applicable catalog categories (everyday, discretionary, health, miscellaneous)
+as a table over a shared age-span timeline, so a level can rise or fall with age. This module seeds
+those expenses from the catalog (preserving amounts already set) and drives the self-saving table.
+Vehicle running costs are a separate, per-car model in the Vehicle Expenses step.
 """
 from dataclasses import replace
 from decimal import Decimal
