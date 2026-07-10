@@ -51,10 +51,6 @@ _HOUSEHOLD_GROUP = 'Household'
 _GROUP_ORDER     = ( _ACCOUNTS_GROUP, _PROPERTY_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP,
                      _HOUSEHOLD_GROUP )
 
-# Real-estate classes: excluded from money transfers, and the candidates a sale sells.
-_REAL_ESTATE = frozenset(
-    ( AssetClass.REAL_ESTATE_RESIDENCE, AssetClass.REAL_ESTATE_RENTAL ) )
-
 
 @dataclass( frozen = True )
 class ReferenceSpec:
@@ -73,13 +69,16 @@ def _subjects( profile ) -> list:
 
 
 def _accounts( profile ) -> list:
+    """The money accounts a transfer can move between -- every holding except real estate (a property is
+    not a cash account)."""
     return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.handle is not None and asset.asset_class not in _REAL_ESTATE ]
+             if asset.handle is not None and not asset.asset_class.is_real_estate ]
 
 
 def _properties( profile ) -> list:
+    """The real-property holdings a sale can sell -- residence, second home, or rental."""
     return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.asset_class in _REAL_ESTATE ]
+             if asset.asset_class.is_real_estate ]
 
 
 def _mortgages( profile, property_handle : str ) -> list:

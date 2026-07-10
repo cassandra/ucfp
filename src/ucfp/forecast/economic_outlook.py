@@ -51,16 +51,17 @@ class EconomicParameters:
         absent from a map carries a zero rate (the `AssetRates` default) -- cash and CDs are
         face-value, so they have only a yield, no growth."""
         growth = {
-            AssetClass.STOCKS                : self.stock_appreciation,
-            AssetClass.DIVIDEND_STOCKS       : self.stock_appreciation,
-            AssetClass.BONDS                 : self.bond_appreciation,
-            AssetClass.REAL_ESTATE_RESIDENCE : self.real_estate_appreciation,
-            AssetClass.REAL_ESTATE_RENTAL    : self.real_estate_appreciation,
-            AssetClass.PRECIOUS_METALS       : self.precious_metals_appreciation,
-            AssetClass.COLLECTIBLES          : self.collectibles_appreciation,
-            AssetClass.DEPRECIATING          : self.depreciation_rate.negated(),
-            AssetClass.PRETAX_RETIREMENT     : self.retirement_growth,
-            AssetClass.ROTH                  : self.retirement_growth,
+            AssetClass.STOCKS            : self.stock_appreciation,
+            AssetClass.DIVIDEND_STOCKS   : self.stock_appreciation,
+            AssetClass.BONDS             : self.bond_appreciation,
+            AssetClass.PRECIOUS_METALS   : self.precious_metals_appreciation,
+            AssetClass.COLLECTIBLES      : self.collectibles_appreciation,
+            AssetClass.DEPRECIATING      : self.depreciation_rate.negated(),
+            AssetClass.PRETAX_RETIREMENT : self.retirement_growth,
+            AssetClass.ROTH              : self.retirement_growth,
+            # Every real-estate class (residence, second home, rental) appreciates at the shared rate.
+            ** { asset_class : self.real_estate_appreciation
+                 for asset_class in AssetClass if asset_class.is_real_estate },
         }
         distribution = {
             AssetClass.CASH            : self.savings_interest,
