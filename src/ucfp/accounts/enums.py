@@ -165,6 +165,15 @@ class AssetClass( LabeledEnum ):
         gain/loss is recognized in the books but excluded from tax."""
         return _REALIZED_GAIN_INCOME_CLASS.get( self )
 
+    @property
+    def is_real_estate( self ) -> bool:
+        """Whether this class is real property -- a residence, a second home, or a rental. The single
+        source of truth for the several "is this real estate?" call sites (it is not a money account, so
+        it is excluded from transfers; it is the thing a property sale sells; it appreciates at the
+        real-estate rate), so adding a real-estate class cannot silently miss one. Rental-specific
+        behavior (depreciation, rental income) keys on `REAL_ESTATE_RENTAL` directly, not on this."""
+        return self in _REAL_ESTATE_ASSET_CLASSES
+
 
 # Cash-like classes carried at face value: their return is distributed as interest
 # income, not accrued as appreciation, so they have no valuation companion.
@@ -176,6 +185,13 @@ _NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS )
 # cost_basis must be 0 (validated on the input), so the whole value seeds as unrealized gain.
 _ZERO_BASIS_ASSET_CLASSES = frozenset(
     ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
+
+
+# The real-property classes (see `is_real_estate`) -- a residence, a second home, or a rental. Grouped
+# once here so the "is this real estate?" call sites cannot drift apart as classes are added.
+_REAL_ESTATE_ASSET_CLASSES = frozenset(
+    ( AssetClass.REAL_ESTATE_RESIDENCE, AssetClass.REAL_ESTATE_SECOND_HOME,
+      AssetClass.REAL_ESTATE_RENTAL ) )
 
 
 class RealPropertyType( LabeledEnum ):
