@@ -43,7 +43,7 @@ class RetirementTiming:
 
 
 # --- Recurring expenses ---------------------------------------------------
-# The user's regular (non-property) recurring expenses, each seeded from the curated catalog (its
+# The household's `LIVING`-class recurring expenses, each seeded from the curated catalog (its
 # category, tax class, and cadence) with an amount per span. The spans are the Plans' shared
 # `expense_spans` timeline (until-ages relative to the primary subject); `amounts` aligns 1:1 with it.
 
@@ -234,7 +234,7 @@ class Plans:
     `ForecastParameters`."""
     # Timing
     timing: list[ RetirementTiming ] = field( default_factory = list )
-    # Recurring expenses (regular, non-property) and the shared span timeline (until-ages, last None)
+    # Recurring expenses (`LIVING`-class) and the shared span timeline (until-ages, last None)
     expense_spans: list[ Optional[ int ] ] = field( default_factory = lambda: [ None ] )
     recurring_expenses: list[ RecurringExpense ] = field( default_factory = list )
     # Property operating expenses (one shared set with per-property overrides)
