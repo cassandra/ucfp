@@ -9,11 +9,13 @@ derivation tested end-to-end in `ucfp.forecast.tests.test_rental`.
 import unittest
 from decimal import Decimal
 
+from common.recurrence import Duration, TimeUnit
+
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.inputs.plans.schemas import Plans, PropertyExpense
 from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
-from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
+from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
 from ucfp.planning.materialization import _property_expenses
 
 _OWNED    = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
@@ -26,11 +28,13 @@ def _property( handle : str, asset_class : AssetClass ) -> AssetProfile:
         opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) )
 
 
-def _expense( applies_to, tax_class ) -> PropertyExpense:
+def _expense( applies_to, tax_class,
+              realization = Realization.SMOOTH, interval = Duration( 1, TimeUnit.YEAR ) ) -> PropertyExpense:
     # One shared property expense at a flat default, applied to the contexts in `applies_to`.
     return PropertyExpense(
         name = 'Upkeep', category = ExpenseCategory.PROPERTY, expense_tax_class = tax_class,
-        applies_to = applies_to, default_amount = Decimal( '6000' ) )
+        applies_to = applies_to, realization = realization, interval = interval,
+        default_amount = Decimal( '6000' ) )
 
 
 class PropertyExpenseTaxClassTests( unittest.TestCase ):
@@ -58,3 +62,27 @@ class PropertyExpenseTaxClassTests( unittest.TestCase ):
         plans = Plans( property_expenses = [ _expense( _OCCUPIED, ExpenseTaxClass.LIVING ) ] )
         streams, _items = _property_expenses( profile, plans, dict(), dict() )
         self.assertEqual( [ s.expense_tax_class for s in streams ], [ ExpenseTaxClass.LIVING ] )
+
+
+class RealizationTests( unittest.TestCase ):
+
+    def _residence_plans( self, realization, interval ):
+        profile = Profile( assets = [ _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ) ] )
+        plans   = Plans( property_expenses = [ _expense(
+            ( PropertyContext.RESIDENCE, ), ExpenseTaxClass.LIVING,
+            realization = realization, interval = interval ) ] )
+        return _property_expenses( profile, plans, { 'residence': _property(
+            'residence', AssetClass.REAL_ESTATE_RESIDENCE ) }, dict() )
+
+    def test_discrete_expense_is_an_item_at_its_cadence( self ):
+        # A DISCRETE expense is placed as an item at its interval, not smoothed into a stream.
+        yearly = Duration( 1, TimeUnit.YEAR )
+        streams, items = self._residence_plans( Realization.DISCRETE, yearly )
+        self.assertEqual( streams, [] )
+        self.assertEqual( [ item.cadence.interval for item in items ], [ yearly ] )
+
+    def test_smooth_annualizes_a_sub_annual_amount( self ):
+        # A monthly $6,000 SMOOTH expense enters as a $72,000/yr stream level (6000 x 12), not an item.
+        streams, items = self._residence_plans( Realization.SMOOTH, Duration( 1, TimeUnit.MONTH ) )
+        self.assertEqual( items, [] )
+        self.assertEqual( streams[ 0 ].amounts.segments[ 0 ].amount, Decimal( '72000' ) )

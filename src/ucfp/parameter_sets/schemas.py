@@ -13,7 +13,7 @@ from common.recurrence import Duration
 from ucfp.accounts.enums import ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 
-from .enums import ExpenseCategory, PropertyContext
+from .enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
 
 
 @dataclass( frozen = True )
@@ -27,9 +27,10 @@ class EconomicOutlookSchedule:
 @dataclass( frozen = True )
 class ExpenseType:
     """One catalog expense: its `category` (the user-facing bucket and the decision it attaches to),
-    tax class, cadence, and a single `default_amount` -- the typical value (annual for a stream,
-    per-occurrence for an item). `interval` None is a smoothed stream, a `Duration` an item placed at
-    its cadence.
+    tax class, seeded `interval` (its default cadence), a single `default_amount` at that cadence, and
+    the two cadence attributes. `realization` (fixed) decides how it hits the engine -- `SMOOTH`
+    annualizes and spreads it, `DISCRETE` places it at its cadence; `cadence_domain` (the input domain)
+    decides which cadences the user may re-select.
 
     For a `PROPERTY` row, `expense_tax_class` is the row's *personal* class (`LIVING`, or `SALT` for
     property tax); materialization swaps it to `RENTAL_EXPENSE` for a rental-owned property. `applies_to`
@@ -40,8 +41,16 @@ class ExpenseType:
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     default_amount: Decimal
-    interval: Optional[ Duration ] = None
+    interval: Duration
+    realization: Realization
+    cadence_domain: CadenceDomain
     applies_to: tuple[ PropertyContext, ... ] = ()
+    # A "durable" expense the user enters as `count` items at `cost_each` replaced every `lifespan`
+    # years; a calculator fills the amount = count x cost_each / lifespan (its annualized cost). All
+    # None for a normal expense entered as a single amount.
+    count: Optional[ int ] = None
+    cost_each: Optional[ Decimal ] = None
+    lifespan: Optional[ int ] = None
 
 
 @dataclass( frozen = True )

@@ -22,7 +22,7 @@ from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource
-from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
+from ucfp.parameter_sets.enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
 
 from .enums import CreditCardPlanMode, EventKind
 
@@ -49,15 +49,22 @@ class RetirementTiming:
 
 @dataclass( frozen = True )
 class RecurringExpense:
-    """One regular recurring expense: its name, catalog `category`, tax class, cadence (`interval`),
-    and an `amounts` list -- one amount per span of the Plans' shared `expense_spans` timeline (a
-    single amount when no spans are defined). `interval` None is a smoothed stream, a `Duration` an
-    item placed at that cadence. Property operating expenses are a separate class (`PropertyExpense`)."""
+    """One regular recurring expense: its name, catalog `category`, tax class, `interval` (its cadence),
+    `realization` (how it hits the engine -- smoothed vs placed at its cadence), and an `amounts` list --
+    one amount per span of the Plans' shared `expense_spans` timeline (a single amount when no spans are
+    defined). Property operating expenses are a separate class (`PropertyExpense`)."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     amounts: list[ Decimal ]
-    interval: Optional[ Duration ] = None
+    interval: Duration
+    realization: Realization = Realization.SMOOTH
+    cadence_domain: CadenceDomain = CadenceDomain.FIXED
+    # A durable entered as a count of items at a cost each, replaced every `lifespan` years (remembered
+    # calculator inputs); the amount is their annualized cost. All None for a normal expense.
+    count: Optional[ int ] = None
+    cost_each: Optional[ Decimal ] = None
+    lifespan: Optional[ int ] = None
 
 
 # --- Property expenses ----------------------------------------------------
@@ -69,17 +76,25 @@ class RecurringExpense:
 @dataclass( frozen = True )
 class PropertyExpense:
     """One property operating expense across the household's properties: its name, catalog `category`,
-    the *personal* `expense_tax_class` (materialization derives the rental swap), cadence (`interval`),
-    and the `applies_to` property contexts it reaches. `default_amount` (None when blank) applies to
-    every reached property unless `overrides` gives that property (by handle) its own amount; a property
-    with neither is not charged. Amounts are constant; a sale ends a property's instance at materialize."""
+    the *personal* `expense_tax_class` (materialization derives the rental swap), `interval` (its
+    cadence), `realization` (smoothed vs placed at its cadence), and the `applies_to` property contexts
+    it reaches. `default_amount` (None when blank) applies to every reached property unless `overrides`
+    gives that property (by handle) its own amount; a property with neither is not charged. Amounts are
+    constant; a sale ends a property's instance at materialize."""
     name: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     applies_to: tuple[ PropertyContext, ... ]
-    interval: Optional[ Duration ] = None
+    interval: Duration
+    realization: Realization = Realization.SMOOTH
+    cadence_domain: CadenceDomain = CadenceDomain.FIXED
     default_amount: Optional[ Decimal ] = None
     overrides: dict[ str, Decimal ] = field( default_factory = dict )
+    # A durable entered as a count of items at a cost each, replaced every `lifespan` years (remembered
+    # calculator inputs); the shared default amount is their annualized cost. All None for a normal one.
+    count: Optional[ int ] = None
+    cost_each: Optional[ Decimal ] = None
+    lifespan: Optional[ int ] = None
 
 
 # --- Saving ---------------------------------------------------------------

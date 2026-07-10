@@ -10,15 +10,19 @@ from decimal import Decimal
 
 from django import forms
 
+from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseCategory
 from ucfp.inputs.plans.schemas import RecurringExpense
-from ucfp.inputs.expenses import applicable_categories, cadence_label, load_catalog
+from ucfp.inputs.cadence import (
+    add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
+    read_durable )
+from ucfp.inputs.expenses import applicable_categories, kept_attr, kept_interval, load_catalog
 
 
 def merged_recurring_expenses( profile, plans ) -> list:
     """The applicable regular (non-property) catalog expenses as `RecurringExpense`s -- existing amounts
-    preserved (aligned to the plan's span count), missing ones seeded at the catalog default across
-    every span. The category and personal tax class are re-derived each merge (not user edits)."""
+    (and any chosen cadence) preserved, missing ones seeded at the catalog default across every span.
+    The category, personal tax class, and realization are re-derived each merge (not user edits)."""
     applicable = applicable_categories( profile )
     span_count = len( plans.expense_spans ) if plans and plans.expense_spans else 1
     existing   = { expense.name: expense
@@ -28,12 +32,17 @@ def merged_recurring_expenses( profile, plans ) -> list:
         if ( catalog_expense.category is ExpenseCategory.PROPERTY
                 or catalog_expense.category not in applicable ):
             continue
+        prior = existing.get( catalog_expense.name )
         merged.append( RecurringExpense(
             name = catalog_expense.name, category = catalog_expense.category,
             expense_tax_class = catalog_expense.expense_tax_class,
-            amounts = _aligned_amounts(
-                existing.get( catalog_expense.name ), catalog_expense.default_amount, span_count ),
-            interval = catalog_expense.interval ) )
+            amounts = _aligned_amounts( prior, catalog_expense.default_amount, span_count ),
+            interval = kept_interval( prior, catalog_expense ),
+            realization = catalog_expense.realization,
+            cadence_domain = catalog_expense.cadence_domain,
+            count = kept_attr( prior, catalog_expense, 'count' ),
+            cost_each = kept_attr( prior, catalog_expense, 'cost_each' ),
+            lifespan = kept_attr( prior, catalog_expense, 'lifespan' ) ) )
     return merged
 
 
@@ -67,10 +76,17 @@ class RecurringExpensesForm( forms.Form ):
             field.initial = until
             self.fields[ self._until_key( si ) ] = field
         for ei, expense in enumerate( self._expenses ):
+            add_cadence_fields( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
+            durable = expense.count is not None
+            if durable:                                    # a durable's amount is filled by the calculator
+                add_calculator_fields( self, ei, expense.count, expense.cost_each, expense.lifespan )
             for si in range( len( self._spans ) ):
                 cell = forms.DecimalField( required = False, min_value = 0 )
                 cell.initial = expense.amounts[ si ] if si < len( expense.amounts ) else (
                     expense.amounts[ -1 ] if expense.amounts else None )
+                if durable:
+                    cell.widget.attrs[ 'readonly' ] = True
+                    cell.widget.attrs[ 'class' ] = AppConst.CALC_TARGET_CLASS
                 self.fields[ self._amount_key( ei, si ) ] = cell
 
     @staticmethod
@@ -80,6 +96,10 @@ class RecurringExpensesForm( forms.Form ):
     @staticmethod
     def _amount_key( ei : int, si : int ) -> str:
         return f'amt_{ei}_{si}'
+
+    @staticmethod
+    def _cad_prefix( ei : int ) -> str:
+        return f'cad_{ei}'
 
     @property
     def span_count( self ) -> int:
@@ -99,25 +119,46 @@ class RecurringExpensesForm( forms.Form ):
     @property
     def sections( self ) -> list:
         """The expense rows grouped by category (a section header per category), each row its name,
-        cadence, and one amount cell per span."""
+        cadence, and one amount cell per span. A durable row's span amounts are filled by its
+        `calculator` (count x cost-each, age-flat) and its cadence shows read-only."""
         sections, current = list(), None
         for ei, expense in enumerate( self._expenses ):
             if expense.category is not current:
                 current = expense.category
                 sections.append( { 'label': current.label, 'rows': list() } )
+            durable = expense.count is not None
             sections[ -1 ][ 'rows' ].append( {
-                'name'    : expense.name,
-                'cadence' : cadence_label( expense.interval ),
-                'cells'   : [ self[ self._amount_key( ei, si ) ]
-                              for si in range( len( self._spans ) ) ] } )
+                'name'        : expense.name,
+                'cadence'     : cadence_cells(
+                    self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ),
+                'count_entry' : durable,
+                'calculator'  : ( calculator_cells(
+                    self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ) )
+                    if durable else None ),
+                'cells'       : [ self[ self._amount_key( ei, si ) ]
+                                  for si in range( len( self._spans ) ) ] } )
         return sections
 
     def apply( self, profile, plans ):
         columns  = self._columns()
         spans    = [ until for until, _ in columns ]
-        expenses = [ replace( expense, amounts = [ amounts[ ei ] for _, amounts in columns ] )
-                     for ei, expense in enumerate( self._expenses ) ]
+        expenses = [ self._edited( ei, expense, columns ) for ei, expense in enumerate( self._expenses ) ]
         return profile, replace( plans, expense_spans = spans, recurring_expenses = expenses )
+
+    def _edited( self, ei : int, expense, columns : list ):
+        """`expense` with its cadence from this row's fields and its per-span amounts re-read from the
+        columns. A durable's amount is computed from its calculator (count x cost-each) and applied
+        age-flat to every span; its count/cost-each are remembered."""
+        interval = read_cadence( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
+        if expense.count is not None:
+            amount, count, cost_each, lifespan = read_durable( self, ei )
+            # An incomplete calculator charges nothing; `amounts` is non-Optional, so that reads as 0
+            # here (the PropertyExpense default_amount, which is Optional, stores None for the same case).
+            total = amount if amount is not None else Decimal( '0' )
+            return replace( expense, interval = interval, amounts = [ total ] * len( columns ),
+                            count = count, cost_each = cost_each, lifespan = lifespan )
+        return replace(
+            expense, interval = interval, amounts = [ amounts[ ei ] for _, amounts in columns ] )
 
     def spans_changed( self ) -> bool:
         """Whether the applied span timeline differs from the current one -- a span added, removed, or

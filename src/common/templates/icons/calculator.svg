@@ -1,0 +1,16 @@
+<svg class="{{ class_attr }}" viewBox="0 0 24 24" fill="currentColor" {{ accessibility_attrs }}>
+  <!-- Calculator body -->
+  <path fill-rule="evenodd" d="M7 2h10c1.1 0 2 .9 2 2v16c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm0 2v16h10V4H7z"/>
+  <!-- Display -->
+  <rect x="7" y="5" width="10" height="3"/>
+  <!-- Buttons -->
+  <rect x="7" y="10" width="2" height="2"/>
+  <rect x="11" y="10" width="2" height="2"/>
+  <rect x="15" y="10" width="2" height="2"/>
+  <rect x="7" y="13" width="2" height="2"/>
+  <rect x="11" y="13" width="2" height="2"/>
+  <rect x="15" y="13" width="2" height="2"/>
+  <rect x="7" y="16" width="2" height="2"/>
+  <rect x="11" y="16" width="2" height="2"/>
+  <rect x="15" y="16" width="2" height="2"/>
+</svg>

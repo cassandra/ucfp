@@ -1,6 +1,7 @@
 """Tests for cadence occurrence-counting (exact, anchored, no amortization)."""
 import unittest
 from datetime import date, timedelta
+from decimal import Decimal
 
 from common.recurrence import Duration, OneTime, Recurrence, TimeUnit
 
@@ -111,6 +112,23 @@ class OneTimeTests( unittest.TestCase ):
 
 def _in_year_once( cadence, year ):
     return cadence.count_in( start = date( year, 1, 1 ), end = date( year, 12, 31 ), since = START_2026 )
+
+
+class OccurrencesPerYearTests( unittest.TestCase ):
+
+    def test_whole_number_cadences( self ):
+        self.assertEqual( Duration( 1, TimeUnit.DAY ).occurrences_per_year(), Decimal( 365 ) )
+        self.assertEqual( Duration( 1, TimeUnit.WEEK ).occurrences_per_year(), Decimal( 52 ) )
+        self.assertEqual( Duration( 1, TimeUnit.MONTH ).occurrences_per_year(), Decimal( 12 ) )
+        self.assertEqual( Duration( 1, TimeUnit.YEAR ).occurrences_per_year(), Decimal( 1 ) )
+
+    def test_multi_count_scales_inversely( self ):
+        self.assertEqual( Duration( 3, TimeUnit.MONTH ).occurrences_per_year(), Decimal( 4 ) )
+        self.assertEqual( Duration( 15, TimeUnit.YEAR ).occurrences_per_year(), Decimal( 1 ) / 15 )
+
+    def test_annualizing_a_weekly_amount_is_lossless_decimal( self ):
+        weekly = Decimal( '150' )
+        self.assertEqual( weekly * Duration( 1, TimeUnit.WEEK ).occurrences_per_year(), Decimal( '7800' ) )
 
 
 if __name__ == '__main__':

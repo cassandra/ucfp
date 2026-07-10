@@ -1,8 +1,9 @@
 """Shared expense-catalog plumbing the Home and Living expense steps both build on.
 
-It loads the curated catalog, decides which categories and properties apply to a household, and
-formats an expense's cadence. No forms and no view: each step owns its own pane (`property_expenses`,
-`recurring_expenses`); this holds only what the two genuinely share.
+It loads the curated catalog, decides which categories and properties apply to a household, and keeps
+a merged expense's cadence in step with the catalog. No forms and no view: each step owns its own pane
+(`property_expenses`, `recurring_expenses`); this holds only what the two genuinely share. The cadence
+*control* (its editor and label) lives in `cadence`.
 """
 from ucfp.accounts.enums import AssetClass
 from ucfp.parameter_sets.enums import (
@@ -58,9 +59,17 @@ def has_property( profile ) -> bool:
     return bool( owned_property_handles( profile ) ) or is_renting( profile )
 
 
-def cadence_label( interval ) -> str:
-    if interval is None:
-        return 'per year'
-    if interval.count == 1:
-        return f'per {interval.unit.label.lower()}'
-    return f'every {interval.count} {interval.unit.label.lower()}s'
+def kept_interval( prior, catalog_expense ):
+    """The cadence to seed on a merge: the prior expense's `interval` when it has one (a preserved user
+    edit), else the catalog default. Only the cadence is a user edit -- the realization is fixed and
+    always re-derived from the catalog."""
+    if prior is not None and prior.interval is not None:
+        return prior.interval
+    return catalog_expense.interval
+
+
+def kept_attr( prior, catalog_expense, attr : str ):
+    """A user-editable value preserved across a merge: the prior expense's when set, else the catalog's
+    (e.g. a durable's `count` / `cost_each` calculator inputs)."""
+    value = getattr( prior, attr ) if prior is not None else None
+    return value if value is not None else getattr( catalog_expense, attr )

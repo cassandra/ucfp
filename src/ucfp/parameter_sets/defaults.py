@@ -15,7 +15,8 @@ from ucfp.accounts.enums import ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 
 from .enums import (
-    CatalogScope, EconomicOutlookVariant, ExpenseCategory, ParameterSetKind, PropertyContext )
+    CadenceDomain, CatalogScope, EconomicOutlookVariant, ExpenseCategory, ParameterSetKind,
+    PropertyContext, Realization )
 from .schemas import EconomicOutlookSchedule, ExpenseCatalog, ExpenseType
 
 
@@ -73,11 +74,27 @@ def _economic_outlook_presets() -> dict:
     }
 
 
-def _expense( name : str, category, amount : str, tax_class, interval = None,
+def _expense( name : str, category, amount : str, tax_class, interval, realization, domain,
               applies_to : tuple = () ) -> ExpenseType:
     return ExpenseType(
         name = name, category = category, expense_tax_class = tax_class,
-        default_amount = Decimal( amount ), interval = interval, applies_to = applies_to )
+        default_amount = Decimal( amount ), interval = interval, realization = realization,
+        cadence_domain = domain, applies_to = applies_to )
+
+
+def _durable( name : str, category, count : int, cost_each : str, lifespan : int, tax_class,
+              applies_to : tuple = () ) -> ExpenseType:
+    """A durable-replacement expense entered as `count` items at `cost_each`, replaced every `lifespan`
+    years. Its amount is the annualized cost (count x cost_each / lifespan) -- a calculator fills it --
+    so it materializes as a smoothed yearly stream (staggered replacements average out); the cadence is
+    a fixed yearly, the replacement lifespan being a calculator input, not the expense's interval."""
+    cost   = Decimal( cost_each )
+    annual = count * cost / lifespan
+    return ExpenseType(
+        name = name, category = category, expense_tax_class = tax_class,
+        default_amount = annual, interval = Duration( 1, TimeUnit.YEAR ), realization = Realization.SMOOTH,
+        cadence_domain = CadenceDomain.FIXED, applies_to = applies_to,
+        count = count, cost_each = cost, lifespan = lifespan )
 
 
 def _general_expense_catalog() -> ExpenseCatalog:
@@ -95,7 +112,6 @@ def _general_expense_catalog() -> ExpenseCatalog:
     quarterly  = Duration( 3, TimeUnit.MONTH )
     semiannual = Duration( 6, TimeUnit.MONTH )
     yearly     = Duration( 1, TimeUnit.YEAR )
-    every_2y   = Duration( 2, TimeUnit.YEAR )
     every_15y  = Duration( 15, TimeUnit.YEAR )
     every_20y  = Duration( 20, TimeUnit.YEAR )
     everyday      = ExpenseCategory.EVERYDAY
@@ -104,6 +120,15 @@ def _general_expense_catalog() -> ExpenseCatalog:
     vehicle       = ExpenseCategory.VEHICLE
     health        = ExpenseCategory.HEALTH
     misc          = ExpenseCategory.MISCELLANEOUS
+    # Realization (fixed): SMOOTH annualizes and spreads a cost; DISCRETE places it at its cadence.
+    smooth   = Realization.SMOOTH
+    discrete = Realization.DISCRETE
+    # Cadence input domains (which cadences the user may re-select): a fixed cadence, weekly<->monthly,
+    # monthly<->yearly, or every N years.
+    fixed    = CadenceDomain.FIXED
+    wk_mo    = CadenceDomain.WK_MO
+    mo_yr    = CadenceDomain.MO_YR
+    n_years  = CadenceDomain.N_YEARS
     # Property-context sets: every owned dwelling; owned dwellings plus a tenant's rented home
     # (utilities); an owned rental alone (property management).
     owned       = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
@@ -111,57 +136,59 @@ def _general_expense_catalog() -> ExpenseCatalog:
     rental_only = ( PropertyContext.RENTAL, )
     rented_only = ( PropertyContext.RENTED_HOME, )
     return ExpenseCatalog( [
-        # Everyday living
-        _expense( 'Food', everyday, '150', living, weekly ),
-        _expense( 'Consumables', everyday, '50', living, weekly ),
-        _expense( 'Clothes', everyday, '1250', living ),
-        _expense( 'Grooming', everyday, '960', living ),
-        # Discretionary
-        _expense( 'Vacations', discretionary, '10000', living ),
-        _expense( 'Transportation / Travel', discretionary, '900', living, quarterly ),
-        _expense( 'Dining Out', discretionary, '75', living, weekly ),
-        _expense( 'Entertainment', discretionary, '50', living, weekly ),
-        _expense( 'Cable TV / Streaming', discretionary, '100', living, monthly ),
-        _expense( 'Hobbies', discretionary, '150', living, quarterly ),
-        _expense( 'Computer Purchase', discretionary, '1500', living, every_2y ),
-        _expense( 'Computer Services', discretionary, '300', living ),
-        _expense( 'Gifts', discretionary, '3000', living ),
-        _expense( 'Health & Fitness', discretionary, '40', living, monthly ),
-        _expense( 'Furniture', discretionary, '500', living ),
+        # Everyday living -- continuous consumption, smoothed; entered weekly or monthly.
+        _expense( 'Food', everyday, '150', living, weekly, smooth, wk_mo ),
+        _expense( 'Consumables', everyday, '50', living, weekly, smooth, wk_mo ),
+        _expense( 'Clothes', everyday, '1250', living, yearly, smooth, mo_yr ),
+        _expense( 'Grooming', everyday, '960', living, yearly, smooth, mo_yr ),
+        # Discretionary -- a mix: smoothed budgets, subscriptions (fixed monthly), and discrete events.
+        _expense( 'Vacations', discretionary, '10000', living, yearly, discrete, mo_yr ),
+        _expense( 'Transportation / Travel', discretionary, '900', living, quarterly, smooth, mo_yr ),
+        _expense( 'Dining Out', discretionary, '75', living, weekly, smooth, wk_mo ),
+        _expense( 'Entertainment', discretionary, '50', living, weekly, smooth, wk_mo ),
+        _expense( 'Cable TV / Streaming', discretionary, '100', living, monthly, discrete, fixed ),
+        _expense( 'Hobbies', discretionary, '150', living, quarterly, smooth, mo_yr ),
+        _durable( 'Computer Purchase', discretionary, 2, '1500', 4, living ),
+        _expense( 'Computer Services', discretionary, '300', living, yearly, smooth, mo_yr ),
+        _expense( 'Gifts', discretionary, '3000', living, yearly, smooth, mo_yr ),
+        _expense( 'Health & Fitness', discretionary, '40', living, monthly, discrete, fixed ),
+        _expense( 'Furniture', discretionary, '500', living, yearly, smooth, mo_yr ),
         # Property -- one operating-cost set per owned dwelling. Tax class is the PERSONAL class
         # (property tax -> SALT, the rest -> living); materialization swaps it to a rental expense for
         # a rental. Utilities also seed a tenant's rented home; rent and property management apply to a
-        # single context only -- the rented home and an owned rental respectively.
-        _expense( 'Rent', prop, '1500', living, monthly, applies_to = rented_only ),
-        _expense( 'Property Tax', prop, '6000', salt, yearly, applies_to = owned ),
-        _expense( 'Property Insurance', prop, '2500', living, applies_to = owned ),
-        _expense( 'HOA / Coop Fee', prop, '300', living, monthly, applies_to = owned ),
-        _expense( 'Maintenance / Repair', prop, '200', living, monthly, applies_to = owned ),
-        _expense( 'A/C Cost', prop, '9000', living, every_15y, applies_to = owned ),
-        _expense( 'Appliance', prop, '580', living, applies_to = owned ),
-        _expense( 'Pest Control', prop, '110', living, quarterly, applies_to = owned ),
-        _expense( 'Roof Cost', prop, '15000', living, every_20y, applies_to = owned ),
-        _expense( 'Pool Maintenance', prop, '125', living, monthly, applies_to = owned ),
-        _expense( 'Lawn Maintenance', prop, '125', living, monthly, applies_to = owned ),
-        _expense( 'Lawn Tools', prop, '100', living, applies_to = owned ),
-        _expense( 'Water / Wastewater', prop, '200', living, monthly, applies_to = occupied ),
-        _expense( 'Electric', prop, '250', living, monthly, applies_to = occupied ),
-        _expense( 'Gas Utility', prop, '80', living, monthly, applies_to = occupied ),
-        _expense( 'Phone Service', prop, '100', living, monthly, applies_to = occupied ),
-        _expense( 'Internet', prop, '100', living, monthly, applies_to = occupied ),
-        _expense( 'Property Management', prop, '240', rental_expense, monthly, applies_to = rental_only ),
+        # single context only -- the rented home and an owned rental respectively. Utilities/services are
+        # a fixed cadence; tax/insurance let the user choose monthly (escrow) or yearly.
+        _expense( 'Rent', prop, '1500', living, monthly, discrete, fixed, applies_to = rented_only ),
+        _expense( 'Property Tax', prop, '6000', salt, yearly, discrete, mo_yr, applies_to = owned ),
+        _expense( 'Property Insurance', prop, '2500', living, yearly, discrete, mo_yr, applies_to = owned ),
+        _expense( 'HOA / Coop Fee', prop, '300', living, monthly, discrete, fixed, applies_to = owned ),
+        _expense( 'Maintenance / Repair', prop, '200', living, monthly, smooth, mo_yr, applies_to = owned ),
+        _expense( 'A/C Cost', prop, '9000', living, every_15y, discrete, n_years, applies_to = owned ),
+        _durable( 'Appliance', prop, 3, '2900', 15, living, applies_to = owned ),
+        _expense( 'Pest Control', prop, '110', living, quarterly, discrete, fixed, applies_to = owned ),
+        _expense( 'Roof Cost', prop, '15000', living, every_20y, discrete, n_years, applies_to = owned ),
+        _expense( 'Pool Maintenance', prop, '125', living, monthly, discrete, fixed, applies_to = owned ),
+        _expense( 'Lawn Maintenance', prop, '125', living, monthly, discrete, fixed, applies_to = owned ),
+        _durable( 'Lawn Tools', prop, 4, '500', 20, living, applies_to = owned ),
+        _expense( 'Water / Wastewater', prop, '200', living, monthly, discrete, fixed, applies_to = occupied ),
+        _expense( 'Electric', prop, '250', living, monthly, discrete, fixed, applies_to = occupied ),
+        _expense( 'Gas Utility', prop, '80', living, monthly, discrete, fixed, applies_to = occupied ),
+        _expense( 'Phone Service', prop, '100', living, monthly, discrete, fixed, applies_to = occupied ),
+        _expense( 'Internet', prop, '100', living, monthly, discrete, fixed, applies_to = occupied ),
+        _expense( 'Property Management', prop, '240', rental_expense, monthly, discrete, fixed, applies_to = rental_only ),
         # Vehicle running costs (the car purchase/financing itself is the parameterized vehicle plan,
-        # not a catalog item)
-        _expense( 'Auto Insurance', vehicle, '750', living, semiannual ),
-        _expense( 'Auto Maintenance', vehicle, '300', living, yearly ),
-        _expense( 'Auto Repair', vehicle, '1000', living ),
-        _expense( 'Gasoline', vehicle, '20', living, weekly ),
-        # Health
-        _expense( 'Medical Expenses', health, '7200', medical ),
-        _expense( 'Health Insurance', health, '26400', medical ),
-        # Miscellaneous -- household costs not tied to a single dwelling
-        _expense( 'Umbrella Insurance', misc, '500', living ),
-        _expense( 'Professional Fees', misc, '500', living, yearly ),
+        # not a catalog item). Insurance is a discrete bill; the rest are smoothed (fuel continuous,
+        # maintenance/repair unpredictable).
+        _expense( 'Auto Insurance', vehicle, '750', living, semiannual, discrete, mo_yr ),
+        _expense( 'Auto Maintenance', vehicle, '300', living, yearly, smooth, mo_yr ),
+        _expense( 'Auto Repair', vehicle, '1000', living, yearly, smooth, mo_yr ),
+        _expense( 'Gasoline', vehicle, '20', living, weekly, smooth, wk_mo ),
+        # Health -- unpredictable medical costs smoothed; the insurance premium a discrete monthly bill.
+        _expense( 'Medical Expenses', health, '7200', medical, yearly, smooth, mo_yr ),
+        _expense( 'Health Insurance', health, '2200', medical, monthly, discrete, mo_yr ),
+        # Miscellaneous -- household costs not tied to a single dwelling; discrete annual bills.
+        _expense( 'Umbrella Insurance', misc, '500', living, yearly, discrete, mo_yr ),
+        _expense( 'Professional Fees', misc, '500', living, yearly, discrete, mo_yr ),
     ] )
 
 

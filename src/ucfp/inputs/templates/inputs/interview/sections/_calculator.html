@@ -1,0 +1,15 @@
+{% comment %}
+A durable expense's count-entry calculator, part of the enclosing js-autosave form. A toggle reveals a
+panel of "count x cost-each, replace every N years" with a live per-year readout; the client fills the
+row's amount target(s) with count x cost / lifespan (its annual cost -- the server recomputes on save,
+so the amount stays authoritative). Include with `calc` = the row's calculator dict (count, cost,
+lifespan, per_year); the enclosing element carries the CALC_CLASS and holds the CALC_TARGET_CLASS
+amount input(s).
+{% endcomment %}
+{% load icons %}
+<button type="button" class="{{ AppConst.CALC_TOGGLE_CLASS }} btn btn-sm btn-link p-0 ml-1"
+        aria-label="Enter as a count of items">{% icon "calculator" size="sm" %}</button>
+<div class="{{ AppConst.CALC_PANEL_CLASS }} small text-muted mt-1" hidden>
+  {{ calc.count }} &times; {{ calc.cost }} each, replace every {{ calc.lifespan }} yr
+  &rarr; &asymp; $<span class="{{ AppConst.CALC_READOUT_CLASS }}">{{ calc.per_year }}</span>/yr
+</div>

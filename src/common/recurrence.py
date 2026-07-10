@@ -15,6 +15,7 @@ A consumer asks only `count_in`, so it treats either kind uniformly.
 import calendar
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import Decimal
 
 from common.labeled_enum import LabeledEnum
 
@@ -64,6 +65,19 @@ class Duration:
             return self.count * 12
         raise ValueError( f'A {self.unit.label} duration has no whole-month size.' )
 
+    def occurrences_per_year( self ) -> Decimal:
+        """How often this recurrence falls in a year, as a `Decimal`: 52 weekly, 12 monthly, 1 yearly,
+        a fraction for a multi-unit cadence (every 15 years -> 1/15). Annualizes a per-occurrence amount
+        into a yearly rate. Assumes a real recurrence (`count` >= 1)."""
+        return _OCCURRENCES_PER_YEAR_BY_UNIT[ self.unit ] / self.count
+
+
+_OCCURRENCES_PER_YEAR_BY_UNIT = {
+    TimeUnit.DAY   : Decimal( 365 ),
+    TimeUnit.WEEK  : Decimal( 52 ),
+    TimeUnit.MONTH : Decimal( 12 ),
+    TimeUnit.YEAR  : Decimal( 1 ),
+}
 
 _ZERO_OFFSET = Duration( 0, TimeUnit.DAY )
 

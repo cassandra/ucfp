@@ -18,7 +18,7 @@ from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import ContributionSource, WindowedAmount
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
+from ucfp.parameter_sets.enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
 from ucfp.parameter_sets.schemas import ExpenseCatalog, ExpenseType
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
@@ -96,14 +96,20 @@ def _sample_plans():
         expense_spans = [ 70, 80, None ],
         recurring_expenses = [ RecurringExpense(
             name = 'Travel', category = ExpenseCategory.DISCRETIONARY,
-            expense_tax_class = ExpenseTaxClass.LIVING,
+            expense_tax_class = ExpenseTaxClass.LIVING, interval = Duration( 1, TimeUnit.YEAR ),
             amounts = [ Decimal( '900' ), Decimal( '500' ), Decimal( '200' ) ] ) ],
         property_expenses = [ PropertyExpense(
             name = 'Property tax', category = ExpenseCategory.PROPERTY,
-            expense_tax_class = ExpenseTaxClass.SALT,
+            expense_tax_class = ExpenseTaxClass.SALT, interval = Duration( 1, TimeUnit.MONTH ),
             applies_to = ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ),
             default_amount = Decimal( '6000' ),
-            overrides = { 'home': Decimal( '6500' ) } ) ],
+            overrides = { 'home': Decimal( '6500' ) } ),
+            PropertyExpense(
+                name = 'Appliance', category = ExpenseCategory.PROPERTY,
+                expense_tax_class = ExpenseTaxClass.LIVING,
+                applies_to = ( PropertyContext.RESIDENCE, ), interval = Duration( 1, TimeUnit.YEAR ),
+                default_amount = Decimal( '580' ), count = 3, cost_each = Decimal( '2900' ),
+                lifespan = 15 ) ],
         contributions = [ Contribution( account_handle = '401k', annual_amount = Decimal( '23000' ),
                                         source = ContributionSource.WAGE ) ],
         loan_repayments = [ LoanRepayment( debt_handle = 'mort',
@@ -163,11 +169,14 @@ class DataclassJsonRoundTripTest( SimpleTestCase ):
             ExpenseType(
                 name = 'Property Tax', category = ExpenseCategory.PROPERTY,
                 expense_tax_class = ExpenseTaxClass.SALT, default_amount = Decimal( '6000' ),
-                interval = Duration( 1, TimeUnit.YEAR ),
+                interval = Duration( 1, TimeUnit.YEAR ), realization = Realization.DISCRETE,
+                cadence_domain = CadenceDomain.MO_YR,
                 applies_to = ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ) ),
             ExpenseType(
                 name = 'Umbrella Insurance', category = ExpenseCategory.MISCELLANEOUS,
-                expense_tax_class = ExpenseTaxClass.LIVING, default_amount = Decimal( '500' ) ) ] )
+                expense_tax_class = ExpenseTaxClass.LIVING, default_amount = Decimal( '500' ),
+                interval = Duration( 1, TimeUnit.YEAR ), realization = Realization.DISCRETE,
+                cadence_domain = CadenceDomain.MO_YR ) ] )
         data = to_json_data( catalog )
         json.dumps( data )
         self.assertEqual( data[ 'expenses' ][ 0 ][ 'applies_to' ], [ 'RESIDENCE', 'RENTAL' ] )
