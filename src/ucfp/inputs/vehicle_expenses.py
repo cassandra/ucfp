@@ -15,7 +15,7 @@ from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseClass
 from ucfp.inputs.plans.schemas import VehiclePlan, VehicleRunningCost
 from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, read_cadence
-from ucfp.inputs.expenses import kept_interval, load_catalog
+from ucfp.inputs.expenses import kept_interval, ordered_catalog
 
 
 def vehicle_plan_of( plans ):
@@ -42,7 +42,7 @@ def merged_vehicle_costs( plans ) -> list:
     plan     = vehicle_plan_of( plans )
     existing = { cost.name: cost for cost in plan.running_costs } if plan is not None else dict()
     merged = list()
-    for catalog_expense in load_catalog().expenses:
+    for catalog_expense in ordered_catalog():
         if catalog_expense.expense_class is not ExpenseClass.VEHICLE:
             continue
         prior = existing.get( catalog_expense.name )

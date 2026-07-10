@@ -19,7 +19,7 @@ from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_durable )
 from ucfp.inputs.expenses import (
-    OWNED_PROPERTY_CONTEXT, has_property, is_renting, kept_attr, kept_interval, load_catalog,
+    OWNED_PROPERTY_CONTEXT, has_property, is_renting, kept_attr, kept_interval, ordered_catalog,
     owned_property_handles )
 
 
@@ -80,7 +80,7 @@ def merged_property_expenses( profile, plans ) -> list:
     existing     = { expense.name: expense for expense in plans.property_expenses } if plans else dict()
     live_handles = set( _property_handles_for( profile ) )
     merged = list()
-    for catalog_expense in load_catalog().expenses:
+    for catalog_expense in ordered_catalog():
         if catalog_expense.expense_class is not ExpenseClass.PROPERTY:
             continue
         prior = existing.get( catalog_expense.name )
