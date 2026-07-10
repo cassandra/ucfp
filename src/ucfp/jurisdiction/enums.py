@@ -15,9 +15,12 @@ class JurisdictionType( LabeledEnum ):
 class StatuteForecastType( LabeledEnum ):
     """How the chosen statute is projected forward over the forecast horizon."""
 
-    CURRENT_LAW  = ( 'Current Law', 'The current year law applied unchanged every year.' )
-    COLA_INDEXED = ( 'COLA-Indexed', 'Inflation-indexed figures shift each year; statutory '
-                                     'fixed figures stay put.' )
+    CURRENT_LAW  = ( "Freeze today's brackets",
+                     "Today's brackets and thresholds are held flat every future year; as incomes grow, "
+                     "more income falls into higher brackets -- a more conservative, higher-tax assumption." )
+    COLA_INDEXED = ( 'Brackets rise with inflation',
+                     'Tax brackets and the standard deduction grow each year with inflation, as they do '
+                     'under current law.' )
 
 
 class FilingStatus( LabeledEnum ):

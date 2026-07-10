@@ -90,7 +90,7 @@ class ExternalFactorsForm( forms.Form ):
     the factor copy and the tax forecast on the assumptions."""
 
     forecast_type = forms.ChoiceField(
-        label = 'Tax brackets', choices = StatuteForecastType.choices(),
+        label = 'Future tax brackets', choices = StatuteForecastType.choices(),
         initial = DEFAULT_TAX_FORECAST_TYPE.name.lower() )
 
     def __init__( self, data = None, *, profile = None, assumptions = None ):
