@@ -1,7 +1,7 @@
 {% comment %}
 The property-expenses matrix (id=property-expenses): the household's per-property operating costs as
 one shared Default column plus one column per property, its rows grouped into ordered category sections
-(taxes & insurance, utilities, maintenance, rent) mirroring the recurring table. The js-autosave form
+mirroring the recurring table. The js-autosave form
 posts each edit to `PropertyExpensesView`, which persists silently. A per-property cell overrides the
 Default (blank falls back to it, shown as the placeholder); a "—" cell is not applicable to that
 property. With a single property the Default column collapses into one value column. Reads `property_form`.

@@ -225,8 +225,8 @@ class PropertyExpensesForm( forms.Form ):
     @property
     def sections( self ) -> list:
         """The displayed expense rows grouped into ordered category sections (a header per property
-        sub-group -- taxes & insurance, utilities, maintenance, rent -- mirroring the recurring table), in
-        the shared deliberate order. Each row is its name, cadence, and a cell per column."""
+        sub-group), in the shared deliberate (group, item) order. Each row is its name, cadence, and a
+        cell per column."""
         return grouped_sections(
             ( expense.category, self._row( ri, expense ) )
             for ri, expense in enumerate( self._rows ) )

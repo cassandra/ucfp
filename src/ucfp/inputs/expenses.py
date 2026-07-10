@@ -21,7 +21,9 @@ OWNED_PROPERTY_CONTEXT = {
 }
 
 
-def load_catalog():
+def _load_catalog():
+    """The seeded general expense catalog (the system default). Internal -- callers use `ordered_catalog`,
+    which returns its rows in the deliberate (group, item) order."""
     return load( ParameterSetKind.EXPENSE_CATALOG, CatalogScope.GENERAL.label )
 
 
@@ -29,15 +31,18 @@ def ordered_catalog() -> list:
     """The catalog's expense types in the deliberate (group, item) order -- sorted by (category
     declaration order, per-item `order`). Every spending surface seeds from this, so their rows share one
     ordering, independent of how the catalog source happens to be authored."""
-    rank = { category : index for index, category in enumerate( ExpenseCategory ) }
-    return sorted( load_catalog().expenses, key = lambda expense: ( rank[ expense.category ], expense.order ) )
+    category_rank = { category : index for index, category in enumerate( ExpenseCategory ) }
+
+    def group_then_item( expense ):
+        return ( category_rank[ expense.category ], expense.order )
+
+    return sorted( _load_catalog().expenses, key = group_then_item )
 
 
 def grouped_sections( items ) -> list:
     """Group an ordered iterable of `(category, row)` pairs into `[{ category, label, rows }]` sections --
     a new section each time the category changes. The items must already be in the deliberate order (from
-    a merge that seeded through `ordered_catalog`), so same-category rows are contiguous. The shared
-    section grouping both spending tables render by."""
+    a merge that seeded through `ordered_catalog`), so same-category rows are contiguous."""
     sections = list()
     for category, row in items:
         if not sections or sections[ -1 ][ 'category' ] is not category:

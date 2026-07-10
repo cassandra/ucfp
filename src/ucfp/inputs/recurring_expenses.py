@@ -57,8 +57,8 @@ def _aligned_amounts( prior, default : Decimal, span_count : int ) -> list:
 
 
 class RecurringExpensesForm( forms.Form ):
-    """The recurring-expenses table: rows are the regular (non-property) expenses grouped by category,
-    columns are the spans of the shared timeline. Each span carries an "until age" (the last blank, the
+    """The recurring-expenses table: rows are the `LIVING`-class expenses grouped by category, columns
+    are the spans of the shared timeline. Each span carries an "until age" (the last blank, the
     open "thereafter" span); each cell is an amount at the row's cadence. Filling the open span's age
     splits it (a new open span duplicates it); clearing a span's age deletes that span. Ages are the
     primary subject's. `apply` writes the shared `expense_spans` and every recurring expense's per-span

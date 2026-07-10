@@ -41,7 +41,7 @@ class ExpenseType:
     property tax); materialization swaps it to `RENTAL_EXPENSE` for a rental-owned property. `applies_to`
     names the `PropertyContext`s the row seeds against -- e.g. a roof against every owned dwelling,
     utilities also against a rented home, property management only against a rental. It is empty for a
-    non-property (household) row. A tuple, not a set, because the JSON codec round-trips tuples."""
+    row outside the `PROPERTY` class. A tuple, not a set, because the JSON codec round-trips tuples."""
     name: str
     expense_class: ExpenseClass
     category: ExpenseCategory
