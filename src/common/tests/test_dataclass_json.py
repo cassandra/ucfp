@@ -28,8 +28,9 @@ from ucfp.inputs.profile.schemas import (
     AssetProfile, CommittedObligation, Debt, GovernmentPensionEntitlement,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    VehiclePlan, Contribution, CreditCardPlan, DrawdownPolicy, HealthCoverageAssumption,
-    LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense, RetirementTiming, Plans )
+    VehiclePlan, VehicleRunningCost, Contribution, CreditCardPlan, DrawdownPolicy,
+    HealthCoverageAssumption, LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense,
+    RetirementTiming, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
 
@@ -124,7 +125,15 @@ def _sample_plans():
                             monthly_payment = Decimal( '150' ), target_date = date( 2030, 1, 1 ) ) ],
         vehicle_plan = VehiclePlan(
             num_cars = 2, purchase_price = Decimal( '35000' ), recurrence_years = 8,
-            start_date = date( 2031, 1, 1 ), down_payment = Decimal( '7000' ) ),
+            start_date = date( 2031, 1, 1 ), down_payment = Decimal( '7000' ),
+            running_costs = [
+                VehicleRunningCost(
+                    name = 'Gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
+                    interval = Duration( 1, TimeUnit.WEEK ), amount = Decimal( '20' ) ),
+                VehicleRunningCost(
+                    name = 'Auto Insurance', expense_tax_class = ExpenseTaxClass.LIVING,
+                    interval = Duration( 6, TimeUnit.MONTH ), amount = Decimal( '750' ),
+                    realization = Realization.DISCRETE, cadence_domain = CadenceDomain.MO_YR ) ] ),
         drawdown = DrawdownPolicy( cash_floor = Decimal( '20000' ), cash_ceiling = Decimal( '50000' ),
                                    draw_order = [ AssetClass.STOCKS, AssetClass.BONDS ],
                                    sweep_allocation = [ ( 'brok', Decimal( '0.6' ) ),

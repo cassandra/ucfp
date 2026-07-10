@@ -286,8 +286,8 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
     down payment financed) plus, when financed, a constant stream of the financed lifetime cost spread
     over the recurrence period. Both scale by the number of cars and begin at the plan's start date."""
     plan = plans.vehicle_plan
-    if plan is None or plan.num_cars <= 0 or plan.purchase_price <= 0 or plan.recurrence_years <= 0:
-        return list()
+    if plan is None or not plan.num_cars or not plan.purchase_price or not plan.recurrence_years:
+        return list()                                  # no cars, or no purchase pattern set
     cars   = Decimal( plan.num_cars )
     window = DateWindow( start = plan.start_date )
     lump, financed_lifetime = _vehicle_costs( plan )
