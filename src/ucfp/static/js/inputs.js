@@ -407,6 +407,20 @@ window.App.Inputs = (function () {
         $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( annual );
     }
 
+    // The vehicle running-costs table: each row's Total = its per-car amount x the shared car count
+    // (from the sibling purchase pane), recomputed live and shown at the row's cadence. Display-only --
+    // materialization scales by num_cars authoritatively on save. A dash shows until both are set.
+    function updateVehicleTotals() {
+        const numCars = parseFloat( $( classSelector( C.VEHICLE_NUM_CARS_CLASS ) ).val() ) || 0;
+        $( classSelector( C.VEHICLE_COSTS_CLASS ) ).find( classSelector( C.VEHICLE_PERCAR_CLASS ) )
+            .each( function () {
+                const perCar = parseFloat( $( this ).val() );
+                const total  = ( numCars && ! isNaN( perCar ) )
+                    ? '$' + Math.round( perCar * numCars ) : '—';
+                $( this ).closest( 'tr' ).find( classSelector( C.VEHICLE_TOTAL_CLASS ) ).text( total );
+            } );
+    }
+
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs
@@ -478,6 +492,11 @@ window.App.Inputs = (function () {
             updateCalculator( $( this ).closest( classSelector( C.CALC_CLASS ) ) );
         } );
 
+        // Recompute the vehicle running-costs totals as a per-car amount or the shared car count changes.
+        $( 'body' ).on( 'input change',
+            classSelector( C.VEHICLE_PERCAR_CLASS ) + ', ' + classSelector( C.VEHICLE_NUM_CARS_CLASS ),
+            updateVehicleTotals );
+
         // Mirror a property-expense row's Default into its blank per-property cells' placeholders as it
         // is typed, so a changed default is visible where a cell falls back to it. The pane saves
         // silently and does not re-render these placeholders, so this keeps them current client-side.
@@ -498,6 +517,7 @@ window.App.Inputs = (function () {
         enhanceSwitches( $( document.body ) );
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
+        updateVehicleTotals();
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
@@ -505,6 +525,7 @@ window.App.Inputs = (function () {
                 enhanceSwitches( $( document.body ) );
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
+                updateVehicleTotals();                     // refresh totals if a pane swap corrected num_cars
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }

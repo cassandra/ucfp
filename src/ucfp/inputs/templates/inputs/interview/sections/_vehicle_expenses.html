@@ -1,0 +1,37 @@
+{% comment %}
+The vehicle running-costs table (id=vehicle-running-costs): one row per per-car running cost, each an
+amount entered per car at its cadence, with a read-only Total (= per-car x the plan's car count, at the
+same cadence) that updates live as the amount or the shared car count changes. The js-autosave form
+posts each edit to `VehicleExpensesView`, which saves silently (the row set is fixed). The car count
+lives on the sibling purchase pane; the total is display-only (materialization scales by it on save).
+Reads `vehicle_costs_form`.
+{% endcomment %}
+<div id="vehicle-running-costs">
+  <form method="post" action="{% url 'vehicle_expenses' %}"
+        class="{{ AppConst.AUTOSAVE_CLASS }} {{ AppConst.VEHICLE_COSTS_CLASS }}">
+    {% csrf_token %}
+    <table class="table table-sm w-auto align-middle">
+      <thead>
+        <tr>
+          <th scope="col">Running cost</th>
+          <th scope="col" class="text-right small">Per car</th>
+          <th scope="col" class="small">Cadence</th>
+          <th scope="col" class="text-right small">Total{% if vehicle_costs_form.num_cars %}
+            <span class="text-muted d-block">{{ vehicle_costs_form.num_cars }} cars</span>{% endif %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in vehicle_costs_form.rows %}
+        <tr>
+          <th scope="row" class="font-weight-normal text-left">{{ row.name }}</th>
+          <td class="text-right">{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
+          <td>{% include 'inputs/interview/sections/_cadence.html' with cadence=row.cadence %}</td>
+          <td class="text-right"><span class="{{ AppConst.VEHICLE_TOTAL_CLASS }}" aria-live="polite">{% if row.total is not None %}${{ row.total }}{% else %}&mdash;{% endif %}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small">Enter each cost per car; the Total scales by the number of cars entered
+      above and is shown at the same cadence. Changes save automatically.</p>
+  </form>
+</div>

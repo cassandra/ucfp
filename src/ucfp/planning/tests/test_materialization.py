@@ -12,11 +12,11 @@ from decimal import Decimal
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
-from ucfp.inputs.plans.schemas import Plans, PropertyExpense
+from ucfp.inputs.plans.schemas import Plans, PropertyExpense, VehiclePlan, VehicleRunningCost
 from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
-from ucfp.planning.materialization import _property_expenses
+from ucfp.planning.materialization import _property_expenses, _vehicle_running_costs
 
 _OWNED    = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
 _OCCUPIED = _OWNED + ( PropertyContext.RENTED_HOME, )
@@ -86,3 +86,43 @@ class RealizationTests( unittest.TestCase ):
         streams, items = self._residence_plans( Realization.SMOOTH, Duration( 1, TimeUnit.MONTH ) )
         self.assertEqual( items, [] )
         self.assertEqual( streams[ 0 ].amounts.segments[ 0 ].amount, Decimal( '72000' ) )
+
+
+class VehicleRunningCostTests( unittest.TestCase ):
+    """A vehicle running cost is a per-car amount scaled by the plan's car count, then materialized by
+    its realization -- SMOOTH annualized into a stream, DISCRETE placed as an item at its cadence."""
+
+    @staticmethod
+    def _plans( num_cars, *costs ):
+        return Plans( vehicle_plan = VehiclePlan( num_cars = num_cars, running_costs = list( costs ) ) )
+
+    @staticmethod
+    def _cost( realization, interval, amount = Decimal( '20' ) ):
+        return VehicleRunningCost(
+            name = 'Gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
+            interval = interval, amount = amount, realization = realization )
+
+    def test_smooth_cost_scales_by_num_cars_then_annualizes( self ):
+        # $20/car/week x 2 cars = $40/week, annualized x 52 = $2,080/yr stream (no item).
+        streams, items = _vehicle_running_costs(
+            self._plans( 2, self._cost( Realization.SMOOTH, Duration( 1, TimeUnit.WEEK ) ) ) )
+        self.assertEqual( items, [] )
+        self.assertEqual( streams[ 0 ].amounts.segments[ 0 ].amount, Decimal( '2080' ) )
+
+    def test_discrete_cost_scales_by_num_cars_at_its_cadence( self ):
+        # $750/car semiannually x 2 cars = a $1,500 item every 6 months (no stream).
+        semiannual = Duration( 6, TimeUnit.MONTH )
+        streams, items = _vehicle_running_costs(
+            self._plans( 2, self._cost( Realization.DISCRETE, semiannual, Decimal( '750' ) ) ) )
+        self.assertEqual( streams, [] )
+        self.assertEqual( items[ 0 ].cadence.interval, semiannual )
+        self.assertEqual( items[ 0 ].amounts.segments[ 0 ].amount, Decimal( '1500' ) )
+
+    def test_no_cars_or_blank_amount_yields_nothing( self ):
+        weekly = Duration( 1, TimeUnit.WEEK )
+        self.assertEqual(                                  # a blank per-car amount is not charged
+            _vehicle_running_costs( self._plans( 2, self._cost( Realization.SMOOTH, weekly, None ) ) ),
+            ( [], [] ) )
+        self.assertEqual(                                  # no cars -> nothing to scale
+            _vehicle_running_costs( self._plans( None, self._cost( Realization.SMOOTH, weekly ) ) ),
+            ( [], [] ) )

@@ -1,0 +1,12 @@
+{% comment %}
+The Vehicle Expenses step (Plans flow): the household's car costs in two panes -- the purchase/financing
+pattern and the per-car running costs. Both render outside the section's Next form and save on their own
+(`VehiclePlanView`, `VehicleExpensesView`); the panes come from the section wrapper (`form.vehicle_form`,
+`form.vehicle_costs_form`). The number of cars entered in the purchase pane is the shared quantity the
+running costs below are scaled by.
+{% endcomment %}
+<p class="text-muted">Your household's cars -- how you buy them and what they cost to run. Enter the
+  number of cars once; the running costs below are entered per car and scale to your total.</p>
+{% include 'inputs/interview/sections/vehicle_plan.html' with vehicle_form=form.vehicle_form %}
+<h6 class="mt-4">Running costs (per car)</h6>
+{% include 'inputs/interview/sections/_vehicle_expenses.html' with vehicle_costs_form=form.vehicle_costs_form %}

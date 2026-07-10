@@ -11,10 +11,11 @@ from ucfp.parameter_sets.enums import (
 from ucfp.parameter_sets.repository import load
 from ucfp.inputs.profile.enums import HousingTenure
 
-# Categories that always apply; Property attaches to owning or renting a dwelling (added by
-# `applicable_categories`). Vehicle running costs are presumed applicable, not gated on owning a vehicle.
+# Categories that always apply to the general recurring-expense table; Property attaches to owning or
+# renting a dwelling (added by `applicable_categories`). Vehicle running costs are NOT here -- they are
+# per-car, scaled by the vehicle plan's car count, and live in the Vehicle Expenses step.
 _ALWAYS = ( ExpenseCategory.EVERYDAY, ExpenseCategory.DISCRETIONARY, ExpenseCategory.HEALTH,
-            ExpenseCategory.VEHICLE, ExpenseCategory.MISCELLANEOUS )
+            ExpenseCategory.MISCELLANEOUS )
 
 # An owned real-property holding's asset class, mapped to the property context its expenses seed
 # against. A tenant's rented home maps to RENTED_HOME separately (see `is_renting`).

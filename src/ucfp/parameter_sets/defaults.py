@@ -176,8 +176,9 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Phone Service', prop, '100', living, monthly, discrete, fixed, applies_to = occupied ),
         _expense( 'Internet', prop, '100', living, monthly, discrete, fixed, applies_to = occupied ),
         _expense( 'Property Management', prop, '240', rental_expense, monthly, discrete, fixed, applies_to = rental_only ),
-        # Vehicle running costs (the car purchase/financing itself is the parameterized vehicle plan,
-        # not a catalog item). Insurance is a discrete bill; the rest are smoothed (fuel continuous,
+        # Vehicle running costs seed the per-car running costs of the Vehicle Expenses step (scaled there
+        # by the plan's car count); the car purchase/financing itself is the parameterized vehicle plan,
+        # not a catalog item. Insurance is a discrete bill; the rest are smoothed (fuel continuous,
         # maintenance/repair unpredictable).
         _expense( 'Auto Insurance', vehicle, '750', living, semiannual, discrete, mo_yr ),
         _expense( 'Auto Maintenance', vehicle, '300', living, yearly, smooth, mo_yr ),

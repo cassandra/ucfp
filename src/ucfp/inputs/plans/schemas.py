@@ -144,7 +144,22 @@ class CreditCardPlan:
     target_date: Optional[ date ] = None
 
 
-# --- Auto (car ownership) -------------------------------------------------
+# --- Auto (car ownership): a shared num_cars, the purchase/financing pattern, and per-car running costs.
+
+@dataclass( frozen = True )
+class VehicleRunningCost:
+    """One per-car vehicle running cost (fuel, insurance, maintenance, repair). `amount` is the cost per
+    car at its `interval` cadence; materialization multiplies it by the plan's `num_cars`. `realization`
+    (smoothed vs placed at its cadence) and `cadence_domain` (the editable input domain) mirror the
+    general expense model, but the amount is a single per-car figure -- constant, with no age spans.
+    `amount` is None when blank (the cost is then not charged)."""
+    name: str
+    expense_tax_class: ExpenseTaxClass
+    interval: Duration
+    amount: Optional[ Decimal ] = None
+    realization: Realization = Realization.SMOOTH
+    cadence_domain: CadenceDomain = CadenceDomain.FIXED
+
 
 @dataclass( frozen = True )
 class VehiclePlan:
@@ -155,13 +170,18 @@ class VehiclePlan:
     at an assumed auto-loan rate/term -- is spread evenly over the recurrence period as one constant
     expense (no start/stop). The user gives either the `monthly_payment` or the `down_payment`;
     materialization derives the other. `start_date` is solicited (pre-filled from an existing auto
-    loan's end date), so the recurring costs begin where any current loan leaves off."""
-    num_cars: int
-    purchase_price: Decimal
-    recurrence_years: int
+    loan's end date), so the recurring costs begin where any current loan leaves off.
+
+    `num_cars` is the shared quantity feeding both the purchase pattern and the per-car `running_costs`.
+    Every field is optional: the plan persists to carry whichever aspect the user has begun (purchase,
+    running costs, or just the car count), and materialization emits only the complete aspects."""
+    num_cars: Optional[ int ] = None
+    purchase_price: Optional[ Decimal ] = None
+    recurrence_years: Optional[ int ] = None
     start_date: Optional[ date ] = None
     monthly_payment: Optional[ Decimal ] = None
     down_payment: Optional[ Decimal ] = None
+    running_costs: list[ VehicleRunningCost ] = field( default_factory = list )
 
 
 # --- Drawdown -------------------------------------------------------------

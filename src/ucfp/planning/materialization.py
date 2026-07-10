@@ -79,6 +79,7 @@ def materialize(
         profile, plans, assets_by_handle, events.property_sales )
     flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
+    vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -93,8 +94,8 @@ def materialize(
         income_items     = flow_items + events.income_items,
         expense_items    = (
             _committed_obligations( profile ) + recurring_items + expense_items
-            + events.expense_items + card_items + _vehicle_expenses( plans ) ),
-        expense_streams  = recurring_streams + expense_streams,
+            + events.expense_items + card_items + _vehicle_expenses( plans ) + vehicle_items ),
+        expense_streams  = recurring_streams + expense_streams + vehicle_streams,
         loans            = _loans( profile, plans ),
         contributions    = _contributions( plans ),
         events           = events.scheduled_events + card_events,
@@ -286,8 +287,8 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
     down payment financed) plus, when financed, a constant stream of the financed lifetime cost spread
     over the recurrence period. Both scale by the number of cars and begin at the plan's start date."""
     plan = plans.vehicle_plan
-    if plan is None or plan.num_cars <= 0 or plan.purchase_price <= 0 or plan.recurrence_years <= 0:
-        return list()
+    if plan is None or not plan.num_cars or not plan.purchase_price or not plan.recurrence_years:
+        return list()                                  # no cars, or no purchase pattern set
     cars   = Decimal( plan.num_cars )
     window = DateWindow( start = plan.start_date )
     lump, financed_lifetime = _vehicle_costs( plan )
@@ -323,6 +324,31 @@ def _vehicle_costs( plan : VehiclePlan ) -> tuple[ Decimal, Decimal ]:
         financed = present_value( plan.monthly_payment, rate, term )
         return max( price - financed, Decimal( '0' ) ), plan.monthly_payment * term
     return price, Decimal( '0' )   # unfinanced: the whole price is the lump
+
+
+def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:
+    """The vehicle plan's per-car running costs as (streams, items): each cost's per-car amount scaled
+    by the plan's car count -- a SMOOTH cost as an annualized stream, a DISCRETE one as an item placed
+    at its cadence. Constant over the forecast (no start/stop). Empty when there is no plan, no cars, or
+    the cost is blank (not charged)."""
+    plan = plans.vehicle_plan
+    if plan is None or not plan.num_cars:
+        return list(), list()
+    cars   = Decimal( plan.num_cars )
+    streams, items = list(), list()
+    for cost in plan.running_costs:
+        if cost.amount is None:
+            continue
+        amounts = Schedule.constant( WindowedAmount( cost.amount * cars ) )
+        if cost.realization is Realization.SMOOTH:
+            streams.append( ExpenseStream(
+                name = cost.name, expense_tax_class = cost.expense_tax_class,
+                amounts = _annualized( amounts, cost.interval ) ) )
+        else:
+            items.append( ExpenseItem(
+                name = cost.name, expense_tax_class = cost.expense_tax_class,
+                amounts = amounts, cadence = Recurrence( cost.interval ) ) )
+    return streams, items
 
 
 # --- Profile: flows (income entitlements, committed obligations) -----------
