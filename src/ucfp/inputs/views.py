@@ -421,7 +421,7 @@ class VehiclePlanView( SelfSavingPaneView ):
 
 class RecurringExpensesView( SelfSavingPaneView ):
     """`/inputs/interview/living-expenses/edit/` -- the recurring-expenses table of the Living Expenses
-    step: the regular (non-property) expenses over the shared age-span timeline. Auto-saves each edit; a
+    step: the `LIVING`-class expenses over the shared age-span timeline. Auto-saves each edit; a
     structural change (a span added, removed, or re-aged) re-renders the table, a pure amount edit
     stays silent."""
 
