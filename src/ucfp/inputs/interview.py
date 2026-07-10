@@ -600,7 +600,7 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
-    Section( 'external-factors', 'External Factors', ( Aggregate.ASSUMPTIONS, ),
+    Section( 'external-factors', 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html' ),
 ]

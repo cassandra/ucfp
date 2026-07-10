@@ -83,7 +83,12 @@ class LoadPathTest( TestCase ):
         call_command( 'seed_parameter_sets' )
         schedule = load( _ECON, _EXPECTED )
         self.assertEqual( len( schedule.segments ), 1 )
-        self.assertEqual( schedule.segments[ 0 ].inflation.fraction, Decimal( '0.025' ) )
+        segment = schedule.segments[ 0 ]
+        self.assertEqual( segment.inflation.fraction, Decimal( '0.025' ) )
+        # The niche asset rates seed non-zero (they previously fell through to a 0 default).
+        self.assertEqual( segment.precious_metals_appreciation.fraction, Decimal( '0.03' ) )
+        self.assertEqual( segment.collectibles_appreciation.fraction, Decimal( '0.02' ) )
+        self.assertEqual( segment.depreciation_rate.fraction, Decimal( '0.10' ) )
 
     def test_load_returns_the_expense_catalog( self ):
         call_command( 'seed_parameter_sets' )
