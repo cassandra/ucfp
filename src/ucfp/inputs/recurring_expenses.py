@@ -11,26 +11,25 @@ from decimal import Decimal
 from django import forms
 
 from ucfp.environment.constants import AppConst
-from ucfp.parameter_sets.enums import ExpenseCategory
+from ucfp.parameter_sets.enums import ExpenseClass
 from ucfp.inputs.plans.schemas import RecurringExpense
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_durable )
-from ucfp.inputs.expenses import applicable_categories, kept_attr, kept_interval, load_catalog
+from ucfp.inputs.expenses import grouped_sections, kept_attr, kept_interval, ordered_catalog
 
 
 def merged_recurring_expenses( profile, plans ) -> list:
-    """The applicable regular (non-property) catalog expenses as `RecurringExpense`s -- existing amounts
-    (and any chosen cadence) preserved, missing ones seeded at the catalog default across every span.
-    The category, personal tax class, and realization are re-derived each merge (not user edits)."""
-    applicable = applicable_categories( profile )
+    """The `LIVING`-class catalog expenses as `RecurringExpense`s -- the always-apply household costs --
+    existing amounts (and any chosen cadence) preserved, missing ones seeded at the catalog default
+    across every span. The category, personal tax class, and realization are re-derived each merge (not
+    user edits)."""
     span_count = len( plans.expense_spans ) if plans and plans.expense_spans else 1
     existing   = { expense.name: expense
                    for expense in plans.recurring_expenses } if plans else dict()
     merged = list()
-    for catalog_expense in load_catalog().expenses:
-        if ( catalog_expense.category is ExpenseCategory.PROPERTY
-                or catalog_expense.category not in applicable ):
+    for catalog_expense in ordered_catalog():
+        if catalog_expense.expense_class is not ExpenseClass.LIVING:
             continue
         prior = existing.get( catalog_expense.name )
         merged.append( RecurringExpense(
@@ -58,8 +57,8 @@ def _aligned_amounts( prior, default : Decimal, span_count : int ) -> list:
 
 
 class RecurringExpensesForm( forms.Form ):
-    """The recurring-expenses table: rows are the regular (non-property) expenses grouped by category,
-    columns are the spans of the shared timeline. Each span carries an "until age" (the last blank, the
+    """The recurring-expenses table: rows are the `LIVING`-class expenses grouped by category, columns
+    are the spans of the shared timeline. Each span carries an "until age" (the last blank, the
     open "thereafter" span); each cell is an amount at the row's cadence. Filling the open span's age
     splits it (a new open span duplicates it); clearing a span's age deletes that span. Ages are the
     primary subject's. `apply` writes the shared `expense_spans` and every recurring expense's per-span
@@ -118,26 +117,26 @@ class RecurringExpensesForm( forms.Form ):
 
     @property
     def sections( self ) -> list:
-        """The expense rows grouped by category (a section header per category), each row its name,
-        cadence, and one amount cell per span. A durable row's span amounts are filled by its
-        `calculator` (count x cost-each, age-flat) and its cadence shows read-only."""
-        sections, current = list(), None
-        for ei, expense in enumerate( self._expenses ):
-            if expense.category is not current:
-                current = expense.category
-                sections.append( { 'label': current.label, 'rows': list() } )
-            durable = expense.count is not None
-            sections[ -1 ][ 'rows' ].append( {
-                'name'        : expense.name,
-                'cadence'     : cadence_cells(
-                    self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ),
-                'count_entry' : durable,
-                'calculator'  : ( calculator_cells(
-                    self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ) )
-                    if durable else None ),
-                'cells'       : [ self[ self._amount_key( ei, si ) ]
-                                  for si in range( len( self._spans ) ) ] } )
-        return sections
+        """The expense rows grouped into ordered category sections (a header per category), in the shared
+        deliberate (group, item) order. Each row is its name, cadence, and one amount cell per span; a
+        durable row's span amounts are filled by its `calculator` (count x cost-each, age-flat) and its
+        cadence shows read-only."""
+        return grouped_sections(
+            ( expense.category, self._row( ei, expense ) )
+            for ei, expense in enumerate( self._expenses ) )
+
+    def _row( self, ei : int, expense ) -> dict:
+        durable = expense.count is not None
+        return {
+            'name'        : expense.name,
+            'cadence'     : cadence_cells(
+                self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ),
+            'count_entry' : durable,
+            'calculator'  : ( calculator_cells(
+                self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ) )
+                if durable else None ),
+            'cells'       : [ self[ self._amount_key( ei, si ) ]
+                              for si in range( len( self._spans ) ) ] }
 
     def apply( self, profile, plans ):
         columns  = self._columns()

@@ -32,7 +32,7 @@ def _expense( applies_to, tax_class,
               realization = Realization.SMOOTH, interval = Duration( 1, TimeUnit.YEAR ) ) -> PropertyExpense:
     # One shared property expense at a flat default, applied to the contexts in `applies_to`.
     return PropertyExpense(
-        name = 'Upkeep', category = ExpenseCategory.PROPERTY, expense_tax_class = tax_class,
+        name = 'Upkeep', category = ExpenseCategory.MAINTENANCE_REPAIR, expense_tax_class = tax_class,
         applies_to = applies_to, realization = realization, interval = interval,
         default_amount = Decimal( '6000' ) )
 

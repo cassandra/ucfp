@@ -13,7 +13,7 @@ from common.recurrence import Duration
 from ucfp.accounts.enums import ExpenseTaxClass
 from ucfp.forecast.economic_outlook import EconomicParameters
 
-from .enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
+from .enums import CadenceDomain, ExpenseCategory, ExpenseClass, PropertyContext, Realization
 
 
 @dataclass( frozen = True )
@@ -26,19 +26,26 @@ class EconomicOutlookSchedule:
 
 @dataclass( frozen = True )
 class ExpenseType:
-    """One catalog expense: its `category` (the user-facing bucket and the decision it attaches to),
-    tax class, seeded `interval` (its default cadence), a single `default_amount` at that cadence, and
-    the two cadence attributes. `realization` (fixed) decides how it hits the engine -- `SMOOTH`
-    annualizes and spreads it, `DISCRETE` places it at its cadence; `cadence_domain` (the input domain)
-    decides which cadences the user may re-select.
+    """One catalog expense. Two orthogonal groupings place it: `expense_class` is its applicability scope
+    (which planning surface shows it -- `LIVING`/`PROPERTY`/`VEHICLE`), and `category` is its visual group
+    (the ordered section it renders under within that surface). `order` is its position among the items of
+    its category; a row sorts by (category declaration order, `order`), so the deliberate (group, item)
+    order is independent of how the catalog source is authored.
+
+    `expense_tax_class`, the seeded `interval` (its default cadence), a single `default_amount` at that
+    cadence, and the two cadence attributes follow. `realization` (fixed) decides how it hits the engine
+    -- `SMOOTH` annualizes and spreads it, `DISCRETE` places it at its cadence; `cadence_domain` (the
+    input domain) decides which cadences the user may re-select.
 
     For a `PROPERTY` row, `expense_tax_class` is the row's *personal* class (`LIVING`, or `SALT` for
     property tax); materialization swaps it to `RENTAL_EXPENSE` for a rental-owned property. `applies_to`
     names the `PropertyContext`s the row seeds against -- e.g. a roof against every owned dwelling,
     utilities also against a rented home, property management only against a rental. It is empty for a
-    non-property (household) row. A tuple, not a set, because the JSON codec round-trips tuples."""
+    row outside the `PROPERTY` class. A tuple, not a set, because the JSON codec round-trips tuples."""
     name: str
+    expense_class: ExpenseClass
     category: ExpenseCategory
+    order: int
     expense_tax_class: ExpenseTaxClass
     default_amount: Decimal
     interval: Duration
