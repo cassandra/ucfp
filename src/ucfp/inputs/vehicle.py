@@ -6,7 +6,7 @@ and -- if financed -- either a down payment or a monthly payment. It is stored a
 (intent), which materialization smooths into a lump every recurrence plus, when financed, a constant
 financed-cost stream, so the forecast carries no start/stop. The recurring-costs start date is
 pre-filled from an existing auto loan's end date (so the pattern begins where a current loan leaves
-off) but is freely editable. The plan's per-car running costs are a sibling pane (`vehicle_expenses`).
+off) but is freely editable. The plan's per-car running costs are entered in a sibling pane.
 """
 from dataclasses import replace
 from datetime import date
@@ -16,6 +16,7 @@ from django import forms
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.plans.schemas import VehiclePlan
 from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
 from ucfp.inputs.widgets import IsoDateInput
 
 
@@ -53,7 +54,9 @@ class VehiclePlanForm( forms.Form ):
                 'num_cars'         : plan.num_cars,
                 'purchase_price'   : plan.purchase_price,
                 'recurrence_years' : plan.recurrence_years,
-                'start_date'       : plan.start_date,
+                # A plan can exist from a running-costs edit before the purchase pane is opened, so fall
+                # back to the auto-loan-end prefill when its start date has not been set yet.
+                'start_date'       : plan.start_date or cls._auto_loan_end( profile, plans ),
                 'down_payment'     : plan.down_payment,
                 'monthly_payment'  : plan.monthly_payment,
             }
@@ -88,10 +91,10 @@ class VehiclePlanForm( forms.Form ):
         # Aspect-preserving and non-blocking: store whatever purchase fields are set (materialization
         # uses only the complete purchase pattern) and carry over any running costs the sibling pane
         # saved. Financing (down or monthly) is optional -- its absence means cash. A wholly empty plan
-        # -- no purchase field and no running cost -- persists as None.
-        cleaned = self.cleaned_data
-        running = ( plans.vehicle_plan.running_costs
-                    if plans is not None and plans.vehicle_plan is not None else list() )
+        # -- no purchase field and no running cost with an amount -- persists as None (`plan_has_content`,
+        # shared with the running-costs pane so the two agree on "empty").
+        cleaned  = self.cleaned_data
+        existing = vehicle_plan_of( plans )
         plan = VehiclePlan(
             num_cars = cleaned.get( 'num_cars' ),
             purchase_price = cleaned.get( 'purchase_price' ),
@@ -99,11 +102,5 @@ class VehiclePlanForm( forms.Form ):
             start_date = cleaned.get( 'start_date' ),
             monthly_payment = cleaned.get( 'monthly_payment' ),
             down_payment = cleaned.get( 'down_payment' ),
-            running_costs = running )
-        return plan if self._has_content( plan ) else None
-
-    @staticmethod
-    def _has_content( plan ) -> bool:
-        """Whether the plan carries anything worth persisting -- any purchase field, or a running cost."""
-        return any( ( plan.num_cars, plan.purchase_price, plan.recurrence_years, plan.start_date,
-                      plan.monthly_payment, plan.down_payment, plan.running_costs ) )
+            running_costs = existing.running_costs if existing is not None else list() )
+        return plan if plan_has_content( plan ) else None

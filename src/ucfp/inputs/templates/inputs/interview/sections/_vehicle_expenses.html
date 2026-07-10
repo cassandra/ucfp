@@ -26,7 +26,7 @@ Reads `vehicle_costs_form`.
           <th scope="row" class="font-weight-normal text-left">{{ row.name }}</th>
           <td class="text-right">{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
           <td>{% include 'inputs/interview/sections/_cadence.html' with cadence=row.cadence %}</td>
-          <td class="text-right"><span class="{{ AppConst.VEHICLE_TOTAL_CLASS }}">{% if row.total is not None %}${{ row.total }}{% else %}&mdash;{% endif %}</span></td>
+          <td class="text-right"><span class="{{ AppConst.VEHICLE_TOTAL_CLASS }}" aria-live="polite">{% if row.total is not None %}${{ row.total }}{% else %}&mdash;{% endif %}</span></td>
         </tr>
         {% endfor %}
       </tbody>

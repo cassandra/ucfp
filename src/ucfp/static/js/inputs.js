@@ -517,6 +517,7 @@ window.App.Inputs = (function () {
         enhanceSwitches( $( document.body ) );
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
+        updateVehicleTotals();
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
@@ -524,6 +525,7 @@ window.App.Inputs = (function () {
                 enhanceSwitches( $( document.body ) );
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
+                updateVehicleTotals();                     // refresh totals if a pane swap corrected num_cars
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }

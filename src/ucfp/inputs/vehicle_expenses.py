@@ -7,7 +7,7 @@ recurring expenses -- a shared-quantity shape distinct from the independent, per
 This module seeds those costs from the catalog, preserving amounts and cadences already set.
 """
 from dataclasses import replace
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django import forms
 
@@ -18,12 +18,29 @@ from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, read_cadence
 from ucfp.inputs.expenses import kept_interval, load_catalog
 
 
+def vehicle_plan_of( plans ):
+    """The Plans aggregate's vehicle plan, or None when there is no aggregate or no plan yet -- the
+    single guard both vehicle panes read the plan through."""
+    return plans.vehicle_plan if plans is not None and plans.vehicle_plan is not None else None
+
+
+def plan_has_content( plan ) -> bool:
+    """Whether a vehicle plan carries anything worth persisting -- any purchase field, or a running cost
+    with an amount. An all-blank plan (no purchase field, every running-cost amount cleared) is empty, so
+    both panes collapse it back to None rather than leaving a spurious plan that reads as "started"."""
+    if plan is None:
+        return False
+    return ( any( ( plan.num_cars, plan.purchase_price, plan.recurrence_years,
+                    plan.start_date, plan.monthly_payment, plan.down_payment ) )
+             or any( cost.amount is not None for cost in plan.running_costs ) )
+
+
 def merged_vehicle_costs( plans ) -> list:
     """The catalog's `VEHICLE` rows as `VehicleRunningCost`s -- each existing per-car amount (and any
     chosen cadence) preserved, missing ones seeded at the catalog default. The tax class and realization
     are re-derived from the catalog each merge (not user edits)."""
-    existing = ( { cost.name: cost for cost in plans.vehicle_plan.running_costs }
-                 if plans is not None and plans.vehicle_plan is not None else dict() )
+    plan     = vehicle_plan_of( plans )
+    existing = { cost.name: cost for cost in plan.running_costs } if plan is not None else dict()
     merged = list()
     for catalog_expense in load_catalog().expenses:
         if catalog_expense.category is not ExpenseCategory.VEHICLE:
@@ -49,9 +66,9 @@ class VehicleExpensesForm( forms.Form ):
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
+        plan           = vehicle_plan_of( plans )
         self._costs    = merged_vehicle_costs( plans )
-        self._num_cars = ( plans.vehicle_plan.num_cars
-                           if plans is not None and plans.vehicle_plan is not None else None )
+        self._num_cars = plan.num_cars if plan is not None else None
         for ci, cost in enumerate( self._costs ):
             amount = forms.DecimalField( required = False, min_value = 0 )
             amount.initial = cost.amount
@@ -87,15 +104,16 @@ class VehicleExpensesForm( forms.Form ):
 
     def _total( self, cost ):
         """The scaled per-period total -- the per-car amount times the plan's car count -- as whole
-        dollars, or None when the amount is blank or the car count is unset (nothing to total)."""
+        dollars, or None when the amount is blank or the car count is unset (nothing to total). Rounded
+        half-up to agree with the client's `Math.round` preview (Decimal's default is half-even)."""
         if cost.amount is None or not self._num_cars:
             return None
-        return ( cost.amount * self._num_cars ).quantize( Decimal( 1 ) )
+        return ( cost.amount * self._num_cars ).quantize( Decimal( 1 ), rounding = ROUND_HALF_UP )
 
     def apply( self, profile, plans ):
         costs = [ self._edited( ci, cost ) for ci, cost in enumerate( self._costs ) ]
-        plan  = plans.vehicle_plan if plans.vehicle_plan is not None else VehiclePlan()
-        return profile, replace( plans, vehicle_plan = replace( plan, running_costs = costs ) )
+        plan  = replace( vehicle_plan_of( plans ) or VehiclePlan(), running_costs = costs )
+        return profile, replace( plans, vehicle_plan = plan if plan_has_content( plan ) else None )
 
     def _edited( self, ci : int, cost ) -> VehicleRunningCost:
         """`cost` with its per-car amount and cadence re-read from this row's fields."""

@@ -144,12 +144,7 @@ class CreditCardPlan:
     target_date: Optional[ date ] = None
 
 
-# --- Auto (car ownership) -------------------------------------------------
-# The household's vehicles as one plan: the shared `num_cars`, the (optional) purchase/financing
-# pattern, and the per-car `running_costs`. `num_cars` is the anchor both aspects scale by, so a running
-# cost is entered once per car and multiplied at materialization. Purchase and running costs are
-# independent aspects -- either may be set without the other (an incomplete plan simply materializes
-# whichever aspects are complete).
+# --- Auto (car ownership): a shared num_cars, the purchase/financing pattern, and per-car running costs.
 
 @dataclass( frozen = True )
 class VehicleRunningCost:
