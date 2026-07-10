@@ -19,8 +19,8 @@ from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_durable )
 from ucfp.inputs.expenses import (
-    OWNED_PROPERTY_CONTEXT, has_property, is_renting, kept_attr, kept_interval, ordered_catalog,
-    owned_property_handles )
+    OWNED_PROPERTY_CONTEXT, grouped_sections, has_property, is_renting, kept_attr, kept_interval,
+    ordered_catalog, owned_property_handles )
 
 
 def _asset_for( profile, handle : str ):
@@ -223,28 +223,33 @@ class PropertyExpensesForm( forms.Form ):
         return columns
 
     @property
-    def rows( self ) -> list:
-        """One row per displayed expense: its name, cadence, and a cell per column -- the bound Default
-        field, then each property's override field, or None where the row is N/A for that property. A
-        durable row's Default is filled by its `calculator` (count x cost-each), and its cadence shows
-        read-only (edited inside the calculator panel)."""
-        result = list()
-        for ri, expense in enumerate( self._rows ):
-            durable = expense.count is not None
-            cells   = [ self[ self._default_key( ri ) ] ]
-            if not self._collapsed:
-                cells += [ self[ self._override_key( ri, hi ) ]
-                           if self._override_key( ri, hi ) in self.fields else None
-                           for hi in range( len( self._handles ) ) ]
-            result.append( {
-                'name'        : expense.name,
-                'cadence'     : cadence_cells(
-                    self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain ),
-                'count_entry' : durable,
-                'calculator'  : ( calculator_cells( self, ri, per_year( expense.default_amount, expense.interval ) )
-                                  if durable else None ),
-                'cells'       : cells } )
-        return result
+    def sections( self ) -> list:
+        """The displayed expense rows grouped into ordered category sections (a header per property
+        sub-group -- taxes & insurance, utilities, maintenance, rent -- mirroring the recurring table), in
+        the shared deliberate order. Each row is its name, cadence, and a cell per column."""
+        return grouped_sections(
+            ( expense.category, self._row( ri, expense ) )
+            for ri, expense in enumerate( self._rows ) )
+
+    def _row( self, ri : int, expense ) -> dict:
+        """One displayed expense row: its name, cadence, and a cell per column -- the bound Default field,
+        then each property's override field, or None where the row is N/A for that property. A durable
+        row's Default is filled by its `calculator` (count x cost-each), and its cadence shows read-only
+        (edited inside the calculator panel)."""
+        durable = expense.count is not None
+        cells   = [ self[ self._default_key( ri ) ] ]
+        if not self._collapsed:
+            cells += [ self[ self._override_key( ri, hi ) ]
+                       if self._override_key( ri, hi ) in self.fields else None
+                       for hi in range( len( self._handles ) ) ]
+        return {
+            'name'        : expense.name,
+            'cadence'     : cadence_cells(
+                self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain ),
+            'count_entry' : durable,
+            'calculator'  : ( calculator_cells( self, ri, per_year( expense.default_amount, expense.interval ) )
+                              if durable else None ),
+            'cells'       : cells }
 
     def apply( self, profile, plans ):
         edited   = { expense.name: self._edited( ri, expense )

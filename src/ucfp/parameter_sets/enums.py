@@ -34,11 +34,12 @@ class ExpenseCategory( LabeledEnum ):
     DISCRETIONARY = ( 'Discretionary', 'Travel, entertainment, hobbies -- the lifestyle spend.' )
     HEALTH        = ( 'Health', 'Medical care and health insurance.' )
     MISCELLANEOUS = ( 'Miscellaneous', 'Household costs not tied to a single dwelling (e.g. umbrella insurance).' )
-    # Property -- a dwelling's operating costs (the Home Expenses matrix).
+    # Property -- a dwelling's operating costs (the Home Expenses matrix). Rent leads: it is the primary
+    # cost when renting, and it is the only group a tenant (no owned dwelling) sees alongside utilities.
+    RENT               = ( 'Rent', 'Rent on a home a tenant occupies but does not own.' )
     TAXES_INSURANCE    = ( 'Taxes & Insurance', 'Property tax, insurance, and mandatory ownership dues.' )
     UTILITIES_SERVICES = ( 'Utilities & Services', 'Utilities and recurring household services.' )
     MAINTENANCE_REPAIR = ( 'Maintenance & Repair', 'Upkeep, repairs, and capital replacements.' )
-    RENT               = ( 'Rent', 'Rent on a home a tenant occupies but does not own.' )
     # Vehicle -- per-car running costs (the Vehicle Expenses step).
     VEHICLE            = ( 'Vehicle', 'Running costs of owning a car.' )
 
