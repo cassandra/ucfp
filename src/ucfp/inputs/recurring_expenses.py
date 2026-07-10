@@ -11,26 +11,25 @@ from decimal import Decimal
 from django import forms
 
 from ucfp.environment.constants import AppConst
-from ucfp.parameter_sets.enums import ExpenseCategory
+from ucfp.parameter_sets.enums import ExpenseClass
 from ucfp.inputs.plans.schemas import RecurringExpense
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_durable )
-from ucfp.inputs.expenses import applicable_categories, kept_attr, kept_interval, load_catalog
+from ucfp.inputs.expenses import kept_attr, kept_interval, load_catalog
 
 
 def merged_recurring_expenses( profile, plans ) -> list:
-    """The applicable regular (non-property) catalog expenses as `RecurringExpense`s -- existing amounts
-    (and any chosen cadence) preserved, missing ones seeded at the catalog default across every span.
-    The category, personal tax class, and realization are re-derived each merge (not user edits)."""
-    applicable = applicable_categories( profile )
+    """The `LIVING`-class catalog expenses as `RecurringExpense`s -- the always-apply household costs --
+    existing amounts (and any chosen cadence) preserved, missing ones seeded at the catalog default
+    across every span. The category, personal tax class, and realization are re-derived each merge (not
+    user edits)."""
     span_count = len( plans.expense_spans ) if plans and plans.expense_spans else 1
     existing   = { expense.name: expense
                    for expense in plans.recurring_expenses } if plans else dict()
     merged = list()
     for catalog_expense in load_catalog().expenses:
-        if ( catalog_expense.category is ExpenseCategory.PROPERTY
-                or catalog_expense.category not in applicable ):
+        if catalog_expense.expense_class is not ExpenseClass.LIVING:
             continue
         prior = existing.get( catalog_expense.name )
         merged.append( RecurringExpense(

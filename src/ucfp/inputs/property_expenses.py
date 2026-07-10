@@ -12,14 +12,14 @@ from typing import Optional
 from django import forms
 
 from ucfp.environment.constants import AppConst
-from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
+from ucfp.parameter_sets.enums import ExpenseClass, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_durable )
 from ucfp.inputs.expenses import (
-    OWNED_PROPERTY_CONTEXT, applicable_categories, is_renting, kept_attr, kept_interval, load_catalog,
+    OWNED_PROPERTY_CONTEXT, has_property, is_renting, kept_attr, kept_interval, load_catalog,
     owned_property_handles )
 
 
@@ -75,13 +75,13 @@ def merged_property_expenses( profile, plans ) -> list:
     fields (category, personal tax class, cadence, `applies_to`) re-derived each merge; the user's
     `default_amount` and per-property `overrides` preserved, with overrides pruned to the properties
     that currently exist and that the row applies to. Empty when the household has no property."""
-    if ExpenseCategory.PROPERTY not in applicable_categories( profile ):
+    if not has_property( profile ):
         return list()
     existing     = { expense.name: expense for expense in plans.property_expenses } if plans else dict()
     live_handles = set( _property_handles_for( profile ) )
     merged = list()
     for catalog_expense in load_catalog().expenses:
-        if catalog_expense.category is not ExpenseCategory.PROPERTY:
+        if catalog_expense.expense_class is not ExpenseClass.PROPERTY:
             continue
         prior = existing.get( catalog_expense.name )
         merged.append( PropertyExpense(

@@ -10,8 +10,8 @@ from django.test import TestCase
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.forecast import Forecast
 from ucfp.parameter_sets.enums import (
-    CadenceDomain, CatalogScope, EconomicOutlookVariant, ExpenseCategory, ParameterSetKind,
-    Realization )
+    CadenceDomain, CatalogScope, EconomicOutlookVariant, ExpenseCategory, ExpenseClass,
+    ParameterSetKind, Realization )
 from ucfp.parameter_sets.models import ParameterSet
 from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
@@ -93,12 +93,18 @@ class LoadPathTest( TestCase ):
         self.assertEqual( len( catalog.expenses ), 41 )
         food = next( expense for expense in catalog.expenses if expense.name == 'Food' )
         self.assertEqual( food.default_amount, Decimal( '150' ) )
+        # Two groupings place a row: its applicability class (which surface) and its visual category
+        # (the ordered section), with an explicit item order within the category.
+        self.assertEqual( food.expense_class, ExpenseClass.LIVING )
         self.assertEqual( food.category, ExpenseCategory.EVERYDAY )
+        self.assertEqual( food.order, 10 )
         # The cadence attributes seed too: Food is a smoothed weekly/monthly consumable, while a
         # property tax is a discrete bill the user may re-express monthly or yearly.
         self.assertEqual( food.realization, Realization.SMOOTH )
         self.assertEqual( food.cadence_domain, CadenceDomain.WK_MO )
         tax = next( expense for expense in catalog.expenses if expense.name == 'Property Tax' )
+        self.assertEqual( tax.expense_class, ExpenseClass.PROPERTY )
+        self.assertEqual( tax.category, ExpenseCategory.TAXES_INSURANCE )
         self.assertEqual( tax.realization, Realization.DISCRETE )
         self.assertEqual( tax.cadence_domain, CadenceDomain.MO_YR )
         # A durable (count-entry) row carries its calculator breakdown; its amount is the annualized

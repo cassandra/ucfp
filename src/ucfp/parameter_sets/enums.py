@@ -10,18 +10,37 @@ class ParameterSetKind( LabeledEnum ):
     EXPENSE_CATALOG  = ( 'Expense Catalog', 'The curated catalog of expense types and defaults.' )
 
 
-class ExpenseCategory( LabeledEnum ):
-    """How curated expenses group in the interview -- the user-facing buckets, and the decision each
-    attaches to: Property costs to a dwelling one owns or rents, Vehicle to a car; Everyday,
-    Discretionary, Health, and Miscellaneous always apply."""
+class ExpenseClass( LabeledEnum ):
+    """The applicability scope of a curated expense -- which planning surface it belongs to and the
+    decision it attaches to. `LIVING` costs always apply (the recurring Living Expenses table); `PROPERTY`
+    costs attach to a dwelling one owns or rents (the Home Expenses matrix); `VEHICLE` costs attach to a
+    car (the Vehicle Expenses step). This is the coarse applicability grouping, distinct from
+    `ExpenseCategory` -- the finer visual grouping *within* a surface (a single class holds several
+    ordered categories)."""
 
+    LIVING   = ( 'Living', 'Everyday household costs that always apply.' )
+    PROPERTY = ( 'Property', 'Operating costs of a dwelling one owns or rents.' )
+    VEHICLE  = ( 'Vehicle', 'Running costs of owning a car.' )
+
+
+class ExpenseCategory( LabeledEnum ):
+    """The visual grouping of curated expenses within a planning surface -- the ordered section each row
+    renders under, finer than its `ExpenseClass` applicability scope. The Living categories, the Property
+    sub-groups, and Vehicle are all ordered sections; declaration order (grouped by class below) is the
+    section order."""
+
+    # Living -- the always-apply recurring costs (the Living Expenses table).
     EVERYDAY      = ( 'Everyday Living', 'Food, clothing, and the recurring basics.' )
     DISCRETIONARY = ( 'Discretionary', 'Travel, entertainment, hobbies -- the lifestyle spend.' )
-    PROPERTY      = ( 'Property', 'Operating costs of a dwelling -- upkeep, insurance, utilities, property tax -- one set per owned property, taxed by its type.' )
-    VEHICLE       = ( 'Vehicle', 'Running costs of owning a car.' )
     HEALTH        = ( 'Health', 'Medical care and health insurance.' )
-    GIVING        = ( 'Giving', 'Charitable contributions.' )
     MISCELLANEOUS = ( 'Miscellaneous', 'Household costs not tied to a single dwelling (e.g. umbrella insurance).' )
+    # Property -- a dwelling's operating costs (the Home Expenses matrix).
+    TAXES_INSURANCE    = ( 'Taxes & Insurance', 'Property tax, insurance, and mandatory ownership dues.' )
+    UTILITIES_SERVICES = ( 'Utilities & Services', 'Utilities and recurring household services.' )
+    MAINTENANCE_REPAIR = ( 'Maintenance & Repair', 'Upkeep, repairs, and capital replacements.' )
+    RENT               = ( 'Rent', 'Rent on a home a tenant occupies but does not own.' )
+    # Vehicle -- per-car running costs (the Vehicle Expenses step).
+    VEHICLE            = ( 'Vehicle', 'Running costs of owning a car.' )
 
 
 class PropertyContext( LabeledEnum ):
