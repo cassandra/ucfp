@@ -117,6 +117,7 @@ def _in_year_once( cadence, year ):
 class OccurrencesPerYearTests( unittest.TestCase ):
 
     def test_whole_number_cadences( self ):
+        self.assertEqual( Duration( 1, TimeUnit.DAY ).occurrences_per_year(), Decimal( 365 ) )
         self.assertEqual( Duration( 1, TimeUnit.WEEK ).occurrences_per_year(), Decimal( 52 ) )
         self.assertEqual( Duration( 1, TimeUnit.MONTH ).occurrences_per_year(), Decimal( 12 ) )
         self.assertEqual( Duration( 1, TimeUnit.YEAR ).occurrences_per_year(), Decimal( 1 ) )

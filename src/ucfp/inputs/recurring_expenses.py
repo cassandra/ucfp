@@ -14,7 +14,8 @@ from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseCategory
 from ucfp.inputs.plans.schemas import RecurringExpense
 from ucfp.inputs.cadence import (
-    add_cadence_fields, cadence_cells, cadence_label, durable_amount, per_year, read_cadence )
+    add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
+    read_durable )
 from ucfp.inputs.expenses import applicable_categories, kept_attr, kept_interval, load_catalog
 
 
@@ -78,7 +79,7 @@ class RecurringExpensesForm( forms.Form ):
             add_cadence_fields( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
             durable = expense.count is not None
             if durable:                                    # a durable's amount is filled by the calculator
-                self._add_calculator_fields( ei, expense )
+                add_calculator_fields( self, ei, expense.count, expense.cost_each, expense.lifespan )
             for si in range( len( self._spans ) ):
                 cell = forms.DecimalField( required = False, min_value = 0 )
                 cell.initial = expense.amounts[ si ] if si < len( expense.amounts ) else (
@@ -87,19 +88,6 @@ class RecurringExpensesForm( forms.Form ):
                     cell.widget.attrs[ 'readonly' ] = True
                     cell.widget.attrs[ 'class' ] = AppConst.CALC_TARGET_CLASS
                 self.fields[ self._amount_key( ei, si ) ] = cell
-
-    def _add_calculator_fields( self, ei : int, expense ) -> None:
-        """A durable's calculator inputs -- count, cost-each, and replacement lifespan (years) -- seeded
-        from the remembered breakdown; the amount is count x cost / lifespan."""
-        count = forms.IntegerField( required = False, min_value = 1 )
-        count.initial = expense.count
-        self.fields[ self._qty_key( ei ) ] = count
-        cost = forms.DecimalField( required = False, min_value = 0 )
-        cost.initial = expense.cost_each
-        self.fields[ self._cost_key( ei ) ] = cost
-        lifespan = forms.IntegerField( required = False, min_value = 1, max_value = 100 )
-        lifespan.initial = expense.lifespan
-        self.fields[ self._lifespan_key( ei ) ] = lifespan
 
     @staticmethod
     def _until_key( si : int ) -> str:
@@ -112,18 +100,6 @@ class RecurringExpensesForm( forms.Form ):
     @staticmethod
     def _cad_prefix( ei : int ) -> str:
         return f'cad_{ei}'
-
-    @staticmethod
-    def _qty_key( ei : int ) -> str:
-        return f'qty_{ei}'
-
-    @staticmethod
-    def _cost_key( ei : int ) -> str:
-        return f'cost_{ei}'
-
-    @staticmethod
-    def _lifespan_key( ei : int ) -> str:
-        return f'lifespan_{ei}'
 
     @property
     def span_count( self ) -> int:
@@ -153,23 +129,15 @@ class RecurringExpensesForm( forms.Form ):
             durable = expense.count is not None
             sections[ -1 ][ 'rows' ].append( {
                 'name'        : expense.name,
-                'cadence'     : ( { 'editable': False, 'label': cadence_label( expense.interval ) }
-                                  if durable else cadence_cells(
-                                      self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ) ),
+                'cadence'     : cadence_cells(
+                    self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ),
                 'count_entry' : durable,
-                'calculator'  : self._calculator( ei, expense ) if durable else None,
+                'calculator'  : ( calculator_cells(
+                    self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ) )
+                    if durable else None ),
                 'cells'       : [ self[ self._amount_key( ei, si ) ]
                                   for si in range( len( self._spans ) ) ] } )
         return sections
-
-    def _calculator( self, ei : int, expense ) -> dict:
-        """A durable row's calculator view: its count, cost-each, and lifespan bound fields, and the
-        seeded annual cost for its initial (pre-JS) readout."""
-        return {
-            'count'    : self[ self._qty_key( ei ) ],
-            'cost'     : self[ self._cost_key( ei ) ],
-            'lifespan' : self[ self._lifespan_key( ei ) ],
-            'per_year' : per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ) }
 
     def apply( self, profile, plans ):
         columns  = self._columns()
@@ -183,11 +151,10 @@ class RecurringExpensesForm( forms.Form ):
         age-flat to every span; its count/cost-each are remembered."""
         interval = read_cadence( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
         if expense.count is not None:
-            cleaned   = self.cleaned_data
-            count     = cleaned.get( self._qty_key( ei ) )
-            cost_each = cleaned.get( self._cost_key( ei ) )
-            lifespan  = cleaned.get( self._lifespan_key( ei ) )
-            total     = durable_amount( count, cost_each, lifespan ) or Decimal( '0' )
+            amount, count, cost_each, lifespan = read_durable( self, ei )
+            # An incomplete calculator charges nothing; `amounts` is non-Optional, so that reads as 0
+            # here (the PropertyExpense default_amount, which is Optional, stores None for the same case).
+            total = amount if amount is not None else Decimal( '0' )
             return replace( expense, interval = interval, amounts = [ total ] * len( columns ),
                             count = count, cost_each = cost_each, lifespan = lifespan )
         return replace(

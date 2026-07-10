@@ -6,6 +6,7 @@ unit choice. This module builds and reads those form fields and formats a cadenc
 tables drive the control the same way.
 """
 from decimal import Decimal
+from typing import Optional
 
 from django import forms
 
@@ -33,7 +34,8 @@ def is_editable( domain ) -> bool:
     return bool( _UNITS_BY_DOMAIN[ domain ] )
 
 
-def durable_amount( count, cost_each, lifespan ):
+def durable_amount( count : Optional[ int ], cost_each : Optional[ Decimal ],
+                    lifespan : Optional[ int ] ) -> Optional[ Decimal ]:
     """A durable's annualized amount -- count x cost-each / lifespan -- or None when any input is missing
     (non-blocking: an incomplete calculator charges nothing)."""
     if count is None or cost_each is None or not lifespan:
@@ -41,7 +43,7 @@ def durable_amount( count, cost_each, lifespan ):
     return count * cost_each / lifespan
 
 
-def per_year( amount, interval ) -> Decimal:
+def per_year( amount : Optional[ Decimal ], interval : Optional[ Duration ] ) -> Decimal:
     """A per-cadence amount as a whole-dollar yearly figure -- the durable calculator's advisory readout
     (count x cost-each is a per-cycle total; this annualizes it)."""
     if amount is None or interval is None:
@@ -66,9 +68,11 @@ def add_cadence_fields( form, prefix, interval, domain ) -> None:
         return
     magnitude = forms.IntegerField( required = False, min_value = 1, max_value = _MAX_MAGNITUDE )
     magnitude.initial = interval.count if interval is not None else 1
+    magnitude.widget.attrs[ 'aria-label' ] = 'Cadence magnitude'
     form.fields[ _count_key( prefix ) ] = magnitude
     unit = forms.ChoiceField( required = False, choices = [ ( u.name, u.label ) for u in units ] )
     unit.initial = interval.unit.name if interval is not None else units[ 0 ].name
+    unit.widget.attrs[ 'aria-label' ] = 'Cadence unit'
     form.fields[ _unit_key( prefix ) ] = unit
 
 
@@ -92,9 +96,66 @@ def read_cadence( form, prefix, interval, domain ):
     return Duration( count, TimeUnit[ unit_name ] )
 
 
+# ----- The durable "count-entry" calculator (a shared control on both expense tables) -----
+# A durable expense's amount is not entered directly but computed from a small breakdown: `count` items
+# at `cost_each`, replaced every `lifespan` years, giving the annualized `durable_amount`. Those three
+# inputs are remembered on the expense; the amount stays server-authoritative (the client fill is a
+# preview). Both tables build, view, and read the calculator through these helpers so they behave alike.
+
+def add_calculator_fields( form, prefix, count : Optional[ int ], cost_each : Optional[ Decimal ],
+                           lifespan : Optional[ int ] ) -> None:
+    """Add a durable's calculator inputs -- item count, cost-each, and replacement lifespan (years) --
+    seeded from the remembered breakdown. `prefix` namespaces the three field names within the form."""
+    count_field = forms.IntegerField( required = False, min_value = 1 )
+    count_field.initial = count
+    count_field.widget.attrs[ 'aria-label' ] = 'Item count'
+    form.fields[ _calc_count_key( prefix ) ] = count_field
+    cost_field = forms.DecimalField( required = False, min_value = 0 )
+    cost_field.initial = cost_each
+    cost_field.widget.attrs[ 'aria-label' ] = 'Cost each'
+    form.fields[ _calc_cost_key( prefix ) ] = cost_field
+    lifespan_field = forms.IntegerField( required = False, min_value = 1, max_value = 100 )
+    lifespan_field.initial = lifespan
+    lifespan_field.widget.attrs[ 'aria-label' ] = 'Replacement lifespan (years)'
+    form.fields[ _calc_lifespan_key( prefix ) ] = lifespan_field
+
+
+def calculator_cells( form, prefix, per_year_amount : Decimal ) -> dict:
+    """The template's view of a durable row's calculator: its three bound fields, plus the seeded annual
+    cost for the initial (pre-JS) readout."""
+    return {
+        'count'    : form[ _calc_count_key( prefix ) ],
+        'cost'     : form[ _calc_cost_key( prefix ) ],
+        'lifespan' : form[ _calc_lifespan_key( prefix ) ],
+        'per_year' : per_year_amount }
+
+
+def read_durable( form, prefix ) -> tuple:
+    """A durable's (amount, count, cost_each, lifespan) read back from its calculator fields: the
+    annualized `durable_amount` (None when the calculator is incomplete -- charging nothing) alongside
+    the raw inputs to remember."""
+    cleaned   = form.cleaned_data
+    count     = cleaned.get( _calc_count_key( prefix ) )
+    cost_each = cleaned.get( _calc_cost_key( prefix ) )
+    lifespan  = cleaned.get( _calc_lifespan_key( prefix ) )
+    return durable_amount( count, cost_each, lifespan ), count, cost_each, lifespan
+
+
 def _count_key( prefix ) -> str:
     return f'{prefix}_count'
 
 
 def _unit_key( prefix ) -> str:
     return f'{prefix}_unit'
+
+
+def _calc_count_key( prefix ) -> str:
+    return f'count_{prefix}'
+
+
+def _calc_cost_key( prefix ) -> str:
+    return f'cost_{prefix}'
+
+
+def _calc_lifespan_key( prefix ) -> str:
+    return f'lifespan_{prefix}'

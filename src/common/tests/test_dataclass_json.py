@@ -96,11 +96,11 @@ def _sample_plans():
         expense_spans = [ 70, 80, None ],
         recurring_expenses = [ RecurringExpense(
             name = 'Travel', category = ExpenseCategory.DISCRETIONARY,
-            expense_tax_class = ExpenseTaxClass.LIVING,
+            expense_tax_class = ExpenseTaxClass.LIVING, interval = Duration( 1, TimeUnit.YEAR ),
             amounts = [ Decimal( '900' ), Decimal( '500' ), Decimal( '200' ) ] ) ],
         property_expenses = [ PropertyExpense(
             name = 'Property tax', category = ExpenseCategory.PROPERTY,
-            expense_tax_class = ExpenseTaxClass.SALT,
+            expense_tax_class = ExpenseTaxClass.SALT, interval = Duration( 1, TimeUnit.MONTH ),
             applies_to = ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ),
             default_amount = Decimal( '6000' ),
             overrides = { 'home': Decimal( '6500' ) } ),

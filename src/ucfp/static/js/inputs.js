@@ -389,7 +389,7 @@ window.App.Inputs = (function () {
 
     // A durable expense's item calculator: count x cost-each / lifespan-years is the annualized amount,
     // which fills both the amount target(s) and the "per year" readout. Field names are stable
-    // (qty_/cost_/lifespan_), so the panel's inputs are found by name. The amount stays authoritative
+    // (count_/cost_/lifespan_), so the panel's inputs are found by name. The amount stays authoritative
     // (server recomputes on save); this fill is a live preview.
     function calcNumber( $panel, selector ) {
         return parseFloat( $panel.find( selector ).val() ) || 0;
@@ -397,12 +397,14 @@ window.App.Inputs = (function () {
 
     function updateCalculator( $calc ) {
         const $panel   = $calc.find( classSelector( C.CALC_PANEL_CLASS ) );
-        const count    = calcNumber( $panel, '[name^="qty_"]' );
+        const count    = calcNumber( $panel, '[name^="count_"]' );
         const cost     = calcNumber( $panel, '[name^="cost_"]' );
         const lifespan = calcNumber( $panel, '[name^="lifespan_"]' ) || 1;
         const annual   = Math.round( ( count * cost ) / lifespan );
+        // The readout mirrors the amount target verbatim (both bare whole dollars), so it matches the
+        // server's initial pre-JS render rather than reformatting on the first edit.
         $calc.find( classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? annual : '' );
-        $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( annual.toLocaleString() );
+        $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( annual );
     }
 
     $( function () {

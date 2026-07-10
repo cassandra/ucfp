@@ -29,7 +29,7 @@ def _property( handle : str, asset_class : AssetClass ) -> AssetProfile:
 
 
 def _expense( applies_to, tax_class,
-              realization = Realization.SMOOTH, interval = None ) -> PropertyExpense:
+              realization = Realization.SMOOTH, interval = Duration( 1, TimeUnit.YEAR ) ) -> PropertyExpense:
     # One shared property expense at a flat default, applied to the contexts in `applies_to`.
     return PropertyExpense(
         name = 'Upkeep', category = ExpenseCategory.PROPERTY, expense_tax_class = tax_class,

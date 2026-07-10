@@ -57,7 +57,7 @@ class RecurringExpense:
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     amounts: list[ Decimal ]
-    interval: Optional[ Duration ] = None
+    interval: Duration
     realization: Realization = Realization.SMOOTH
     cadence_domain: CadenceDomain = CadenceDomain.FIXED
     # A durable entered as a count of items at a cost each, replaced every `lifespan` years (remembered
@@ -85,7 +85,7 @@ class PropertyExpense:
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     applies_to: tuple[ PropertyContext, ... ]
-    interval: Optional[ Duration ] = None
+    interval: Duration
     realization: Realization = Realization.SMOOTH
     cadence_domain: CadenceDomain = CadenceDomain.FIXED
     default_amount: Optional[ Decimal ] = None

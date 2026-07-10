@@ -16,7 +16,8 @@ from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense
 from ucfp.inputs.cadence import (
-    add_cadence_fields, cadence_cells, cadence_label, durable_amount, per_year, read_cadence )
+    add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
+    read_durable )
 from ucfp.inputs.expenses import (
     OWNED_PROPERTY_CONTEXT, applicable_categories, is_renting, kept_attr, kept_interval, load_catalog,
     owned_property_handles )
@@ -137,7 +138,7 @@ class PropertyExpensesForm( forms.Form ):
             default.widget.attrs[ 'aria-label' ] = self._cell_label( expense, self._default_column_label() )
             if expense.count is not None:                  # a durable's amount is filled by the calculator
                 default.widget.attrs[ 'readonly' ] = True
-                self._add_calculator_fields( ri, expense )
+                add_calculator_fields( self, ri, expense.count, expense.cost_each, expense.lifespan )
             self.fields[ self._default_key( ri ) ] = default
             add_cadence_fields( self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain )
             if self._collapsed:
@@ -166,36 +167,11 @@ class PropertyExpensesForm( forms.Form ):
         return f'cad_{ri}'
 
     @staticmethod
-    def _qty_key( ri : int ) -> str:
-        return f'qty_{ri}'
-
-    @staticmethod
-    def _cost_key( ri : int ) -> str:
-        return f'cost_{ri}'
-
-    @staticmethod
-    def _lifespan_key( ri : int ) -> str:
-        return f'lifespan_{ri}'
-
-    @staticmethod
     def _default_class( expense ) -> str:
         classes = AppConst.PROPERTY_DEFAULT_CLASS
         if expense.count is not None:
             classes += ' ' + AppConst.CALC_TARGET_CLASS   # the calculator fills this amount
         return classes
-
-    def _add_calculator_fields( self, ri : int, expense ) -> None:
-        """A durable's calculator inputs -- count, cost-each, and replacement lifespan (years) -- seeded
-        from the remembered breakdown; the amount is count x cost / lifespan."""
-        count = forms.IntegerField( required = False, min_value = 1 )
-        count.initial = expense.count
-        self.fields[ self._qty_key( ri ) ] = count
-        cost = forms.DecimalField( required = False, min_value = 0 )
-        cost.initial = expense.cost_each
-        self.fields[ self._cost_key( ri ) ] = cost
-        lifespan = forms.IntegerField( required = False, min_value = 1, max_value = 100 )
-        lifespan.initial = expense.lifespan
-        self.fields[ self._lifespan_key( ri ) ] = lifespan
 
     def _applies( self, expense, handle : str ) -> bool:
         return _property_context( self._profile, handle ) in expense.applies_to
@@ -262,22 +238,13 @@ class PropertyExpensesForm( forms.Form ):
                            for hi in range( len( self._handles ) ) ]
             result.append( {
                 'name'        : expense.name,
-                'cadence'     : ( { 'editable': False, 'label': cadence_label( expense.interval ) }
-                                  if durable else cadence_cells(
-                                      self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain ) ),
+                'cadence'     : cadence_cells(
+                    self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain ),
                 'count_entry' : durable,
-                'calculator'  : self._calculator( ri, expense ) if durable else None,
+                'calculator'  : ( calculator_cells( self, ri, per_year( expense.default_amount, expense.interval ) )
+                                  if durable else None ),
                 'cells'       : cells } )
         return result
-
-    def _calculator( self, ri : int, expense ) -> dict:
-        """A durable row's calculator view: its count, cost-each, and lifespan bound fields, and the
-        seeded annual cost for its initial (pre-JS) readout."""
-        return {
-            'count'    : self[ self._qty_key( ri ) ],
-            'cost'     : self[ self._cost_key( ri ) ],
-            'lifespan' : self[ self._lifespan_key( ri ) ],
-            'per_year' : per_year( expense.default_amount, expense.interval ) }
 
     def apply( self, profile, plans ):
         edited   = { expense.name: self._edited( ri, expense )
@@ -294,10 +261,7 @@ class PropertyExpensesForm( forms.Form ):
         interval  = read_cadence( self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain )
         overrides = dict() if self._collapsed else self._read_overrides( ri )
         if expense.count is not None:
-            count     = cleaned.get( self._qty_key( ri ) )
-            cost_each = cleaned.get( self._cost_key( ri ) )
-            lifespan  = cleaned.get( self._lifespan_key( ri ) )
-            default   = durable_amount( count, cost_each, lifespan )
+            default, count, cost_each, lifespan = read_durable( self, ri )
             return replace( expense, interval = interval, default_amount = default, count = count,
                             cost_each = cost_each, lifespan = lifespan, overrides = overrides )
         return replace( expense, interval = interval,

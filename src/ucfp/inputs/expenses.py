@@ -73,5 +73,3 @@ def kept_attr( prior, catalog_expense, attr : str ):
     (e.g. a durable's `count` / `cost_each` calculator inputs)."""
     value = getattr( prior, attr ) if prior is not None else None
     return value if value is not None else getattr( catalog_expense, attr )
-
-
