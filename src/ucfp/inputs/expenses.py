@@ -68,3 +68,10 @@ def kept_interval( prior, catalog_expense ):
     return catalog_expense.interval
 
 
+def kept_attr( prior, catalog_expense, attr : str ):
+    """A user-editable value preserved across a merge: the prior expense's when set, else the catalog's
+    (e.g. a durable's `count` / `cost_each` calculator inputs)."""
+    value = getattr( prior, attr ) if prior is not None else None
+    return value if value is not None else getattr( catalog_expense, attr )
+
+

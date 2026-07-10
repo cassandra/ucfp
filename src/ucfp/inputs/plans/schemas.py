@@ -60,6 +60,11 @@ class RecurringExpense:
     interval: Optional[ Duration ] = None
     realization: Realization = Realization.SMOOTH
     cadence_domain: CadenceDomain = CadenceDomain.FIXED
+    # A durable entered as a count of items at a cost each, replaced every `lifespan` years (remembered
+    # calculator inputs); the amount is their annualized cost. All None for a normal expense.
+    count: Optional[ int ] = None
+    cost_each: Optional[ Decimal ] = None
+    lifespan: Optional[ int ] = None
 
 
 # --- Property expenses ----------------------------------------------------
@@ -85,6 +90,11 @@ class PropertyExpense:
     cadence_domain: CadenceDomain = CadenceDomain.FIXED
     default_amount: Optional[ Decimal ] = None
     overrides: dict[ str, Decimal ] = field( default_factory = dict )
+    # A durable entered as a count of items at a cost each, replaced every `lifespan` years (remembered
+    # calculator inputs); the shared default amount is their annualized cost. All None for a normal one.
+    count: Optional[ int ] = None
+    cost_each: Optional[ Decimal ] = None
+    lifespan: Optional[ int ] = None
 
 
 # --- Saving ---------------------------------------------------------------

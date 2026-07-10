@@ -107,6 +107,16 @@ class AppConst:
     PROPERTY_DEFAULT_CLASS  = 'js-property-default'   # a row's Default amount input
     PROPERTY_OVERRIDE_CLASS = 'js-property-override'  # a per-property override input in the same row
 
+    # A durable expense's count-entry calculator (Appliance, Lawn Tools, Computer Purchase). A toggle
+    # reveals a panel of count/cost/cadence inputs; as they change, the client fills the amount
+    # target(s) with count x cost and writes a live "per year" readout. The amount stays authoritative
+    # (server-computed on save), so the calculator is a convenience, not a separate source of truth.
+    CALC_CLASS         = 'js-calc'          # the wrapper (cell/row) holding a calculator + its target(s)
+    CALC_TOGGLE_CLASS  = 'js-calc-toggle'   # the button that reveals/hides the panel
+    CALC_PANEL_CLASS   = 'js-calc-panel'    # the collapsible panel of count/cost/cadence inputs
+    CALC_TARGET_CLASS  = 'js-calc-target'   # an amount input the computed count x cost fills
+    CALC_READOUT_CLASS = 'js-calc-readout'  # where the advisory "per year" figure is written
+
     @classmethod
     def to_json_dict_str( cls ):
         """

@@ -5,6 +5,8 @@ An expense's cadence is a magnitude + unit ("Every N units") the user may edit w
 unit choice. This module builds and reads those form fields and formats a cadence for display, so both
 tables drive the control the same way.
 """
+from decimal import Decimal
+
 from django import forms
 
 from common.recurrence import Duration, TimeUnit
@@ -29,6 +31,22 @@ def cadence_units( domain ) -> tuple:
 def is_editable( domain ) -> bool:
     """Whether the user may re-select this domain's cadence (every domain but `FIXED`)."""
     return bool( _UNITS_BY_DOMAIN[ domain ] )
+
+
+def durable_amount( count, cost_each, lifespan ):
+    """A durable's annualized amount -- count x cost-each / lifespan -- or None when any input is missing
+    (non-blocking: an incomplete calculator charges nothing)."""
+    if count is None or cost_each is None or not lifespan:
+        return None
+    return count * cost_each / lifespan
+
+
+def per_year( amount, interval ) -> Decimal:
+    """A per-cadence amount as a whole-dollar yearly figure -- the durable calculator's advisory readout
+    (count x cost-each is a per-cycle total; this annualizes it)."""
+    if amount is None or interval is None:
+        return Decimal( 0 )
+    return ( amount * interval.occurrences_per_year() ).quantize( Decimal( 1 ) )
 
 
 def cadence_label( interval ) -> str:

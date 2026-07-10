@@ -82,6 +82,21 @@ def _expense( name : str, category, amount : str, tax_class, interval, realizati
         cadence_domain = domain, applies_to = applies_to )
 
 
+def _durable( name : str, category, count : int, cost_each : str, lifespan : int, tax_class,
+              applies_to : tuple = () ) -> ExpenseType:
+    """A durable-replacement expense entered as `count` items at `cost_each`, replaced every `lifespan`
+    years. Its amount is the annualized cost (count x cost_each / lifespan) -- a calculator fills it --
+    so it materializes as a smoothed yearly stream (staggered replacements average out); the cadence is
+    a fixed yearly, the replacement lifespan being a calculator input, not the expense's interval."""
+    cost   = Decimal( cost_each )
+    annual = count * cost / lifespan
+    return ExpenseType(
+        name = name, category = category, expense_tax_class = tax_class,
+        default_amount = annual, interval = Duration( 1, TimeUnit.YEAR ), realization = Realization.SMOOTH,
+        cadence_domain = CadenceDomain.FIXED, applies_to = applies_to,
+        count = count, cost_each = cost, lifespan = lifespan )
+
+
 def _general_expense_catalog() -> ExpenseCatalog:
     """The general expense catalog: the spreadsheet rows restructured into typed, grouped entries, each
     collapsed to a single default amount. Grouping follows the decision each cost attaches to. The
@@ -97,7 +112,6 @@ def _general_expense_catalog() -> ExpenseCatalog:
     quarterly  = Duration( 3, TimeUnit.MONTH )
     semiannual = Duration( 6, TimeUnit.MONTH )
     yearly     = Duration( 1, TimeUnit.YEAR )
-    every_2y   = Duration( 2, TimeUnit.YEAR )
     every_15y  = Duration( 15, TimeUnit.YEAR )
     every_20y  = Duration( 20, TimeUnit.YEAR )
     everyday      = ExpenseCategory.EVERYDAY
@@ -134,7 +148,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Entertainment', discretionary, '50', living, weekly, smooth, wk_mo ),
         _expense( 'Cable TV / Streaming', discretionary, '100', living, monthly, discrete, fixed ),
         _expense( 'Hobbies', discretionary, '150', living, quarterly, smooth, mo_yr ),
-        _expense( 'Computer Purchase', discretionary, '1500', living, every_2y, discrete, n_years ),
+        _durable( 'Computer Purchase', discretionary, 2, '1500', 4, living ),
         _expense( 'Computer Services', discretionary, '300', living, yearly, smooth, mo_yr ),
         _expense( 'Gifts', discretionary, '3000', living, yearly, smooth, mo_yr ),
         _expense( 'Health & Fitness', discretionary, '40', living, monthly, discrete, fixed ),
@@ -150,12 +164,12 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'HOA / Coop Fee', prop, '300', living, monthly, discrete, fixed, applies_to = owned ),
         _expense( 'Maintenance / Repair', prop, '200', living, monthly, smooth, mo_yr, applies_to = owned ),
         _expense( 'A/C Cost', prop, '9000', living, every_15y, discrete, n_years, applies_to = owned ),
-        _expense( 'Appliance', prop, '580', living, yearly, smooth, mo_yr, applies_to = owned ),
+        _durable( 'Appliance', prop, 3, '2900', 15, living, applies_to = owned ),
         _expense( 'Pest Control', prop, '110', living, quarterly, discrete, fixed, applies_to = owned ),
         _expense( 'Roof Cost', prop, '15000', living, every_20y, discrete, n_years, applies_to = owned ),
         _expense( 'Pool Maintenance', prop, '125', living, monthly, discrete, fixed, applies_to = owned ),
         _expense( 'Lawn Maintenance', prop, '125', living, monthly, discrete, fixed, applies_to = owned ),
-        _expense( 'Lawn Tools', prop, '100', living, yearly, smooth, mo_yr, applies_to = owned ),
+        _durable( 'Lawn Tools', prop, 4, '500', 20, living, applies_to = owned ),
         _expense( 'Water / Wastewater', prop, '200', living, monthly, discrete, fixed, applies_to = occupied ),
         _expense( 'Electric', prop, '250', living, monthly, discrete, fixed, applies_to = occupied ),
         _expense( 'Gas Utility', prop, '80', living, monthly, discrete, fixed, applies_to = occupied ),

@@ -25,6 +25,7 @@ AVAILABLE_ICONS = {
     'bold',
     'book',
     'book-open',
+    'calculator',
     'calendar',
     'camera',
     'cancel',

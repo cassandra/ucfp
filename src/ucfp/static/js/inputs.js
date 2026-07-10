@@ -387,6 +387,24 @@ window.App.Inputs = (function () {
             .each( function () { updateLoan( $( this ) ); } );
     }
 
+    // A durable expense's item calculator: count x cost-each / lifespan-years is the annualized amount,
+    // which fills both the amount target(s) and the "per year" readout. Field names are stable
+    // (qty_/cost_/lifespan_), so the panel's inputs are found by name. The amount stays authoritative
+    // (server recomputes on save); this fill is a live preview.
+    function calcNumber( $panel, selector ) {
+        return parseFloat( $panel.find( selector ).val() ) || 0;
+    }
+
+    function updateCalculator( $calc ) {
+        const $panel   = $calc.find( classSelector( C.CALC_PANEL_CLASS ) );
+        const count    = calcNumber( $panel, '[name^="qty_"]' );
+        const cost     = calcNumber( $panel, '[name^="cost_"]' );
+        const lifespan = calcNumber( $panel, '[name^="lifespan_"]' ) || 1;
+        const annual   = Math.round( ( count * cost ) / lifespan );
+        $calc.find( classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? annual : '' );
+        $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( annual.toLocaleString() );
+    }
+
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs
@@ -444,6 +462,18 @@ window.App.Inputs = (function () {
             const $form = $( this ).closest( 'form' + classSelector( C.AUTOSAVE_CLASS ) );
             $form.find( 'input[name="delete_span"]' ).val( $( this ).data( 'span' ) );
             saveForm( $form );
+        } );
+
+        // Reveal/hide a durable's item calculator panel.
+        $( 'body' ).on( 'click', classSelector( C.CALC_TOGGLE_CLASS ), function () {
+            const $panel = $( this ).closest( classSelector( C.CALC_CLASS ) )
+                .find( classSelector( C.CALC_PANEL_CLASS ) );
+            $panel.prop( 'hidden', ! $panel.prop( 'hidden' ) );
+        } );
+
+        // Recompute a calculator's total + per-year and fill its amount target(s) as its inputs change.
+        $( 'body' ).on( 'input change', classSelector( C.CALC_PANEL_CLASS ) + ' :input', function () {
+            updateCalculator( $( this ).closest( classSelector( C.CALC_CLASS ) ) );
         } );
 
         // Mirror a property-expense row's Default into its blank per-property cells' placeholders as it

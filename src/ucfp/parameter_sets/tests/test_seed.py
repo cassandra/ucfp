@@ -101,6 +101,13 @@ class LoadPathTest( TestCase ):
         tax = next( expense for expense in catalog.expenses if expense.name == 'Property Tax' )
         self.assertEqual( tax.realization, Realization.DISCRETE )
         self.assertEqual( tax.cadence_domain, CadenceDomain.MO_YR )
+        # A durable (count-entry) row carries its calculator breakdown; its amount is the annualized
+        # cost, count x cost_each / lifespan.
+        appliance = next( expense for expense in catalog.expenses if expense.name == 'Appliance' )
+        self.assertEqual( appliance.count, 3 )
+        self.assertEqual( appliance.cost_each, Decimal( '2900' ) )
+        self.assertEqual( appliance.lifespan, 15 )
+        self.assertEqual( appliance.default_amount, Decimal( '580' ) )   # 3 x 2900 / 15
 
 
 class MaterializeFromLibraryTest( TestCase ):

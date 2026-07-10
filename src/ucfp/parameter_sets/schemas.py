@@ -6,6 +6,7 @@ over time is a list of windowed segments, never a lone instance.
 """
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Optional
 
 from common.recurrence import Duration
 
@@ -44,6 +45,12 @@ class ExpenseType:
     realization: Realization
     cadence_domain: CadenceDomain
     applies_to: tuple[ PropertyContext, ... ] = ()
+    # A "durable" expense the user enters as `count` items at `cost_each` replaced every `lifespan`
+    # years; a calculator fills the amount = count x cost_each / lifespan (its annualized cost). All
+    # None for a normal expense entered as a single amount.
+    count: Optional[ int ] = None
+    cost_each: Optional[ Decimal ] = None
+    lifespan: Optional[ int ] = None
 
 
 @dataclass( frozen = True )
