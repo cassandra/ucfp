@@ -57,13 +57,25 @@ def _current_definition( request,
 
 def _fragment_context( bookkeeper : Bookkeeper, catalog : BooksTableColumnCatalog,
                        run : ProjectionRun, definition : BooksTableDefinition ) -> dict:
-    spans   = [ DateSpan( step.start_date, step.end_date ) for step in run.result.steps ]
-    visible = set( definition.column_keys )
+    period_spans = [ DateSpan( step.start_date, step.end_date ) for step in run.result.steps ]
+    spans        = _spans_with_opening( period_spans )
+    visible      = set( definition.column_keys )
     return {
         'books_table'     : build_books_table(
             bookkeeper.ledger, bookkeeper.chart, spans, definition, catalog ),
         'addable_columns' : [ column for column in catalog.columns() if column.key not in visible ],
     }
+
+
+def _spans_with_opening( period_spans : list ) -> list:
+    """`period_spans` led by an opening row -- a zero-length span at the day before the first period,
+    the date the ledger reads opening balances through (the prior period's close). Its balance columns
+    then show the starting position, and its flow columns are zero (no period precedes it), so the table
+    opens with where the household stands before the first period rather than only at its close."""
+    if not period_spans:
+        return period_spans
+    opening = period_spans[ 0 ].day_before_start
+    return [ DateSpan( opening, opening ) ] + period_spans
 
 
 def _operate( definition : BooksTableDefinition, catalog : BooksTableColumnCatalog,

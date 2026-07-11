@@ -1,12 +1,28 @@
 {% comment %}
 The Books of Account drill-down table for a run, rendered as a single #books-table element so a
-column operation can swap it in place (antinode replace_map). Rows are the run's periods; columns
-come from the user's adapted lens. Asset/liability/equity and Net Worth read as a balance at
-period end; revenue/expense read as a flow over the period. Each column header carries the
-structural controls (expand/collapse/hide/move); the add-column control follows the table.
+column operation can swap it in place (antinode replace_map). Rows are the run's periods, led by an
+opening row (the starting position before the first period); columns come from the user's adapted
+lens. Asset/liability/equity and Net Worth read as a balance at period end; revenue/expense read as a
+flow over the period. Each column header carries the structural controls (expand/collapse/hide/move);
+the add-column control precedes the table.
 {% endcomment %}
 {% load common_tags %}
 <div id="books-table" class="table-responsive">
+  {% if addable_columns %}
+  <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+        data-async="#books-table" class="d-flex align-items-center mb-2">
+    {% csrf_token %}
+    <input type="hidden" name="op" value="add">
+    <label class="small text-muted mb-0 mr-2" for="books-table-add">Add column</label>
+    <select id="books-table-add" name="column" class="custom-select custom-select-sm w-auto mr-2">
+      {% for column in addable_columns %}
+      <option value="{{ column.key.token }}">{{ column.label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline-secondary btn-sm">Add</button>
+  </form>
+  {% endif %}
+
   <table class="table table-sm w-auto">
     <thead>
       <tr>
@@ -46,8 +62,8 @@ structural controls (expand/collapse/hide/move); the add-column control follows 
     </thead>
     <tbody>
       {% for row in books_table.rows %}
-      <tr>
-        <td class="text-nowrap">{{ row.span.end_date|date:"Y-m-d" }}</td>
+      <tr{% if forloop.first %} class="table-light"{% endif %}>
+        <td class="text-nowrap">{{ row.span.end_date|date:"Y-m-d" }}{% if forloop.first %} <span class="text-muted small">opening</span>{% endif %}</td>
         {% for cell in row.cells %}
         <td class="text-end">{{ cell.value|money:currency }}</td>
         {% endfor %}
@@ -55,19 +71,4 @@ structural controls (expand/collapse/hide/move); the add-column control follows 
       {% endfor %}
     </tbody>
   </table>
-
-  {% if addable_columns %}
-  <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
-        data-async="#books-table" class="d-flex align-items-center mt-2">
-    {% csrf_token %}
-    <input type="hidden" name="op" value="add">
-    <label class="small text-muted mb-0 mr-2" for="books-table-add">Add column</label>
-    <select id="books-table-add" name="column" class="custom-select custom-select-sm w-auto mr-2">
-      {% for column in addable_columns %}
-      <option value="{{ column.key.token }}">{{ column.label }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="btn btn-outline-secondary btn-sm">Add</button>
-  </form>
-  {% endif %}
 </div>

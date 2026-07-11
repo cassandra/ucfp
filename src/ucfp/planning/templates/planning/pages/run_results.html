@@ -18,15 +18,22 @@
   {% endif %}
 </p>
 
+{% if notices %}
+<p class="mb-2">
+  <button class="btn btn-sm btn-outline-secondary" type="button" data-toggle="collapse"
+          data-target="#run-notices" aria-expanded="false" aria-controls="run-notices">
+    Notices ({{ notices|length }})
+  </button>
+</p>
+<div class="collapse mb-3" id="run-notices">
+  <ul class="mb-0">
+    {% for year, kind, severity, amount in notices %}
+    <li>{{ year }}: {{ kind }} ({{ severity }}){% if amount %} &mdash; {{ amount|money:currency }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 <h2 class="h4 mt-4">Books of account</h2>
 {% include "planning/pages/run_books_table.html" %}
-
-{% if notices %}
-<h2 class="h4 mt-4">Notices</h2>
-<ul>
-  {% for year, kind, severity, amount in notices %}
-  <li>{{ year }}: {{ kind }} ({{ severity }}){% if amount %} &mdash; {{ amount|money:currency }}{% endif %}</li>
-  {% endfor %}
-</ul>
-{% endif %}
 {% endblock %}
