@@ -27,6 +27,7 @@ from uuid import UUID
 from common.date_span import DateSpan
 from common.labeled_enum import LabeledEnum
 
+from .books import AccountDisplayGroup, AccountDisplayPlacement
 from .chart import Chart
 from .enums import (
     AccountClass,
@@ -326,8 +327,9 @@ class BooksTableColumnCatalog:
     @classmethod
     def build( cls, chart : Chart ) -> 'BooksTableColumnCatalog':
         """Walk the chart into the full column set: a derived column per figure, then per type its
-        rollup, its class rollups (where it has a class rung), and an account column per displayable
-        account. Roots and valuation companions are not columns."""
+        rollup and the rollup rungs its accounts display under (an account's `display_placement`, or its
+        engine class as the fallback), down to an account column per displayable account. Roots and
+        valuation companions are not columns."""
         columns : list[ BooksColumn ] = []
         for figure in BooksDerivedFigure:
             columns.append( BooksLeafColumn(
@@ -340,37 +342,78 @@ class BooksTableColumnCatalog:
     @classmethod
     def _append_type( cls, columns : list[ BooksColumn ], chart : Chart,
                       account_type : AccountType ) -> None:
-        type_key = BooksColumnKey.for_type( account_type )
-        if account_type in _CLASS_ENUM_BY_TYPE:
-            member_keys = []
-            for account_class in chart.classes( account_type ):
-                class_key = BooksColumnKey.for_class( account_type, account_class )
-                accounts  = chart.accounts( account_class = account_class )
-                cls._append_accounts( columns, accounts, parent_key = class_key )
-                columns.append( BooksSummaryColumn(
-                    key = class_key, label = account_class.label, parent_key = type_key,
-                    member_keys = tuple(
-                        BooksColumnKey.for_account( account.account_uuid ) for account in accounts ) ) )
-                member_keys.append( class_key )
+        """Build a type's subtree from its accounts' display placements: each account descends through
+        its rollup rungs (created on first appearance, so groups and members keep account order), landing
+        as a leaf under its deepest rung. A type with a class rung omits a placeless account (as its
+        engine-class fallback would leave it), matching the columns the chart offers."""
+        type_key    = BooksColumnKey.for_type( account_type )
+        has_classes = account_type in _CLASS_ENUM_BY_TYPE
+        group_parent : dict[ str, tuple ] = {}   # group token -> (AccountDisplayGroup, parent key)
+        group_members : dict[ str, list ] = {}   # group token -> its member keys, in order
+        type_members : list[ BooksColumnKey ] = []
+        for account in cls._displayable_accounts( chart, account_type ):
+            placement = cls._placement_of( account )
+            if has_classes and not placement.path:
                 continue
-        else:
-            accounts = [ account for account in chart.accounts( account_type = account_type )
-                         if ( not account.is_root ) and ( not account.is_valuation ) ]
-            cls._append_accounts( columns, accounts, parent_key = type_key )
-            member_keys = [ BooksColumnKey.for_account( account.account_uuid ) for account in accounts ]
+            parent_key     = type_key
+            parent_members = type_members
+            path_tokens : list[ str ] = []
+            for group in placement.path:
+                path_tokens.append( group.key )
+                group_key = cls._group_key( account_type, path_tokens )
+                if group_key.token not in group_parent:
+                    group_parent[ group_key.token ]  = ( group, parent_key )
+                    group_members[ group_key.token ] = []
+                    parent_members.append( group_key )
+                parent_key     = group_key
+                parent_members = group_members[ group_key.token ]
+                continue
+            account_key = BooksColumnKey.for_account( account.account_uuid )
+            columns.append( BooksLeafColumn(
+                key = account_key, label = account.name, parent_key = parent_key ) )
+            parent_members.append( account_key )
+            continue
+        for token, ( group, parent_key ) in group_parent.items():
+            columns.append( BooksSummaryColumn(
+                key = BooksColumnKey( token ), label = group.label, parent_key = parent_key,
+                member_keys = tuple( group_members[ token ] ) ) )
+            continue
         columns.append( BooksSummaryColumn(
-            key = type_key, label = account_type.label, member_keys = tuple( member_keys ) ) )
+            key = type_key, label = account_type.label, member_keys = tuple( type_members ) ) )
         return
 
     @staticmethod
-    def _append_accounts( columns : list[ BooksColumn ], accounts : list,
-                          parent_key : BooksColumnKey ) -> None:
-        for account in accounts:
-            columns.append( BooksLeafColumn(
-                key = BooksColumnKey.for_account( account.account_uuid ),
-                label = account.name, parent_key = parent_key ) )
-            continue
-        return
+    def _displayable_accounts( chart : Chart, account_type : AccountType ) -> list:
+        """The accounts of `account_type` that get a column -- every account but the type root and the
+        valuation companions (whose appreciation a holding's market value already carries)."""
+        return [ account for account in chart.accounts( account_type = account_type )
+                 if ( not account.is_root ) and ( not account.is_valuation ) ]
+
+    @classmethod
+    def _placement_of( cls, account ) -> AccountDisplayPlacement:
+        """An account's display placement: its stamped `display_placement`, or the engine-class fallback
+        when it carries none."""
+        if account.display_placement is not None:
+            return account.display_placement
+        return cls._engine_class_placement( account )
+
+    @staticmethod
+    def _engine_class_placement( account ) -> AccountDisplayPlacement:
+        """The fallback placement: a single rung named by the account's engine class (asset, income, or
+        expense), or no rung when it has none -- reproducing the chart's own class grouping."""
+        account_class = ( account.asset_class or account.income_tax_class or account.expense_tax_class )
+        if account_class is None:
+            return AccountDisplayPlacement()
+        return AccountDisplayPlacement(
+            path = ( AccountDisplayGroup( key = account_class.name, label = account_class.label ), ) )
+
+    @staticmethod
+    def _group_key( account_type : AccountType, path_tokens : list ) -> BooksColumnKey:
+        """A rollup rung's column key: its type and the group keys down to it. A single-rung fallback
+        keys as `class:TYPE:CLASSNAME` -- the engine-class column key -- so the fallback view is exactly
+        the chart's class grouping."""
+        return BooksColumnKey(
+            f'{BooksColumnKind.CLASS}:{account_type.name}:{"/".join( path_tokens )}' )
 
     def columns( self ) -> tuple[ BooksColumn, ... ]:
         return self._columns

@@ -28,6 +28,29 @@ from .exceptions import AccountStructureError, TransactionImbalanceError
 from .schemas import Handle
 
 
+@dataclass( frozen = True )
+class AccountDisplayGroup:
+    """One rollup rung an account displays under -- an opaque presentation grouping the higher (input)
+    layer mints, the way it mints a `handle`. `key` identifies the group within its type (so accounts
+    sharing a group share it); `label` is what the group's column shows; `order` places it among its
+    siblings. The `accounts` layer never interprets these -- it only groups and orders by them."""
+
+    key   : str
+    label : str
+    order : int = 0
+
+
+@dataclass( frozen = True )
+class AccountDisplayPlacement:
+    """Where an account sits in the display hierarchy below its type: `path` is its chain of rollup
+    rungs (top-down; empty for a type that expands straight to accounts), and `order` places the account
+    leaf among its siblings. Opaque presentation data the higher layer stamps and the books table reads;
+    absent (None on the account) means fall back to the account's engine class."""
+
+    path  : tuple[ AccountDisplayGroup, ... ] = ()
+    order : int                               = 0
+
+
 @dataclass( eq = False )
 class Account:
     """A node in a `BooksOfAccount`'s account tree.
@@ -60,6 +83,9 @@ class Account:
     description       : str                          = ''
     closed            : bool                         = False
     account_uuid      : UUID                         = field( default_factory = uuid4 )
+    # Where this account displays in the run table (grouping + order below its type). Opaque
+    # presentation data the planning layer stamps; None means fall back to the engine class.
+    display_placement : Optional[ AccountDisplayPlacement ] = None
 
     def __post_init__( self ):
         self._assert_valid_structure()
