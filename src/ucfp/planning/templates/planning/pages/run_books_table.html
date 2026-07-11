@@ -3,18 +3,21 @@ The Books of Account drill-down table for a run, rendered as a single #books-tab
 operation can swap it in place (antinode replace_map). Rows are the run's periods, led by an opening row
 (the starting position before the first period). Columns come from the user's lens: a shown column reads
 a balance at period end (assets at market value) for asset/liability/equity/Net Worth, or a flow over
-the period for revenue/expense, and carries the structural controls (expand/collapse/remove/move); a
-removed column keeps its place as a thin sliver with a "+" to show it again. Reads `books_table`.
+the period for revenue/expense, and carries the structural controls. A summary is the header of its
+group: expand reveals its members beside it, collapse folds them back; removing a summary folds its
+group into one thin sliver. A removed column keeps its place as a sliver with a "+" to show it again.
+Each header is tinted by its top-level group and drill depth (see css/books_table.css). Reads
+`books_table`.
 {% endcomment %}
 {% load common_tags %}
-<div id="books-table" class="table-responsive">
+<div id="books-table" class="bt-scroll">
   <table class="table table-sm w-auto">
     <thead>
       <tr>
-        <th>Period</th>
+        <th class="bt-period-head">Period</th>
         {% for col in books_table.columns %}
         {% if col.removed %}
-        <th class="text-center align-bottom px-1">
+        <th class="bt-head bt-removed text-center align-bottom px-1">
           <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
                 data-async="#books-table" class="d-inline">
             {% csrf_token %}
@@ -25,7 +28,7 @@ removed column keeps its place as a thin sliver with a "+" to show it again. Rea
           </form>
         </th>
         {% else %}
-        <th class="text-end">
+        <th class="bt-head bt-group-{{ col.group }} bt-depth-{{ col.depth }} text-end">
           <div>
             {{ col.column.label }}
             {% if col.column.account_uuid %}
@@ -40,11 +43,11 @@ removed column keeps its place as a thin sliver with a "+" to show it again. Rea
             <input type="hidden" name="column" value="{{ col.column.key.token }}">
             <button type="submit" name="op" value="move_left" class="btn btn-link btn-sm p-0 mx-1"
                     title="Move left" aria-label="Move left">&lsaquo;</button>
-            {% if col.column.expandable %}
+            {% if col.column.expandable and not col.expanded %}
             <button type="submit" name="op" value="expand" class="btn btn-link btn-sm p-0 mx-1"
                     title="Expand" aria-label="Expand">+</button>
             {% endif %}
-            {% if col.column.parent_key %}
+            {% if col.expanded %}
             <button type="submit" name="op" value="collapse" class="btn btn-link btn-sm p-0 mx-1"
                     title="Collapse" aria-label="Collapse">&minus;</button>
             {% endif %}
@@ -61,7 +64,7 @@ removed column keeps its place as a thin sliver with a "+" to show it again. Rea
     <tbody>
       {% for row in books_table.rows %}
       <tr{% if forloop.first %} class="table-light"{% endif %}>
-        <td class="text-nowrap">{{ row.span.end_date|date:"Y-m-d" }}{% if forloop.first %} <span class="text-muted small">opening</span>{% endif %}</td>
+        <td class="bt-period-cell text-nowrap">{{ row.span.end_date|date:"Y-m-d" }}{% if forloop.first %} <span class="text-muted small">opening</span>{% endif %}</td>
         {% for cell in row.cells %}
         {% if cell.removed %}
         <td class="px-1"></td>

@@ -1,0 +1,74 @@
+/*  UCFP -- books-of-account run table
+ *
+ *  Styling for the forecast run's drill-down table (planning/pages/run_books_table.html).
+ *  Two ideas carry the visuals:
+ *
+ *    - Group tinting. Each column's header is tinted by its top-level group (Asset,
+ *      Expense, Net Worth, ...) via a per-group hue, and lightened by drill depth, so a
+ *      column's class and level read at a glance as groups are expanded. Tint is on the
+ *      header only; body cells stay neutral. Removed columns leave the palette entirely,
+ *      shown as a neutral grey sliver.
+ *    - Sticky header. The table scrolls within a bounded pane (`.bt-scroll`) so the
+ *      header row stays visible while the periods scroll.
+ *
+ *  The palette is a starting point -- tune the hues and depth lightness below.
+ */
+
+
+/* The scroll pane: a bounded box so the header can stick while the body scrolls (both
+   axes, since wide tables also scroll sideways). */
+.bt-scroll {
+    max-height: 75vh;
+    overflow: auto;
+}
+.bt-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+
+/* A tinted header cell: the group hue (--bt-hue / --bt-sat) lightened by depth
+   (--bt-light). The group and depth classes below set those variables. */
+.bt-head {
+    background-color: hsl( var( --bt-hue, 0 ), var( --bt-sat, 0% ), var( --bt-light, 100% ) );
+}
+
+/* Per-group base hue. One hue per top-level group; saturation kept in a similar band so
+   depth lightening reads consistently across groups. */
+.bt-group-net-worth { --bt-hue: 258; --bt-sat: 45%; }
+.bt-group-asset     { --bt-hue: 210; --bt-sat: 45%; }
+.bt-group-liability { --bt-hue:   8; --bt-sat: 55%; }
+.bt-group-equity    { --bt-hue: 280; --bt-sat: 35%; }
+.bt-group-revenue   { --bt-hue: 145; --bt-sat: 40%; }
+.bt-group-expense   { --bt-hue:  35; --bt-sat: 60%; }
+
+/* Depth lightening: the top-level summary is the deepest tint; each expansion level steps
+   lighter. Kept light enough that dark header text stays legible. */
+.bt-depth-0 { --bt-light: 82%; }
+.bt-depth-1 { --bt-light: 89%; }
+.bt-depth-2 { --bt-light: 94%; }
+
+/* A removed column: parked out of the group palette as a neutral grey sliver. */
+.bt-head.bt-removed {
+    --bt-hue: 0;
+    --bt-sat: 0%;
+    --bt-light: 93%;
+    color: var( --muted-color );
+}
+
+/* The leading Period column: sticky on the left as well, so the dates stay in view when a
+   wide table scrolls sideways. The header cell is the top-left corner -- sticky on both axes
+   and above the other sticky headers (hence the raised z-index and matching specificity). */
+.bt-scroll thead th.bt-period-head {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background-color: var( --white );
+}
+.bt-period-cell {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background-color: var( --white );
+}

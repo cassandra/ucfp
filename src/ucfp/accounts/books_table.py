@@ -159,8 +159,9 @@ class BooksLeafColumn( BooksColumn ):
 
 @dataclass( frozen = True )
 class BooksSummaryColumn( BooksColumn ):
-    """A rollup column -- a type or class total. Expanding it replaces it with its `member_keys`
-    (a type's classes, or its accounts where it has no class rung; a class's accounts)."""
+    """A rollup column -- a type or class total. Expanding it reveals its `member_keys` after it, the
+    summary staying put as the group header (a type's classes, or its accounts where it has no class
+    rung; a class's accounts)."""
 
     member_keys : tuple[ BooksColumnKey, ... ] = ()
 
@@ -178,10 +179,10 @@ def _key_tuple( tokens ) -> tuple:
 class BooksTableDefinition:
     """The view to render: the ordered frontier of columns, each shown or removed. A removed column
     keeps its place (rendered as a thin restore sliver) rather than leaving the table, so it stays at its
-    natural position in the hierarchy. Expansion is implicit -- an expanded summary is absent while its
-    members are present. Immutable: every operation returns a new definition, and the ones that consult
-    column structure take the `catalog`. Persisted (per user) via `to_storage` / `from_storage`; fitted
-    to a books with `adapt` before rendering."""
+    natural position in the hierarchy. Expansion keeps the summary: an expanded summary stays as a group
+    header, shown just before its members (group-header-first). Immutable: every operation returns a new
+    definition, and the ones that consult column structure take the `catalog`. Persisted (per user) via
+    `to_storage` / `from_storage`; fitted to a books with `adapt` before rendering."""
 
     column_keys : tuple[ BooksColumnKey, ... ] = ()
     # The subset of `column_keys` the user removed -- kept in place (rendered as a restore sliver) rather
@@ -219,57 +220,50 @@ class BooksTableDefinition:
 
     def expand( self, catalog : 'BooksTableColumnCatalog',
                 key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Replace a shown summary column with its members (the type's classes, or its accounts where it
-        has no class rung; a class's accounts), in place. No-op if the column is removed, or not an
-        expandable summary."""
+        """Reveal a shown summary's members just after it -- the summary stays as the group header. Only
+        members not already present are inserted. No-op if the column is removed, not an expandable
+        summary, or already expanded."""
         if key in self.removed_keys:
             return self
         column = catalog.get( key )
         if not isinstance( column, BooksSummaryColumn ):
             return self
-        members = [ member_key for member_key in column.member_keys if member_key in catalog ]
+        present = set( self.column_keys )
+        members = [ member_key for member_key in column.member_keys
+                    if ( member_key in catalog ) and ( member_key not in present ) ]
         if not members:
             return self
         expanded : list[ BooksColumnKey ] = []
         for frontier_key in self.column_keys:
+            expanded.append( frontier_key )
             if frontier_key == key:
                 expanded.extend( members )
-            else:
-                expanded.append( frontier_key )
             continue
         return BooksTableDefinition( tuple( expanded ), self.removed_keys )
 
     def collapse( self, catalog : 'BooksTableColumnCatalog',
                   key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Fold a column's level back into its parent: replace every frontier descendant of the parent
-        (shown or removed) with the single parent column -- shown -- at the first such position. A
-        removed descendant is then represented by the parent, so it leaves the removed set. No-op for a
-        top-level column (no parent)."""
+        """Fold a summary's group back under it: drop every frontier descendant of the summary (shown or
+        removed), the summary itself staying in place. A removed descendant is then represented by the
+        summary, so it leaves the removed set. No-op for a non-summary column (no group to fold)."""
         column = catalog.get( key )
-        if ( column is None ) or ( column.parent_key is None ):
+        if not isinstance( column, BooksSummaryColumn ):
             return self
-        parent = column.parent_key
-        collapsed : list[ BooksColumnKey ] = []
-        inserted = False
-        for frontier_key in self.column_keys:
-            if catalog.descends_from( frontier_key, parent ):
-                if not inserted:
-                    collapsed.append( parent )
-                    inserted = True
-            else:
-                collapsed.append( frontier_key )
-            continue
         return BooksTableDefinition(
-            tuple( collapsed ),
+            tuple( frontier_key for frontier_key in self.column_keys
+                   if not catalog.descends_from( frontier_key, key ) ),
             tuple( removed for removed in self.removed_keys
-                   if not catalog.descends_from( removed, parent ) ) )
+                   if not catalog.descends_from( removed, key ) ) )
 
-    def remove( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Mark a shown column removed -- it keeps its place (a restore sliver) rather than leaving the
-        frontier. No-op if it is not a shown column."""
+    def remove( self, catalog : 'BooksTableColumnCatalog',
+                key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Mark a shown column removed -- it keeps its place as a restore sliver. Removing a summary first
+        collapses its group, so an expanded group leaves a single sliver at the summary's position rather
+        than one per member. No-op if it is not a shown column."""
         if ( key not in self.column_keys ) or ( key in self.removed_keys ):
             return self
-        return BooksTableDefinition( self.column_keys, self.removed_keys + ( key, ) )
+        folded = self.collapse( catalog, key )
+        return BooksTableDefinition( folded.column_keys, folded.removed_keys + ( key, ) )
 
     def restore( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
         """Bring a removed column back into view -- clear it from the removed set, in its place."""
@@ -386,10 +380,14 @@ class BooksTableColumnCatalog:
 
 @dataclass( frozen = True )
 class BooksTableColumn:
-    """One column as rendered: its catalog column and whether it is currently removed (shown as a thin
-    restore sliver rather than a full column with its figures)."""
-    column  : BooksColumn
-    removed : bool = False
+    """One column as rendered: its catalog column, whether it is currently removed (a thin restore sliver
+    rather than a full column with its figures), whether it is an expanded summary (its members shown
+    alongside it), and the structural facts the view tints by -- the drill `depth` and top-level `group`."""
+    column   : BooksColumn
+    removed  : bool = False
+    expanded : bool = False
+    depth    : int  = 0
+    group    : str  = ''
 
 
 @dataclass( frozen = True )
@@ -414,16 +412,62 @@ class BooksTable:
     rows    : tuple[ BooksTableRow, ... ]
 
 
+def _column_depth( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> int:
+    """How many levels down from its top-level group a column sits: a type or derived figure is 0, a
+    class 1, an account 1 or 2 (by whether its type has a class rung). The view lightens the tint by it."""
+    depth  = 0
+    column = catalog.get( key )
+    while ( column is not None ) and ( column.parent_key is not None ):
+        depth += 1
+        column = catalog.get( column.parent_key )
+        continue
+    return depth
+
+
+def _column_group( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> str:
+    """A slug for the column's top-level group -- its account type (`asset`, `expense`, ...) or, for a
+    derived figure, the figure (`net-worth`). Every column in a group shares it, so the view can tint a
+    whole group with one hue."""
+    column = catalog.get( key )
+    while ( column is not None ) and ( column.parent_key is not None ):
+        column = catalog.get( column.parent_key )
+        continue
+    top = column.key
+    if top.kind == BooksColumnKind.DERIVED:
+        return top.derived_figure.name.lower().replace( '_', '-' )
+    return top.account_type.name.lower()
+
+
+def _render_columns( catalog : BooksTableColumnCatalog,
+                     definition : BooksTableDefinition ) -> tuple[ BooksTableColumn, ... ]:
+    """Resolve the frontier to rendered columns, each carrying its removed state, whether it is an
+    expanded summary (a member of it is present), and its drill depth and top-level group (what the
+    view tints by). Keys absent from the catalog are skipped (callers adapt first)."""
+    removed  = set( definition.removed_keys )
+    frontier = set( definition.column_keys )
+    rendered : list[ BooksTableColumn ] = []
+    for key in definition.column_keys:
+        if key not in catalog:
+            continue
+        column   = catalog.get( key )
+        expanded = ( isinstance( column, BooksSummaryColumn )
+                     and any( member in frontier for member in column.member_keys ) )
+        rendered.append( BooksTableColumn(
+            column   = column,
+            removed  = key in removed,
+            expanded = expanded,
+            depth    = _column_depth( catalog, key ),
+            group    = _column_group( catalog, key ) ) )
+        continue
+    return tuple( rendered )
+
+
 def build_books_table( ledger : Ledger, chart : Chart, spans : list[ DateSpan ],
                        definition : BooksTableDefinition,
                        catalog : BooksTableColumnCatalog ) -> BooksTable:
-    """Render `definition` over `spans`: resolve each frontier key to its catalog column and compute its
-    per-period cell -- except a removed column, which renders as a value-less restore sliver. Keys absent
-    from the catalog are skipped (callers adapt first)."""
-    removed = set( definition.removed_keys )
-    columns = tuple(
-        BooksTableColumn( catalog.get( key ), key in removed )
-        for key in definition.column_keys if key in catalog )
+    """Render `definition` over `spans`: resolve each frontier key to its rendered column and compute its
+    per-period cell -- except a removed column, which renders as a value-less restore sliver."""
+    columns = _render_columns( catalog, definition )
     rows    = tuple(
         BooksTableRow(
             span  = span,

@@ -85,7 +85,7 @@ def _operate( definition : BooksTableDefinition, catalog : BooksTableColumnCatal
     if operation == 'collapse':
         return definition.collapse( catalog, key )
     if operation == 'remove':
-        return definition.remove( key )
+        return definition.remove( catalog, key )
     if operation == 'restore':
         return definition.restore( key )
     if operation == 'move_left':
