@@ -14,6 +14,7 @@ from ucfp.inputs.profile.schemas import Profile
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.assumptions.schemas import Assumptions
 
+from .display_placement import stamp_expense_placements
 from .materialization import ForecastFrame, materialize
 from .models import ProjectionRunRecord
 from .schemas import NoticeRecord, ProjectionResult, ProjectionRun, StepResult
@@ -26,6 +27,7 @@ def run_and_capture(
     parameters   = materialize(
         profile = profile, plans = plans, assumptions = assumptions, frame = frame )
     result       = Forecast( parameters ).run()
+    stamp_expense_placements( result.books )
     books_record = BooksOfAccountRepository().save( result.books, organization )
     captured     = ProjectionRun(
         profile = profile, plans = plans, assumptions = assumptions, frame = frame,

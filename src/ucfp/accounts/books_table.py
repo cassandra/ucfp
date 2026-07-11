@@ -75,6 +75,11 @@ _TYPE_DISPLAY_ORDER  = (
 )
 _DEFAULT_SUPPRESSED_TYPES = frozenset( ( AccountType.EQUITY, ) )
 
+# The order value the engine-class fallback assigns its rungs and leaves: large, so a stamped placement
+# (with small, input-derived orders) always sorts ahead of the fallback groups, which then keep their
+# account order among themselves (a stable sort by order preserves first appearance for equal orders).
+_FALLBACK_ORDER = 10 ** 6
+
 
 @dataclass( frozen = True )
 class BooksColumnKey:
@@ -343,14 +348,16 @@ class BooksTableColumnCatalog:
     def _append_type( cls, columns : list[ BooksColumn ], chart : Chart,
                       account_type : AccountType ) -> None:
         """Build a type's subtree from its accounts' display placements: each account descends through
-        its rollup rungs (created on first appearance, so groups and members keep account order), landing
-        as a leaf under its deepest rung. A type with a class rung omits a placeless account (as its
-        engine-class fallback would leave it), matching the columns the chart offers."""
+        its rollup rungs (created on first appearance), landing as a leaf under its deepest rung. A rung's
+        members are ordered by their placement order (a stable sort, so equal orders keep account order),
+        placing input-grouped columns as the inputs present them and the engine-class fallback after them.
+        A type with a class rung omits a placeless account (as its fallback would leave it), matching the
+        columns the chart offers."""
         type_key    = BooksColumnKey.for_type( account_type )
         has_classes = account_type in _CLASS_ENUM_BY_TYPE
         group_parent : dict[ str, tuple ] = {}   # group token -> (AccountDisplayGroup, parent key)
-        group_members : dict[ str, list ] = {}   # group token -> its member keys, in order
-        type_members : list[ BooksColumnKey ] = []
+        group_members : dict[ str, list ] = {}   # group token -> its members, each (key, order)
+        type_members : list[ tuple ] = []        # the type's members, each (key, order)
         for account in cls._displayable_accounts( chart, account_type ):
             placement = cls._placement_of( account )
             if has_classes and not placement.path:
@@ -364,23 +371,30 @@ class BooksTableColumnCatalog:
                 if group_key.token not in group_parent:
                     group_parent[ group_key.token ]  = ( group, parent_key )
                     group_members[ group_key.token ] = []
-                    parent_members.append( group_key )
+                    parent_members.append( ( group_key, group.order ) )
                 parent_key     = group_key
                 parent_members = group_members[ group_key.token ]
                 continue
             account_key = BooksColumnKey.for_account( account.account_uuid )
             columns.append( BooksLeafColumn(
                 key = account_key, label = account.name, parent_key = parent_key ) )
-            parent_members.append( account_key )
+            parent_members.append( ( account_key, placement.order ) )
             continue
         for token, ( group, parent_key ) in group_parent.items():
             columns.append( BooksSummaryColumn(
                 key = BooksColumnKey( token ), label = group.label, parent_key = parent_key,
-                member_keys = tuple( group_members[ token ] ) ) )
+                member_keys = cls._ordered_keys( group_members[ token ] ) ) )
             continue
         columns.append( BooksSummaryColumn(
-            key = type_key, label = account_type.label, member_keys = tuple( type_members ) ) )
+            key = type_key, label = account_type.label,
+            member_keys = cls._ordered_keys( type_members ) ) )
         return
+
+    @staticmethod
+    def _ordered_keys( members : list ) -> tuple:
+        """The member keys sorted by placement order -- a stable sort, so members of equal order keep the
+        account order they were seen in (which is what the engine-class fallback relies on)."""
+        return tuple( key for key, _order in sorted( members, key = lambda member: member[ 1 ] ) )
 
     @staticmethod
     def _displayable_accounts( chart : Chart, account_type : AccountType ) -> list:
@@ -403,9 +417,10 @@ class BooksTableColumnCatalog:
         expense), or no rung when it has none -- reproducing the chart's own class grouping."""
         account_class = ( account.asset_class or account.income_tax_class or account.expense_tax_class )
         if account_class is None:
-            return AccountDisplayPlacement()
-        return AccountDisplayPlacement(
-            path = ( AccountDisplayGroup( key = account_class.name, label = account_class.label ), ) )
+            return AccountDisplayPlacement( order = _FALLBACK_ORDER )
+        group = AccountDisplayGroup( key = account_class.name, label = account_class.label,
+                                     order = _FALLBACK_ORDER )
+        return AccountDisplayPlacement( path = ( group, ), order = _FALLBACK_ORDER )
 
     @staticmethod
     def _group_key( account_type : AccountType, path_tokens : list ) -> BooksColumnKey:
@@ -571,7 +586,8 @@ def build_books_table( ledger : Ledger, chart : Chart, spans : list[ DateSpan ],
             cells = tuple(
                 BooksTableCell(
                     rendered.column,
-                    None if rendered.removed else _cell_value( rendered.column.key, ledger, chart, span ),
+                    None if rendered.removed
+                    else _column_value( catalog, rendered.column, ledger, chart, span ),
                     rendered.removed )
                 for rendered in columns ) )
         for span in spans
@@ -579,21 +595,37 @@ def build_books_table( ledger : Ledger, chart : Chart, spans : list[ DateSpan ],
     return BooksTable( columns = columns, rows = rows )
 
 
+def _account_leaf_keys( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> list:
+    """The account-leaf keys under a column: the column itself if it is a leaf, else every account leaf
+    beneath its rungs. A rollup's figure is the sum over these, so a group totals its members whatever
+    axis groups them (an engine class or an input category)."""
+    column = catalog.get( key )
+    if isinstance( column, BooksSummaryColumn ):
+        leaves : list = []
+        for member in column.member_keys:
+            leaves.extend( _account_leaf_keys( catalog, member ) )
+            continue
+        return leaves
+    return [ key ]
+
+
+def _column_value( catalog : BooksTableColumnCatalog, column : BooksColumn,
+                   ledger : Ledger, chart : Chart, span : DateSpan ) -> Decimal:
+    """A column's figure for one period: a summary sums its account leaves (so market value and flows
+    fold in exactly as a type/class total would); a leaf reads its own figure."""
+    if isinstance( column, BooksSummaryColumn ):
+        return sum( ( _cell_value( leaf, ledger, chart, span )
+                      for leaf in _account_leaf_keys( catalog, column.key ) ), Decimal( '0' ) )
+    return _cell_value( column.key, ledger, chart, span )
+
+
 def _cell_value( key : BooksColumnKey, ledger : Ledger, chart : Chart, span : DateSpan ) -> Decimal:
-    """One column's figure for one period: a flow over the span for revenue/expense, a balance at
-    span end otherwise (assets at market value)."""
+    """A leaf column's figure for one period: the derived figure, or an account's flow over the span
+    (revenue/expense) or balance at span end (assets at market value, else natural balance)."""
     if key.kind == BooksColumnKind.DERIVED:
         if key.derived_figure == BooksDerivedFigure.NET_WORTH:
             return ledger.net_worth( through = span.end_date )
         raise ValueError( f'Unsupported derived figure: {key.derived_figure}' )
-    if key.kind == BooksColumnKind.TYPE:
-        if key.account_type in _FLOW_TYPES:
-            return ledger.type_flow( key.account_type, start = span.start_date, end = span.end_date )
-        return ledger.type_total( key.account_type, through = span.end_date )
-    if key.kind == BooksColumnKind.CLASS:
-        if key.account_type in _FLOW_TYPES:
-            return ledger.class_flow( key.account_class, start = span.start_date, end = span.end_date )
-        return ledger.class_total( key.account_class, through = span.end_date )
     account = chart.account_by_uuid( key.account_uuid )
     if account is None:
         return Decimal( '0' )
