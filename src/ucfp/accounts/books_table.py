@@ -175,6 +175,30 @@ def _key_tuple( tokens ) -> tuple:
     return tuple( BooksColumnKey( str( token ) ) for token in tokens ) if isinstance( tokens, list ) else ()
 
 
+def _subtree_block( catalog : 'BooksTableColumnCatalog', keys : list,
+                    root_key : BooksColumnKey ) -> tuple[ int, int ]:
+    """The half-open index range `[start, end)` a column and its descendants occupy in `keys`. In a
+    well-formed (pre-order) frontier a column's descendants are exactly the run right after it, so the
+    block is a column plus the contiguous descendants that follow."""
+    start = keys.index( root_key )
+    end   = start + 1
+    while ( end < len( keys ) ) and catalog.descends_from( keys[ end ], root_key ):
+        end += 1
+        continue
+    return start, end
+
+
+def _swap_sibling_blocks( catalog : 'BooksTableColumnCatalog', keys : list,
+                          first_key : BooksColumnKey, second_key : BooksColumnKey ) -> list:
+    """`keys` with the two columns' subtree blocks swapped -- each column carries its descendants. The
+    blocks keep whatever lies between them, so adjacent siblings simply trade places, group and all."""
+    first       = _subtree_block( catalog, keys, first_key )
+    second      = _subtree_block( catalog, keys, second_key )
+    left, right = ( first, second ) if first[ 0 ] < second[ 0 ] else ( second, first )
+    return ( keys[ : left[ 0 ] ] + keys[ right[ 0 ] : right[ 1 ] ] + keys[ left[ 1 ] : right[ 0 ] ]
+             + keys[ left[ 0 ] : left[ 1 ] ] + keys[ right[ 1 ] : ] )
+
+
 @dataclass( frozen = True )
 class BooksTableDefinition:
     """The view to render: the ordered frontier of columns, each shown or removed. A removed column
@@ -271,18 +295,24 @@ class BooksTableDefinition:
             self.column_keys,
             tuple( removed for removed in self.removed_keys if removed != key ) )
 
-    def move( self, key : Optional[ BooksColumnKey ], offset : int ) -> 'BooksTableDefinition':
-        """Shift a column by `offset` positions in the frontier (-1 left, +1 right), clamped within the
-        row. Removed slivers are part of the order, so a shown column can move past one."""
-        keys = list( self.column_keys )
-        if key not in keys:
+    def move( self, catalog : 'BooksTableColumnCatalog',
+              key : Optional[ BooksColumnKey ], offset : int ) -> 'BooksTableDefinition':
+        """Reorder a column among its siblings by `offset` (-1 left, +1 right), carrying its whole
+        subtree: it swaps with the adjacent sibling under the same parent (an expanded summary takes its
+        members along), keeping the frontier a well-formed tree. No-op at a group edge (no sibling that
+        way) or for an absent column -- a column never leaves its parent's group."""
+        keys   = list( self.column_keys )
+        column = catalog.get( key )
+        if ( key not in keys ) or ( column is None ):
             return self
-        index  = keys.index( key )
-        target = index + offset
-        if ( target < 0 ) or ( target >= len( keys ) ):
+        siblings = [ frontier_key for frontier_key in keys
+                     if catalog.get( frontier_key )
+                     and ( catalog.get( frontier_key ).parent_key == column.parent_key ) ]
+        target = siblings.index( key ) + offset
+        if ( target < 0 ) or ( target >= len( siblings ) ):
             return self
-        keys[ index ], keys[ target ] = keys[ target ], keys[ index ]
-        return BooksTableDefinition( tuple( keys ), self.removed_keys )
+        reordered = _swap_sibling_blocks( catalog, keys, key, siblings[ target ] )
+        return BooksTableDefinition( tuple( reordered ), self.removed_keys )
 
 
 class BooksTableColumnCatalog:
@@ -382,12 +412,16 @@ class BooksTableColumnCatalog:
 class BooksTableColumn:
     """One column as rendered: its catalog column, whether it is currently removed (a thin restore sliver
     rather than a full column with its figures), whether it is an expanded summary (its members shown
-    alongside it), and the structural facts the view tints by -- the drill `depth` and top-level `group`."""
-    column   : BooksColumn
-    removed  : bool = False
-    expanded : bool = False
-    depth    : int  = 0
-    group    : str  = ''
+    alongside it), the structural facts the view tints by -- the drill `depth` and top-level `group` --
+    and whether it has a sibling to trade places with in each direction (a reorder is a within-group
+    sibling swap, so an edge column offers no move that way)."""
+    column         : BooksColumn
+    removed        : bool = False
+    expanded       : bool = False
+    depth          : int  = 0
+    group          : str  = ''
+    can_move_left  : bool = False
+    can_move_right : bool = False
 
 
 @dataclass( frozen = True )
@@ -438,26 +472,46 @@ def _column_group( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> 
     return top.account_type.name.lower()
 
 
+def _sibling_order( catalog : BooksTableColumnCatalog,
+                    keys : tuple[ BooksColumnKey, ... ] ) -> dict:
+    """Each present column's position among its siblings, as `{ key : (index, sibling_count) }`. Siblings
+    are the frontier columns sharing a parent (top-level columns share the None parent). Used to tell,
+    per column, whether a reorder has somewhere to go in each direction."""
+    by_parent : dict = {}
+    for key in keys:
+        column = catalog.get( key )
+        if column is not None:
+            by_parent.setdefault( column.parent_key, [] ).append( key )
+            continue
+    return { key : ( group.index( key ), len( group ) )
+             for group in by_parent.values() for key in group }
+
+
 def _render_columns( catalog : BooksTableColumnCatalog,
                      definition : BooksTableDefinition ) -> tuple[ BooksTableColumn, ... ]:
     """Resolve the frontier to rendered columns, each carrying its removed state, whether it is an
-    expanded summary (a member of it is present), and its drill depth and top-level group (what the
-    view tints by). Keys absent from the catalog are skipped (callers adapt first)."""
-    removed  = set( definition.removed_keys )
-    frontier = set( definition.column_keys )
+    expanded summary (a member of it is present), its drill depth and top-level group (what the view
+    tints by), and whether it has a sibling to move toward in each direction. Keys absent from the
+    catalog are skipped (callers adapt first)."""
+    removed   = set( definition.removed_keys )
+    frontier  = set( definition.column_keys )
+    positions = _sibling_order( catalog, definition.column_keys )
     rendered : list[ BooksTableColumn ] = []
     for key in definition.column_keys:
         if key not in catalog:
             continue
-        column   = catalog.get( key )
-        expanded = ( isinstance( column, BooksSummaryColumn )
-                     and any( member in frontier for member in column.member_keys ) )
+        column       = catalog.get( key )
+        expanded     = ( isinstance( column, BooksSummaryColumn )
+                         and any( member in frontier for member in column.member_keys ) )
+        index, count = positions[ key ]
         rendered.append( BooksTableColumn(
-            column   = column,
-            removed  = key in removed,
-            expanded = expanded,
-            depth    = _column_depth( catalog, key ),
-            group    = _column_group( catalog, key ) ) )
+            column         = column,
+            removed        = key in removed,
+            expanded       = expanded,
+            depth          = _column_depth( catalog, key ),
+            group          = _column_group( catalog, key ),
+            can_move_left  = index > 0,
+            can_move_right = index < count - 1 ) )
         continue
     return tuple( rendered )
 

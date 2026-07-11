@@ -41,8 +41,10 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
                 data-async="#books-table" class="d-inline-flex">
             {% csrf_token %}
             <input type="hidden" name="column" value="{{ col.column.key.token }}">
+            {% if col.can_move_left %}
             <button type="submit" name="op" value="move_left" class="btn btn-link btn-sm p-0 mx-1"
                     title="Move left" aria-label="Move left">&lsaquo;</button>
+            {% endif %}
             {% if col.column.expandable and not col.expanded %}
             <button type="submit" name="op" value="expand" class="btn btn-link btn-sm p-0 mx-1"
                     title="Expand" aria-label="Expand">+</button>
@@ -53,8 +55,10 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
             {% endif %}
             <button type="submit" name="op" value="remove" class="btn btn-link btn-sm p-0 mx-1"
                     title="Remove" aria-label="Remove">&times;</button>
+            {% if col.can_move_right %}
             <button type="submit" name="op" value="move_right" class="btn btn-link btn-sm p-0 mx-1"
                     title="Move right" aria-label="Move right">&rsaquo;</button>
+            {% endif %}
           </form>
         </th>
         {% endif %}

@@ -89,7 +89,7 @@ def _operate( definition : BooksTableDefinition, catalog : BooksTableColumnCatal
     if operation == 'restore':
         return definition.restore( key )
     if operation == 'move_left':
-        return definition.move( key, -1 )
+        return definition.move( catalog, key, -1 )
     if operation == 'move_right':
-        return definition.move( key, 1 )
+        return definition.move( catalog, key, 1 )
     raise BadRequest( f'Unknown books-table operation: {operation!r}' )
