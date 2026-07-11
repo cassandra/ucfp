@@ -116,14 +116,15 @@ window.App.Inputs = (function () {
         orientation      : 'bottom auto',
     };
 
-    // Past-facing contexts cannot run beyond today and open on the decade-of-years view (startView
-    // 2), so reaching a far year is a couple of clicks rather than months of paging; forward-facing
-    // dates open on the normal day view but may still be typed or header-zoomed to a distant year.
+    // Dates here routinely sit years out (or decades back), so every context opens on the
+    // decade-of-years view (startView 2): reaching a far year is a couple of clicks (and a decade
+    // arrow to jump ten years) rather than months of paging. Past-facing contexts additionally cap at
+    // today.
     function datepickerOptions( context ) {
         if ( context === C.DATE_CONTEXT_BIRTHDATE || context === C.DATE_CONTEXT_PAST ) {
             return Object.assign( {}, DATEPICKER_BASE, { endDate : '+0d', startView : 2 } );
         }
-        return Object.assign( {}, DATEPICKER_BASE );
+        return Object.assign( {}, DATEPICKER_BASE, { startView : 2 } );
     }
 
     // A private flag (data-dp-enhanced) marks inputs already wired, so re-scanning after an antinode
