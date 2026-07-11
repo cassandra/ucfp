@@ -41,8 +41,14 @@ class ExpenseType:
     property tax); materialization swaps it to `RENTAL_EXPENSE` for a rental-owned property. `applies_to`
     names the `PropertyContext`s the row seeds against -- e.g. a roof against every owned dwelling,
     utilities also against a rented home, property management only against a rental. It is empty for a
-    row outside the `PROPERTY` class. A tuple, not a set, because the JSON codec round-trips tuples."""
+    row outside the `PROPERTY` class. A tuple, not a set, because the JSON codec round-trips tuples.
+
+    `handle` is the row's stable identity -- an authored slug independent of the mutable `name`/`order`,
+    carried onto the plan expense and stamped on the materialized account, so the run table can map an
+    output account back to its catalog row (and thus its class/category/order) for input-aligned
+    grouping."""
     name: str
+    handle: str
     expense_class: ExpenseClass
     category: ExpenseCategory
     order: int

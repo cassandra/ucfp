@@ -47,7 +47,7 @@ def merged_vehicle_costs( plans ) -> list:
             continue
         prior = existing.get( catalog_expense.name )
         merged.append( VehicleRunningCost(
-            name = catalog_expense.name,
+            name = catalog_expense.name, handle = catalog_expense.handle,
             expense_tax_class = catalog_expense.expense_tax_class,
             interval = kept_interval( prior, catalog_expense ),
             realization = catalog_expense.realization,

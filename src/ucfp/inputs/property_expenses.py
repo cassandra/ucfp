@@ -85,7 +85,8 @@ def merged_property_expenses( profile, plans ) -> list:
             continue
         prior = existing.get( catalog_expense.name )
         merged.append( PropertyExpense(
-            name = catalog_expense.name, category = catalog_expense.category,
+            name = catalog_expense.name, handle = catalog_expense.handle,
+            category = catalog_expense.category,
             expense_tax_class = catalog_expense.expense_tax_class,
             applies_to = catalog_expense.applies_to,
             interval = kept_interval( prior, catalog_expense ),

@@ -342,11 +342,11 @@ def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:
         amounts = Schedule.constant( WindowedAmount( cost.amount * cars ) )
         if cost.realization is Realization.SMOOTH:
             streams.append( ExpenseStream(
-                name = cost.name, expense_tax_class = cost.expense_tax_class,
+                name = cost.name, handle = cost.handle, expense_tax_class = cost.expense_tax_class,
                 amounts = _annualized( amounts, cost.interval ) ) )
         else:
             items.append( ExpenseItem(
-                name = cost.name, expense_tax_class = cost.expense_tax_class,
+                name = cost.name, handle = cost.handle, expense_tax_class = cost.expense_tax_class,
                 amounts = amounts, cadence = Recurrence( cost.interval ) ) )
     return streams, items
 
@@ -435,11 +435,11 @@ def _recurring_expenses( plans : Plans, primary_birthdate : Optional[ date ],
         amounts = _span_schedule( expense.amounts, boundaries, frame )
         if expense.realization is Realization.SMOOTH:
             streams.append( ExpenseStream(
-                name = expense.name, expense_tax_class = expense.expense_tax_class,
+                name = expense.name, handle = expense.handle, expense_tax_class = expense.expense_tax_class,
                 amounts = _annualized( amounts, expense.interval ) ) )
         else:
             items.append( ExpenseItem(
-                name = expense.name, expense_tax_class = expense.expense_tax_class,
+                name = expense.name, handle = expense.handle, expense_tax_class = expense.expense_tax_class,
                 amounts = amounts, cadence = Recurrence( expense.interval ) ) )
     return streams, items
 
@@ -521,11 +521,11 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
             amounts   = _property_schedule( amount, sale_dates.get( handle ) )
             if expense.realization is Realization.SMOOTH:
                 streams.append( ExpenseStream(
-                    name = expense.name, expense_tax_class = tax_class,
+                    name = expense.name, handle = expense.handle, expense_tax_class = tax_class,
                     amounts = _annualized( amounts, expense.interval ) ) )
             else:
                 items.append( ExpenseItem(
-                    name = expense.name, expense_tax_class = tax_class,
+                    name = expense.name, handle = expense.handle, expense_tax_class = tax_class,
                     amounts = amounts, cadence = Recurrence( expense.interval ) ) )
     return streams, items
 

@@ -33,7 +33,8 @@ def merged_recurring_expenses( profile, plans ) -> list:
             continue
         prior = existing.get( catalog_expense.name )
         merged.append( RecurringExpense(
-            name = catalog_expense.name, category = catalog_expense.category,
+            name = catalog_expense.name, handle = catalog_expense.handle,
+            category = catalog_expense.category,
             expense_tax_class = catalog_expense.expense_tax_class,
             amounts = _aligned_amounts( prior, catalog_expense.default_amount, span_count ),
             interval = kept_interval( prior, catalog_expense ),

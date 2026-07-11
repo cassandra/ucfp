@@ -54,6 +54,7 @@ class RecurringExpense:
     one amount per span of the Plans' shared `expense_spans` timeline (a single amount when no spans are
     defined). Property operating expenses are a separate class (`PropertyExpense`)."""
     name: str
+    handle: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     amounts: list[ Decimal ]
@@ -82,6 +83,7 @@ class PropertyExpense:
     gives that property (by handle) its own amount; a property with neither is not charged. Amounts are
     constant; a sale ends a property's instance at materialize."""
     name: str
+    handle: str
     category: ExpenseCategory
     expense_tax_class: ExpenseTaxClass
     applies_to: tuple[ PropertyContext, ... ]
@@ -154,6 +156,7 @@ class VehicleRunningCost:
     general expense model, but the amount is a single per-car figure -- constant, with no age spans.
     `amount` is None when blank (the cost is then not charged)."""
     name: str
+    handle: str
     expense_tax_class: ExpenseTaxClass
     interval: Duration
     amount: Optional[ Decimal ] = None
