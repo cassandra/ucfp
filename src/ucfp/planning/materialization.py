@@ -93,7 +93,7 @@ def materialize(
             profile, plans, subjects_by_handle, government_pension ) + flow_streams,
         income_items     = flow_items + events.income_items,
         expense_items    = (
-            _committed_obligations( profile ) + recurring_items + expense_items
+            recurring_items + expense_items
             + events.expense_items + card_items + _vehicle_expenses( plans ) + vehicle_items ),
         expense_streams  = recurring_streams + expense_streams + vehicle_streams,
         loans            = _loans( profile, plans ),
@@ -351,7 +351,7 @@ def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:
     return streams, items
 
 
-# --- Profile: flows (income entitlements, committed obligations) -----------
+# --- Profile: flows (income entitlements) ----------------------------------
 
 def _income_flows(
         profile : Profile, subjects_by_handle : dict[ str, Subject ] ) -> tuple[ list, list ]:
@@ -412,16 +412,6 @@ def _claiming_date( timing : Optional[ RetirementTiming ], subject_handle : str 
             f'The government pension for "{subject_handle}" needs a claiming date in the plans '
             'timing.' )
     return timing.government_pension_claiming_date
-
-
-def _committed_obligations( profile : Profile ) -> list[ ExpenseItem ]:
-    """The profile's committed non-loan outflows -- placed at their cadence."""
-    return [ ExpenseItem(
-        name = obligation.name, expense_tax_class = obligation.expense_tax_class,
-        amounts = Schedule.constant( WindowedAmount( obligation.amount ) ),
-        cadence = Recurrence( obligation.cadence ),
-        window = DateWindow( end = obligation.through ), handle = obligation.handle )
-        for obligation in profile.obligations ]
 
 
 def _annualized( amounts : Schedule, interval : Optional[ Duration ] ) -> Schedule:

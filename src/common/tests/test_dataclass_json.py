@@ -26,7 +26,7 @@ from ucfp.jurisdiction.law import TaxProjection
 
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
-    AssetProfile, CommittedObligation, Debt, GovernmentPensionEntitlement,
+    AssetProfile, Debt, GovernmentPensionEntitlement,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
     VehiclePlan, VehicleRunningCost, Contribution, CreditCardPlan, DrawdownPolicy,
@@ -67,10 +67,6 @@ def _sample_profile():
                                          normal_start_age = 65 ) ],
         government_pension = [ GovernmentPensionEntitlement(
             subject_handle = 'you', monthly_at_normal_age = Decimal( '2800.50' ) ) ],
-        obligations = [ CommittedObligation( handle = 'tuition', name = 'Tuition',
-                                             amount = Decimal( '1500' ),
-                                             cadence = Duration( 1, TimeUnit.MONTH ),
-                                             expense_tax_class = ExpenseTaxClass.LIVING ) ],
     )
 
 

@@ -44,7 +44,7 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
     subjects = { subject.handle for subject in profile.subjects }
     accounts = { asset.handle for asset in profile.assets }
     debts    = { debt.handle for debt in profile.debts }
-    entities = subjects | accounts | debts | { obligation.handle for obligation in profile.obligations }
+    entities = subjects | accounts | debts
 
     issues = list()
     for timing in plans.timing:

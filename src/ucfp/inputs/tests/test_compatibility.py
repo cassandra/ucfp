@@ -7,10 +7,10 @@ from django.test import SimpleTestCase
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
-    AssetProfile, CommittedObligation, Debt, Profile, SubjectProfile )
+    AssetProfile, Debt, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanPrepayment, LoanRepayment, PlanEvent, Plans, RetirementTiming )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
@@ -19,17 +19,14 @@ from ucfp.inputs.compatibility import (
 
 
 def _profile() -> Profile:
-    """A profile with one of each entity kind references resolve against -- subject, account, debt,
-    and obligation."""
+    """A profile with one of each entity kind references resolve against -- subject, account, and
+    debt."""
     return Profile(
         subjects = [ SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
         assets = [ AssetProfile( handle = 'savings', name = 'Savings', asset_class = AssetClass.CASH,
                                  opening_value = Decimal( '1000' ) ) ],
         debts = [ Debt( handle = 'mortgage', name = 'Mortgage', kind = DebtKind.MORTGAGE,
-                        balance = Decimal( '300000' ) ) ],
-        obligations = [ CommittedObligation(
-            handle = 'rent', name = 'Rent', amount = Decimal( '1500' ),
-            cadence = Duration( 1, TimeUnit.MONTH ), expense_tax_class = ExpenseTaxClass.LIVING ) ] )
+                        balance = Decimal( '300000' ) ) ] )
 
 
 class CompatibilityTest( SimpleTestCase ):
@@ -62,11 +59,11 @@ class CompatibilityTest( SimpleTestCase ):
             assert_compatible( _profile(), plans )
 
     def test_event_selection_resolves_across_every_entity_type( self ):
-        # An event role may point at a subject, account, debt, or obligation -- the only check that
-        # resolves against the combined entity set (here a transfer whose target is an obligation).
+        # An event role may point at a subject, account, or debt -- the only check that resolves
+        # against the combined entity set (here a transfer whose target is a debt).
         compatible = Plans( events = [ PlanEvent(
             kind = EventKind.TRANSFER, date = date( 2030, 1, 1 ), amount = Decimal( '100' ),
-            selections = { 'source': 'savings', 'target': 'rent' } ) ] )
+            selections = { 'source': 'savings', 'target': 'mortgage' } ) ] )
         self.assertEqual( compatibility_issues( _profile(), compatible ), [] )
         dangling = Plans( events = [ PlanEvent(
             kind = EventKind.TRANSFER, date = date( 2030, 1, 1 ),
