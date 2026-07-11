@@ -169,43 +169,61 @@ class BooksSummaryColumn( BooksColumn ):
         return bool( self.member_keys )
 
 
+def _key_tuple( tokens ) -> tuple:
+    """A tuple of `BooksColumnKey`s from a list of stored tokens (empty for a missing/non-list value)."""
+    return tuple( BooksColumnKey( str( token ) ) for token in tokens ) if isinstance( tokens, list ) else ()
+
+
 @dataclass( frozen = True )
 class BooksTableDefinition:
-    """The view to render: the ordered, visible column keys, plus the operations that evolve it.
-    Expansion state is implicit -- an expanded type is simply absent while its class keys are
-    present. The value object is immutable: every operation returns a new definition, and the ones
-    that consult column structure take the `catalog`. Persisted (per user) via `to_storage` /
-    `from_storage`; fitted to a books with `adapt` before rendering."""
+    """The view to render: the ordered frontier of columns, each shown or removed. A removed column
+    keeps its place (rendered as a thin restore sliver) rather than leaving the table, so it stays at its
+    natural position in the hierarchy. Expansion is implicit -- an expanded summary is absent while its
+    members are present. Immutable: every operation returns a new definition, and the ones that consult
+    column structure take the `catalog`. Persisted (per user) via `to_storage` / `from_storage`; fitted
+    to a books with `adapt` before rendering."""
 
     column_keys : tuple[ BooksColumnKey, ... ] = ()
+    # The subset of `column_keys` the user removed -- kept in place (rendered as a restore sliver) rather
+    # than dropped, so a removed column holds its spot. A removed column is absorbed when its level is
+    # collapsed into a parent that now represents it.
+    removed_keys : tuple[ BooksColumnKey, ... ] = ()
 
-    def to_storage( self ) -> list[ str ]:
-        """This lens as a plain, storable value -- its column-key tokens. The definition owns its
-        own storage form, so a store (the session) keeps no knowledge of column keys."""
-        return [ key.token for key in self.column_keys ]
+    def to_storage( self ) -> dict:
+        """This lens as a plain, storable value -- the ordered column tokens and which of them are
+        removed. The definition owns its own storage form, so a store (the session) keeps no knowledge
+        of column keys."""
+        return { 'columns' : [ key.token for key in self.column_keys ],
+                 'removed' : [ key.token for key in self.removed_keys ] }
 
     @classmethod
     def from_storage( cls, data ) -> Optional[ 'BooksTableDefinition' ]:
-        """Rebuild a lens from a stored value (a list of key tokens), or None when absent. Unknown
-        tokens survive parsing and are dropped later, when the lens is adapted to a books (`adapt`)
-        -- so a stale token never breaks the read."""
-        if not isinstance( data, list ):
-            return None
-        return cls( tuple( BooksColumnKey( str( token ) ) for token in data ) )
+        """Rebuild a lens from a stored value, or None when absent. A bare list is a lens stored before
+        removed columns were tracked (columns only). Unknown tokens survive parsing and are dropped
+        later, when the lens is adapted to a books (`adapt`) -- so a stale token never breaks the read."""
+        if isinstance( data, dict ):
+            return cls( _key_tuple( data.get( 'columns' ) ), _key_tuple( data.get( 'removed' ) ) )
+        if isinstance( data, list ):
+            return cls( _key_tuple( data ) )
+        return None
 
     def adapt( self, catalog : 'BooksTableColumnCatalog' ) -> 'BooksTableDefinition':
-        """Fit to a books: drop any column it does not offer (an account that is not here, a class
-        it lacks), preserving order. Fall back to the default view if nothing survives. Only drops
-        -- never resurrects a deliberately hidden column."""
-        kept = tuple( key for key in self.column_keys if key in catalog )
+        """Fit to a books: drop any column it does not offer (an account that is not here, a class it
+        lacks), preserving order. Fall back to the default view if nothing survives. Both the frontier
+        and the removed subset are filtered, so the removed set stays within the frontier."""
+        kept    = tuple( key for key in self.column_keys if key in catalog )
+        removed = tuple( key for key in self.removed_keys if key in catalog )
         if not kept:
             return catalog.default_definition()
-        return BooksTableDefinition( kept )
+        return BooksTableDefinition( kept, removed )
 
     def expand( self, catalog : 'BooksTableColumnCatalog',
                 key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Replace a visible summary column with its members (the type's classes, or its accounts
-        where it has no class rung; a class's accounts), in place. No-op if not applicable."""
+        """Replace a shown summary column with its members (the type's classes, or its accounts where it
+        has no class rung; a class's accounts), in place. No-op if the column is removed, or not an
+        expandable summary."""
+        if key in self.removed_keys:
+            return self
         column = catalog.get( key )
         if not isinstance( column, BooksSummaryColumn ):
             return self
@@ -213,18 +231,19 @@ class BooksTableDefinition:
         if not members:
             return self
         expanded : list[ BooksColumnKey ] = []
-        for visible_key in self.column_keys:
-            if visible_key == key:
+        for frontier_key in self.column_keys:
+            if frontier_key == key:
                 expanded.extend( members )
             else:
-                expanded.append( visible_key )
+                expanded.append( frontier_key )
             continue
-        return BooksTableDefinition( tuple( expanded ) )
+        return BooksTableDefinition( tuple( expanded ), self.removed_keys )
 
     def collapse( self, catalog : 'BooksTableColumnCatalog',
                   key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Fold a column's level back into its parent: replace every visible descendant of the
-        column's parent with the single parent column, at the first such position. No-op for a
+        """Fold a column's level back into its parent: replace every frontier descendant of the parent
+        (shown or removed) with the single parent column -- shown -- at the first such position. A
+        removed descendant is then represented by the parent, so it leaves the removed set. No-op for a
         top-level column (no parent)."""
         column = catalog.get( key )
         if ( column is None ) or ( column.parent_key is None ):
@@ -232,30 +251,35 @@ class BooksTableDefinition:
         parent = column.parent_key
         collapsed : list[ BooksColumnKey ] = []
         inserted = False
-        for visible_key in self.column_keys:
-            if catalog.descends_from( visible_key, parent ):
+        for frontier_key in self.column_keys:
+            if catalog.descends_from( frontier_key, parent ):
                 if not inserted:
                     collapsed.append( parent )
                     inserted = True
             else:
-                collapsed.append( visible_key )
+                collapsed.append( frontier_key )
             continue
-        return BooksTableDefinition( tuple( collapsed ) )
-
-    def hide( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Remove a column from the visible set."""
         return BooksTableDefinition(
-            tuple( visible_key for visible_key in self.column_keys if visible_key != key ) )
+            tuple( collapsed ),
+            tuple( removed for removed in self.removed_keys
+                   if not catalog.descends_from( removed, parent ) ) )
 
-    def add( self, catalog : 'BooksTableColumnCatalog',
-             key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Append a column the books offers and is not already showing (the unhide / add op)."""
-        if ( key not in catalog ) or ( key in self.column_keys ):
+    def remove( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Mark a shown column removed -- it keeps its place (a restore sliver) rather than leaving the
+        frontier. No-op if it is not a shown column."""
+        if ( key not in self.column_keys ) or ( key in self.removed_keys ):
             return self
-        return BooksTableDefinition( self.column_keys + ( key, ) )
+        return BooksTableDefinition( self.column_keys, self.removed_keys + ( key, ) )
+
+    def restore( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Bring a removed column back into view -- clear it from the removed set, in its place."""
+        return BooksTableDefinition(
+            self.column_keys,
+            tuple( removed for removed in self.removed_keys if removed != key ) )
 
     def move( self, key : Optional[ BooksColumnKey ], offset : int ) -> 'BooksTableDefinition':
-        """Shift a column by `offset` positions (-1 left, +1 right), clamped within the row."""
+        """Shift a column by `offset` positions in the frontier (-1 left, +1 right), clamped within the
+        row. Removed slivers are part of the order, so a shown column can move past one."""
         keys = list( self.column_keys )
         if key not in keys:
             return self
@@ -264,7 +288,7 @@ class BooksTableDefinition:
         if ( target < 0 ) or ( target >= len( keys ) ):
             return self
         keys[ index ], keys[ target ] = keys[ target ], keys[ index ]
-        return BooksTableDefinition( tuple( keys ) )
+        return BooksTableDefinition( tuple( keys ), self.removed_keys )
 
 
 class BooksTableColumnCatalog:
@@ -361,9 +385,18 @@ class BooksTableColumnCatalog:
 
 
 @dataclass( frozen = True )
+class BooksTableColumn:
+    """One column as rendered: its catalog column and whether it is currently removed (shown as a thin
+    restore sliver rather than a full column with its figures)."""
+    column  : BooksColumn
+    removed : bool = False
+
+
+@dataclass( frozen = True )
 class BooksTableCell:
-    column : BooksColumn
-    value  : Decimal
+    column  : BooksColumn
+    value   : Optional[ Decimal ]   # None for a removed column's sliver -- no figure is shown
+    removed : bool = False
 
 
 @dataclass( frozen = True )
@@ -374,24 +407,32 @@ class BooksTableRow:
 
 @dataclass( frozen = True )
 class BooksTable:
-    """A rendered table: the visible columns and a row per period, each carrying a cell per
-    column."""
+    """A rendered table: the frontier columns (some shown as thin restore slivers) and a row per period,
+    each carrying a cell per column."""
 
-    columns : tuple[ BooksColumn, ... ]
+    columns : tuple[ BooksTableColumn, ... ]
     rows    : tuple[ BooksTableRow, ... ]
 
 
 def build_books_table( ledger : Ledger, chart : Chart, spans : list[ DateSpan ],
                        definition : BooksTableDefinition,
                        catalog : BooksTableColumnCatalog ) -> BooksTable:
-    """Render `definition` over `spans`: resolve each visible key to its catalog column and
-    compute its per-period cell. Keys absent from the catalog are skipped (callers adapt first)."""
-    columns = tuple( catalog.get( key ) for key in definition.column_keys if key in catalog )
+    """Render `definition` over `spans`: resolve each frontier key to its catalog column and compute its
+    per-period cell -- except a removed column, which renders as a value-less restore sliver. Keys absent
+    from the catalog are skipped (callers adapt first)."""
+    removed = set( definition.removed_keys )
+    columns = tuple(
+        BooksTableColumn( catalog.get( key ), key in removed )
+        for key in definition.column_keys if key in catalog )
     rows    = tuple(
         BooksTableRow(
             span  = span,
-            cells = tuple( BooksTableCell( column, _cell_value( column.key, ledger, chart, span ) )
-                           for column in columns ) )
+            cells = tuple(
+                BooksTableCell(
+                    rendered.column,
+                    None if rendered.removed else _cell_value( rendered.column.key, ledger, chart, span ),
+                    rendered.removed )
+                for rendered in columns ) )
         for span in spans
     )
     return BooksTable( columns = columns, rows = rows )

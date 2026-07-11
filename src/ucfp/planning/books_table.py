@@ -59,11 +59,9 @@ def _fragment_context( bookkeeper : Bookkeeper, catalog : BooksTableColumnCatalo
                        run : ProjectionRun, definition : BooksTableDefinition ) -> dict:
     period_spans = [ DateSpan( step.start_date, step.end_date ) for step in run.result.steps ]
     spans        = _spans_with_opening( period_spans )
-    visible      = set( definition.column_keys )
     return {
-        'books_table'     : build_books_table(
+        'books_table' : build_books_table(
             bookkeeper.ledger, bookkeeper.chart, spans, definition, catalog ),
-        'addable_columns' : [ column for column in catalog.columns() if column.key not in visible ],
     }
 
 
@@ -86,10 +84,10 @@ def _operate( definition : BooksTableDefinition, catalog : BooksTableColumnCatal
         return definition.expand( catalog, key )
     if operation == 'collapse':
         return definition.collapse( catalog, key )
-    if operation == 'hide':
-        return definition.hide( key )
-    if operation == 'add':
-        return definition.add( catalog, key )
+    if operation == 'remove':
+        return definition.remove( key )
+    if operation == 'restore':
+        return definition.restore( key )
     if operation == 'move_left':
         return definition.move( key, -1 )
     if operation == 'move_right':
