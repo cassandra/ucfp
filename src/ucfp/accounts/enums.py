@@ -25,7 +25,7 @@ class AccountType( LabeledEnum ):
     ASSET     = ( 'Asset'     , 'Resources owned (cash, investments, property).' )
     LIABILITY = ( 'Liability' , 'Obligations owed to others (loans, debts).' )
     EQUITY    = ( 'Equity'    , 'Residual interest: assets minus liabilities.' )
-    REVENUE   = ( 'Revenue'   , 'Inflows that increase equity (income).' )
+    REVENUE   = ( 'Income'    , 'Inflows that increase equity (income).' )
     EXPENSE   = ( 'Expense'   , 'Outflows that decrease equity (costs).' )
 
     @property
