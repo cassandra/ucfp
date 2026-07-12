@@ -67,8 +67,10 @@ def rename_plans( record: PlansRecord, label: str ) -> PlansRecord:
 def clone_plans( record: PlansRecord ) -> PlansRecord:
     """Mint a new Plans set holding a copy of `record`'s contents, named "<label> copy" -- the basis
     for tweaking a variant without disturbing the original. The copy goes through the typed load/save
-    seam, so it is fully independent of the source."""
-    clone = PlansRecord( organization = record.organization, label = f'{record.label} copy' )
+    seam, so it is fully independent of the source; it also inherits the source's acknowledged sections,
+    since a copy of a reviewed set has itself been reviewed."""
+    clone = PlansRecord( organization = record.organization, label = f'{record.label} copy',
+                         acknowledged_sections = list( record.acknowledged_sections ) )
     return save_plans( clone, load_plans( record ) )
 
 

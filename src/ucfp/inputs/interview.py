@@ -499,7 +499,10 @@ class DebtPlanSectionForm:
 class HomeExpensesSectionForm:
     """Home Expenses -- the per-property operating-cost matrix. It exposes the matrix pane (saved on
     its own through `PropertyExpensesView`); `apply` seeds the property expenses from the catalog on
-    Next, so a household that accepts the defaults still gets them without opening the pane."""
+    Next, so a household that accepts the defaults still gets them without opening the pane. `apply` is a
+    pure catalog merge (it ignores form input), so it also seeds on render -- see `seeds_on_render`."""
+
+    seeds_on_render = True
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -522,7 +525,10 @@ class VehicleExpensesSectionForm:
     running-costs table. Both save on their own (through `VehiclePlanView` and `VehicleExpensesView`).
     `apply` seeds the running costs from the catalog on Next once a vehicle plan exists, so a household
     that set up a plan and accepts the default running costs still records them; with no plan (no car),
-    Next just advances."""
+    Next just advances. `apply` ignores form input (a pure merge, a no-op without a plan), so it also
+    seeds on render -- see `seeds_on_render`."""
+
+    seeds_on_render = True
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -552,7 +558,10 @@ class LivingExpensesSectionForm:
     over the shared age-span timeline. It exposes the table pane (saved on its own through
     `RecurringExpensesView`); `apply` seeds the recurring expenses from the catalog on Next, so accepting
     the defaults still records them. Vehicle running costs are a separate per-car model (Vehicle
-    Expenses)."""
+    Expenses). `apply` is a pure catalog merge (it ignores form input), so it also seeds on render -- see
+    `seeds_on_render`."""
+
+    seeds_on_render = True
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -570,14 +579,21 @@ class LivingExpensesSectionForm:
             plans, recurring_expenses = merged_recurring_expenses( profile, plans ) )
 
 
+# Section keys other modules route to by name -- the interview owns its own key vocabulary, so the run
+# gate borrows these rather than re-spelling the strings (readiness maps its field issues onto them).
+SUBJECTS_STEP         = 'subjects'
+INCOME_STEP           = 'income'
+EXTERNAL_FACTORS_STEP = 'external-factors'
+
+
 # The interview's order. A section with a form is live; the rest are declared so the stepper shows
 # the full path ahead.
 SECTIONS = [
-    Section( 'subjects'    , 'Who this plan is for', form = SubjectsSectionForm,
+    Section( SUBJECTS_STEP  , 'Who this plan is for', form = SubjectsSectionForm,
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
+    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
@@ -600,7 +616,7 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
-    Section( 'external-factors', 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
+    Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html' ),
 ]

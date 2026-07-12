@@ -95,12 +95,18 @@ class FinancialForecastView( View ):
         profile     = load_profile( profile_record )
         plans       = load_plans( plans_record )
         assumptions = load_assumptions( assumptions_record )
-        issues = readiness_issues( profile, plans, assumptions )
+        # Make the chosen bundle the current one before gating, so a readiness redirect ("continue the
+        # interview") leads back to exactly these records rather than a stale session selection.
+        request.session_state.current_plans_uuid       = str( plans_record.uuid )
+        request.session_state.current_assumptions_uuid = str( assumptions_record.uuid )
+        request.session_state.to_session( request )
+        acknowledged = frozenset(
+            profile_record.acknowledged_sections ).union(
+            plans_record.acknowledged_sections, assumptions_record.acknowledged_sections )
+        issues = readiness_issues( profile, plans, assumptions, acknowledged )
         if issues:                                             # a doomed run: guide, do not run
             return render(
                 request, _HUB_TEMPLATE, self._context( request, form = form, issues = issues ) )
-        request.session_state.current_plans_uuid = str( plans_record.uuid )
-        request.session_state.to_session( request )
         try:
             with transaction.atomic():
                 run = run_and_capture(

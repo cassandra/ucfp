@@ -9,7 +9,7 @@ surfaces incompleteness the same way. Renders nothing when the bundle is ready.
   <p class="mb-2">These inputs need finishing first:</p>
   <ul class="mb-0">
     {% for issue in readiness_issues %}
-    <li>{{ issue.message }} <a href="{% url issue.fix_route %}">{{ issue.fix_label }}</a>.</li>
+    <li>{{ issue.message }} <a href="{{ issue.fix_url }}">{{ issue.fix_label }}</a>.</li>
     {% endfor %}
   </ul>
 </div>
