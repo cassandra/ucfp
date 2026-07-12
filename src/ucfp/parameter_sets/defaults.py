@@ -211,9 +211,9 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Pool Maintenance', 'pool-maintenance', upkeep, 30, '125', living, monthly, discrete, fixed, applies_to = owned ),
         _expense( 'Lawn Maintenance', 'lawn-maintenance', upkeep, 40, '125', living, monthly, discrete, fixed, applies_to = owned ),
         _durable( 'Lawn Tools', 'lawn-tools', upkeep, 50, 4, '500', 20, living, applies_to = owned ),
-        _expense( 'A/C Cost', 'ac-cost', upkeep, 60, '9000', living, every_15y, discrete, n_years, applies_to = owned ),
+        _expense( 'A/C Cost', 'ac-cost', upkeep, 60, '9000', living, every_15y, smooth, n_years, applies_to = owned ),
         _durable( 'Appliance', 'appliance', upkeep, 70, 3, '2900', 15, living, applies_to = owned ),
-        _expense( 'Roof Cost', 'roof-cost', upkeep, 80, '15000', living, every_20y, discrete, n_years, applies_to = owned ),
+        _expense( 'Roof Cost', 'roof-cost', upkeep, 80, '15000', living, every_20y, smooth, n_years, applies_to = owned ),
         # --- Property: rent -- a tenant's rented home only.
         _expense( 'Rent', 'rent', rent_cat, 10, '1500', living, monthly, discrete, fixed, applies_to = rented_only ),
         # Vehicle running costs seed the per-car running costs of the Vehicle Expenses step (scaled there
