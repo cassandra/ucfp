@@ -23,8 +23,8 @@ from dataclasses import dataclass
 
 from ucfp.accounts.books import AccountDisplayGroup, AccountDisplayPlacement, BooksOfAccount
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
-from ucfp.inputs.expenses import ordered_catalog
-from ucfp.inputs.profile.schemas import Profile
+from ucfp.inputs.expenses import is_renting, ordered_catalog, owned_property_handles
+from ucfp.inputs.profile.schemas import Profile, RENTED_HOME_HANDLE
 from ucfp.parameter_sets.enums import ExpenseCategory, ExpenseClass
 
 
@@ -123,7 +123,7 @@ def stamp_display_placements( books : BooksOfAccount, profile : Profile ) -> Non
     concern must not be able to fail run capture, so a missing catalog or any error leaves that pass
     unstamped (the table then falls back to the engine-class grouping). The failure is logged, not
     silenced, so a broken mapping surfaces rather than invisibly degrading."""
-    for stamp in ( lambda : _stamp_expense_placements( books ),
+    for stamp in ( lambda : _stamp_expense_placements( books, profile ),
                    lambda : _stamp_income_placements( books, profile ),
                    lambda : _stamp_asset_placements( books, profile ) ):
         try:
@@ -136,41 +136,84 @@ def stamp_display_placements( books : BooksOfAccount, profile : Profile ) -> Non
     return
 
 
-def _stamp_expense_placements( books : BooksOfAccount ) -> None:
-    """Group each expense account under its ExpenseClass surface then its ExpenseCategory section. A
-    catalog row supplies both for a catalog expense (matched on the base handle, so a property-scoped
-    handle groups with its catalog kind while its per-property account stays distinct); the Vehicle
-    pane's generated purchase and payment expenses carry no catalog row, so they map to the Vehicle
-    section directly -- joining the catalog's vehicle running costs instead of falling back to their
-    (Living) deductibility class."""
-    catalog = { row.handle : row for row in ordered_catalog() }
+def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> None:
+    """Group each expense account under its ExpenseClass surface then its ExpenseCategory section
+    (matched on the base handle, so a property-scoped handle groups with its catalog kind while its
+    per-property account stays distinct). A PROPERTY expense drills by *property first*: its account
+    handle names the property (`property-tax:rental-1`), so the path gains a per-property rung between
+    the class and the category (Property -> Pickfair -> Taxes & Insurance -> ...), the expense mirror
+    of income's per-subject rung. The Vehicle pane's generated purchase and payment expenses carry no
+    catalog row, so they map to the Vehicle section directly -- joining the catalog's vehicle running
+    costs instead of falling back to their (Living) deductibility class."""
+    catalog    = { row.handle : row for row in ordered_catalog() }
+    properties = _property_rungs( profile )
     for account in books.accounts:
         if account.handle is None:
             continue
-        base = _base_expense_handle( str( account.handle ) )
-        row  = catalog.get( base )
+        handle = str( account.handle )
+        base   = _base_expense_handle( handle )
+        row    = catalog.get( base )
         if row is not None:
-            account.display_placement = _expense_placement(
-                row.expense_class, row.category, row.order )
+            account.display_placement = _catalog_expense_placement( row, handle, properties )
         elif base in _GENERATED_VEHICLE_ORDER:
             account.display_placement = _expense_placement(
-                ExpenseClass.VEHICLE, ExpenseCategory.VEHICLE, _GENERATED_VEHICLE_ORDER[ base ] )
+                _class_group( ExpenseClass.VEHICLE ), _category_group( ExpenseCategory.VEHICLE ),
+                _GENERATED_VEHICLE_ORDER[ base ] )
         continue
     return
 
 
-def _expense_placement( expense_class, category, order ) -> AccountDisplayPlacement:
+def _property_rungs( profile : Profile ) -> dict:
+    """Each property's per-property rung by handle -- the owned dwellings in display order, then the
+    tenant's rented home. The rung labels the property by name (or "Rented Home"); its order places it
+    among the properties. Absent a property, an expense simply keeps its class -> category grouping."""
+    rungs = dict()
+    names = { asset.handle : asset.name for asset in profile.assets }
+    for order, handle in enumerate( owned_property_handles( profile ) ):
+        rungs[ handle ] = AccountDisplayGroup(
+            key = 'property-' + handle, label = names.get( handle, handle ), order = order )
+    if is_renting( profile ):
+        rungs[ RENTED_HOME_HANDLE ] = AccountDisplayGroup(
+            key = 'property-' + RENTED_HOME_HANDLE, label = 'Rented Home', order = len( rungs ) )
+    return rungs
+
+
+def _catalog_expense_placement( row, handle : str, properties : dict ) -> AccountDisplayPlacement:
+    """A catalog expense's placement: a PROPERTY expense drills class -> property -> category (the
+    property rung read from its scoped handle); every other expense drills class -> category."""
+    if row.expense_class is ExpenseClass.PROPERTY:
+        property_rung = properties.get( _property_of_expense_handle( handle ) )
+        if property_rung is not None:
+            return AccountDisplayPlacement(
+                path = ( _class_group( row.expense_class ), property_rung,
+                         _category_group( row.category ) ),
+                order = row.order )
+    return _expense_placement(
+        _class_group( row.expense_class ), _category_group( row.category ), row.order )
+
+
+def _property_of_expense_handle( account_handle : str ):
+    """The property handle a property-scoped account handle carries (the part after the separator), or
+    None for an unscoped handle (a non-property expense)."""
+    parts = account_handle.split( _PROPERTY_EXPENSE_HANDLE_SEP, 1 )
+    return parts[ 1 ] if len( parts ) == 2 else None
+
+
+def _class_group( expense_class ) -> AccountDisplayGroup:
+    return AccountDisplayGroup( key   = 'class-' + expense_class.name.lower(),
+                                label = expense_class.label, order = _CLASS_ORDER[ expense_class ] )
+
+
+def _category_group( category ) -> AccountDisplayGroup:
+    return AccountDisplayGroup( key   = 'cat-' + category.name.lower(),
+                                label = category.label, order = _CATEGORY_ORDER[ category ] )
+
+
+def _expense_placement( class_group, category_group, order ) -> AccountDisplayPlacement:
     """The two-rung expense placement: an ExpenseClass surface then an ExpenseCategory section, with
     `order` ranking the account within its section. Keyed by the enum names, so a catalog expense and a
     generated one that share a class and category land in the very same group."""
-    return AccountDisplayPlacement(
-        path = ( AccountDisplayGroup( key   = 'class-' + expense_class.name.lower(),
-                                      label = expense_class.label,
-                                      order = _CLASS_ORDER[ expense_class ] ),
-                 AccountDisplayGroup( key   = 'cat-' + category.name.lower(),
-                                      label = category.label,
-                                      order = _CATEGORY_ORDER[ category ] ) ),
-        order = order )
+    return AccountDisplayPlacement( path = ( class_group, category_group ), order = order )
 
 
 def _stamp_income_placements( books : BooksOfAccount, profile : Profile ) -> None:
