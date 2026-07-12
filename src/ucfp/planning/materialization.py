@@ -36,6 +36,8 @@ from ucfp.jurisdiction.law import StatuteProfile
 
 from ucfp.parameter_sets.enums import PropertyContext, Realization
 
+from ucfp.planning.display_placement import CAR_PAYMENTS_HANDLE, CAR_PURCHASE_HANDLE
+
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.expenses import OWNED_PROPERTY_CONTEXT
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
@@ -298,13 +300,14 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
             name = 'Car purchase', expense_tax_class = ExpenseTaxClass.LIVING,
             amounts = Schedule.constant( WindowedAmount( lump * cars ) ),
             cadence = Recurrence( Duration( plan.recurrence_years, TimeUnit.YEAR ) ),
-            window = window ) )
+            window = window, handle = CAR_PURCHASE_HANDLE ) )
     if financed_lifetime > 0:
         monthly = financed_lifetime * cars / ( plan.recurrence_years * 12 )
         items.append( ExpenseItem(
             name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
             amounts = Schedule.constant( WindowedAmount( monthly ) ),
-            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ), window = window ) )
+            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ), window = window,
+            handle = CAR_PAYMENTS_HANDLE ) )
     return items
 
 

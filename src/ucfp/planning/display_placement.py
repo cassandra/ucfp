@@ -40,6 +40,14 @@ _UNMAPPED_ORDER = 10 ** 6
 _CLASS_ORDER    = { klass : index for index, klass in enumerate( ExpenseClass ) }
 _CATEGORY_ORDER = { category : index for index, category in enumerate( ExpenseCategory ) }
 
+# The Vehicle pane generates the car purchase and its financing payments outside the expense catalog
+# (materialization mints these stable handles for their accounts). They belong in the same Vehicle
+# section as the catalog running costs, leading them (ordered ahead of insurance at 10) -- the
+# acquisition before the operating costs.
+CAR_PURCHASE_HANDLE = 'car-purchase'
+CAR_PAYMENTS_HANDLE = 'car-payments'
+_GENERATED_VEHICLE_ORDER = { CAR_PURCHASE_HANDLE : 0, CAR_PAYMENTS_HANDLE : 5 }
+
 
 @dataclass( frozen = True )
 class _Grouping:
@@ -112,23 +120,38 @@ def stamp_display_placements( books : BooksOfAccount, profile : Profile ) -> Non
 
 
 def _stamp_expense_placements( books : BooksOfAccount ) -> None:
+    """Group each expense account under its ExpenseClass surface then its ExpenseCategory section. A
+    catalog row supplies both for a catalog expense; the Vehicle pane's generated purchase and payment
+    expenses carry no catalog row, so they map to the Vehicle section directly -- joining the catalog's
+    vehicle running costs instead of falling back to their (Living) deductibility class."""
     catalog = { row.handle : row for row in ordered_catalog() }
     for account in books.accounts:
         if account.handle is None:
             continue
-        row = catalog.get( str( account.handle ) )
-        if row is None:
-            continue
-        account.display_placement = AccountDisplayPlacement(
-            path = ( AccountDisplayGroup( key   = 'class-' + row.expense_class.name.lower(),
-                                          label = row.expense_class.label,
-                                          order = _CLASS_ORDER[ row.expense_class ] ),
-                     AccountDisplayGroup( key   = 'cat-' + row.category.name.lower(),
-                                          label = row.category.label,
-                                          order = _CATEGORY_ORDER[ row.category ] ) ),
-            order = row.order )
+        handle = str( account.handle )
+        row    = catalog.get( handle )
+        if row is not None:
+            account.display_placement = _expense_placement(
+                row.expense_class, row.category, row.order )
+        elif handle in _GENERATED_VEHICLE_ORDER:
+            account.display_placement = _expense_placement(
+                ExpenseClass.VEHICLE, ExpenseCategory.VEHICLE, _GENERATED_VEHICLE_ORDER[ handle ] )
         continue
     return
+
+
+def _expense_placement( expense_class, category, order ) -> AccountDisplayPlacement:
+    """The two-rung expense placement: an ExpenseClass surface then an ExpenseCategory section, with
+    `order` ranking the account within its section. Keyed by the enum names, so a catalog expense and a
+    generated one that share a class and category land in the very same group."""
+    return AccountDisplayPlacement(
+        path = ( AccountDisplayGroup( key   = 'class-' + expense_class.name.lower(),
+                                      label = expense_class.label,
+                                      order = _CLASS_ORDER[ expense_class ] ),
+                 AccountDisplayGroup( key   = 'cat-' + category.name.lower(),
+                                      label = category.label,
+                                      order = _CATEGORY_ORDER[ category ] ) ),
+        order = order )
 
 
 def _stamp_income_placements( books : BooksOfAccount, profile : Profile ) -> None:
