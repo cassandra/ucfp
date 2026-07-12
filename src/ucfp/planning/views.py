@@ -95,7 +95,10 @@ class FinancialForecastView( View ):
         profile     = load_profile( profile_record )
         plans       = load_plans( plans_record )
         assumptions = load_assumptions( assumptions_record )
-        issues = readiness_issues( profile, plans, assumptions )
+        acknowledged = frozenset(
+            profile_record.acknowledged_sections ).union(
+            plans_record.acknowledged_sections, assumptions_record.acknowledged_sections )
+        issues = readiness_issues( profile, plans, assumptions, acknowledged )
         if issues:                                             # a doomed run: guide, do not run
             return render(
                 request, _HUB_TEMPLATE, self._context( request, form = form, issues = issues ) )

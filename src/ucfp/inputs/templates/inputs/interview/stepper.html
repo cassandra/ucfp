@@ -2,16 +2,24 @@
 The interview's progress rail. Re-rendered on every swap from the *applicable* sections, so a
 section that prior answers add or remove appears or disappears here. A live section (one with a
 form) that is not the current one is a revisit link (async, into the section pane); upcoming
-sections are plain. The element ids come from the view (stepper_target / section_target).
+sections are plain. A section the user has already seen is marked acknowledged. The element ids come
+from the view (stepper_target / section_target).
 {% endcomment %}
 <ol id="{{ stepper_target }}" class="list-group list-group-numbered">
   {% for section in sections %}
-  <li class="list-group-item{% if section.key == current_section.key %} active{% endif %}">
-    {% if section.form and section.key != current_section.key %}
-    <a data-async="#{{ section_target }}"
-       href="{% url 'interview_section' section=section.key %}">{{ section.title }}</a>
+  <li class="list-group-item d-flex justify-content-between align-items-center{% if section.key == current_section.key %} active{% endif %}">
+    <span>
+      {% if section.form and section.key != current_section.key %}
+      <a data-async="#{{ section_target }}"
+         href="{% url 'interview_section' section=section.key %}">{{ section.title }}</a>
+      {% else %}
+      {{ section.title }}
+      {% endif %}
+    </span>
+    {% if section.key in acknowledged_sections %}
+    <span class="text-success small" title="Reviewed" aria-label="Reviewed">&check;</span>
     {% else %}
-    {{ section.title }}
+    <span class="text-muted small" title="Not yet reviewed" aria-label="Not yet reviewed">&hellip;</span>
     {% endif %}
   </li>
   {% endfor %}

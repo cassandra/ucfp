@@ -364,13 +364,14 @@ class InterviewView( View ):
     def _context( self, request, sections, section, form ):
         flow = flow_of( section )
         return {
-            'sections'        : sections,
-            'current_section' : section,
-            'flow_title'      : flow_title( flow ),
-            'flow_heading'    : self._flow_heading( request, flow ),
-            'form'            : form,
-            'section_target'  : self._SECTION_TARGET,
-            'stepper_target'  : self._STEPPER_TARGET,
+            'sections'             : sections,
+            'current_section'      : section,
+            'acknowledged_sections': self._flow_record( request, section ).acknowledged_section_keys,
+            'flow_title'           : flow_title( flow ),
+            'flow_heading'         : self._flow_heading( request, flow ),
+            'form'                 : form,
+            'section_target'       : self._SECTION_TARGET,
+            'stepper_target'       : self._STEPPER_TARGET,
         }
 
     @staticmethod

@@ -12,13 +12,16 @@ it owns), while materialization stays the structural backstop that raises at use
 flow (`fix_route`) that resolves it -- a URL name taking no arguments, so a template can link straight
 to it.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from django.urls import reverse
 
 from organization.models import Organization
 
 from ucfp.inputs.assumptions.repository import assumptions_for
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import DRIFT_LEAD_IN, compatibility_issues
+from ucfp.inputs.interview import applicable_sections
 from ucfp.inputs.plans.repository import plans_for
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.repository import profiles_for
@@ -42,21 +45,47 @@ def input_availability( organization : Organization ) -> dict:
 
 @dataclass( frozen = True )
 class ReadinessIssue:
-    """One reason a bundle cannot run yet: a user-facing `message` and the input flow that resolves it
-    (`fix_route` is a URL name taking no arguments; `fix_label` is the link text)."""
-    message   : str
-    fix_label : str
-    fix_route : str
+    """One reason a bundle cannot run yet: a user-facing `message` and the input step that resolves it.
+    `fix_route` is a URL name and `fix_route_kwargs` its arguments (empty for a flow-entry link, or the
+    section key to link straight to one interview step); `fix_label` is the link text. `fix_url` resolves
+    the two for a template."""
+    message          : str
+    fix_label        : str
+    fix_route        : str
+    fix_route_kwargs : dict = field( default_factory = dict )
+
+    @property
+    def fix_url( self ) -> str:
+        return reverse( self.fix_route, kwargs = self.fix_route_kwargs )
 
 
 def readiness_issues(
-        profile : Profile, plans : Plans, assumptions : Assumptions ) -> list[ ReadinessIssue ]:
-    """Every reason the bundle is not ready to run, as user-facing issues -- empty when it is ready.
-    The single place that enumerates the run's preconditions, so the run surface need not re-spell
-    them and materialization's raises stay a backstop."""
-    return ( _profile_issues( profile )
+        profile : Profile, plans : Plans, assumptions : Assumptions,
+        acknowledged_sections : frozenset = frozenset() ) -> list[ ReadinessIssue ]:
+    """Every reason the bundle is not ready to run, as user-facing issues -- empty when it is ready. The
+    single place that enumerates the run's preconditions, so the run surface need not re-spell them and
+    materialization's raises stay a backstop. `acknowledged_sections` is the union of the chosen bundle's
+    records' seen sections; an unreviewed step gates the run so no section's defaults slip in unseen."""
+    return ( _acknowledgment_issues( profile, acknowledged_sections )
+             + _profile_issues( profile )
              + _assumptions_issues( assumptions )
              + _plans_issues( profile, plans ) )
+
+
+def _acknowledgment_issues(
+        profile : Profile, acknowledged_sections : frozenset ) -> list[ ReadinessIssue ]:
+    """The first applicable interview step (in Profile -> Plans -> Assumptions order) the user has not yet
+    seen, linking straight to it to resume the guided flow. Only live (form-backed) steps gate -- a
+    declared placeholder is never presented, so it can never be acknowledged."""
+    for section in applicable_sections( profile ):
+        if section.form is not None and section.key not in acknowledged_sections:
+            return [ ReadinessIssue(
+                message          = f'"{section.title}" has not been reviewed yet -- continue the '
+                                   'interview to finish setup.',
+                fix_label        = 'Continue the interview',
+                fix_route        = 'interview_section',
+                fix_route_kwargs = { 'section' : section.key } ) ]
+    return list()
 
 
 def _profile_issues( profile : Profile ) -> list[ ReadinessIssue ]:
