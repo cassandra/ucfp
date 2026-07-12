@@ -28,6 +28,13 @@ from ucfp.inputs.profile.repository import profiles_for
 from ucfp.inputs.profile.schemas import Profile
 
 
+# The interview step (an `interview_section` key) each field issue routes to, so its link lands on the
+# page that resolves it. Drift is not one step -- it keeps a flow-level link.
+_FILING_STEP   = 'subjects'
+_CLAIMING_STEP = 'income'
+_FACTORS_STEP  = 'external-factors'
+
+
 def input_availability( organization : Organization ) -> dict:
     """Which of the three planning inputs `organization` has at least one of, plus whether all are
     present (`inputs_available`) -- the template context for the existence gate every planning feature
@@ -91,19 +98,21 @@ def _acknowledgment_issues(
 def _profile_issues( profile : Profile ) -> list[ ReadinessIssue ]:
     if profile.filing_status is None:
         return [ ReadinessIssue(
-            message   = 'Your situation needs a filing status before a forecast can run.',
-            fix_label = 'Finish your situation',
-            fix_route = 'flow_profile' ) ]
+            message          = 'Your situation needs a filing status before a forecast can run.',
+            fix_label        = 'Finish your situation',
+            fix_route        = 'interview_section',
+            fix_route_kwargs = { 'section' : _FILING_STEP } ) ]
     return list()
 
 
 def _assumptions_issues( assumptions : Assumptions ) -> list[ ReadinessIssue ]:
     if assumptions.economics is None or assumptions.tax_projection is None:
         return [ ReadinessIssue(
-            message   = 'These assumptions are missing their external factors (economic outlook and '
-                        'tax projection). Open them to finish setup.',
-            fix_label = 'Finish your assumptions',
-            fix_route = 'flow_assumptions' ) ]
+            message          = 'These assumptions are missing their external factors (economic outlook '
+                               'and tax projection). Open them to finish setup.',
+            fix_label        = 'Finish your assumptions',
+            fix_route        = 'interview_section',
+            fix_route_kwargs = { 'section' : _FACTORS_STEP } ) ]
     return list()
 
 
@@ -129,9 +138,10 @@ def _claiming_issues( profile : Profile, plans : Plans ) -> list[ ReadinessIssue
                 if entry.government_pension_claiming_date is not None }
     names   = { subject.handle : subject.name for subject in profile.subjects }
     return [ ReadinessIssue(
-        message   = f'Social Security for {names.get( entitlement.subject_handle, "a person" )} needs '
-                    'a claiming date.',
-        fix_label = 'Set retirement timing',
-        fix_route = 'flow_plans' )
+        message          = f'Social Security for {names.get( entitlement.subject_handle, "a person" )} '
+                           'needs a claiming date.',
+        fix_label        = 'Set retirement timing',
+        fix_route        = 'interview_section',
+        fix_route_kwargs = { 'section' : _CLAIMING_STEP } )
         for entitlement in profile.government_pension
         if entitlement.subject_handle not in claimed ]
