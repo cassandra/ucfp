@@ -306,21 +306,37 @@ class BaselineBuilder:
         return None
 
     def _seed_opening_balances( self, bookkeeper : Bookkeeper, holdings : list ) -> None:
-        """Post the opening transaction: each holding's value (increasing the asset) and each
-        loan's balance (a credit, the liability), with Opening Balances absorbing the residual
-        so the books balance from t0. Each holding's embedded gain (value - basis) self-balances
-        against its own Unrealized Gains equity, so only the bases and loans hit the plug."""
-        chart = bookkeeper.chart
-        opening_postings = list()
+        """Seed each holding and each loan with its *own* opening transaction, so an opening row's
+        counterpart is the equity seed (Opening Balances) rather than every other opening posting.
+        Every transaction is dated the day before the forecast start, so the books stand from t0;
+        each balances against Opening Balances, which absorbs its residual (the cost basis or the
+        loan balance -- a holding's embedded gain nets to zero against Unrealized Gains within its
+        own transaction)."""
+        chart            = bookkeeper.chart
+        opening_balances = chart.system_account( SystemAccountRole.OPENING_BALANCES )
+        opening_date     = self._parameters.start_date - timedelta( days = 1 )
         for holding, value, cost_basis in holdings:
-            opening_postings += self._opening_value_postings( chart, holding, value, cost_basis )
+            self._record_opening(
+                bookkeeper, opening_date,
+                self._opening_value_postings( chart, holding, value, cost_basis ), opening_balances )
             continue
-        opening_postings += [ ( loan.account, loan.parameters.opening_balance ) for loan in self._loans ]
-        plug = -sum( ( amount for _account, amount in opening_postings ), Decimal( '0' ) )
-        opening_postings.append(
-            ( chart.system_account( SystemAccountRole.OPENING_BALANCES ), plug ) )
-        if any( amount != 0 for _account, amount in opening_postings ):
-            bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), opening_postings )
+        for loan in self._loans:
+            self._record_opening(
+                bookkeeper, opening_date,
+                [ ( loan.account, loan.parameters.opening_balance ) ], opening_balances )
+            continue
+        return
+
+    def _record_opening( self, bookkeeper : Bookkeeper, opening_date : date,
+                         postings : list[ tuple[ Account, Decimal ] ],
+                         opening_balances : Account ) -> None:
+        """Record one account's opening `postings` as a balanced transaction, with Opening Balances
+        absorbing their residual. Skips a fully-zero seed (a zero-basis holding contributes nothing
+        here -- its whole value is the embedded gain, already balanced against Unrealized Gains)."""
+        plug     = -sum( ( amount for _account, amount in postings ), Decimal( '0' ) )
+        balanced = postings + [ ( opening_balances, plug ) ]
+        if any( amount != 0 for _account, amount in balanced ):
+            bookkeeper.record( opening_date, balanced, description = 'Opening balance' )
         return
 
     def _opening_value_postings( self, chart : Chart, holding : Account, value : Decimal,

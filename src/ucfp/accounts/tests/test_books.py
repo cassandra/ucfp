@@ -123,5 +123,37 @@ class BookkeeperTests( unittest.TestCase ):
         bookkeeper.assert_balanced()
 
 
+class JournalTests( unittest.TestCase ):
+    """The results-page drill-down: the plain per-account journal, and the market-value fold that
+    combines a holding with its valuation companion so the running balance tracks market value --
+    the same fold the Ledger applies to the holding's results column."""
+
+    def test_account_journal_lists_only_that_accounts_postings( self ):
+        bookkeeper, _cash, stocks, _lt_gains = _seed_books()
+        chart      = bookkeeper.chart
+        valuation  = chart.valuation_of( stocks )
+        unrealized = chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
+        bookkeeper.record(                                          # appreciation lands in the companion
+            LATER, [ ( valuation, Decimal( '-100000' ) ), ( unrealized, Decimal( '100000' ) ) ] )
+        rows = bookkeeper.journal.account_entries( stocks )
+        self.assertEqual( len( rows ), 1 )                          # the holding sees only its cost basis
+        self.assertEqual( rows[ -1 ].balance, Decimal( '500000' ) )
+
+    def test_market_value_journal_folds_valuation_and_tracks_market_value( self ):
+        bookkeeper, _cash, stocks, _lt_gains = _seed_books()
+        chart, ledger = bookkeeper.chart, bookkeeper.ledger
+        valuation  = chart.valuation_of( stocks )
+        unrealized = chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
+        bookkeeper.record(
+            LATER, [ ( valuation, Decimal( '-100000' ) ), ( unrealized, Decimal( '100000' ) ) ] )
+        rows = bookkeeper.journal.market_value_entries( stocks, valuation )
+        self.assertEqual( len( rows ), 2 )                          # opening cost, then the appreciation
+        self.assertEqual( rows[ 0 ].balance, Decimal( '500000' ) )  # market value after the opening
+        self.assertEqual( rows[ -1 ].balance, ledger.market_value( stocks ) )   # folds to market value
+        self.assertEqual( rows[ -1 ].balance, Decimal( '600000' ) )
+        self.assertIn( 'Unrealized Gains', rows[ -1 ].counterparts )
+        self.assertNotIn( 'Valuation', rows[ -1 ].counterparts )    # the folded companion is not a counterpart
+
+
 if __name__ == '__main__':
     unittest.main()

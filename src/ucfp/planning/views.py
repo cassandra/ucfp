@@ -225,5 +225,16 @@ class BooksTableJournalView( ModalView ):
         return self.modal_response( request, context = {
             'record'  : record,
             'account' : account,
-            'entries' : bookkeeper.journal.account_entries( account ),
+            'entries' : self._entries( bookkeeper, account ),
         } )
+
+    @staticmethod
+    def _entries( bookkeeper, account ):
+        """The account's journal rows: for an appreciating holding, its own postings folded with its
+        valuation companion's so the running balance tracks market value; for any other account, its
+        plain per-account journal."""
+        valuation_account = bookkeeper.chart.valuation_of( account )
+        journal           = bookkeeper.journal
+        if valuation_account is None:
+            return journal.account_entries( account )
+        return journal.market_value_entries( account, valuation_account )
