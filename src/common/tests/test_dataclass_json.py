@@ -26,7 +26,7 @@ from ucfp.jurisdiction.law import TaxProjection
 
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
-    AssetProfile, CommittedObligation, Debt, GovernmentPensionEntitlement,
+    AssetProfile, Debt, GovernmentPensionEntitlement,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
     VehiclePlan, VehicleRunningCost, Contribution, CreditCardPlan, DrawdownPolicy,
@@ -67,10 +67,6 @@ def _sample_profile():
                                          normal_start_age = 65 ) ],
         government_pension = [ GovernmentPensionEntitlement(
             subject_handle = 'you', monthly_at_normal_age = Decimal( '2800.50' ) ) ],
-        obligations = [ CommittedObligation( handle = 'tuition', name = 'Tuition',
-                                             amount = Decimal( '1500' ),
-                                             cadence = Duration( 1, TimeUnit.MONTH ),
-                                             expense_tax_class = ExpenseTaxClass.LIVING ) ],
     )
 
 
@@ -97,17 +93,17 @@ def _sample_plans():
             pension_start = date( 2038, 1, 1 ) ) ],
         expense_spans = [ 70, 80, None ],
         recurring_expenses = [ RecurringExpense(
-            name = 'Travel', category = ExpenseCategory.DISCRETIONARY,
+            name = 'Travel', handle = 'travel', category = ExpenseCategory.DISCRETIONARY,
             expense_tax_class = ExpenseTaxClass.LIVING, interval = Duration( 1, TimeUnit.YEAR ),
             amounts = [ Decimal( '900' ), Decimal( '500' ), Decimal( '200' ) ] ) ],
         property_expenses = [ PropertyExpense(
-            name = 'Property tax', category = ExpenseCategory.TAXES_INSURANCE,
+            name = 'Property tax', handle = 'property-tax', category = ExpenseCategory.TAXES_INSURANCE,
             expense_tax_class = ExpenseTaxClass.SALT, interval = Duration( 1, TimeUnit.MONTH ),
             applies_to = ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ),
             default_amount = Decimal( '6000' ),
             overrides = { 'home': Decimal( '6500' ) } ),
             PropertyExpense(
-                name = 'Appliance', category = ExpenseCategory.MAINTENANCE_REPAIR,
+                name = 'Appliance', handle = 'appliance', category = ExpenseCategory.MAINTENANCE_REPAIR,
                 expense_tax_class = ExpenseTaxClass.LIVING,
                 applies_to = ( PropertyContext.RESIDENCE, ), interval = Duration( 1, TimeUnit.YEAR ),
                 default_amount = Decimal( '580' ), count = 3, cost_each = Decimal( '2900' ),
@@ -129,10 +125,11 @@ def _sample_plans():
             start_date = date( 2031, 1, 1 ), down_payment = Decimal( '7000' ),
             running_costs = [
                 VehicleRunningCost(
-                    name = 'Gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
+                    name = 'Gasoline', handle = 'gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
                     interval = Duration( 1, TimeUnit.WEEK ), amount = Decimal( '20' ) ),
                 VehicleRunningCost(
-                    name = 'Auto Insurance', expense_tax_class = ExpenseTaxClass.LIVING,
+                    name = 'Auto Insurance', handle = 'auto-insurance',
+                    expense_tax_class = ExpenseTaxClass.LIVING,
                     interval = Duration( 6, TimeUnit.MONTH ), amount = Decimal( '750' ),
                     realization = Realization.DISCRETE, cadence_domain = CadenceDomain.MO_YR ) ] ),
         drawdown = DrawdownPolicy( cash_floor = Decimal( '20000' ), cash_ceiling = Decimal( '50000' ),
@@ -177,14 +174,14 @@ class DataclassJsonRoundTripTest( SimpleTestCase ):
         # tuple (a household row) survives as ().
         catalog = ExpenseCatalog( expenses = [
             ExpenseType(
-                name = 'Property Tax', expense_class = ExpenseClass.PROPERTY,
+                name = 'Property Tax', handle = 'property-tax', expense_class = ExpenseClass.PROPERTY,
                 category = ExpenseCategory.TAXES_INSURANCE, order = 10,
                 expense_tax_class = ExpenseTaxClass.SALT, default_amount = Decimal( '6000' ),
                 interval = Duration( 1, TimeUnit.YEAR ), realization = Realization.DISCRETE,
                 cadence_domain = CadenceDomain.MO_YR,
                 applies_to = ( PropertyContext.RESIDENCE, PropertyContext.RENTAL ) ),
             ExpenseType(
-                name = 'Umbrella Insurance', expense_class = ExpenseClass.LIVING,
+                name = 'Umbrella Insurance', handle = 'umbrella-insurance', expense_class = ExpenseClass.LIVING,
                 category = ExpenseCategory.MISCELLANEOUS, order = 10,
                 expense_tax_class = ExpenseTaxClass.LIVING, default_amount = Decimal( '500' ),
                 interval = Duration( 1, TimeUnit.YEAR ), realization = Realization.DISCRETE,

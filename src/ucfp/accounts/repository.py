@@ -10,7 +10,8 @@ from typing import Optional
 
 from django.db import transaction
 
-from .books import Account, BooksOfAccount, Entry, Transaction
+from .books import (
+    Account, AccountDisplayGroup, AccountDisplayPlacement, BooksOfAccount, Entry, Transaction )
 from .models import AccountRecord, BooksOfAccountRecord, EntryRecord, TransactionRecord
 from .schemas import Handle
 from organization.models import Organization
@@ -23,6 +24,27 @@ def _handle_string( handle : Optional[ Handle ] ) -> Optional[ str ]:
     if handle is None:
         return None
     return str( handle )
+
+
+def _placement_json( placement : Optional[ AccountDisplayPlacement ] ) -> Optional[ dict ]:
+    """An account's display placement as plain JSON, or None. Opaque presentation data, stored so the
+    grouping computed once at capture survives a reload."""
+    if placement is None:
+        return None
+    return { 'path'  : [ { 'key' : group.key, 'label' : group.label, 'order' : group.order }
+                         for group in placement.path ],
+             'order' : placement.order }
+
+
+def _placement_from_json( data : Optional[ dict ] ) -> Optional[ AccountDisplayPlacement ]:
+    """Rebuild a display placement from its stored JSON, or None when absent."""
+    if not data:
+        return None
+    return AccountDisplayPlacement(
+        path  = tuple( AccountDisplayGroup( key = group[ 'key' ], label = group[ 'label' ],
+                                            order = group[ 'order' ] )
+                       for group in data.get( 'path', () ) ),
+        order = data.get( 'order', 0 ) )
 
 
 class BooksOfAccountRepository:
@@ -55,6 +77,7 @@ class BooksOfAccountRepository:
                 owner_handle      = _handle_string( account.owner_handle ),
                 description       = account.description,
                 closed            = account.closed,
+                display_placement = _placement_json( account.display_placement ),
             )
             continue
         for txn in books.transactions:
@@ -132,5 +155,6 @@ class BooksOfAccountRepository:
             description       = record.description,
             closed            = record.closed,
             account_uuid      = record.uuid,
+            display_placement = _placement_from_json( record.display_placement ),
         )
         return account_by_id[ record.id ]

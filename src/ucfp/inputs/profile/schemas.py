@@ -9,8 +9,8 @@ Naming: a type that mirrors a Forecast engine concept keeps the engine noun with
 boundary, while staying a distinct type the profile layer owns (so the stored format is
 decoupled from engine churn). A type with no single engine analog -- the engine is
 deliberately generic for income and expenses -- takes its own user-facing name
-(`IncomeFlow`, `CommittedObligation`). Shared vocabulary (enums, `Duration`)
-is imported from the engine; engine parameter dataclasses are not.
+(`IncomeFlow`). Shared vocabulary (enums, `Duration`) is imported from the engine;
+engine parameter dataclasses are not.
 
 Section comments mark the user-facing groupings; they are kept as a seam guide for a future
 breakdown, without (yet) a wrapper type per section.
@@ -22,7 +22,7 @@ from typing import Optional
 
 from common.recurrence import Duration
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass, RealPropertyType
 from ucfp.forecast.parameters import WindowedAmount
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
 
@@ -151,21 +151,6 @@ class GovernmentPensionEntitlement:
     monthly_at_normal_age: Decimal
 
 
-# --- Committed obligations ------------------------------------------------
-
-@dataclass( frozen = True )
-class CommittedObligation:
-    """A determined (non-discretionary) non-loan outflow -- rent, premium, tuition, property
-    tax. The fact subset of the engine's generic expense flows. `cadence` keeps the natural
-    period (rent is monthly); `through` bounds a time-limited commitment."""
-    handle: str
-    name: str
-    amount: Decimal
-    cadence: Duration
-    expense_tax_class: ExpenseTaxClass
-    through: Optional[ date ] = None
-
-
 # --- Aggregate ------------------------------------------------------------
 
 @dataclass( frozen = True )
@@ -191,5 +176,3 @@ class Profile:
     # Retirement entitlements
     pensions: list[ PensionEntitlement ] = field( default_factory = list )
     government_pension: list[ GovernmentPensionEntitlement ] = field( default_factory = list )
-    # Committed obligations
-    obligations: list[ CommittedObligation ] = field( default_factory = list )

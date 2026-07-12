@@ -27,6 +27,7 @@ from uuid import UUID
 from common.date_span import DateSpan
 from common.labeled_enum import LabeledEnum
 
+from .books import AccountDisplayGroup, AccountDisplayPlacement
 from .chart import Chart
 from .enums import (
     AccountClass,
@@ -73,6 +74,12 @@ _TYPE_DISPLAY_ORDER  = (
     AccountType.EXPENSE,
 )
 _DEFAULT_SUPPRESSED_TYPES = frozenset( ( AccountType.EQUITY, ) )
+
+# The order value the engine-class fallback assigns its rungs and leaves: large, so a stamped placement
+# (with small, input-derived orders) always sorts ahead of the fallback groups, which then keep their
+# account order among themselves (a stable sort by order preserves first appearance for equal orders).
+# Mirrors `_UNMAPPED_ORDER` in planning/display_placement.py -- the two must stay in lockstep.
+_FALLBACK_ORDER = 10 ** 6
 
 
 @dataclass( frozen = True )
@@ -159,8 +166,9 @@ class BooksLeafColumn( BooksColumn ):
 
 @dataclass( frozen = True )
 class BooksSummaryColumn( BooksColumn ):
-    """A rollup column -- a type or class total. Expanding it replaces it with its `member_keys`
-    (a type's classes, or its accounts where it has no class rung; a class's accounts)."""
+    """A rollup column -- a type or class total. Expanding it reveals its `member_keys` after it, the
+    summary staying put as the group header (a type's classes, or its accounts where it has no class
+    rung; a class's accounts)."""
 
     member_keys : tuple[ BooksColumnKey, ... ] = ()
 
@@ -169,102 +177,149 @@ class BooksSummaryColumn( BooksColumn ):
         return bool( self.member_keys )
 
 
+def _key_tuple( tokens ) -> tuple:
+    """A tuple of `BooksColumnKey`s from a list of stored tokens (empty for a missing/non-list value)."""
+    return tuple( BooksColumnKey( str( token ) ) for token in tokens ) if isinstance( tokens, list ) else ()
+
+
+def _subtree_block( catalog : 'BooksTableColumnCatalog', keys : list,
+                    root_key : BooksColumnKey ) -> tuple[ int, int ]:
+    """The half-open index range `[start, end)` a column and its descendants occupy in `keys`. In a
+    well-formed (pre-order) frontier a column's descendants are exactly the run right after it, so the
+    block is a column plus the contiguous descendants that follow."""
+    start = keys.index( root_key )
+    end   = start + 1
+    while ( end < len( keys ) ) and catalog.descends_from( keys[ end ], root_key ):
+        end += 1
+        continue
+    return start, end
+
+
+def _swap_sibling_blocks( catalog : 'BooksTableColumnCatalog', keys : list,
+                          first_key : BooksColumnKey, second_key : BooksColumnKey ) -> list:
+    """`keys` with the two columns' subtree blocks swapped -- each column carries its descendants. The
+    blocks keep whatever lies between them, so adjacent siblings simply trade places, group and all."""
+    first       = _subtree_block( catalog, keys, first_key )
+    second      = _subtree_block( catalog, keys, second_key )
+    left, right = ( first, second ) if first[ 0 ] < second[ 0 ] else ( second, first )
+    return ( keys[ : left[ 0 ] ] + keys[ right[ 0 ] : right[ 1 ] ] + keys[ left[ 1 ] : right[ 0 ] ]
+             + keys[ left[ 0 ] : left[ 1 ] ] + keys[ right[ 1 ] : ] )
+
+
 @dataclass( frozen = True )
 class BooksTableDefinition:
-    """The view to render: the ordered, visible column keys, plus the operations that evolve it.
-    Expansion state is implicit -- an expanded type is simply absent while its class keys are
-    present. The value object is immutable: every operation returns a new definition, and the ones
-    that consult column structure take the `catalog`. Persisted (per user) via `to_storage` /
-    `from_storage`; fitted to a books with `adapt` before rendering."""
+    """The view to render: the ordered frontier of columns, each shown or removed. A removed column
+    keeps its place (rendered as a thin restore sliver) rather than leaving the table, so it stays at its
+    natural position in the hierarchy. Expansion keeps the summary: an expanded summary stays as a group
+    header, shown just before its members (group-header-first). Immutable: every operation returns a new
+    definition, and the ones that consult column structure take the `catalog`. Persisted (per user) via
+    `to_storage` / `from_storage`; fitted to a books with `adapt` before rendering."""
 
     column_keys : tuple[ BooksColumnKey, ... ] = ()
+    # The subset of `column_keys` the user removed -- kept in place (rendered as a restore sliver) rather
+    # than dropped, so a removed column holds its spot. A removed column is absorbed when its level is
+    # collapsed into a parent that now represents it.
+    removed_keys : tuple[ BooksColumnKey, ... ] = ()
 
-    def to_storage( self ) -> list[ str ]:
-        """This lens as a plain, storable value -- its column-key tokens. The definition owns its
-        own storage form, so a store (the session) keeps no knowledge of column keys."""
-        return [ key.token for key in self.column_keys ]
+    def to_storage( self ) -> dict:
+        """This lens as a plain, storable value -- the ordered column tokens and which of them are
+        removed. The definition owns its own storage form, so a store (the session) keeps no knowledge
+        of column keys."""
+        return { 'columns' : [ key.token for key in self.column_keys ],
+                 'removed' : [ key.token for key in self.removed_keys ] }
 
     @classmethod
     def from_storage( cls, data ) -> Optional[ 'BooksTableDefinition' ]:
-        """Rebuild a lens from a stored value (a list of key tokens), or None when absent. Unknown
-        tokens survive parsing and are dropped later, when the lens is adapted to a books (`adapt`)
-        -- so a stale token never breaks the read."""
-        if not isinstance( data, list ):
-            return None
-        return cls( tuple( BooksColumnKey( str( token ) ) for token in data ) )
+        """Rebuild a lens from a stored value, or None when absent. A bare list is a lens stored before
+        removed columns were tracked (columns only). Unknown tokens survive parsing and are dropped
+        later, when the lens is adapted to a books (`adapt`) -- so a stale token never breaks the read."""
+        if isinstance( data, dict ):
+            return cls( _key_tuple( data.get( 'columns' ) ), _key_tuple( data.get( 'removed' ) ) )
+        if isinstance( data, list ):
+            return cls( _key_tuple( data ) )
+        return None
 
     def adapt( self, catalog : 'BooksTableColumnCatalog' ) -> 'BooksTableDefinition':
-        """Fit to a books: drop any column it does not offer (an account that is not here, a class
-        it lacks), preserving order. Fall back to the default view if nothing survives. Only drops
-        -- never resurrects a deliberately hidden column."""
-        kept = tuple( key for key in self.column_keys if key in catalog )
+        """Fit to a books: drop any column it does not offer (an account that is not here, a class it
+        lacks), preserving order. Fall back to the default view if nothing survives. Both the frontier
+        and the removed subset are filtered, so the removed set stays within the frontier."""
+        kept    = tuple( key for key in self.column_keys if key in catalog )
+        removed = tuple( key for key in self.removed_keys if key in catalog )
         if not kept:
             return catalog.default_definition()
-        return BooksTableDefinition( kept )
+        return BooksTableDefinition( kept, removed )
 
     def expand( self, catalog : 'BooksTableColumnCatalog',
                 key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Replace a visible summary column with its members (the type's classes, or its accounts
-        where it has no class rung; a class's accounts), in place. No-op if not applicable."""
+        """Reveal a shown summary's members just after it -- the summary stays as the group header. Only
+        members not already present are inserted. No-op if the column is removed, not an expandable
+        summary, or already expanded."""
+        if key in self.removed_keys:
+            return self
         column = catalog.get( key )
         if not isinstance( column, BooksSummaryColumn ):
             return self
-        members = [ member_key for member_key in column.member_keys if member_key in catalog ]
+        present = set( self.column_keys )
+        members = [ member_key for member_key in column.member_keys
+                    if ( member_key in catalog ) and ( member_key not in present ) ]
         if not members:
             return self
         expanded : list[ BooksColumnKey ] = []
-        for visible_key in self.column_keys:
-            if visible_key == key:
+        for frontier_key in self.column_keys:
+            expanded.append( frontier_key )
+            if frontier_key == key:
                 expanded.extend( members )
-            else:
-                expanded.append( visible_key )
             continue
-        return BooksTableDefinition( tuple( expanded ) )
+        return BooksTableDefinition( tuple( expanded ), self.removed_keys )
 
     def collapse( self, catalog : 'BooksTableColumnCatalog',
                   key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Fold a column's level back into its parent: replace every visible descendant of the
-        column's parent with the single parent column, at the first such position. No-op for a
-        top-level column (no parent)."""
+        """Fold a summary's group back under it: drop every frontier descendant of the summary (shown or
+        removed), the summary itself staying in place. A removed descendant is then represented by the
+        summary, so it leaves the removed set. No-op for a non-summary column (no group to fold)."""
         column = catalog.get( key )
-        if ( column is None ) or ( column.parent_key is None ):
+        if not isinstance( column, BooksSummaryColumn ):
             return self
-        parent = column.parent_key
-        collapsed : list[ BooksColumnKey ] = []
-        inserted = False
-        for visible_key in self.column_keys:
-            if catalog.descends_from( visible_key, parent ):
-                if not inserted:
-                    collapsed.append( parent )
-                    inserted = True
-            else:
-                collapsed.append( visible_key )
-            continue
-        return BooksTableDefinition( tuple( collapsed ) )
-
-    def hide( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Remove a column from the visible set."""
         return BooksTableDefinition(
-            tuple( visible_key for visible_key in self.column_keys if visible_key != key ) )
+            tuple( frontier_key for frontier_key in self.column_keys
+                   if not catalog.descends_from( frontier_key, key ) ),
+            tuple( removed for removed in self.removed_keys
+                   if not catalog.descends_from( removed, key ) ) )
 
-    def add( self, catalog : 'BooksTableColumnCatalog',
-             key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
-        """Append a column the books offers and is not already showing (the unhide / add op)."""
-        if ( key not in catalog ) or ( key in self.column_keys ):
+    def remove( self, catalog : 'BooksTableColumnCatalog',
+                key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Mark a shown column removed -- it keeps its place as a restore sliver. Removing a summary first
+        collapses its group, so an expanded group leaves a single sliver at the summary's position rather
+        than one per member. No-op if it is not a shown column."""
+        if ( key not in self.column_keys ) or ( key in self.removed_keys ):
             return self
-        return BooksTableDefinition( self.column_keys + ( key, ) )
+        folded = self.collapse( catalog, key )
+        return BooksTableDefinition( folded.column_keys, folded.removed_keys + ( key, ) )
 
-    def move( self, key : Optional[ BooksColumnKey ], offset : int ) -> 'BooksTableDefinition':
-        """Shift a column by `offset` positions (-1 left, +1 right), clamped within the row."""
-        keys = list( self.column_keys )
-        if key not in keys:
+    def restore( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Bring a removed column back into view -- clear it from the removed set, in its place."""
+        return BooksTableDefinition(
+            self.column_keys,
+            tuple( removed for removed in self.removed_keys if removed != key ) )
+
+    def move( self, catalog : 'BooksTableColumnCatalog',
+              key : Optional[ BooksColumnKey ], offset : int ) -> 'BooksTableDefinition':
+        """Reorder a column among its siblings by `offset` (-1 left, +1 right), carrying its whole
+        subtree: it swaps with the adjacent sibling under the same parent (an expanded summary takes its
+        members along), keeping the frontier a well-formed tree. No-op at a group edge (no sibling that
+        way) or for an absent column -- a column never leaves its parent's group."""
+        keys   = list( self.column_keys )
+        column = catalog.get( key )
+        if ( key not in keys ) or ( column is None ):
             return self
-        index  = keys.index( key )
-        target = index + offset
-        if ( target < 0 ) or ( target >= len( keys ) ):
+        siblings = [ frontier_key for frontier_key in keys
+                     if catalog.get( frontier_key )
+                     and ( catalog.get( frontier_key ).parent_key == column.parent_key ) ]
+        target = siblings.index( key ) + offset
+        if ( target < 0 ) or ( target >= len( siblings ) ):
             return self
-        keys[ index ], keys[ target ] = keys[ target ], keys[ index ]
-        return BooksTableDefinition( tuple( keys ) )
+        reordered = _swap_sibling_blocks( catalog, keys, key, siblings[ target ] )
+        return BooksTableDefinition( tuple( reordered ), self.removed_keys )
 
 
 class BooksTableColumnCatalog:
@@ -278,8 +333,9 @@ class BooksTableColumnCatalog:
     @classmethod
     def build( cls, chart : Chart ) -> 'BooksTableColumnCatalog':
         """Walk the chart into the full column set: a derived column per figure, then per type its
-        rollup, its class rollups (where it has a class rung), and an account column per displayable
-        account. Roots and valuation companions are not columns."""
+        rollup and the rollup rungs its accounts display under (an account's `display_placement`, or its
+        engine class as the fallback), down to an account column per displayable account. Roots and
+        valuation companions are not columns."""
         columns : list[ BooksColumn ] = []
         for figure in BooksDerivedFigure:
             columns.append( BooksLeafColumn(
@@ -292,37 +348,88 @@ class BooksTableColumnCatalog:
     @classmethod
     def _append_type( cls, columns : list[ BooksColumn ], chart : Chart,
                       account_type : AccountType ) -> None:
-        type_key = BooksColumnKey.for_type( account_type )
-        if account_type in _CLASS_ENUM_BY_TYPE:
-            member_keys = []
-            for account_class in chart.classes( account_type ):
-                class_key = BooksColumnKey.for_class( account_type, account_class )
-                accounts  = chart.accounts( account_class = account_class )
-                cls._append_accounts( columns, accounts, parent_key = class_key )
-                columns.append( BooksSummaryColumn(
-                    key = class_key, label = account_class.label, parent_key = type_key,
-                    member_keys = tuple(
-                        BooksColumnKey.for_account( account.account_uuid ) for account in accounts ) ) )
-                member_keys.append( class_key )
+        """Build a type's subtree from its accounts' display placements: each account descends through
+        its rollup rungs (created on first appearance), landing as a leaf under its deepest rung. A rung's
+        members are ordered by their placement order (a stable sort, so equal orders keep account order),
+        placing input-grouped columns as the inputs present them and the engine-class fallback after them.
+        A type with a class rung omits a placeless account (as its fallback would leave it), matching the
+        columns the chart offers."""
+        type_key    = BooksColumnKey.for_type( account_type )
+        has_classes = account_type in _CLASS_ENUM_BY_TYPE
+        group_parent : dict[ str, tuple ] = {}   # group token -> (AccountDisplayGroup, parent key)
+        group_members : dict[ str, list ] = {}   # group token -> its members, each (key, order)
+        type_members : list[ tuple ] = []        # the type's members, each (key, order)
+        for account in cls._displayable_accounts( chart, account_type ):
+            placement = cls._placement_of( account )
+            if has_classes and not placement.path:
                 continue
-        else:
-            accounts = [ account for account in chart.accounts( account_type = account_type )
-                         if ( not account.is_root ) and ( not account.is_valuation ) ]
-            cls._append_accounts( columns, accounts, parent_key = type_key )
-            member_keys = [ BooksColumnKey.for_account( account.account_uuid ) for account in accounts ]
+            parent_key     = type_key
+            parent_members = type_members
+            path_tokens : list[ str ] = []
+            for group in placement.path:
+                path_tokens.append( group.key )
+                group_key = cls._group_key( account_type, path_tokens )
+                if group_key.token not in group_parent:
+                    group_parent[ group_key.token ]  = ( group, parent_key )
+                    group_members[ group_key.token ] = []
+                    parent_members.append( ( group_key, group.order ) )
+                parent_key     = group_key
+                parent_members = group_members[ group_key.token ]
+                continue
+            account_key = BooksColumnKey.for_account( account.account_uuid )
+            columns.append( BooksLeafColumn(
+                key = account_key, label = account.name, parent_key = parent_key ) )
+            parent_members.append( ( account_key, placement.order ) )
+            continue
+        for token, ( group, parent_key ) in group_parent.items():
+            columns.append( BooksSummaryColumn(
+                key = BooksColumnKey( token ), label = group.label, parent_key = parent_key,
+                member_keys = cls._ordered_keys( group_members[ token ] ) ) )
+            continue
         columns.append( BooksSummaryColumn(
-            key = type_key, label = account_type.label, member_keys = tuple( member_keys ) ) )
+            key = type_key, label = account_type.label,
+            member_keys = cls._ordered_keys( type_members ) ) )
         return
 
     @staticmethod
-    def _append_accounts( columns : list[ BooksColumn ], accounts : list,
-                          parent_key : BooksColumnKey ) -> None:
-        for account in accounts:
-            columns.append( BooksLeafColumn(
-                key = BooksColumnKey.for_account( account.account_uuid ),
-                label = account.name, parent_key = parent_key ) )
-            continue
-        return
+    def _ordered_keys( members : list ) -> tuple:
+        """The member keys sorted by placement order -- a stable sort, so members of equal order keep the
+        account order they were seen in (which is what the engine-class fallback relies on)."""
+        return tuple( key for key, _order in sorted( members, key = lambda member: member[ 1 ] ) )
+
+    @staticmethod
+    def _displayable_accounts( chart : Chart, account_type : AccountType ) -> list:
+        """The accounts of `account_type` that get a column -- every account but the type root and the
+        valuation companions (whose appreciation a holding's market value already carries)."""
+        return [ account for account in chart.accounts( account_type = account_type )
+                 if ( not account.is_root ) and ( not account.is_valuation ) ]
+
+    @classmethod
+    def _placement_of( cls, account ) -> AccountDisplayPlacement:
+        """An account's display placement: its stamped `display_placement`, or the engine-class fallback
+        when it carries none."""
+        if account.display_placement is not None:
+            return account.display_placement
+        return cls._engine_class_placement( account )
+
+    @staticmethod
+    def _engine_class_placement( account ) -> AccountDisplayPlacement:
+        """The fallback placement: a single rung named by the account's engine class (asset, income, or
+        expense), or no rung when it has none -- reproducing the chart's own class grouping."""
+        account_class = ( account.asset_class or account.income_tax_class or account.expense_tax_class )
+        if account_class is None:
+            return AccountDisplayPlacement( order = _FALLBACK_ORDER )
+        group = AccountDisplayGroup( key = account_class.name, label = account_class.label,
+                                     order = _FALLBACK_ORDER )
+        return AccountDisplayPlacement( path = ( group, ), order = _FALLBACK_ORDER )
+
+    @staticmethod
+    def _group_key( account_type : AccountType, path_tokens : list ) -> BooksColumnKey:
+        """A rollup rung's column key: its type and the group keys down to it. A single-rung fallback
+        keys as `class:TYPE:CLASSNAME` -- the engine-class column key -- so the fallback view is exactly
+        the chart's class grouping."""
+        return BooksColumnKey(
+            f'{BooksColumnKind.CLASS}:{account_type.name}:{"/".join( path_tokens )}' )
 
     def columns( self ) -> tuple[ BooksColumn, ... ]:
         return self._columns
@@ -361,9 +468,32 @@ class BooksTableColumnCatalog:
 
 
 @dataclass( frozen = True )
+class BooksTableColumn:
+    """One column as rendered. `column` is what it displays -- normally the frontier column, but for a
+    single-child chain (a group whose one shown member would duplicate its value) the chain's terminal,
+    with the absorbed groups' labels in `breadcrumb`. `op_key` is the key structural ops (move / remove /
+    collapse) act on -- the top of the chain -- while `expand_key` is the terminal, so drilling deeper
+    still works. `removed` marks a restore sliver; `can_expand` / `can_collapse` gate those controls;
+    `depth` / `group` drive the tint; `can_move_*` gate the reorder arrows at a group edge (a reorder is a
+    within-group sibling swap)."""
+    column         : BooksColumn
+    op_key         : BooksColumnKey
+    expand_key     : BooksColumnKey
+    removed        : bool  = False
+    can_expand     : bool  = False
+    can_collapse   : bool  = False
+    depth          : int   = 0
+    group          : str   = ''
+    can_move_left  : bool  = False
+    can_move_right : bool  = False
+    breadcrumb     : tuple = ()
+
+
+@dataclass( frozen = True )
 class BooksTableCell:
-    column : BooksColumn
-    value  : Decimal
+    column  : BooksColumn
+    value   : Optional[ Decimal ]   # None for a removed column's sliver -- no figure is shown
+    removed : bool = False
 
 
 @dataclass( frozen = True )
@@ -374,44 +504,167 @@ class BooksTableRow:
 
 @dataclass( frozen = True )
 class BooksTable:
-    """A rendered table: the visible columns and a row per period, each carrying a cell per
-    column."""
+    """A rendered table: the frontier columns (some shown as thin restore slivers) and a row per period,
+    each carrying a cell per column."""
 
-    columns : tuple[ BooksColumn, ... ]
+    columns : tuple[ BooksTableColumn, ... ]
     rows    : tuple[ BooksTableRow, ... ]
+
+
+def _column_depth( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> int:
+    """How many levels down from its top-level group a column sits: a type or derived figure is 0, a
+    class 1, an account 1 or 2 (by whether its type has a class rung). The view lightens the tint by it."""
+    depth  = 0
+    column = catalog.get( key )
+    while ( column is not None ) and ( column.parent_key is not None ):
+        depth += 1
+        column = catalog.get( column.parent_key )
+        continue
+    return depth
+
+
+def _column_group( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> str:
+    """A slug for the column's top-level group -- its account type (`asset`, `expense`, ...) or, for a
+    derived figure, the figure (`net-worth`). Every column in a group shares it, so the view can tint a
+    whole group with one hue."""
+    column = catalog.get( key )
+    while ( column is not None ) and ( column.parent_key is not None ):
+        column = catalog.get( column.parent_key )
+        continue
+    top = column.key
+    if top.kind == BooksColumnKind.DERIVED:
+        return top.derived_figure.name.lower().replace( '_', '-' )
+    return top.account_type.name.lower()
+
+
+def _sibling_order( catalog : BooksTableColumnCatalog,
+                    keys : tuple[ BooksColumnKey, ... ] ) -> dict:
+    """Each present column's position among its siblings, as `{ key : (index, sibling_count) }`. Siblings
+    are the frontier columns sharing a parent (top-level columns share the None parent). Used to tell,
+    per column, whether a reorder has somewhere to go in each direction."""
+    by_parent : dict = {}
+    for key in keys:
+        column = catalog.get( key )
+        if column is not None:
+            by_parent.setdefault( column.parent_key, [] ).append( key )
+            continue
+    return { key : ( group.index( key ), len( group ) )
+             for group in by_parent.values() for key in group }
+
+
+def _is_transparent( catalog : BooksTableColumnCatalog, key : BooksColumnKey, shown : set ) -> bool:
+    """A shown summary with exactly one member, that member also shown: its single expanded child
+    duplicates its value, so it is absorbed into the child's column (path compression)."""
+    column = catalog.get( key )
+    return ( isinstance( column, BooksSummaryColumn ) and ( len( column.member_keys ) == 1 )
+             and ( column.member_keys[ 0 ] in shown ) )
+
+
+def _chain_top( catalog : BooksTableColumnCatalog, key : BooksColumnKey,
+                transparent : set ) -> tuple:
+    """Walk up from `key` through transparent single-child ancestors: the top ancestor (the column
+    structural ops act on for the whole chain) and the breadcrumb of absorbed group labels, top-down."""
+    top    = key
+    labels : list = []
+    parent = catalog.get( key ).parent_key
+    while ( parent is not None ) and ( parent in transparent ):
+        labels.insert( 0, catalog.get( parent ).label )
+        top    = parent
+        parent = catalog.get( parent ).parent_key
+        continue
+    return top, tuple( labels )
+
+
+def _render_columns( catalog : BooksTableColumnCatalog,
+                     definition : BooksTableDefinition ) -> tuple[ BooksTableColumn, ... ]:
+    """Resolve the frontier to rendered columns. A single-child chain (a group whose one shown member
+    would duplicate its value, recursively) renders as its terminal alone, carrying the absorbed groups
+    as a breadcrumb and pointing structural ops at the chain top; every other column renders itself. Each
+    carries removed state, expand/collapse availability, tint depth/group, and sibling-move reach. Keys
+    absent from the catalog are skipped (callers adapt first)."""
+    removed     = set( definition.removed_keys )
+    frontier    = set( definition.column_keys )
+    shown       = { key for key in definition.column_keys if ( key in catalog ) and ( key not in removed ) }
+    transparent = { key for key in shown if _is_transparent( catalog, key, shown ) }
+    positions   = _sibling_order( catalog, definition.column_keys )
+    rendered : list[ BooksTableColumn ] = []
+    for key in definition.column_keys:
+        if ( key not in catalog ) or ( key in transparent ):
+            continue                                   # absorbed into its single child's column
+        column          = catalog.get( key )
+        is_removed      = key in removed
+        top, breadcrumb = ( key, () ) if is_removed else _chain_top( catalog, key, transparent )
+        breadcrumb      = tuple( label for label in breadcrumb if label != column.label )
+        expanded        = column.expandable and any( member in frontier for member in column.member_keys )
+        index, count    = positions[ top ]
+        rendered.append( BooksTableColumn(
+            column         = column,
+            op_key         = top,
+            expand_key     = key,
+            removed        = is_removed,
+            can_expand     = ( not is_removed ) and column.expandable and ( not expanded ),
+            can_collapse   = ( not is_removed ) and ( expanded or ( top != key ) ),
+            depth          = _column_depth( catalog, top ),
+            group          = _column_group( catalog, key ),
+            can_move_left  = index > 0,
+            can_move_right = index < count - 1,
+            breadcrumb     = breadcrumb ) )
+        continue
+    return tuple( rendered )
 
 
 def build_books_table( ledger : Ledger, chart : Chart, spans : list[ DateSpan ],
                        definition : BooksTableDefinition,
                        catalog : BooksTableColumnCatalog ) -> BooksTable:
-    """Render `definition` over `spans`: resolve each visible key to its catalog column and
-    compute its per-period cell. Keys absent from the catalog are skipped (callers adapt first)."""
-    columns = tuple( catalog.get( key ) for key in definition.column_keys if key in catalog )
+    """Render `definition` over `spans`: resolve each frontier key to its rendered column and compute its
+    per-period cell -- except a removed column, which renders as a value-less restore sliver."""
+    columns = _render_columns( catalog, definition )
     rows    = tuple(
         BooksTableRow(
             span  = span,
-            cells = tuple( BooksTableCell( column, _cell_value( column.key, ledger, chart, span ) )
-                           for column in columns ) )
+            cells = tuple(
+                BooksTableCell(
+                    rendered.column,
+                    None if rendered.removed
+                    else _column_value( catalog, rendered.column, ledger, chart, span ),
+                    rendered.removed )
+                for rendered in columns ) )
         for span in spans
     )
     return BooksTable( columns = columns, rows = rows )
 
 
+def _account_leaf_keys( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> list:
+    """The account-leaf keys under a column: the column itself if it is a leaf, else every account leaf
+    beneath its rungs. A rollup's figure is the sum over these, so a group totals its members whatever
+    axis groups them (an engine class or an input category)."""
+    column = catalog.get( key )
+    if isinstance( column, BooksSummaryColumn ):
+        leaves : list = []
+        for member in column.member_keys:
+            leaves.extend( _account_leaf_keys( catalog, member ) )
+            continue
+        return leaves
+    return [ key ]
+
+
+def _column_value( catalog : BooksTableColumnCatalog, column : BooksColumn,
+                   ledger : Ledger, chart : Chart, span : DateSpan ) -> Decimal:
+    """A column's figure for one period: a summary sums its account leaves (so market value and flows
+    fold in exactly as a type/class total would); a leaf reads its own figure."""
+    if isinstance( column, BooksSummaryColumn ):
+        return sum( ( _cell_value( leaf, ledger, chart, span )
+                      for leaf in _account_leaf_keys( catalog, column.key ) ), Decimal( '0' ) )
+    return _cell_value( column.key, ledger, chart, span )
+
+
 def _cell_value( key : BooksColumnKey, ledger : Ledger, chart : Chart, span : DateSpan ) -> Decimal:
-    """One column's figure for one period: a flow over the span for revenue/expense, a balance at
-    span end otherwise (assets at market value)."""
+    """A leaf column's figure for one period: the derived figure, or an account's flow over the span
+    (revenue/expense) or balance at span end (assets at market value, else natural balance)."""
     if key.kind == BooksColumnKind.DERIVED:
         if key.derived_figure == BooksDerivedFigure.NET_WORTH:
             return ledger.net_worth( through = span.end_date )
         raise ValueError( f'Unsupported derived figure: {key.derived_figure}' )
-    if key.kind == BooksColumnKind.TYPE:
-        if key.account_type in _FLOW_TYPES:
-            return ledger.type_flow( key.account_type, start = span.start_date, end = span.end_date )
-        return ledger.type_total( key.account_type, through = span.end_date )
-    if key.kind == BooksColumnKind.CLASS:
-        if key.account_type in _FLOW_TYPES:
-            return ledger.class_flow( key.account_class, start = span.start_date, end = span.end_date )
-        return ledger.class_total( key.account_class, through = span.end_date )
     account = chart.account_by_uuid( key.account_uuid )
     if account is None:
         return Decimal( '0' )

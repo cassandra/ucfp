@@ -32,7 +32,8 @@ def _expense( applies_to, tax_class,
               realization = Realization.SMOOTH, interval = Duration( 1, TimeUnit.YEAR ) ) -> PropertyExpense:
     # One shared property expense at a flat default, applied to the contexts in `applies_to`.
     return PropertyExpense(
-        name = 'Upkeep', category = ExpenseCategory.MAINTENANCE_REPAIR, expense_tax_class = tax_class,
+        name = 'Upkeep', handle = 'upkeep', category = ExpenseCategory.MAINTENANCE_REPAIR,
+        expense_tax_class = tax_class,
         applies_to = applies_to, realization = realization, interval = interval,
         default_amount = Decimal( '6000' ) )
 
@@ -99,7 +100,7 @@ class VehicleRunningCostTests( unittest.TestCase ):
     @staticmethod
     def _cost( realization, interval, amount = Decimal( '20' ) ):
         return VehicleRunningCost(
-            name = 'Gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
+            name = 'Gasoline', handle = 'gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
             interval = interval, amount = amount, realization = realization )
 
     def test_smooth_cost_scales_by_num_cars_then_annualizes( self ):

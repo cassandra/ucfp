@@ -77,15 +77,16 @@ def merged_property_expenses( profile, plans ) -> list:
     that currently exist and that the row applies to. Empty when the household has no property."""
     if not has_property( profile ):
         return list()
-    existing     = { expense.name: expense for expense in plans.property_expenses } if plans else dict()
+    existing     = { expense.handle: expense for expense in plans.property_expenses } if plans else dict()
     live_handles = set( _property_handles_for( profile ) )
     merged = list()
     for catalog_expense in ordered_catalog():
         if catalog_expense.expense_class is not ExpenseClass.PROPERTY:
             continue
-        prior = existing.get( catalog_expense.name )
+        prior = existing.get( catalog_expense.handle )
         merged.append( PropertyExpense(
-            name = catalog_expense.name, category = catalog_expense.category,
+            name = catalog_expense.name, handle = catalog_expense.handle,
+            category = catalog_expense.category,
             expense_tax_class = catalog_expense.expense_tax_class,
             applies_to = catalog_expense.applies_to,
             interval = kept_interval( prior, catalog_expense ),
@@ -252,9 +253,9 @@ class PropertyExpensesForm( forms.Form ):
             'cells'       : cells }
 
     def apply( self, profile, plans ):
-        edited   = { expense.name: self._edited( ri, expense )
+        edited   = { expense.handle: self._edited( ri, expense )
                      for ri, expense in enumerate( self._rows ) }
-        expenses = [ edited.get( expense.name, expense ) for expense in self._all ]
+        expenses = [ edited.get( expense.handle, expense ) for expense in self._all ]
         return profile, replace( plans, property_expenses = expenses )
 
     def _edited( self, ri : int, expense ) -> PropertyExpense:

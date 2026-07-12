@@ -152,6 +152,12 @@ class AccountRecord( TimestampedModel ):
         'Closed',
         default = False,
     )
+    display_placement = models.JSONField(
+        'Display Placement',
+        null = True,
+        blank = True,
+        default = None,
+    )
 
     class Meta:
         verbose_name = 'Account'

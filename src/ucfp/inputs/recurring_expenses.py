@@ -25,15 +25,16 @@ def merged_recurring_expenses( profile, plans ) -> list:
     across every span. The category, personal tax class, and realization are re-derived each merge (not
     user edits)."""
     span_count = len( plans.expense_spans ) if plans and plans.expense_spans else 1
-    existing   = { expense.name: expense
+    existing   = { expense.handle: expense
                    for expense in plans.recurring_expenses } if plans else dict()
     merged = list()
     for catalog_expense in ordered_catalog():
         if catalog_expense.expense_class is not ExpenseClass.LIVING:
             continue
-        prior = existing.get( catalog_expense.name )
+        prior = existing.get( catalog_expense.handle )
         merged.append( RecurringExpense(
-            name = catalog_expense.name, category = catalog_expense.category,
+            name = catalog_expense.name, handle = catalog_expense.handle,
+            category = catalog_expense.category,
             expense_tax_class = catalog_expense.expense_tax_class,
             amounts = _aligned_amounts( prior, catalog_expense.default_amount, span_count ),
             interval = kept_interval( prior, catalog_expense ),
