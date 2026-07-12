@@ -48,6 +48,23 @@ CAR_PURCHASE_HANDLE = 'car-purchase'
 CAR_PAYMENTS_HANDLE = 'car-payments'
 _GENERATED_VEHICLE_ORDER = { CAR_PURCHASE_HANDLE : 0, CAR_PAYMENTS_HANDLE : 5 }
 
+# A property expense's account handle scopes the catalog handle to its property (`property-tax:rental-1`),
+# so each property's costs are a distinct account -- a unique handle, keeping its own per-property tax
+# class -- that still groups by the base catalog handle (the part before the separator).
+_PROPERTY_EXPENSE_HANDLE_SEP = ':'
+
+
+def property_expense_handle( expense_handle : str, property_handle : str ) -> str:
+    """The account handle for `expense_handle` scoped to `property_handle` -- unique per property, yet
+    grouping by its base catalog handle. Minted in materialization, parsed back here for placement."""
+    return f'{expense_handle}{_PROPERTY_EXPENSE_HANDLE_SEP}{property_handle}'
+
+
+def _base_expense_handle( account_handle : str ) -> str:
+    """The catalog handle an account groups under: a property-scoped handle's part before the separator,
+    or the whole handle when it carries none (a catalog or generated expense)."""
+    return account_handle.split( _PROPERTY_EXPENSE_HANDLE_SEP, 1 )[ 0 ]
+
 
 @dataclass( frozen = True )
 class _Grouping:
@@ -121,21 +138,23 @@ def stamp_display_placements( books : BooksOfAccount, profile : Profile ) -> Non
 
 def _stamp_expense_placements( books : BooksOfAccount ) -> None:
     """Group each expense account under its ExpenseClass surface then its ExpenseCategory section. A
-    catalog row supplies both for a catalog expense; the Vehicle pane's generated purchase and payment
-    expenses carry no catalog row, so they map to the Vehicle section directly -- joining the catalog's
-    vehicle running costs instead of falling back to their (Living) deductibility class."""
+    catalog row supplies both for a catalog expense (matched on the base handle, so a property-scoped
+    handle groups with its catalog kind while its per-property account stays distinct); the Vehicle
+    pane's generated purchase and payment expenses carry no catalog row, so they map to the Vehicle
+    section directly -- joining the catalog's vehicle running costs instead of falling back to their
+    (Living) deductibility class."""
     catalog = { row.handle : row for row in ordered_catalog() }
     for account in books.accounts:
         if account.handle is None:
             continue
-        handle = str( account.handle )
-        row    = catalog.get( handle )
+        base = _base_expense_handle( str( account.handle ) )
+        row  = catalog.get( base )
         if row is not None:
             account.display_placement = _expense_placement(
                 row.expense_class, row.category, row.order )
-        elif handle in _GENERATED_VEHICLE_ORDER:
+        elif base in _GENERATED_VEHICLE_ORDER:
             account.display_placement = _expense_placement(
-                ExpenseClass.VEHICLE, ExpenseCategory.VEHICLE, _GENERATED_VEHICLE_ORDER[ handle ] )
+                ExpenseClass.VEHICLE, ExpenseCategory.VEHICLE, _GENERATED_VEHICLE_ORDER[ base ] )
         continue
     return
 

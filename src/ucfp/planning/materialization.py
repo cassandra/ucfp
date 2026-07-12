@@ -36,7 +36,8 @@ from ucfp.jurisdiction.law import StatuteProfile
 
 from ucfp.parameter_sets.enums import PropertyContext, Realization
 
-from ucfp.planning.display_placement import CAR_PAYMENTS_HANDLE, CAR_PURCHASE_HANDLE
+from ucfp.planning.display_placement import (
+    CAR_PAYMENTS_HANDLE, CAR_PURCHASE_HANDLE, property_expense_handle )
 
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.expenses import OWNED_PROPERTY_CONTEXT
@@ -532,8 +533,11 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
     """The Plans' property operating expenses as (streams, items): each expense applied to every property
     its `applies_to` reaches, at that property's override or the shared default (skipped when both are
     blank or zero), with the tax class derived from the property and the amount clipped to the property's
-    ownership window -- its sale date, when it is sold. A SMOOTH expense enters as an annualized stream; a
-    DISCRETE one as an item placed at its cadence."""
+    ownership window -- its sale date, when it is sold. Each account is scoped to its property (name
+    prefixed with the property) so a rental's cost -- taxed as a rental expense -- stays distinct from
+    the residence's same-named cost (taxed as SALT or non-deductible) rather than merging by name into a
+    single, mis-classed account. A SMOOTH expense enters as an annualized stream; a DISCRETE one as an
+    item placed at its cadence."""
     streams, items = list(), list()
     for expense in plans.property_expenses:
         for handle, context, asset in _property_contexts( profile ):
@@ -542,17 +546,28 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
             amount = expense.overrides.get( handle, expense.default_amount )
             if not amount:
                 continue
-            tax_class = _property_expense_tax_class( expense, asset )
-            amounts   = _property_schedule( amount, sale_dates.get( handle ) )
+            tax_class      = _property_expense_tax_class( expense, asset )
+            amounts        = _property_schedule( amount, sale_dates.get( handle ) )
+            name           = _property_expense_name( asset, expense )
+            account_handle = property_expense_handle( expense.handle, handle )
             if expense.realization is Realization.SMOOTH:
                 streams.append( ExpenseStream(
-                    name = expense.name, handle = expense.handle, expense_tax_class = tax_class,
+                    name = name, handle = account_handle, expense_tax_class = tax_class,
                     amounts = _annualized( amounts, expense.interval ) ) )
             else:
                 items.append( ExpenseItem(
-                    name = expense.name, handle = expense.handle, expense_tax_class = tax_class,
+                    name = name, handle = account_handle, expense_tax_class = tax_class,
                     amounts = amounts, cadence = Recurrence( expense.interval ) ) )
     return streams, items
+
+
+def _property_expense_name( asset : Optional[ AssetProfile ], expense ) -> str:
+    """A property expense's account name, scoped to its property so each property's costs are a distinct
+    account -- their per-property tax class is not lost to a same-named sibling, and the results show
+    each property's costs on their own line. The owned property's name (or the rented-home label) leads
+    the expense name."""
+    label = asset.name if asset is not None else 'Rented Home'
+    return f'{label} {expense.name}'
 
 
 def _property_schedule( amount : Decimal, sale_date ) -> Schedule:
