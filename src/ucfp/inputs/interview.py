@@ -593,10 +593,12 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
-             outer_template = 'inputs/interview/sections/income.html' ),
+    # Property precedes Income: declaring a rental creates its rent line on the Income step, so the
+    # properties must exist before the user works through Income or a rental's rent goes unnoticed.
     Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
+    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
+             outer_template = 'inputs/interview/sections/income.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
     # adjustable on its property. Facts only; the repayment plan per debt is the Debt plan step below,
     # which opens the Plans flow.
