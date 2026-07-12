@@ -75,7 +75,8 @@ _ASSET_CLASS_ORDER = { asset_class : index for index, asset_class in enumerate( 
 # its own tax-class rung.
 _INCOME_SOURCES = [
     _Grouping( 'earned', 'Earned Income', ( IncomeTaxClass.WAGES, ) ),
-    _Grouping( 'pension-withdrawals', 'Pension & Withdrawals', ( IncomeTaxClass.ORDINARY, ) ),
+    _Grouping( 'pension-withdrawals', 'Pension & Withdrawals',
+               ( IncomeTaxClass.ORDINARY, IncomeTaxClass.RETIREMENT_DISTRIBUTION ) ),
     _Grouping( 'social-security', 'Social Security', ( IncomeTaxClass.SOCIAL_SECURITY, ) ),
     _Grouping( 'investment', 'Investment Income',
                ( IncomeTaxClass.TAXABLE_INTEREST, IncomeTaxClass.TAX_EXEMPT_INTEREST,

@@ -149,7 +149,10 @@ class Realization( PeriodEvent ):
         income_class = self.holding.asset_class.realized_gain_income_class
         realized_gain_account = None
         if income_class is not None:
-            realized_gain_account = chart.income_account( income_class )
+            # Owner-attributed income (a retirement distribution) posts to the account owner's own
+            # revenue account; household income (a capital gain) to the single shared one.
+            owner_handle = self.holding.owner_handle if income_class.is_owner_attributed else None
+            realized_gain_account = chart.income_account( income_class, owner_handle )
             if realized_gain_account is None:
                 raise MissingAccountError(
                     f'No revenue account for income tax-class {income_class.label}.'

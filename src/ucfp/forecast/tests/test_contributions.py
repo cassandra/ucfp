@@ -130,9 +130,9 @@ class ContributionMechanicsTests( unittest.TestCase ):
             events        = [ ScheduledRealization( date( 2027, 6, 1 ), '401k', Decimal( '20000' ) ) ],
         )
         reader = Bookkeeper( Forecast( parameters ).run().books )
-        ordinary = reader.chart.income_account( IncomeTaxClass.ORDINARY )
+        distribution = reader.chart.income_account( IncomeTaxClass.RETIREMENT_DISTRIBUTION )
         # the full 20k withdrawal is ordinary income, not just any growth (there is none here)
-        self.assertEqual( reader.ledger.natural_balance( ordinary ), Decimal( '20000' ) )
+        self.assertEqual( reader.ledger.natural_balance( distribution ), Decimal( '20000' ) )
 
 
 class ContributionValidationTests( unittest.TestCase ):

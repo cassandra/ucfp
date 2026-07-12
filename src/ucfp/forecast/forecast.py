@@ -415,21 +415,23 @@ class BaselineBuilder:
         return
 
     def _create_asset_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
-        """Create a revenue account for each income class the assets can generate -- yields
-        (distributions) and realized gains -- that does not already have one, so a holding's
-        distributions and a funding draw's recognized gain have somewhere to post."""
-        chart = bookkeeper.chart
-        revenue_root = chart.root( AccountType.REVENUE )
-        income_classes = set()
+        """Ensure a revenue account exists for each income an asset can generate -- its yield
+        (distribution) and its realized gain -- so a distribution or a funding draw's recognized gain
+        has somewhere to post. Owner-attributed income (a pre-tax retirement distribution) gets a
+        per-subject account in the owner's name; the rest stay household accounts keyed by class.
+        Routed through the same IncomeAccounts keying as the income streams, so a given
+        (subject, class) resolves to one account however it is reached."""
+        subject_by_handle = { str( subject.handle ) : subject
+                              for subject in self._parameters.subjects }
         for asset in self._parameters.assets:
-            income_classes.add( asset.asset_class.distribution_income_class )
-            income_classes.add( asset.asset_class.realized_gain_income_class )
-        income_classes.discard( None )
-        for income_class in sorted( income_classes, key = lambda klass : klass.name ):
-            if chart.income_account( income_class ) is None:
-                bookkeeper.add_account(
-                    Account( name = income_class.label, parent = revenue_root,
-                             income_tax_class = income_class ) )
+            for income_class in ( asset.asset_class.distribution_income_class,
+                                  asset.asset_class.realized_gain_income_class ):
+                if income_class is None:
+                    continue
+                owner = ( subject_by_handle.get( str( asset.owner_handle ) )
+                          if income_class.is_owner_attributed else None )
+                self._income_accounts.account_for( owner, income_class )
+                continue
             continue
         return
 

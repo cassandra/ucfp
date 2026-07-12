@@ -214,7 +214,9 @@ class IncomeTaxClass( LabeledEnum ):
     """
 
     WAGES               = ( 'Wages', 'Earned income; ordinary rate, plus FICA.' )
-    ORDINARY            = ( 'Ordinary Income', 'Ordinary rate, not investment income (pension, IRA).' )
+    ORDINARY            = ( 'Ordinary Income', 'Ordinary rate, not investment income (e.g. a pension).' )
+    RETIREMENT_DISTRIBUTION = (
+        'Retirement Distribution', 'Pre-tax retirement withdrawals and RMDs; taxed as ordinary income.' )
     TAXABLE_INTEREST    = ( 'Taxable Interest', 'Ordinary rate; net investment income (bank/bond/CD).' )
     QUALIFIED_DIVIDENDS = ( 'Qualified Dividends', 'Preferential rate; not netted with losses.' )
     LONG_TERM_GAINS     = ( 'Long-Term Gains', 'Preferential rate; netted with losses.' )
@@ -228,6 +230,20 @@ class IncomeTaxClass( LabeledEnum ):
     GROSS_RENTAL        = ( 'Gross Rental', 'Gross rents; netted with expenses in-period.' )
     TAX_FREE            = ( 'Tax-Free', 'Excluded from tax everywhere (Roth).' )
     TAX_EXEMPT_INTEREST = ( 'Tax-Exempt Interest', 'Untaxed, but counts in SS/ACA MAGI (muni).' )
+
+    @property
+    def is_owner_attributed( self ) -> bool:
+        """Whether an asset's income of this class is tracked per owning subject -- a revenue account
+        in the owner's name -- rather than at the household level. A pre-tax retirement distribution
+        lands in the account owner's name (it is that person's RMD/withdrawal); a taxable gain stays
+        household (joint on a joint return)."""
+        return self in _OWNER_ATTRIBUTED_INCOME_CLASSES
+
+
+# Income tax-classes whose asset income is attributed to the owning subject (a per-person revenue
+# account), not the household -- a retirement distribution carries the owner's name; capital gains do
+# not (they are joint on a joint return).
+_OWNER_ATTRIBUTED_INCOME_CLASSES = frozenset( { IncomeTaxClass.RETIREMENT_DISTRIBUTION } )
 
 
 # The income tax-class each distributing asset class credits with its yield
@@ -253,7 +269,7 @@ _REALIZED_GAIN_INCOME_CLASS = {
     AssetClass.REAL_ESTATE_RESIDENCE   : IncomeTaxClass.RESIDENCE_SECTION_121_GAIN,
     AssetClass.REAL_ESTATE_RENTAL      : IncomeTaxClass.LONG_TERM_GAINS,
     AssetClass.REAL_ESTATE_SECOND_HOME : IncomeTaxClass.SECOND_HOME_GAIN,
-    AssetClass.PRETAX_RETIREMENT       : IncomeTaxClass.ORDINARY,
+    AssetClass.PRETAX_RETIREMENT       : IncomeTaxClass.RETIREMENT_DISTRIBUTION,
     AssetClass.ROTH                    : IncomeTaxClass.TAX_FREE,
     AssetClass.PRECIOUS_METALS         : IncomeTaxClass.COLLECTIBLES_GAINS,
     AssetClass.COLLECTIBLES            : IncomeTaxClass.COLLECTIBLES_GAINS,

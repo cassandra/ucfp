@@ -53,8 +53,8 @@ class RmdTests( unittest.TestCase ):
             ],
             events = [] )
         ledger = reader.ledger
-        ordinary = reader.chart.income_account( IncomeTaxClass.ORDINARY )
-        self.assertEqual( ledger.natural_balance( ordinary ), Decimal( '10000' ) )
+        distribution = reader.chart.income_account( IncomeTaxClass.RETIREMENT_DISTRIBUTION )
+        self.assertEqual( ledger.natural_balance( distribution ), Decimal( '10000' ) )
         self.assertEqual(
             ledger.market_value( _holding( reader, 'IRA' ), through = date( 2026, 12, 31 ) ),
             Decimal( '236000' ) )
@@ -72,8 +72,8 @@ class RmdTests( unittest.TestCase ):
             ],
             events = [ ScheduledRealization( date( 2026, 3, 1 ), 'IRA', Decimal( '10000' ) ) ] )
         ledger = reader.ledger
-        ordinary = reader.chart.income_account( IncomeTaxClass.ORDINARY )
-        self.assertEqual( ledger.natural_balance( ordinary ), Decimal( '10000' ) )
+        distribution = reader.chart.income_account( IncomeTaxClass.RETIREMENT_DISTRIBUTION )
+        self.assertEqual( ledger.natural_balance( distribution ), Decimal( '10000' ) )
         self.assertEqual(
             ledger.market_value( _holding( reader, 'IRA' ), through = date( 2026, 12, 31 ) ),
             Decimal( '236000' ) )
