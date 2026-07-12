@@ -10,6 +10,8 @@ axes are stamped:
     keyed by (subject, tax class), pension and pre-tax retirement withdrawals share one `ORDINARY`
     account and so one source ("Pension & Withdrawals") -- named honestly for that engine-set granularity
     rather than split.
+  - Assets, by `AssetClass` -> the input *pane* the assets step groups them under (Financial Accounts /
+    Properties / Possessions) then the asset class, with holdings ordered by their profile position.
 
 This is the one place carrying `parameter_sets`/grouping knowledge to the books; the accounts layer
 stays oblivious, reading the placement opaquely. Best-effort by design: an account the mapping does not
@@ -17,15 +19,38 @@ cover keeps the engine-class fallback, and any failure leaves that pass unstampe
 run capture -- hence the guard.
 """
 from ucfp.accounts.books import AccountDisplayGroup, AccountDisplayPlacement, BooksOfAccount
-from ucfp.accounts.enums import IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.inputs.expenses import ordered_catalog
 from ucfp.inputs.profile.schemas import Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, ExpenseClass
 
 
+# The order a leaf whose input position is unknown sorts to -- after every input-ordered sibling.
+_UNMAPPED_ORDER = 10 ** 6
+
 # Section order is enum declaration order (the catalog author's intent).
 _CLASS_ORDER    = { klass : index for index, klass in enumerate( ExpenseClass ) }
 _CATEGORY_ORDER = { category : index for index, category in enumerate( ExpenseCategory ) }
+
+# Asset panes: the coarse grouping the assets input step presents (Financial Accounts / Properties /
+# Possessions), one super-rung above the asset class, derived from the class. In declaration display
+# order; the classes not named here are the financial accounts.
+_ASSET_PANES = [
+    ( 'financial', 'Financial Accounts', ( AssetClass.CASH, AssetClass.STOCKS,
+                                           AssetClass.DIVIDEND_STOCKS, AssetClass.BONDS,
+                                           AssetClass.CDS, AssetClass.PRETAX_RETIREMENT,
+                                           AssetClass.ROTH ) ),
+    ( 'properties', 'Properties', ( AssetClass.REAL_ESTATE_RESIDENCE,
+                                    AssetClass.REAL_ESTATE_SECOND_HOME,
+                                    AssetClass.REAL_ESTATE_RENTAL ) ),
+    ( 'possessions', 'Possessions', ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES,
+                                      AssetClass.DEPRECIATING ) ),
+]
+_PANE_BY_CLASS = { asset_class : ( order, key, label )
+                   for order, ( key, label, classes ) in enumerate( _ASSET_PANES )
+                   for asset_class in classes }
+# Within a pane, the classes order by their own declaration order.
+_ASSET_CLASS_ORDER = { asset_class : index for index, asset_class in enumerate( AssetClass ) }
 
 # Income sources: a coarser, user-facing grouping of income tax classes, in display order. Every income
 # account carries a tax class, so the map covers them all -- an uncovered class would simply fall back to
@@ -58,7 +83,8 @@ def stamp_display_placements( books : BooksOfAccount, profile : Profile ) -> Non
     concern must not be able to fail run capture, so a missing catalog or any error leaves that pass
     unstamped (the table then falls back to the engine-class grouping)."""
     for stamp in ( lambda : _stamp_expense_placements( books ),
-                   lambda : _stamp_income_placements( books, profile ) ):
+                   lambda : _stamp_income_placements( books, profile ),
+                   lambda : _stamp_asset_placements( books, profile ) ):
         try:
             stamp()
         except Exception:
@@ -105,5 +131,27 @@ def _stamp_income_placements( books : BooksOfAccount, profile : Profile ) -> Non
                                               label = subject_name, order = subject_order ) )
         account.display_placement = AccountDisplayPlacement(
             path = tuple( path ), order = _TAX_CLASS_ORDER[ account.income_tax_class ] )
+        continue
+    return
+
+
+def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None:
+    positions = { asset.handle : index for index, asset in enumerate( profile.assets ) }
+    for account in books.accounts:
+        if account.asset_class is None:
+            continue
+        pane = _PANE_BY_CLASS.get( account.asset_class )
+        if pane is None:
+            continue
+        pane_order, pane_key, pane_label = pane
+        leaf_order = ( positions.get( str( account.handle ), _UNMAPPED_ORDER )
+                       if account.handle is not None else _UNMAPPED_ORDER )
+        account.display_placement = AccountDisplayPlacement(
+            path = ( AccountDisplayGroup( key = 'pane-' + pane_key, label = pane_label,
+                                          order = pane_order ),
+                     AccountDisplayGroup( key = account.asset_class.name,
+                                          label = account.asset_class.label,
+                                          order = _ASSET_CLASS_ORDER[ account.asset_class ] ) ),
+            order = leaf_order )
         continue
     return

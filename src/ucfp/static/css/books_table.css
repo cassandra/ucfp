@@ -48,6 +48,7 @@
 .bt-depth-0 { --bt-light: 82%; }
 .bt-depth-1 { --bt-light: 89%; }
 .bt-depth-2 { --bt-light: 94%; }
+.bt-depth-3 { --bt-light: 97%; }
 
 /* A removed column: parked out of the group palette as a neutral grey sliver. */
 .bt-head.bt-removed {
