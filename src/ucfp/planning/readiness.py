@@ -8,9 +8,9 @@ user-facing messages each linked to the input flow that fixes it -- so a feature
 with actionable guidance instead of surfacing a raw materialization exception.
 
 `readiness_issues` enumerates the issues (reusing `compatibility_issues` for the Plans->Profile drift
-it owns), while materialization stays the structural backstop that raises at use. Each issue names the
-flow (`fix_route`) that resolves it -- a URL name taking no arguments, so a template can link straight
-to it.
+it owns), while materialization stays the structural backstop that raises at use. Each issue carries a
+`fix_route` (URL name) and `fix_route_kwargs`, resolved through `fix_url`, so a template can link
+straight to the step that resolves it.
 """
 from dataclasses import dataclass, field
 
@@ -21,18 +21,19 @@ from organization.models import Organization
 from ucfp.inputs.assumptions.repository import assumptions_for
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import DRIFT_LEAD_IN, compatibility_issues
-from ucfp.inputs.interview import applicable_sections
+from ucfp.inputs.interview import (
+    EXTERNAL_FACTORS_STEP, INCOME_STEP, SUBJECTS_STEP, applicable_sections )
 from ucfp.inputs.plans.repository import plans_for
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.repository import profiles_for
 from ucfp.inputs.profile.schemas import Profile
 
 
-# The interview step (an `interview_section` key) each field issue routes to, so its link lands on the
-# page that resolves it. Drift is not one step -- it keeps a flow-level link.
-_FILING_STEP   = 'subjects'
-_CLAIMING_STEP = 'income'
-_FACTORS_STEP  = 'external-factors'
+# The interview step each field issue routes to (keys owned by the interview module), so its link lands
+# on the page that resolves it. Drift is not one step -- it keeps a flow-level link.
+_FILING_STEP   = SUBJECTS_STEP
+_CLAIMING_STEP = INCOME_STEP
+_FACTORS_STEP  = EXTERNAL_FACTORS_STEP
 
 
 def input_availability( organization : Organization ) -> dict:

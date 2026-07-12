@@ -264,7 +264,7 @@ class InterviewView( View ):
         so what the user sees is already saved (matching the auto-save spirit) and an acknowledged spending
         section is never empty. Both happen only here -- the merge builders are never a source of
         acknowledgment on their own -- and only on first view, so revisits are inert."""
-        record = self._flow_record( request, section )
+        record = self._flow_record( request, flow_of( section ) )
         if section.key in record.acknowledged_section_keys:
             return
         if getattr( section.form, 'seeds_on_render', False ):
@@ -273,11 +273,11 @@ class InterviewView( View ):
         record.acknowledge( section.key )
 
     @staticmethod
-    def _flow_record( request, section ):
-        """The record whose flow this section belongs to -- where its acknowledgment is stored. The run
-        gate later unions the current bundle's three records, so which record holds a given key does not
-        matter (a section can move between flows)."""
-        flow = flow_of( section )
+    def _flow_record( request, flow ):
+        """The current record a `flow` edits -- the single flow -> record dispatch, used for a section's
+        acknowledgment, the stepper's seen marks, and the flow heading. The run gate later unions the
+        current bundle's three records, so which record holds a given section key does not matter (a
+        section can move between flows)."""
         if flow == 'plans':
             return current_plans_record( request )
         if flow == 'assumptions':
@@ -366,7 +366,9 @@ class InterviewView( View ):
         return {
             'sections'             : sections,
             'current_section'      : section,
-            'acknowledged_sections': self._flow_record( request, section ).acknowledged_section_keys,
+            # The current flow's record only -- the stepper shows one flow's steps, so its seen marks are
+            # flow-scoped (the run gate, spanning all three records, is the cross-flow view).
+            'acknowledged_sections': self._flow_record( request, flow ).acknowledged_section_keys,
             'flow_title'           : flow_title( flow ),
             'flow_heading'         : self._flow_heading( request, flow ),
             'form'                 : form,
@@ -374,16 +376,13 @@ class InterviewView( View ):
             'stepper_target'       : self._STEPPER_TARGET,
         }
 
-    @staticmethod
-    def _flow_heading( request, flow ) -> str:
+    def _flow_heading( self, request, flow ) -> str:
         """The flow's title with the record being edited named, for the page heading -- "Plans: Base
         case", "Assumptions: Optimistic" -- so the user sees which of several they are editing. The
         single-record Profile shows just its title."""
         title = flow_title( flow )
-        if flow == 'plans':
-            return f'{title}: {current_plans_record( request ).label}'
-        if flow == 'assumptions':
-            return f'{title}: {current_assumptions_record( request ).label}'
+        if flow in ( 'plans', 'assumptions' ):
+            return f'{title}: {self._flow_record( request, flow ).label}'
         return title
 
 

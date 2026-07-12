@@ -5,7 +5,7 @@ form) that is not the current one is a revisit link (async, into the section pan
 sections are plain. A section the user has already seen is marked acknowledged. The element ids come
 from the view (stepper_target / section_target).
 {% endcomment %}
-<ol id="{{ stepper_target }}" class="list-group list-group-numbered">
+<ol id="{{ stepper_target }}" class="list-group">
   {% for section in sections %}
   <li class="list-group-item d-flex justify-content-between align-items-center{% if section.key == current_section.key %} active{% endif %}">
     <span>

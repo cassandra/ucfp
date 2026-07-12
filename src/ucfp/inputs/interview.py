@@ -502,7 +502,7 @@ class HomeExpensesSectionForm:
     Next, so a household that accepts the defaults still gets them without opening the pane. `apply` is a
     pure catalog merge (it ignores form input), so it also seeds on render -- see `seeds_on_render`."""
 
-    seeds_on_render = True                                  # rendering the section persists its seed
+    seeds_on_render = True
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -528,7 +528,7 @@ class VehicleExpensesSectionForm:
     Next just advances. `apply` ignores form input (a pure merge, a no-op without a plan), so it also
     seeds on render -- see `seeds_on_render`."""
 
-    seeds_on_render = True                                  # rendering the section persists its seed
+    seeds_on_render = True
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -561,7 +561,7 @@ class LivingExpensesSectionForm:
     Expenses). `apply` is a pure catalog merge (it ignores form input), so it also seeds on render -- see
     `seeds_on_render`."""
 
-    seeds_on_render = True                                  # rendering the section persists its seed
+    seeds_on_render = True
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -579,14 +579,21 @@ class LivingExpensesSectionForm:
             plans, recurring_expenses = merged_recurring_expenses( profile, plans ) )
 
 
+# Section keys other modules route to by name -- the interview owns its own key vocabulary, so the run
+# gate borrows these rather than re-spelling the strings (readiness maps its field issues onto them).
+SUBJECTS_STEP         = 'subjects'
+INCOME_STEP           = 'income'
+EXTERNAL_FACTORS_STEP = 'external-factors'
+
+
 # The interview's order. A section with a form is live; the rest are declared so the stepper shows
 # the full path ahead.
 SECTIONS = [
-    Section( 'subjects'    , 'Who this plan is for', form = SubjectsSectionForm,
+    Section( SUBJECTS_STEP  , 'Who this plan is for', form = SubjectsSectionForm,
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    Section( 'income'      , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
+    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
@@ -609,7 +616,7 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
-    Section( 'external-factors', 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
+    Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html' ),
 ]
