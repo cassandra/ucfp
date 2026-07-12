@@ -8,14 +8,14 @@
 
 {% include 'planning/panes/readiness_issues.html' %}
 
-{% if inputs_available %}
+{% if input_state.is_ready %}
 <form method="post" class="mt-3">
   {% csrf_token %}
   {{ form.as_p }}
   <button type="submit" class="btn btn-primary">Run forecast</button>
 </form>
 {% else %}
-{% include 'planning/panes/missing_inputs.html' %}
+{% include 'inputs/panes/setup_gate.html' %}
 {% endif %}
 
 <h2 class="h4 mt-5">Past results</h2>

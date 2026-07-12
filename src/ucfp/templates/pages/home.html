@@ -5,7 +5,12 @@
 <div class="text-center py-5">
   <h1 class="text-primary mb-3">{% settings_value 'SITE_NAME' %}</h1>
   <p class="lead text-muted mb-4">Plan your financial future.</p>
-  <a href="{% url 'inputs_home' %}" class="btn btn-primary btn-lg mr-2">Set up / edit your plan</a>
-  <a href="{% url 'financial_forecast' %}" class="btn btn-outline-primary btn-lg">Run a forecast</a>
+  {% if input_state.is_empty %}
+  <a href="{% url 'interview_home' %}" class="btn btn-primary btn-lg">Set up your plan</a>
+  {% elif input_state.is_partial %}
+  <a href="{% url 'interview_home' %}" class="btn btn-primary btn-lg">Finish your setup</a>
+  {% else %}
+  <a href="{% url 'inputs_home' %}" class="btn btn-primary btn-lg">Set up or edit your plan</a>
+  {% endif %}
 </div>
 {% endblock %}

@@ -1,31 +1,26 @@
-"""Whether the planning inputs are ready to run a forecast -- the shared pre-run gate for every
+"""Whether a *chosen* planning bundle is ready to run a forecast -- the shared pre-run gate for every
 planning feature.
 
-Two concerns, both keyed to a feature's run controls: `input_availability` reports which of the three
-inputs the organization even has (the existence gate, shown before any bundle is chosen), and
-`readiness_issues` judges whether a *chosen* Profile + Plans + Assumptions bundle is complete, as
+`readiness_issues` judges whether a selected Profile + Plans + Assumptions bundle is complete, as
 user-facing messages each linked to the input flow that fixes it -- so a feature can stop a doomed run
-with actionable guidance instead of surfacing a raw materialization exception.
+with actionable guidance instead of surfacing a raw materialization exception. It enumerates the
+issues (reusing `compatibility_issues` for the Plans->Profile drift it owns), while materialization
+stays the structural backstop that raises at use. Each issue carries a `fix_route` (URL name) and
+`fix_route_kwargs`, resolved through `fix_url`, so a template can link straight to the step that
+resolves it.
 
-`readiness_issues` enumerates the issues (reusing `compatibility_issues` for the Plans->Profile drift
-it owns), while materialization stays the structural backstop that raises at use. Each issue carries a
-`fix_route` (URL name) and `fix_route_kwargs`, resolved through `fix_url`, so a template can link
-straight to the step that resolves it.
+The prior existence gate -- whether the organization has each input at all -- now lives in
+`inputs.state` (`InputState`), one step earlier than the bundle completeness judged here.
 """
 from dataclasses import dataclass, field
 
 from django.urls import reverse
 
-from organization.models import Organization
-
-from ucfp.inputs.assumptions.repository import assumptions_for
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import DRIFT_LEAD_IN, compatibility_issues
 from ucfp.inputs.interview import (
     EXTERNAL_FACTORS_STEP, INCOME_STEP, SUBJECTS_STEP, applicable_sections )
-from ucfp.inputs.plans.repository import plans_for
 from ucfp.inputs.plans.schemas import Plans
-from ucfp.inputs.profile.repository import profiles_for
 from ucfp.inputs.profile.schemas import Profile
 
 
@@ -34,21 +29,6 @@ from ucfp.inputs.profile.schemas import Profile
 _FILING_STEP   = SUBJECTS_STEP
 _CLAIMING_STEP = INCOME_STEP
 _FACTORS_STEP  = EXTERNAL_FACTORS_STEP
-
-
-def input_availability( organization : Organization ) -> dict:
-    """Which of the three planning inputs `organization` has at least one of, plus whether all are
-    present (`inputs_available`) -- the template context for the existence gate every planning feature
-    shows before its run controls. Distinct from `readiness_issues`, which judges a chosen bundle."""
-    has_profile     = profiles_for( organization ).exists()
-    has_plans       = plans_for( organization ).exists()
-    has_assumptions = assumptions_for( organization ).exists()
-    return {
-        'has_profile'      : has_profile,
-        'has_plans'        : has_plans,
-        'has_assumptions'  : has_assumptions,
-        'inputs_available' : has_profile and has_plans and has_assumptions,
-    }
 
 
 @dataclass( frozen = True )

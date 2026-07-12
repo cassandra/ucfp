@@ -24,6 +24,7 @@ from common.dataclass_json import from_json_data
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
+from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ProfileRecord, PlansRecord, AssumptionsRecord
 from ucfp.inputs.profile.repository import load_profile, profiles_for
 from ucfp.inputs.plans.repository import load_plans, plans_for
@@ -35,7 +36,7 @@ from .forms import GRANULARITY, RunForm
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture
-from .readiness import input_availability, readiness_issues
+from .readiness import readiness_issues
 from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
@@ -70,10 +71,10 @@ class ComingSoonView( TemplateView ):
         return context
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class FinancialForecastView( View ):
+class FinancialForecastView( InputGatedMixin, View ):
     """`/plan/financial-forecast/` -- the hub: choose the profile + plans + assumptions + frame, run,
-    and browse past runs."""
+    and browse past runs. `InputGatedMixin` ensures the organization and attaches `request.input_state`
+    (the existence gate) that the hub shows before its run controls."""
 
     def get( self, request ):
         return render( request, _HUB_TEMPLATE, self._context( request ) )
@@ -155,7 +156,7 @@ class FinancialForecastView( View ):
         plans       = plans_for( organization )
         assumptions = assumptions_for( organization )
         return {
-            **input_availability( organization ),
+            'input_state'     : request.input_state,
             'form'            : form or RunForm(
                 profiles = profiles, plans = plans, assumptions = assumptions,
                 initial = self._default_selection( request, profiles, plans, assumptions ) ),
