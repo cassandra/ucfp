@@ -30,6 +30,9 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
         {% else %}
         <th class="bt-head bt-group-{{ col.group }} bt-depth-{{ col.depth }} text-end">
           <div>
+            {% if col.breadcrumb %}
+            <div class="text-muted small text-truncate" title="{{ col.breadcrumb|join:' › ' }}">{{ col.breadcrumb|join:' › ' }} &rsaquo;</div>
+            {% endif %}
             {{ col.column.label }}
             {% if col.column.account_uuid %}
             <a href="{% url 'books_journal' run_uuid=record.uuid account_uuid=col.column.account_uuid %}"
@@ -37,29 +40,37 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
                title="Transaction history" aria-label="Transaction history">&#8801;</a>
             {% endif %}
           </div>
-          <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
-                data-async="#books-table" class="d-inline-flex">
-            {% csrf_token %}
-            <input type="hidden" name="column" value="{{ col.column.key.token }}">
-            {% if col.can_move_left %}
-            <button type="submit" name="op" value="move_left" class="btn btn-link btn-sm p-0 mx-1"
-                    title="Move left" aria-label="Move left">&lsaquo;</button>
+          <div class="d-inline-flex">
+            {% if col.can_expand %}
+            <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+                  data-async="#books-table" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="op" value="expand">
+              <input type="hidden" name="column" value="{{ col.expand_key.token }}">
+              <button type="submit" class="btn btn-link btn-sm p-0 mx-1"
+                      title="Expand" aria-label="Expand">+</button>
+            </form>
             {% endif %}
-            {% if col.column.expandable and not col.expanded %}
-            <button type="submit" name="op" value="expand" class="btn btn-link btn-sm p-0 mx-1"
-                    title="Expand" aria-label="Expand">+</button>
-            {% endif %}
-            {% if col.expanded %}
-            <button type="submit" name="op" value="collapse" class="btn btn-link btn-sm p-0 mx-1"
-                    title="Collapse" aria-label="Collapse">&minus;</button>
-            {% endif %}
-            <button type="submit" name="op" value="remove" class="btn btn-link btn-sm p-0 mx-1"
-                    title="Remove" aria-label="Remove">&times;</button>
-            {% if col.can_move_right %}
-            <button type="submit" name="op" value="move_right" class="btn btn-link btn-sm p-0 mx-1"
-                    title="Move right" aria-label="Move right">&rsaquo;</button>
-            {% endif %}
-          </form>
+            <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+                  data-async="#books-table" class="d-inline-flex">
+              {% csrf_token %}
+              <input type="hidden" name="column" value="{{ col.op_key.token }}">
+              {% if col.can_move_left %}
+              <button type="submit" name="op" value="move_left" class="btn btn-link btn-sm p-0 mx-1"
+                      title="Move left" aria-label="Move left">&lsaquo;</button>
+              {% endif %}
+              {% if col.can_collapse %}
+              <button type="submit" name="op" value="collapse" class="btn btn-link btn-sm p-0 mx-1"
+                      title="Collapse" aria-label="Collapse">&minus;</button>
+              {% endif %}
+              <button type="submit" name="op" value="remove" class="btn btn-link btn-sm p-0 mx-1"
+                      title="Remove" aria-label="Remove">&times;</button>
+              {% if col.can_move_right %}
+              <button type="submit" name="op" value="move_right" class="btn btn-link btn-sm p-0 mx-1"
+                      title="Move right" aria-label="Move right">&rsaquo;</button>
+              {% endif %}
+            </form>
+          </div>
         </th>
         {% endif %}
         {% endfor %}

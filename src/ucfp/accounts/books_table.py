@@ -468,18 +468,24 @@ class BooksTableColumnCatalog:
 
 @dataclass( frozen = True )
 class BooksTableColumn:
-    """One column as rendered: its catalog column, whether it is currently removed (a thin restore sliver
-    rather than a full column with its figures), whether it is an expanded summary (its members shown
-    alongside it), the structural facts the view tints by -- the drill `depth` and top-level `group` --
-    and whether it has a sibling to trade places with in each direction (a reorder is a within-group
-    sibling swap, so an edge column offers no move that way)."""
+    """One column as rendered. `column` is what it displays -- normally the frontier column, but for a
+    single-child chain (a group whose one shown member would duplicate its value) the chain's terminal,
+    with the absorbed groups' labels in `breadcrumb`. `op_key` is the key structural ops (move / remove /
+    collapse) act on -- the top of the chain -- while `expand_key` is the terminal, so drilling deeper
+    still works. `removed` marks a restore sliver; `can_expand` / `can_collapse` gate those controls;
+    `depth` / `group` drive the tint; `can_move_*` gate the reorder arrows at a group edge (a reorder is a
+    within-group sibling swap)."""
     column         : BooksColumn
-    removed        : bool = False
-    expanded       : bool = False
-    depth          : int  = 0
-    group          : str  = ''
-    can_move_left  : bool = False
-    can_move_right : bool = False
+    op_key         : BooksColumnKey
+    expand_key     : BooksColumnKey
+    removed        : bool  = False
+    can_expand     : bool  = False
+    can_collapse   : bool  = False
+    depth          : int   = 0
+    group          : str   = ''
+    can_move_left  : bool  = False
+    can_move_right : bool  = False
+    breadcrumb     : tuple = ()
 
 
 @dataclass( frozen = True )
@@ -545,31 +551,63 @@ def _sibling_order( catalog : BooksTableColumnCatalog,
              for group in by_parent.values() for key in group }
 
 
+def _is_transparent( catalog : BooksTableColumnCatalog, key : BooksColumnKey, shown : set ) -> bool:
+    """A shown summary with exactly one member, that member also shown: its single expanded child
+    duplicates its value, so it is absorbed into the child's column (path compression)."""
+    column = catalog.get( key )
+    return ( isinstance( column, BooksSummaryColumn ) and ( len( column.member_keys ) == 1 )
+             and ( column.member_keys[ 0 ] in shown ) )
+
+
+def _chain_top( catalog : BooksTableColumnCatalog, key : BooksColumnKey,
+                transparent : set ) -> tuple:
+    """Walk up from `key` through transparent single-child ancestors: the top ancestor (the column
+    structural ops act on for the whole chain) and the breadcrumb of absorbed group labels, top-down."""
+    top    = key
+    labels : list = []
+    parent = catalog.get( key ).parent_key
+    while ( parent is not None ) and ( parent in transparent ):
+        labels.insert( 0, catalog.get( parent ).label )
+        top    = parent
+        parent = catalog.get( parent ).parent_key
+        continue
+    return top, tuple( labels )
+
+
 def _render_columns( catalog : BooksTableColumnCatalog,
                      definition : BooksTableDefinition ) -> tuple[ BooksTableColumn, ... ]:
-    """Resolve the frontier to rendered columns, each carrying its removed state, whether it is an
-    expanded summary (a member of it is present), its drill depth and top-level group (what the view
-    tints by), and whether it has a sibling to move toward in each direction. Keys absent from the
-    catalog are skipped (callers adapt first)."""
-    removed   = set( definition.removed_keys )
-    frontier  = set( definition.column_keys )
-    positions = _sibling_order( catalog, definition.column_keys )
+    """Resolve the frontier to rendered columns. A single-child chain (a group whose one shown member
+    would duplicate its value, recursively) renders as its terminal alone, carrying the absorbed groups
+    as a breadcrumb and pointing structural ops at the chain top; every other column renders itself. Each
+    carries removed state, expand/collapse availability, tint depth/group, and sibling-move reach. Keys
+    absent from the catalog are skipped (callers adapt first)."""
+    removed     = set( definition.removed_keys )
+    frontier    = set( definition.column_keys )
+    shown       = { key for key in definition.column_keys if ( key in catalog ) and ( key not in removed ) }
+    transparent = { key for key in shown if _is_transparent( catalog, key, shown ) }
+    positions   = _sibling_order( catalog, definition.column_keys )
     rendered : list[ BooksTableColumn ] = []
     for key in definition.column_keys:
-        if key not in catalog:
-            continue
-        column       = catalog.get( key )
-        expanded     = ( isinstance( column, BooksSummaryColumn )
-                         and any( member in frontier for member in column.member_keys ) )
-        index, count = positions[ key ]
+        if ( key not in catalog ) or ( key in transparent ):
+            continue                                   # absorbed into its single child's column
+        column          = catalog.get( key )
+        is_removed      = key in removed
+        top, breadcrumb = ( key, () ) if is_removed else _chain_top( catalog, key, transparent )
+        breadcrumb      = tuple( label for label in breadcrumb if label != column.label )
+        expanded        = column.expandable and any( member in frontier for member in column.member_keys )
+        index, count    = positions[ top ]
         rendered.append( BooksTableColumn(
             column         = column,
-            removed        = key in removed,
-            expanded       = expanded,
-            depth          = _column_depth( catalog, key ),
+            op_key         = top,
+            expand_key     = key,
+            removed        = is_removed,
+            can_expand     = ( not is_removed ) and column.expandable and ( not expanded ),
+            can_collapse   = ( not is_removed ) and ( expanded or ( top != key ) ),
+            depth          = _column_depth( catalog, top ),
             group          = _column_group( catalog, key ),
             can_move_left  = index > 0,
-            can_move_right = index < count - 1 ) )
+            can_move_right = index < count - 1,
+            breadcrumb     = breadcrumb ) )
         continue
     return tuple( rendered )
 
