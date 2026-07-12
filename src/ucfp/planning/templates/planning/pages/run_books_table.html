@@ -28,7 +28,7 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
           </form>
         </th>
         {% else %}
-        <th class="bt-head bt-group-{{ col.group }} bt-depth-{{ col.depth }} text-end">
+        <th class="bt-head bt-group-{{ col.group }} bt-depth-{{ col.depth }} text-right">
           <div>
             {% if col.breadcrumb %}
             <div class="text-muted small text-truncate" title="{{ col.breadcrumb|join:' › ' }}">{{ col.breadcrumb|join:' › ' }} &rsaquo;</div>
@@ -84,7 +84,7 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
         {% if cell.removed %}
         <td class="px-1"></td>
         {% else %}
-        <td class="text-end">{{ cell.value|money:currency }}</td>
+        <td class="text-right">{{ cell.value|money:currency }}</td>
         {% endif %}
         {% endfor %}
       </tr>

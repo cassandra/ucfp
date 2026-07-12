@@ -31,9 +31,9 @@ from .schemas import Handle
 @dataclass( frozen = True )
 class AccountDisplayGroup:
     """One rollup rung an account displays under -- an opaque presentation grouping the higher (input)
-    layer mints, the way it mints a `handle`. `key` identifies the group within its type (so accounts
-    sharing a group share it); `label` is what the group's column shows; `order` places it among its
-    siblings. The `accounts` layer never interprets these -- it only groups and orders by them."""
+    layer mints. `key` identifies the group within its type (so accounts sharing a group share it);
+    `label` is what the group's column shows; `order` places it among its siblings. The `accounts` layer
+    never interprets these -- it only groups and orders by them."""
 
     key   : str
     label : str

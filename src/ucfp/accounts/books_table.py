@@ -78,6 +78,7 @@ _DEFAULT_SUPPRESSED_TYPES = frozenset( ( AccountType.EQUITY, ) )
 # The order value the engine-class fallback assigns its rungs and leaves: large, so a stamped placement
 # (with small, input-derived orders) always sorts ahead of the fallback groups, which then keep their
 # account order among themselves (a stable sort by order preserves first appearance for equal orders).
+# Mirrors `_UNMAPPED_ORDER` in planning/display_placement.py -- the two must stay in lockstep.
 _FALLBACK_ORDER = 10 ** 6
 
 

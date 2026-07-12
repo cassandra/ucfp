@@ -40,12 +40,12 @@ def merged_vehicle_costs( plans ) -> list:
     chosen cadence) preserved, missing ones seeded at the catalog default. The tax class and realization
     are re-derived from the catalog each merge (not user edits)."""
     plan     = vehicle_plan_of( plans )
-    existing = { cost.name: cost for cost in plan.running_costs } if plan is not None else dict()
+    existing = { cost.handle: cost for cost in plan.running_costs } if plan is not None else dict()
     merged = list()
     for catalog_expense in ordered_catalog():
         if catalog_expense.expense_class is not ExpenseClass.VEHICLE:
             continue
-        prior = existing.get( catalog_expense.name )
+        prior = existing.get( catalog_expense.handle )
         merged.append( VehicleRunningCost(
             name = catalog_expense.name, handle = catalog_expense.handle,
             expense_tax_class = catalog_expense.expense_tax_class,
