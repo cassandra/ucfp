@@ -875,40 +875,43 @@ class Forecast:
             reference_premium = coverage.reference_premium )
 
     def _tax_properties_for( self, span : DateSpan ) -> tuple:
-        """The engine's `TaxProperty` for each rental: its depreciation attributes (for the
-        annual deduction) plus a disposition marking the sale date when it is sold within
-        this fiscal year (driving §1250 recapture). Residences need none -- their gain
-        settles through the §121 residence-gains account, not the context."""
-        properties = list()
+        """The engine's `TaxProperty` for each rental still held this fiscal year: its depreciation
+        attributes (for the annual deduction) plus a disposition marking the sale date when it is
+        sold *within* this fiscal year (driving §1250 recapture, which fires once). A rental sold in
+        a prior year is dropped -- it is no longer held, so it neither depreciates nor recaptures
+        again. Residences need none -- their gain settles through the §121 residence-gains account,
+        not the context."""
+        fiscal_year = span.end_date.year
+        properties  = list()
         for asset, holding in self._baseline.asset_holdings:
             attributes = asset.property_attributes
             if ( asset.asset_class != AssetClass.REAL_ESTATE_RENTAL ) or ( attributes is None ):
                 continue
+            sale_date = self._sale_date_of( asset )
+            if ( sale_date is not None ) and ( sale_date.year < fiscal_year ):
+                continue                                   # sold in a prior year -> no longer held
+            disposition = ( PropertyDisposition( sale_date = sale_date )
+                            if ( sale_date is not None ) and ( sale_date.year == fiscal_year )
+                            else None )
             properties.append(
                 TaxProperty(
                     holding           = holding,
                     acquisition_date  = attributes.acquisition_date,
                     depreciable_basis = attributes.depreciable_basis,
                     property_type     = attributes.property_type,
-                    disposition       = self._disposition_for( asset, span ),
+                    disposition       = disposition,
                 )
             )
             continue
         return tuple( properties )
 
-    def _disposition_for(
-            self, asset : AssetParameters, span : DateSpan ) -> Optional[ PropertyDisposition ]:
-        """The disposition for `asset` if a sale of it falls in this span's fiscal year, else
-        None: the first scheduled realization of its holding handle, dated in that calendar
-        year. (The sale date is a scheduled input, so no running state is needed.) A property
-        with no handle cannot be referenced by a sale, so it never disposes."""
+    def _sale_date_of( self, asset : AssetParameters ) -> Optional[ date ]:
+        """The date `asset`'s holding is sold -- the earliest scheduled realization of its handle --
+        or None if it is never sold. (The sale date is a scheduled input, so no running state is
+        needed.) A property with no handle cannot be referenced by a sale, so it never disposes."""
         if asset.handle is None:
             return None
-        fiscal_year = span.end_date.year
-        for event in self._parameters.events:
-            if not isinstance( event, ScheduledRealization ):
-                continue
-            if ( str( event.holding ) != str( asset.handle ) ) or ( event.event_date.year != fiscal_year ):
-                continue
-            return PropertyDisposition( sale_date = event.event_date )
-        return None
+        sale_dates = [ event.event_date for event in self._parameters.events
+                       if isinstance( event, ScheduledRealization )
+                       and str( event.holding ) == str( asset.handle ) ]
+        return min( sale_dates ) if sale_dates else None

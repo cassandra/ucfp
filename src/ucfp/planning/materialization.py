@@ -79,7 +79,8 @@ def materialize(
     events = event_contributions( profile, plans, subjects_by_handle )
     expense_streams, expense_items = _property_expenses(
         profile, plans, assets_by_handle, events.property_sales )
-    flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
+    flow_streams, flow_items = _income_flows(
+        profile, subjects_by_handle, events.property_sales )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
     vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
     return ForecastParameters(
@@ -357,16 +358,20 @@ def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:
 # --- Profile: flows (income entitlements) ----------------------------------
 
 def _income_flows(
-        profile : Profile, subjects_by_handle : dict[ str, Subject ] ) -> tuple[ list, list ]:
+        profile : Profile, subjects_by_handle : dict[ str, Subject ],
+        sale_dates : dict ) -> tuple[ list, list ]:
     """The profile's income flows as (streams, items): a flow with no interval is a smoothed stream,
     one with an interval an item placed at that cadence (rent is monthly). The flow's `schedule`
     carries its own window, and its `property_handle` is carried to the engine as the income's
-    `source_handle` (rental income keeps its property link)."""
+    `source_handle` (rental income keeps its property link). A property-linked flow is clipped to its
+    property's sale date -- when a rental is sold, its rent stops with it (the mirror of how a
+    property's operating expenses are clipped)."""
     streams, items = list(), list()
     for flow in profile.income_flows:
         subject = ( subjects_by_handle[ flow.subject_handle ]
                     if flow.subject_handle is not None else None )   # None -> household income
-        amounts = Schedule( tuple( flow.schedule ) )
+        amounts = _clipped_to_sale(
+            Schedule( tuple( flow.schedule ) ), sale_dates.get( flow.property_handle ) )
         if flow.interval is None:
             streams.append( IncomeStream(
                 subject = subject, income_tax_class = flow.income_tax_class,
@@ -377,6 +382,23 @@ def _income_flows(
                 amounts = amounts, cadence = Recurrence( flow.interval ),
                 source_handle = flow.property_handle ) )
     return streams, items
+
+
+def _clipped_to_sale( amounts : Schedule, sale_date : Optional[ date ] ) -> Schedule:
+    """`amounts` with every segment's window pulled in to `sale_date` -- so a rental's income ends when
+    the property is sold. Unchanged when the property is never sold (`sale_date` None)."""
+    if sale_date is None:
+        return amounts
+    return Schedule( tuple(
+        WindowedAmount( segment.amount, _capped_window( segment.window, sale_date ) )
+        for segment in amounts.segments ) )
+
+
+def _capped_window( window : DateWindow, end : date ) -> DateWindow:
+    """`window` with its end pulled in to `end` when it extends past it (or is unbounded)."""
+    if ( window.end is None ) or ( window.end > end ):
+        return DateWindow( start = window.start, end = end )
+    return window
 
 
 def _entitlement_income(
