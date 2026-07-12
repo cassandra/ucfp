@@ -70,9 +70,11 @@ def rename_assumptions( record: AssumptionsRecord, label: str ) -> AssumptionsRe
 def clone_assumptions( record: AssumptionsRecord ) -> AssumptionsRecord:
     """Mint a new assumptions set holding a copy of `record`'s contents, named "<label> copy" -- the
     basis for tweaking a variant without disturbing the original. The copy goes through the typed
-    load/save seam, so it is fully independent of the source."""
+    load/save seam, so it is fully independent of the source; it also inherits the source's acknowledged
+    sections, since a copy of a reviewed set has itself been reviewed."""
     clone = AssumptionsRecord(
-        organization = record.organization, label = f'{record.label} copy' )
+        organization = record.organization, label = f'{record.label} copy',
+        acknowledged_sections = list( record.acknowledged_sections ) )
     return save_assumptions( clone, load_assumptions( record ) )
 
 
