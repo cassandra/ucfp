@@ -499,7 +499,10 @@ class DebtPlanSectionForm:
 class HomeExpensesSectionForm:
     """Home Expenses -- the per-property operating-cost matrix. It exposes the matrix pane (saved on
     its own through `PropertyExpensesView`); `apply` seeds the property expenses from the catalog on
-    Next, so a household that accepts the defaults still gets them without opening the pane."""
+    Next, so a household that accepts the defaults still gets them without opening the pane. `apply` is a
+    pure catalog merge (it ignores form input), so it also seeds on render -- see `seeds_on_render`."""
+
+    seeds_on_render = True                                  # rendering the section persists its seed
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -522,7 +525,10 @@ class VehicleExpensesSectionForm:
     running-costs table. Both save on their own (through `VehiclePlanView` and `VehicleExpensesView`).
     `apply` seeds the running costs from the catalog on Next once a vehicle plan exists, so a household
     that set up a plan and accepts the default running costs still records them; with no plan (no car),
-    Next just advances."""
+    Next just advances. `apply` ignores form input (a pure merge, a no-op without a plan), so it also
+    seeds on render -- see `seeds_on_render`."""
+
+    seeds_on_render = True                                  # rendering the section persists its seed
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -552,7 +558,10 @@ class LivingExpensesSectionForm:
     over the shared age-span timeline. It exposes the table pane (saved on its own through
     `RecurringExpensesView`); `apply` seeds the recurring expenses from the catalog on Next, so accepting
     the defaults still records them. Vehicle running costs are a separate per-car model (Vehicle
-    Expenses)."""
+    Expenses). `apply` is a pure catalog merge (it ignores form input), so it also seeds on render -- see
+    `seeds_on_render`."""
+
+    seeds_on_render = True                                  # rendering the section persists its seed
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile

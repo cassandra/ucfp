@@ -250,12 +250,39 @@ class InterviewView( View ):
 
     def get( self, request, section ):
         current  = self._live_section( section )
+        self._seed_and_acknowledge( request, current )         # presenting the section is the acknowledgment
         profile, other = self._load( request, current )
         sections = self._flow_sections( profile, flow_of( current ) )
         form     = self._form( current, profile, other )
         if is_ajax( request ):
             return self._swap( request, sections, current, form )
         return render( request, self._PAGE_TEMPLATE, self._context( request, sections, current, form ) )
+
+    def _seed_and_acknowledge( self, request, section ):
+        """Presenting a section to the user is the acknowledgment that they have seen it. On the first
+        view a *seeding* section (one whose `apply` is a pure catalog merge) also persists its defaults,
+        so what the user sees is already saved (matching the auto-save spirit) and an acknowledged spending
+        section is never empty. Both happen only here -- the merge builders are never a source of
+        acknowledgment on their own -- and only on first view, so revisits are inert."""
+        record = self._flow_record( request, section )
+        if section.key in record.acknowledged_section_keys:
+            return
+        if getattr( section.form, 'seeds_on_render', False ):
+            profile, other = self._load( request, section )
+            self._store( request, section, self._form( section, profile, other ), profile, other )
+        record.acknowledge( section.key )
+
+    @staticmethod
+    def _flow_record( request, section ):
+        """The record whose flow this section belongs to -- where its acknowledgment is stored. The run
+        gate later unions the current bundle's three records, so which record holds a given key does not
+        matter (a section can move between flows)."""
+        flow = flow_of( section )
+        if flow == 'plans':
+            return current_plans_record( request )
+        if flow == 'assumptions':
+            return current_assumptions_record( request )
+        return latest_profile( request.organization ) or create_profile( request.organization )
 
     def post( self, request, section ):
         current = self._live_section( section )
@@ -270,6 +297,7 @@ class InterviewView( View ):
             following = next_flow_entry( flow )         # guided: advance into the next flow
         if following is None:
             return antinode.redirect_response( reverse( 'inputs_home' ) )
+        self._seed_and_acknowledge( request, following )       # the advanced-to section is now presented
         next_sections = self._flow_sections( profile, flow_of( following ) )
         next_profile, next_other = self._load( request, following )
         next_form = self._form( following, next_profile, next_other )
