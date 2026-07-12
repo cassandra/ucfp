@@ -22,7 +22,7 @@ import logging
 from dataclasses import dataclass
 
 from ucfp.accounts.books import AccountDisplayGroup, AccountDisplayPlacement, BooksOfAccount
-from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.inputs.expenses import is_renting, ordered_catalog, owned_property_handles
 from ucfp.inputs.profile.schemas import Profile, RENTED_HOME_HANDLE
 from ucfp.parameter_sets.enums import ExpenseCategory, ExpenseClass
@@ -39,6 +39,11 @@ _UNMAPPED_ORDER = 10 ** 6
 # Section order is enum declaration order (the catalog author's intent).
 _CLASS_ORDER    = { klass : index for index, klass in enumerate( ExpenseClass ) }
 _CATEGORY_ORDER = { category : index for index, category in enumerate( ExpenseCategory ) }
+
+# The engine's tax-payment accounts gather under one Taxes & Fees surface, placed just after the
+# spending ExpenseClass groups and ordered within it by tax class.
+_TAXES_AND_FEES_ORDER = len( ExpenseClass )
+_TAX_CLASS_LEAF_ORDER = { klass : index for index, klass in enumerate( ExpenseTaxClass ) }
 
 # The Vehicle pane generates the car purchase and its financing payments outside the expense catalog
 # (materialization mints these stable handles for their accounts). They belong in the same Vehicle
@@ -144,10 +149,15 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
     the class and the category (Property -> Pickfair -> Taxes & Insurance -> ...), the expense mirror
     of income's per-subject rung. The Vehicle pane's generated purchase and payment expenses carry no
     catalog row, so they map to the Vehicle section directly -- joining the catalog's vehicle running
-    costs instead of falling back to their (Living) deductibility class."""
+    costs instead of falling back to their (Living) deductibility class. The engine's tax settlements
+    (income/payroll tax, NIIT, the early-withdrawal penalty) have no handle at all, but their
+    tax-payment class gathers them under one Taxes & Fees surface rather than a flat column each."""
     catalog    = { row.handle : row for row in ordered_catalog() }
     properties = _property_rungs( profile )
     for account in books.accounts:
+        if ( account.expense_tax_class is not None ) and account.expense_tax_class.is_tax_payment:
+            account.display_placement = _tax_expense_placement( account.expense_tax_class )
+            continue
         if account.handle is None:
             continue
         handle = str( account.handle )
@@ -161,6 +171,16 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
                 _GENERATED_VEHICLE_ORDER[ base ] )
         continue
     return
+
+
+def _tax_expense_placement( tax_class ) -> AccountDisplayPlacement:
+    """A tax-payment account's placement: one Taxes & Fees surface gathering the engine's tax
+    settlements (income/payroll tax, NIIT, the early-withdrawal penalty), the account ordered within it
+    by its tax class. The surface sits after the spending classes, ahead of the engine-class fallback."""
+    return AccountDisplayPlacement(
+        path  = ( AccountDisplayGroup(
+            key = 'taxes-and-fees', label = 'Taxes & Fees', order = _TAXES_AND_FEES_ORDER ), ),
+        order = _TAX_CLASS_LEAF_ORDER[ tax_class ] )
 
 
 def _property_rungs( profile : Profile ) -> dict:
