@@ -18,7 +18,7 @@ from ucfp.jurisdiction.context import TaxContext
 from ucfp.jurisdiction.engine import ContributionKind, TaxEngine, TaxState
 
 from .events import PeriodEvent
-from .fiscal_window import EstimatedFiscalWindow, FiscalWindow
+from .fiscal_window import FiscalWindow
 
 
 @dataclass( frozen = True )
@@ -137,14 +137,14 @@ class PeriodParameters:
     """The single-interval, already-resolved inputs the Period consumes.
 
     `tax_engine` is the year's resolved engine (from the tax-law projection), carried every
-    interval. Tax is annual, so the Period asks the engine whether the interval's end closes
-    a tax year and settles only then, over the full tax-year span the engine names (Jan-Dec)
-    -- so the boundary is the tax law's to decide, not a pre-set window's presence. A `None`
-    engine simply runs no tax step. `opening_tax_state` is the carryforwards threaded in from
-    the prior period. `fiscal_window` is the tax-year view the Forecast resolves for this
-    interval -- a plain window for a full year, an annualizing `EstimatedFiscalWindow` for a
-    mid-year-start partial first year; the Period reads it for the contribution clamp and the
-    year-close tax steps, and prorates the settled charge by its `coverage`."""
+    interval of a *full* calendar year. Tax is annual, so the Period asks the engine whether the
+    interval's end closes a tax year and settles only then, over the full tax-year span the
+    engine names (Jan-Dec). A partial year (a mid-year start, or a trailing year short of
+    December 31) is handed a `None` engine and so runs no tax step -- the Forecast decides
+    fullness; the boundary is the tax law's. `opening_tax_state` is the carryforwards threaded in
+    from the prior period. `fiscal_window` is the tax-year view the Forecast resolves for this
+    interval -- a plain window the Period reads for the contribution clamp and the year-close
+    tax step."""
 
     date_span             : DateSpan
     tax_context           : TaxContext
@@ -157,7 +157,7 @@ class PeriodParameters:
     events                : list[ PeriodEvent ]                             = field( default_factory = list )
     tax_engine            : Optional[ TaxEngine ]                           = None
     opening_tax_state     : Optional[ TaxState ]                            = None
-    fiscal_window         : Optional[ FiscalWindow | EstimatedFiscalWindow ] = None
+    fiscal_window         : Optional[ FiscalWindow ]                        = None
     # Selling costs applied to a property sale this interval: a realtor rate on the sale price plus a
     # fixed cost already inflated to this year (the Forecast inflates it, like other today's-dollar
     # inputs). Carried as primitives so this myopic slice needs no engine-parameters import.

@@ -43,10 +43,13 @@ class NoticeKind( LabeledEnum ):
         'Cash Shortfall', 'The cash balance went negative -- spending outran available cash.' )
     NET_WORTH_DEPLETED = (
         'Net Worth Depleted', 'Assets no longer cover liabilities; the forecast stops.' )
-    APPROXIMATE_TAX_YEAR = (
-        'Approximate Tax Year',
-        'A partial calendar year (a mid-year start or a non-year-end horizon): its tax is an '
-        'estimate or, for a trailing year, unsettled -- the figures are approximate.' )
+    PARTIAL_YEAR_UNTAXED = (
+        'Untaxed Partial Year',
+        'A partial calendar year (a mid-year start, or a horizon short of December 31): tax is '
+        'assessed on whole years only, so this year is posted but left untaxed. It carries the '
+        'approximate income that escaped tax -- the readily-taxable classes, excluding those '
+        '(Social Security, net rental, tax-exempt interest) that need the engine to tax correctly '
+        '-- so the user can adjust inputs to compensate.' )
 
 
 @dataclass( frozen = True )
@@ -57,12 +60,15 @@ class Notice:
 
     `kind` is the self-describing category (its label is the title). `severity` ranks
     importance. `amount` is the figure the notice carries (a penalty, an RMD, the shortfall),
-    or None. `transaction_uuid` links to the originating transaction (whose `description` memo
-    carries the per-posting detail) -- None for a notice about a state rather than a posting."""
+    or None. `detail` names what `amount` measures when the kind's title does not already say
+    (e.g. "in untaxed capital gains") -- None to render the amount bare. `transaction_uuid` links
+    to the originating transaction (whose `description` memo carries the per-posting detail) --
+    None for a notice about a state rather than a posting."""
 
     kind             : NoticeKind
     severity         : NoticeSeverity
     amount           : Optional[ Decimal ] = None
+    detail           : Optional[ str ]     = None
     transaction_uuid : Optional[ UUID ]    = None
 
 

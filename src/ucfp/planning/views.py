@@ -183,7 +183,7 @@ class RunResultsView( View ):
             'record'        : record,
             'stopped_early' : run.result.stopped_early,
             'notices'       : [ ( step.end_date.year, notice.kind.label,
-                                  notice.severity.label, notice.amount )
+                                  notice.severity.label, notice.amount, notice.detail )
                                 for step in run.result.steps for notice in step.notices ],
         }
         context.update( run_books_table_context( request, run, books ) )

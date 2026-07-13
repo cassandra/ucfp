@@ -51,7 +51,7 @@ from ucfp.period.parameters import (
     PeriodParameters,
 )
 from ucfp.period.events import PeriodEvent
-from ucfp.period.fiscal_window import EstimatedFiscalWindow, FiscalWindow
+from ucfp.period.fiscal_window import FiscalWindow
 from ucfp.period.period import Period
 from ucfp.period.results import Notice, NoticeKind, NoticeSeverity, PeriodResult
 from ucfp.jurisdiction.engine import ContributionKind, TaxEngine, TaxState
@@ -81,6 +81,28 @@ _LIMIT_KIND_BY_SOURCE = {
     ContributionSource.PERSONAL : ContributionKind.PERSONAL,
     ContributionSource.EMPLOYER : None,
 }
+
+
+# The income classes summed to report the approximate income that escaped tax in an untaxed
+# partial year -- split into capital gains and ordinary. Deliberately excluded are the classes
+# whose taxable amount the books cannot give without the engine's own netting/worksheets: Social
+# Security (partly taxable), gross rental (net of depreciation and passive-loss limits), and
+# tax-exempt interest (never taxed). SECTION_1250 recapture is engine-derived at assessment, never
+# a booked posting, so it too is absent. Hence "approximate".
+_CAPITAL_GAIN_CLASSES = (
+    IncomeTaxClass.LONG_TERM_GAINS,
+    IncomeTaxClass.SHORT_TERM_GAINS,
+    IncomeTaxClass.RESIDENCE_SECTION_121_GAIN,
+    IncomeTaxClass.SECOND_HOME_GAIN,
+    IncomeTaxClass.COLLECTIBLES_GAINS,
+)
+_ORDINARY_UNTAXED_CLASSES = (
+    IncomeTaxClass.WAGES,
+    IncomeTaxClass.ORDINARY,
+    IncomeTaxClass.RETIREMENT_DISTRIBUTION,
+    IncomeTaxClass.TAXABLE_INTEREST,
+    IncomeTaxClass.QUALIFIED_DIVIDENDS,
+)
 
 
 # A loan resolved against the books: its parameters plus the accounts and the monthly level
@@ -501,7 +523,7 @@ class Forecast:
             period_parameters = self._build_period_parameters( span, opening_state, bookkeeper )
             period            = Period( period_parameters )
             period_result     = period.compute( bookkeeper )
-            self._flag_partial_tax_year( span, period_result )
+            self._flag_partial_tax_year( span, period_result, bookkeeper )
             result.steps.append( ForecastStep( span, period_result ) )
             if period_result.closing_tax_state is not None:
                 opening_state = period_result.closing_tax_state
@@ -753,12 +775,12 @@ class Forecast:
                                   bookkeeper : Bookkeeper ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters. Rates and flows are resolved to
         the interval's length (so the same parameters run at any granularity), and liability
-        terms are amortized off the running balance. The year's tax engine is carried every
-        interval; the Period asks it whether the interval closes a tax year and settles only
-        then."""
+        terms are amortized off the running balance. The tax engine is carried only over a full
+        calendar year (a partial year is untaxed); where present, the Period asks it whether the
+        interval closes a tax year and settles only then."""
         year_fraction = self._year_fraction( span )
         annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
-        tax_engine = self._tax_law.engine_for( span.end_date.year )
+        tax_engine = self._settling_tax_engine( span )
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
@@ -786,32 +808,41 @@ class Forecast:
         year_days = 366 if calendar.isleap( span.start_date.year ) else 365
         return Decimal( period_days ) / Decimal( year_days )
 
+    def _settling_tax_engine( self, span : DateSpan ) -> Optional[ TaxEngine ]:
+        """The interval's tax engine, but only when its tax year is a *full* calendar year within
+        the forecast span -- otherwise None. Tax is assessed on whole years only; a partial year
+        (a mid-year start, or a trailing year short of the tax-year end) is posted but untaxed,
+        which the Period effects by being handed no engine."""
+        tax_engine = self._tax_law.engine_for( span.end_date.year )
+        if tax_engine is None:
+            return None
+        year_start, year_end = tax_engine.tax_year_bounds( span.end_date )
+        covers_full_year = (
+            self._parameters.start_date <= year_start and self._parameters.end_date >= year_end )
+        return tax_engine if covers_full_year else None
+
     def _fiscal_window_for(
             self, span : DateSpan, bookkeeper : Bookkeeper,
-            tax_engine : Optional[ TaxEngine ] ) -> FiscalWindow | EstimatedFiscalWindow:
-        """The tax-year view this interval reads: a window from the tax year's start (named by
-        the engine) through the interval's end -- year-to-date, the whole year at a close. The
-        Forecast owns it because the tax-year boundary and the partial-year adjustment are time
-        facts. A mid-year start's partial first year is wrapped in an `EstimatedFiscalWindow` so
-        its figures annualize for the short-period tax estimate; every later (full) year is a
-        plain window."""
+            tax_engine : Optional[ TaxEngine ] ) -> FiscalWindow:
+        """The tax-year view this interval reads: a window from the tax year's start (named by the
+        engine) through the interval's end -- year-to-date, the whole year at a close. The Forecast
+        owns it because the tax-year boundary is a time fact. Tax settles only on full calendar
+        years (a partial year is handed no engine), so this is always a plain window."""
         period_end = span.end_date
         if tax_engine is not None:
-            year_start, year_end = tax_engine.tax_year_bounds( period_end )
+            year_start, _year_end = tax_engine.tax_year_bounds( period_end )
         else:
-            year_start, year_end = date( period_end.year, 1, 1 ), date( period_end.year, 12, 31 )
-        window = FiscalWindow( bookkeeper, DateSpan( year_start, period_end ) )
-        if self._parameters.start_date <= year_start:
-            return window
-        covered_days = ( year_end - self._parameters.start_date ).days + 1
-        year_days = ( year_end - year_start ).days + 1
-        return EstimatedFiscalWindow( window, Decimal( covered_days ) / Decimal( year_days ) )
+            year_start = date( period_end.year, 1, 1 )
+        return FiscalWindow( bookkeeper, DateSpan( year_start, period_end ) )
 
-    def _flag_partial_tax_year( self, span : DateSpan, result : PeriodResult ) -> None:
-        """At the last interval of a partial calendar year -- the mid-year first year, or a
-        trailing year ending before December 31 -- raise an INFO Notice that the year's figures are
-        approximate: its tax is a short-period estimate (first year) or goes unsettled (trailing
-        year, no year-close). Raised once, at the year's last interval; full years are silent."""
+    def _flag_partial_tax_year(
+            self, span : DateSpan, result : PeriodResult, bookkeeper : Bookkeeper ) -> None:
+        """At the last interval of a partial calendar year -- the mid-year first year, or a trailing
+        year ending before December 31 -- raise a Notice that tax was not computed for it (tax
+        settles on whole years only). The notice carries the approximate income that escaped tax so
+        the user can adjust inputs to compensate, and is a WARNING when there is any (INFO when the
+        year had no readily-taxable income). Raised once, at the year's last interval; full years
+        are silent."""
         end = span.end_date
         closes_calendar_year = ( end == date( end.year, 12, 31 ) ) or ( end == self._parameters.end_date )
         if not closes_calendar_year:
@@ -820,10 +851,36 @@ class Forecast:
         starts_partial = ( end.year == start.year ) and ( ( start.month, start.day ) != ( 1, 1 ) )
         ends_partial = ( end.year == self._parameters.end_date.year ) and (
             ( self._parameters.end_date.month, self._parameters.end_date.day ) != ( 12, 31 ) )
-        if starts_partial or ends_partial:
-            result.notices.append(
-                Notice( kind = NoticeKind.APPROXIMATE_TAX_YEAR, severity = NoticeSeverity.INFO ) )
+        if not ( starts_partial or ends_partial ):
+            return
+        window = FiscalWindow( bookkeeper, DateSpan( date( end.year, 1, 1 ), end ) )
+        gains    = sum( ( window.income( c ) for c in _CAPITAL_GAIN_CLASSES ), Decimal( '0' ) )
+        ordinary = sum( ( window.income( c ) for c in _ORDINARY_UNTAXED_CLASSES ), Decimal( '0' ) )
+        untaxed  = gains + ordinary
+        if untaxed <= 0:
+            result.notices.append( Notice(
+                kind = NoticeKind.PARTIAL_YEAR_UNTAXED, severity = NoticeSeverity.INFO ) )
+            return
+        result.notices.append( Notice(
+            kind     = NoticeKind.PARTIAL_YEAR_UNTAXED,
+            severity = NoticeSeverity.WARNING,
+            amount   = untaxed,
+            detail   = self._untaxed_income_detail( gains, ordinary ) ) )
         return
+
+    @staticmethod
+    def _untaxed_income_detail( gains : Decimal, ordinary : Decimal ) -> str:
+        """The label for the untaxed-income figure a partial-year notice carries, naming the
+        capital-gain vs ordinary split when both are present so the reader can judge how to
+        compensate. Amounts are whole-dollar and currency-symbol-free (the display currency is a
+        presentation concern the engine does not hold); the figure is approximate by construction
+        (see `_CAPITAL_GAIN_CLASSES`)."""
+        if gains > 0 and ordinary > 0:
+            return ( f'in approximate untaxed income '
+                     f'({gains:,.0f} capital gains, {ordinary:,.0f} ordinary)' )
+        if gains > 0:
+            return 'in approximate untaxed capital gains'
+        return 'in approximate untaxed ordinary income'
 
     def _retitle_removed_subjects_accounts( self, bookkeeper : Bookkeeper, span : DateSpan ) -> None:
         """Retitle a decedent's accounts to the survivor once the run passes the death year, so
