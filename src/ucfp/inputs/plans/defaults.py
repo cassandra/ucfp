@@ -25,14 +25,28 @@ LIQUID_DRAW_CLASSES = (
     AssetClass.PRETAX_RETIREMENT,
 )
 
+# The classes a cash sweep may invest surplus into: the non-retirement liquid holdings. Retirement
+# is excluded (contribution limits, and the engine sweeps at cost basis into taxable holdings). The
+# Accounts step keeps a (possibly $0) account for each of these so a sweep always has a home.
+SWEEP_TARGET_CLASSES = (
+    AssetClass.CDS,
+    AssetClass.BONDS,
+    AssetClass.STOCKS,
+    AssetClass.DIVIDEND_STOCKS,
+)
+
+# The stable Accounts handles for the default 50/50 sweep -- the Stocks and Bonds homes, which the
+# Accounts step always keeps (at $0 if unfunded), so the default sweep always resolves.
+_DEFAULT_SWEEP = [ ( 'stocks', Decimal( '0.5' ) ), ( 'bonds', Decimal( '0.5' ) ) ]
+
 
 def default_drawdown() -> DrawdownPolicy:
-    """The cash policy an untouched plan uses: a $25k floor and the liquid draw waterfall. No ceiling
-    or sweep yet -- the engine requires a ceiling to come with a sweep allocation (a destination to
-    invest the surplus into), so the maximum and the sweep are set together in the sweep step; until
-    then, surplus simply stays in cash."""
+    """The complete cash policy an untouched plan uses: a $25k floor / $50k ceiling band, the liquid
+    draw waterfall, and a 50/50 Stocks/Bonds sweep -- since holding too much idle cash is rarely a
+    good plan. The sweep targets (the Stocks and Bonds accounts) are always present, so the ceiling,
+    which the engine requires to come with a sweep destination, is safe to default."""
     return DrawdownPolicy(
         cash_floor       = Decimal( '25000' ),
-        cash_ceiling     = None,
+        cash_ceiling     = Decimal( '50000' ),
         draw_order       = list( LIQUID_DRAW_CLASSES ),
-        sweep_allocation = [] )
+        sweep_allocation = list( _DEFAULT_SWEEP ) )

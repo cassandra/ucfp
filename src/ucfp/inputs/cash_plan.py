@@ -1,31 +1,47 @@
-"""The Cash Plan section: the cash band and how the engine keeps the hub inside it.
+"""The Cash Plan section: the cash band, the draw-order priority, and the sweep of surplus.
 
 A Plans-flow section. `cash_floor`/`cash_ceiling` are the band; `draw_order` is the priority of
-liquid asset classes the engine sells when cash runs low -- an up/down-ordered list, shown over the
-full liquid set (even types not yet held, so the order survives new holdings). The sweep (investing
-surplus above the ceiling) is added in a later section. Seeded from the plan's drawdown policy or
-the shared default; materialization reads the copy stored here.
+liquid asset classes the engine sells when cash runs low (an up/down-ordered list); the sweep is a
+weighted split of the surplus above the ceiling across non-retirement holdings. Seeded from the
+plan's drawdown policy or the shared default; materialization reads the copy stored here. The engine
+requires a ceiling to come with a sweep, so the two are edited together and stored as a pair -- a
+ceiling with no sweep yet is simply not persisted (non-blocking), never re-rendered from under typing.
 """
 from dataclasses import replace
+from decimal import Decimal, InvalidOperation
 
 from django import forms
 
-from .plans.defaults import LIQUID_DRAW_CLASSES, default_drawdown
+from .plans.defaults import LIQUID_DRAW_CLASSES, SWEEP_TARGET_CLASSES, default_drawdown
 from .plans.schemas import DrawdownPolicy
 
 
+def _normalized( rows : list ) -> list:
+    """`(handle, weight)` rows (positive weights) -> `(handle, fraction)` summing to exactly 1. The
+    last row absorbs the rounding remainder so `AssetAllocation`'s sum-to-one check always holds."""
+    total   = sum( ( weight for _handle, weight in rows ), Decimal( '0' ) )
+    running = Decimal( '0' )
+    result  = list()
+    for index, ( handle, weight ) in enumerate( rows ):
+        if index < len( rows ) - 1:
+            fraction = ( weight / total ).quantize( Decimal( '0.000001' ) )
+            running += fraction
+        else:
+            fraction = Decimal( '1' ) - running
+        result.append( ( handle, fraction ) )
+    return result
+
+
 class DrawdownForm( forms.Form ):
-    """The cash-band editor: the min/max cash and the draw-order priority over the liquid classes.
-    Seeded from the plan's drawdown policy (or the default); `apply` stores the edited policy back
-    on the plans, preserving the sweep allocation (which a later section sets)."""
+    """The cash-policy editor: the band, the draw-order priority, and the sweep of surplus. Seeded
+    from the plan's drawdown policy (or the default); `apply` stores the edited policy back on the
+    plans. A ceiling is kept only when a sweep names where to invest the surplus."""
 
     cash_floor   = forms.DecimalField(
         label = 'Minimum cash', min_value = 0,
         widget = forms.NumberInput( attrs = { 'class' : 'form-control' } ) )
-    # Disabled until the sweep step: the engine requires a ceiling to come with a sweep allocation
-    # (a destination to invest the surplus into), so the maximum is set together with the sweep.
     cash_ceiling = forms.DecimalField(
-        label = 'Maximum cash', min_value = 0, required = False, disabled = True,
+        label = 'Maximum cash', min_value = 0, required = False,
         widget = forms.NumberInput( attrs = { 'class' : 'form-control' } ) )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -33,7 +49,10 @@ class DrawdownForm( forms.Form ):
         self._profile = profile
         self._policy  = (
             plans.drawdown if ( plans is not None and plans.drawdown is not None ) else default_drawdown() )
-        self.fields[ 'cash_floor' ].initial = self._policy.cash_floor
+        self.fields[ 'cash_floor' ].initial   = self._policy.cash_floor
+        self.fields[ 'cash_ceiling' ].initial = self._policy.cash_ceiling
+
+    # ---- draw order ----
 
     @property
     def draw_rows( self ) -> list:
@@ -45,20 +64,52 @@ class DrawdownForm( forms.Form ):
         return [ { 'value' : c.name, 'label' : c.label, 'held' : c in held } for c in order ]
 
     def _submitted_order( self ) -> list:
-        """The draw order as posted -- the hidden `draw_order` inputs in their (reordered) DOM order,
-        filtered to the known liquid classes. Falls back to the current order if none was posted."""
-        by_name  = { c.name : c for c in LIQUID_DRAW_CLASSES }
-        ordered  = [ by_name[ name ] for name in self.data.getlist( 'draw_order' ) if name in by_name ]
+        by_name = { c.name : c for c in LIQUID_DRAW_CLASSES }
+        ordered = [ by_name[ name ] for name in self.data.getlist( 'draw_order' ) if name in by_name ]
         return ordered or list( self._policy.draw_order )
 
+    # ---- sweep ----
+
+    @property
+    def sweep_targets( self ) -> list:
+        """The holdings a sweep may invest into -- the non-retirement liquid holdings, always present
+        (the Accounts step keeps a $0 account for each). The row selects choose among these."""
+        return [ { 'handle' : asset.handle, 'label' : asset.asset_class.label }
+                 for asset in ( self._profile.assets if self._profile else () )
+                 if asset.asset_class in SWEEP_TARGET_CLASSES ]
+
+    @property
+    def sweep_rows( self ) -> list:
+        """The current sweep as pane rows (target handle, whole-percent weight); one blank row when
+        there is no sweep yet, so the table always shows an editable line."""
+        rows = [ { 'handle' : handle, 'weight' : ( weight * 100 ).quantize( Decimal( '1' ) ) }
+                 for handle, weight in self._policy.sweep_allocation ]
+        return rows or [ { 'handle' : '', 'weight' : '' } ]
+
+    def _submitted_sweep( self ) -> list:
+        """Posted sweep rows -> `(handle, weight)` for valid target handles with a positive weight."""
+        valid   = { target[ 'handle' ] for target in self.sweep_targets }
+        handles = self.data.getlist( 'sweep_handle' )
+        weights = self.data.getlist( 'sweep_weight' )
+        rows    = list()
+        for handle, weight in zip( handles, weights ):
+            if ( handle not in valid ) or ( not weight.strip() ):
+                continue
+            try:
+                amount = Decimal( weight )
+            except InvalidOperation:
+                continue
+            if amount > 0:
+                rows.append( ( handle, amount ) )
+        return rows
+
     def apply( self, profile, plans ):
-        sweep = list( self._policy.sweep_allocation )                    # preserved; set in a later section
-        policy = DrawdownPolicy(
+        ceiling = self.cleaned_data.get( 'cash_ceiling' )
+        rows    = self._submitted_sweep() if ceiling is not None else list()
+        sweep   = _normalized( rows ) if rows else list()
+        policy  = DrawdownPolicy(
             cash_floor       = self.cleaned_data[ 'cash_floor' ],
-            # A ceiling is kept only when a sweep exists to invest the surplus (the engine requires the
-            # pair). Until the sweep step sets both, the maximum stays None -- an inert band max, not an
-            # invalid ceiling.
-            cash_ceiling     = self._policy.cash_ceiling if sweep else None,
+            cash_ceiling     = ceiling if sweep else None,   # a ceiling is kept only with a sweep to invest into
             draw_order       = self._submitted_order(),
             sweep_allocation = sweep )
         return profile, replace( plans, drawdown = policy )

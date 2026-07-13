@@ -129,9 +129,18 @@ class MaterializeFromLibraryTest( TestCase ):
             subjects = [ SubjectProfile(
                 handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
             filing_status = FilingStatus.SINGLE,
-            assets = [ AssetProfile(
-                handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
-                opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) ) ] )
+            # The $0 Stocks/Bonds accounts are the always-seeded sweep homes (see the Accounts step):
+            # the default drawdown policy sweeps surplus into them, so they must exist as holdings.
+            assets = [
+                AssetProfile(
+                    handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
+                    opening_value = Decimal( '500000' ), cost_basis = Decimal( '500000' ) ),
+                AssetProfile(
+                    handle = 'stocks', name = 'Stocks', asset_class = AssetClass.STOCKS,
+                    opening_value = Decimal( '0' ), cost_basis = Decimal( '0' ) ),
+                AssetProfile(
+                    handle = 'bonds', name = 'Bonds', asset_class = AssetClass.BONDS,
+                    opening_value = Decimal( '0' ), cost_basis = Decimal( '0' ) ) ] )
         plans = Plans()
         assumptions = Assumptions(   # the economic-factors copy, seeded here
             economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),

@@ -11,6 +11,7 @@ onto the typed aggregates.
 whole path, and a section becomes live simply by giving it a form.
 """
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from enum import Enum, auto
 from typing import Optional
 
@@ -379,7 +380,7 @@ class AccountsForm( forms.Form ):
         by_handle = { asset.handle : asset for asset in profile.assets }
         initial   = dict()
         for name, handle, _asset_class in cls._TAXABLE:
-            if handle in by_handle:
+            if handle in by_handle and by_handle[ handle ].opening_value:   # $0 placeholders show blank
                 initial[ name ] = by_handle[ handle ].opening_value
         for subject in profile.subjects:
             for prefix, handle_prefix, _asset_class, _concept in cls._RETIREMENT:
@@ -396,12 +397,14 @@ class AccountsForm( forms.Form ):
 
     def _accounts( self ) -> list:
         accounts = []
+        # Every taxable account is kept, at $0 when blank: Cash is the hub the whole engine runs on,
+        # and Stocks/Bonds/CDs/Dividend Stocks are the homes a cash sweep invests into, so they must
+        # exist for a sweep to land even before the user funds them.
         for name, handle, asset_class in self._TAXABLE:
-            value = self.cleaned_data.get( name )
-            if value is not None:
-                accounts.append( AssetProfile(
-                    handle = handle, name = asset_class.label,
-                    asset_class = asset_class, opening_value = value ) )
+            value = self.cleaned_data.get( name ) or Decimal( '0' )
+            accounts.append( AssetProfile(
+                handle = handle, name = asset_class.label,
+                asset_class = asset_class, opening_value = value ) )
         for subject in self._subjects:
             for prefix, handle_prefix, asset_class, _concept in self._RETIREMENT:
                 value = self.cleaned_data.get( self._retire_field( prefix, subject.handle ) )
