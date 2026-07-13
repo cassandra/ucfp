@@ -22,7 +22,7 @@ import logging
 from dataclasses import dataclass
 
 from ucfp.accounts.books import AccountDisplayGroup, AccountDisplayPlacement, BooksOfAccount
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.inputs.expenses import is_renting, ordered_catalog, owned_property_handles
 from ucfp.inputs.profile.schemas import Profile, RENTED_HOME_HANDLE
 from ucfp.parameter_sets.enums import ExpenseCategory, ExpenseClass
@@ -41,9 +41,10 @@ _CLASS_ORDER    = { klass : index for index, klass in enumerate( ExpenseClass ) 
 _CATEGORY_ORDER = { category : index for index, category in enumerate( ExpenseCategory ) }
 
 # The engine's tax-payment accounts gather under one Taxes & Fees surface, placed just after the
-# spending ExpenseClass groups and ordered within it by tax class.
+# spending ExpenseClass groups; within it each tax class gets its own rung, ordered by tax class
+# (its enum value, which is its declaration position -- see LabeledEnum -- so the rungs follow the
+# enum's own order without capturing its members in an import-time dict).
 _TAXES_AND_FEES_ORDER = len( ExpenseClass )
-_TAX_CLASS_LEAF_ORDER = { klass : index for index, klass in enumerate( ExpenseTaxClass ) }
 
 # The Vehicle pane generates the car purchase and its financing payments outside the expense catalog
 # (materialization mints these stable handles for their accounts). They belong in the same Vehicle
@@ -175,12 +176,21 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
 
 def _tax_expense_placement( tax_class ) -> AccountDisplayPlacement:
     """A tax-payment account's placement: one Taxes & Fees surface gathering the engine's tax
-    settlements (income/payroll tax, NIIT, the early-withdrawal penalty), the account ordered within it
-    by its tax class. The surface sits after the spending classes, ahead of the engine-class fallback."""
-    return AccountDisplayPlacement(
-        path  = ( AccountDisplayGroup(
-            key = 'taxes-and-fees', label = 'Taxes & Fees', order = _TAXES_AND_FEES_ORDER ), ),
-        order = _TAX_CLASS_LEAF_ORDER[ tax_class ] )
+    settlements (income/payroll tax, NIIT, the early-withdrawal penalty), then a per-tax-class rung so
+    each tax renders as its own column. The surface sits after the spending classes, ahead of the
+    engine-class fallback.
+
+    The class rung is what makes a tax column's place stick in the session's column lens. The engine
+    mints a fresh account UUID every run, so a bare tax leaf (keyed by that UUID) cannot be matched back
+    across runs and its expand/remove/reorder state is lost. The rung is keyed by the tax-class enum --
+    stable across runs and label edits -- and holds exactly one account, so it collapses into a
+    single-child column carrying that stable key; a class absent from a run is simply dropped."""
+    surface   = AccountDisplayGroup(
+        key = 'taxes-and-fees', label = 'Taxes & Fees', order = _TAXES_AND_FEES_ORDER )
+    tax_group = AccountDisplayGroup(
+        key = 'tax-' + tax_class.name.lower(), label = tax_class.label,
+        order = tax_class.value )
+    return AccountDisplayPlacement( path = ( surface, tax_group ), order = 0 )
 
 
 def _property_rungs( profile : Profile ) -> dict:
