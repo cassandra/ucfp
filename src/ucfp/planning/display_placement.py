@@ -12,7 +12,8 @@ axes are stamped:
     honestly for that engine-set granularity rather than split. The trailing tax-class rung gives each
     account a run-stable column key (one account per rung), the income mirror of the Taxes & Fees rung.
   - Assets, by `AssetClass` -> the input *pane* the assets step groups them under (Financial Accounts /
-    Properties / Possessions) then the asset class, with holdings ordered by their profile position.
+    Properties / Possessions) then the asset class then the holding itself, keyed by its handle and
+    ordered by profile position -- so several holdings of one class each keep a run-stable column.
 
 This is the one place carrying `parameter_sets`/grouping knowledge to the books; the accounts layer
 stays oblivious, reading the placement opaquely. Best-effort by design: an account the mapping does not
@@ -285,12 +286,18 @@ def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None
         pane_order, pane = grouping
         leaf_order = ( positions.get( str( account.handle ), _UNMAPPED_ORDER )
                        if account.handle is not None else _UNMAPPED_ORDER )
-        account.display_placement = AccountDisplayPlacement(
-            path = ( AccountDisplayGroup( key = 'pane-' + pane.key, label = pane.label,
-                                          order = pane_order ),
-                     AccountDisplayGroup( key = account.asset_class.name,
-                                          label = account.asset_class.label,
-                                          order = account.asset_class.value ) ),   # declaration order
-            order = leaf_order )
+        path = [ AccountDisplayGroup( key = 'pane-' + pane.key, label = pane.label, order = pane_order ),
+                 AccountDisplayGroup( key = account.asset_class.name, label = account.asset_class.label,
+                                      order = account.asset_class.value ) ]   # declaration order
+        # A per-holding rung keyed by the account's own handle gives its column a run-stable identity
+        # (the account UUID is reminted each run). An asset account always carries a handle; with one
+        # holding per class the rung absorbs into the class column (no visible change), and with several
+        # -- a supported future case -- it keeps each holding individually addressable across runs, the
+        # asset mirror of the per-class rungs on the tax and income axes.
+        if account.handle is not None:
+            path.append( AccountDisplayGroup( key   = 'holding-' + str( account.handle ),
+                                              label = account.name, order = leaf_order ) )
+            leaf_order = 0
+        account.display_placement = AccountDisplayPlacement( path = tuple( path ), order = leaf_order )
         continue
     return
