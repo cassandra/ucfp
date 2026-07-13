@@ -37,9 +37,9 @@ class TaxFigures:
 
 class FiscalWindowView( Protocol ):
     """The read-only view of one fiscal year's books the engine assesses against -- the structural
-    contract that `period`'s `FiscalWindow` / `EstimatedFiscalWindow` satisfy. Declared here rather
-    than imported because the dependency runs period -> tax: the engine names the shape it reads
-    without depending on (or cycling through) the concrete window class."""
+    contract that `period`'s `FiscalWindow` satisfies. Declared here rather than imported because
+    the dependency runs period -> tax: the engine names the shape it reads without depending on
+    (or cycling through) the concrete window class."""
 
     @property
     def span( self ) -> DateSpan:

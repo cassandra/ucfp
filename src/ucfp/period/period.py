@@ -367,20 +367,19 @@ class Period:
         (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
         refund -- modeled here as a negated charge against the same expense class.
 
-        Over a partial first year the window annualizes its figures, so the engine returns a
-        full-year assessment; the charges and credits are prorated by the window's `coverage`
-        back to the in-window share (the section 443 short-period estimate). Coverage is 1 for a
-        full year, so this is a no-op then."""
-        if not self._is_close_of_tax_year():
+        Income tax is assessed only on a whole calendar year: a partial year (a mid-year start
+        or a trailing year short of December 31) is not a `full_tax_year`, so this returns before
+        assessing even at its year-close -- leaving it posted but untaxed. (The engine's other,
+        exact rules still run; only this bracket-driven settlement is gated.)"""
+        if not ( self._is_close_of_tax_year() and self._parameters.full_tax_year ):
             return
         fiscal_window = self._parameters.fiscal_window
         assessment = self._parameters.tax_engine.assess(
             fiscal_window, self._parameters.tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
-        coverage = fiscal_window.coverage
         settlements = (
-            [ ( charge.tax_class, charge.amount * coverage ) for charge in assessment.charges ]
-            + [ ( credit.tax_class, -credit.amount * coverage ) for credit in assessment.credits ] )
+            [ ( charge.tax_class, charge.amount ) for charge in assessment.charges ]
+            + [ ( credit.tax_class, -credit.amount ) for credit in assessment.credits ] )
         self._book_charges( bookkeeper, settlements, self._parameters.date_span.end_date )
         return
 

@@ -166,11 +166,11 @@ class ContributionValidationTests( unittest.TestCase ):
 
 class ContributionLimitTests( unittest.TestCase ):
 
-    def _grown_contributions( self, contributions, assets = None ):
+    def _grown_contributions( self, contributions, assets = None, end = date( 2027, 12, 31 ) ):
         # a two-year forecast with 10%/yr wage growth, so a contribution can grow past its limit
         return Forecast( ForecastParameters(
             start_date    = date( 2026, 1, 1 ),
-            end_date      = date( 2027, 12, 31 ),
+            end_date      = end,
             filing_status = FilingStatus.SINGLE,
             statute  = _PROFILE,
             subjects      = [ _SUBJECT ],
@@ -209,6 +209,16 @@ class ContributionLimitTests( unittest.TestCase ):
         self.assertEqual( len( caps ), 1 )
         self.assertEqual( caps[ 0 ].amount, Decimal( '2000' ) )    # 33000 wanted - 31000 allowed
         self.assertEqual( caps[ 0 ].severity, NoticeSeverity.WARNING )
+
+    def test_contribution_clamp_still_applies_in_a_partial_year( self ):
+        # the contribution limit is an exact real-dollar rule, not a bracket calculation, so it must
+        # apply even in a partial year that income tax does not settle. A trailing 2027 ending Dec 30
+        # is not taxed, but growth still pushes the deferral past the 31000 limit and it is clamped.
+        result = self._grown_contributions(
+            [ RetirementContribution( '401k', Decimal( '30000' ), ContributionSource.WAGE ) ],
+            end = date( 2027, 12, 30 ) )
+        caps = _cap_notices( result )
+        self.assertEqual( [ n.severity for n in caps ], [ NoticeSeverity.WARNING ] )
 
     def test_contributions_to_two_accounts_share_one_limit( self ):
         # two 401(k)s for one owner share the single employer-plan limit: 15k + 15k = 30k fits in

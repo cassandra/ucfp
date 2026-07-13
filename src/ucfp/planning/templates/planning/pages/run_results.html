@@ -27,8 +27,8 @@
 </p>
 <div class="collapse mb-3" id="run-notices">
   <ul class="mb-0">
-    {% for year, kind, severity, amount in notices %}
-    <li>{{ year }}: {{ kind }} ({{ severity }}){% if amount %} &mdash; {{ amount|money:currency }}{% endif %}</li>
+    {% for year, kind, severity, amount, detail in notices %}
+    <li>{{ year }}: {{ kind }} ({{ severity }}){% if amount %} &mdash; {{ amount|money:currency }}{% if detail %} {{ detail }}{% endif %}{% endif %}</li>
     {% endfor %}
   </ul>
 </div>

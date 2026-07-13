@@ -22,12 +22,13 @@ from .materialization import ForecastFrame
 
 @dataclass( frozen = True )
 class NoticeRecord:
-    """A planning insight the run surfaced (a captured `Notice`): its kind, severity, and the
-    figure it carries. The link to the originating transaction is omitted until drill-down needs
-    it."""
+    """A planning insight the run surfaced (a captured `Notice`): its kind, severity, the figure
+    it carries, and `detail` naming what that figure measures. The link to the originating
+    transaction is omitted until drill-down needs it."""
     kind: NoticeKind
     severity: NoticeSeverity
     amount: Optional[ Decimal ] = None
+    detail: Optional[ str ]     = None
 
 
 @dataclass( frozen = True )
