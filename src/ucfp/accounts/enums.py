@@ -294,7 +294,12 @@ class ExpenseTaxClass( LabeledEnum ):
     CHARITABLE              = ( 'Charitable', 'Itemizable charitable gifts; AGI-limited.' )
     NON_DEDUCTIBLE_INTEREST = ( 'Non-Deductible Interest', 'Auto/personal/credit-card interest.' )
     RENTAL_EXPENSE          = ( 'Rental Expense', 'Netted against rental income.' )
-    INCOME_TAX              = ( 'Income Tax', 'Income tax paid (incl. AMT).' )
+    ORDINARY_INCOME_TAX     = ( 'Ordinary Income Tax', 'Tax on ordinary income at the bracket rates.' )
+    CAPITAL_GAINS_TAX       = (
+        'Capital Gains Tax', 'Preferential-rate tax on long-term gains and qualified dividends.' )
+    SECTION_1250_TAX        = (
+        'Section 1250 Tax', 'Tax on unrecaptured §1250 depreciation, capped at its own rate.' )
+    COLLECTIBLES_TAX        = ( 'Collectibles Tax', 'Tax on collectibles gains, capped at its own rate.' )
     PAYROLL_TAX             = ( 'Payroll Tax', 'FICA / Medicare on wages.' )
     NIIT                    = ( 'Net Investment Income Tax', '3.8% net investment income tax.' )
     EARLY_WITHDRAWAL_PENALTY = (
@@ -311,7 +316,10 @@ class ExpenseTaxClass( LabeledEnum ):
 # The expense classes a TaxEngine settles charges/credits into (see
 # ExpenseTaxClass.is_tax_payment); kept beside the enum as its single source of truth.
 _TAX_PAYMENT_EXPENSE_CLASSES = frozenset( (
-    ExpenseTaxClass.INCOME_TAX,
+    ExpenseTaxClass.ORDINARY_INCOME_TAX,
+    ExpenseTaxClass.CAPITAL_GAINS_TAX,
+    ExpenseTaxClass.SECTION_1250_TAX,
+    ExpenseTaxClass.COLLECTIBLES_TAX,
     ExpenseTaxClass.PAYROLL_TAX,
     ExpenseTaxClass.NIIT,
     ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,

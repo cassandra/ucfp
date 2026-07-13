@@ -13,9 +13,10 @@ from decimal import Decimal
 from common.recurrence import Duration, OneTime, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
+from ucfp.forecast.tests.tax_helpers import income_tax_accounts
 from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, IncomeItem, IncomeStream, Subject, WindowedAmount )
 from ucfp.period.results import NoticeKind
@@ -62,7 +63,8 @@ class MidYearStartTests( unittest.TestCase ):
         return reader.ledger.flows( account, start = date( year, 1, 1 ), end = date( year, 12, 31 ) )
 
     def _income_tax( self, reader, year ):
-        return -self._flow( reader, reader.chart.expense_account( ExpenseTaxClass.INCOME_TAX ), year )
+        return -sum( ( self._flow( reader, account, year )
+                       for account in income_tax_accounts( reader.chart ) ), Decimal( '0' ) )
 
     def test_partial_first_year_income_tax_is_the_short_period_estimate( self ):
         full = self._run( date( 2026, 1, 1 ) )

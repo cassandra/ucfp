@@ -12,8 +12,9 @@ from decimal import Decimal
 from common.date_window import DateWindow
 from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.forecast import Forecast
+from ucfp.forecast.tests.tax_helpers import total_income_tax
 from ucfp.forecast.parameters import (
     AssetParameters,
     ForecastParameters,
@@ -53,14 +54,12 @@ class HealthCoverageTests( unittest.TestCase ):
                 window            = DateWindow(),
                 household_size    = 1,
                 reference_premium = Decimal( '8000' ) ) )
-        income_tax = reader.chart.expense_account( ExpenseTaxClass.INCOME_TAX )
-        self.assertLess( reader.ledger.natural_balance( income_tax ), Decimal( '0' ) )
+        self.assertLess( total_income_tax( reader ), Decimal( '0' ) )
 
     def test_no_coverage_yields_no_credit( self ):
         # without coverage the credit never fires, so income tax is non-negative
         reader = self._run( None )
-        income_tax = reader.chart.expense_account( ExpenseTaxClass.INCOME_TAX )
-        self.assertGreaterEqual( reader.ledger.natural_balance( income_tax ), Decimal( '0' ) )
+        self.assertGreaterEqual( total_income_tax( reader ), Decimal( '0' ) )
 
     def test_credit_only_within_the_coverage_window( self ):
         # coverage windowed to a later year: this year is uncovered, so no credit
@@ -69,8 +68,7 @@ class HealthCoverageTests( unittest.TestCase ):
                 window            = DateWindow( start = date( 2030, 1, 1 ) ),
                 household_size    = 1,
                 reference_premium = Decimal( '8000' ) ) )
-        income_tax = reader.chart.expense_account( ExpenseTaxClass.INCOME_TAX )
-        self.assertGreaterEqual( reader.ledger.natural_balance( income_tax ), Decimal( '0' ) )
+        self.assertGreaterEqual( total_income_tax( reader ), Decimal( '0' ) )
 
 
 if __name__ == '__main__':

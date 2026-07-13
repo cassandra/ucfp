@@ -13,9 +13,10 @@ from common.date_window import DateWindow
 from common.rate import Rate
 from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, SystemAccountRole
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass, SystemAccountRole
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
+from ucfp.forecast.tests.tax_helpers import total_income_tax
 from ucfp.forecast.parameters import (
     AssetParameters,
     ContributionSource,
@@ -44,8 +45,7 @@ def _cap_notices( result ):
 
 
 def _income_tax( reader ):
-    return reader.ledger.natural_balance(
-        reader.chart.expense_account( ExpenseTaxClass.INCOME_TAX ) )
+    return total_income_tax( reader )
 
 
 def _parameters( contributions, assets = None, income = Decimal( '120000' ), end = date( 2026, 12, 31 ) ):
