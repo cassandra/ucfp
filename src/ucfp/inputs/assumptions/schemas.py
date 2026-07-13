@@ -16,13 +16,16 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ucfp.forecast.economic_outlook import EconomicParameters
+from ucfp.forecast.parameters import TransactionCosts
 from ucfp.jurisdiction.law import TaxProjection
 
 
 @dataclass( frozen = True )
 class Assumptions:
-    """One named set of external factors: the editable economic-factors copy (seeded from a preset)
-    and the tax projection. Serialized whole into an `AssumptionsRecord`'s JSON, and materialized
-    (with a Profile and Plans) into `ForecastParameters`."""
+    """One named set of external factors: the editable economic-factors copy (seeded from a preset),
+    the tax projection, and the transaction costs applied when an asset is sold. Serialized whole into
+    an `AssumptionsRecord`'s JSON, and materialized (with a Profile and Plans) into
+    `ForecastParameters`."""
     economics: Optional[ EconomicParameters ] = None
     tax_projection: Optional[ TaxProjection ] = None
+    transaction_costs: Optional[ TransactionCosts ] = None

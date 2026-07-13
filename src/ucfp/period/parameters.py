@@ -158,3 +158,8 @@ class PeriodParameters:
     tax_engine            : Optional[ TaxEngine ]                           = None
     opening_tax_state     : Optional[ TaxState ]                            = None
     fiscal_window         : Optional[ FiscalWindow | EstimatedFiscalWindow ] = None
+    # Selling costs applied to a property sale this interval: a realtor rate on the sale price plus a
+    # fixed cost already inflated to this year (the Forecast inflates it, like other today's-dollar
+    # inputs). Carried as primitives so this myopic slice needs no engine-parameters import.
+    property_sale_realtor_fee_rate : Rate    = ZERO_RATE
+    property_sale_fixed_cost        : Decimal = Decimal( '0' )

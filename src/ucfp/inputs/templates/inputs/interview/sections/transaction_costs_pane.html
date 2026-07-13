@@ -1,0 +1,25 @@
+{% comment %}
+The self-saving Selling Costs form (id=transaction-costs): the realtor fee (a percent of the sale
+price) and the fixed costs (title/escrow/transfer, in today's dollars). The js-autosave form posts each
+edit to `TransactionCostsView`, which persists silently and re-renders only on a genuine field error.
+Reads `costs_form`.
+{% endcomment %}
+<div id="transaction-costs">
+  <form method="post" action="{% url 'transaction_costs' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <table class="table table-sm w-auto mt-2 align-middle">
+      <tbody>
+        <tr>
+          <th scope="row" class="font-weight-normal text-left">{{ costs_form.realtor_fee.label_tag }}
+            <span class="text-muted d-block small">A share of the sale price paid in commission.</span></th>
+          <td class="text-right text-nowrap">{{ costs_form.realtor_fee }} %{% if costs_form.realtor_fee.errors %}<span class="text-danger small d-block">{{ costs_form.realtor_fee.errors|join:" " }}</span>{% endif %}</td>
+        </tr>
+        <tr>
+          <th scope="row" class="font-weight-normal text-left">{{ costs_form.fixed_cost.label_tag }}
+            <span class="text-muted d-block small">Title, escrow, and transfer costs in today's dollars.</span></th>
+          <td class="text-right text-nowrap">$ {{ costs_form.fixed_cost }}{% if costs_form.fixed_cost.errors %}<span class="text-danger small d-block">{{ costs_form.fixed_cost.errors|join:" " }}</span>{% endif %}</td>
+        </tr>
+      </tbody>
+    </table>
+  </form>
+</div>

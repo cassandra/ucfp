@@ -31,11 +31,13 @@ from ucfp.forecast.parameters import (
     PropertyAttributes,
     ScheduledRealization,
     Subject,
+    TransactionCosts,
     WindowedAmount,
 )
 from ucfp.forecast.tests.tax_helpers import total_income_tax
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
+from ucfp.period.results import NoticeKind
 
 
 def _income_tax( reader ):
@@ -162,6 +164,70 @@ class RentalSaleRecaptureTests( unittest.TestCase ):
         not_depreciated = _income_tax(
             Bookkeeper( Forecast( self._parameters( Decimal( '0' ) ) ).run().books ) )
         self.assertGreater( depreciated, not_depreciated )
+
+
+class PropertySaleClosingCostsTests( unittest.TestCase ):
+    """Selling a property charges closing costs -- a realtor fee on the sale price plus fixed costs --
+    which reduce the recognized (taxable) gain and net proceeds, with a Notice. Non-real-estate sales
+    are unaffected."""
+
+    _REALTOR = Rate.percent( Decimal( 6 ) )
+    _FIXED   = Decimal( '10000' )
+
+    def _run( self, asset_class, costs ):
+        subject = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
+        return Forecast( ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.SINGLE,
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+            subjects      = [ subject ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ), handle = 'cash' ),
+                AssetParameters(
+                    'Holding', asset_class, Decimal( '600000' ), Decimal( '400000' ), handle = 'sold',
+                    owner_handle = 'subject-a' if asset_class is AssetClass.PRETAX_RETIREMENT else None,
+                    property_attributes = ( PropertyAttributes(
+                        acquisition_date = date( 2010, 1, 1 ), depreciable_basis = Decimal( '0' ),
+                        property_type = RealPropertyType.RESIDENTIAL )
+                        if asset_class is AssetClass.REAL_ESTATE_RENTAL else None ) ) ],
+            events        = [ ScheduledRealization( date( 2026, 6, 1 ), 'sold' ) ],   # full sale
+            property_sale_costs = costs ) ).run()
+
+    @staticmethod
+    def _long_term_gain( run ) -> Decimal:
+        reader = Bookkeeper( run.books )
+        return reader.ledger.natural_balance(
+            reader.chart.income_account( IncomeTaxClass.LONG_TERM_GAINS ) )
+
+    @staticmethod
+    def _sale_cost_notices( run ) -> list:
+        return [ n for step in run.steps for n in step.result.notices
+                 if n.kind is NoticeKind.PROPERTY_SALE_COSTS ]
+
+    def test_closing_costs_reduce_the_recognized_gain( self ):
+        costs = TransactionCosts(
+            property_sale_realtor_fee_rate = self._REALTOR, property_sale_fixed_cost = self._FIXED )
+        without = self._long_term_gain( self._run( AssetClass.REAL_ESTATE_RENTAL, TransactionCosts() ) )
+        withc   = self._long_term_gain( self._run( AssetClass.REAL_ESTATE_RENTAL, costs ) )
+        # 6% of the 600k sale + 10k fixed = 46,000, taken off the long-term gain
+        self.assertEqual( without - withc, Decimal( '46000' ) )
+
+    def test_a_notice_reports_the_total( self ):
+        costs = TransactionCosts(
+            property_sale_realtor_fee_rate = self._REALTOR, property_sale_fixed_cost = self._FIXED )
+        notices = self._sale_cost_notices( self._run( AssetClass.REAL_ESTATE_RENTAL, costs ) )
+        self.assertEqual( [ n.amount for n in notices ], [ Decimal( '46000' ) ] )
+
+    def test_no_costs_no_charge( self ):
+        self.assertEqual(
+            self._sale_cost_notices( self._run( AssetClass.REAL_ESTATE_RENTAL, TransactionCosts() ) ), [] )
+
+    def test_non_real_estate_sale_is_untouched( self ):
+        # the same costs against a stock sale: no closing costs, no notice (they are property-only)
+        costs = TransactionCosts(
+            property_sale_realtor_fee_rate = self._REALTOR, property_sale_fixed_cost = self._FIXED )
+        self.assertEqual( self._sale_cost_notices( self._run( AssetClass.STOCKS, costs ) ), [] )
 
 
 if __name__ == '__main__':

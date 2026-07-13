@@ -17,7 +17,7 @@ from typing import Optional
 from common.date_span import DateSpan
 from common.date_window import DateWindow
 from common.labeled_enum import LabeledEnum
-from common.rate import Rate
+from common.rate import Rate, ZERO_RATE
 from common.recurrence import Cadence, Duration, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.books import Account
@@ -40,6 +40,17 @@ from ucfp.jurisdiction.law import StatuteProfile
 from ucfp.jurisdiction.enums import FilingStatus
 
 from .economic_outlook import EconomicOutlook
+
+
+@dataclass( frozen = True )
+class TransactionCosts:
+    """The household's assumed one-time costs of selling an asset. Today it holds a property sale's
+    realtor commission (a flat rate on the sale price) and fixed costs (title/escrow/transfer, given in
+    forecast-start dollars and inflation-adjusted to the sale year). Field names are event-qualified so
+    further transaction costs can join without ambiguity. An exogenous Assumption reused by the engine,
+    the twin of `EconomicParameters`."""
+    property_sale_realtor_fee_rate : Rate    = ZERO_RATE
+    property_sale_fixed_cost       : Decimal = Decimal( '0' )
 
 
 @dataclass( frozen = True )
@@ -502,6 +513,7 @@ class ForecastParameters:
         default_factory = CashAccountParameters )
     health_coverage   : Optional[ SubsidizedHealthCoverage ] = None
     subject_removals  : list[ SubjectRemoval ]               = field( default_factory = list )
+    property_sale_costs : TransactionCosts                   = field( default_factory = TransactionCosts )
     initial_tax_state : Optional[ TaxState ]                 = None
 
     def __post_init__( self ) -> None:

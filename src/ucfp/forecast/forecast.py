@@ -772,6 +772,10 @@ class Forecast:
             tax_engine        = tax_engine,
             opening_tax_state = opening_tax_state,
             fiscal_window     = self._fiscal_window_for( span, bookkeeper, tax_engine ),
+            property_sale_realtor_fee_rate = self._parameters.property_sale_costs.property_sale_realtor_fee_rate,
+            property_sale_fixed_cost       = (
+                self._parameters.property_sale_costs.property_sale_fixed_cost
+                * self._inflation_factor( span.start_date.year ) ),
         )
 
     def _year_fraction( self, span : DateSpan ) -> Decimal:
