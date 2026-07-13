@@ -158,13 +158,14 @@ class RentalForm( _PropertyForm ):
     _PREFIX       = 'rental-'
     _ASSET_FIELDS = ( 'name', 'value', 'purchase_price', 'acquisition_date',
                       'building_basis', 'property_type' )
-    field_order   = [ 'name', 'value', 'building_basis', 'purchase_price', 'mortgage_balance',
-                      'acquisition_date', 'property_type' ]
+    field_order   = [ 'name', 'value', 'purchase_price', 'building_basis', 'acquisition_date',
+                      'mortgage_balance', 'property_type' ]
 
     name             = forms.CharField( label = 'Name', max_length = 100, required = False )
     value            = forms.DecimalField( label = 'Current value', min_value = 0, required = False )
     building_basis   = forms.DecimalField(
-        label = 'Building value, excludes land (for depreciation)', min_value = 0, required = False )
+        label = 'Building value at purchase, excludes land (for depreciation)',
+        min_value = 0, required = False )
     purchase_price   = forms.DecimalField( label = 'Purchase price', min_value = 0, required = False )
     acquisition_date = forms.DateField(
         label = 'Purchase date', required = False,
