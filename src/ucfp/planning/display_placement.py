@@ -6,12 +6,14 @@ axes are stamped:
 
   - Expenses, by catalog `handle` -> `ExpenseClass` surface then `ExpenseCategory` section.
   - Income, by `IncomeTaxClass` -> a coarser income *source* (a meaningful rollup -- e.g. Investment
-    Income totals interest, dividends and gains) then the owning *subject*. Because income accounts are
-    keyed by (subject, tax class), pension and pre-tax retirement withdrawals share one `ORDINARY`
-    account and so one source ("Pension & Withdrawals") -- named honestly for that engine-set granularity
-    rather than split.
+    Income totals interest, dividends and gains) then the owning *subject* then the tax class itself.
+    Because income accounts are keyed by (subject, tax class), pension and pre-tax retirement
+    withdrawals share one `ORDINARY` account and so one source ("Pension & Withdrawals") -- named
+    honestly for that engine-set granularity rather than split. The trailing tax-class rung gives each
+    account a run-stable column key (one account per rung), the income mirror of the Taxes & Fees rung.
   - Assets, by `AssetClass` -> the input *pane* the assets step groups them under (Financial Accounts /
-    Properties / Possessions) then the asset class, with holdings ordered by their profile position.
+    Properties / Possessions) then the asset class then the holding itself, keyed by its handle and
+    ordered by profile position -- so several holdings of one class each keep a run-stable column.
 
 This is the one place carrying `parameter_sets`/grouping knowledge to the books; the accounts layer
 stays oblivious, reading the placement opaquely. Best-effort by design: an account the mapping does not
@@ -22,7 +24,7 @@ import logging
 from dataclasses import dataclass
 
 from ucfp.accounts.books import AccountDisplayGroup, AccountDisplayPlacement, BooksOfAccount
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.inputs.expenses import is_renting, ordered_catalog, owned_property_handles
 from ucfp.inputs.profile.schemas import Profile, RENTED_HOME_HANDLE
 from ucfp.parameter_sets.enums import ExpenseCategory, ExpenseClass
@@ -36,14 +38,11 @@ logger = logging.getLogger( __name__ )
 # layer apart but must stay in lockstep so a stamped leaf always sorts ahead of a fallback one.
 _UNMAPPED_ORDER = 10 ** 6
 
-# Section order is enum declaration order (the catalog author's intent).
-_CLASS_ORDER    = { klass : index for index, klass in enumerate( ExpenseClass ) }
-_CATEGORY_ORDER = { category : index for index, category in enumerate( ExpenseCategory ) }
-
 # The engine's tax-payment accounts gather under one Taxes & Fees surface, placed just after the
-# spending ExpenseClass groups and ordered within it by tax class.
+# spending ExpenseClass groups; within it each tax class gets its own rung, ordered by tax class
+# (its enum value, which is its declaration position -- see LabeledEnum -- so the rungs follow the
+# enum's own order without capturing its members in an import-time dict).
 _TAXES_AND_FEES_ORDER = len( ExpenseClass )
-_TAX_CLASS_LEAF_ORDER = { klass : index for index, klass in enumerate( ExpenseTaxClass ) }
 
 # The Vehicle pane generates the car purchase and its financing payments outside the expense catalog
 # (materialization mints these stable handles for their accounts). They belong in the same Vehicle
@@ -97,8 +96,6 @@ _ASSET_PANES = [
 _PANE_BY_CLASS = { asset_class : ( order, pane )
                    for order, pane in enumerate( _ASSET_PANES )
                    for asset_class in pane.classes }
-# Within a pane, the classes order by their own declaration order.
-_ASSET_CLASS_ORDER = { asset_class : index for index, asset_class in enumerate( AssetClass ) }
 
 # Income sources: a coarser, user-facing grouping of income tax classes, in display order. Every income
 # account carries a tax class, so the map covers them all -- an uncovered class would simply fall back to
@@ -119,8 +116,6 @@ _INCOME_SOURCES = [
 _SOURCE_BY_CLASS = { tax_class : ( order, source )
                      for order, source in enumerate( _INCOME_SOURCES )
                      for tax_class in source.classes }
-# Within a subject, the tax-class accounts order by the tax class's own declaration order.
-_TAX_CLASS_ORDER = { tax_class : index for index, tax_class in enumerate( IncomeTaxClass ) }
 
 
 def stamp_display_placements( books : BooksOfAccount, profile : Profile ) -> None:
@@ -175,12 +170,21 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
 
 def _tax_expense_placement( tax_class ) -> AccountDisplayPlacement:
     """A tax-payment account's placement: one Taxes & Fees surface gathering the engine's tax
-    settlements (income/payroll tax, NIIT, the early-withdrawal penalty), the account ordered within it
-    by its tax class. The surface sits after the spending classes, ahead of the engine-class fallback."""
-    return AccountDisplayPlacement(
-        path  = ( AccountDisplayGroup(
-            key = 'taxes-and-fees', label = 'Taxes & Fees', order = _TAXES_AND_FEES_ORDER ), ),
-        order = _TAX_CLASS_LEAF_ORDER[ tax_class ] )
+    settlements (income/payroll tax, NIIT, the early-withdrawal penalty), then a per-tax-class rung so
+    each tax renders as its own column. The surface sits after the spending classes, ahead of the
+    engine-class fallback.
+
+    The class rung is what makes a tax column's place stick in the session's column lens. The engine
+    mints a fresh account UUID every run, so a bare tax leaf (keyed by that UUID) cannot be matched back
+    across runs and its expand/remove/reorder state is lost. The rung is keyed by the tax-class enum --
+    stable across runs and label edits -- and holds exactly one account, so it collapses into a
+    single-child column carrying that stable key; a class absent from a run is simply dropped."""
+    surface   = AccountDisplayGroup(
+        key = 'taxes-and-fees', label = 'Taxes & Fees', order = _TAXES_AND_FEES_ORDER )
+    tax_group = AccountDisplayGroup(
+        key = 'tax-' + tax_class.name.lower(), label = tax_class.label,
+        order = tax_class.value )
+    return AccountDisplayPlacement( path = ( surface, tax_group ), order = 0 )
 
 
 def _property_rungs( profile : Profile ) -> dict:
@@ -220,13 +224,15 @@ def _property_of_expense_handle( account_handle : str ):
 
 
 def _class_group( expense_class ) -> AccountDisplayGroup:
+    # Surfaces order by the ExpenseClass's declaration order -- its LabeledEnum value (the catalog
+    # author's intent). Same convention for every rung below (see also the sections and asset classes).
     return AccountDisplayGroup( key   = 'class-' + expense_class.name.lower(),
-                                label = expense_class.label, order = _CLASS_ORDER[ expense_class ] )
+                                label = expense_class.label, order = expense_class.value )
 
 
 def _category_group( category ) -> AccountDisplayGroup:
     return AccountDisplayGroup( key   = 'cat-' + category.name.lower(),
-                                label = category.label, order = _CATEGORY_ORDER[ category ] )
+                                label = category.label, order = category.value )
 
 
 def _expense_placement( class_group, category_group, order ) -> AccountDisplayPlacement:
@@ -252,10 +258,21 @@ def _stamp_income_placements( books : BooksOfAccount, profile : Profile ) -> Non
             subject_order, subject_name = subject
             path.append( AccountDisplayGroup( key   = 'subj-' + str( account.owner_handle ),
                                               label = subject_name, order = subject_order ) )
-        account.display_placement = AccountDisplayPlacement(
-            path = tuple( path ), order = _TAX_CLASS_ORDER[ account.income_tax_class ] )
+        # A per-tax-class rung gives the account's column a run-stable identity: the engine mints a
+        # fresh account UUID each run, so a bare leaf keyed by it loses its expand/remove/reorder state
+        # across runs. Income accounts are keyed by (subject, tax class), so this rung -- below the
+        # subject -- holds exactly one account and collapses into a single-child column carrying its
+        # stable key (mirroring the Taxes & Fees per-tax rung).
+        path.append( _income_class_group( account.income_tax_class ) )
+        account.display_placement = AccountDisplayPlacement( path = tuple( path ), order = 0 )
         continue
     return
+
+
+def _income_class_group( income_tax_class ) -> AccountDisplayGroup:
+    # Rungs order by the tax class's declaration order (its LabeledEnum value).
+    return AccountDisplayGroup( key   = 'inc-' + income_tax_class.name.lower(),
+                                label = income_tax_class.label, order = income_tax_class.value )
 
 
 def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None:
@@ -269,12 +286,18 @@ def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None
         pane_order, pane = grouping
         leaf_order = ( positions.get( str( account.handle ), _UNMAPPED_ORDER )
                        if account.handle is not None else _UNMAPPED_ORDER )
-        account.display_placement = AccountDisplayPlacement(
-            path = ( AccountDisplayGroup( key = 'pane-' + pane.key, label = pane.label,
-                                          order = pane_order ),
-                     AccountDisplayGroup( key = account.asset_class.name,
-                                          label = account.asset_class.label,
-                                          order = _ASSET_CLASS_ORDER[ account.asset_class ] ) ),
-            order = leaf_order )
+        path = [ AccountDisplayGroup( key = 'pane-' + pane.key, label = pane.label, order = pane_order ),
+                 AccountDisplayGroup( key = account.asset_class.name, label = account.asset_class.label,
+                                      order = account.asset_class.value ) ]   # declaration order
+        # A per-holding rung keyed by the account's own handle gives its column a run-stable identity
+        # (the account UUID is reminted each run). An asset account always carries a handle; with one
+        # holding per class the rung absorbs into the class column (no visible change), and with several
+        # -- a supported future case -- it keeps each holding individually addressable across runs, the
+        # asset mirror of the per-class rungs on the tax and income axes.
+        if account.handle is not None:
+            path.append( AccountDisplayGroup( key   = 'holding-' + str( account.handle ),
+                                              label = account.name, order = leaf_order ) )
+            leaf_order = 0
+        account.display_placement = AccountDisplayPlacement( path = tuple( path ), order = leaf_order )
         continue
     return
