@@ -6,7 +6,6 @@ which assumptions, the frame), runs it, and lists past runs. The results page (`
 a captured run -- the net-worth trajectory derived from its persisted books, whether it stopped
 early, and the notices. The guided interview and the input editors live in the `inputs` app.
 """
-from datetime import timedelta
 
 from django.db import transaction
 from django.http import Http404
@@ -32,7 +31,7 @@ from ucfp.inputs.assumptions.repository import assumptions_for, load_assumptions
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
-from .forms import GRANULARITY, RunForm
+from .forms import GRANULARITY, RunForm, resolve_frame
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture
@@ -126,13 +125,11 @@ class FinancialForecastView( InputGatedMixin, View ):
         return redirect( 'run_results', run_uuid = run.uuid )
 
     def _frame( self, profile_record, form ) -> ForecastFrame:
-        start       = profile_record.effective_date
-        years       = form.cleaned_data[ 'duration_years' ]
-        anniversary = start.replace( year = start.year + years )
-        end         = anniversary - timedelta( days = 1 )
-        return ForecastFrame(
-            start_date = start, end_date = end,
-            granularity = GRANULARITY[ form.cleaned_data[ 'interval' ] ] )
+        return resolve_frame(
+            effective_date = profile_record.effective_date,
+            start_choice   = form.cleaned_data[ 'start_from' ],
+            duration_years = form.cleaned_data[ 'duration_years' ],
+            granularity    = GRANULARITY[ form.cleaned_data[ 'interval' ] ] )
 
     def _default_selection( self, request, profiles, plans, assumptions ) -> dict:
         """The run form's default bundle: the plans and assumptions the user last selected or edited
