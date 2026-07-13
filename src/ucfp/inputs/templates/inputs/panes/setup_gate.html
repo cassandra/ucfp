@@ -1,0 +1,30 @@
+{% comment %}
+Shared pane: the input-existence gate, shown in place of a feature's run controls until the
+organization has all three planning inputs. Reads `input_state` (an `InputState`) from the
+surrounding context and tailors the guidance to its readiness:
+
+  EMPTY   -- nothing set up yet: a plain welcome and a single push into the guided interview,
+             with no checklist of concepts the first-time user has not met.
+  PARTIAL -- some inputs exist: name exactly what is still missing, each linked to its flow, with
+             the interview as the way to finish.
+
+Self-guarding: renders nothing once the inputs are READY, so any page may include it unconditionally.
+{% endcomment %}
+{% if input_state.is_empty %}
+<div class="alert alert-info mt-3">
+  <h2 class="h5 mb-2">Let's set up your plan</h2>
+  <p class="mb-3">A forecast draws on three things: your situation, your plans, and the assumptions
+    behind them. The guided interview walks you through all three in order &mdash; start there.</p>
+  <a href="{% url 'interview_home' %}" class="btn btn-primary">Start the guided interview</a>
+</div>
+{% elif input_state.is_partial %}
+<div class="alert alert-info mt-3">
+  <p class="mb-2">You've made a start. A forecast needs all three inputs &mdash; you still need:</p>
+  <ul class="mb-2">
+    {% if not input_state.has_profile %}<li>your situation &mdash; <a href="{% url 'flow_profile' %}">add it</a></li>{% endif %}
+    {% if not input_state.has_plans %}<li>a plan &mdash; <a href="{% url 'flow_plans' %}">add one</a></li>{% endif %}
+    {% if not input_state.has_assumptions %}<li>a set of assumptions &mdash; <a href="{% url 'flow_assumptions' %}">add one</a></li>{% endif %}
+  </ul>
+  <p class="mb-0"><a href="{% url 'interview_home' %}">Continue the guided interview</a> to finish setup.</p>
+</div>
+{% endif %}

@@ -36,6 +36,9 @@ from ucfp.jurisdiction.law import StatuteProfile
 
 from ucfp.parameter_sets.enums import PropertyContext, Realization
 
+from ucfp.planning.display_placement import (
+    CAR_PAYMENTS_HANDLE, CAR_PURCHASE_HANDLE, property_expense_handle )
+
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.expenses import OWNED_PROPERTY_CONTEXT
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
@@ -77,7 +80,8 @@ def materialize(
     events = event_contributions( profile, plans, subjects_by_handle )
     expense_streams, expense_items = _property_expenses(
         profile, plans, assets_by_handle, events.property_sales )
-    flow_streams, flow_items = _income_flows( profile, subjects_by_handle )
+    flow_streams, flow_items = _income_flows(
+        profile, subjects_by_handle, events.property_sales )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
     vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
     return ForecastParameters(
@@ -298,13 +302,14 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
             name = 'Car purchase', expense_tax_class = ExpenseTaxClass.LIVING,
             amounts = Schedule.constant( WindowedAmount( lump * cars ) ),
             cadence = Recurrence( Duration( plan.recurrence_years, TimeUnit.YEAR ) ),
-            window = window ) )
+            window = window, handle = CAR_PURCHASE_HANDLE ) )
     if financed_lifetime > 0:
         monthly = financed_lifetime * cars / ( plan.recurrence_years * 12 )
         items.append( ExpenseItem(
             name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
             amounts = Schedule.constant( WindowedAmount( monthly ) ),
-            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ), window = window ) )
+            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ), window = window,
+            handle = CAR_PAYMENTS_HANDLE ) )
     return items
 
 
@@ -354,16 +359,20 @@ def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:
 # --- Profile: flows (income entitlements) ----------------------------------
 
 def _income_flows(
-        profile : Profile, subjects_by_handle : dict[ str, Subject ] ) -> tuple[ list, list ]:
+        profile : Profile, subjects_by_handle : dict[ str, Subject ],
+        sale_dates : dict ) -> tuple[ list, list ]:
     """The profile's income flows as (streams, items): a flow with no interval is a smoothed stream,
     one with an interval an item placed at that cadence (rent is monthly). The flow's `schedule`
     carries its own window, and its `property_handle` is carried to the engine as the income's
-    `source_handle` (rental income keeps its property link)."""
+    `source_handle` (rental income keeps its property link). A property-linked flow is clipped to its
+    property's sale date -- when a rental is sold, its rent stops with it (the mirror of how a
+    property's operating expenses are clipped)."""
     streams, items = list(), list()
     for flow in profile.income_flows:
         subject = ( subjects_by_handle[ flow.subject_handle ]
                     if flow.subject_handle is not None else None )   # None -> household income
-        amounts = Schedule( tuple( flow.schedule ) )
+        amounts = _clipped_to_sale(
+            Schedule( tuple( flow.schedule ) ), sale_dates.get( flow.property_handle ) )
         if flow.interval is None:
             streams.append( IncomeStream(
                 subject = subject, income_tax_class = flow.income_tax_class,
@@ -374,6 +383,23 @@ def _income_flows(
                 amounts = amounts, cadence = Recurrence( flow.interval ),
                 source_handle = flow.property_handle ) )
     return streams, items
+
+
+def _clipped_to_sale( amounts : Schedule, sale_date : Optional[ date ] ) -> Schedule:
+    """`amounts` with every segment's window pulled in to `sale_date` -- so a rental's income ends when
+    the property is sold. Unchanged when the property is never sold (`sale_date` None)."""
+    if sale_date is None:
+        return amounts
+    return Schedule( tuple(
+        WindowedAmount( segment.amount, _capped_window( segment.window, sale_date ) )
+        for segment in amounts.segments ) )
+
+
+def _capped_window( window : DateWindow, end : date ) -> DateWindow:
+    """`window` with its end pulled in to `end` when it extends past it (or is unbounded)."""
+    if ( window.end is None ) or ( window.end > end ):
+        return DateWindow( start = window.start, end = end )
+    return window
 
 
 def _entitlement_income(
@@ -507,8 +533,11 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
     """The Plans' property operating expenses as (streams, items): each expense applied to every property
     its `applies_to` reaches, at that property's override or the shared default (skipped when both are
     blank or zero), with the tax class derived from the property and the amount clipped to the property's
-    ownership window -- its sale date, when it is sold. A SMOOTH expense enters as an annualized stream; a
-    DISCRETE one as an item placed at its cadence."""
+    ownership window -- its sale date, when it is sold. Each account is scoped to its property (name
+    prefixed with the property) so a rental's cost -- taxed as a rental expense -- stays distinct from
+    the residence's same-named cost (taxed as SALT or non-deductible) rather than merging by name into a
+    single, mis-classed account. A SMOOTH expense enters as an annualized stream; a DISCRETE one as an
+    item placed at its cadence."""
     streams, items = list(), list()
     for expense in plans.property_expenses:
         for handle, context, asset in _property_contexts( profile ):
@@ -517,17 +546,28 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
             amount = expense.overrides.get( handle, expense.default_amount )
             if not amount:
                 continue
-            tax_class = _property_expense_tax_class( expense, asset )
-            amounts   = _property_schedule( amount, sale_dates.get( handle ) )
+            tax_class      = _property_expense_tax_class( expense, asset )
+            amounts        = _property_schedule( amount, sale_dates.get( handle ) )
+            name           = _property_expense_name( asset, expense )
+            account_handle = property_expense_handle( expense.handle, handle )
             if expense.realization is Realization.SMOOTH:
                 streams.append( ExpenseStream(
-                    name = expense.name, handle = expense.handle, expense_tax_class = tax_class,
+                    name = name, handle = account_handle, expense_tax_class = tax_class,
                     amounts = _annualized( amounts, expense.interval ) ) )
             else:
                 items.append( ExpenseItem(
-                    name = expense.name, handle = expense.handle, expense_tax_class = tax_class,
+                    name = name, handle = account_handle, expense_tax_class = tax_class,
                     amounts = amounts, cadence = Recurrence( expense.interval ) ) )
     return streams, items
+
+
+def _property_expense_name( asset : Optional[ AssetProfile ], expense ) -> str:
+    """A property expense's account name, scoped to its property so each property's costs are a distinct
+    account -- their per-property tax class is not lost to a same-named sibling, and the results show
+    each property's costs on their own line. The owned property's name (or the rented-home label) leads
+    the expense name."""
+    label = asset.name if asset is not None else 'Rented Home'
+    return f'{label} {expense.name}'
 
 
 def _property_schedule( amount : Decimal, sale_date ) -> Schedule:

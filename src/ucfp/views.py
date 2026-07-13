@@ -9,6 +9,8 @@ from common import antinode
 from common.healthcheck import do_healthcheck
 from common.request_utils import is_ajax
 
+from ucfp.inputs.mixins import InputGatedMixin
+
 
 def error_response( request             : HttpRequest,
                     sync_template_name  : str,
@@ -144,10 +146,13 @@ class HealthView( View ):
         return JsonResponse( {'status': status_dict}, status = response_status )
 
 
-class HomeView( View ):
+class HomeView( InputGatedMixin, View ):
+    """The landing page. `InputGatedMixin` attaches `request.input_state` so the page can lead a
+    first-time user (EMPTY) into the guided interview, nudge a partway one (PARTIAL) to finish, or
+    offer a returning one (READY) the input editors -- feature navigation lives in the top menu."""
 
     def get(self, request, *args, **kwargs):
-        return render( request, 'pages/home.html', {} )
+        return render( request, 'pages/home.html', { 'input_state': request.input_state } )
 
 
 class ManifestView( View ):

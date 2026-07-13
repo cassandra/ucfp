@@ -306,21 +306,37 @@ class BaselineBuilder:
         return None
 
     def _seed_opening_balances( self, bookkeeper : Bookkeeper, holdings : list ) -> None:
-        """Post the opening transaction: each holding's value (increasing the asset) and each
-        loan's balance (a credit, the liability), with Opening Balances absorbing the residual
-        so the books balance from t0. Each holding's embedded gain (value - basis) self-balances
-        against its own Unrealized Gains equity, so only the bases and loans hit the plug."""
-        chart = bookkeeper.chart
-        opening_postings = list()
+        """Seed each holding and each loan with its *own* opening transaction, so an opening row's
+        counterpart is the equity seed (Opening Balances) rather than every other opening posting.
+        Every transaction is dated the day before the forecast start, so the books stand from t0;
+        each balances against Opening Balances, which absorbs its residual (the cost basis or the
+        loan balance -- a holding's embedded gain nets to zero against Unrealized Gains within its
+        own transaction)."""
+        chart            = bookkeeper.chart
+        opening_balances = chart.system_account( SystemAccountRole.OPENING_BALANCES )
+        opening_date     = self._parameters.start_date - timedelta( days = 1 )
         for holding, value, cost_basis in holdings:
-            opening_postings += self._opening_value_postings( chart, holding, value, cost_basis )
+            self._record_opening(
+                bookkeeper, opening_date,
+                self._opening_value_postings( chart, holding, value, cost_basis ), opening_balances )
             continue
-        opening_postings += [ ( loan.account, loan.parameters.opening_balance ) for loan in self._loans ]
-        plug = -sum( ( amount for _account, amount in opening_postings ), Decimal( '0' ) )
-        opening_postings.append(
-            ( chart.system_account( SystemAccountRole.OPENING_BALANCES ), plug ) )
-        if any( amount != 0 for _account, amount in opening_postings ):
-            bookkeeper.record( self._parameters.start_date - timedelta( days = 1 ), opening_postings )
+        for loan in self._loans:
+            self._record_opening(
+                bookkeeper, opening_date,
+                [ ( loan.account, loan.parameters.opening_balance ) ], opening_balances )
+            continue
+        return
+
+    def _record_opening( self, bookkeeper : Bookkeeper, opening_date : date,
+                         postings : list[ tuple[ Account, Decimal ] ],
+                         opening_balances : Account ) -> None:
+        """Record one account's opening `postings` as a balanced transaction, with Opening Balances
+        absorbing their residual. Skips a fully-zero seed (a zero-basis holding contributes nothing
+        here -- its whole value is the embedded gain, already balanced against Unrealized Gains)."""
+        plug     = -sum( ( amount for _account, amount in postings ), Decimal( '0' ) )
+        balanced = postings + [ ( opening_balances, plug ) ]
+        if any( amount != 0 for _account, amount in balanced ):
+            bookkeeper.record( opening_date, balanced, description = 'Opening balance' )
         return
 
     def _opening_value_postings( self, chart : Chart, holding : Account, value : Decimal,
@@ -399,21 +415,23 @@ class BaselineBuilder:
         return
 
     def _create_asset_income_accounts( self, bookkeeper : Bookkeeper ) -> None:
-        """Create a revenue account for each income class the assets can generate -- yields
-        (distributions) and realized gains -- that does not already have one, so a holding's
-        distributions and a funding draw's recognized gain have somewhere to post."""
-        chart = bookkeeper.chart
-        revenue_root = chart.root( AccountType.REVENUE )
-        income_classes = set()
+        """Ensure a revenue account exists for each income an asset can generate -- its yield
+        (distribution) and its realized gain -- so a distribution or a funding draw's recognized gain
+        has somewhere to post. Owner-attributed income (a pre-tax retirement distribution) gets a
+        per-subject account in the owner's name; the rest stay household accounts keyed by class.
+        Routed through the same IncomeAccounts keying as the income streams, so a given
+        (subject, class) resolves to one account however it is reached."""
+        subject_by_handle = { str( subject.handle ) : subject
+                              for subject in self._parameters.subjects }
         for asset in self._parameters.assets:
-            income_classes.add( asset.asset_class.distribution_income_class )
-            income_classes.add( asset.asset_class.realized_gain_income_class )
-        income_classes.discard( None )
-        for income_class in sorted( income_classes, key = lambda klass : klass.name ):
-            if chart.income_account( income_class ) is None:
-                bookkeeper.add_account(
-                    Account( name = income_class.label, parent = revenue_root,
-                             income_tax_class = income_class ) )
+            for income_class in ( asset.asset_class.distribution_income_class,
+                                  asset.asset_class.realized_gain_income_class ):
+                if income_class is None:
+                    continue
+                owner = ( subject_by_handle.get( str( asset.owner_handle ) )
+                          if income_class.is_owner_attributed else None )
+                self._income_accounts.account_for( owner, income_class )
+                continue
             continue
         return
 
@@ -857,40 +875,43 @@ class Forecast:
             reference_premium = coverage.reference_premium )
 
     def _tax_properties_for( self, span : DateSpan ) -> tuple:
-        """The engine's `TaxProperty` for each rental: its depreciation attributes (for the
-        annual deduction) plus a disposition marking the sale date when it is sold within
-        this fiscal year (driving §1250 recapture). Residences need none -- their gain
-        settles through the §121 residence-gains account, not the context."""
-        properties = list()
+        """The engine's `TaxProperty` for each rental still held this fiscal year: its depreciation
+        attributes (for the annual deduction) plus a disposition marking the sale date when it is
+        sold *within* this fiscal year (driving §1250 recapture, which fires once). A rental sold in
+        a prior year is dropped -- it is no longer held, so it neither depreciates nor recaptures
+        again. Residences need none -- their gain settles through the §121 residence-gains account,
+        not the context."""
+        fiscal_year = span.end_date.year
+        properties  = list()
         for asset, holding in self._baseline.asset_holdings:
             attributes = asset.property_attributes
             if ( asset.asset_class != AssetClass.REAL_ESTATE_RENTAL ) or ( attributes is None ):
                 continue
+            sale_date = self._sale_date_of( asset )
+            if ( sale_date is not None ) and ( sale_date.year < fiscal_year ):
+                continue                                   # sold in a prior year -> no longer held
+            disposition = ( PropertyDisposition( sale_date = sale_date )
+                            if ( sale_date is not None ) and ( sale_date.year == fiscal_year )
+                            else None )
             properties.append(
                 TaxProperty(
                     holding           = holding,
                     acquisition_date  = attributes.acquisition_date,
                     depreciable_basis = attributes.depreciable_basis,
                     property_type     = attributes.property_type,
-                    disposition       = self._disposition_for( asset, span ),
+                    disposition       = disposition,
                 )
             )
             continue
         return tuple( properties )
 
-    def _disposition_for(
-            self, asset : AssetParameters, span : DateSpan ) -> Optional[ PropertyDisposition ]:
-        """The disposition for `asset` if a sale of it falls in this span's fiscal year, else
-        None: the first scheduled realization of its holding handle, dated in that calendar
-        year. (The sale date is a scheduled input, so no running state is needed.) A property
-        with no handle cannot be referenced by a sale, so it never disposes."""
+    def _sale_date_of( self, asset : AssetParameters ) -> Optional[ date ]:
+        """The date `asset`'s holding is sold -- the earliest scheduled realization of its handle --
+        or None if it is never sold. (The sale date is a scheduled input, so no running state is
+        needed.) A property with no handle cannot be referenced by a sale, so it never disposes."""
         if asset.handle is None:
             return None
-        fiscal_year = span.end_date.year
-        for event in self._parameters.events:
-            if not isinstance( event, ScheduledRealization ):
-                continue
-            if ( str( event.holding ) != str( asset.handle ) ) or ( event.event_date.year != fiscal_year ):
-                continue
-            return PropertyDisposition( sale_date = event.event_date )
-        return None
+        sale_dates = [ event.event_date for event in self._parameters.events
+                       if isinstance( event, ScheduledRealization )
+                       and str( event.holding ) == str( asset.handle ) ]
+        return min( sale_dates ) if sale_dates else None

@@ -10,8 +10,9 @@ from decimal import Decimal
 
 from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.forecast import Forecast
+from ucfp.forecast.tests.tax_helpers import total_income_tax
 from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, IncomeStream, Subject, WindowedAmount )
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
@@ -36,10 +37,7 @@ class TaxSettlementTests( unittest.TestCase ):
         )
         result = Forecast( parameters ).run()   # raised MissingAccountError before the fix
         reader = Bookkeeper( result.books )
-        income_tax = next(
-            account for account in reader.chart.accounts()
-            if account.expense_tax_class == ExpenseTaxClass.INCOME_TAX )
-        self.assertGreater( reader.ledger.natural_balance( income_tax ), Decimal( '0' ) )
+        self.assertGreater( total_income_tax( reader ), Decimal( '0' ) )
 
 
 if __name__ == '__main__':

@@ -106,6 +106,17 @@ class _TaxableSplit( NamedTuple ):
     collectibles : Decimal
 
 
+class _IncomeTaxParts( NamedTuple ):
+    """The income tax split by rate layer -- ordinary brackets, preferential long-term gains, and the
+    separately-capped §1250 and collectibles gains -- each a distinct account so the detail is visible.
+    They sum to the total income tax; the split is exact, not an apportionment."""
+
+    ordinary      : Decimal
+    capital_gains : Decimal
+    section_1250  : Decimal
+    collectibles  : Decimal
+
+
 class _PassiveActivity( NamedTuple ):
     """The passive-activity (rental) outcome: `deductible` is the amount flowing into
     ordinary income and net investment income (net passive income if positive, the
@@ -132,7 +143,10 @@ class USFederalTaxEngine( TaxEngine ):
         carryover  = tax_state.capital_loss_carryover
 
         wages               = fiscal_window.income( IncomeTaxClass.WAGES )
-        ordinary_other      = fiscal_window.income( IncomeTaxClass.ORDINARY )
+        # Retirement distributions (RMDs, pre-tax withdrawals) are their own income line for the
+        # books but tax exactly as ordinary income, so they fold in here.
+        ordinary_other      = ( fiscal_window.income( IncomeTaxClass.ORDINARY )
+                                + fiscal_window.income( IncomeTaxClass.RETIREMENT_DISTRIBUTION ) )
         taxable_interest    = fiscal_window.income( IncomeTaxClass.TAXABLE_INTEREST )
         tax_exempt_interest = fiscal_window.income( IncomeTaxClass.TAX_EXEMPT_INTEREST )
         qualified_dividends = fiscal_window.income( IncomeTaxClass.QUALIFIED_DIVIDENDS )
@@ -201,7 +215,7 @@ class USFederalTaxEngine( TaxEngine ):
         taxable_income = max( _ZERO, agi - deduction )
         split          = self._split_taxable_income(
             taxable_income, preferential_income, section_1250, collectibles )
-        income_tax     = self._tax_on_stack( status, split )
+        income_tax     = self._tax_on_stack( status, split )   # ordinary / gains / §1250 / collectibles
 
         net_investment_income = max(
             _ZERO,
@@ -213,14 +227,20 @@ class USFederalTaxEngine( TaxEngine ):
         payroll_tax = self._payroll_tax( status, fiscal_window )
         premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.health_enrollment )
 
-        charges = [ TaxCharge( ExpenseTaxClass.INCOME_TAX, income_tax ) ]
-        if payroll_tax > 0:
-            charges.append( TaxCharge( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ) )
-        if niit > 0:
-            charges.append( TaxCharge( ExpenseTaxClass.NIIT, niit ) )
+        # Income tax splits into its rate layers, each its own account; payroll tax and NIIT stand
+        # apart. The refundable premium credit offsets the ordinary income tax (its natural home).
+        income_tax_charges = (
+            ( ExpenseTaxClass.ORDINARY_INCOME_TAX, income_tax.ordinary ),
+            ( ExpenseTaxClass.CAPITAL_GAINS_TAX, income_tax.capital_gains ),
+            ( ExpenseTaxClass.SECTION_1250_TAX, income_tax.section_1250 ),
+            ( ExpenseTaxClass.COLLECTIBLES_TAX, income_tax.collectibles ),
+            ( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ),
+            ( ExpenseTaxClass.NIIT, niit ) )
+        charges = [ TaxCharge( tax_class, amount )
+                    for tax_class, amount in income_tax_charges if amount > 0 ]
         credits = []
         if premium_credit > 0:
-            credits.append( TaxCredit( ExpenseTaxClass.INCOME_TAX, premium_credit ) )
+            credits.append( TaxCredit( ExpenseTaxClass.ORDINARY_INCOME_TAX, premium_credit ) )
         return TaxAssessment(
             charges           = charges,
             credits           = credits,
@@ -512,24 +532,26 @@ class USFederalTaxEngine( TaxEngine ):
         coll_taxed  = min( collectibles, room )
         return _TaxableSplit( ordinary, pref_taxed, s1250_taxed, coll_taxed )
 
-    def _tax_on_stack( self, status : FilingStatus, split : _TaxableSplit ) -> Decimal:
-        """Tax the apportioned buckets as a stack: ordinary brackets on ordinary
-        income; the §1250 and collectibles gains at ordinary rates stacked on top,
-        each capped at its maximum rate; the 0/15/20% preferential gains at the LTCG
-        brackets stacked above all ordinary-rated income."""
+    def _tax_on_stack( self, status : FilingStatus, split : _TaxableSplit ) -> _IncomeTaxParts:
+        """Tax the apportioned buckets as a stack, returning each layer's tax separately: ordinary
+        brackets on ordinary income; the §1250 and collectibles gains at ordinary rates stacked on
+        top, each capped at its maximum rate; the 0/15/20% preferential gains at the LTCG brackets
+        stacked above all ordinary-rated income. The layers sum to the total income tax."""
         ordinary = self._parameters.ordinary_brackets[ status ]
         ltcg     = self._parameters.ltcg_brackets[ status ]
 
-        tax  = ordinary.tax_on( split.ordinary )
-        base = split.ordinary
-        tax += self._capped_gain_tax(
+        base             = split.ordinary
+        ordinary_tax     = ordinary.tax_on( split.ordinary )
+        section_1250_tax = self._capped_gain_tax(
             ordinary, base, split.section_1250, self._parameters.section_1250_rate )
         base += split.section_1250
-        tax += self._capped_gain_tax(
+        collectibles_tax = self._capped_gain_tax(
             ordinary, base, split.collectibles, self._parameters.collectibles_rate )
         base += split.collectibles
-        tax += ltcg.tax_on( base + split.preferential ) - ltcg.tax_on( base )
-        return tax
+        capital_gains_tax = ltcg.tax_on( base + split.preferential ) - ltcg.tax_on( base )
+        return _IncomeTaxParts(
+            ordinary = ordinary_tax, capital_gains = capital_gains_tax,
+            section_1250 = section_1250_tax, collectibles = collectibles_tax )
 
     def _capped_gain_tax( self, ordinary : BracketTable, base : Decimal, gain : Decimal, cap : Decimal ) -> Decimal:
         """A maximum-rate gain stacked on `base`: ordinary-rate tax on the gain, but

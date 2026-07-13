@@ -33,13 +33,13 @@ from ucfp.forecast.parameters import (
     Subject,
     WindowedAmount,
 )
+from ucfp.forecast.tests.tax_helpers import total_income_tax
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
 
 def _income_tax( reader ):
-    account = reader.chart.expense_account( ExpenseTaxClass.INCOME_TAX )
-    return reader.ledger.natural_balance( account )
+    return total_income_tax( reader )
 
 
 class RentalDepreciationDeductionTests( unittest.TestCase ):

@@ -450,7 +450,10 @@ class Period:
                 income_class = source.asset_class.realized_gain_income_class
             realized_gain_account = None
             if income_class is not None:
-                realized_gain_account = chart.income_account( income_class )
+                # A pre-tax draw's distribution posts to the owner's own revenue account; a taxable
+                # gain to the single shared household one.
+                owner_handle = source.owner_handle if income_class.is_owner_attributed else None
+                realized_gain_account = chart.income_account( income_class, owner_handle )
                 if realized_gain_account is None:
                     raise MissingAccountError(
                         f'No revenue account for income tax-class {income_class.label}.'

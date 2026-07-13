@@ -25,7 +25,7 @@ class AccountType( LabeledEnum ):
     ASSET     = ( 'Asset'     , 'Resources owned (cash, investments, property).' )
     LIABILITY = ( 'Liability' , 'Obligations owed to others (loans, debts).' )
     EQUITY    = ( 'Equity'    , 'Residual interest: assets minus liabilities.' )
-    REVENUE   = ( 'Revenue'   , 'Inflows that increase equity (income).' )
+    REVENUE   = ( 'Income'    , 'Inflows that increase equity (income).' )
     EXPENSE   = ( 'Expense'   , 'Outflows that decrease equity (costs).' )
 
     @property
@@ -214,7 +214,9 @@ class IncomeTaxClass( LabeledEnum ):
     """
 
     WAGES               = ( 'Wages', 'Earned income; ordinary rate, plus FICA.' )
-    ORDINARY            = ( 'Ordinary Income', 'Ordinary rate, not investment income (pension, IRA).' )
+    ORDINARY            = ( 'Ordinary Income', 'Ordinary rate, not investment income (e.g. a pension).' )
+    RETIREMENT_DISTRIBUTION = (
+        'Retirement Distribution', 'Pre-tax retirement withdrawals and RMDs; taxed as ordinary income.' )
     TAXABLE_INTEREST    = ( 'Taxable Interest', 'Ordinary rate; net investment income (bank/bond/CD).' )
     QUALIFIED_DIVIDENDS = ( 'Qualified Dividends', 'Preferential rate; not netted with losses.' )
     LONG_TERM_GAINS     = ( 'Long-Term Gains', 'Preferential rate; netted with losses.' )
@@ -228,6 +230,20 @@ class IncomeTaxClass( LabeledEnum ):
     GROSS_RENTAL        = ( 'Gross Rental', 'Gross rents; netted with expenses in-period.' )
     TAX_FREE            = ( 'Tax-Free', 'Excluded from tax everywhere (Roth).' )
     TAX_EXEMPT_INTEREST = ( 'Tax-Exempt Interest', 'Untaxed, but counts in SS/ACA MAGI (muni).' )
+
+    @property
+    def is_owner_attributed( self ) -> bool:
+        """Whether an asset's income of this class is tracked per owning subject -- a revenue account
+        in the owner's name -- rather than at the household level. A pre-tax retirement distribution
+        lands in the account owner's name (it is that person's RMD/withdrawal); a taxable gain stays
+        household (joint on a joint return)."""
+        return self in _OWNER_ATTRIBUTED_INCOME_CLASSES
+
+
+# Income tax-classes whose asset income is attributed to the owning subject (a per-person revenue
+# account), not the household -- a retirement distribution carries the owner's name; capital gains do
+# not (they are joint on a joint return).
+_OWNER_ATTRIBUTED_INCOME_CLASSES = frozenset( { IncomeTaxClass.RETIREMENT_DISTRIBUTION } )
 
 
 # The income tax-class each distributing asset class credits with its yield
@@ -253,7 +269,7 @@ _REALIZED_GAIN_INCOME_CLASS = {
     AssetClass.REAL_ESTATE_RESIDENCE   : IncomeTaxClass.RESIDENCE_SECTION_121_GAIN,
     AssetClass.REAL_ESTATE_RENTAL      : IncomeTaxClass.LONG_TERM_GAINS,
     AssetClass.REAL_ESTATE_SECOND_HOME : IncomeTaxClass.SECOND_HOME_GAIN,
-    AssetClass.PRETAX_RETIREMENT       : IncomeTaxClass.ORDINARY,
+    AssetClass.PRETAX_RETIREMENT       : IncomeTaxClass.RETIREMENT_DISTRIBUTION,
     AssetClass.ROTH                    : IncomeTaxClass.TAX_FREE,
     AssetClass.PRECIOUS_METALS         : IncomeTaxClass.COLLECTIBLES_GAINS,
     AssetClass.COLLECTIBLES            : IncomeTaxClass.COLLECTIBLES_GAINS,
@@ -278,7 +294,12 @@ class ExpenseTaxClass( LabeledEnum ):
     CHARITABLE              = ( 'Charitable', 'Itemizable charitable gifts; AGI-limited.' )
     NON_DEDUCTIBLE_INTEREST = ( 'Non-Deductible Interest', 'Auto/personal/credit-card interest.' )
     RENTAL_EXPENSE          = ( 'Rental Expense', 'Netted against rental income.' )
-    INCOME_TAX              = ( 'Income Tax', 'Income tax paid (incl. AMT).' )
+    ORDINARY_INCOME_TAX     = ( 'Ordinary Income Tax', 'Tax on ordinary income at the bracket rates.' )
+    CAPITAL_GAINS_TAX       = (
+        'Capital Gains Tax', 'Preferential-rate tax on long-term gains and qualified dividends.' )
+    SECTION_1250_TAX        = (
+        'Section 1250 Tax', 'Tax on unrecaptured §1250 depreciation, capped at its own rate.' )
+    COLLECTIBLES_TAX        = ( 'Collectibles Tax', 'Tax on collectibles gains, capped at its own rate.' )
     PAYROLL_TAX             = ( 'Payroll Tax', 'FICA / Medicare on wages.' )
     NIIT                    = ( 'Net Investment Income Tax', '3.8% net investment income tax.' )
     EARLY_WITHDRAWAL_PENALTY = (
@@ -295,7 +316,10 @@ class ExpenseTaxClass( LabeledEnum ):
 # The expense classes a TaxEngine settles charges/credits into (see
 # ExpenseTaxClass.is_tax_payment); kept beside the enum as its single source of truth.
 _TAX_PAYMENT_EXPENSE_CLASSES = frozenset( (
-    ExpenseTaxClass.INCOME_TAX,
+    ExpenseTaxClass.ORDINARY_INCOME_TAX,
+    ExpenseTaxClass.CAPITAL_GAINS_TAX,
+    ExpenseTaxClass.SECTION_1250_TAX,
+    ExpenseTaxClass.COLLECTIBLES_TAX,
     ExpenseTaxClass.PAYROLL_TAX,
     ExpenseTaxClass.NIIT,
     ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,

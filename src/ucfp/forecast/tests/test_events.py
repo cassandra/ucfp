@@ -101,8 +101,8 @@ class EventResolutionTests( unittest.TestCase ):
         reader = Bookkeeper( Forecast( parameters ).run().books )
         ledger = reader.ledger
         through = date( 2026, 6, 30 )
-        ordinary = reader.chart.income_account( IncomeTaxClass.ORDINARY )
-        self.assertEqual( ledger.natural_balance( ordinary ), Decimal( '40000' ) )
+        distribution = reader.chart.income_account( IncomeTaxClass.RETIREMENT_DISTRIBUTION )
+        self.assertEqual( ledger.natural_balance( distribution ), Decimal( '40000' ) )
         # the withdrawal lands in cash; recognizing it is net-worth-neutral (no tax this half-year)
         self.assertEqual( ledger.market_value( _holding( reader, 'Cash' ), through = through ),
                           Decimal( '40000' ) )

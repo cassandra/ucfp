@@ -115,17 +115,19 @@ class _PropertyForm( forms.Form ):
         return all( cleaned.get( field ) not in ( None, '' ) for field in self._ASSET_FIELDS )
 
     def apply( self, profile, plans ):
+        # Non-blocking and non-destructive: a partial edit writes nothing and leaves any existing
+        # property (and its mortgage) untouched. The form background-saves on every change, so a save
+        # can fire mid-edit with a required field transiently blank -- a stray one must never delete a
+        # property. Removal is the explicit delete action's job, not a side effect of incompleteness.
+        # A complete form writes its asset and, if a balance is entered, its secured mortgage debt.
+        if not self._complete():
+            return profile, plans
         handle   = self._handle or _minted_handle( profile, self._PREFIX )
         mortgage = _mortgage_handle( handle )
         existing = next( ( d for d in profile.debts if d.handle == mortgage ), None )
-        # Non-blocking: an incomplete property (and so its mortgage) materializes nothing, and editing
-        # an existing one to incomplete removes both; a complete one writes its asset and, if a balance
-        # is entered, its mortgage debt.
-        complete = self._complete()
-        assets   = [ a for a in profile.assets if a.handle != handle ] + (
-            [ self._asset( handle ) ] if complete else [] )
-        debts    = [ d for d in profile.debts if d.handle != mortgage ] + (
-            self._mortgage( handle, existing ) if complete else [] )
+        assets   = [ a for a in profile.assets if a.handle != handle ] + [ self._asset( handle ) ]
+        debts    = ( [ d for d in profile.debts if d.handle != mortgage ]
+                     + self._mortgage( handle, existing ) )
         return replace( profile, assets = assets, debts = debts ), plans
 
     def _asset( self, handle : str ) -> AssetProfile:
