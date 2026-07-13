@@ -6,10 +6,11 @@ axes are stamped:
 
   - Expenses, by catalog `handle` -> `ExpenseClass` surface then `ExpenseCategory` section.
   - Income, by `IncomeTaxClass` -> a coarser income *source* (a meaningful rollup -- e.g. Investment
-    Income totals interest, dividends and gains) then the owning *subject*. Because income accounts are
-    keyed by (subject, tax class), pension and pre-tax retirement withdrawals share one `ORDINARY`
-    account and so one source ("Pension & Withdrawals") -- named honestly for that engine-set granularity
-    rather than split.
+    Income totals interest, dividends and gains) then the owning *subject* then the tax class itself.
+    Because income accounts are keyed by (subject, tax class), pension and pre-tax retirement
+    withdrawals share one `ORDINARY` account and so one source ("Pension & Withdrawals") -- named
+    honestly for that engine-set granularity rather than split. The trailing tax-class rung gives each
+    account a run-stable column key (one account per rung), the income mirror of the Taxes & Fees rung.
   - Assets, by `AssetClass` -> the input *pane* the assets step groups them under (Financial Accounts /
     Properties / Possessions) then the asset class, with holdings ordered by their profile position.
 
@@ -256,10 +257,21 @@ def _stamp_income_placements( books : BooksOfAccount, profile : Profile ) -> Non
             subject_order, subject_name = subject
             path.append( AccountDisplayGroup( key   = 'subj-' + str( account.owner_handle ),
                                               label = subject_name, order = subject_order ) )
-        account.display_placement = AccountDisplayPlacement(
-            path = tuple( path ), order = account.income_tax_class.value )   # declaration order
+        # A per-tax-class rung gives the account's column a run-stable identity: the engine mints a
+        # fresh account UUID each run, so a bare leaf keyed by it loses its expand/remove/reorder state
+        # across runs. Income accounts are keyed by (subject, tax class), so this rung -- below the
+        # subject -- holds exactly one account and collapses into a single-child column carrying its
+        # stable key (mirroring the Taxes & Fees per-tax rung).
+        path.append( _income_class_group( account.income_tax_class ) )
+        account.display_placement = AccountDisplayPlacement( path = tuple( path ), order = 0 )
         continue
     return
+
+
+def _income_class_group( income_tax_class ) -> AccountDisplayGroup:
+    # Rungs order by the tax class's declaration order (its LabeledEnum value).
+    return AccountDisplayGroup( key   = 'inc-' + income_tax_class.name.lower(),
+                                label = income_tax_class.label, order = income_tax_class.value )
 
 
 def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None:
