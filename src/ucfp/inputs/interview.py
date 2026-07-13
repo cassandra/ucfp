@@ -31,6 +31,7 @@ from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
 from .events import EventsForm
 from .external_factors import ExternalFactorsSectionForm
+from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
 from .expenses import has_property
@@ -621,6 +622,11 @@ SECTIONS = [
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html' ),
+    # Selling costs (realtor fee + fixed costs) applied when a property is sold -- an assumption, but
+    # distinct from the economic outlook, so its own step after it.
+    Section( 'transaction-costs', 'Selling Costs', ( Aggregate.ASSUMPTIONS, ),
+             TransactionCostsSectionForm,
+             outer_template = 'inputs/interview/sections/transaction_costs.html' ),
 ]
 
 

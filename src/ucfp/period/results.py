@@ -29,6 +29,9 @@ class NoticeKind( LabeledEnum ):
 
     FUNDING_DRAW = (
         'Funding Draw', 'Assets were sold to cover a cash shortfall to the target buffer.' )
+    PROPERTY_SALE_COSTS = (
+        'Property Sale Costs',
+        'Selling costs (realtor fee and fixed costs) were charged on a property sale.' )
     REQUIRED_MINIMUM_DISTRIBUTION = (
         'Required Minimum Distribution', 'A pre-tax retirement RMD was forced.' )
     EARLY_WITHDRAWAL_PENALTY = (

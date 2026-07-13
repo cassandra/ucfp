@@ -29,7 +29,7 @@ from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
     ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
     RetirementContribution, ScheduledExternalDisbursement, Subject, SubsidizedHealthCoverage,
-    WindowedAmount )
+    TransactionCosts, WindowedAmount )
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
@@ -46,6 +46,7 @@ from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENTED_HOME
 from ucfp.inputs.plans.enums import CreditCardPlanMode
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanRepayment, Plans, RetirementTiming, VehiclePlan )
+from ucfp.inputs.assumptions.defaults import default_transaction_costs
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 
@@ -106,6 +107,7 @@ def materialize(
         cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
+        property_sale_costs = _property_sale_costs( assumptions ),
     )
 
 
@@ -624,6 +626,12 @@ def _economic_outlook( assumptions : Assumptions ) -> EconomicOutlook:
     if assumptions.economics is None:
         raise ValueError( 'Assumptions must carry economic factors (seed them from a preset).' )
     return EconomicOutlook.constant( assumptions.economics )
+
+
+def _property_sale_costs( assumptions : Assumptions ) -> TransactionCosts:
+    """The selling costs the engine applies to a property sale -- the assumptions' own copy, or the
+    shared default when unset."""
+    return assumptions.transaction_costs or default_transaction_costs()
 
 
 def _statute( profile : Profile, assumptions : Assumptions ):

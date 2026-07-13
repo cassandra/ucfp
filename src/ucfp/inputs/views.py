@@ -39,6 +39,7 @@ from .vehicle import VehiclePlanForm
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
+from .transaction_costs import TransactionCostsForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
 from .events import EventForm, events_context, handler_for, menu_context
@@ -588,6 +589,22 @@ class ExternalFactorsView( SelfSavingPaneView ):
 
     def build_form( self, request, data = None ):
         return ExternalFactorsForm( data, assumptions = _current_assumptions( request ) )
+
+    def persist( self, request, form ):
+        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
+        save_assumptions( current_assumptions_record( request ), assumptions )
+
+
+class TransactionCostsView( SelfSavingPaneView ):
+    """`/inputs/interview/transaction-costs/edit/` -- the Selling Costs pane of the Assumptions flow. It
+    persists the transaction-cost assumptions applied when an asset is sold."""
+
+    template     = 'inputs/interview/sections/transaction_costs_pane.html'
+    target       = 'transaction-costs'
+    context_name = 'costs_form'
+
+    def build_form( self, request, data = None ):
+        return TransactionCostsForm( data, assumptions = _current_assumptions( request ) )
 
     def persist( self, request, form ):
         _profile, assumptions = form.apply( None, _current_assumptions( request ) )

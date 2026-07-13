@@ -274,12 +274,61 @@ class Period:
 
     def _apply_events( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Apply each scheduled PeriodEvent (transfer, purchase, realization, external
-        receipt/disbursement); each materializes its own balanced transaction. Scheduled events
-        are the user's requested operations, so they raise no Notices (a Notice flags the
-        unrequested)."""
+        receipt/disbursement); each materializes its own balanced transaction. Scheduled events are the
+        user's requested operations, so they raise no Notices -- except a property sale, whose *closing
+        costs* are an automatic consequence worth surfacing, overlaid here after the sale realizes."""
         for event in self._parameters.events:
+            sale_price = self._property_sale_price( bookkeeper, event )
             event.apply( bookkeeper )
+            if sale_price is not None:
+                self._book_property_sale_costs( bookkeeper, result, event, sale_price )
             continue
+        return
+
+    @staticmethod
+    def _property_sale_price( bookkeeper : Bookkeeper, event ) -> Optional[ Decimal ]:
+        """The market value of a real-estate holding about to be sold whole -- the sale price its
+        closing costs scale against -- captured *before* the realize draws it down. None for any other
+        event (a withdrawal, a conversion, a non-real-estate sale) or a valueless holding (no real sale
+        to charge against, mirroring `realize`'s own zero-value guard)."""
+        if not ( isinstance( event, Realization ) and event.amount is None
+                 and event.holding.asset_class.is_real_estate ):
+            return None
+        market = bookkeeper.ledger.market_value( event.holding )
+        return market if market > 0 else None
+
+    def _book_property_sale_costs(
+            self, bookkeeper : Bookkeeper, result : PeriodResult, event, sale_price : Decimal ) -> None:
+        """Overlay a property sale's closing costs: the realtor fee (a share of the sale price) plus the
+        already-inflated fixed costs. Booked as a cost of sale -- DR the realized-gain account / CR cash
+        -- so it reduces both the net proceeds and the taxable gain (no separate account), with an INFO
+        Notice whose linked transaction memo carries the breakdown."""
+        realtor_fee = quantize_money(
+            self._parameters.property_sale_realtor_fee_rate.change_on( sale_price ) )
+        fixed = quantize_money( self._parameters.property_sale_fixed_cost )
+        total = realtor_fee + fixed
+        if total <= 0:
+            return
+        chart = bookkeeper.chart
+        cash_account = chart.cash_account()
+        # Real-estate gains are household income (never owner-attributed), so the cost of sale resolves
+        # the gain account with no owner_handle -- unlike the owner-scoped retirement-distribution path.
+        gain_account = chart.income_account( event.holding.asset_class.realized_gain_income_class )
+        if cash_account is None or gain_account is None:
+            return
+        net = quantize_money( sale_price ) - total
+        description = (
+            f'Selling costs on {event.holding.name}: {realtor_fee} realtor fee + {fixed} fixed costs on '
+            f'a {quantize_money( sale_price )} sale (net {net}).' )
+        transaction = bookkeeper.record(
+            event.event_date, [ ( gain_account, -total ), ( cash_account, total ) ],
+            description = description )
+        result.notices.append(
+            Notice(
+                kind             = NoticeKind.PROPERTY_SALE_COSTS,
+                severity         = NoticeSeverity.INFO,
+                amount           = total,
+                transaction_uuid = transaction.transaction_uuid ) )
         return
 
     def _settle_and_fund( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
