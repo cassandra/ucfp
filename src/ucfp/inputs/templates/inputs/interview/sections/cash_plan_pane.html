@@ -1,0 +1,42 @@
+{% comment %}
+The self-saving Cash Plan form (id=cash-plan): the cash band (minimum/maximum) and the draw-order
+priority over the liquid asset classes. Reordering with the up/down buttons moves a row -- carrying its
+hidden `draw_order` input -- so the form serializes the classes in priority order; the js-autosave form
+posts each edit to `CashPlanView`, which persists silently and re-renders only on a genuine field error.
+Reads `drawdown_form`.
+{% endcomment %}
+<div id="cash-plan">
+  <form method="post" action="{% url 'cash_plan' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <div class="form-row mt-2">
+      <div class="form-group col-sm-6">
+        <label class="font-weight-normal mb-1">{{ drawdown_form.cash_floor.label }}
+          <span class="text-muted small d-block">Kept on hand; topped up from your accounts below this.</span></label>
+        <div class="input-group"><div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ drawdown_form.cash_floor }}</div>
+        {% if drawdown_form.cash_floor.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_floor.errors|join:" " }}</span>{% endif %}
+      </div>
+      <div class="form-group col-sm-6">
+        <label class="font-weight-normal mb-1">{{ drawdown_form.cash_ceiling.label }}
+          <span class="text-muted small d-block">Set up together with investing the surplus, in the next step.</span></label>
+        <div class="input-group"><div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ drawdown_form.cash_ceiling }}</div>
+      </div>
+    </div>
+    <label class="font-weight-normal mb-1">Draw order
+      <span class="text-muted small d-block">When cash drops below the minimum, sell from these in order. A
+        <span class="d-inline-block rounded-circle bg-success align-middle" style="width:.5rem;height:.5rem"></span>
+        marks a type you hold today; the rest are skipped until you own them.</span></label>
+    <ul class="list-unstyled mb-0 js-draw-order">
+      {% for row in drawdown_form.draw_rows %}
+      <li class="d-flex align-items-center border rounded p-2 mb-2 bg-white">
+        <input type="hidden" name="draw_order" value="{{ row.value }}">
+        <span class="badge badge-light border mr-2 js-draw-rank">{{ forloop.counter }}</span>
+        <span class="d-inline-block rounded-circle mr-2 {% if row.held %}bg-success{% else %}bg-light border{% endif %}"
+              style="width:.5rem;height:.5rem" title="{% if row.held %}held{% else %}not held yet{% endif %}"></span>
+        <span class="flex-grow-1 {% if not row.held %}text-muted{% endif %}">{{ row.label }}</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 mr-1 js-draw-up" aria-label="Move up">&uarr;</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 js-draw-down" aria-label="Move down">&darr;</button>
+      </li>
+      {% endfor %}
+    </ul>
+  </form>
+</div>

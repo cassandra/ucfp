@@ -39,6 +39,7 @@ from .vehicle import VehiclePlanForm
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
+from .cash_plan import DrawdownForm
 from .transaction_costs import TransactionCostsForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
@@ -609,6 +610,24 @@ class TransactionCostsView( SelfSavingPaneView ):
     def persist( self, request, form ):
         _profile, assumptions = form.apply( None, _current_assumptions( request ) )
         save_assumptions( current_assumptions_record( request ), assumptions )
+
+
+class CashPlanView( SelfSavingPaneView ):
+    """`/inputs/interview/cash-plan/edit/` -- the Cash Plan pane of the Plans flow. It persists the
+    cash band and the draw-order priority; the sweep allocation is a later section."""
+
+    template     = 'inputs/interview/sections/cash_plan_pane.html'
+    target       = 'cash-plan'
+    context_name = 'drawdown_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return DrawdownForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
 
 
 class AccountsView( SelfSavingPaneView ):

@@ -31,6 +31,7 @@ from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
 from .events import EventsForm
 from .external_factors import ExternalFactorsSectionForm
+from .cash_plan import CashPlanSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
@@ -619,6 +620,10 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
+    # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set
+    # up in the same pane). The last Plans step, after events, since it references the accounts above.
+    Section( 'cash-plan'   , 'Cash Plan', ( Aggregate.PLANS, ), CashPlanSectionForm,
+             outer_template = 'inputs/interview/sections/cash_plan.html' ),
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html' ),
