@@ -533,22 +533,28 @@ class USFederalTaxEngine( TaxEngine ):
         return _TaxableSplit( ordinary, pref_taxed, s1250_taxed, coll_taxed )
 
     def _tax_on_stack( self, status : FilingStatus, split : _TaxableSplit ) -> _IncomeTaxParts:
-        """Tax the apportioned buckets as a stack, returning each layer's tax separately: ordinary
-        brackets on ordinary income; the §1250 and collectibles gains at ordinary rates stacked on
-        top, each capped at its maximum rate; the 0/15/20% preferential gains at the LTCG brackets
-        stacked above all ordinary-rated income. The layers sum to the total income tax."""
+        """Tax the apportioned buckets as a stack, in the IRC Schedule D Tax Worksheet order,
+        returning each layer's tax separately: ordinary brackets on ordinary income; the 0/15/20%
+        preferential gains at the LTCG brackets stacked directly above ordinary income (so they keep
+        their low brackets, including 0%); then the §1250 and collectibles gains at ordinary rates
+        stacked *above* the preferential gains, each capped at its maximum rate (so a high-income
+        year reaches the 25%/28% cap, while a low-income year pays the lower ordinary rate). The
+        layers sum to the total income tax."""
         ordinary = self._parameters.ordinary_brackets[ status ]
         ltcg     = self._parameters.ltcg_brackets[ status ]
 
-        base             = split.ordinary
-        ordinary_tax     = ordinary.tax_on( split.ordinary )
+        ordinary_tax      = ordinary.tax_on( split.ordinary )
+        # Preferential long-term gains sit right above ordinary income.
+        capital_gains_tax = (
+            ltcg.tax_on( split.ordinary + split.preferential ) - ltcg.tax_on( split.ordinary ) )
+        # §1250 recapture and collectibles stack above the preferential gains, at ordinary rates
+        # capped at their maximum -- so their rate is measured against the high end of the stack.
+        base             = split.ordinary + split.preferential
         section_1250_tax = self._capped_gain_tax(
             ordinary, base, split.section_1250, self._parameters.section_1250_rate )
         base += split.section_1250
         collectibles_tax = self._capped_gain_tax(
             ordinary, base, split.collectibles, self._parameters.collectibles_rate )
-        base += split.collectibles
-        capital_gains_tax = ltcg.tax_on( base + split.preferential ) - ltcg.tax_on( base )
         return _IncomeTaxParts(
             ordinary = ordinary_tax, capital_gains = capital_gains_tax,
             section_1250 = section_1250_tax, collectibles = collectibles_tax )
