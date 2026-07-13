@@ -437,6 +437,37 @@ window.App.Inputs = (function () {
             saveForm( $( this ) );
         } );
 
+        // Draw-order reorder (Cash Plan): the up/down buttons move a row within its list and save.
+        // Each row carries a hidden draw_order input, so the form then serializes the classes in the
+        // new priority order; re-rank the badges so the numbering matches. No-op at the list ends.
+        $( 'body' ).on( 'click', '.js-draw-up, .js-draw-down', function () {
+            const $li = $( this ).closest( 'li' );
+            if ( $( this ).hasClass( 'js-draw-up' ) ) { $li.prev( 'li' ).before( $li ); }
+            else                                      { $li.next( 'li' ).after( $li ); }
+            $li.closest( 'ul' ).find( '.js-draw-rank' ).each( function ( i ) { $( this ).text( i + 1 ); } );
+            saveForm( $li.closest( 'form' ) );
+        } );
+
+        // Sweep table (Cash Plan): add clones the first row (cleared) so a new holding/weight pair
+        // joins the form; remove drops a row, but the last row is cleared rather than removed so the
+        // table always keeps one editable line. Either way, persist -- clearing/removing fires no
+        // `change`, so the autosave must be triggered explicitly.
+        $( 'body' ).on( 'click', '.js-sweep-add', function () {
+            const $table = $( this ).closest( 'form' ).find( '.js-sweep-table' );
+            const $row   = $table.find( '.js-sweep-row' ).first().clone();
+            $row.find( 'select' ).val( '' );
+            $row.find( 'input[name="sweep_weight"]' ).val( '' );
+            $table.find( 'tbody' ).append( $row );
+            $row.find( 'select' ).trigger( 'focus' );
+        } );
+        $( 'body' ).on( 'click', '.js-sweep-remove', function () {
+            const $row  = $( this ).closest( '.js-sweep-row' );
+            const $form = $row.closest( 'form' );
+            if ( $row.siblings( '.js-sweep-row' ).length ) { $row.remove(); }
+            else { $row.find( 'select, input' ).val( '' ); }
+            saveForm( $form );
+        } );
+
         // A form marked data-confirm asks before it submits -- the guard for destructive actions
         // (deleting a plans/assumptions set). Cancelling stops the submission.
         $( 'body' ).on( 'submit', 'form[data-confirm]', function ( event ) {

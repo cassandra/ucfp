@@ -1,0 +1,83 @@
+{% comment %}
+The self-saving Cash Plan form (id=cash-plan), laid out as two paired columns: the minimum cash and
+the draw-order priority it refills from on the left; the maximum cash and the sweep it invests the
+surplus down to on the right. Reordering with the up/down buttons moves a draw row -- carrying its
+hidden `draw_order` input -- so the form serializes the classes in priority order; the sweep table's
+add/remove buttons grow and shrink the `sweep_handle`/`sweep_weight` pairs. The js-autosave form posts
+each edit to `CashPlanView`, which persists silently -- an incomplete pair (a holding with no weight,
+or a maximum with no holding) is simply not saved, never re-rendered from under the typing. Reads
+`drawdown_form`.
+{% endcomment %}
+<div id="cash-plan">
+  <form method="post" action="{% url 'cash_plan' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <div class="form-row mt-2">
+
+      <div class="col-md-6 mb-3">
+        <div class="form-group">
+          <label class="font-weight-normal mb-1">{{ drawdown_form.cash_floor.label }}
+            <span class="text-muted small d-block">Kept on hand; topped up from your accounts when cash falls below it.</span></label>
+          <div class="input-group"><div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ drawdown_form.cash_floor }}</div>
+          {% if drawdown_form.cash_floor.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_floor.errors|join:" " }}</span>{% endif %}
+        </div>
+        <label class="font-weight-normal mb-1">Draw order
+          <span class="text-muted small d-block">Below the minimum, sell from these in order. A
+            <span class="d-inline-block rounded-circle bg-success align-middle" style="width:.5rem;height:.5rem"></span>
+            marks a type you hold today; the rest are skipped until you own them.</span></label>
+        <ul class="list-unstyled mb-0 js-draw-order">
+          {% for row in drawdown_form.draw_rows %}
+          <li class="d-flex align-items-center border rounded p-2 mb-2 bg-white">
+            <input type="hidden" name="draw_order" value="{{ row.value }}">
+            <span class="badge badge-light border mr-2 js-draw-rank">{{ forloop.counter }}</span>
+            <span class="d-inline-block rounded-circle mr-2 {% if row.held %}bg-success{% else %}bg-light border{% endif %}"
+                  style="width:.5rem;height:.5rem" title="{% if row.held %}held{% else %}not held yet{% endif %}"></span>
+            <span class="flex-grow-1 {% if not row.held %}text-muted{% endif %}">{{ row.label }}</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 mr-1 js-draw-up" aria-label="Move up">&uarr;</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 js-draw-down" aria-label="Move down">&darr;</button>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="col-md-6 mb-3">
+        <div class="form-group">
+          <label class="font-weight-normal mb-1">{{ drawdown_form.cash_ceiling.label }}
+            <span class="text-muted small d-block">Surplus above it is invested by the sweep below. Leave blank to let cash accumulate.</span></label>
+          <div class="input-group"><div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ drawdown_form.cash_ceiling }}</div>
+          {% if drawdown_form.cash_ceiling.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_ceiling.errors|join:" " }}</span>{% endif %}
+        </div>
+        <label class="font-weight-normal mb-1">Invest the surplus into
+          <span class="text-muted small d-block">Above the maximum, the surplus is split across these holdings by weight
+            (weights are relative -- they need not add up to 100).</span></label>
+        <table class="table table-sm mb-1 js-sweep-table">
+          <tbody>
+            {% for row in drawdown_form.sweep_rows %}
+            <tr class="js-sweep-row">
+              <td class="align-middle pl-0">
+                <select name="sweep_handle" class="form-control form-control-sm">
+                  <option value="">Choose a holding&hellip;</option>
+                  {% for target in drawdown_form.sweep_targets %}
+                  <option value="{{ target.handle }}" {% if target.handle == row.handle %}selected{% endif %}>{{ target.label }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="align-middle" style="width:6.5rem">
+                <div class="input-group input-group-sm">
+                  <input type="number" name="sweep_weight" value="{{ row.weight }}" min="0" step="any" class="form-control" aria-label="Weight">
+                  <div class="input-group-append"><span class="input-group-text">%</span></div>
+                </div>
+              </td>
+              <td class="align-middle pr-0" style="width:2.5rem">
+                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 js-sweep-remove" aria-label="Remove">&times;</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="button" class="btn btn-sm btn-outline-secondary js-sweep-add">&plus; Add holding</button>
+        <span class="text-muted small d-block mt-2">A maximum only takes effect once at least one holding is chosen to invest the surplus into.</span>
+      </div>
+
+    </div>
+  </form>
+</div>

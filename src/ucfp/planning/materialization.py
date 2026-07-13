@@ -41,6 +41,7 @@ from ucfp.planning.display_placement import (
 
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.expenses import OWNED_PROPERTY_CONTEXT
+from ucfp.inputs.plans.defaults import default_drawdown
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENTED_HOME_HANDLE
 from ucfp.inputs.plans.enums import CreditCardPlanMode
@@ -600,9 +601,7 @@ def _contributions( plans : Plans ) -> list[ RetirementContribution ]:
 
 
 def _cash_account( plans : Plans ) -> CashAccountParameters:
-    drawdown = plans.drawdown
-    if drawdown is None:
-        return CashAccountParameters()
+    drawdown = plans.drawdown or default_drawdown()   # the sensible band applies even for an unedited plan
     sweep = AssetAllocation( tuple( drawdown.sweep_allocation ) ) if drawdown.sweep_allocation else None
     return CashAccountParameters(
         cash_floor = drawdown.cash_floor, cash_ceiling = drawdown.cash_ceiling,

@@ -1,0 +1,10 @@
+{% comment %}
+The Cash Plan section pane (Plans flow): an intro and the self-saving cash-band + draw-order form. The
+form renders outside the section's Next form (a nested form is invalid HTML) and persists each edit on
+its own through `CashPlanView`. The editor comes from the section wrapper (`form.drawdown_form`); the
+same partial is re-rendered by the view on a field error.
+{% endcomment %}
+<p class="text-muted">How your Cash &amp; Savings account is kept in a healthy band. When it runs low, the
+  plan sells from your other accounts to top it back up -- in the order you set here; when it builds up
+  past the maximum, the surplus is invested (that part is set up in the next step).</p>
+{% include 'inputs/interview/sections/cash_plan_pane.html' with drawdown_form=form.drawdown_form %}
