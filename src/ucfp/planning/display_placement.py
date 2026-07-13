@@ -36,10 +36,6 @@ logger = logging.getLogger( __name__ )
 # layer apart but must stay in lockstep so a stamped leaf always sorts ahead of a fallback one.
 _UNMAPPED_ORDER = 10 ** 6
 
-# Section order is enum declaration order (the catalog author's intent).
-_CLASS_ORDER    = { klass : index for index, klass in enumerate( ExpenseClass ) }
-_CATEGORY_ORDER = { category : index for index, category in enumerate( ExpenseCategory ) }
-
 # The engine's tax-payment accounts gather under one Taxes & Fees surface, placed just after the
 # spending ExpenseClass groups; within it each tax class gets its own rung, ordered by tax class
 # (its enum value, which is its declaration position -- see LabeledEnum -- so the rungs follow the
@@ -98,8 +94,6 @@ _ASSET_PANES = [
 _PANE_BY_CLASS = { asset_class : ( order, pane )
                    for order, pane in enumerate( _ASSET_PANES )
                    for asset_class in pane.classes }
-# Within a pane, the classes order by their own declaration order.
-_ASSET_CLASS_ORDER = { asset_class : index for index, asset_class in enumerate( AssetClass ) }
 
 # Income sources: a coarser, user-facing grouping of income tax classes, in display order. Every income
 # account carries a tax class, so the map covers them all -- an uncovered class would simply fall back to
@@ -120,8 +114,6 @@ _INCOME_SOURCES = [
 _SOURCE_BY_CLASS = { tax_class : ( order, source )
                      for order, source in enumerate( _INCOME_SOURCES )
                      for tax_class in source.classes }
-# Within a subject, the tax-class accounts order by the tax class's own declaration order.
-_TAX_CLASS_ORDER = { tax_class : index for index, tax_class in enumerate( IncomeTaxClass ) }
 
 
 def stamp_display_placements( books : BooksOfAccount, profile : Profile ) -> None:
@@ -230,13 +222,15 @@ def _property_of_expense_handle( account_handle : str ):
 
 
 def _class_group( expense_class ) -> AccountDisplayGroup:
+    # Surfaces order by the ExpenseClass's declaration order -- its LabeledEnum value (the catalog
+    # author's intent). Same convention for every rung below (see also the sections and asset classes).
     return AccountDisplayGroup( key   = 'class-' + expense_class.name.lower(),
-                                label = expense_class.label, order = _CLASS_ORDER[ expense_class ] )
+                                label = expense_class.label, order = expense_class.value )
 
 
 def _category_group( category ) -> AccountDisplayGroup:
     return AccountDisplayGroup( key   = 'cat-' + category.name.lower(),
-                                label = category.label, order = _CATEGORY_ORDER[ category ] )
+                                label = category.label, order = category.value )
 
 
 def _expense_placement( class_group, category_group, order ) -> AccountDisplayPlacement:
@@ -263,7 +257,7 @@ def _stamp_income_placements( books : BooksOfAccount, profile : Profile ) -> Non
             path.append( AccountDisplayGroup( key   = 'subj-' + str( account.owner_handle ),
                                               label = subject_name, order = subject_order ) )
         account.display_placement = AccountDisplayPlacement(
-            path = tuple( path ), order = _TAX_CLASS_ORDER[ account.income_tax_class ] )
+            path = tuple( path ), order = account.income_tax_class.value )   # declaration order
         continue
     return
 
@@ -284,7 +278,7 @@ def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None
                                           order = pane_order ),
                      AccountDisplayGroup( key = account.asset_class.name,
                                           label = account.asset_class.label,
-                                          order = _ASSET_CLASS_ORDER[ account.asset_class ] ) ),
+                                          order = account.asset_class.value ) ),   # declaration order
             order = leaf_order )
         continue
     return
