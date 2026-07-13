@@ -18,9 +18,8 @@ from .assumptions.defaults import default_transaction_costs
 
 
 class TransactionCostsForm( forms.Form ):
-    """The assumptions' selling costs: the realtor fee (a percent of the sale price) and the fixed costs
-    (a dollar amount in today's dollars). Seeded from the assumptions or the default; `apply` stores the
-    costs on the assumptions."""
+    """The selling-costs editor: seeded from the assumptions (or the shared default), `apply` stores the
+    edited costs back on the assumptions."""
 
     realtor_fee = forms.DecimalField( label = 'Realtor fee' )        # percent of the sale price
     fixed_cost  = forms.DecimalField( label = 'Other fixed costs' )  # dollars, in forecast-start terms

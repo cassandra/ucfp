@@ -47,8 +47,7 @@ class TransactionCosts:
     """The household's assumed one-time costs of selling an asset. Today it holds a property sale's
     realtor commission (a flat rate on the sale price) and fixed costs (title/escrow/transfer, given in
     forecast-start dollars and inflation-adjusted to the sale year). Field names are event-qualified so
-    further transaction costs can join without ambiguity. An exogenous Assumption reused by the engine,
-    the twin of `EconomicParameters`."""
+    further transaction costs can join without ambiguity."""
     property_sale_realtor_fee_rate : Rate    = ZERO_RATE
     property_sale_fixed_cost       : Decimal = Decimal( '0' )
 

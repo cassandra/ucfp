@@ -289,11 +289,13 @@ class Period:
     def _property_sale_price( bookkeeper : Bookkeeper, event ) -> Optional[ Decimal ]:
         """The market value of a real-estate holding about to be sold whole -- the sale price its
         closing costs scale against -- captured *before* the realize draws it down. None for any other
-        event (a withdrawal, a conversion, a non-real-estate sale)."""
+        event (a withdrawal, a conversion, a non-real-estate sale) or a valueless holding (no real sale
+        to charge against, mirroring `realize`'s own zero-value guard)."""
         if not ( isinstance( event, Realization ) and event.amount is None
                  and event.holding.asset_class.is_real_estate ):
             return None
-        return bookkeeper.ledger.market_value( event.holding )
+        market = bookkeeper.ledger.market_value( event.holding )
+        return market if market > 0 else None
 
     def _book_property_sale_costs(
             self, bookkeeper : Bookkeeper, result : PeriodResult, event, sale_price : Decimal ) -> None:
@@ -309,6 +311,8 @@ class Period:
             return
         chart = bookkeeper.chart
         cash_account = chart.cash_account()
+        # Real-estate gains are household income (never owner-attributed), so the cost of sale resolves
+        # the gain account with no owner_handle -- unlike the owner-scoped retirement-distribution path.
         gain_account = chart.income_account( event.holding.asset_class.realized_gain_income_class )
         if cash_account is None or gain_account is None:
             return

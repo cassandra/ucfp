@@ -22,6 +22,7 @@ from common.recurrence import Duration, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
+from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters,
@@ -174,14 +175,16 @@ class PropertySaleClosingCostsTests( unittest.TestCase ):
     _REALTOR = Rate.percent( Decimal( 6 ) )
     _FIXED   = Decimal( '10000' )
 
-    def _run( self, asset_class, costs ):
+    def _run( self, asset_class, costs, *, sale = date( 2026, 6, 1 ),
+              end = date( 2026, 12, 31 ), outlook = None ):
         subject = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
         return Forecast( ForecastParameters(
             start_date    = date( 2026, 1, 1 ),
-            end_date      = date( 2026, 12, 31 ),
+            end_date      = end,
             filing_status = FilingStatus.SINGLE,
             statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
             subjects      = [ subject ],
+            economic_outlook = outlook if outlook is not None else EconomicOutlook(),
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ), handle = 'cash' ),
                 AssetParameters(
@@ -191,14 +194,17 @@ class PropertySaleClosingCostsTests( unittest.TestCase ):
                         acquisition_date = date( 2010, 1, 1 ), depreciable_basis = Decimal( '0' ),
                         property_type = RealPropertyType.RESIDENTIAL )
                         if asset_class is AssetClass.REAL_ESTATE_RENTAL else None ) ) ],
-            events        = [ ScheduledRealization( date( 2026, 6, 1 ), 'sold' ) ],   # full sale
+            events        = [ ScheduledRealization( sale, 'sold' ) ],   # full sale (no amount)
             property_sale_costs = costs ) ).run()
 
+    def _costs( self ) -> TransactionCosts:
+        return TransactionCosts(
+            property_sale_realtor_fee_rate = self._REALTOR, property_sale_fixed_cost = self._FIXED )
+
     @staticmethod
-    def _long_term_gain( run ) -> Decimal:
+    def _gain( run, income_class ) -> Decimal:
         reader = Bookkeeper( run.books )
-        return reader.ledger.natural_balance(
-            reader.chart.income_account( IncomeTaxClass.LONG_TERM_GAINS ) )
+        return reader.ledger.natural_balance( reader.chart.income_account( income_class ) )
 
     @staticmethod
     def _sale_cost_notices( run ) -> list:
@@ -206,17 +212,15 @@ class PropertySaleClosingCostsTests( unittest.TestCase ):
                  if n.kind is NoticeKind.PROPERTY_SALE_COSTS ]
 
     def test_closing_costs_reduce_the_recognized_gain( self ):
-        costs = TransactionCosts(
-            property_sale_realtor_fee_rate = self._REALTOR, property_sale_fixed_cost = self._FIXED )
-        without = self._long_term_gain( self._run( AssetClass.REAL_ESTATE_RENTAL, TransactionCosts() ) )
-        withc   = self._long_term_gain( self._run( AssetClass.REAL_ESTATE_RENTAL, costs ) )
+        without = self._gain(
+            self._run( AssetClass.REAL_ESTATE_RENTAL, TransactionCosts() ), IncomeTaxClass.LONG_TERM_GAINS )
+        withc   = self._gain(
+            self._run( AssetClass.REAL_ESTATE_RENTAL, self._costs() ), IncomeTaxClass.LONG_TERM_GAINS )
         # 6% of the 600k sale + 10k fixed = 46,000, taken off the long-term gain
         self.assertEqual( without - withc, Decimal( '46000' ) )
 
     def test_a_notice_reports_the_total( self ):
-        costs = TransactionCosts(
-            property_sale_realtor_fee_rate = self._REALTOR, property_sale_fixed_cost = self._FIXED )
-        notices = self._sale_cost_notices( self._run( AssetClass.REAL_ESTATE_RENTAL, costs ) )
+        notices = self._sale_cost_notices( self._run( AssetClass.REAL_ESTATE_RENTAL, self._costs() ) )
         self.assertEqual( [ n.amount for n in notices ], [ Decimal( '46000' ) ] )
 
     def test_no_costs_no_charge( self ):
@@ -225,9 +229,28 @@ class PropertySaleClosingCostsTests( unittest.TestCase ):
 
     def test_non_real_estate_sale_is_untouched( self ):
         # the same costs against a stock sale: no closing costs, no notice (they are property-only)
-        costs = TransactionCosts(
-            property_sale_realtor_fee_rate = self._REALTOR, property_sale_fixed_cost = self._FIXED )
-        self.assertEqual( self._sale_cost_notices( self._run( AssetClass.STOCKS, costs ) ), [] )
+        self.assertEqual( self._sale_cost_notices( self._run( AssetClass.STOCKS, self._costs() ) ), [] )
+
+    def test_residence_costs_hit_the_section_121_gain_and_inflate( self ):
+        # A residence sold a year out, under 10% general inflation and no appreciation: the sale price
+        # stays 600k, the 10k fixed cost inflates to 11k, so 6%*600k + 11k = 47,000 -- taken off the
+        # residence (section 121) gain (not long-term gains), matching the notice, and reducing cash.
+        outlook = EconomicOutlook.constant( EconomicParameters( inflation = Rate.percent( Decimal( 10 ) ) ) )
+        later = dict( sale = date( 2027, 6, 1 ), end = date( 2027, 12, 31 ), outlook = outlook )
+        without = self._gain(
+            self._run( AssetClass.REAL_ESTATE_RESIDENCE, TransactionCosts(), **later ),
+            IncomeTaxClass.RESIDENCE_SECTION_121_GAIN )
+        run   = self._run( AssetClass.REAL_ESTATE_RESIDENCE, self._costs(), **later )
+        withc = self._gain( run, IncomeTaxClass.RESIDENCE_SECTION_121_GAIN )
+        self.assertEqual( without - withc, Decimal( '47000' ) )       # residence branch + fixed-cost inflation
+        self.assertEqual( [ n.amount for n in self._sale_cost_notices( run ) ], [ Decimal( '47000' ) ] )
+        # the linked cost-of-sale transaction credits (reduces) cash by the same total -- net proceeds fell
+        reader = Bookkeeper( run.books )
+        cash   = reader.chart.cash_account()
+        txn    = next( t for t in run.books.transactions
+                       if t.transaction_uuid == self._sale_cost_notices( run )[ 0 ].transaction_uuid )
+        cash_credit = sum( ( e.signed_amount for e in txn.entries if e.account is cash ), Decimal( '0' ) )
+        self.assertEqual( cash_credit, Decimal( '47000' ) )
 
 
 if __name__ == '__main__':

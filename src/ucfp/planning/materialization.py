@@ -630,7 +630,7 @@ def _economic_outlook( assumptions : Assumptions ) -> EconomicOutlook:
 
 def _property_sale_costs( assumptions : Assumptions ) -> TransactionCosts:
     """The selling costs the engine applies to a property sale -- the assumptions' own copy, or the
-    shared default for a set minted before the block existed."""
+    shared default when unset."""
     return assumptions.transaction_costs or default_transaction_costs()
 
 
