@@ -775,12 +775,13 @@ class Forecast:
                                   bookkeeper : Bookkeeper ) -> PeriodParameters:
         """Build this interval's myopic PeriodParameters. Rates and flows are resolved to
         the interval's length (so the same parameters run at any granularity), and liability
-        terms are amortized off the running balance. The tax engine is carried only over a full
-        calendar year (a partial year is untaxed); where present, the Period asks it whether the
-        interval closes a tax year and settles only then."""
+        terms are amortized off the running balance. The tax engine is carried every interval (its
+        exact real-dollar rules -- the contribution limit, the early-withdrawal penalty, forced
+        RMDs -- apply regardless), but income tax settles only on a full calendar year, gated by
+        `full_tax_year`."""
         year_fraction = self._year_fraction( span )
         annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
-        tax_engine = self._settling_tax_engine( span )
+        tax_engine = self._tax_law.engine_for( span.end_date.year )
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
@@ -792,6 +793,7 @@ class Forecast:
             events            = self._events_for( span, bookkeeper ),
             funding_policy    = self._funding_policy_for( span ),
             tax_engine        = tax_engine,
+            full_tax_year     = self._is_full_tax_year( span, tax_engine ),
             opening_tax_state = opening_tax_state,
             fiscal_window     = self._fiscal_window_for( span, bookkeeper, tax_engine ),
             property_sale_realtor_fee_rate = self._parameters.property_sale_costs.property_sale_realtor_fee_rate,
@@ -808,31 +810,22 @@ class Forecast:
         year_days = 366 if calendar.isleap( span.start_date.year ) else 365
         return Decimal( period_days ) / Decimal( year_days )
 
-    def _settling_tax_engine( self, span : DateSpan ) -> Optional[ TaxEngine ]:
-        """The interval's tax engine, but only when its tax year is a *full* calendar year within
-        the forecast span -- otherwise None. Tax is assessed on whole years only; a partial year
-        (a mid-year start, or a trailing year short of the tax-year end) is posted but untaxed,
-        which the Period effects by being handed no engine."""
-        tax_engine = self._tax_law.engine_for( span.end_date.year )
-        if tax_engine is None:
-            return None
+    def _is_full_tax_year( self, span : DateSpan, tax_engine : TaxEngine ) -> bool:
+        """Whether the interval's tax year is a full calendar year within the forecast span -- the
+        gate for settling income tax. A partial year (a mid-year start, or a trailing year short of
+        the tax-year end) is posted but its income tax is not assessed. The engine is still carried
+        every interval, so its exact, non-bracket rules (the retirement contribution limit, the
+        early-withdrawal penalty, forced RMDs) keep applying to a partial year unchanged."""
         year_start, year_end = tax_engine.tax_year_bounds( span.end_date )
-        covers_full_year = (
-            self._parameters.start_date <= year_start and self._parameters.end_date >= year_end )
-        return tax_engine if covers_full_year else None
+        return self._parameters.start_date <= year_start and self._parameters.end_date >= year_end
 
     def _fiscal_window_for(
-            self, span : DateSpan, bookkeeper : Bookkeeper,
-            tax_engine : Optional[ TaxEngine ] ) -> FiscalWindow:
+            self, span : DateSpan, bookkeeper : Bookkeeper, tax_engine : TaxEngine ) -> FiscalWindow:
         """The tax-year view this interval reads: a window from the tax year's start (named by the
         engine) through the interval's end -- year-to-date, the whole year at a close. The Forecast
-        owns it because the tax-year boundary is a time fact. Tax settles only on full calendar
-        years (a partial year is handed no engine), so this is always a plain window."""
+        owns it because the tax-year boundary is a time fact."""
         period_end = span.end_date
-        if tax_engine is not None:
-            year_start, _year_end = tax_engine.tax_year_bounds( period_end )
-        else:
-            year_start = date( period_end.year, 1, 1 )
+        year_start, _year_end = tax_engine.tax_year_bounds( period_end )
         return FiscalWindow( bookkeeper, DateSpan( year_start, period_end ) )
 
     def _flag_partial_tax_year(

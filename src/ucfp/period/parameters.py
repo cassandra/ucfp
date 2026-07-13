@@ -137,14 +137,15 @@ class PeriodParameters:
     """The single-interval, already-resolved inputs the Period consumes.
 
     `tax_engine` is the year's resolved engine (from the tax-law projection), carried every
-    interval of a *full* calendar year. Tax is annual, so the Period asks the engine whether the
-    interval's end closes a tax year and settles only then, over the full tax-year span the
-    engine names (Jan-Dec). A partial year (a mid-year start, or a trailing year short of
-    December 31) is handed a `None` engine and so runs no tax step -- the Forecast decides
-    fullness; the boundary is the tax law's. `opening_tax_state` is the carryforwards threaded in
-    from the prior period. `fiscal_window` is the tax-year view the Forecast resolves for this
-    interval -- a plain window the Period reads for the contribution clamp and the year-close
-    tax step."""
+    interval so its exact, non-bracket rules -- the retirement contribution limit, the
+    early-withdrawal penalty, forced RMDs -- apply to every year. Income tax, by contrast, is
+    annual and bracket-driven, so it settles only when the interval closes a *full* calendar year:
+    the Period settles when `_is_close_of_tax_year()` and `full_tax_year`. `full_tax_year` is
+    False for a partial year (a mid-year start, or a trailing year short of December 31), which is
+    posted but not income-taxed -- the Forecast decides fullness; the boundary is the tax law's.
+    `opening_tax_state` is the carryforwards threaded in from the prior period. `fiscal_window` is
+    the tax-year view the Forecast resolves for this interval -- the year-to-date window the Period
+    reads for the contribution clamp and the year-close tax step."""
 
     date_span             : DateSpan
     tax_context           : TaxContext
@@ -156,6 +157,7 @@ class PeriodParameters:
     contribution_lines    : list[ ContributionLine ]                        = field( default_factory = list )
     events                : list[ PeriodEvent ]                             = field( default_factory = list )
     tax_engine            : Optional[ TaxEngine ]                           = None
+    full_tax_year         : bool                                           = True
     opening_tax_state     : Optional[ TaxState ]                            = None
     fiscal_window         : Optional[ FiscalWindow ]                        = None
     # Selling costs applied to a property sale this interval: a realtor rate on the sale price plus a

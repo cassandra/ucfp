@@ -99,7 +99,7 @@ Pick the shape by how the flow is *naturally known*:
 - **`books : BooksOfAccount`** — the complete record; every figure derives from it. Read via `Bookkeeper(result.books)` → `.ledger` (`net_worth(through=)`, `market_value`, `flows(start=, end=)`) and `.chart` (accounts, `income_account`, `expense_account`, `cash_account`). → `accounts/`
 - **`steps : list[ForecastStep]`** — one per interval; each `ForecastStep(span, result)` where `result : PeriodResult` carries `notices`, `is_depleted`, `closing_tax_state`.
 - **`stopped_early : bool`** — net worth depleted (or all subjects gone) before the horizon.
-- **Notices** — the planning-insight stream (`Notice(kind, severity, amount, transaction_uuid)`): `FUNDING_DRAW`, `REQUIRED_MINIMUM_DISTRIBUTION`, `CONTRIBUTION_CAPPED`, `CASH_SHORTFALL`, `NET_WORTH_DEPLETED`, `APPROXIMATE_TAX_YEAR` (a partial first/last year). Surface these to the user. → `period/results.py`
+- **Notices** — the planning-insight stream (`Notice(kind, severity, amount, detail, transaction_uuid)`): `FUNDING_DRAW`, `REQUIRED_MINIMUM_DISTRIBUTION`, `CONTRIBUTION_CAPPED`, `CASH_SHORTFALL`, `NET_WORTH_DEPLETED`, `PARTIAL_YEAR_UNTAXED` (a partial first/last year, posted but not income-taxed; `amount`/`detail` carry the approximate income that escaped tax). Surface these to the user. → `period/results.py`
 
 For figure extraction patterns over a run, see the harness `forecast/tests/granularity_harness.py` (`yearly_figures`, `outcome`).
 

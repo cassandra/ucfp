@@ -23,6 +23,7 @@ from ucfp.forecast.parameters import (
 from ucfp.period.results import NoticeKind, NoticeSeverity
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
+from ucfp.jurisdiction.us.state import CapitalLossCarryover, TaxState
 
 _TAX     = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 _NULL    = EconomicOutlook.constant( EconomicParameters() )
@@ -166,6 +167,36 @@ class MidYearStartTests( unittest.TestCase ):
         self.assertIn( 'approximate untaxed income', notice.detail )
         self.assertRegex( notice.detail, r'capital gains.*ordinary' )
 
+    def test_capital_loss_carryover_survives_an_untaxed_partial_first_year( self ):
+        # a prior-year capital-loss carryover threaded in must pass through the untaxed mid-year
+        # stub unchanged (it settles no tax, so it neither consumes nor drops the carryforward) and
+        # still offset a gain realized in the first full year
+        subject = Subject( 'A', date( 1980, 1, 1 ), 'a' )
+
+        def run( opening_state ):
+            parameters = ForecastParameters(
+                start_date    = date( 2026, 4, 1 ),
+                end_date      = date( 2027, 12, 31 ),
+                filing_status = FilingStatus.SINGLE,
+                statute       = _TAX,
+                granularity   = _MONTHLY,
+                subjects      = [ subject ],
+                economic_outlook = _NULL,
+                assets        = [
+                    AssetParameters( 'Cash', AssetClass.CASH, Decimal( '100000' ), Decimal( '100000' ) ),
+                    AssetParameters(
+                        'Stock', AssetClass.STOCKS, Decimal( '200000' ), Decimal( '0' ), handle = 'Stock' ) ],
+                events        = [ ScheduledRealization( date( 2027, 3, 1 ), 'Stock', Decimal( '200000' ) ) ],
+                initial_tax_state = opening_state )
+            return _reader( Forecast( parameters ).run() )
+        carried = TaxState( capital_loss_carryover = CapitalLossCarryover( long = Decimal( '50000' ) ) )
+        with_loss = run( carried )
+        without   = run( None )
+        # the gain lands in the full 2027 year and is taxed; the carryforward that survived the
+        # untaxed 2026 stub lowers that tax versus starting fresh
+        self.assertGreater( self._income_tax( without, 2027 ), Decimal( '0' ) )
+        self.assertLess( self._income_tax( with_loss, 2027 ), self._income_tax( without, 2027 ) )
+
     def test_partial_year_with_no_taxable_income_is_informational( self ):
         subject = Subject( 'A', date( 1980, 1, 1 ), 'a' )
         parameters = ForecastParameters(
@@ -188,6 +219,12 @@ class MidYearStartTests( unittest.TestCase ):
         result = self._result( date( 2026, 1, 1 ), end = date( 2028, 6, 30 ) )
         # a full first year, full middle year, and a trailing partial year (ends June 30)
         self.assertEqual( self._untaxed_partial_years( result ), [ 2028 ] )
+        # a trailing stub carries its untaxed income the same way a leading stub does (here the
+        # half-year of wages), not just a bare flag
+        notice = self._partial_year_notices( result )[ 0 ]
+        self.assertEqual( notice.severity, NoticeSeverity.WARNING )
+        self.assertGreater( notice.amount, Decimal( '0' ) )
+        self.assertEqual( notice.detail, 'in approximate untaxed ordinary income' )
 
     def test_full_calendar_forecast_raises_no_partial_year_notice( self ):
         result = self._result( date( 2026, 1, 1 ), end = date( 2028, 12, 31 ) )

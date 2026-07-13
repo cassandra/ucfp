@@ -367,10 +367,11 @@ class Period:
         (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
         refund -- modeled here as a negated charge against the same expense class.
 
-        Tax is assessed only on a whole calendar year: the Forecast hands a partial year
-        (a mid-year start or a trailing year short of December 31) no tax engine, so this
-        never runs there and the window it reads is always a full year."""
-        if not self._is_close_of_tax_year():
+        Income tax is assessed only on a whole calendar year: a partial year (a mid-year start
+        or a trailing year short of December 31) is not a `full_tax_year`, so this returns before
+        assessing even at its year-close -- leaving it posted but untaxed. (The engine's other,
+        exact rules still run; only this bracket-driven settlement is gated.)"""
+        if not ( self._is_close_of_tax_year() and self._parameters.full_tax_year ):
             return
         fiscal_window = self._parameters.fiscal_window
         assessment = self._parameters.tax_engine.assess(

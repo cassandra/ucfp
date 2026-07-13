@@ -49,5 +49,6 @@ def _step( step ) -> StepResult:
         start_date  = step.span.start_date,
         end_date    = step.span.end_date,
         is_depleted = step.result.is_depleted,
-        notices     = [ NoticeRecord( notice.kind, notice.severity, notice.amount, notice.detail )
+        notices     = [ NoticeRecord( kind = notice.kind, severity = notice.severity,
+                                      amount = notice.amount, detail = notice.detail )
                         for notice in step.result.notices ] )

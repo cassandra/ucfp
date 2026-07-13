@@ -288,9 +288,9 @@ TIERS = {
 
 # -- start dates ------------------------------------------------------------------------
 # A second axis: the same profiles run from January 1 (a whole first year) and from a mid-year
-# first-of-month (a partial first year, taxed by the section 443 estimate). Mid-year start
-# interacts with the granularity machinery from a different angle (issue #17), so the differential
-# is run over both.
+# first-of-month (a partial first year -- posted but left untaxed, since tax settles on whole
+# years only). Mid-year start interacts with the granularity machinery from a different angle
+# (issue #17), so the differential is run over both.
 
 _MID_START = date( 2026, 4, 1 )
 
