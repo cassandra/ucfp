@@ -6,6 +6,15 @@ from django.http import HttpRequest
 from ucfp.accounts.books_table import BooksTableDefinition
 
 
+def _int_or_none( value ) -> Optional[ int ]:
+    """A stored value coerced to int, or None when absent or malformed -- the safe read for an
+    integer session field (the session is JSON-backed, but tolerate a bad value rather than raise)."""
+    try:
+        return int( value )
+    except ( TypeError, ValueError ):
+        return None
+
+
 @dataclass
 class SessionState:
     """
@@ -53,6 +62,13 @@ class SessionState:
     # session storage form (see BooksTableDefinition.to_storage / from_storage).
     books_table_definition : Optional[ BooksTableDefinition ] = None
 
+    # The forecast run frame the user last chose on the hub (start-from choice, duration in years, and
+    # interval), so the run form's when-controls default to that selection rather than its built-in
+    # defaults. Stored raw (the RunForm re-validates on submit); a stale value simply does not preselect.
+    forecast_start_from : Optional[ str ] = None
+    forecast_duration_years : Optional[ int ] = None
+    forecast_interval : Optional[ str ] = None
+
     def to_session( self, request : HttpRequest ):
         """Write this state back into the session (extend as fields are added)."""
         if not hasattr( request, 'session' ):
@@ -62,6 +78,9 @@ class SessionState:
         request.session[ 'current_assumptions_uuid' ] = self.current_assumptions_uuid
         request.session[ 'books_table_definition' ] = (
             None if self.books_table_definition is None else self.books_table_definition.to_storage() )
+        request.session[ 'forecast_start_from' ] = self.forecast_start_from
+        request.session[ 'forecast_duration_years' ] = self.forecast_duration_years
+        request.session[ 'forecast_interval' ] = self.forecast_interval
         return
 
     @staticmethod
@@ -74,4 +93,7 @@ class SessionState:
             current_plans_uuid = request.session.get( 'current_plans_uuid' ),
             current_assumptions_uuid = request.session.get( 'current_assumptions_uuid' ),
             books_table_definition = BooksTableDefinition.from_storage(
-                request.session.get( 'books_table_definition' ) ) )
+                request.session.get( 'books_table_definition' ) ),
+            forecast_start_from = request.session.get( 'forecast_start_from' ),
+            forecast_duration_years = _int_or_none( request.session.get( 'forecast_duration_years' ) ),
+            forecast_interval = request.session.get( 'forecast_interval' ) )
