@@ -24,48 +24,91 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
   </div>
 </div>
 
-<!-- TOP: two input columns; each is a container of per-section views (placeholders this sub-step) -->
-<div class="row">
-  <div class="col-md-6 mb-3">
-    <div class="card h-100">
-      <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <h2 class="h6 mb-0">Plans</h2>
-        </div>
-        <p class="text-muted small mb-0">The Living Expenses section view (age-band selector + curated
-          spending) lands in the next sub-step.</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-6 mb-3">
-    <div class="card h-100">
-      <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <h2 class="h6 mb-0">Assumptions</h2>
-        </div>
-        <p class="text-muted small mb-0">The Economic Assumptions section view (the curated rates) lands
-          in the next sub-step.</p>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- The tweak-and-re-run form wraps both input columns and the controls (a band switch navigates via
+     the selector's onchange, so it stays a plain select rather than a nested form). -->
+<form method="post" action="{% url 'explore' %}">
+  {% csrf_token %}
+  <input type="hidden" name="band" value="{{ band }}">
 
-<!-- MIDDLE: explore controls -->
-<div class="card mb-3">
-  <div class="card-body py-2 d-flex flex-wrap align-items-center">
-    <form method="post" action="{% url 'explore' %}" class="my-1 mr-3">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-primary">&#8635; Re-run</button>
-    </form>
-    <div class="d-flex align-items-center flex-wrap my-1">
-      <span class="text-muted small mr-2">Recent runs</span>
-      {% for result in transient_runs %}
-      <span class="badge badge-pill border p-2 mr-1 {% if result.pk == latest.pk %}badge-primary{% else %}badge-light{% endif %}">
-        {{ result.label }}</span>
-      {% endfor %}
+  <!-- TOP: two input columns, each a per-section view -->
+  <div class="row">
+    <!-- Plans column: Living Expenses section view -->
+    <div class="col-md-6 mb-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h2 class="h6 mb-0">Plans</h2>
+            <a href="#" class="small text-muted" title="Full editor arrives in a later phase">Full plan editor &rarr;</a>
+          </div>
+          <div class="border rounded p-2">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="font-weight-bold small">Living Expenses</span>
+              <div class="form-inline">
+                <span class="text-muted small mr-1">Age band</span>
+                <select class="custom-select custom-select-sm"
+                        onchange="window.location.href='?band='+this.value">
+                  {% for b in living_form.bands %}
+                  <option value="{{ b.index }}" {% if b.index == band %}selected{% endif %}>{{ b.label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              {% for row in living_form.rows %}
+              <div class="form-group col-12 d-flex align-items-center mb-2">
+                <label class="mb-0 mr-auto font-weight-normal">{{ row.label }}
+                  <span class="text-muted small">{{ row.cadence }}</span></label>
+                <div class="input-group input-group-sm" style="width:8rem">
+                  <div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ row.field }}
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="text-muted small">Values for the selected age band; other bands stay unchanged.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Assumptions column: Economic Assumptions section view -->
+    <div class="col-md-6 mb-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h2 class="h6 mb-0">Assumptions</h2>
+            <a href="#" class="small text-muted" title="Full editor arrives in a later phase">Full assumptions editor &rarr;</a>
+          </div>
+          <div class="border rounded p-2">
+            <div class="font-weight-bold small mb-2">Economic Assumptions</div>
+            <div class="form-row">
+              {% for row in econ_form.rows %}
+              <div class="form-group col-12 d-flex align-items-center mb-2">
+                <label class="mb-0 mr-auto font-weight-normal">{{ row.label }}
+                  <span class="text-muted small">%/yr</span></label>
+                <div style="width:6rem">{{ row.field }}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-</div>
+
+  <!-- MIDDLE: explore controls -->
+  <div class="card mb-3">
+    <div class="card-body py-2 d-flex flex-wrap align-items-center">
+      <button type="submit" class="btn btn-primary my-1 mr-3">&#8635; Re-run</button>
+      <div class="d-flex align-items-center flex-wrap my-1">
+        <span class="text-muted small mr-2">Recent runs</span>
+        {% for result in transient_runs %}
+        <span class="badge badge-pill border p-2 mr-1 {% if result.pk == latest.pk %}badge-primary{% else %}badge-light{% endif %}">
+          {{ result.label }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</form>
 
 <!-- BOTTOM: latest run's results -->
 <div class="card mb-4">

@@ -11,6 +11,7 @@ from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
@@ -28,12 +29,13 @@ from ucfp.inputs.models import ProfileRecord, PlansRecord, AssumptionsRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile, profiles_for
 from ucfp.inputs.plans.repository import load_plans, plans_for
 from ucfp.inputs.assumptions.repository import assumptions_for, load_assumptions
-from ucfp.inputs.scenarios.repository import working_scenario
+from ucfp.inputs.scenarios.repository import load_scenario, set_working_scenario, working_scenario
 from ucfp.inputs.scenarios.schemas import Scenario
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
 from .explore import enter_explore, run_working_scenario, transient_runs
+from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import GRANULARITY, RunForm, resolve_frame
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
@@ -239,21 +241,35 @@ class ExploreView( InputGatedMixin, View ):
 
     def get( self, request ):
         organization = request.organization
-        if working_scenario( organization ) is None:
+        working = working_scenario( organization )
+        if working is None:
             return redirect( 'financial_forecast' )        # nothing to explore yet
         runs = list( transient_runs( organization ) )
         if not runs:                                       # first entry: produce the initial run
             run_working_scenario( organization, self._frame( request ), self._run_label( organization ) )
             runs = list( transient_runs( organization ) )
-        return render( request, self._TEMPLATE, self._context( request, runs ) )
+        scenario = load_scenario( working )
+        band     = self._band( request )
+        forms    = { 'living_form' : LivingExpensesExploreForm( scenario = scenario, band = band ),
+                     'econ_form'    : EconomicAssumptionsExploreForm( scenario = scenario ) }
+        return render( request, self._TEMPLATE, self._context( request, runs, band, forms ) )
 
-    def post( self, request ):                             # explicit re-run
+    def post( self, request ):                             # apply the dialed tweaks, then re-run
         organization = request.organization
-        if working_scenario( organization ) is not None:
+        working = working_scenario( organization )
+        if working is None:
+            return redirect( 'financial_forecast' )
+        band     = self._band( request )
+        scenario = load_scenario( working )
+        living   = LivingExpensesExploreForm( request.POST, scenario = scenario, band = band )
+        economic = EconomicAssumptionsExploreForm( request.POST, scenario = scenario )
+        if living.is_valid() and economic.is_valid():
+            scenario = economic.apply( living.apply( scenario ) )
+            set_working_scenario( organization, scenario )
             run_working_scenario( organization, self._frame( request ), self._run_label( organization ) )
-        return redirect( 'explore' )
+        return redirect( f'{reverse( "explore" )}?band={band}' )
 
-    def _context( self, request, runs ) -> dict:
+    def _context( self, request, runs, band, forms ) -> dict:
         latest  = runs[ 0 ]
         run     = from_json_data( ProjectionRun, latest.run.data )
         books   = BooksOfAccountRepository().load( latest.run.books )
@@ -263,9 +279,19 @@ class ExploreView( InputGatedMixin, View ):
             'latest'         : latest,
             'record'         : latest.run,   # the ProjectionRunRecord the books-table column ops key on
             'stopped_early'  : run.result.stopped_early,
+            'band'           : band,
+            **forms,
         }
         context.update( run_books_table_context( request, run, books ) )
         return context
+
+    @staticmethod
+    def _band( request ) -> int:
+        raw = request.POST.get( 'band' ) or request.GET.get( 'band' ) or 0
+        try:
+            return int( raw )
+        except ( TypeError, ValueError ):
+            return 0
 
     def _frame( self, request ) -> ForecastFrame:
         state   = request.session_state
