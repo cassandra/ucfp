@@ -25,13 +25,12 @@ def vehicle_plan_of( plans ):
 
 
 def plan_has_content( plan ) -> bool:
-    """Whether a vehicle plan carries anything worth persisting -- any purchase field, or a running cost
-    with an amount. An all-blank plan (no purchase field, every running-cost amount cleared) is empty, so
-    both panes collapse it back to None rather than leaving a spurious plan that reads as "started"."""
+    """Whether a vehicle plan carries anything worth persisting -- any vehicle, or a running cost with an
+    amount. An all-blank plan (no vehicles, every running-cost amount cleared) is empty, so both panes
+    collapse it back to None rather than leaving a spurious plan that reads as "started"."""
     if plan is None:
         return False
-    return ( any( ( plan.num_cars, plan.purchase_price, plan.recurrence_years,
-                    plan.start_date, plan.monthly_payment, plan.down_payment ) )
+    return ( bool( plan.vehicles )
              or any( cost.amount is not None for cost in plan.running_costs ) )
 
 
@@ -66,9 +65,11 @@ class VehicleExpensesForm( forms.Form ):
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
-        plan           = vehicle_plan_of( plans )
         self._costs    = merged_vehicle_costs( plans )
-        self._num_cars = plan.num_cars if plan is not None else None
+        # INTERIM (#84 Phase 1): the fleet count is now time-varying (per-vehicle windows), so the
+        # single-count scaled-total preview no longer applies. Phase 2 reworks this pane; until then the
+        # total column simply shows a dash.
+        self._num_cars = None
         for ci, cost in enumerate( self._costs ):
             amount = forms.DecimalField( required = False, min_value = 0 )
             amount.initial = cost.amount

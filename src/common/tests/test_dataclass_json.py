@@ -29,7 +29,7 @@ from ucfp.inputs.profile.schemas import (
     AssetProfile, Debt, GovernmentPensionEntitlement,
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    VehiclePlan, VehicleRunningCost, Contribution, CreditCardPlan, DrawdownPolicy,
+    Vehicle, VehiclePlan, VehicleRunningCost, Contribution, CreditCardPlan, DrawdownPolicy,
     HealthCoverageAssumption, LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense,
     RetirementTiming, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
@@ -121,8 +121,13 @@ def _sample_plans():
             CreditCardPlan( card_handle = 'disc', mode = CreditCardPlanMode.COMBO,
                             monthly_payment = Decimal( '150' ), target_date = date( 2030, 1, 1 ) ) ],
         vehicle_plan = VehiclePlan(
-            num_cars = 2, purchase_price = Decimal( '35000' ), recurrence_years = 8,
-            start_date = date( 2031, 1, 1 ), down_payment = Decimal( '7000' ),
+            vehicles = [
+                Vehicle( handle = 'vehicle-1', name = 'Sedan', purchase_date = date( 2031, 1, 1 ),
+                         purchase_price = Decimal( '35000' ), recurrence_years = 8,
+                         down_payment = Decimal( '7000' ) ),
+                Vehicle( handle = 'vehicle-2', name = 'Pickup', purchase_date = date( 2033, 6, 1 ),
+                         end_date = date( 2045, 1, 1 ), purchase_price = Decimal( '48000' ),
+                         recurrence_years = 10, monthly_payment = Decimal( '600' ) ) ],
             running_costs = [
                 VehicleRunningCost(
                     name = 'Gasoline', handle = 'gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
