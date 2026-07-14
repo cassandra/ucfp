@@ -248,11 +248,12 @@ class ExploreView( InputGatedMixin, View ):
         if not runs:                                       # first entry: produce the initial run
             run_working_scenario( organization, self._frame( request ), self._run_label( organization ) )
             runs = list( transient_runs( organization ) )
+        selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
         scenario = load_scenario( working )
         band     = self._band( request )
         forms    = { 'living_form' : LivingExpensesExploreForm( scenario = scenario, band = band ),
                      'econ_form'    : EconomicAssumptionsExploreForm( scenario = scenario ) }
-        return render( request, self._TEMPLATE, self._context( request, runs, band, forms ) )
+        return render( request, self._TEMPLATE, self._context( request, runs, selected, band, forms ) )
 
     def post( self, request ):                             # apply the dialed tweaks, then re-run
         organization = request.organization
@@ -269,21 +270,31 @@ class ExploreView( InputGatedMixin, View ):
             run_working_scenario( organization, self._frame( request ), self._run_label( organization ) )
         return redirect( f'{reverse( "explore" )}?band={band}' )
 
-    def _context( self, request, runs, band, forms ) -> dict:
-        latest  = runs[ 0 ]
-        run     = from_json_data( ProjectionRun, latest.run.data )
-        books   = BooksOfAccountRepository().load( latest.run.books )
+    def _context( self, request, runs, selected, band, forms ) -> dict:
+        run     = from_json_data( ProjectionRun, selected.run.data )
+        books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
             'input_state'    : request.input_state,
             'transient_runs' : runs,
-            'latest'         : latest,
-            'record'         : latest.run,   # the ProjectionRunRecord the books-table column ops key on
+            'selected'       : selected,
+            'record'         : selected.run,  # the ProjectionRunRecord the books-table column ops key on
             'stopped_early'  : run.result.stopped_early,
             'band'           : band,
             **forms,
         }
         context.update( run_books_table_context( request, run, books ) )
         return context
+
+    @staticmethod
+    def _selected_run( request, runs ):
+        """The transient run whose results to show -- the one a chip names (`?run=<uuid>`), else the
+        most recent."""
+        run_uuid = request.GET.get( 'run' )
+        if run_uuid:
+            for result in runs:
+                if str( result.run.uuid ) == run_uuid:
+                    return result
+        return runs[ 0 ]
 
     @staticmethod
     def _band( request ) -> int:

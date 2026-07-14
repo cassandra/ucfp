@@ -18,6 +18,10 @@ from .materialization import ForecastFrame
 from .models import PlanningResultRecord
 from .orchestration import run_and_capture
 
+# Transient (WORKING) runs retained per organization: a recovery buffer well beyond what the strip
+# shows, so a good run tweaked past can still be recovered, without unbounded growth of run snapshots.
+_TRANSIENT_KEEP = 25
+
 
 def enter_explore( organization: Organization, scenario: Scenario ) -> None:
     """Fork `scenario` into the single working scenario -- the explore-entry seed, overwriting whatever
@@ -37,9 +41,11 @@ def run_working_scenario(
     run = run_and_capture(
         organization = organization, profile = load_profile( profile_record ),
         plans = scenario.plans, assumptions = scenario.assumptions, frame = frame, label = label )
-    return PlanningResultRecord.objects.create(
+    result = PlanningResultRecord.objects.create(
         organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
         run = run, label = label, usage_role = UsageRole.WORKING )
+    _prune_transient_runs( organization )
+    return result
 
 
 def transient_runs( organization: Organization ):
@@ -48,3 +54,10 @@ def transient_runs( organization: Organization ):
     return PlanningResultRecord.objects.filter(
         organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
         usage_role = UsageRole.WORKING ).select_related( 'run' ).order_by( '-updated_datetime' )
+
+
+def _prune_transient_runs( organization: Organization ) -> None:
+    """Drop the oldest transient runs beyond the retention cap. Deleting each captured run's books
+    cascades to its `ProjectionRunRecord` and this `PlanningResultRecord`, so no orphans are left."""
+    for result in list( transient_runs( organization )[ _TRANSIENT_KEEP: ] ):
+        result.run.books.delete()

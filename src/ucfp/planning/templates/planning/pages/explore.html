@@ -102,8 +102,9 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
       <div class="d-flex align-items-center flex-wrap my-1">
         <span class="text-muted small mr-2">Recent runs</span>
         {% for result in transient_runs %}
-        <span class="badge badge-pill border p-2 mr-1 {% if result.pk == latest.pk %}badge-primary{% else %}badge-light{% endif %}">
-          {{ result.label }}</span>
+        <a href="?run={{ result.run.uuid }}&amp;band={{ band }}"
+           class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}">
+          {{ result.label }}</a>
         {% endfor %}
       </div>
     </div>
@@ -114,7 +115,7 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
 <div class="card mb-4">
   <div class="card-body">
     <div class="d-flex align-items-baseline justify-content-between mb-2">
-      <h2 class="h5 mb-0">Results <span class="text-muted small">— {{ latest.label }}</span></h2>
+      <h2 class="h5 mb-0">Results <span class="text-muted small">— {{ selected.label }}</span></h2>
       {% if stopped_early %}
         <span class="text-danger font-weight-bold small">Money ran out before the horizon.</span>
       {% else %}
