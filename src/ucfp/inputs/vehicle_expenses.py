@@ -1,17 +1,15 @@
 """The per-car vehicle running costs of the Vehicle Expenses step.
 
 The household's car running costs (fuel, insurance, maintenance, repair) are entered once *per car* and
-scaled by the vehicle plan's shared `num_cars`. They are seeded from the curated catalog's `VEHICLE`
-rows and stored on the `VehiclePlan` (alongside the purchase/financing pattern), not with the general
-recurring expenses -- a shared-quantity shape distinct from the independent, per-age recurring costs.
-This module seeds those costs from the catalog, preserving amounts and cadences already set.
+applied to each owned vehicle over its window at materialization. They are seeded from the curated
+catalog's `VEHICLE` rows and stored on the `VehiclePlan` (alongside its list of vehicles), not with the
+general recurring expenses -- a shared-quantity shape distinct from the independent, per-age recurring
+costs. This module seeds those costs from the catalog, preserving amounts and cadences already set.
 """
 from dataclasses import replace
-from decimal import Decimal, ROUND_HALF_UP
 
 from django import forms
 
-from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseClass
 from ucfp.inputs.plans.schemas import VehiclePlan, VehicleRunningCost
 from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, read_cadence
@@ -57,23 +55,18 @@ def merged_vehicle_costs( plans ) -> list:
 
 class VehicleExpensesForm( forms.Form ):
     """The per-car running-costs table of the Vehicle Expenses step: one row per running cost, each a
-    per-car amount at its own cadence, with a read-only total (the per-car amount times the plan's car
-    count, at the same cadence) shown alongside. Auto-saves each edit onto the vehicle plan's
-    `running_costs`; the row set is fixed (the catalog's vehicle costs), so it never restructures.
-    `apply` writes the running costs onto the plan, creating one if the household has not begun a
-    vehicle plan yet. The car count the totals scale by lives on the sibling purchase pane."""
+    per-car amount at its own cadence. Auto-saves each edit onto the vehicle plan's `running_costs`; the
+    row set is fixed (the catalog's vehicle costs), so it never restructures. `apply` writes the running
+    costs onto the plan, creating one if the household has not begun a vehicle plan yet. The amount is a
+    single per-car figure; materialization applies it to each owned vehicle over its window, so the total
+    tracks the fleet over time and no single scaled total is shown here."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
-        self._costs    = merged_vehicle_costs( plans )
-        # INTERIM (#84 Phase 1): the fleet count is now time-varying (per-vehicle windows), so the
-        # single-count scaled-total preview no longer applies. Phase 2 reworks this pane; until then the
-        # total column simply shows a dash.
-        self._num_cars = None
+        self._costs = merged_vehicle_costs( plans )
         for ci, cost in enumerate( self._costs ):
             amount = forms.DecimalField( required = False, min_value = 0 )
             amount.initial = cost.amount
-            amount.widget.attrs[ 'class' ]      = AppConst.VEHICLE_PERCAR_CLASS
             amount.widget.attrs[ 'aria-label' ] = f'{cost.name} — per car'
             self.fields[ self._amount_key( ci ) ] = amount
             add_cadence_fields( self, self._cad_prefix( ci ), cost.interval, cost.cadence_domain )
@@ -87,29 +80,13 @@ class VehicleExpensesForm( forms.Form ):
         return f'cad_{ci}'
 
     @property
-    def num_cars( self ):
-        """The plan's car count the totals scale by (None until set) -- shown in the table caption."""
-        return self._num_cars
-
-    @property
     def rows( self ) -> list:
-        """One row per running cost: its name, the per-car amount field, its cadence control, and the
-        read-only scaled total (per-car amount times the car count, whole dollars; None until both are
-        known -- the cadence column carries the period the total is expressed at)."""
+        """One row per running cost: its name, the per-car amount field, and its cadence control."""
         return [ {
             'name'    : cost.name,
             'amount'  : self[ self._amount_key( ci ) ],
-            'cadence' : cadence_cells( self, self._cad_prefix( ci ), cost.interval, cost.cadence_domain ),
-            'total'   : self._total( cost ) }
+            'cadence' : cadence_cells( self, self._cad_prefix( ci ), cost.interval, cost.cadence_domain ) }
             for ci, cost in enumerate( self._costs ) ]
-
-    def _total( self, cost ):
-        """The scaled per-period total -- the per-car amount times the plan's car count -- as whole
-        dollars, or None when the amount is blank or the car count is unset (nothing to total). Rounded
-        half-up to agree with the client's `Math.round` preview (Decimal's default is half-even)."""
-        if cost.amount is None or not self._num_cars:
-            return None
-        return ( cost.amount * self._num_cars ).quantize( Decimal( 1 ), rounding = ROUND_HALF_UP )
 
     def apply( self, profile, plans ):
         costs = [ self._edited( ci, cost ) for ci, cost in enumerate( self._costs ) ]

@@ -117,15 +117,6 @@ class AppConst:
     CALC_TARGET_CLASS  = 'js-calc-target'   # an amount input the computed count x cost fills
     CALC_READOUT_CLASS = 'js-calc-readout'  # where the advisory "per year" figure is written
 
-    # The vehicle running-costs table (Vehicle Expenses step). Each row is a per-car amount at its
-    # cadence; a read-only total (= per-car x the plan's car count, at the same cadence) updates live as
-    # the amount or the shared car count changes. The car count lives on the sibling purchase pane. The
-    # total is display-only -- materialization scales by num_cars authoritatively on save.
-    VEHICLE_COSTS_CLASS    = 'js-vehicle-costs'      # the running-costs table wrapper
-    VEHICLE_PERCAR_CLASS   = 'js-vehicle-percar'     # a row's per-car amount input
-    VEHICLE_TOTAL_CLASS    = 'js-vehicle-total'      # where the row's scaled total is written
-    VEHICLE_NUM_CARS_CLASS = 'js-vehicle-num-cars'   # the shared car-count input (on the purchase pane)
-
     @classmethod
     def to_json_dict_str( cls ):
         """

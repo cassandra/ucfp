@@ -39,7 +39,7 @@ from .properties import PANES, PossessionsForm, properties_context
 from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
-from .vehicle import VehiclePlanForm
+from .vehicle import vehicles_context
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
 from .widgets import IsoDateInput
 
@@ -526,12 +526,13 @@ class HomeExpensesSectionForm:
 
 
 class VehicleExpensesSectionForm:
-    """Vehicle Expenses -- the household's car costs: the purchase/financing pane and the per-car
-    running-costs table. Both save on their own (through `VehiclePlanView` and `VehicleExpensesView`).
-    `apply` seeds the running costs from the catalog on Next once a vehicle plan exists, so a household
-    that set up a plan and accepts the default running costs still records them; with no plan (no car),
-    Next just advances. `apply` ignores form input (a pure merge, a no-op without a plan), so it also
-    seeds on render -- see `seeds_on_render`."""
+    """Vehicle Expenses -- the household's car costs: the per-vehicle list and the shared per-car
+    running-costs table. The vehicles are managed by `VehicleFormView` / `VehicleDeleteView` and the
+    running costs by `VehicleExpensesView`, each saving on its own. `apply` seeds the running costs from
+    the catalog on Next once a vehicle plan exists, so a household that added a vehicle and accepts the
+    default running costs still records them; with no plan (no car), Next just advances. `apply` ignores
+    form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
+    `seeds_on_render`."""
 
     seeds_on_render = True
 
@@ -543,8 +544,10 @@ class VehicleExpensesSectionForm:
         return True
 
     @property
-    def vehicle_form( self ):
-        return VehiclePlanForm( profile = self._profile, plans = self._plans )
+    def vehicles( self ):
+        """The plan's vehicles for the section's list template -- the per-vehicle add/edit/delete panes
+        manage them through `VehicleFormView` / `VehicleDeleteView`."""
+        return vehicles_context( self._plans )
 
     @property
     def vehicle_costs_form( self ):
