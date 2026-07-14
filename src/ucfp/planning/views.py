@@ -95,10 +95,14 @@ class FinancialForecastView( InputGatedMixin, View ):
         profile     = load_profile( profile_record )
         plans       = load_plans( plans_record )
         assumptions = load_assumptions( assumptions_record )
-        # Make the chosen bundle the current one before gating, so a readiness redirect ("continue the
-        # interview") leads back to exactly these records rather than a stale session selection.
-        request.session_state.current_plans_uuid       = str( plans_record.uuid )
-        request.session_state.current_assumptions_uuid = str( assumptions_record.uuid )
+        # Make the chosen bundle and frame the current selection before gating, so a readiness redirect
+        # ("continue the interview") leads back to exactly these records, and the run form's when-controls
+        # keep the user's choices on any re-render (a doomed run, an engine error) or a later visit.
+        request.session_state.current_plans_uuid        = str( plans_record.uuid )
+        request.session_state.current_assumptions_uuid  = str( assumptions_record.uuid )
+        request.session_state.forecast_start_from       = form.cleaned_data[ 'start_from' ]
+        request.session_state.forecast_duration_years   = form.cleaned_data[ 'duration_years' ]
+        request.session_state.forecast_interval         = form.cleaned_data[ 'interval' ]
         request.session_state.to_session( request )
         acknowledged = frozenset(
             profile_record.acknowledged_sections ).union(
@@ -132,15 +136,24 @@ class FinancialForecastView( InputGatedMixin, View ):
             granularity    = GRANULARITY[ form.cleaned_data[ 'interval' ] ] )
 
     def _default_selection( self, request, profiles, plans, assumptions ) -> dict:
-        """The run form's default bundle: the plans and assumptions the user last selected or edited
-        (from the session), each falling back to the most recent; the profile defaults to the most
-        recent (the single current one). A stale session uuid simply falls through to no preselection."""
-        state = request.session_state
-        return {
+        """The run form's default bundle: the plans and assumptions the user last selected or edited, and
+        the frame (start-from, duration, interval) last run -- all from the session; the profile defaults
+        to the most recent (the single current one). The frame keys are set only when the session carries
+        them, so an unset field falls back to the form's own built-in default rather than being blanked. A
+        stale session value simply falls through to no preselection."""
+        state     = request.session_state
+        selection = {
             'profile'     : self._first_uuid( profiles ),
             'plans'       : state.current_plans_uuid or self._first_uuid( plans ),
             'assumptions' : state.current_assumptions_uuid or self._first_uuid( assumptions ),
         }
+        frame = {
+            'start_from'     : state.forecast_start_from,
+            'duration_years' : state.forecast_duration_years,
+            'interval'       : state.forecast_interval,
+        }
+        selection.update( { key: value for key, value in frame.items() if value is not None } )
+        return selection
 
     @staticmethod
     def _first_uuid( queryset ):
