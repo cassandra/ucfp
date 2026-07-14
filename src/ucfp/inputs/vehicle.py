@@ -84,9 +84,17 @@ class VehicleForm( forms.Form ):
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( plans, handle ) if handle else None )
-        self._profile = profile
-        self._plans   = plans
-        self._handle  = handle
+        self._handle = handle
+
+    def clean( self ):
+        # An owned-until date before the purchase date is an inverted ownership window: materialization
+        # would silently emit nothing for the car, so surface it as a field error rather than a no-op.
+        cleaned  = super().clean()
+        purchase = cleaned.get( 'purchase_date' )
+        end      = cleaned.get( 'end_date' )
+        if ( purchase is not None ) and ( end is not None ) and ( end < purchase ):
+            self.add_error( 'end_date', 'Owned-until date must be on or after the purchase date.' )
+        return cleaned
 
     @classmethod
     def _initial( cls, plans, handle : str ) -> dict:

@@ -408,7 +408,6 @@ window.App.Inputs = (function () {
         $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( annual );
     }
 
-
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs

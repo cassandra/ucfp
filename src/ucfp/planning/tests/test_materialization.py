@@ -111,21 +111,27 @@ class VehiclePurchaseTests( unittest.TestCase ):
                        purchase_price = Decimal( '40000' ), recurrence_years = 8 )
         items = _vehicle_expenses( self._plans( v1, v2 ) )
         self.assertEqual( [ item.name for item in items ], [ 'Car purchase', 'Car purchase' ] )
-        self.assertEqual( [ item.window.start for item in items ],
-                          [ date( 2026, 1, 1 ), date( 2028, 1, 1 ) ] )
-        self.assertEqual( items[ 1 ].window.end, date( 2040, 1, 1 ) )   # the retired car stops
+        # the ongoing car is unbounded on the end; the retired one carries its full [purchase, end] window
+        self.assertEqual( items[ 0 ].window, DateWindow( start = date( 2026, 1, 1 ) ) )
+        self.assertEqual( items[ 1 ].window,
+                          DateWindow( start = date( 2028, 1, 1 ), end = date( 2040, 1, 1 ) ) )
         self.assertEqual( items[ 0 ].amounts.segments[ 0 ].amount, Decimal( '30000' ) )  # cash: full price
 
     def test_incomplete_vehicle_emits_nothing( self ):
         self.assertEqual( _vehicle_expenses( self._plans( _vehicle( 'vehicle-1', date( 2026, 1, 1 ) ) ) ), [] )
 
     def test_financed_vehicle_splits_into_down_and_payments( self ):
-        vehicle = _vehicle( 'vehicle-1', date( 2026, 1, 1 ), purchase_price = Decimal( '30000' ),
-                            recurrence_years = 5, down_payment = Decimal( '5000' ) )
+        vehicle = _vehicle( 'vehicle-1', date( 2026, 1, 1 ), end_date = date( 2038, 1, 1 ),
+                            purchase_price = Decimal( '30000' ), recurrence_years = 5,
+                            down_payment = Decimal( '5000' ) )
         items = _vehicle_expenses( self._plans( vehicle ) )
         self.assertEqual( { item.name for item in items }, { 'Car purchase', 'Car payments' } )
         purchase = next( item for item in items if item.name == 'Car purchase' )
+        payments = next( item for item in items if item.name == 'Car payments' )
         self.assertEqual( purchase.amounts.segments[ 0 ].amount, Decimal( '5000' ) )  # the down payment is the lump
+        window = DateWindow( start = date( 2026, 1, 1 ), end = date( 2038, 1, 1 ) )
+        self.assertEqual( purchase.window, window )     # both items carry the vehicle's ownership window
+        self.assertEqual( payments.window, window )
 
 
 class VehicleRunningCostTests( unittest.TestCase ):
