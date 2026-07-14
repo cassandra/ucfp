@@ -1,0 +1,21 @@
+{% comment %}
+The add/edit form for one vehicle (id=vehicles-form), rendered into the pane's form area. It auto-saves
+in the background (js-autosave) and always edits a known handle (add mints one), so a new vehicle has a
+stable identity from the first keystroke. Non-blocking: the vehicle appears in the list once its
+required fields (name, next purchase date, price, replacement interval) are set. "Done" closes the form;
+it is already saved. Empty when no form is open. Reads `vehicle_form` and `handle`.
+{% endcomment %}
+<div id="vehicles-form">
+  {% if vehicle_form %}
+  <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }}"
+        action="{% url 'vehicle_edit' handle=handle %}">
+    {% csrf_token %}
+    {% for field in vehicle_form.primary_fields %}{% include 'inputs/interview/_field.html' with field=field %}{% endfor %}
+    <p class="text-muted small">If you finance, enter either the down payment or the monthly payment (we
+      work out the rest); leave both blank to buy for cash. Leave "Owned until" blank for a car you keep
+      replacing. Changes save automatically.</p>
+    <a class="btn btn-sm btn-link px-0" data-async="#vehicles-form"
+       href="{% url 'vehicle_add' %}?collapse=1">Done</a>
+  </form>
+  {% endif %}
+</div>

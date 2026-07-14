@@ -46,7 +46,7 @@ from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENTED_HOME_HANDLE
 from ucfp.inputs.plans.enums import CreditCardPlanMode
 from ucfp.inputs.plans.schemas import (
-    CreditCardPlan, LoanRepayment, Plans, RetirementTiming, VehiclePlan )
+    CreditCardPlan, LoanRepayment, Plans, RetirementTiming, Vehicle )
 from ucfp.inputs.assumptions.defaults import default_transaction_costs
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
@@ -290,24 +290,36 @@ _AUTO_LOAN_TERM_MONTHS = BUILTIN_ASSUMPTIONS.auto_loan_term_years * 12
 
 
 def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
-    """The household's car costs, smoothed: a lump every recurrence (the full price unfinanced, or the
-    down payment financed) plus, when financed, a constant stream of the financed lifetime cost spread
-    over the recurrence period. Both scale by the number of cars and begin at the plan's start date."""
+    """Each vehicle's purchase costs, smoothed within its ownership window: a lump every recurrence (the
+    full price unfinanced, or the down payment financed) plus, when financed, a constant stream of the
+    financed lifetime cost spread over the recurrence period. All vehicles share one Car purchase / Car
+    payments account (aggregated by name), each item windowed to its vehicle's [purchase, end] range."""
     plan = plans.vehicle_plan
-    if plan is None or not plan.num_cars or not plan.purchase_price or not plan.recurrence_years:
-        return list()                                  # no cars, or no purchase pattern set
-    cars   = Decimal( plan.num_cars )
-    window = DateWindow( start = plan.start_date )
-    lump, financed_lifetime = _vehicle_costs( plan )
+    if plan is None:
+        return list()
+    items = list()
+    for vehicle in plan.vehicles:
+        items.extend( _vehicle_purchase_items( vehicle ) )
+    return items
+
+
+def _vehicle_purchase_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
+    """One vehicle's purchase items -- empty until its purchase date, price, and recurrence are all set.
+    The item's window bounds the recurrence to the vehicle's ownership range (its first buy at the
+    purchase date, replaced every recurrence, stopping at the end date)."""
+    if not vehicle.purchase_date or not vehicle.purchase_price or not vehicle.recurrence_years:
+        return list()
+    window = DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
+    lump, financed_lifetime = _vehicle_costs( vehicle )
     items = list()
     if lump > 0:
         items.append( ExpenseItem(
             name = 'Car purchase', expense_tax_class = ExpenseTaxClass.LIVING,
-            amounts = Schedule.constant( WindowedAmount( lump * cars ) ),
-            cadence = Recurrence( Duration( plan.recurrence_years, TimeUnit.YEAR ) ),
+            amounts = Schedule.constant( WindowedAmount( lump ) ),
+            cadence = Recurrence( Duration( vehicle.recurrence_years, TimeUnit.YEAR ) ),
             window = window, handle = CAR_PURCHASE_HANDLE ) )
     if financed_lifetime > 0:
-        monthly = financed_lifetime * cars / ( plan.recurrence_years * 12 )
+        monthly = financed_lifetime / ( vehicle.recurrence_years * 12 )
         items.append( ExpenseItem(
             name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
             amounts = Schedule.constant( WindowedAmount( monthly ) ),
@@ -316,46 +328,48 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
     return items
 
 
-def _vehicle_costs( plan : VehiclePlan ) -> tuple[ Decimal, Decimal ]:
-    """The (per-car lump, per-car financed lifetime cost) of the plan. Unfinanced: the lump is the
-    full price, nothing financed. Financed: the lump is the down payment and the financed lifetime
-    cost is the total of the loan's payments (principal plus interest). The user gives the down
-    payment or the monthly payment; the other is derived at the assumed rate and term."""
+def _vehicle_costs( vehicle : Vehicle ) -> tuple[ Decimal, Decimal ]:
+    """The (lump, financed lifetime cost) of one vehicle. Unfinanced: the lump is the full price,
+    nothing financed. Financed: the lump is the down payment and the financed lifetime cost is the total
+    of the loan's payments (principal plus interest). The user gives the down payment or the monthly
+    payment; the other is derived at the assumed rate and term."""
     rate  = _AUTO_LOAN_APR.fraction / 12
     term  = _AUTO_LOAN_TERM_MONTHS
-    price = plan.purchase_price
-    if plan.down_payment is not None:
-        financed = max( price - plan.down_payment, Decimal( '0' ) )
+    price = vehicle.purchase_price
+    if vehicle.down_payment is not None:
+        financed = max( price - vehicle.down_payment, Decimal( '0' ) )
         payment  = level_payment( financed, rate, term ) if financed > 0 else Decimal( '0' )
-        return plan.down_payment, payment * term
-    if plan.monthly_payment is not None:
-        financed = present_value( plan.monthly_payment, rate, term )
-        return max( price - financed, Decimal( '0' ) ), plan.monthly_payment * term
+        return vehicle.down_payment, payment * term
+    if vehicle.monthly_payment is not None:
+        financed = present_value( vehicle.monthly_payment, rate, term )
+        return max( price - financed, Decimal( '0' ) ), vehicle.monthly_payment * term
     return price, Decimal( '0' )   # unfinanced: the whole price is the lump
 
 
 def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:
-    """The vehicle plan's per-car running costs as (streams, items): each cost's per-car amount scaled
-    by the plan's car count -- a SMOOTH cost as an annualized stream, a DISCRETE one as an item placed
-    at its cadence. Constant over the forecast (no start/stop). Empty when there is no plan, no cars, or
-    the cost is blank (not charged)."""
+    """The shared per-car running costs applied to each owned vehicle as (streams, items): each cost's
+    per-car amount is emitted once per vehicle, gated to that vehicle's ownership window, so the total
+    ramps with the number of cars owned over time. A SMOOTH cost enters as an annualized stream, a
+    DISCRETE one as an item placed at its cadence. Empty when there is no plan or the cost is blank."""
     plan = plans.vehicle_plan
-    if plan is None or not plan.num_cars:
+    if plan is None:
         return list(), list()
-    cars   = Decimal( plan.num_cars )
+    windows = [ DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
+                for vehicle in plan.vehicles if vehicle.purchase_date is not None ]
     streams, items = list(), list()
     for cost in plan.running_costs:
         if cost.amount is None:
             continue
-        amounts = Schedule.constant( WindowedAmount( cost.amount * cars ) )
-        if cost.realization is Realization.SMOOTH:
-            streams.append( ExpenseStream(
-                name = cost.name, handle = cost.handle, expense_tax_class = cost.expense_tax_class,
-                amounts = _annualized( amounts, cost.interval ) ) )
-        else:
-            items.append( ExpenseItem(
-                name = cost.name, handle = cost.handle, expense_tax_class = cost.expense_tax_class,
-                amounts = amounts, cadence = Recurrence( cost.interval ) ) )
+        amounts = Schedule.constant( WindowedAmount( cost.amount ) )
+        for window in windows:
+            if cost.realization is Realization.SMOOTH:
+                streams.append( ExpenseStream(
+                    name = cost.name, handle = cost.handle, expense_tax_class = cost.expense_tax_class,
+                    amounts = _annualized( amounts, cost.interval ), window = window ) )
+            else:
+                items.append( ExpenseItem(
+                    name = cost.name, handle = cost.handle, expense_tax_class = cost.expense_tax_class,
+                    amounts = amounts, cadence = Recurrence( cost.interval ), window = window ) )
     return streams, items
 
 

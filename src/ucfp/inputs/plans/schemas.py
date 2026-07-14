@@ -146,15 +146,16 @@ class CreditCardPlan:
     target_date: Optional[ date ] = None
 
 
-# --- Auto (car ownership): a shared num_cars, the purchase/financing pattern, and per-car running costs.
+# --- Auto (car ownership): a list of vehicles (each with its own dates/financing) and shared running costs.
 
 @dataclass( frozen = True )
 class VehicleRunningCost:
     """One per-car vehicle running cost (fuel, insurance, maintenance, repair). `amount` is the cost per
-    car at its `interval` cadence; materialization multiplies it by the plan's `num_cars`. `realization`
-    (smoothed vs placed at its cadence) and `cadence_domain` (the editable input domain) mirror the
-    general expense model, but the amount is a single per-car figure -- constant, with no age spans.
-    `amount` is None when blank (the cost is then not charged)."""
+    car at its `interval` cadence; materialization applies it to each vehicle over its ownership window,
+    so the total tracks the number of cars owned at any time. `realization` (smoothed vs placed at its
+    cadence) and `cadence_domain` (the editable input domain) mirror the general expense model, but the
+    amount is a single per-car figure -- constant, with no age spans. `amount` is None when blank (the
+    cost is then not charged)."""
     name: str
     handle: str
     expense_tax_class: ExpenseTaxClass
@@ -165,25 +166,35 @@ class VehicleRunningCost:
 
 
 @dataclass( frozen = True )
-class VehiclePlan:
-    """The household's ongoing car-ownership costs, smoothed so the forecast carries no start/stop
-    lumps. Every `recurrence_years` from `start_date`, `num_cars` cars are bought at `purchase_price`
-    each. Unfinanced (no down or monthly payment given), the whole price lands as a lump each cycle.
-    Financed, the down payment lands as the lump and the financed remainder -- principal plus interest
-    at an assumed auto-loan rate/term -- is spread evenly over the recurrence period as one constant
-    expense (no start/stop). The user gives either the `monthly_payment` or the `down_payment`;
-    materialization derives the other. `start_date` is solicited (pre-filled from an existing auto
-    loan's end date), so the recurring costs begin where any current loan leaves off.
-
-    `num_cars` is the shared quantity feeding both the purchase pattern and the per-car `running_costs`.
-    Every field is optional: the plan persists to carry whichever aspect the user has begun (purchase,
-    running costs, or just the car count), and materialization emits only the complete aspects."""
-    num_cars: Optional[ int ] = None
+class Vehicle:
+    """One car the household plans to own over a window: bought at `purchase_price` on `purchase_date`
+    and replaced every `recurrence_years` thereafter, up to `end_date` (blank = ongoing). Unfinanced (no
+    down or monthly payment given), the whole price lands as a lump each cycle; financed, the down payment
+    is the lump and the financed remainder -- principal plus interest at an assumed auto-loan rate/term --
+    is spread evenly over the recurrence period as one constant expense. The user gives either the
+    `monthly_payment` or the `down_payment`; materialization derives the other. `handle` is a stable
+    per-vehicle identity (minted `vehicle-N`); every other field is optional so a just-added vehicle
+    persists while it is filled -- materialization emits its purchases only once `purchase_date`,
+    `purchase_price`, and `recurrence_years` are all set, and its running costs while it is owned."""
+    handle: str
+    name: str = ''
+    purchase_date: Optional[ date ] = None
+    end_date: Optional[ date ] = None
     purchase_price: Optional[ Decimal ] = None
     recurrence_years: Optional[ int ] = None
-    start_date: Optional[ date ] = None
-    monthly_payment: Optional[ Decimal ] = None
     down_payment: Optional[ Decimal ] = None
+    monthly_payment: Optional[ Decimal ] = None
+
+
+@dataclass( frozen = True )
+class VehiclePlan:
+    """The household's car-ownership plan: the `vehicles` it buys over time (each with its own
+    purchase/replacement schedule, ownership window, and optional financing) and the shared per-car
+    `running_costs` applied to each vehicle while it is owned. Purchases are smoothed within each
+    vehicle's window (a lump every recurrence, plus a constant financed-cost stream when financed); the
+    running costs track the fleet as vehicles are added and retired. Both lists are optional so the plan
+    persists whichever aspect the user has begun, and materialization emits only the complete parts."""
+    vehicles: list[ Vehicle ] = field( default_factory = list )
     running_costs: list[ VehicleRunningCost ] = field( default_factory = list )
 
 

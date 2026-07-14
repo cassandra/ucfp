@@ -35,7 +35,7 @@ from .interview import (
     SECTIONS, Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
     first_section_of_flow, flow_of, flow_title, next_flow_entry, next_section_after, section_for )
 from .models import AssumptionsRecord, PlansRecord
-from .vehicle import VehiclePlanForm
+from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
@@ -431,22 +431,59 @@ class SelfSavingPaneView( View ):
         return antinode.response( replace_map = { self.target: self._pane( request, form ) } )
 
 
-class VehiclePlanView( SelfSavingPaneView ):
-    """`/inputs/interview/vehicle-expenses/purchase/edit/` -- the car-purchase/financing pane of the
-    Vehicle Expenses step (the per-car running costs are the sibling `VehicleExpensesView` pane)."""
+@method_decorator( ensure_organization, name = 'dispatch' )
+class _VehicleListView( View ):
+    """Shared, org-scoped base for the vehicle list of the Vehicle Expenses step: it renders the plan's
+    vehicles. The per-vehicle add/edit/delete swaps refresh this list; the per-car running costs are the
+    sibling `VehicleExpensesView` pane."""
 
-    template     = 'inputs/interview/sections/vehicle_plan.html'
-    target       = 'vehicle-purchase'
-    context_name = 'vehicle_form'
+    _LIST_TEMPLATE = 'inputs/interview/sections/vehicle_list.html'
 
-    def build_form( self, request, data = None ):
+    def _list( self, request, plans ):
+        return render_to_string(
+            self._LIST_TEMPLATE, { 'vehicles': vehicles_context( plans ) }, request = request )
+
+
+class VehicleFormView( _VehicleListView ):
+    """`/inputs/interview/vehicle-expenses/vehicles/add/` and `.../<handle>/` -- the add/edit form for
+    one vehicle. Add and edit converge on a minted handle, so a new vehicle has a stable identity from
+    the first keystroke. POST background-saves (non-blocking, so an incomplete vehicle writes nothing)
+    and refreshes the list; the open form is left untouched except to surface a genuine field error."""
+
+    _FORM_TEMPLATE = 'inputs/interview/sections/vehicle_form.html'
+
+    def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
-        return VehiclePlanForm( data, profile = profile, plans = plans )
+        if request.GET.get( 'collapse' ):
+            return antinode.response( main_content = self._form( request, None, None ) )
+        if handle is None:                             # add: mint a fresh handle, open its editor
+            handle = _minted_vehicle_handle( plans )
+        form = VehicleForm( profile = profile, plans = plans, handle = handle )
+        return antinode.response( main_content = self._form( request, handle, form ) )
 
-    def persist( self, request, form ):
+    def post( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
-        _profile, plans = form.apply( profile, plans )
-        save_plans( current_plans_record( request ), plans )
+        form = VehicleForm( request.POST, profile = profile, plans = plans, handle = handle )
+        if not form.is_valid():
+            return antinode.response(                          # surface a genuine field error
+                replace_map = { 'vehicles-form': self._form( request, handle, form ) } )
+        profile, plans = form.apply( profile, plans )
+        _save_profile_and_plans( request, profile, plans )
+        return antinode.response( replace_map = { 'vehicles-list': self._list( request, plans ) } )
+
+    def _form( self, request, handle, form ):
+        return render_to_string(
+            self._FORM_TEMPLATE, { 'vehicle_form': form, 'handle': handle }, request = request )
+
+
+class VehicleDeleteView( _VehicleListView ):
+    """`.../vehicle-expenses/vehicles/<handle>/delete/` -- remove one vehicle, then refresh the list."""
+
+    def post( self, request, handle ):
+        profile, plans = _current_profile_and_plans( request )
+        plans = delete_vehicle( plans, handle )
+        _save_profile_and_plans( request, profile, plans )
+        return antinode.response( replace_map = { 'vehicles-list': self._list( request, plans ) } )
 
 
 class RecurringExpensesView( SelfSavingPaneView ):

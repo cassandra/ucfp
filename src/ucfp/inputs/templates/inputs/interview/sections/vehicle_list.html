@@ -1,0 +1,28 @@
+{% comment %}
+The household's vehicles (id=vehicles-list), refreshed on add/edit/delete: each car with its plan
+summary, Edit, and Remove, plus the Add affordance. Edit/Add open the form in the pane's form area
+(#vehicles-form); Remove posts to the delete view. `vehicles` is the list of {handle, name, summary}.
+{% endcomment %}
+<div id="vehicles-list">
+  {% if vehicles %}
+  <ul class="list-unstyled mb-2">
+    {% for vehicle in vehicles %}
+    <li class="mb-1">
+      {{ vehicle.name }}{% if vehicle.summary %} &mdash; <span class="text-muted">{{ vehicle.summary }}</span>{% endif %}
+      <a class="ml-2" data-async="#vehicles-form"
+         href="{% url 'vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>
+      <form method="post" action="{% url 'vehicle_delete' handle=vehicle.handle %}"
+            data-async="#vehicles-list" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
+                aria-label="Remove {{ vehicle.name }}">Remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted mb-2">No vehicles yet.</p>
+  {% endif %}
+  <a class="btn btn-sm btn-outline-secondary" data-async="#vehicles-form"
+     href="{% url 'vehicle_add' %}">Add a vehicle</a>
+</div>

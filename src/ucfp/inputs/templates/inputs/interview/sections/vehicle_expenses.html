@@ -1,12 +1,14 @@
 {% comment %}
-The Vehicle Expenses step (Plans flow): the household's car costs in two panes -- the purchase/financing
-pattern and the per-car running costs. Both render outside the section's Next form and save on their own
-(`VehiclePlanView`, `VehicleExpensesView`); the panes come from the section wrapper (`form.vehicle_form`,
-`form.vehicle_costs_form`). The number of cars entered in the purchase pane is the shared quantity the
-running costs below are scaled by.
+The Vehicle Expenses step (Plans flow): the household's cars as a list of vehicles (each added/edited
+through its own async view, outside the section's Next form) and the shared per-car running costs. The
+list and its (initially empty) add/edit form area come from the section wrapper (`form.vehicles`,
+managed by `VehicleFormView` / `VehicleDeleteView`); the running-costs table is `form.vehicle_costs_form`
+(`VehicleExpensesView`). Each running cost is entered once per car and applies to every car while owned.
 {% endcomment %}
-<p class="text-muted">Your household's cars -- how you buy them and what they cost to run. Enter the
-  number of cars once; the running costs below are entered per car and scale to your total.</p>
-{% include 'inputs/interview/sections/vehicle_plan.html' with vehicle_form=form.vehicle_form %}
+<p class="text-muted">Your household's cars -- add each one with when you buy it, its price, how often
+  you replace it, and (optionally) when you stop owning it. The per-car running costs below apply to
+  each car while you own it. Changes save automatically; Next moves on when you're done.</p>
+{% include 'inputs/interview/sections/vehicle_list.html' with vehicles=form.vehicles %}
+<div id="vehicles-form"></div>
 <h6 class="mt-4">Running costs (per car)</h6>
 {% include 'inputs/interview/sections/_vehicle_expenses.html' with vehicle_costs_form=form.vehicle_costs_form %}
