@@ -13,6 +13,8 @@
   {% csrf_token %}
   {{ form.as_p }}
   <button type="submit" class="btn btn-primary">Run forecast</button>
+  <button type="submit" class="btn btn-outline-primary ml-2"
+          formaction="{% url 'explore_enter' %}">Explore &amp; tweak &rarr;</button>
 </form>
 {% else %}
 {% include 'inputs/panes/setup_gate.html' %}

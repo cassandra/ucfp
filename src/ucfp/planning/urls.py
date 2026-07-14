@@ -9,6 +9,8 @@ from . import views
 
 urlpatterns = [
     path( 'financial-forecast/', views.FinancialForecastView.as_view(), name = 'financial_forecast' ),
+    path( 'financial-forecast/explore/', views.ExploreView.as_view(), name = 'explore' ),
+    path( 'financial-forecast/explore/enter/', views.EnterExploreView.as_view(), name = 'explore_enter' ),
     path( 'retirement-timing/',
           views.ComingSoonView.as_view( feature_key = 'retirement_timing' ),
           name = 'retirement_timing' ),

@@ -25,12 +25,15 @@ from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ProfileRecord, PlansRecord, AssumptionsRecord
-from ucfp.inputs.profile.repository import load_profile, profiles_for
+from ucfp.inputs.profile.repository import latest_profile, load_profile, profiles_for
 from ucfp.inputs.plans.repository import load_plans, plans_for
 from ucfp.inputs.assumptions.repository import assumptions_for, load_assumptions
+from ucfp.inputs.scenarios.repository import working_scenario
+from ucfp.inputs.scenarios.schemas import Scenario
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
+from .explore import enter_explore, run_working_scenario, transient_runs
 from .forms import GRANULARITY, RunForm, resolve_frame
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
@@ -198,6 +201,84 @@ class RunResultsView( View ):
         }
         context.update( run_books_table_context( request, run, books ) )
         return render( request, _RESULTS_TEMPLATE, context )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class EnterExploreView( InputGatedMixin, View ):
+    """`/plan/financial-forecast/explore/enter/` -- fork the hub's chosen plans + assumptions into the
+    working scenario and open Explore. The Phase-2 bridge entry from the hub; the scenario list replaces
+    it in Phase 3."""
+
+    def post( self, request ):
+        organization = request.organization
+        form = RunForm(
+            request.POST, profiles = profiles_for( organization ), plans = plans_for( organization ),
+            assumptions = assumptions_for( organization ) )
+        if not form.is_valid():
+            return redirect( 'financial_forecast' )
+        plans_record = get_object_or_404(
+            PlansRecord, uuid = form.cleaned_data[ 'plans' ], organization = organization )
+        assumptions_record = get_object_or_404(
+            AssumptionsRecord, uuid = form.cleaned_data[ 'assumptions' ], organization = organization )
+        enter_explore( organization, Scenario(
+            plans = load_plans( plans_record ), assumptions = load_assumptions( assumptions_record ) ) )
+        request.session_state.forecast_start_from     = form.cleaned_data[ 'start_from' ]
+        request.session_state.forecast_duration_years = form.cleaned_data[ 'duration_years' ]
+        request.session_state.forecast_interval       = form.cleaned_data[ 'interval' ]
+        request.session_state.to_session( request )
+        return redirect( 'explore' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ExploreView( InputGatedMixin, View ):
+    """`/plan/financial-forecast/explore/` -- the exploration workspace: the working scenario's inputs,
+    an explicit re-run, the transient-run history, and the latest run's results table. Phase-2a
+    scaffolding; the section-view input panes and the diff-driven save follow in later sub-steps."""
+
+    _TEMPLATE = 'planning/pages/explore.html'
+
+    def get( self, request ):
+        organization = request.organization
+        if working_scenario( organization ) is None:
+            return redirect( 'financial_forecast' )        # nothing to explore yet
+        runs = list( transient_runs( organization ) )
+        if not runs:                                       # first entry: produce the initial run
+            run_working_scenario( organization, self._frame( request ), self._run_label( organization ) )
+            runs = list( transient_runs( organization ) )
+        return render( request, self._TEMPLATE, self._context( request, runs ) )
+
+    def post( self, request ):                             # explicit re-run
+        organization = request.organization
+        if working_scenario( organization ) is not None:
+            run_working_scenario( organization, self._frame( request ), self._run_label( organization ) )
+        return redirect( 'explore' )
+
+    def _context( self, request, runs ) -> dict:
+        latest  = runs[ 0 ]
+        run     = from_json_data( ProjectionRun, latest.run.data )
+        books   = BooksOfAccountRepository().load( latest.run.books )
+        context = {
+            'input_state'    : request.input_state,
+            'transient_runs' : runs,
+            'latest'         : latest,
+            'record'         : latest.run,   # the ProjectionRunRecord the books-table column ops key on
+            'stopped_early'  : run.result.stopped_early,
+        }
+        context.update( run_books_table_context( request, run, books ) )
+        return context
+
+    def _frame( self, request ) -> ForecastFrame:
+        state   = request.session_state
+        profile = latest_profile( request.organization )
+        return resolve_frame(
+            effective_date = profile.effective_date,
+            start_choice   = state.forecast_start_from or 'effective',
+            duration_years = state.forecast_duration_years or 40,
+            granularity    = GRANULARITY.get( state.forecast_interval or 'year', GRANULARITY[ 'year' ] ) )
+
+    @staticmethod
+    def _run_label( organization ) -> str:
+        return f'Exploration run {transient_runs( organization ).count() + 1}'
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

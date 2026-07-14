@@ -1,0 +1,84 @@
+{% extends "pages/app_base.html" %}
+{% load common_tags %}
+
+{% comment %}
+The Explore workspace (#87 Phase 2). Top: two input columns (Plans | Assumptions), each a container of
+per-section views -- placeholders in this scaffolding sub-step (the Living Expenses and Economic
+Assumptions views land next). Middle: explore controls (re-run, the transient-run history). Bottom: the
+latest run's results table, reusing the shared run_books_table partial. Reads `transient_runs`, `latest`,
+`stopped_early`, and the `books_table` context.
+{% endcomment %}
+
+{% block app_content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb bg-white border">
+    <li class="breadcrumb-item"><a href="{% url 'financial_forecast' %}">Financial Forecast</a></li>
+    <li class="breadcrumb-item active">Explore</li>
+  </ol>
+</nav>
+
+<div class="d-flex align-items-baseline justify-content-between mb-2">
+  <div>
+    <h1 class="h3 mb-0">Explore</h1>
+    <div class="text-muted small">Exploring the working scenario — nothing is saved until you say so.</div>
+  </div>
+</div>
+
+<!-- TOP: two input columns; each is a container of per-section views (placeholders this sub-step) -->
+<div class="row">
+  <div class="col-md-6 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h2 class="h6 mb-0">Plans</h2>
+        </div>
+        <p class="text-muted small mb-0">The Living Expenses section view (age-band selector + curated
+          spending) lands in the next sub-step.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h2 class="h6 mb-0">Assumptions</h2>
+        </div>
+        <p class="text-muted small mb-0">The Economic Assumptions section view (the curated rates) lands
+          in the next sub-step.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MIDDLE: explore controls -->
+<div class="card mb-3">
+  <div class="card-body py-2 d-flex flex-wrap align-items-center">
+    <form method="post" action="{% url 'explore' %}" class="my-1 mr-3">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">&#8635; Re-run</button>
+    </form>
+    <div class="d-flex align-items-center flex-wrap my-1">
+      <span class="text-muted small mr-2">Recent runs</span>
+      {% for result in transient_runs %}
+      <span class="badge badge-pill border p-2 mr-1 {% if result.pk == latest.pk %}badge-primary{% else %}badge-light{% endif %}">
+        {{ result.label }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM: latest run's results -->
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex align-items-baseline justify-content-between mb-2">
+      <h2 class="h5 mb-0">Results <span class="text-muted small">— {{ latest.label }}</span></h2>
+      {% if stopped_early %}
+        <span class="text-danger font-weight-bold small">Money ran out before the horizon.</span>
+      {% else %}
+        <span class="text-success font-weight-bold small">Money lasted through the horizon.</span>
+      {% endif %}
+    </div>
+    {% include "planning/pages/run_books_table.html" %}
+  </div>
+</div>
+{% endblock %}
