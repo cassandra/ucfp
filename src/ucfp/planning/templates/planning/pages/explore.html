@@ -111,7 +111,31 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
   </div>
 </form>
 
-<!-- BOTTOM: latest run's results -->
+<!-- SAVE bar: keep the run's output, or promote the working scenario to a saved one. Separate forms,
+     so outside the tweak form above. -->
+<div class="card mb-3">
+  <div class="card-body py-2 d-flex flex-wrap align-items-center">
+    <span class="text-muted small mr-3 my-1">
+      {% if drift %}{{ drift_summary }} since start{% else %}No changes since start{% endif %}</span>
+
+    <form method="post" action="{% url 'explore_save_scenario' %}" class="form-inline my-1 mr-3">
+      {% csrf_token %}
+      <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="Scenario name"
+             aria-label="Scenario name">
+      <button type="submit" class="btn btn-success btn-sm">Save as new scenario</button>
+    </form>
+
+    <span class="text-muted mr-3 my-1">·</span>
+
+    <form method="post" action="{% url 'explore_keep_run' %}" class="my-1">
+      {% csrf_token %}
+      <input type="hidden" name="run" value="{{ selected.run.uuid }}">
+      <button type="submit" class="btn btn-outline-success btn-sm">Keep this run</button>
+    </form>
+  </div>
+</div>
+
+<!-- BOTTOM: selected run's results -->
 <div class="card mb-4">
   <div class="card-body">
     <div class="d-flex align-items-baseline justify-content-between mb-2">

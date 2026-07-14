@@ -24,17 +24,20 @@ from common.dataclass_json import from_json_data
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
+from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ProfileRecord, PlansRecord, AssumptionsRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile, profiles_for
 from ucfp.inputs.plans.repository import load_plans, plans_for
 from ucfp.inputs.assumptions.repository import assumptions_for, load_assumptions
-from ucfp.inputs.scenarios.repository import load_scenario, set_working_scenario, working_scenario
+from ucfp.inputs.scenarios.repository import (
+    load_scenario, save_working_as_scenario, set_working_scenario, working_scenario )
 from ucfp.inputs.scenarios.schemas import Scenario
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
-from .explore import enter_explore, run_working_scenario, transient_runs
+from .explore import enter_explore, run_scenario, run_working_scenario, transient_runs
+from .explore_diff import curated_changes, describe_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import GRANULARITY, RunForm, resolve_frame
 from .materialization import ForecastFrame
@@ -246,14 +249,15 @@ class ExploreView( InputGatedMixin, View ):
             return redirect( 'financial_forecast' )        # nothing to explore yet
         runs = list( transient_runs( organization ) )
         if not runs:                                       # first entry: produce the initial run
-            run_working_scenario( organization, self._frame( request ), self._run_label( organization ) )
+            run_working_scenario( organization, self._frame( request ) )
             runs = list( transient_runs( organization ) )
         selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
         scenario = load_scenario( working )
         band     = self._band( request )
         forms    = { 'living_form' : LivingExpensesExploreForm( scenario = scenario, band = band ),
                      'econ_form'    : EconomicAssumptionsExploreForm( scenario = scenario ) }
-        return render( request, self._TEMPLATE, self._context( request, runs, selected, band, forms ) )
+        drift    = curated_changes( run_scenario( runs[ -1 ] ), scenario )   # working vs the starting run
+        return render( request, self._TEMPLATE, self._context( request, runs, selected, band, forms, drift ) )
 
     def post( self, request ):                             # apply the dialed tweaks, then re-run
         organization = request.organization
@@ -267,10 +271,10 @@ class ExploreView( InputGatedMixin, View ):
         if living.is_valid() and economic.is_valid():
             scenario = economic.apply( living.apply( scenario ) )
             set_working_scenario( organization, scenario )
-            run_working_scenario( organization, self._frame( request ), self._run_label( organization ) )
+            run_working_scenario( organization, self._frame( request ) )
         return redirect( f'{reverse( "explore" )}?band={band}' )
 
-    def _context( self, request, runs, selected, band, forms ) -> dict:
+    def _context( self, request, runs, selected, band, forms, drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
         books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
@@ -280,6 +284,8 @@ class ExploreView( InputGatedMixin, View ):
             'record'         : selected.run,  # the ProjectionRunRecord the books-table column ops key on
             'stopped_early'  : run.result.stopped_early,
             'band'           : band,
+            'drift'          : drift,                          # curated changes vs the starting run
+            'drift_summary'  : describe_changes( drift ),
             **forms,
         }
         context.update( run_books_table_context( request, run, books ) )
@@ -313,9 +319,32 @@ class ExploreView( InputGatedMixin, View ):
             duration_years = state.forecast_duration_years or 40,
             granularity    = GRANULARITY.get( state.forecast_interval or 'year', GRANULARITY[ 'year' ] ) )
 
-    @staticmethod
-    def _run_label( organization ) -> str:
-        return f'Exploration run {transient_runs( organization ).count() + 1}'
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class SaveScenarioView( InputGatedMixin, View ):
+    """`.../explore/save-scenario/` -- promote the working scenario to a saved, named scenario (a copy;
+    the working copy keeps churning as the user explores)."""
+
+    def post( self, request ):
+        organization = request.organization
+        if working_scenario( organization ) is not None:
+            name = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
+            save_working_as_scenario( organization, name )
+        return redirect( 'explore' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class KeepRunView( InputGatedMixin, View ):
+    """`.../explore/keep-run/` -- retain a transient run: mark it SAVED so it is kept (and drops out of the
+    transient strip and its prune) rather than churned away."""
+
+    def post( self, request ):
+        organization = request.organization
+        result = get_object_or_404(
+            PlanningResultRecord, run__uuid = request.POST.get( 'run' ), organization = organization )
+        result.usage_role = UsageRole.SAVED
+        result.save( update_fields = [ 'usage_role', 'updated_datetime' ] )
+        return redirect( 'explore' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
