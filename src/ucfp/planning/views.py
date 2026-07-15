@@ -34,7 +34,7 @@ from ucfp.inputs.scenarios.repository import (
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
 from .explore import enter_explore, run_working_scenario, transient_runs
-from .explore_diff import curated_changes, describe_changes
+from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
 from .materialization import ForecastFrame
@@ -218,22 +218,14 @@ class ExploreView( InputGatedMixin, View ):
         forms    = { 'living_form' : LivingExpensesExploreForm( scenario = working_inputs ),
                      'econ_form'    : EconomicAssumptionsExploreForm( scenario = working_inputs ) }
         # Drift is measured against the saved source scenario -- exactly what an "update" would overwrite.
-        drift    = curated_changes( load_scenario( source ), working_inputs )
+        drift    = value_changes( load_scenario( source ), working_inputs )
         return render(
             request, self._TEMPLATE, self._context( request, source, runs, selected, forms, drift ) )
 
-    def post( self, request, scenario ):                   # apply the dialed tweaks, then re-run
+    def post( self, request, scenario ):                   # Re-run: project the auto-saved working scenario
         organization = request.organization
-        source  = self._source( organization, scenario )
-        working = working_scenario( organization )
-        if working is None:
-            return redirect( 'financial_forecast' )
-        working_inputs = load_scenario( working )
-        living   = LivingExpensesExploreForm( request.POST, scenario = working_inputs )
-        economic = EconomicAssumptionsExploreForm( request.POST, scenario = working_inputs )
-        if living.is_valid() and economic.is_valid():
-            working_inputs = economic.apply( living.apply( working_inputs ) )
-            set_working_scenario( organization, working_inputs )
+        source = self._source( organization, scenario )
+        if working_scenario( organization ) is not None:   # the dials auto-save; Re-run only re-projects
             run_working_scenario( organization, self._frame( request ) )
         return redirect( 'explore', scenario = source.uuid )
 
@@ -279,6 +271,40 @@ class ExploreView( InputGatedMixin, View ):
             start_choice   = state.forecast_start_from or 'effective',
             duration_years = state.forecast_duration_years or 40,
             granularity    = GRANULARITY.get( state.forecast_interval or 'year', GRANULARITY[ 'year' ] ) )
+
+
+class _ExploreSectionAutosaveView( InputGatedMixin, View ):
+    """Base for a self-saving Explore input section: a valid edit is applied to the working scenario and
+    saved silently (the `js-autosave` pattern the inputs panes use), so typing is undisturbed; an
+    incomplete or invalid entry simply is not saved. Explore edits values only, so nothing structural
+    changes and the response is always the silent, no-op antinode acknowledgement -- Re-run re-projects
+    the accumulated edits when the user asks."""
+
+    form_class = None
+
+    def post( self, request, scenario ):
+        organization = request.organization
+        get_object_or_404(                                 # 404 unless the scenario is this org's
+            ScenarioRecord, uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
+        working = working_scenario( organization )
+        if working is not None:
+            current = load_scenario( working )
+            form    = self.form_class( request.POST, scenario = current )
+            if form.is_valid():
+                set_working_scenario( organization, form.apply( current ) )
+        return antinode.response()
+
+
+class ExplorePlansAutosaveView( _ExploreSectionAutosaveView ):
+    """`.../explore/<scenario>/plans/` -- self-save the Living Expenses dials into the working scenario."""
+
+    form_class = LivingExpensesExploreForm
+
+
+class ExploreAssumptionsAutosaveView( _ExploreSectionAutosaveView ):
+    """`.../explore/<scenario>/assumptions/` -- self-save the Economic dials into the working scenario."""
+
+    form_class = EconomicAssumptionsExploreForm
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
