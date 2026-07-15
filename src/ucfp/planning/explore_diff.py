@@ -7,13 +7,15 @@ drifted from where the exploration started). A fuller field-level diff over all 
 """
 from ucfp.inputs.scenarios.schemas import Scenario
 
-from .explore_sections import _CURATED_EXPENSES, _CURATED_RATES
+from .explore_sections import _CURATED_EXPENSES, _CURATED_RATES, _band_labels
 
 
 def curated_changes( before: Scenario, after: Scenario ) -> list:
     """Short descriptions of the curated fields that differ from `before` to `after`."""
+    band_labels = _band_labels( after.plans.expense_spans or [ None ] )
     return ( _rate_changes( before.assumptions.economics, after.assumptions.economics )
-             + _expense_changes( before.plans.recurring_expenses, after.plans.recurring_expenses ) )
+             + _expense_changes(
+                 before.plans.recurring_expenses, after.plans.recurring_expenses, band_labels ) )
 
 
 def describe_changes( changes: list ) -> str:
@@ -34,7 +36,7 @@ def _rate_changes( before, after ) -> list:
     return changes
 
 
-def _expense_changes( before, after ) -> list:
+def _expense_changes( before, after, band_labels ) -> list:
     by_before = { expense.handle: expense for expense in before }
     by_after  = { expense.handle: expense for expense in after }
     changes   = list()
@@ -42,11 +44,18 @@ def _expense_changes( before, after ) -> list:
         earlier, later = by_before.get( handle ), by_after.get( handle )
         if ( earlier is None ) or ( later is None ):
             continue
-        for was, now in zip( earlier.amounts, later.amounts ):
-            if was != now:
-                changes.append( f'{label} {_num( was )}→{_num( now )}' )   # first differing band, for brevity
-                break
+        for band, ( was, now ) in enumerate( zip( earlier.amounts, later.amounts ) ):
+            if was != now:                                     # one entry per differing band, band-labelled
+                changes.append( f'{label}{_band_suffix( band, band_labels )} {_num( was )}→{_num( now )}' )
     return changes
+
+
+def _band_suffix( band: int, band_labels ) -> str:
+    """The age-range qualifier for a changed band, e.g. ` (65–75)` -- omitted for a single all-ages band,
+    where naming the band adds no information."""
+    if len( band_labels ) <= 1 or band >= len( band_labels ):
+        return ''
+    return f' ({band_labels[ band ]})'
 
 
 def _pct( fraction ) -> str:
