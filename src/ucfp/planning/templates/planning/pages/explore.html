@@ -19,16 +19,15 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
 
 <div class="d-flex align-items-baseline justify-content-between mb-2">
   <div>
-    <h1 class="h3 mb-0">Explore</h1>
-    <div class="text-muted small">Exploring the working scenario — nothing is saved until you say so.</div>
+    <h1 class="h3 mb-0">Explore <span class="text-muted">— {{ source.label }}</span></h1>
+    <div class="text-muted small">Tweaks apply to a working copy — the saved scenario changes only when
+      you save.</div>
   </div>
 </div>
 
-<!-- The tweak-and-re-run form wraps both input columns and the controls (a band switch navigates via
-     the selector's onchange, so it stays a plain select rather than a nested form). -->
-<form method="post" action="{% url 'explore' %}">
+<!-- The tweak-and-re-run form wraps both input columns and the controls. -->
+<form method="post" action="{% url 'explore' scenario=source.uuid %}">
   {% csrf_token %}
-  <input type="hidden" name="band" value="{{ band }}">
 
   <!-- TOP: two input columns, each a per-section view -->
   <div class="row">
@@ -41,30 +40,35 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
             <a href="#" class="small text-muted" title="Full editor arrives in a later phase">Full plan editor &rarr;</a>
           </div>
           <div class="border rounded p-2">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <span class="font-weight-bold small">Living Expenses</span>
-              <div class="form-inline">
-                <span class="text-muted small mr-1">Age band</span>
-                <select class="custom-select custom-select-sm"
-                        onchange="window.location.href='?band='+this.value">
-                  {% for b in living_form.bands %}
-                  <option value="{{ b.index }}" {% if b.index == band %}selected{% endif %}>{{ b.label }}</option>
+            <div class="font-weight-bold small mb-2">Living Expenses</div>
+            <!-- One row per curated expense, one editable cell per age band (the columns). -->
+            <div class="table-responsive">
+              <table class="table table-sm mb-1">
+                <thead>
+                  <tr>
+                    <th class="font-weight-normal small text-muted border-top-0"></th>
+                    {% for band_label in living_form.bands %}
+                    <th class="font-weight-normal small text-muted text-right border-top-0">{{ band_label }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in living_form.rows %}
+                  <tr>
+                    <td class="align-middle">{{ row.label }}
+                      <span class="text-muted small">{{ row.cadence }}</span></td>
+                    {% for cell in row.cells %}
+                    <td class="text-right" style="width:7rem">
+                      <div class="input-group input-group-sm">
+                        <div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ cell }}
+                      </div>
+                    </td>
+                    {% endfor %}
+                  </tr>
                   {% endfor %}
-                </select>
-              </div>
+                </tbody>
+              </table>
             </div>
-            <div class="form-row">
-              {% for row in living_form.rows %}
-              <div class="form-group col-12 d-flex align-items-center mb-2">
-                <label class="mb-0 mr-auto font-weight-normal">{{ row.label }}
-                  <span class="text-muted small">{{ row.cadence }}</span></label>
-                <div class="input-group input-group-sm" style="width:8rem">
-                  <div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ row.field }}
-                </div>
-              </div>
-              {% endfor %}
-            </div>
-            <div class="text-muted small">Values for the selected age band; other bands stay unchanged.</div>
           </div>
         </div>
       </div>
@@ -95,6 +99,10 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
     </div>
   </div>
 
+  <div class="text-muted small mb-3">
+    These values are exploratory — Re-run projects them, but nothing here is saved until you explicitly
+    save a scenario below.</div>
+
   <!-- MIDDLE: explore controls -->
   <div class="card mb-3">
     <div class="card-body py-2 d-flex flex-wrap align-items-center">
@@ -102,7 +110,7 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
       <div class="d-flex align-items-center flex-wrap my-1">
         <span class="text-muted small mr-2">Recent runs</span>
         {% for result in transient_runs %}
-        <a href="?run={{ result.run.uuid }}&amp;band={{ band }}"
+        <a href="{% url 'explore' scenario=source.uuid %}?run={{ result.run.uuid }}"
            class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}">
           {{ result.label }}</a>
         {% endfor %}
@@ -118,7 +126,7 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
     <span class="text-muted small mr-3 my-1">
       {% if drift %}{{ drift_summary }} since start{% else %}No changes since start{% endif %}</span>
 
-    <form method="post" action="{% url 'explore_save_scenario' %}" class="form-inline my-1 mr-3">
+    <form method="post" action="{% url 'explore_save_scenario' scenario=source.uuid %}" class="form-inline my-1 mr-3">
       {% csrf_token %}
       <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="Scenario name"
              aria-label="Scenario name">
@@ -127,7 +135,7 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
 
     <span class="text-muted mr-3 my-1">·</span>
 
-    <form method="post" action="{% url 'explore_keep_run' %}" class="my-1">
+    <form method="post" action="{% url 'explore_keep_run' scenario=source.uuid %}" class="my-1">
       {% csrf_token %}
       <input type="hidden" name="run" value="{{ selected.run.uuid }}">
       <button type="submit" class="btn btn-outline-success btn-sm">Keep this run</button>

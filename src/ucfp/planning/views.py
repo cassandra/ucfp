@@ -11,7 +11,6 @@ from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
-from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
@@ -26,24 +25,20 @@ from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.mixins import InputGatedMixin
-from ucfp.inputs.models import ProfileRecord, PlansRecord, AssumptionsRecord
-from ucfp.inputs.profile.repository import latest_profile, load_profile, profiles_for
-from ucfp.inputs.plans.repository import load_plans, plans_for
-from ucfp.inputs.assumptions.repository import assumptions_for, load_assumptions
+from ucfp.inputs.models import ScenarioRecord
+from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.scenarios.repository import (
-    load_scenario, save_working_as_scenario, set_working_scenario, working_scenario )
-from ucfp.inputs.scenarios.schemas import Scenario
+    load_scenario, save_working_as_scenario, scenarios_for, set_working_scenario, working_scenario )
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
 from .explore import enter_explore, run_scenario, run_working_scenario, transient_runs
 from .explore_diff import curated_changes, describe_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
-from .forms import GRANULARITY, RunForm, resolve_frame
+from .forms import ForecastForm, GRANULARITY, resolve_frame
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture
-from .readiness import readiness_issues
 from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
@@ -78,56 +73,50 @@ class ComingSoonView( TemplateView ):
         return context
 
 
+def _remember_frame( request, form ) -> None:
+    """Persist the form's chosen frame to the session, so it defaults on the next hub visit and Explore
+    (which reads the frame from the session) projects over the same window."""
+    request.session_state.forecast_start_from     = form.cleaned_data[ 'start_from' ]
+    request.session_state.forecast_duration_years = form.cleaned_data[ 'duration_years' ]
+    request.session_state.forecast_interval       = form.cleaned_data[ 'interval' ]
+    request.session_state.to_session( request )
+
+
 class FinancialForecastView( InputGatedMixin, View ):
-    """`/plan/financial-forecast/` -- the hub: choose the profile + plans + assumptions + frame, run,
-    and browse past runs. `InputGatedMixin` ensures the organization and attaches `request.input_state`
-    (the existence gate) that the hub shows before its run controls."""
+    """`/plan/financial-forecast/` -- the hub: pick a saved scenario and a frame, then either run it as-is
+    (this view's POST) or open it in Explore (the `Explore` button posts the same form to
+    `EnterExploreView`), and browse kept runs. A scenario is the run-ready unit (a validated Plans +
+    Assumptions bundle); the hub only *selects* one -- it never builds or edits scenarios. With none yet,
+    it points at the (not-yet-built) scenario builder rather than offering a run."""
 
     def get( self, request ):
         return render( request, _HUB_TEMPLATE, self._context( request ) )
 
-    def post( self, request ):
+    def post( self, request ):                             # "Run forecast": project the scenario as-is
         organization = request.organization
-        form = RunForm(
-            request.POST,
-            profiles = profiles_for( organization ), plans = plans_for( organization ),
-            assumptions = assumptions_for( organization ) )
+        form = ForecastForm( request.POST, scenarios = scenarios_for( organization ) )
         if not form.is_valid():
             return render( request, _HUB_TEMPLATE, self._context( request, form = form ) )
-        profile_record  = get_object_or_404(
-            ProfileRecord, uuid = form.cleaned_data[ 'profile' ], organization = organization )
-        plans_record = get_object_or_404(
-            PlansRecord, uuid = form.cleaned_data[ 'plans' ], organization = organization )
-        assumptions_record = get_object_or_404(
-            AssumptionsRecord, uuid = form.cleaned_data[ 'assumptions' ], organization = organization )
-        profile     = load_profile( profile_record )
-        plans       = load_plans( plans_record )
-        assumptions = load_assumptions( assumptions_record )
-        # Make the chosen bundle and frame the current selection before gating, so a readiness redirect
-        # ("continue the interview") leads back to exactly these records, and the run form's when-controls
-        # keep the user's choices on any re-render (a doomed run, an engine error) or a later visit.
-        request.session_state.current_plans_uuid        = str( plans_record.uuid )
-        request.session_state.current_assumptions_uuid  = str( assumptions_record.uuid )
-        request.session_state.forecast_start_from       = form.cleaned_data[ 'start_from' ]
-        request.session_state.forecast_duration_years   = form.cleaned_data[ 'duration_years' ]
-        request.session_state.forecast_interval         = form.cleaned_data[ 'interval' ]
-        request.session_state.to_session( request )
-        acknowledged = frozenset(
-            profile_record.acknowledged_sections ).union(
-            plans_record.acknowledged_sections, assumptions_record.acknowledged_sections )
-        issues = readiness_issues( profile, plans, assumptions, acknowledged )
-        if issues:                                             # a doomed run: guide, do not run
-            return render(
-                request, _HUB_TEMPLATE, self._context( request, form = form, issues = issues ) )
+        scenario_record = get_object_or_404(
+            ScenarioRecord, uuid = form.cleaned_data[ 'scenario' ], organization = organization,
+            usage_role = UsageRole.SAVED )
+        profile_record = latest_profile( organization )
+        if profile_record is None:
+            return render( request, _HUB_TEMPLATE, self._context(
+                request, form = form, error = 'Set up a profile before running a forecast.' ) )
+        _remember_frame( request, form )
+        scenario = load_scenario( scenario_record )
+        frame    = resolve_frame(
+            effective_date = profile_record.effective_date,
+            start_choice   = form.cleaned_data[ 'start_from' ],
+            duration_years = form.cleaned_data[ 'duration_years' ],
+            granularity    = GRANULARITY[ form.cleaned_data[ 'interval' ] ] )
         try:
             with transaction.atomic():
                 run = run_and_capture(
-                    organization = organization,
-                    profile      = profile,
-                    plans        = plans,
-                    assumptions  = assumptions,
-                    frame        = self._frame( profile_record, form ),
-                    label        = plans_record.label )
+                    organization = organization, profile = load_profile( profile_record ),
+                    plans = scenario.plans, assumptions = scenario.assumptions,
+                    frame = frame, label = scenario_record.label )
                 PlanningResultRecord.objects.create(
                     organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
                     run = run, label = run.label )
@@ -136,54 +125,29 @@ class FinancialForecastView( InputGatedMixin, View ):
                 request, _HUB_TEMPLATE, self._context( request, form = form, error = str( error ) ) )
         return redirect( 'run_results', run_uuid = run.uuid )
 
-    def _frame( self, profile_record, form ) -> ForecastFrame:
-        return resolve_frame(
-            effective_date = profile_record.effective_date,
-            start_choice   = form.cleaned_data[ 'start_from' ],
-            duration_years = form.cleaned_data[ 'duration_years' ],
-            granularity    = GRANULARITY[ form.cleaned_data[ 'interval' ] ] )
-
-    def _default_selection( self, request, profiles, plans, assumptions ) -> dict:
-        """The run form's default bundle: the plans and assumptions the user last selected or edited, and
-        the frame (start-from, duration, interval) last run -- all from the session; the profile defaults
-        to the most recent (the single current one). The frame keys are set only when the session carries
-        them, so an unset field falls back to the form's own built-in default rather than being blanked. A
-        stale session value simply falls through to no preselection."""
-        state     = request.session_state
-        selection = {
-            'profile'     : self._first_uuid( profiles ),
-            'plans'       : state.current_plans_uuid or self._first_uuid( plans ),
-            'assumptions' : state.current_assumptions_uuid or self._first_uuid( assumptions ),
+    def _context( self, request, form = None, error = None ) -> dict:
+        organization = request.organization
+        scenarios = scenarios_for( organization )
+        return {
+            'scenarios' : scenarios,
+            'form'      : form or ForecastForm(
+                scenarios = scenarios, initial = self._frame_defaults( request ) ),
+            'results'   : PlanningResultRecord.objects.select_related( 'run' ).filter(
+                organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
+                usage_role = UsageRole.SAVED ).order_by( '-created_datetime' ),
+            'error'     : error,
         }
-        frame = {
+
+    @staticmethod
+    def _frame_defaults( request ) -> dict:
+        """The frame the user last ran, from the session; an unset field falls through to the form's own
+        default rather than being blanked."""
+        state = request.session_state
+        return { key: value for key, value in {
             'start_from'     : state.forecast_start_from,
             'duration_years' : state.forecast_duration_years,
             'interval'       : state.forecast_interval,
-        }
-        selection.update( { key: value for key, value in frame.items() if value is not None } )
-        return selection
-
-    @staticmethod
-    def _first_uuid( queryset ):
-        record = queryset.first()
-        return str( record.uuid ) if record is not None else None
-
-    def _context( self, request, form = None, error = None, issues = None ) -> dict:
-        organization = request.organization
-        profiles    = profiles_for( organization )
-        plans       = plans_for( organization )
-        assumptions = assumptions_for( organization )
-        return {
-            'input_state'     : request.input_state,
-            'form'            : form or RunForm(
-                profiles = profiles, plans = plans, assumptions = assumptions,
-                initial = self._default_selection( request, profiles, plans, assumptions ) ),
-            'results'         : PlanningResultRecord.objects.select_related( 'run' ).filter(
-                organization = organization,
-                feature = PlanningFeature.FINANCIAL_FORECAST ).order_by( '-created_datetime' ),
-            'error'           : error,
-            'readiness_issues': issues,
-        }
+        }.items() if value is not None }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -210,40 +174,35 @@ class RunResultsView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class EnterExploreView( InputGatedMixin, View ):
-    """`/plan/financial-forecast/explore/enter/` -- fork the hub's chosen plans + assumptions into the
-    working scenario and open Explore. The Phase-2 bridge entry from the hub; the scenario list replaces
-    it in Phase 3."""
+    """`/plan/financial-forecast/explore/enter/` -- fork the hub's chosen saved scenario into the working
+    copy and open its Explore workspace. The scenario's uuid (POSTed from the hub picker) rides in the
+    workspace URL as the exploration's source, and the target a save can overwrite."""
 
     def post( self, request ):
         organization = request.organization
-        form = RunForm(
-            request.POST, profiles = profiles_for( organization ), plans = plans_for( organization ),
-            assumptions = assumptions_for( organization ) )
+        form = ForecastForm( request.POST, scenarios = scenarios_for( organization ) )
         if not form.is_valid():
             return redirect( 'financial_forecast' )
-        plans_record = get_object_or_404(
-            PlansRecord, uuid = form.cleaned_data[ 'plans' ], organization = organization )
-        assumptions_record = get_object_or_404(
-            AssumptionsRecord, uuid = form.cleaned_data[ 'assumptions' ], organization = organization )
-        enter_explore( organization, Scenario(
-            plans = load_plans( plans_record ), assumptions = load_assumptions( assumptions_record ) ) )
-        request.session_state.forecast_start_from     = form.cleaned_data[ 'start_from' ]
-        request.session_state.forecast_duration_years = form.cleaned_data[ 'duration_years' ]
-        request.session_state.forecast_interval       = form.cleaned_data[ 'interval' ]
-        request.session_state.to_session( request )
-        return redirect( 'explore' )
+        scenario_record = get_object_or_404(
+            ScenarioRecord, uuid = form.cleaned_data[ 'scenario' ], organization = organization,
+            usage_role = UsageRole.SAVED )
+        _remember_frame( request, form )
+        enter_explore( organization, load_scenario( scenario_record ) )
+        return redirect( 'explore', scenario = scenario_record.uuid )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ExploreView( InputGatedMixin, View ):
-    """`/plan/financial-forecast/explore/` -- the exploration workspace: the working scenario's inputs,
-    an explicit re-run, the transient-run history, and the latest run's results table. Phase-2a
-    scaffolding; the section-view input panes and the diff-driven save follow in later sub-steps."""
+    """`/plan/financial-forecast/explore/<scenario>/` -- the exploration workspace for a saved scenario:
+    the working copy's inputs, an explicit re-run, the transient-run history, and the selected run's
+    results table. The `<scenario>` uuid is the exploration's source -- displayed as its name, and (in a
+    later sub-step) the target a save overwrites and the baseline a drift diff compares against."""
 
     _TEMPLATE = 'planning/pages/explore.html'
 
-    def get( self, request ):
+    def get( self, request, scenario ):
         organization = request.organization
+        source  = self._source( organization, scenario )
         working = working_scenario( organization )
         if working is None:
             return redirect( 'financial_forecast' )        # nothing to explore yet
@@ -252,38 +211,44 @@ class ExploreView( InputGatedMixin, View ):
             run_working_scenario( organization, self._frame( request ) )
             runs = list( transient_runs( organization ) )
         selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
-        scenario = load_scenario( working )
-        band     = self._band( request )
-        forms    = { 'living_form' : LivingExpensesExploreForm( scenario = scenario, band = band ),
-                     'econ_form'    : EconomicAssumptionsExploreForm( scenario = scenario ) }
-        drift    = curated_changes( run_scenario( runs[ -1 ] ), scenario )   # working vs the starting run
-        return render( request, self._TEMPLATE, self._context( request, runs, selected, band, forms, drift ) )
+        working_inputs = load_scenario( working )
+        forms    = { 'living_form' : LivingExpensesExploreForm( scenario = working_inputs ),
+                     'econ_form'    : EconomicAssumptionsExploreForm( scenario = working_inputs ) }
+        drift    = curated_changes( run_scenario( runs[ -1 ] ), working_inputs )  # working vs the starting run
+        return render(
+            request, self._TEMPLATE, self._context( request, source, runs, selected, forms, drift ) )
 
-    def post( self, request ):                             # apply the dialed tweaks, then re-run
+    def post( self, request, scenario ):                   # apply the dialed tweaks, then re-run
         organization = request.organization
+        source  = self._source( organization, scenario )
         working = working_scenario( organization )
         if working is None:
             return redirect( 'financial_forecast' )
-        band     = self._band( request )
-        scenario = load_scenario( working )
-        living   = LivingExpensesExploreForm( request.POST, scenario = scenario, band = band )
-        economic = EconomicAssumptionsExploreForm( request.POST, scenario = scenario )
+        working_inputs = load_scenario( working )
+        living   = LivingExpensesExploreForm( request.POST, scenario = working_inputs )
+        economic = EconomicAssumptionsExploreForm( request.POST, scenario = working_inputs )
         if living.is_valid() and economic.is_valid():
-            scenario = economic.apply( living.apply( scenario ) )
-            set_working_scenario( organization, scenario )
+            working_inputs = economic.apply( living.apply( working_inputs ) )
+            set_working_scenario( organization, working_inputs )
             run_working_scenario( organization, self._frame( request ) )
-        return redirect( f'{reverse( "explore" )}?band={band}' )
+        return redirect( 'explore', scenario = source.uuid )
 
-    def _context( self, request, runs, selected, band, forms, drift ) -> dict:
+    @staticmethod
+    def _source( organization, scenario ) -> ScenarioRecord:
+        """The saved scenario this exploration is anchored to (the URL's uuid), 404 if not the org's."""
+        return get_object_or_404(
+            ScenarioRecord, uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
+
+    def _context( self, request, source, runs, selected, forms, drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
         books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
             'input_state'    : request.input_state,
+            'source'         : source,        # the saved scenario being explored (its name, the save target)
             'transient_runs' : runs,
             'selected'       : selected,
             'record'         : selected.run,  # the ProjectionRunRecord the books-table column ops key on
             'stopped_early'  : run.result.stopped_early,
-            'band'           : band,
             'drift'          : drift,                          # curated changes vs the starting run
             'drift_summary'  : describe_changes( drift ),
             **forms,
@@ -302,14 +267,6 @@ class ExploreView( InputGatedMixin, View ):
                     return result
         return runs[ 0 ]
 
-    @staticmethod
-    def _band( request ) -> int:
-        raw = request.POST.get( 'band' ) or request.GET.get( 'band' ) or 0
-        try:
-            return int( raw )
-        except ( TypeError, ValueError ):
-            return 0
-
     def _frame( self, request ) -> ForecastFrame:
         state   = request.session_state
         profile = latest_profile( request.organization )
@@ -322,29 +279,29 @@ class ExploreView( InputGatedMixin, View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class SaveScenarioView( InputGatedMixin, View ):
-    """`.../explore/save-scenario/` -- promote the working scenario to a saved, named scenario (a copy;
-    the working copy keeps churning as the user explores)."""
+    """`.../explore/<scenario>/save-scenario/` -- promote the working scenario to a saved, named scenario
+    (a copy; the working copy keeps churning as the user explores)."""
 
-    def post( self, request ):
+    def post( self, request, scenario ):
         organization = request.organization
         if working_scenario( organization ) is not None:
             name = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
             save_working_as_scenario( organization, name )
-        return redirect( 'explore' )
+        return redirect( 'explore', scenario = scenario )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class KeepRunView( InputGatedMixin, View ):
-    """`.../explore/keep-run/` -- retain a transient run: mark it SAVED so it is kept (and drops out of the
-    transient strip and its prune) rather than churned away."""
+    """`.../explore/<scenario>/keep-run/` -- retain a transient run: mark it SAVED so it is kept (and drops
+    out of the transient strip and its prune) rather than churned away."""
 
-    def post( self, request ):
+    def post( self, request, scenario ):
         organization = request.organization
         result = get_object_or_404(
             PlanningResultRecord, run__uuid = request.POST.get( 'run' ), organization = organization )
         result.usage_role = UsageRole.SAVED
         result.save( update_fields = [ 'usage_role', 'updated_datetime' ] )
-        return redirect( 'explore' )
+        return redirect( 'explore', scenario = scenario )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

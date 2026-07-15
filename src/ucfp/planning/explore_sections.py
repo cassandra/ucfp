@@ -1,8 +1,9 @@
 """Explore's curated section views -- one compact form per input section, over the working scenario.
 
 Each input section has its own data shape, so each gets its own small view here rather than a generic
-grid. Phase 2 ships two: `LivingExpensesExploreForm` (the discretionary spending at a chosen age band)
-and `EconomicAssumptionsExploreForm` (the headline rates). Both read the working `Scenario` and return an
+grid. Phase 2 ships two: `LivingExpensesExploreForm` (the discretionary spending, a grid of expenses by
+age band) and `EconomicAssumptionsExploreForm` (the headline rates). Both read the working `Scenario` and
+return an
 updated one from `apply`, touching only their curated fields and leaving the rest of the inputs intact --
 the full editors remain the way to reach everything else.
 """
@@ -62,28 +63,36 @@ def _band_labels( spans : list ) -> list:
 
 
 class LivingExpensesExploreForm( forms.Form ):
-    """The Living Expenses section view: the curated discretionary expenses at the selected age band,
-    one editable value each. The band (an index into the shared `expense_spans` timeline) targets which
-    band the rows show and write; `apply` updates only those bands' amounts, preserving the other bands
-    and every non-curated expense."""
+    """The Living Expenses section view: the curated discretionary expenses across every age band at once,
+    one editable value per expense per band. Bands are the columns of a small grid (rows are the curated
+    expenses), so switching focus never loses an unsaved edit the way a band selector would. `apply`
+    writes every band's amount back, preserving each expense's other (uncurated) structure and every
+    non-curated expense."""
 
-    def __init__( self, data = None, *, scenario = None, band = 0 ):
+    def __init__( self, data = None, *, scenario = None ):
         super().__init__( data )
-        self._plans = scenario.plans if scenario is not None else Plans()
-        spans       = self._plans.expense_spans or [ None ]
-        self._band  = max( 0, min( band, len( spans ) - 1 ) )
-        by_handle   = { expense.handle : expense for expense in self._plans.recurring_expenses }
-        self._rows  = list()
+        self._plans  = scenario.plans if scenario is not None else Plans()
+        self._bands  = _band_labels( self._plans.expense_spans or [ None ] )
+        by_handle    = { expense.handle : expense for expense in self._plans.recurring_expenses }
+        self._rows   = list()
         for handle, label in _CURATED_EXPENSES:
             expense = by_handle.get( handle )
             if expense is None:                        # a complete plan carries them, but stay defensive
                 continue
-            field         = forms.DecimalField( required = False, min_value = 0, label = label )
-            field.initial = self._amount( expense, self._band )
-            field.widget.attrs[ 'class' ] = 'form-control form-control-sm'
-            self.fields[ handle ] = field
-            self._rows.append( { 'label' : label, 'field' : self[ handle ],
+            cells = list()
+            for band in range( len( self._bands ) ):
+                name          = self._field_name( handle, band )
+                field         = forms.DecimalField( required = False, min_value = 0, label = label )
+                field.initial = self._amount( expense, band )
+                field.widget.attrs[ 'class' ] = 'form-control form-control-sm'
+                self.fields[ name ] = field
+                cells.append( self[ name ] )
+            self._rows.append( { 'label' : label, 'cells' : cells,
                                  'cadence' : _cadence_hint( expense.interval ) } )
+
+    @staticmethod
+    def _field_name( handle : str, band : int ) -> str:
+        return f'{handle}__{band}'
 
     @staticmethod
     def _amount( expense, band : int ):
@@ -93,32 +102,29 @@ class LivingExpensesExploreForm( forms.Form ):
         return amounts[ -1 ] if amounts else None
 
     @property
-    def band( self ) -> int:
-        return self._band
-
-    @property
     def rows( self ) -> list:
         return self._rows
 
     @property
     def bands( self ) -> list:
-        """The band options for the selector -- each an index and its age-range label."""
-        return [ { 'index' : index, 'label' : label }
-                 for index, label in enumerate( _band_labels( self._plans.expense_spans or [ None ] ) ) ]
+        """The column headers -- one age-range label per band."""
+        return self._bands
 
     def apply( self, scenario ):
         cleaned = self.cleaned_data
         updated = list()
         for expense in self._plans.recurring_expenses:
-            value = cleaned.get( expense.handle )
-            if ( expense.handle in self.fields ) and ( value is not None ):
-                amounts = list( expense.amounts )
-                while len( amounts ) <= self._band:    # pad a short list up to the edited band
-                    amounts.append( amounts[ -1 ] if amounts else Decimal( '0' ) )
-                amounts[ self._band ] = value
-                updated.append( replace( expense, amounts = amounts ) )
-            else:
+            if expense.handle not in { handle for handle, _label in _CURATED_EXPENSES }:
                 updated.append( expense )
+                continue
+            amounts = list( expense.amounts )
+            while len( amounts ) < len( self._bands ):  # pad a short list up to every shown band
+                amounts.append( amounts[ -1 ] if amounts else Decimal( '0' ) )
+            for band in range( len( self._bands ) ):
+                value = cleaned.get( self._field_name( expense.handle, band ) )
+                if value is not None:
+                    amounts[ band ] = value
+            updated.append( replace( expense, amounts = amounts ) )
         return replace( scenario, plans = replace( self._plans, recurring_expenses = updated ) )
 
 
