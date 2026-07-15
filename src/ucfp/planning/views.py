@@ -215,8 +215,12 @@ class ExploreView( InputGatedMixin, View ):
             runs = list( transient_runs( organization ) )
         selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
         working_inputs = load_scenario( working )
-        forms    = { 'living_form' : LivingExpensesExploreForm( scenario = working_inputs ),
-                     'econ_form'    : EconomicAssumptionsExploreForm( scenario = working_inputs ) }
+        state    = request.session_state
+        forms    = {
+            'living_form' : LivingExpensesExploreForm(
+                scenario = working_inputs, selected = state.explore_curated_expenses ),
+            'econ_form'   : EconomicAssumptionsExploreForm(
+                scenario = working_inputs, selected = state.explore_curated_rates ) }
         # Drift is measured against the saved source scenario -- exactly what an "update" would overwrite.
         drift    = value_changes( load_scenario( source ), working_inputs )
         return render(
@@ -305,6 +309,25 @@ class ExploreAssumptionsAutosaveView( _ExploreSectionAutosaveView ):
     """`.../explore/<scenario>/assumptions/` -- self-save the Economic dials into the working scenario."""
 
     form_class = EconomicAssumptionsExploreForm
+
+
+class ExploreCurationView( InputGatedMixin, View ):
+    """`.../explore/<scenario>/curate/` -- persist which inputs a section keeps visible when collapsed
+    (the curated subset). Visual only -- saved silently to the session when the user closes the picker,
+    keyed by section. Unknown sections are ignored."""
+
+    _SESSION_FIELD = {
+        'expenses' : 'explore_curated_expenses',
+        'rates'    : 'explore_curated_rates',
+    }
+
+    def post( self, request, scenario ):
+        field = self._SESSION_FIELD.get( request.POST.get( 'section' ) )
+        if field is not None:
+            keys = [ key for key in ( request.POST.get( 'keys' ) or '' ).split( ',' ) if key ]
+            setattr( request.session_state, field, keys )
+            request.session_state.to_session( request )
+        return antinode.response()
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

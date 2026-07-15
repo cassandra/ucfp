@@ -61,6 +61,12 @@ class SessionState:
     # it rather than the most-recent one. A stale value (scenario deleted) simply does not preselect.
     current_scenario_uuid : Optional[ str ] = None
 
+    # Which inputs each Explore section keeps visible when collapsed (the curated subset) -- a per-section
+    # list of handles. A visual convenience only; None means "not yet curated", so the section falls back
+    # to its built-in default selection.
+    explore_curated_expenses : Optional[ list ] = None
+    explore_curated_rates : Optional[ list ] = None
+
     # The user's BooksTable column lens (a results-view preference): the ordered visible columns,
     # carried across runs and adapted to each run's books on read. The definition owns its own
     # session storage form (see BooksTableDefinition.to_storage / from_storage).
@@ -81,6 +87,8 @@ class SessionState:
         request.session[ 'current_plans_uuid' ] = self.current_plans_uuid
         request.session[ 'current_assumptions_uuid' ] = self.current_assumptions_uuid
         request.session[ 'current_scenario_uuid' ] = self.current_scenario_uuid
+        request.session[ 'explore_curated_expenses' ] = self.explore_curated_expenses
+        request.session[ 'explore_curated_rates' ] = self.explore_curated_rates
         request.session[ 'books_table_definition' ] = (
             None if self.books_table_definition is None else self.books_table_definition.to_storage() )
         request.session[ 'forecast_start_from' ] = self.forecast_start_from
@@ -98,6 +106,8 @@ class SessionState:
             current_plans_uuid = request.session.get( 'current_plans_uuid' ),
             current_assumptions_uuid = request.session.get( 'current_assumptions_uuid' ),
             current_scenario_uuid = request.session.get( 'current_scenario_uuid' ),
+            explore_curated_expenses = request.session.get( 'explore_curated_expenses' ),
+            explore_curated_rates = request.session.get( 'explore_curated_rates' ),
             books_table_definition = BooksTableDefinition.from_storage(
                 request.session.get( 'books_table_definition' ) ),
             forecast_start_from = request.session.get( 'forecast_start_from' ),

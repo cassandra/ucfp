@@ -1,13 +1,15 @@
 {% extends "pages/app_base.html" %}
-{% load common_tags %}
+{% load common_tags icons %}
 
 {% comment %}
 The Explore workspace (#87 Phase 2), for the scenario named by `source`. Top: two input columns
-(Plans | Assumptions), each a per-section curated view over the working copy. Then the Scenario controls
-(update `source` or save a new scenario, with a drill-down of the drift), then the Re-run controls
-(re-run the tweaks, the transient-run strip, keep a run's output), then the selected run's results table
-via the shared run_books_table partial. Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`,
-`transient_runs`, `selected`, `stopped_early`, and the `books_table` context.
+(Plans | Assumptions), each an auto-saving section holding all of its inputs, with a "Choose inputs"
+gear that reveals every input plus a checkbox to curate which stay visible when collapsed (saved to the
+session per section on close -- see the curate script below). Then the Scenario controls (update `source`
+or save a new scenario, with a drill-down of the drift), the Re-run controls (re-project, the transient-run
+strip, keep a run's output), and the selected run's results table via the shared run_books_table partial.
+Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_runs`, `selected`,
+`stopped_early`, and the `books_table` context.
 {% endcomment %}
 
 {% block app_content %}
@@ -29,13 +31,18 @@ via the shared run_books_table partial. Reads `source`, `living_form`/`econ_form
 <!-- TOP: two input columns, each an independent auto-saving section form. Editing a dial persists it to
      the working scenario immediately (js-autosave, silent); Re-run (below) re-projects the saved edits. -->
 <div class="row">
-  <!-- Plans column: Living Expenses section, auto-saving -->
+  <!-- Plans column: Living Expenses -- all expenses; the curated subset shows when collapsed, the gear
+       reveals every input with a checkbox to choose which stay. -->
   <div class="col-md-6 mb-3">
-    <div class="card h-100">
+    <div class="card h-100 curate-section" id="plans-section"
+         data-curate-save="{% url 'explore_curate' scenario=source.uuid %}" data-curate-key="expenses">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between mb-2">
           <h2 class="h6 mb-0">Plans</h2>
-          <a href="#" class="small text-muted" title="Full editor arrives in a later phase">Full plan editor &rarr;</a>
+          <button type="button" class="btn btn-link btn-sm p-0 curate-toggle" data-curate-toggle="plans-section">
+            <span class="curate-open">{% icon 'gear' size='sm' %} Choose inputs</span>
+            <span class="curate-close d-none">{% icon 'check' size='sm' %} Done</span>
+          </button>
         </div>
         <form method="post" action="{% url 'explore_save_plans' scenario=source.uuid %}"
               class="{{ AppConst.AUTOSAVE_CLASS }} border rounded p-2">
@@ -54,8 +61,10 @@ via the shared run_books_table partial. Reads `source`, `living_form`/`econ_form
               </thead>
               <tbody>
                 {% for row in living_form.rows %}
-                <tr>
-                  <td class="align-middle">{{ row.label }}
+                <tr class="curate-row{% if not row.selected %} d-none{% endif %}" data-key="{{ row.handle }}">
+                  <td class="align-middle">
+                    <input type="checkbox" class="curate-check d-none mr-1" data-key="{{ row.handle }}"
+                           {% if row.selected %}checked{% endif %}>{{ row.label }}
                     <span class="text-muted small">{{ row.cadence }}</span></td>
                   {% for cell in row.cells %}
                   <td class="text-right" style="width:7rem">
@@ -74,13 +83,18 @@ via the shared run_books_table partial. Reads `source`, `living_form`/`econ_form
     </div>
   </div>
 
-  <!-- Assumptions column: Economic Assumptions section, auto-saving -->
+  <!-- Assumptions column: Economic Assumptions -- all rates; same curate/collapse as Plans. -->
   <div class="col-md-6 mb-3">
-    <div class="card h-100">
+    <div class="card h-100 curate-section" id="assumptions-section"
+         data-curate-save="{% url 'explore_curate' scenario=source.uuid %}" data-curate-key="rates">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between mb-2">
           <h2 class="h6 mb-0">Assumptions</h2>
-          <a href="#" class="small text-muted" title="Full editor arrives in a later phase">Full assumptions editor &rarr;</a>
+          <button type="button" class="btn btn-link btn-sm p-0 curate-toggle"
+                  data-curate-toggle="assumptions-section">
+            <span class="curate-open">{% icon 'gear' size='sm' %} Choose inputs</span>
+            <span class="curate-close d-none">{% icon 'check' size='sm' %} Done</span>
+          </button>
         </div>
         <form method="post" action="{% url 'explore_save_assumptions' scenario=source.uuid %}"
               class="{{ AppConst.AUTOSAVE_CLASS }} border rounded p-2">
@@ -89,7 +103,10 @@ via the shared run_books_table partial. Reads `source`, `living_form`/`econ_form
             <span class="text-muted font-weight-normal">(% per year)</span></div>
           <div class="form-row">
             {% for row in econ_form.rows %}
-            <div class="form-group col-12 d-flex align-items-center mb-2">
+            <div class="form-group col-12 d-flex align-items-center mb-2 curate-row{% if not row.selected %} d-none{% endif %}"
+                 data-key="{{ row.handle }}">
+              <input type="checkbox" class="curate-check d-none mr-1" data-key="{{ row.handle }}"
+                     {% if row.selected %}checked{% endif %}>
               <label class="mb-0 mr-auto font-weight-normal">{{ row.label }}</label>
               <div style="width:6rem">{{ row.field }}</div>
             </div>
@@ -178,4 +195,35 @@ via the shared run_books_table partial. Reads `source`, `living_form`/`econ_form
     {% include "planning/pages/run_books_table.html" %}
   </div>
 </div>
+
+{% comment %}
+Curate a section's visible inputs. The gear reveals every input and its checkbox; "Done" collapses back
+to the checked ones and saves that selection to the session (per section, silent). Value editing is the
+separate js-autosave on each section form; this only toggles visibility. jQuery and antinode (AN) are
+loaded before content, and AN.post adds the CSRF token from the cookie.
+{% endcomment %}
+<script>
+ (function () {
+   $( 'body' ).on( 'click', '.curate-toggle', function () {
+     var section = $( '#' + $( this ).data( 'curate-toggle' ) );
+     var editing = section.toggleClass( 'curating' ).hasClass( 'curating' );
+     $( this ).find( '.curate-open' ).toggleClass( 'd-none', editing );
+     $( this ).find( '.curate-close' ).toggleClass( 'd-none', !editing );
+     section.find( '.curate-check' ).toggleClass( 'd-none', !editing );
+     if ( editing ) {
+       section.find( '.curate-row' ).removeClass( 'd-none' );        // reveal every input to choose from
+       return;
+     }
+     var keys = [];                                                  // collapsing: keep only the checked
+     section.find( '.curate-row' ).each( function () {
+       var on = $( this ).find( '.curate-check' ).prop( 'checked' );
+       $( this ).toggleClass( 'd-none', !on );
+       if ( on ) { keys.push( $( this ).data( 'key' ) ); }
+     } );
+     AN.post( section.data( 'curate-save' ),
+              { section: section.data( 'curate-key' ), keys: keys.join( ',' ) },
+              { suppressLoader: true } );
+   } );
+ })();
+</script>
 {% endblock %}

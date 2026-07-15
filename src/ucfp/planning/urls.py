@@ -15,6 +15,8 @@ urlpatterns = [
           name = 'explore_save_plans' ),
     path( 'financial-forecast/explore/<uuid:scenario>/assumptions/',
           views.ExploreAssumptionsAutosaveView.as_view(), name = 'explore_save_assumptions' ),
+    path( 'financial-forecast/explore/<uuid:scenario>/curate/', views.ExploreCurationView.as_view(),
+          name = 'explore_curate' ),
     path( 'financial-forecast/explore/<uuid:scenario>/update-scenario/', views.UpdateScenarioView.as_view(),
           name = 'explore_update_scenario' ),
     path( 'financial-forecast/explore/<uuid:scenario>/save-scenario/', views.SaveScenarioView.as_view(),

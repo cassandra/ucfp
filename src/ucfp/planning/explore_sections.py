@@ -61,10 +61,11 @@ class LivingExpensesExploreForm( forms.Form ):
     band's amount back, value-only -- each expense's cadence, durable-item structure, and the age spans
     stay as the full editor set them."""
 
-    def __init__( self, data = None, *, scenario = None ):
+    def __init__( self, data = None, *, scenario = None, selected = None ):
         super().__init__( data )
         self._plans = scenario.plans if scenario is not None else Plans()
         self._bands = _band_labels( self._plans.expense_spans or [ None ] )
+        chosen      = set( selected ) if selected is not None else set( _DEFAULT_EXPENSE_HANDLES )
         self._rows  = list()
         for expense in self._plans.recurring_expenses:
             cells = list()
@@ -77,7 +78,7 @@ class LivingExpensesExploreForm( forms.Form ):
                 cells.append( self[ name ] )
             self._rows.append( { 'handle' : expense.handle, 'label' : expense.name, 'cells' : cells,
                                  'cadence' : _cadence_hint( expense.interval ),
-                                 'default' : expense.handle in _DEFAULT_EXPENSE_HANDLES } )
+                                 'selected' : expense.handle in chosen } )
 
     @staticmethod
     def _field_name( handle : str, band : int ) -> str:
@@ -119,10 +120,11 @@ class EconomicAssumptionsExploreForm( forms.Form ):
     labels as the full external-factors editor). `apply` writes them back onto the assumptions'
     `EconomicParameters`, leaving the window and non-rate fields intact."""
 
-    def __init__( self, data = None, *, scenario = None ):
+    def __init__( self, data = None, *, scenario = None, selected = None ):
         super().__init__( data )
         self._assumptions = scenario.assumptions if scenario is not None else Assumptions()
         economics   = self._assumptions.economics
+        chosen      = set( selected ) if selected is not None else set( _DEFAULT_RATE_FIELDS )
         self._rows  = list()
         for factor in ECONOMIC_FACTORS:
             field         = forms.DecimalField( required = False, label = factor.label )
@@ -130,7 +132,7 @@ class EconomicAssumptionsExploreForm( forms.Form ):
             field.widget.attrs.update( { 'class' : 'form-control form-control-sm', 'step' : '0.1' } )
             self.fields[ factor.field ] = field
             self._rows.append( { 'handle' : factor.field, 'label' : factor.label, 'field' : self[ factor.field ],
-                                 'default' : factor.field in _DEFAULT_RATE_FIELDS } )
+                                 'selected' : factor.field in chosen } )
 
     @property
     def rows( self ) -> list:
