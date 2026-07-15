@@ -103,12 +103,16 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
             <span class="text-muted font-weight-normal">(% per year)</span></div>
           <div class="form-row">
             {% for row in econ_form.rows %}
-            <div class="form-group col-12 d-flex align-items-center mb-2 curate-row{% if not row.selected %} d-none{% endif %}"
+            <!-- The flex sits on an inner wrapper, not the curate-row: Bootstrap's .d-flex is !important
+                 and would override .d-none, so a row that also carried d-flex could never hide. -->
+            <div class="form-group col-12 mb-2 curate-row{% if not row.selected %} d-none{% endif %}"
                  data-key="{{ row.handle }}">
-              <input type="checkbox" class="curate-check d-none mr-1" data-key="{{ row.handle }}"
-                     {% if row.selected %}checked{% endif %}>
-              <label class="mb-0 mr-auto font-weight-normal">{{ row.label }}</label>
-              <div style="width:6rem">{{ row.field }}</div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" class="curate-check d-none mr-1" data-key="{{ row.handle }}"
+                       {% if row.selected %}checked{% endif %}>
+                <label class="mb-0 mr-auto font-weight-normal">{{ row.label }}</label>
+                <div style="width:6rem">{{ row.field }}</div>
+              </div>
             </div>
             {% endfor %}
           </div>
