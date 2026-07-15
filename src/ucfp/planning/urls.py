@@ -11,6 +11,8 @@ urlpatterns = [
     path( 'financial-forecast/', views.FinancialForecastView.as_view(), name = 'financial_forecast' ),
     path( 'financial-forecast/explore/enter/', views.EnterExploreView.as_view(), name = 'explore_enter' ),
     path( 'financial-forecast/explore/<uuid:scenario>/', views.ExploreView.as_view(), name = 'explore' ),
+    path( 'financial-forecast/explore/<uuid:scenario>/update-scenario/', views.UpdateScenarioView.as_view(),
+          name = 'explore_update_scenario' ),
     path( 'financial-forecast/explore/<uuid:scenario>/save-scenario/', views.SaveScenarioView.as_view(),
           name = 'explore_save_scenario' ),
     path( 'financial-forecast/explore/<uuid:scenario>/keep-run/', views.KeepRunView.as_view(),

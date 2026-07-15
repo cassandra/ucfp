@@ -92,6 +92,16 @@ def save_working_as_scenario( organization: Organization, label: str ) -> Scenar
     return create_scenario( organization, load_scenario( working ), label )
 
 
+def save_working_over_scenario( organization: Organization, record: ScenarioRecord ) -> ScenarioRecord:
+    """Overwrite an existing saved scenario `record` with the current working scenario's inputs (its name
+    is left untouched) -- the 'update this scenario' action, versus `save_working_as_scenario`'s 'save a
+    new one'. Raises if there is no working scenario."""
+    working = working_scenario( organization )
+    if working is None:
+        raise ValueError( 'No working scenario to save.' )
+    return save_scenario( record, load_scenario( working ) )
+
+
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new scenario, since many coexist per organization."""
     return f'Scenario {scenarios_for( organization ).count() + 1}'

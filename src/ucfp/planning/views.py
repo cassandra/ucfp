@@ -28,11 +28,12 @@ from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.scenarios.repository import (
-    load_scenario, save_working_as_scenario, scenarios_for, set_working_scenario, working_scenario )
+    load_scenario, save_working_as_scenario, save_working_over_scenario, scenarios_for,
+    set_working_scenario, working_scenario )
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
-from .explore import enter_explore, run_scenario, run_working_scenario, transient_runs
+from .explore import enter_explore, run_working_scenario, transient_runs
 from .explore_diff import curated_changes, describe_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
@@ -214,7 +215,8 @@ class ExploreView( InputGatedMixin, View ):
         working_inputs = load_scenario( working )
         forms    = { 'living_form' : LivingExpensesExploreForm( scenario = working_inputs ),
                      'econ_form'    : EconomicAssumptionsExploreForm( scenario = working_inputs ) }
-        drift    = curated_changes( run_scenario( runs[ -1 ] ), working_inputs )  # working vs the starting run
+        # Drift is measured against the saved source scenario -- exactly what an "update" would overwrite.
+        drift    = curated_changes( load_scenario( source ), working_inputs )
         return render(
             request, self._TEMPLATE, self._context( request, source, runs, selected, forms, drift ) )
 
@@ -249,7 +251,7 @@ class ExploreView( InputGatedMixin, View ):
             'selected'       : selected,
             'record'         : selected.run,  # the ProjectionRunRecord the books-table column ops key on
             'stopped_early'  : run.result.stopped_early,
-            'drift'          : drift,                          # curated changes vs the starting run
+            'drift'          : drift,                          # curated changes vs the source scenario
             'drift_summary'  : describe_changes( drift ),
             **forms,
         }
@@ -278,15 +280,32 @@ class ExploreView( InputGatedMixin, View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
+class UpdateScenarioView( InputGatedMixin, View ):
+    """`.../explore/<scenario>/update-scenario/` -- overwrite the explored saved scenario with the working
+    copy's current inputs. The common 'save my changes' action, distinct from minting a new scenario; its
+    name is unchanged and the exploration stays anchored to it."""
+
+    def post( self, request, scenario ):
+        organization = request.organization
+        source = get_object_or_404(
+            ScenarioRecord, uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
+        if working_scenario( organization ) is not None:
+            save_working_over_scenario( organization, source )
+        return redirect( 'explore', scenario = source.uuid )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
 class SaveScenarioView( InputGatedMixin, View ):
-    """`.../explore/<scenario>/save-scenario/` -- promote the working scenario to a saved, named scenario
-    (a copy; the working copy keeps churning as the user explores)."""
+    """`.../explore/<scenario>/save-scenario/` -- promote the working scenario to a new, separately named
+    saved scenario (a copy; the working copy keeps churning). The exploration re-anchors to the new
+    scenario, so a subsequent update targets it rather than the one it was forked from."""
 
     def post( self, request, scenario ):
         organization = request.organization
         if working_scenario( organization ) is not None:
             name = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
-            save_working_as_scenario( organization, name )
+            record = save_working_as_scenario( organization, name )
+            return redirect( 'explore', scenario = record.uuid )
         return redirect( 'explore', scenario = scenario )
 
 

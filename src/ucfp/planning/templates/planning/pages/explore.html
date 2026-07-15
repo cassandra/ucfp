@@ -2,11 +2,12 @@
 {% load common_tags %}
 
 {% comment %}
-The Explore workspace (#87 Phase 2). Top: two input columns (Plans | Assumptions), each a container of
-per-section views -- placeholders in this scaffolding sub-step (the Living Expenses and Economic
-Assumptions views land next). Middle: explore controls (re-run, the transient-run history). Bottom: the
-latest run's results table, reusing the shared run_books_table partial. Reads `transient_runs`, `latest`,
-`stopped_early`, and the `books_table` context.
+The Explore workspace (#87 Phase 2), for the scenario named by `source`. Top: two input columns
+(Plans | Assumptions), each a per-section curated view over the working copy. Then the Scenario controls
+(update `source` or save a new scenario, with a drill-down of the drift), then the Re-run controls
+(re-run the tweaks, the transient-run strip, keep a run's output), then the selected run's results table
+via the shared run_books_table partial. Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`,
+`transient_runs`, `selected`, `stopped_early`, and the `books_table` context.
 {% endcomment %}
 
 {% block app_content %}
@@ -25,8 +26,10 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
   </div>
 </div>
 
-<!-- The tweak-and-re-run form wraps both input columns and the controls. -->
-<form method="post" action="{% url 'explore' scenario=source.uuid %}">
+<!-- The tweak form wraps the input dials only. The Re-run button lives in the Re-run pane further down
+     and submits this form via its form= attribute, so the Scenario controls can sit between the inputs
+     and Re-run without nesting forms. -->
+<form id="explore-tweak" method="post" action="{% url 'explore' scenario=source.uuid %}">
   {% csrf_token %}
 
   <!-- TOP: two input columns, each a per-section view -->
@@ -100,45 +103,62 @@ latest run's results table, reusing the shared run_books_table partial. Reads `t
   </div>
 
   <div class="text-muted small mb-3">
-    These values are exploratory — Re-run projects them, but nothing here is saved until you explicitly
-    save a scenario below.</div>
-
-  <!-- MIDDLE: explore controls -->
-  <div class="card mb-3">
-    <div class="card-body py-2 d-flex flex-wrap align-items-center">
-      <button type="submit" class="btn btn-primary my-1 mr-3">&#8635; Re-run</button>
-      <div class="d-flex align-items-center flex-wrap my-1">
-        <span class="text-muted small mr-2">Recent runs</span>
-        {% for result in transient_runs %}
-        <a href="{% url 'explore' scenario=source.uuid %}?run={{ result.run.uuid }}"
-           class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}">
-          {{ result.label }}</a>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
+    These values are exploratory — Re-run projects them, but nothing here is saved until you save the
+    scenario below.</div>
 </form>
 
-<!-- SAVE bar: keep the run's output, or promote the working scenario to a saved one. Separate forms,
-     so outside the tweak form above. -->
+<!-- SCENARIO controls (first, right under the inputs): update the explored scenario or save a new one,
+     with a drill-down of exactly what an update would overwrite. Separate forms, so outside the tweak
+     form above. -->
 <div class="card mb-3">
-  <div class="card-body py-2 d-flex flex-wrap align-items-center">
-    <span class="text-muted small mr-3 my-1">
-      {% if drift %}{{ drift_summary }} since start{% else %}No changes since start{% endif %}</span>
+  <div class="card-body d-flex flex-wrap align-items-center">
+    <div class="mr-auto my-1">
+      {% if drift %}
+      <div class="small">Differs from <strong>{{ source.label }}</strong> — {{ drift_summary }}.</div>
+      <details class="mt-1">
+        <summary class="small text-primary" style="cursor:pointer">Show all changes</summary>
+        <ul class="small mb-0 mt-1">
+          {% for change in drift %}<li>{{ change }}</li>{% endfor %}
+        </ul>
+      </details>
+      {% else %}
+      <div class="small text-muted">No changes from <strong>{{ source.label }}</strong>.</div>
+      {% endif %}
+    </div>
 
-    <form method="post" action="{% url 'explore_save_scenario' scenario=source.uuid %}" class="form-inline my-1 mr-3">
+    <form method="post" action="{% url 'explore_update_scenario' scenario=source.uuid %}" class="my-1 mr-3">
       {% csrf_token %}
-      <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="Scenario name"
-             aria-label="Scenario name">
-      <button type="submit" class="btn btn-success btn-sm">Save as new scenario</button>
+      <button type="submit" class="btn btn-success btn-sm" {% if not drift %}disabled{% endif %}>
+        Update &ldquo;{{ source.label }}&rdquo;</button>
     </form>
 
-    <span class="text-muted mr-3 my-1">·</span>
+    <form method="post" action="{% url 'explore_save_scenario' scenario=source.uuid %}" class="form-inline my-1">
+      {% csrf_token %}
+      <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="New scenario name"
+             aria-label="New scenario name">
+      <button type="submit" class="btn btn-outline-secondary btn-sm">Save as new</button>
+    </form>
+  </div>
+</div>
 
+<!-- RE-RUN controls (second): re-run the tweaks (submits the tweak form above), browse recent transient
+     runs, or keep one's output. Keeping a run saves only that output; the scenario is unaffected. -->
+<div class="card mb-3">
+  <div class="card-body py-2 d-flex flex-wrap align-items-center">
+    <button type="submit" form="explore-tweak" class="btn btn-primary my-1 mr-3">&#8635; Re-run</button>
+    <div class="d-flex align-items-center flex-wrap my-1 mr-auto">
+      <span class="text-muted small mr-2">Recent runs</span>
+      {% for result in transient_runs %}
+      <a href="{% url 'explore' scenario=source.uuid %}?run={{ result.run.uuid }}"
+         class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}">
+        {{ result.label }}</a>
+      {% endfor %}
+    </div>
     <form method="post" action="{% url 'explore_keep_run' scenario=source.uuid %}" class="my-1">
       {% csrf_token %}
       <input type="hidden" name="run" value="{{ selected.run.uuid }}">
-      <button type="submit" class="btn btn-outline-success btn-sm">Keep this run</button>
+      <button type="submit" class="btn btn-outline-success btn-sm"
+              title="Save this run's output; the scenario is unaffected">Keep this run</button>
     </form>
   </div>
 </div>
