@@ -74,9 +74,10 @@ class ComingSoonView( TemplateView ):
         return context
 
 
-def _remember_frame( request, form ) -> None:
-    """Persist the form's chosen frame to the session, so it defaults on the next hub visit and Explore
-    (which reads the frame from the session) projects over the same window."""
+def _remember_selection( request, form, scenario_record ) -> None:
+    """Persist the chosen scenario and frame to the session, so the hub chooser defaults to them on the
+    next visit and Explore (which reads the frame from the session) projects over the same window."""
+    request.session_state.current_scenario_uuid   = str( scenario_record.uuid )
     request.session_state.forecast_start_from     = form.cleaned_data[ 'start_from' ]
     request.session_state.forecast_duration_years = form.cleaned_data[ 'duration_years' ]
     request.session_state.forecast_interval       = form.cleaned_data[ 'interval' ]
@@ -105,7 +106,7 @@ class FinancialForecastView( InputGatedMixin, View ):
         if profile_record is None:
             return render( request, _HUB_TEMPLATE, self._context(
                 request, form = form, error = 'Set up a profile before running a forecast.' ) )
-        _remember_frame( request, form )
+        _remember_selection( request, form, scenario_record )
         scenario = load_scenario( scenario_record )
         frame    = resolve_frame(
             effective_date = profile_record.effective_date,
@@ -132,7 +133,7 @@ class FinancialForecastView( InputGatedMixin, View ):
         return {
             'scenarios' : scenarios,
             'form'      : form or ForecastForm(
-                scenarios = scenarios, initial = self._frame_defaults( request ) ),
+                scenarios = scenarios, initial = self._selection_defaults( request ) ),
             'results'   : PlanningResultRecord.objects.select_related( 'run' ).filter(
                 organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
                 usage_role = UsageRole.SAVED ).order_by( '-created_datetime' ),
@@ -140,11 +141,12 @@ class FinancialForecastView( InputGatedMixin, View ):
         }
 
     @staticmethod
-    def _frame_defaults( request ) -> dict:
-        """The frame the user last ran, from the session; an unset field falls through to the form's own
-        default rather than being blanked."""
+    def _selection_defaults( request ) -> dict:
+        """The scenario and frame the user last chose, from the session; an unset (or stale) value falls
+        through to the form's own default -- the first scenario, the built-in frame -- rather than blanks."""
         state = request.session_state
         return { key: value for key, value in {
+            'scenario'       : state.current_scenario_uuid,
             'start_from'     : state.forecast_start_from,
             'duration_years' : state.forecast_duration_years,
             'interval'       : state.forecast_interval,
@@ -187,7 +189,7 @@ class EnterExploreView( InputGatedMixin, View ):
         scenario_record = get_object_or_404(
             ScenarioRecord, uuid = form.cleaned_data[ 'scenario' ], organization = organization,
             usage_role = UsageRole.SAVED )
-        _remember_frame( request, form )
+        _remember_selection( request, form, scenario_record )
         enter_explore( organization, load_scenario( scenario_record ) )
         return redirect( 'explore', scenario = scenario_record.uuid )
 

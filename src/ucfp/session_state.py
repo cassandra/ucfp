@@ -53,9 +53,13 @@ class SessionState:
 
     # The plans and assumptions the user is currently working on, by uuid -- the inputs pages select
     # them (many of each coexist per organization, unlike the single latest profile). These are the
-    # editing target for the flows and the default selection for a forecast run.
+    # editing target for the flows.
     current_plans_uuid : Optional[ str ] = None
     current_assumptions_uuid : Optional[ str ] = None
+
+    # The saved scenario the user last ran or explored, by uuid -- the hub's scenario chooser defaults to
+    # it rather than the most-recent one. A stale value (scenario deleted) simply does not preselect.
+    current_scenario_uuid : Optional[ str ] = None
 
     # The user's BooksTable column lens (a results-view preference): the ordered visible columns,
     # carried across runs and adapted to each run's books on read. The definition owns its own
@@ -76,6 +80,7 @@ class SessionState:
         request.session[ 'current_organization_uuid' ] = self.current_organization_uuid
         request.session[ 'current_plans_uuid' ] = self.current_plans_uuid
         request.session[ 'current_assumptions_uuid' ] = self.current_assumptions_uuid
+        request.session[ 'current_scenario_uuid' ] = self.current_scenario_uuid
         request.session[ 'books_table_definition' ] = (
             None if self.books_table_definition is None else self.books_table_definition.to_storage() )
         request.session[ 'forecast_start_from' ] = self.forecast_start_from
@@ -92,6 +97,7 @@ class SessionState:
             current_organization_uuid = request.session.get( 'current_organization_uuid' ),
             current_plans_uuid = request.session.get( 'current_plans_uuid' ),
             current_assumptions_uuid = request.session.get( 'current_assumptions_uuid' ),
+            current_scenario_uuid = request.session.get( 'current_scenario_uuid' ),
             books_table_definition = BooksTableDefinition.from_storage(
                 request.session.get( 'books_table_definition' ) ),
             forecast_start_from = request.session.get( 'forecast_start_from' ),
