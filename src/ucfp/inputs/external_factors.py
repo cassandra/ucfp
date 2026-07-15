@@ -77,6 +77,10 @@ _FACTOR_GROUPS = (
 # engine's rate factors (the non-rate `window` is excluded -- it stays at its default constant outlook).
 _ALL_FACTORS  = tuple( factor for _group, factors in _FACTOR_GROUPS for factor in factors )
 _FACTOR_NAMES = tuple( factor.field for factor in _ALL_FACTORS )
+
+# The economic factors in display order, shared with the Explore workspace's economic section so its
+# rate dials carry the same fields and labels as this editor (each `_Factor` exposes `field` and `label`).
+ECONOMIC_FACTORS = _ALL_FACTORS
 _ENGINE_RATE_FIELDS = frozenset(
     spec.name for spec in fields( EconomicParameters ) if isinstance( spec.default, Rate ) )
 assert set( _FACTOR_NAMES ) == _ENGINE_RATE_FIELDS, (

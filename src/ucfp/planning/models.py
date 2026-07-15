@@ -20,6 +20,7 @@ from common.models import JsonDocumentModel
 from organization.models import Organization
 
 from ucfp.accounts.models import BooksOfAccountRecord
+from ucfp.inputs.enums import UsageRole
 
 from .enums import PlanningFeature
 
@@ -42,6 +43,14 @@ class PlanningResultRecord( JsonDocumentModel ):
     feature = LabeledEnumField( PlanningFeature, verbose_name = 'Feature' )
     run = models.ForeignKey(
         ProjectionRunRecord, on_delete = models.CASCADE, related_name = 'results' )
+    # WORKING results are the exploration loop's transient runs (pruned by recency); SAVED are the ones
+    # the user kept. Defaults to SAVED so an unmarked run is retained.
+    usage_role = LabeledEnumField(
+        UsageRole, verbose_name = 'Usage Role', default = str( UsageRole.SAVED ) )
+
+    class Meta:
+        # Org-scoped list/prune by usage_role, most-recent first: organization must lead to be usable.
+        indexes = [ models.Index( fields = [ 'organization', 'usage_role', 'updated_datetime' ] ) ]
 
     def __str__( self ):
         return f'{self.feature.label}: {self.label} ({self.organization})'
