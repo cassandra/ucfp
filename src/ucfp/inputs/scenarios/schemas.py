@@ -1,10 +1,10 @@
 """The typed `Scenario` aggregate: a Plans set paired with an Assumptions set.
 
-A scenario is the user's durable unit of "what I plan" -- a named Plans + Assumptions combination, owned
-as one **copy** (not links to shared records), so editing it never disturbs anything else and it stays
-self-consistent. It is serialized whole into a `ScenarioRecord`'s `data` (see `scenarios.repository`).
-A run snapshots the same Plans + Assumptions pair, so a run's provenance against a scenario is derived
-by comparing these inputs -- the scenario is never referenced from a run, since it drifts over time.
+A scenario is the user's durable unit of "what I plan" -- a named Plans + Assumptions combination. This
+dataclass is the *resolved* form: a `ScenarioRecord` references a `PlansRecord` and an `AssumptionsRecord`
+(it does not copy them), and `scenarios.repository.load_scenario` materializes their current values into
+this pair. A run snapshots the resolved inputs, so a run's provenance against a scenario is derived by
+comparing these inputs -- the scenario is never referenced from a run, since its components can change.
 """
 from dataclasses import dataclass, field
 

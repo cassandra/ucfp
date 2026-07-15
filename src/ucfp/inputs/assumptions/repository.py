@@ -14,6 +14,7 @@ from common.dataclass_json import from_json_data, to_json_data
 
 from organization.models import Organization
 
+from ..enums import UsageRole
 from ..models import AssumptionsRecord
 from .defaults import default_assumptions
 from .schemas import Assumptions
@@ -28,9 +29,10 @@ def store_assumptions( record: AssumptionsRecord, assumptions: Assumptions ) -> 
 
 
 def assumptions_for( organization: Organization ) -> QuerySet:
-    """The organization's assumptions sets, most recent first."""
+    """The organization's SAVED assumptions sets, most recent first -- the WORKING copies backing an
+    Explore sandbox (see `scenarios.repository`) are excluded, as they are not user-facing sets."""
     return AssumptionsRecord.objects.filter(
-        organization = organization ).order_by( '-created_datetime' )
+        organization = organization, usage_role = str( UsageRole.SAVED ) ).order_by( '-created_datetime' )
 
 
 def latest_assumptions( organization: Organization ) -> Optional[ AssumptionsRecord ]:

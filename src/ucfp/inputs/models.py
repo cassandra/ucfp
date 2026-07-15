@@ -11,10 +11,12 @@ can change without a schema migration. A profile is not assumed singular: editin
 current month and retains prior months. `PlansRecord` and `AssumptionsRecord` are not versioned:
 many labelled sets coexist per organization, each selected and varied at planning time.
 """
+import uuid
+
 from django.db import models
 
 from common.labeled_enum import LabeledEnumField
-from common.models import JsonDocumentModel
+from common.models import JsonDocumentModel, TimestampedModel
 
 from organization.models import Organization
 
@@ -85,15 +87,26 @@ class AssumptionsRecord( InputRecord ):
         return f'{self.label} ({self.organization})'
 
 
-class ScenarioRecord( InputRecord ):
-    """A named, durable, mutable combination of Plans + Assumptions -- the user's unit of "what I plan",
-    re-run over time as facts change. It fully owns a copy of its inputs, embedded in `data` (the typed
-    `Scenario`; see `scenarios.repository`), independent of any run: it exists with no run, survives run
-    deletion, and a run's provenance is derived by comparing its embedded inputs to a scenario's current
-    ones -- never a stored link, since a scenario drifts."""
+class ScenarioRecord( TimestampedModel ):
+    """A named combination of a Plans and an Assumptions -- the user's unit of "what I plan", run and
+    explored over time. It *references* its components rather than copying them, so refining a shared Plans
+    or Assumptions is reflected in every scenario that uses it (a run still snapshots the resolved inputs,
+    so provenance is preserved). Deleting a component cascades to the scenarios that reference it.
 
+    Partitioned by `usage_role`: SAVED scenarios are the user's kept set; the single WORKING scenario per
+    organization is the exploration sandbox, referencing the WORKING component copies the user tweaks --
+    so Save/Update writes the sandbox back into the referenced SAVED components (propagation is intended)."""
+
+    uuid  = models.UUIDField( default = uuid.uuid4, unique = True, editable = False )
+    label = models.CharField( max_length = 255 )
     organization = models.ForeignKey(
         Organization, on_delete = models.CASCADE, related_name = 'scenarios' )
+    plans = models.ForeignKey(
+        PlansRecord, on_delete = models.CASCADE, related_name = 'scenarios' )
+    assumptions = models.ForeignKey(
+        AssumptionsRecord, on_delete = models.CASCADE, related_name = 'scenarios' )
+    usage_role = LabeledEnumField(
+        UsageRole, verbose_name = 'Usage Role', default = str( UsageRole.SAVED ) )
 
     class Meta:
         indexes = [ models.Index( fields = [ 'organization', 'usage_role', 'updated_datetime' ] ) ]
