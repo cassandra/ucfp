@@ -91,11 +91,14 @@ class ScenarioRecord( TimestampedModel ):
     """A named combination of a Plans and an Assumptions -- the user's unit of "what I plan", run and
     explored over time. It *references* its components rather than copying them, so refining a shared Plans
     or Assumptions is reflected in every scenario that uses it (a run still snapshots the resolved inputs,
-    so provenance is preserved). Deleting a component cascades to the scenarios that reference it.
+    so provenance is preserved). Deleting a component CASCADEs (not PROTECT) to the scenarios that
+    reference it: a scenario is meaningless without both parts, so a dangling one is not worth keeping.
 
     Partitioned by `usage_role`: SAVED scenarios are the user's kept set; the single WORKING scenario per
-    organization is the exploration sandbox, referencing the WORKING component copies the user tweaks --
-    so Save/Update writes the sandbox back into the referenced SAVED components (propagation is intended)."""
+    organization (enforced by a partial unique constraint) is the exploration sandbox, referencing WORKING
+    copies of a Plans and an Assumptions that the user tweaks -- Save/Update writes those copies back into
+    the referenced SAVED components (propagation is intended). The WORKING sandbox trio is one permanent
+    per-organization row, reused across sessions (overwritten in place), not torn down between explorations."""
 
     uuid  = models.UUIDField( default = uuid.uuid4, unique = True, editable = False )
     label = models.CharField( max_length = 255 )
@@ -110,6 +113,13 @@ class ScenarioRecord( TimestampedModel ):
 
     class Meta:
         indexes = [ models.Index( fields = [ 'organization', 'usage_role', 'updated_datetime' ] ) ]
+        # At most one WORKING (sandbox) scenario per organization. Matched against the stored enum value
+        # ('working'), since `LabeledEnumField` persists the name lowercased.
+        constraints = [
+            models.UniqueConstraint(
+                fields = [ 'organization' ], condition = models.Q( usage_role = 'working' ),
+                name = 'one_working_scenario_per_organization' ),
+        ]
 
     def __str__( self ):
         return f'{self.label} ({self.organization})'

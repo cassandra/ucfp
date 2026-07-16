@@ -55,7 +55,8 @@ class ScenarioRepositoryTest( TestCase ):
         plans       = save_plans(
             PlansRecord( organization = self.organization, label = 'Plans' ), _rich_plans() )
         assumptions = save_assumptions(
-            AssumptionsRecord( organization = self.organization, label = 'Assumptions' ), _rich_assumptions() )
+            AssumptionsRecord( organization = self.organization, label = 'Assumptions' ),
+            _rich_assumptions() )
         return plans, assumptions
 
     def _reload( self, record ):
@@ -107,8 +108,26 @@ class ScenarioRepositoryTest( TestCase ):
         self.assertEqual( variant.usage_role, UsageRole.SAVED )
         self.assertNotEqual( variant.plans_id, source.plans_id )       # the changed Plans is forked...
         self.assertEqual( variant.assumptions_id, source.assumptions_id )   # ...the unchanged one is shared
-        self.assertEqual( variant.plans.usage_role, UsageRole.SAVED )  # the fork is a user-facing set
+        forked_plans = PlansRecord.objects.get( pk = variant.plans_id )     # re-fetched, not the in-memory clone
+        self.assertEqual( forked_plans.usage_role, UsageRole.SAVED )    # the fork is a user-facing set
         self.assertEqual( load_scenario( self._reload( variant ) ).plans, Plans() )
+
+    def test_save_as_new_shares_both_components_when_nothing_changed( self ):
+        plans, assumptions = self._components()
+        source = create_scenario( self.organization, plans, assumptions, label = 'Base' )
+        set_working_scenario( self.organization, load_scenario( source ) )   # sandbox identical to source
+        variant = save_working_as_scenario( self.organization, 'Variant', source )
+        self.assertEqual( variant.plans_id, source.plans_id )          # nothing changed -> both shared,
+        self.assertEqual( variant.assumptions_id, source.assumptions_id )   # nothing forked
+
+    def test_save_as_new_forks_both_components_when_both_changed( self ):
+        plans, assumptions = self._components()
+        source = create_scenario( self.organization, plans, assumptions, label = 'Base' )
+        set_working_scenario( self.organization, load_scenario( source ) )
+        set_working_scenario( self.organization, Scenario() )          # both diverge to empty
+        variant = save_working_as_scenario( self.organization, 'Variant', source )
+        self.assertNotEqual( variant.plans_id, source.plans_id )       # both changed -> both forked
+        self.assertNotEqual( variant.assumptions_id, source.assumptions_id )
 
     def test_deleting_a_referenced_component_cascades_to_its_scenarios( self ):
         plans, assumptions = self._components()

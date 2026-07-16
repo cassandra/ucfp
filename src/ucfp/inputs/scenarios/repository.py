@@ -10,6 +10,7 @@ referenced SAVED components (propagation is intended), Save-as-new forks them in
 """
 from typing import Optional
 
+from django.db import transaction
 from django.db.models import QuerySet
 
 from organization.models import Organization
@@ -24,7 +25,9 @@ from .schemas import Scenario
 def load_scenario( record: ScenarioRecord ) -> Scenario:
     """The scenario's inputs, resolved from its referenced components -- the current values, so an edit to
     a shared Plans or Assumptions is visible through every scenario that references it."""
-    return Scenario( plans = load_plans( record.plans ), assumptions = load_assumptions( record.assumptions ) )
+    plans       = load_plans( record.plans )
+    assumptions = load_assumptions( record.assumptions )
+    return Scenario( plans = plans, assumptions = assumptions )
 
 
 def scenarios_for( organization: Organization ) -> QuerySet:
@@ -70,21 +73,22 @@ def set_working_scenario( organization: Organization, scenario: Scenario ) -> Sc
     """Seed the working sandbox with `scenario` -- overwriting the WORKING component copies in place, or
     minting the sandbox (a WORKING scenario referencing WORKING Plans + Assumptions) on first use. The
     explore-entry step that forks a chosen scenario's current inputs into the loop."""
-    working = working_scenario( organization )
-    if working is not None:
-        save_plans( working.plans, scenario.plans )
-        save_assumptions( working.assumptions, scenario.assumptions )
-        return working
-    working_plans = save_plans(
-        PlansRecord( organization = organization, usage_role = UsageRole.WORKING, label = 'Working plans' ),
-        scenario.plans )
-    working_assumptions = save_assumptions(
-        AssumptionsRecord(
-            organization = organization, usage_role = UsageRole.WORKING, label = 'Working assumptions' ),
-        scenario.assumptions )
-    return ScenarioRecord.objects.create(
-        organization = organization, label = 'Working scenario', usage_role = UsageRole.WORKING,
-        plans = working_plans, assumptions = working_assumptions )
+    with transaction.atomic():                             # mint or overwrite the sandbox trio as a unit
+        working = working_scenario( organization )
+        if working is not None:
+            save_plans( working.plans, scenario.plans )
+            save_assumptions( working.assumptions, scenario.assumptions )
+            return working
+        working_plans = save_plans(
+            PlansRecord( organization = organization, usage_role = UsageRole.WORKING, label = 'Working plans' ),
+            scenario.plans )
+        working_assumptions = save_assumptions(
+            AssumptionsRecord(
+                organization = organization, usage_role = UsageRole.WORKING, label = 'Working assumptions' ),
+            scenario.assumptions )
+        return ScenarioRecord.objects.create(
+            organization = organization, label = 'Working scenario', usage_role = UsageRole.WORKING,
+            plans = working_plans, assumptions = working_assumptions )
 
 
 def save_working_over_scenario( organization: Organization, record: ScenarioRecord ) -> ScenarioRecord:
@@ -94,8 +98,9 @@ def save_working_over_scenario( organization: Organization, record: ScenarioReco
     working = working_scenario( organization )
     if working is None:
         raise ValueError( 'No working scenario to save.' )
-    save_plans( record.plans, load_plans( working.plans ) )
-    save_assumptions( record.assumptions, load_assumptions( working.assumptions ) )
+    with transaction.atomic():                             # both components update together, or neither
+        save_plans( record.plans, load_plans( working.plans ) )
+        save_assumptions( record.assumptions, load_assumptions( working.assumptions ) )
     return record
 
 
@@ -108,12 +113,18 @@ def save_working_as_scenario(
     working = working_scenario( organization )
     if working is None:
         raise ValueError( 'No working scenario to save.' )
-    sandbox, origin = load_scenario( working ), load_scenario( source )
-    plans = ( rename_plans( clone_plans( working.plans ), f'{label} Plans' )
-              if sandbox.plans != origin.plans else source.plans )
-    assumptions = ( rename_assumptions( clone_assumptions( working.assumptions ), f'{label} Assumptions' )
-                    if sandbox.assumptions != origin.assumptions else source.assumptions )
-    return create_scenario( organization, plans, assumptions, label )
+    sandbox = load_scenario( working )
+    origin  = load_scenario( source )
+    with transaction.atomic():                             # the forks and the new scenario land together
+        if sandbox.plans != origin.plans:
+            plans = rename_plans( clone_plans( working.plans ), f'{label} Plans' )
+        else:
+            plans = source.plans                           # unchanged: share it, so edits still propagate
+        if sandbox.assumptions != origin.assumptions:
+            assumptions = rename_assumptions( clone_assumptions( working.assumptions ), f'{label} Assumptions' )
+        else:
+            assumptions = source.assumptions
+        return create_scenario( organization, plans, assumptions, label )
 
 
 def _default_label( organization: Organization ) -> str:

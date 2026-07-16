@@ -80,16 +80,24 @@ def transient_runs( organization: Organization ):
         usage_role = UsageRole.WORKING ).select_related( 'run' ).order_by( '-updated_datetime' )
 
 
-def _prune_transient_runs( organization: Organization ) -> None:
-    """Drop the oldest transient runs beyond the retention cap. Deleting each captured run's books
-    cascades to its `ProjectionRunRecord` and this `PlanningResultRecord`, so no orphans are left."""
-    for result in list( transient_runs( organization )[ _TRANSIENT_KEEP: ] ):
+def _delete_transient_runs( results ) -> None:
+    """Delete the given transient runs by dropping each captured run's books; the `ProjectionRunRecord`
+    and `PlanningResultRecord` cascade away, so no orphans remain. The single home for the how; callers
+    choose which runs."""
+    for result in list( results ):
         result.run.books.delete()
+        continue
+    return
+
+
+def _prune_transient_runs( organization: Organization ) -> None:
+    """Drop the oldest transient runs beyond the retention cap -- the recency-bounded recovery buffer."""
+    _delete_transient_runs( transient_runs( organization )[ _TRANSIENT_KEEP: ] )
+    return
 
 
 def _clear_transient_runs( organization: Organization ) -> None:
     """Drop every transient run -- the fresh-session reset when *starting* an exploration from the hub
-    (resuming keeps them). Deleting each captured run's books cascades to its `ProjectionRunRecord` and
-    `PlanningResultRecord`; kept SAVED runs are untouched, as they are not transient."""
-    for result in list( transient_runs( organization ) ):
-        result.run.books.delete()
+    (resuming keeps them). Kept SAVED runs are untouched, as they are not transient."""
+    _delete_transient_runs( transient_runs( organization ) )
+    return

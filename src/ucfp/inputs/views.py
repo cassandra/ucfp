@@ -63,7 +63,7 @@ class InputsHubView( View ):
     def get( self, request ):
         organization = request.organization
         # Prefetch each set's referencing scenarios so the delete confirmation can warn which scenarios a
-        # deletion would cascade away (a scenario references its Plans/Assumptions -- see scenarios.models).
+        # deletion would cascade away (a scenario references its Plans/Assumptions).
         return render( request, _HUB_TEMPLATE, {
             'profile'     : latest_profile( organization ),
             'plans'       : plans_for( organization ).prefetch_related( 'scenarios' ),
