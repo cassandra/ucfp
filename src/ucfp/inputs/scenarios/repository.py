@@ -1,42 +1,37 @@
-"""The seam between a `ScenarioRecord` and its typed `Scenario`, plus minting, listing, and the single
-working copy.
+"""The seam between a `ScenarioRecord` (a reference to a Plans + an Assumptions) and its resolved typed
+`Scenario`, plus minting, listing, and the single working sandbox.
 
-A scenario is the durable, mutable unit the user keeps and re-runs over time; it fully owns a copy of
-its inputs, embedded in the record's `data`, independent of any run. All reads and writes go through
-here, so no caller handles the raw JSON. Records are partitioned by `usage_role`: the `SAVED` scenarios
-are the user's kept set; one `WORKING` scenario per organization is the exploration tweak target,
-overwritten wholesale on each fresh entry into the explore loop.
+A scenario is the durable unit the user keeps and re-runs over time. It does not copy its inputs: it
+*references* a `PlansRecord` and an `AssumptionsRecord`, so refining a shared component is reflected in
+every scenario that uses it. Records are partitioned by `usage_role`: SAVED scenarios are the user's kept
+set; the single WORKING scenario per organization is the exploration sandbox, referencing WORKING copies
+of a Plans and an Assumptions that the user tweaks freely -- Save writes those copies back into the
+referenced SAVED components (propagation is intended), Save-as-new forks them into new SAVED components.
 """
 from typing import Optional
 
+from django.db import transaction
 from django.db.models import QuerySet
-
-from common.dataclass_json import from_json_data, to_json_data
 
 from organization.models import Organization
 
+from ..assumptions.repository import clone_assumptions, load_assumptions, rename_assumptions, save_assumptions
 from ..enums import UsageRole
-from ..models import ScenarioRecord
+from ..models import AssumptionsRecord, PlansRecord, ScenarioRecord
+from ..plans.repository import clone_plans, load_plans, rename_plans, save_plans
 from .schemas import Scenario
 
 
 def load_scenario( record: ScenarioRecord ) -> Scenario:
-    return from_json_data( Scenario, record.data )
-
-
-def store_scenario( record: ScenarioRecord, scenario: Scenario ) -> None:
-    record.data = to_json_data( scenario )
-
-
-def save_scenario( record: ScenarioRecord, scenario: Scenario ) -> ScenarioRecord:
-    """Persist `scenario` into `record` -- a specific scenario, overwriting its prior contents."""
-    store_scenario( record, scenario )
-    record.save()
-    return record
+    """The scenario's inputs, resolved from its referenced components -- the current values, so an edit to
+    a shared Plans or Assumptions is visible through every scenario that references it."""
+    plans       = load_plans( record.plans )
+    assumptions = load_assumptions( record.assumptions )
+    return Scenario( plans = plans, assumptions = assumptions )
 
 
 def scenarios_for( organization: Organization ) -> QuerySet:
-    """The organization's saved scenarios, most recent first. The working copy is excluded -- it is not
+    """The organization's saved scenarios, most recent first. The working sandbox is excluded -- it is not
     a user-facing scenario."""
     return ScenarioRecord.objects.filter(
         organization = organization, usage_role = UsageRole.SAVED ).order_by( '-updated_datetime' )
@@ -47,59 +42,89 @@ def latest_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]:
     return scenarios_for( organization ).first()
 
 
-def create_scenario( organization: Organization, scenario: Optional[ Scenario ] = None,
+def create_scenario( organization: Organization, plans: PlansRecord, assumptions: AssumptionsRecord,
                      label: Optional[ str ] = None ) -> ScenarioRecord:
-    """Mint a new saved scenario for `organization` -- empty inputs and a distinguishable label by
-    default. The single place that decides a new scenario's initial content and name."""
-    record = ScenarioRecord(
-        organization = organization, usage_role = UsageRole.SAVED,
-        label = label or _default_label( organization ) )
-    return save_scenario( record, scenario or Scenario() )
+    """Mint a saved scenario referencing the given Plans and Assumptions records -- the single place that
+    decides a new scenario's default name."""
+    return ScenarioRecord.objects.create(
+        organization = organization, label = label or _default_label( organization ),
+        plans = plans, assumptions = assumptions, usage_role = UsageRole.SAVED )
 
 
 def rename_scenario( record: ScenarioRecord, label: str ) -> ScenarioRecord:
-    """Rename a scenario, leaving its inputs untouched."""
+    """Rename a scenario, leaving its component references untouched."""
     record.label = label
     record.save()
     return record
 
 
 def delete_scenario( record: ScenarioRecord ) -> None:
-    """Delete a scenario. Runs snapshot their inputs, so nothing downstream depends on it."""
+    """Delete a scenario -- only the pairing; its Plans and Assumptions live on for other scenarios."""
     record.delete()
 
 
 def working_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]:
-    """The organization's single working scenario (the exploration tweak target), or None if none yet."""
+    """The organization's single working scenario (the exploration sandbox), or None if none yet."""
     return ScenarioRecord.objects.filter(
         organization = organization, usage_role = UsageRole.WORKING ).order_by( '-updated_datetime' ).first()
 
 
 def set_working_scenario( organization: Organization, scenario: Scenario ) -> ScenarioRecord:
-    """Seed the single working scenario with `scenario`, creating it on first use or overwriting it
-    wholesale -- the explore-entry step that forks a chosen scenario (or fresh inputs) into the loop."""
-    record = working_scenario( organization ) or ScenarioRecord(
-        organization = organization, usage_role = UsageRole.WORKING, label = 'Working scenario' )
-    return save_scenario( record, scenario )
-
-
-def save_working_as_scenario( organization: Organization, label: str ) -> ScenarioRecord:
-    """Promote the current working scenario's inputs into a new, independent saved scenario named
-    `label` (a copy -- the working copy keeps churning). Raises if there is no working scenario."""
-    working = working_scenario( organization )
-    if working is None:
-        raise ValueError( 'No working scenario to save.' )
-    return create_scenario( organization, load_scenario( working ), label )
+    """Seed the working sandbox with `scenario` -- overwriting the WORKING component copies in place, or
+    minting the sandbox (a WORKING scenario referencing WORKING Plans + Assumptions) on first use. The
+    explore-entry step that forks a chosen scenario's current inputs into the loop."""
+    with transaction.atomic():                             # mint or overwrite the sandbox trio as a unit
+        working = working_scenario( organization )
+        if working is not None:
+            save_plans( working.plans, scenario.plans )
+            save_assumptions( working.assumptions, scenario.assumptions )
+            return working
+        working_plans = save_plans(
+            PlansRecord( organization = organization, usage_role = UsageRole.WORKING, label = 'Working plans' ),
+            scenario.plans )
+        working_assumptions = save_assumptions(
+            AssumptionsRecord(
+                organization = organization, usage_role = UsageRole.WORKING, label = 'Working assumptions' ),
+            scenario.assumptions )
+        return ScenarioRecord.objects.create(
+            organization = organization, label = 'Working scenario', usage_role = UsageRole.WORKING,
+            plans = working_plans, assumptions = working_assumptions )
 
 
 def save_working_over_scenario( organization: Organization, record: ScenarioRecord ) -> ScenarioRecord:
-    """Overwrite an existing saved scenario `record` with the current working scenario's inputs (its name
-    is left untouched) -- the 'update this scenario' action, versus `save_working_as_scenario`'s 'save a
-    new one'. Raises if there is no working scenario."""
+    """Write the sandbox's values into `record`'s referenced Plans and Assumptions -- the 'update this
+    scenario' action. Because those components are shared, this propagates to every scenario referencing
+    them, which is the intent. Raises if there is no working scenario."""
     working = working_scenario( organization )
     if working is None:
         raise ValueError( 'No working scenario to save.' )
-    return save_scenario( record, load_scenario( working ) )
+    with transaction.atomic():                             # both components update together, or neither
+        save_plans( record.plans, load_plans( working.plans ) )
+        save_assumptions( record.assumptions, load_assumptions( working.assumptions ) )
+    return record
+
+
+def save_working_as_scenario(
+        organization: Organization, label: str, source: ScenarioRecord ) -> ScenarioRecord:
+    """Fork the sandbox into a new saved scenario named `label`, forking **only the component(s) the user
+    changed** relative to `source`: a diverged component is copied into a new SAVED set (named after the
+    scenario), an unchanged one is shared with `source` so edits to it still propagate to both. Raises if
+    there is no working scenario."""
+    working = working_scenario( organization )
+    if working is None:
+        raise ValueError( 'No working scenario to save.' )
+    sandbox = load_scenario( working )
+    origin  = load_scenario( source )
+    with transaction.atomic():                             # the forks and the new scenario land together
+        if sandbox.plans != origin.plans:
+            plans = rename_plans( clone_plans( working.plans ), f'{label} Plans' )
+        else:
+            plans = source.plans                           # unchanged: share it, so edits still propagate
+        if sandbox.assumptions != origin.assumptions:
+            assumptions = rename_assumptions( clone_assumptions( working.assumptions ), f'{label} Assumptions' )
+        else:
+            assumptions = source.assumptions
+        return create_scenario( organization, plans, assumptions, label )
 
 
 def _default_label( organization: Organization ) -> str:

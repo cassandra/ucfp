@@ -14,6 +14,7 @@ from common.dataclass_json import from_json_data, to_json_data
 
 from organization.models import Organization
 
+from ..enums import UsageRole
 from ..models import PlansRecord
 from .schemas import Plans
 
@@ -27,9 +28,10 @@ def store_plans( record: PlansRecord, plans: Plans ) -> None:
 
 
 def plans_for( organization: Organization ) -> QuerySet:
-    """The organization's plans, most recent first."""
+    """The organization's SAVED plans, most recent first -- the WORKING copies backing an Explore sandbox
+    (see `scenarios.repository`) are excluded, as they are not user-facing sets."""
     return PlansRecord.objects.filter(
-        organization = organization ).order_by( '-created_datetime' )
+        organization = organization, usage_role = str( UsageRole.SAVED ) ).order_by( '-created_datetime' )
 
 
 def latest_plans( organization: Organization ) -> Optional[ PlansRecord ]:

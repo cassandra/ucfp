@@ -235,9 +235,11 @@ class ExploreView( InputGatedMixin, View ):
 
     @staticmethod
     def _source( organization, scenario ) -> ScenarioRecord:
-        """The saved scenario this exploration is anchored to (the URL's uuid), 404 if not the org's."""
+        """The saved scenario this exploration is anchored to (the URL's uuid), 404 if not the org's.
+        Its Plans/Assumptions are joined in, since the workspace shows their labels."""
         return get_object_or_404(
-            ScenarioRecord, uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
+            ScenarioRecord.objects.select_related( 'plans', 'assumptions' ),
+            uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
 
     def _context( self, request, source, runs, selected, forms, drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
@@ -353,11 +355,13 @@ class SaveScenarioView( InputGatedMixin, View ):
 
     def post( self, request, scenario ):
         organization = request.organization
+        source = get_object_or_404(
+            ScenarioRecord, uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
         if working_scenario( organization ) is not None:
             name = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
-            record = save_working_as_scenario( organization, name )
+            record = save_working_as_scenario( organization, name, source )
             return redirect( 'explore', scenario = record.uuid )
-        return redirect( 'explore', scenario = scenario )
+        return redirect( 'explore', scenario = source.uuid )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

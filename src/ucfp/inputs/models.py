@@ -11,10 +11,12 @@ can change without a schema migration. A profile is not assumed singular: editin
 current month and retains prior months. `PlansRecord` and `AssumptionsRecord` are not versioned:
 many labelled sets coexist per organization, each selected and varied at planning time.
 """
+import uuid
+
 from django.db import models
 
 from common.labeled_enum import LabeledEnumField
-from common.models import JsonDocumentModel
+from common.models import JsonDocumentModel, TimestampedModel
 
 from organization.models import Organization
 
@@ -85,18 +87,39 @@ class AssumptionsRecord( InputRecord ):
         return f'{self.label} ({self.organization})'
 
 
-class ScenarioRecord( InputRecord ):
-    """A named, durable, mutable combination of Plans + Assumptions -- the user's unit of "what I plan",
-    re-run over time as facts change. It fully owns a copy of its inputs, embedded in `data` (the typed
-    `Scenario`; see `scenarios.repository`), independent of any run: it exists with no run, survives run
-    deletion, and a run's provenance is derived by comparing its embedded inputs to a scenario's current
-    ones -- never a stored link, since a scenario drifts."""
+class ScenarioRecord( TimestampedModel ):
+    """A named combination of a Plans and an Assumptions -- the user's unit of "what I plan", run and
+    explored over time. It *references* its components rather than copying them, so refining a shared Plans
+    or Assumptions is reflected in every scenario that uses it (a run still snapshots the resolved inputs,
+    so provenance is preserved). Deleting a component CASCADEs (not PROTECT) to the scenarios that
+    reference it: a scenario is meaningless without both parts, so a dangling one is not worth keeping.
 
+    Partitioned by `usage_role`: SAVED scenarios are the user's kept set; the single WORKING scenario per
+    organization (enforced by a partial unique constraint) is the exploration sandbox, referencing WORKING
+    copies of a Plans and an Assumptions that the user tweaks -- Save/Update writes those copies back into
+    the referenced SAVED components (propagation is intended). The WORKING sandbox trio is one permanent
+    per-organization row, reused across sessions (overwritten in place), not torn down between explorations."""
+
+    uuid  = models.UUIDField( default = uuid.uuid4, unique = True, editable = False )
+    label = models.CharField( max_length = 255 )
     organization = models.ForeignKey(
         Organization, on_delete = models.CASCADE, related_name = 'scenarios' )
+    plans = models.ForeignKey(
+        PlansRecord, on_delete = models.CASCADE, related_name = 'scenarios' )
+    assumptions = models.ForeignKey(
+        AssumptionsRecord, on_delete = models.CASCADE, related_name = 'scenarios' )
+    usage_role = LabeledEnumField(
+        UsageRole, verbose_name = 'Usage Role', default = str( UsageRole.SAVED ) )
 
     class Meta:
         indexes = [ models.Index( fields = [ 'organization', 'usage_role', 'updated_datetime' ] ) ]
+        # At most one WORKING (sandbox) scenario per organization. Matched against the stored enum value
+        # ('working'), since `LabeledEnumField` persists the name lowercased.
+        constraints = [
+            models.UniqueConstraint(
+                fields = [ 'organization' ], condition = models.Q( usage_role = 'working' ),
+                name = 'one_working_scenario_per_organization' ),
+        ]
 
     def __str__( self ):
         return f'{self.label} ({self.organization})'

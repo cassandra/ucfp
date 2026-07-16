@@ -38,7 +38,8 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
          data-curate-save="{% url 'explore_curate' scenario=source.uuid %}" data-curate-key="expenses">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between mb-2">
-          <h2 class="h6 mb-0">Plans</h2>
+          <h2 class="h6 mb-0">Plans
+            <span class="text-muted font-weight-normal small">— {{ source.plans.label }}</span></h2>
           <button type="button" class="btn btn-link btn-sm p-0 curate-toggle" data-curate-toggle="plans-section">
             <span class="curate-open">{% icon 'gear' size='sm' %} Choose inputs</span>
             <span class="curate-close d-none">{% icon 'check' size='sm' %} Done</span>
@@ -89,7 +90,8 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
          data-curate-save="{% url 'explore_curate' scenario=source.uuid %}" data-curate-key="rates">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between mb-2">
-          <h2 class="h6 mb-0">Assumptions</h2>
+          <h2 class="h6 mb-0">Assumptions
+            <span class="text-muted font-weight-normal small">— {{ source.assumptions.label }}</span></h2>
           <button type="button" class="btn btn-link btn-sm p-0 curate-toggle"
                   data-curate-toggle="assumptions-section">
             <span class="curate-open">{% icon 'gear' size='sm' %} Choose inputs</span>

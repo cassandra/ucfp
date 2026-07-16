@@ -28,9 +28,12 @@ _TRANSIENT_KEEP = 25
 
 
 def enter_explore( organization: Organization, scenario: Scenario ) -> None:
-    """Fork `scenario` into the single working scenario -- the explore-entry seed, overwriting whatever
-    working copy was there."""
+    """Start a fresh exploration of `scenario`: fork it into the single working scenario (overwriting
+    whatever was there) and clear the prior session's transient runs, so the workspace re-projects the
+    entered scenario's *current* state rather than showing a stale run from an earlier session. The
+    initial run is produced lazily by the workspace view once no transient runs remain."""
     set_working_scenario( organization, scenario )
+    _clear_transient_runs( organization )
 
 
 def run_working_scenario(
@@ -77,8 +80,24 @@ def transient_runs( organization: Organization ):
         usage_role = UsageRole.WORKING ).select_related( 'run' ).order_by( '-updated_datetime' )
 
 
-def _prune_transient_runs( organization: Organization ) -> None:
-    """Drop the oldest transient runs beyond the retention cap. Deleting each captured run's books
-    cascades to its `ProjectionRunRecord` and this `PlanningResultRecord`, so no orphans are left."""
-    for result in list( transient_runs( organization )[ _TRANSIENT_KEEP: ] ):
+def _delete_transient_runs( results ) -> None:
+    """Delete the given transient runs by dropping each captured run's books; the `ProjectionRunRecord`
+    and `PlanningResultRecord` cascade away, so no orphans remain. The single home for the how; callers
+    choose which runs."""
+    for result in list( results ):
         result.run.books.delete()
+        continue
+    return
+
+
+def _prune_transient_runs( organization: Organization ) -> None:
+    """Drop the oldest transient runs beyond the retention cap -- the recency-bounded recovery buffer."""
+    _delete_transient_runs( transient_runs( organization )[ _TRANSIENT_KEEP: ] )
+    return
+
+
+def _clear_transient_runs( organization: Organization ) -> None:
+    """Drop every transient run -- the fresh-session reset when *starting* an exploration from the hub
+    (resuming keeps them). Kept SAVED runs are untouched, as they are not transient."""
+    _delete_transient_runs( transient_runs( organization ) )
+    return
