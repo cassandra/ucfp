@@ -97,13 +97,18 @@ class ScenarioRepositoryTest( TestCase ):
         save_working_over_scenario( self.organization, scenario )
         self.assertEqual( load_scenario( self._reload( scenario ) ), Scenario() )   # written into the refs
 
-    def test_save_as_new_forks_independent_saved_components( self ):
-        set_working_scenario( self.organization, _rich_scenario() )
-        saved = save_working_as_scenario( self.organization, 'Kept' )
-        self.assertEqual( saved.usage_role, UsageRole.SAVED )
-        self.assertEqual( saved.plans.usage_role, UsageRole.SAVED )    # the fork is a user-facing set
-        set_working_scenario( self.organization, Scenario() )          # churning the sandbox afterward...
-        self.assertEqual( load_scenario( self._reload( saved ) ), _rich_scenario() )   # ...leaves it intact
+    def test_save_as_new_forks_only_the_changed_component( self ):
+        plans, assumptions = self._components()
+        source = create_scenario( self.organization, plans, assumptions, label = 'Base' )
+        set_working_scenario( self.organization, load_scenario( source ) )   # enter the sandbox...
+        set_working_scenario(                                               # ...then change only the Plans
+            self.organization, Scenario( plans = Plans(), assumptions = _rich_assumptions() ) )
+        variant = save_working_as_scenario( self.organization, 'Variant', source )
+        self.assertEqual( variant.usage_role, UsageRole.SAVED )
+        self.assertNotEqual( variant.plans_id, source.plans_id )       # the changed Plans is forked...
+        self.assertEqual( variant.assumptions_id, source.assumptions_id )   # ...the unchanged one is shared
+        self.assertEqual( variant.plans.usage_role, UsageRole.SAVED )  # the fork is a user-facing set
+        self.assertEqual( load_scenario( self._reload( variant ) ).plans, Plans() )
 
     def test_deleting_a_referenced_component_cascades_to_its_scenarios( self ):
         plans, assumptions = self._components()

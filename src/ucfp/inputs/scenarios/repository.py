@@ -99,16 +99,21 @@ def save_working_over_scenario( organization: Organization, record: ScenarioReco
     return record
 
 
-def save_working_as_scenario( organization: Organization, label: str ) -> ScenarioRecord:
-    """Fork the sandbox into a new saved scenario named `label`: copy its WORKING Plans and Assumptions
-    into new SAVED components (named after the scenario) and reference them. Raises if there is no working
-    scenario. (Phase 1 forks both components; forking only the changed one follows in Phase 2.)"""
+def save_working_as_scenario(
+        organization: Organization, label: str, source: ScenarioRecord ) -> ScenarioRecord:
+    """Fork the sandbox into a new saved scenario named `label`, forking **only the component(s) the user
+    changed** relative to `source`: a diverged component is copied into a new SAVED set (named after the
+    scenario), an unchanged one is shared with `source` so edits to it still propagate to both. Raises if
+    there is no working scenario."""
     working = working_scenario( organization )
     if working is None:
         raise ValueError( 'No working scenario to save.' )
-    saved_plans       = rename_plans( clone_plans( working.plans ), f'{label} Plans' )
-    saved_assumptions = rename_assumptions( clone_assumptions( working.assumptions ), f'{label} Assumptions' )
-    return create_scenario( organization, saved_plans, saved_assumptions, label )
+    sandbox, origin = load_scenario( working ), load_scenario( source )
+    plans = ( rename_plans( clone_plans( working.plans ), f'{label} Plans' )
+              if sandbox.plans != origin.plans else source.plans )
+    assumptions = ( rename_assumptions( clone_assumptions( working.assumptions ), f'{label} Assumptions' )
+                    if sandbox.assumptions != origin.assumptions else source.assumptions )
+    return create_scenario( organization, plans, assumptions, label )
 
 
 def _default_label( organization: Organization ) -> str:
