@@ -28,9 +28,12 @@ _TRANSIENT_KEEP = 25
 
 
 def enter_explore( organization: Organization, scenario: Scenario ) -> None:
-    """Fork `scenario` into the single working scenario -- the explore-entry seed, overwriting whatever
-    working copy was there."""
+    """Start a fresh exploration of `scenario`: fork it into the single working scenario (overwriting
+    whatever was there) and clear the prior session's transient runs, so the workspace re-projects the
+    entered scenario's *current* state rather than showing a stale run from an earlier session. The
+    initial run is produced lazily by the workspace view once no transient runs remain."""
     set_working_scenario( organization, scenario )
+    _clear_transient_runs( organization )
 
 
 def run_working_scenario(
@@ -81,4 +84,12 @@ def _prune_transient_runs( organization: Organization ) -> None:
     """Drop the oldest transient runs beyond the retention cap. Deleting each captured run's books
     cascades to its `ProjectionRunRecord` and this `PlanningResultRecord`, so no orphans are left."""
     for result in list( transient_runs( organization )[ _TRANSIENT_KEEP: ] ):
+        result.run.books.delete()
+
+
+def _clear_transient_runs( organization: Organization ) -> None:
+    """Drop every transient run -- the fresh-session reset when *starting* an exploration from the hub
+    (resuming keeps them). Deleting each captured run's books cascades to its `ProjectionRunRecord` and
+    `PlanningResultRecord`; kept SAVED runs are untouched, as they are not transient."""
+    for result in list( transient_runs( organization ) ):
         result.run.books.delete()
