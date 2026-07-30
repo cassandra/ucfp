@@ -41,9 +41,17 @@
         </li>
       </ul>
       <ul class="navbar-nav">
+        {% comment %}
+        Profile and Scenarios stay lit while editing their flows: the flow editors all resolve to
+        `interview_section`, so the view supplies `active_nav` rather than keying on the url name.
+        {% endcomment %}
         <li class="nav-item">
-          <a class="nav-link {% if request.path|slice:':8' == '/inputs/' %}active{% endif %}"
-             href="{% url 'inputs_home' %}">Inputs</a>
+          <a class="nav-link {% if active_nav == 'profile' %}active{% endif %}"
+             href="{% url 'flow_profile' %}">Profile</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if active_nav == 'scenarios' %}active{% endif %}"
+             href="{% url 'scenarios_home' %}">Scenarios</a>
         </li>
         <li class="nav-item">
           <a class="nav-link {% if url_name == 'organization_settings' %}active{% endif %}"

@@ -1,40 +1,42 @@
 {% extends "pages/app_base.html" %}
 
+{% comment %}
+The Scenarios landing (#91). A placeholder: it lists the organization's saved scenarios and provides the
+Plans and Assumptions management (a scenario combines those). Scenario building and per-scenario actions
+arrive with #90; this page is feature-agnostic -- it links to no single feature.
+{% endcomment %}
+
 {% block app_content %}
-<h1 class="mb-2">Your inputs</h1>
+<h1 class="mb-2">Scenarios</h1>
 <p class="text-muted">
-  Every forecast is built from three things: your <strong>Profile</strong> (your situation today),
-  your <strong>Plans</strong> (the future you're contemplating), and your <strong>Assumptions</strong>
-  (the economy and tax outlook you're projecting under).
+  A <strong>Scenario</strong> pairs a set of <strong>Plans</strong> (the future you're contemplating)
+  with a set of <strong>Assumptions</strong> (the economy and tax outlook to project under). Build and
+  manage scenarios here.
 </p>
 
-{% if not profile %}
-<div class="text-center my-5">
-  <a href="{% url 'interview_home' %}" class="btn btn-primary btn-lg">Set up with the guided interview</a>
-  <div class="small text-muted mt-2">The interview builds your Profile, a first Plan, and your Assumptions in one pass.</div>
-</div>
-{% else %}
-
-<div class="row">
-  <div class="col-lg-4 mb-4">
-    <div class="card h-100">
-      <div class="card-header bg-white d-flex align-items-center">
-        <strong>Profile</strong>
-        <span class="ml-auto small text-muted">your situation</span>
-      </div>
-      <div class="card-body">
-        <div class="font-weight-bold">{{ profile.label }}</div>
-        <div class="small text-muted">as of {{ profile.effective_date|date:"F Y" }}</div>
-        <p class="small text-muted mt-2 mb-0">One current Profile, updated as life changes; prior
-          months are kept for history.</p>
-      </div>
-      <div class="card-footer bg-white border-0">
-        <a href="{% url 'flow_profile' %}" class="btn btn-outline-primary btn-sm btn-block">Edit Profile</a>
-      </div>
-    </div>
+<div class="card mb-4">
+  <div class="card-header bg-white d-flex align-items-center">
+    <strong>Your scenarios</strong>
+    <span class="ml-auto small text-muted">a plan + an outlook, named</span>
   </div>
+  <ul class="list-group list-group-flush">
+    {% for scenario in scenarios %}
+    <li class="list-group-item d-flex align-items-center py-2">
+      <span class="font-weight-bold">{{ scenario.label }}</span>
+      <span class="ml-auto small text-muted">{{ scenario.plans.label }} + {{ scenario.assumptions.label }}</span>
+    </li>
+    {% empty %}
+    <li class="list-group-item text-muted small">No scenarios yet.</li>
+    {% endfor %}
+  </ul>
+  <div class="card-footer bg-white border-0 small text-muted">
+    Building and managing scenarios arrives soon.
+  </div>
+</div>
 
-  <div class="col-lg-4 mb-4">
+<h2 class="h5 mb-3">Components</h2>
+<div class="row">
+  <div class="col-lg-6 mb-4">
     <div class="card h-100">
       <div class="card-header bg-white d-flex align-items-center">
         <strong>Plans</strong>
@@ -77,7 +79,7 @@
     </div>
   </div>
 
-  <div class="col-lg-4 mb-4">
+  <div class="col-lg-6 mb-4">
     <div class="card h-100">
       <div class="card-header bg-white d-flex align-items-center">
         <strong>Assumptions</strong>
@@ -120,9 +122,4 @@
     </div>
   </div>
 </div>
-
-<p class="text-muted small">
-  Prefer a guided pass over everything? <a href="{% url 'interview_home' %}">Run the interview</a>.
-</p>
-{% endif %}
 {% endblock %}

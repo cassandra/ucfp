@@ -1,4 +1,4 @@
-"""`/inputs/` -- the inputs area: the hub, the three editable flows, and the guided interview.
+"""`/inputs/` -- the inputs area: the Scenarios landing, the three editable flows, and the guided interview.
 
 All served by this app's own views. The interview's section routes keep stable `name`s
 (`interview_section`, `residence`, ...) so existing `{% url %}` references resolve unchanged; the
@@ -9,7 +9,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path( '', views.InputsHubView.as_view(), name = 'inputs_home' ),
+    path( 'scenarios/', views.ScenariosHomeView.as_view(), name = 'scenarios_home' ),
 
     # The three input flows, each editable on its own (the guided interview chains them).
     path( 'profile/', views.FlowEntryView.as_view( flow = 'profile' ), name = 'flow_profile' ),
