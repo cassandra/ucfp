@@ -52,25 +52,7 @@ from .properties import (
 from .property_expenses import PropertyExpensesForm
 from .recurring_expenses import RecurringExpensesForm
 
-_HUB_TEMPLATE = 'inputs/hub.html'
 _SCENARIOS_TEMPLATE = 'inputs/scenarios_home.html'
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class InputsHubView( View ):
-    """`/inputs/` -- the inputs landing. Shows the current Profile (the latest month) and the Plans
-    and Assumptions sets, so the split is visible here (at selection/management time) even though the
-    interview authors all three in one pass. The interview completes here."""
-
-    def get( self, request ):
-        organization = request.organization
-        # Prefetch each set's referencing scenarios so the delete confirmation can warn which scenarios a
-        # deletion would cascade away (a scenario references its Plans/Assumptions).
-        return render( request, _HUB_TEMPLATE, {
-            'profile'     : latest_profile( organization ),
-            'plans'       : plans_for( organization ).prefetch_related( 'scenarios' ),
-            'assumptions' : assumptions_for( organization ).prefetch_related( 'scenarios' ),
-        } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -238,7 +220,7 @@ class PlansDeleteView( View ):
         record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
         _forget_if_current( request, 'current_plans_uuid', record )
         delete_plans( record )
-        return redirect( 'inputs_home' )
+        return redirect( 'scenarios_home' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -252,7 +234,7 @@ class AssumptionsDeleteView( View ):
             AssumptionsRecord, uuid = uuid, organization = request.organization )
         _forget_if_current( request, 'current_assumptions_uuid', record )
         delete_assumptions( record )
-        return redirect( 'inputs_home' )
+        return redirect( 'scenarios_home' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -321,7 +303,7 @@ class InterviewView( View ):
         if following is None and request.session.get( 'interview_guided' ):
             following = next_flow_entry( flow )         # guided: advance into the next flow
         if following is None:
-            return antinode.redirect_response( reverse( 'inputs_home' ) )
+            return antinode.redirect_response( reverse( 'scenarios_home' ) )
         self._seed_and_acknowledge( request, following )       # the advanced-to section is now presented
         next_sections = self._flow_sections( profile, flow_of( following ) )
         next_profile, next_other = self._load( request, following )

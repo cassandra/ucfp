@@ -42,8 +42,12 @@
       </ul>
       <ul class="navbar-nav">
         <li class="nav-item">
-          <a class="nav-link {% if request.path|slice:':8' == '/inputs/' %}active{% endif %}"
-             href="{% url 'inputs_home' %}">Inputs</a>
+          <a class="nav-link {% if url_name == 'flow_profile' %}active{% endif %}"
+             href="{% url 'flow_profile' %}">Profile</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'scenarios_home' %}active{% endif %}"
+             href="{% url 'scenarios_home' %}">Scenarios</a>
         </li>
         <li class="nav-item">
           <a class="nav-link {% if url_name == 'organization_settings' %}active{% endif %}"

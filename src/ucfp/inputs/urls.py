@@ -9,7 +9,6 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path( '', views.InputsHubView.as_view(), name = 'inputs_home' ),
     path( 'scenarios/', views.ScenariosHomeView.as_view(), name = 'scenarios_home' ),
 
     # The three input flows, each editable on its own (the guided interview chains them).
