@@ -376,6 +376,7 @@ class InterviewView( View ):
             # The current flow's record only -- the stepper shows one flow's steps, so its seen marks are
             # flow-scoped (the run gate, spanning all three records, is the cross-flow view).
             'acknowledged_sections': self._flow_record( request, flow ).acknowledged_section_keys,
+            'flow'                 : flow,
             'flow_title'           : flow_title( flow ),
             'flow_heading'         : self._flow_heading( request, flow ),
             'form'                 : form,

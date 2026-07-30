@@ -2,9 +2,15 @@
 
 {% block app_content %}
 <h1 class="mb-1">{{ flow_heading }}</h1>
+{% comment %}
+Profile is a standalone top-level page (the heading names it), so it needs no breadcrumb. Plans and
+Assumptions are scenario components reached from the Scenarios page, so they breadcrumb back to it.
+{% endcomment %}
+{% if flow != 'profile' %}
 <p class="text-muted mb-4">
   <a href="{% url 'scenarios_home' %}">Scenarios</a> &rsaquo; {{ flow_title }}
 </p>
+{% endif %}
 <div class="row">
   <div class="col-md-3 mb-4">
     {% include "inputs/interview/stepper.html" %}
