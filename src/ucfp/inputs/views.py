@@ -1,10 +1,10 @@
-"""The inputs area -- the hub plus the guided interview and its per-flow editors.
+"""The inputs area -- the Scenarios landing plus the guided interview and its per-flow editors.
 
-The hub (`/inputs/`) lists the current Profile and the organization's Plans and Assumptions sets,
-each linking to its flow. The interview is one section machinery run as three flows (Profile, Plans,
-Assumptions): `FlowEntryView` enters a single flow, `InterviewHomeView` runs all three guided, and
-`InterviewView` drives one section at a time over the typed aggregates. The remaining views are the
-sub-editors each section pane drills into.
+The Scenarios landing (`/inputs/scenarios/`) lists the organization's scenarios and hosts the Plans and
+Assumptions management; the Profile is edited on its own flow (reached from the nav). The interview is
+one section machinery run as three flows (Profile, Plans, Assumptions): `FlowEntryView` enters a single
+flow, `InterviewHomeView` runs all three guided, and `InterviewView` drives one section at a time over
+the typed aggregates. The remaining views are the sub-editors each section pane drills into.
 """
 from dataclasses import replace
 
@@ -60,15 +60,17 @@ class ScenariosHomeView( View ):
     """`/inputs/scenarios/` -- the Scenarios landing: the organization's saved scenarios, plus the Plans
     and Assumptions management (a scenario is a combination of those, so its components are managed here).
     A placeholder for now -- scenario building and per-scenario management arrive later; this only lists
-    them and keeps the component editors reachable. Feature-agnostic: it does not link to any one feature
-    (the main nav reaches those)."""
+    them and keeps the component editors reachable. Perspective-agnostic: it links to the component
+    editors but to no planning perspective (forecast, retirement, ...) -- the main nav reaches those."""
 
     def get( self, request ):
         organization = request.organization
-        # Prefetch each set's referencing scenarios so the delete confirmation can warn which scenarios a
-        # deletion would cascade away (a scenario references its Plans/Assumptions).
+        # `select_related` the components (the list shows each scenario's Plans/Assumptions labels), and
+        # prefetch each set's referencing scenarios so a delete confirmation can warn which scenarios it
+        # would cascade away (a scenario references its Plans/Assumptions).
         return render( request, _SCENARIOS_TEMPLATE, {
-            'scenarios'   : scenarios_for( organization ),
+            'active_nav'  : 'scenarios',
+            'scenarios'   : scenarios_for( organization ).select_related( 'plans', 'assumptions' ),
             'plans'       : plans_for( organization ).prefetch_related( 'scenarios' ),
             'assumptions' : assumptions_for( organization ).prefetch_related( 'scenarios' ),
         } )
@@ -77,8 +79,8 @@ class ScenariosHomeView( View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class InterviewHomeView( View ):
     """`/inputs/interview/` -- start the *guided* interview: run all three flows (Profile, Plans,
-    Assumptions) in sequence, ending on the inputs hub. The guided flag drives the flow chaining in
-    `InterviewView`."""
+    Assumptions) in sequence, ending on the Scenarios landing. The guided flag drives the flow chaining
+    in `InterviewView`."""
 
     def get( self, request ):
         request.session[ 'interview_guided' ] = True
@@ -88,8 +90,8 @@ class InterviewHomeView( View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class FlowEntryView( View ):
     """`/inputs/<flow>/` -- edit a single input flow (Profile, Plans, or Assumptions) on its own,
-    without guided chaining: it ends on the inputs hub at the flow's last section. `flow` is set per
-    route via `as_view`."""
+    without guided chaining: it ends on the Scenarios landing at the flow's last section. `flow` is set
+    per route via `as_view`."""
 
     flow = None
 
@@ -377,6 +379,10 @@ class InterviewView( View ):
             # flow-scoped (the run gate, spanning all three records, is the cross-flow view).
             'acknowledged_sections': self._flow_record( request, flow ).acknowledged_section_keys,
             'flow'                 : flow,
+            # Which top-level nav home this flow belongs under, so it stays lit while editing (the flow
+            # editors all resolve to `interview_section`, so nav-active can't key on the url name). Profile
+            # is its own home; Plans and Assumptions are scenario components, under Scenarios.
+            'active_nav'           : 'profile' if flow == 'profile' else 'scenarios',
             'flow_title'           : flow_title( flow ),
             'flow_heading'         : self._flow_heading( request, flow ),
             'form'                 : form,

@@ -1,4 +1,4 @@
-"""`/inputs/` -- the inputs area: the hub, the three editable flows, and the guided interview.
+"""`/inputs/` -- the inputs area: the Scenarios landing, the three editable flows, and the guided interview.
 
 All served by this app's own views. The interview's section routes keep stable `name`s
 (`interview_section`, `residence`, ...) so existing `{% url %}` references resolve unchanged; the
