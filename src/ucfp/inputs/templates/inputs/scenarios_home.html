@@ -1,0 +1,125 @@
+{% extends "pages/app_base.html" %}
+
+{% comment %}
+The Scenarios landing (#91). A placeholder: it lists the organization's saved scenarios and provides the
+Plans and Assumptions management (a scenario combines those). Scenario building and per-scenario actions
+arrive with #90; this page is feature-agnostic -- it links to no single feature.
+{% endcomment %}
+
+{% block app_content %}
+<h1 class="mb-2">Scenarios</h1>
+<p class="text-muted">
+  A <strong>Scenario</strong> pairs a set of <strong>Plans</strong> (the future you're contemplating)
+  with a set of <strong>Assumptions</strong> (the economy and tax outlook to project under). Build and
+  manage scenarios here.
+</p>
+
+<div class="card mb-4">
+  <div class="card-header bg-white d-flex align-items-center">
+    <strong>Your scenarios</strong>
+    <span class="ml-auto small text-muted">a plan + an outlook, named</span>
+  </div>
+  <ul class="list-group list-group-flush">
+    {% for scenario in scenarios %}
+    <li class="list-group-item d-flex align-items-center py-2">
+      <span class="font-weight-bold">{{ scenario.label }}</span>
+      <span class="ml-auto small text-muted">{{ scenario.plans.label }} + {{ scenario.assumptions.label }}</span>
+    </li>
+    {% empty %}
+    <li class="list-group-item text-muted small">No scenarios yet.</li>
+    {% endfor %}
+  </ul>
+  <div class="card-footer bg-white border-0 small text-muted">
+    Building and managing scenarios arrives soon.
+  </div>
+</div>
+
+<h2 class="h5 mb-3">Components</h2>
+<div class="row">
+  <div class="col-lg-6 mb-4">
+    <div class="card h-100">
+      <div class="card-header bg-white d-flex align-items-center">
+        <strong>Plans</strong>
+        <span class="ml-auto small text-muted">strategies to compare</span>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for plan in plans %}
+        <li class="list-group-item d-flex align-items-center py-2">
+          <form method="post" action="{% url 'plan_rename' plan.uuid %}"
+                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
+            {% csrf_token %}
+            <input type="text" name="label" value="{{ plan.label }}" aria-label="Plan name"
+                   class="form-control form-control-sm border-0 bg-transparent px-1">
+            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
+            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
+          </form>
+          <span class="d-flex align-items-center flex-shrink-0">
+            <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'plan_clone' plan.uuid %}" class="m-0 mr-3">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+            </form>
+            <form method="post" action="{% url 'plan_delete' plan.uuid %}" class="m-0"
+                  data-confirm="Delete &quot;{{ plan.label }}&quot;?{% if plan.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in plan.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
+            </form>
+          </span>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted small">No plans yet.</li>
+        {% endfor %}
+      </ul>
+      <div class="card-footer bg-white border-0">
+        <form method="post" action="{% url 'plan_new' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New plan</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6 mb-4">
+    <div class="card h-100">
+      <div class="card-header bg-white d-flex align-items-center">
+        <strong>Assumptions</strong>
+        <span class="ml-auto small text-muted">outlook to vary</span>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for item in assumptions %}
+        <li class="list-group-item d-flex align-items-center py-2">
+          <form method="post" action="{% url 'assumptions_rename' item.uuid %}"
+                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
+            {% csrf_token %}
+            <input type="text" name="label" value="{{ item.label }}" aria-label="Assumptions name"
+                   class="form-control form-control-sm border-0 bg-transparent px-1">
+            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
+            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
+          </form>
+          <span class="d-flex align-items-center flex-shrink-0">
+            <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'assumptions_clone' item.uuid %}" class="m-0 mr-3">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+            </form>
+            <form method="post" action="{% url 'assumptions_delete' item.uuid %}" class="m-0"
+                  data-confirm="Delete &quot;{{ item.label }}&quot;?{% if item.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in item.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
+            </form>
+          </span>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted small">No assumptions yet.</li>
+        {% endfor %}
+      </ul>
+      <div class="card-footer bg-white border-0">
+        <form method="post" action="{% url 'assumptions_new' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New assumptions</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

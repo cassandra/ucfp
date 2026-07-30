@@ -10,6 +10,7 @@ from . import views
 
 urlpatterns = [
     path( '', views.InputsHubView.as_view(), name = 'inputs_home' ),
+    path( 'scenarios/', views.ScenariosHomeView.as_view(), name = 'scenarios_home' ),
 
     # The three input flows, each editable on its own (the guided interview chains them).
     path( 'profile/', views.FlowEntryView.as_view( flow = 'profile' ), name = 'flow_profile' ),

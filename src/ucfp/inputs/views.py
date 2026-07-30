@@ -29,6 +29,7 @@ from ucfp.inputs.plans.repository import (
 from ucfp.inputs.assumptions.repository import (
     assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
     load_assumptions, rename_assumptions, save_assumptions )
+from ucfp.inputs.scenarios.repository import scenarios_for
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -52,6 +53,7 @@ from .property_expenses import PropertyExpensesForm
 from .recurring_expenses import RecurringExpensesForm
 
 _HUB_TEMPLATE = 'inputs/hub.html'
+_SCENARIOS_TEMPLATE = 'inputs/scenarios_home.html'
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -66,6 +68,25 @@ class InputsHubView( View ):
         # deletion would cascade away (a scenario references its Plans/Assumptions).
         return render( request, _HUB_TEMPLATE, {
             'profile'     : latest_profile( organization ),
+            'plans'       : plans_for( organization ).prefetch_related( 'scenarios' ),
+            'assumptions' : assumptions_for( organization ).prefetch_related( 'scenarios' ),
+        } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenariosHomeView( View ):
+    """`/inputs/scenarios/` -- the Scenarios landing: the organization's saved scenarios, plus the Plans
+    and Assumptions management (a scenario is a combination of those, so its components are managed here).
+    A placeholder for now -- scenario building and per-scenario management arrive later; this only lists
+    them and keeps the component editors reachable. Feature-agnostic: it does not link to any one feature
+    (the main nav reaches those)."""
+
+    def get( self, request ):
+        organization = request.organization
+        # Prefetch each set's referencing scenarios so the delete confirmation can warn which scenarios a
+        # deletion would cascade away (a scenario references its Plans/Assumptions).
+        return render( request, _SCENARIOS_TEMPLATE, {
+            'scenarios'   : scenarios_for( organization ),
             'plans'       : plans_for( organization ).prefetch_related( 'scenarios' ),
             'assumptions' : assumptions_for( organization ).prefetch_related( 'scenarios' ),
         } )
