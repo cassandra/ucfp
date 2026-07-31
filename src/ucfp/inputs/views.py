@@ -72,31 +72,61 @@ class ScenariosHomeView( View ):
     def get( self, request ):
         organization   = request.organization
         profile_record = completed_profile( organization )
-        # `select_related` the components (the list shows each scenario's Plans/Assumptions labels), and
-        # prefetch each set's referencing scenarios so a delete confirmation can warn which scenarios it
-        # would cascade away (a scenario references its Plans/Assumptions).
+        plans_ids       = { record.id for record in complete_plans( profile_record, organization ) } \
+            if profile_record else set()
+        assumptions_ids = { record.id for record in complete_assumptions( profile_record, organization ) } \
+            if profile_record else set()
+        # `select_related`/prefetch: the scenario rows show component labels, and each component's delete
+        # confirmation warns which scenarios it would cascade away (a scenario references its components).
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
             'profile_complete' : profile_record is not None,
-            'scenarios'        : self._scenario_rows( profile_record, organization ),
-            'plans'            : plans_for( organization ).prefetch_related( 'scenarios' ),
-            'assumptions'      : assumptions_for( organization ).prefetch_related( 'scenarios' ),
+            'scenarios'        : self._scenario_rows( organization, plans_ids, assumptions_ids ),
+            'plans'            : self._marked( plans_for( organization ).prefetch_related( 'scenarios' ),
+                                               plans_ids ),
+            'assumptions'      : self._marked(
+                assumptions_for( organization ).prefetch_related( 'scenarios' ), assumptions_ids ),
         } )
 
     @staticmethod
-    def _scenario_rows( profile_record, organization ):
+    def _marked( records, complete_ids ):
+        """Tag each component with `is_complete` (its flow fully walked), so the list can flag the ones
+        still needing setup -- an incomplete component is absent from scenario building until finished."""
+        tagged = list()
+        for record in records:
+            record.is_complete = record.id in complete_ids
+            tagged.append( record )
+        return tagged
+
+    @staticmethod
+    def _scenario_rows( organization, plans_ids, assumptions_ids ):
         """Each saved scenario with whether its build is complete -- both components' flows walked -- so an
         in-progress one (e.g. the freshly-created Default) can offer to resume its setup."""
-        if profile_record is None:
-            return list()
-        plans_ids       = { record.id for record in complete_plans( profile_record, organization ) }
-        assumptions_ids = { record.id for record in complete_assumptions( profile_record, organization ) }
         rows = list()
         for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' ):
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
             rows.append( { 'scenario': scenario, 'complete': complete } )
         return rows
+
+
+_RENAME_PANE = 'inputs/panes/inline_rename.html'
+
+
+def _rename_or_conflict( request, record, siblings, kind, aria, bold, rename ):
+    """Apply an inline rename unless the new name is already used by another of `siblings` (same type,
+    same organization). A blank name is ignored (non-blocking); a duplicate reverts the field and shows a
+    warning by re-rendering just that rename pane; otherwise the rename is saved silently."""
+    label = request.POST.get( 'label', '' ).strip()
+    if not label:
+        return antinode.response()
+    if siblings.filter( label__iexact = label ).exclude( pk = record.pk ).exists():
+        pane = render_to_string( _RENAME_PANE, {
+            'kind': kind, 'uuid': record.uuid, 'rename_url': request.path, 'label': record.label,
+            'aria': aria, 'bold': bold, 'warning': 'That name is already in use.' }, request = request )
+        return antinode.response( replace_map = { f'rename-{kind}-{record.uuid}': pane } )
+    rename( record, label )
+    return antinode.response()
 
 
 def _require_complete_profile( request ):
@@ -111,19 +141,28 @@ class ScenarioCombineForm( forms.Form ):
     organization's *complete* components (injected by the view); a pairing already covered by a scenario is
     rejected, since a scenario is exactly a distinct combination."""
 
-    name        = forms.CharField( label = 'Scenario name', max_length = 255, required = False )
+    name        = forms.CharField( label = 'Scenario name', max_length = 255 )
     plans       = forms.ChoiceField( label = 'Plans' )
     assumptions = forms.ChoiceField( label = 'Assumptions' )
 
-    def __init__( self, *args, plans = None, assumptions = None, taken = frozenset(), **kwargs ):
+    def __init__( self, *args, plans = None, assumptions = None, taken = frozenset(),
+                  taken_names = frozenset(), **kwargs ):
         super().__init__( *args, **kwargs )
-        self._taken = taken
+        self._taken       = taken
+        self._taken_names = taken_names
         self.fields[ 'plans' ].choices = [
             ( str( record.uuid ), record.label ) for record in ( plans or [] ) ]
         self.fields[ 'assumptions' ].choices = [
             ( str( record.uuid ), record.label ) for record in ( assumptions or [] ) ]
+        self.fields[ 'name' ].widget.attrs[ 'class' ] = 'form-control'
         for field in ( 'plans', 'assumptions' ):
             self.fields[ field ].widget.attrs[ 'class' ] = 'custom-select'
+
+    def clean_name( self ):
+        name = self.cleaned_data[ 'name' ].strip()
+        if name.lower() in self._taken_names:
+            raise forms.ValidationError( 'A scenario with that name already exists -- pick another.' )
+        return name
 
     def clean( self ):
         cleaned = super().clean()
@@ -168,10 +207,9 @@ class ScenarioNewView( View ):
             return render( request, self._FORM_TEMPLATE, { 'form': form } )
         by_uuid_plans       = { str( record.uuid ): record for record in plans }
         by_uuid_assumptions = { str( record.uuid ): record for record in assumptions }
-        name = ( form.cleaned_data[ 'name' ] or '' ).strip() or 'Future Scenario'
         create_scenario(
             organization, by_uuid_plans[ form.cleaned_data[ 'plans' ] ],
-            by_uuid_assumptions[ form.cleaned_data[ 'assumptions' ] ], name )
+            by_uuid_assumptions[ form.cleaned_data[ 'assumptions' ] ], form.cleaned_data[ 'name' ] )
         return redirect( 'scenarios_home' )
 
     @staticmethod
@@ -186,8 +224,10 @@ class ScenarioNewView( View ):
 
     @staticmethod
     def _form( organization, plans, assumptions, data = None ):
+        taken_names = { record.label.lower() for record in scenarios_for( organization ) }
         return ScenarioCombineForm(
-            data, plans = plans, assumptions = assumptions, taken = existing_pairings( organization ) )
+            data, plans = plans, assumptions = assumptions, taken = existing_pairings( organization ),
+            taken_names = taken_names )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -210,15 +250,15 @@ class ScenarioResumeView( View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ScenarioRenameView( View ):
     """`/inputs/scenarios/<uuid>/rename/` -- rename a scenario from the Scenarios page's inline editor.
-    Saves the new label in the background and replies silently; a blank name is ignored (non-blocking)."""
+    Saves silently; a blank name is ignored and a duplicate is rejected with a warning."""
 
     def post( self, request, uuid ):
+        organization = request.organization
         record = get_object_or_404(
-            ScenarioRecord, uuid = uuid, organization = request.organization, usage_role = UsageRole.SAVED )
-        label  = request.POST.get( 'label', '' ).strip()
-        if label:
-            rename_scenario( record, label )
-        return antinode.response()
+            ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
+        return _rename_or_conflict(
+            request, record, scenarios_for( organization ), 'scenario', 'Scenario name', True,
+            rename_scenario )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -319,29 +359,27 @@ class AssumptionsSelectView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class PlansRenameView( View ):
-    """`/inputs/plans/<uuid>/rename/` -- rename a Plans set from the hub's inline editor. Saves the new
-    label in the background and replies silently; a blank name is ignored (non-blocking)."""
+    """`/inputs/plans/<uuid>/rename/` -- rename a Plans set from the Scenarios page's inline editor. Saves
+    silently; a blank name is ignored and a duplicate is rejected with a warning (non-blocking)."""
 
     def post( self, request, uuid ):
-        record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
-        label  = request.POST.get( 'label', '' ).strip()
-        if label:
-            rename_plans( record, label )
-        return antinode.response()
+        organization = request.organization
+        record = get_object_or_404( PlansRecord, uuid = uuid, organization = organization )
+        return _rename_or_conflict(
+            request, record, plans_for( organization ), 'plan', 'Plan name', False, rename_plans )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class AssumptionsRenameView( View ):
-    """`/inputs/assumptions/<uuid>/rename/` -- rename an assumptions set from the hub's inline editor.
-    Saves the new label in the background and replies silently; a blank name is ignored."""
+    """`/inputs/assumptions/<uuid>/rename/` -- rename an assumptions set from the Scenarios page's inline
+    editor. Saves silently; a blank name is ignored and a duplicate is rejected with a warning."""
 
     def post( self, request, uuid ):
-        record = get_object_or_404(
-            AssumptionsRecord, uuid = uuid, organization = request.organization )
-        label  = request.POST.get( 'label', '' ).strip()
-        if label:
-            rename_assumptions( record, label )
-        return antinode.response()
+        organization = request.organization
+        record = get_object_or_404( AssumptionsRecord, uuid = uuid, organization = organization )
+        return _rename_or_conflict(
+            request, record, assumptions_for( organization ), 'assumptions', 'Assumptions name', False,
+            rename_assumptions )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

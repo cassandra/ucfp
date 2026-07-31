@@ -33,8 +33,8 @@ Scenarios page. The choosers list only complete components, so the combined scen
           </div>
           <div class="form-group">
             <label for="{{ form.name.id_for_label }}">Scenario name</label>
-            <input type="text" id="{{ form.name.id_for_label }}" name="name"
-                   value="{{ form.name.value|default:'' }}" class="form-control" placeholder="Future Scenario">
+            {{ form.name }}
+            {% for error in form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
           </div>
           <button type="submit" class="btn btn-primary">Create scenario</button>
         </form>

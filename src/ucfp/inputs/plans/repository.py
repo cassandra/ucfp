@@ -16,6 +16,7 @@ from organization.models import Organization
 
 from ..enums import UsageRole
 from ..models import PlansRecord
+from ..naming import numbered_label, unique_label
 from .schemas import Plans
 
 
@@ -71,14 +72,19 @@ def clone_plans( record: PlansRecord ) -> PlansRecord:
     for tweaking a variant without disturbing the original. The copy goes through the typed load/save
     seam, so it is fully independent of the source; it also inherits the source's acknowledged sections,
     since a copy of a reviewed set has itself been reviewed."""
-    clone = PlansRecord( organization = record.organization, label = f'{record.label} copy',
+    label = unique_label( f'{record.label} copy', _labels( record.organization ) )
+    clone = PlansRecord( organization = record.organization, label = label,
                          acknowledged_sections = list( record.acknowledged_sections ) )
     return save_plans( clone, load_plans( record ) )
 
 
+def _labels( organization: Organization ) -> list:
+    return [ record.label for record in plans_for( organization ) ]
+
+
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new set, since many coexist per organization."""
-    return f'Plans {plans_for( organization ).count() + 1}'
+    return numbered_label( 'Plans', _labels( organization ) )
 
 
 def _initial_plans() -> Plans:

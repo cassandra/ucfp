@@ -27,14 +27,8 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
   <ul class="list-group list-group-flush">
     {% for row in scenarios %}
     <li class="list-group-item d-flex align-items-center py-2">
-      <form method="post" action="{% url 'scenario_rename' row.scenario.uuid %}"
-            class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
-        {% csrf_token %}
-        <input type="text" name="label" value="{{ row.scenario.label }}" aria-label="Scenario name"
-               class="form-control form-control-sm font-weight-bold">
-        {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
-        <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
-      </form>
+      {% url 'scenario_rename' row.scenario.uuid as rename_url %}
+      {% include 'inputs/panes/inline_rename.html' with kind='scenario' uuid=row.scenario.uuid rename_url=rename_url label=row.scenario.label aria='Scenario name' bold=True %}
       <span class="d-flex align-items-center flex-shrink-0">
         <span class="small text-muted mr-3">
           {{ row.scenario.plans.label }} + {{ row.scenario.assumptions.label }}
@@ -73,20 +67,19 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
       <ul class="list-group list-group-flush">
         {% for plan in plans %}
         <li class="list-group-item d-flex align-items-center py-2">
-          <form method="post" action="{% url 'plan_rename' plan.uuid %}"
-                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
-            {% csrf_token %}
-            <input type="text" name="label" value="{{ plan.label }}" aria-label="Plan name"
-                   class="form-control form-control-sm">
-            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
-            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
-          </form>
+          {% url 'plan_rename' plan.uuid as rename_url %}
+          {% include 'inputs/panes/inline_rename.html' with kind='plan' uuid=plan.uuid rename_url=rename_url label=plan.label aria='Plan name' %}
           <span class="d-flex align-items-center flex-shrink-0">
+            {% if plan.is_complete %}
             <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
             <form method="post" action="{% url 'plan_clone' plan.uuid %}" class="m-0 mr-3">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
             </form>
+            {% else %}
+            <span class="badge badge-secondary mr-2">needs setup</span>
+            <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
+            {% endif %}
             <form method="post" action="{% url 'plan_delete' plan.uuid %}" class="m-0"
                   data-confirm="Delete &quot;{{ plan.label }}&quot;?{% if plan.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in plan.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
               {% csrf_token %}
@@ -116,20 +109,19 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
       <ul class="list-group list-group-flush">
         {% for item in assumptions %}
         <li class="list-group-item d-flex align-items-center py-2">
-          <form method="post" action="{% url 'assumptions_rename' item.uuid %}"
-                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
-            {% csrf_token %}
-            <input type="text" name="label" value="{{ item.label }}" aria-label="Assumptions name"
-                   class="form-control form-control-sm">
-            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
-            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
-          </form>
+          {% url 'assumptions_rename' item.uuid as rename_url %}
+          {% include 'inputs/panes/inline_rename.html' with kind='assumptions' uuid=item.uuid rename_url=rename_url label=item.label aria='Assumptions name' %}
           <span class="d-flex align-items-center flex-shrink-0">
+            {% if item.is_complete %}
             <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
             <form method="post" action="{% url 'assumptions_clone' item.uuid %}" class="m-0 mr-3">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
             </form>
+            {% else %}
+            <span class="badge badge-secondary mr-2">needs setup</span>
+            <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
+            {% endif %}
             <form method="post" action="{% url 'assumptions_delete' item.uuid %}" class="m-0"
                   data-confirm="Delete &quot;{{ item.label }}&quot;?{% if item.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in item.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
               {% csrf_token %}

@@ -19,6 +19,7 @@ from ..assumptions.repository import (
     clone_assumptions, create_assumptions, load_assumptions, rename_assumptions, save_assumptions )
 from ..enums import UsageRole
 from ..models import AssumptionsRecord, PlansRecord, ScenarioRecord
+from ..naming import numbered_label
 from ..plans.repository import clone_plans, create_plans, load_plans, rename_plans, save_plans
 from .schemas import Scenario
 
@@ -159,4 +160,5 @@ def save_working_as_scenario(
 
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new scenario, since many coexist per organization."""
-    return f'Scenario {scenarios_for( organization ).count() + 1}'
+    return numbered_label(
+        'Scenario', [ record.label for record in scenarios_for( organization ) ] )

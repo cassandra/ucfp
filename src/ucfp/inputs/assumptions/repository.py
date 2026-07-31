@@ -16,6 +16,7 @@ from organization.models import Organization
 
 from ..enums import UsageRole
 from ..models import AssumptionsRecord
+from ..naming import numbered_label, unique_label
 from .defaults import default_assumptions
 from .schemas import Assumptions
 
@@ -74,15 +75,20 @@ def clone_assumptions( record: AssumptionsRecord ) -> AssumptionsRecord:
     basis for tweaking a variant without disturbing the original. The copy goes through the typed
     load/save seam, so it is fully independent of the source; it also inherits the source's acknowledged
     sections, since a copy of a reviewed set has itself been reviewed."""
+    label = unique_label( f'{record.label} copy', _labels( record.organization ) )
     clone = AssumptionsRecord(
-        organization = record.organization, label = f'{record.label} copy',
+        organization = record.organization, label = label,
         acknowledged_sections = list( record.acknowledged_sections ) )
     return save_assumptions( clone, load_assumptions( record ) )
 
 
+def _labels( organization: Organization ) -> list:
+    return [ record.label for record in assumptions_for( organization ) ]
+
+
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new set, since many coexist per organization."""
-    return f'Assumptions {assumptions_for( organization ).count() + 1}'
+    return numbered_label( 'Assumptions', _labels( organization ) )
 
 
 def _initial_assumptions() -> Assumptions:
