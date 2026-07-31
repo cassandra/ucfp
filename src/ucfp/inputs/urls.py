@@ -31,8 +31,7 @@ urlpatterns = [
     path( 'assumptions/<uuid:uuid>/', views.AssumptionsSelectView.as_view(),
           name = 'assumptions_select' ),
 
-    # Guided interview + the per-section editors.
-    path( 'interview/', views.InterviewHomeView.as_view(), name = 'interview_home' ),
+    # The section-driven interview (entered per flow above) + the per-section editors.
     path( 'interview/<str:section>/', views.InterviewView.as_view(), name = 'interview_section' ),
     path( 'interview/income/table/', views.IncomeTableView.as_view(), name = 'income_table' ),
     path( 'interview/debt/list/', views.DebtsView.as_view(), name = 'debts' ),

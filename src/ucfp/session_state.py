@@ -61,6 +61,11 @@ class SessionState:
     # it rather than the most-recent one. A stale value (scenario deleted) simply does not preselect.
     current_scenario_uuid : Optional[ str ] = None
 
+    # Where to send the user once they finish the setup a feature deflected them into (Profile-first, or
+    # building a scenario) -- the path they were trying to reach. One-shot: the deflecting gate sets it and
+    # the completing flow consumes and clears it, falling back to home. Intent, not history.
+    post_setup_return : Optional[ str ] = None
+
     # Which inputs each Explore section keeps visible when collapsed (the curated subset) -- a per-section
     # list of handles. A visual convenience only; None means "not yet curated", so the section falls back
     # to its built-in default selection.
@@ -87,6 +92,7 @@ class SessionState:
         request.session[ 'current_plans_uuid' ] = self.current_plans_uuid
         request.session[ 'current_assumptions_uuid' ] = self.current_assumptions_uuid
         request.session[ 'current_scenario_uuid' ] = self.current_scenario_uuid
+        request.session[ 'post_setup_return' ] = self.post_setup_return
         request.session[ 'explore_curated_expenses' ] = self.explore_curated_expenses
         request.session[ 'explore_curated_rates' ] = self.explore_curated_rates
         request.session[ 'books_table_definition' ] = (
@@ -106,6 +112,7 @@ class SessionState:
             current_plans_uuid = request.session.get( 'current_plans_uuid' ),
             current_assumptions_uuid = request.session.get( 'current_assumptions_uuid' ),
             current_scenario_uuid = request.session.get( 'current_scenario_uuid' ),
+            post_setup_return = request.session.get( 'post_setup_return' ),
             explore_curated_expenses = request.session.get( 'explore_curated_expenses' ),
             explore_curated_rates = request.session.get( 'explore_curated_rates' ),
             books_table_definition = BooksTableDefinition.from_storage(

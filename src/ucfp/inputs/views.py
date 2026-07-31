@@ -3,8 +3,9 @@
 The Scenarios landing (`/inputs/scenarios/`) lists the organization's scenarios and hosts the Plans and
 Assumptions management; the Profile is edited on its own flow (reached from the nav). The interview is
 one section machinery run as three flows (Profile, Plans, Assumptions): `FlowEntryView` enters a single
-flow, `InterviewHomeView` runs all three guided, and `InterviewView` drives one section at a time over
-the typed aggregates. The remaining views are the sub-editors each section pane drills into.
+flow and `InterviewView` drives one section at a time over the typed aggregates. Profile is the
+standalone first setup; the Plans/Assumptions flows compose into a scenario (the build flow chains them).
+The remaining views are the sub-editors each section pane drills into.
 """
 from dataclasses import replace
 
@@ -33,8 +34,8 @@ from ucfp.inputs.scenarios.repository import scenarios_for
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
-    SECTIONS, Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
-    first_section_of_flow, flow_of, flow_title, next_flow_entry, next_section_after, section_for )
+    Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
+    first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
 from .models import AssumptionsRecord, PlansRecord
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
@@ -77,30 +78,30 @@ class ScenariosHomeView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class InterviewHomeView( View ):
-    """`/inputs/interview/` -- start the *guided* interview: run all three flows (Profile, Plans,
-    Assumptions) in sequence, ending on the Scenarios landing. The guided flag drives the flow chaining
-    in `InterviewView`."""
-
-    def get( self, request ):
-        request.session[ 'interview_guided' ] = True
-        return redirect( 'interview_section', section = SECTIONS[ 0 ].key )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
 class FlowEntryView( View ):
-    """`/inputs/<flow>/` -- edit a single input flow (Profile, Plans, or Assumptions) on its own,
-    without guided chaining: it ends on the Scenarios landing at the flow's last section. `flow` is set
-    per route via `as_view`."""
+    """`/inputs/<flow>/` -- edit a single input flow (Profile, Plans, or Assumptions) on its own. `flow`
+    is set per route via `as_view`. Profile is the standalone first flow; Plans/Assumptions are edited on
+    their own here (and, in the scenario-building flow, chained -- see `InterviewView`)."""
 
     flow = None
 
     def get( self, request ):
-        request.session[ 'interview_guided' ] = False
         first = first_section_of_flow( self.flow )
         if first is None:
             raise Http404( f'No sections in flow {self.flow!r}.' )
         return redirect( 'interview_section', section = first.key )
+
+
+def _consume_post_setup_return( request ) -> str:
+    """Where to send the user now that deflected setup has completed: the path a feature stashed when it
+    sent them here, popped so it fires once, else the home page. The counterpart to the gate that sets
+    `post_setup_return`."""
+    destination = request.session_state.post_setup_return
+    if destination:
+        request.session_state.post_setup_return = None
+        request.session_state.to_session( request )
+        return destination
+    return reverse( 'home' )
 
 
 def _select( request, field, record ):
@@ -302,10 +303,12 @@ class InterviewView( View ):
             return self._swap( request, self._flow_sections( profile, flow ), current, form )
         profile   = self._store( request, current, form, profile, other )
         following = next_section_after( self._flow_sections( profile, flow ), current.key )
-        if following is None and request.session.get( 'interview_guided' ):
-            following = next_flow_entry( flow )         # guided: advance into the next flow
-        if following is None:
-            return antinode.redirect_response( reverse( 'scenarios_home' ) )
+        if following is None:                                   # flow complete
+            # Profile is the standalone first setup, so it returns the user wherever a feature deflected
+            # them (else home); the component flows end on the Scenarios landing.
+            destination = ( _consume_post_setup_return( request ) if flow == 'profile'
+                            else reverse( 'scenarios_home' ) )
+            return antinode.redirect_response( destination )
         self._seed_and_acknowledge( request, following )       # the advanced-to section is now presented
         next_sections = self._flow_sections( profile, flow_of( following ) )
         next_profile, next_other = self._load( request, following )
