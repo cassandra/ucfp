@@ -77,20 +77,21 @@ def clone_assumptions( record: AssumptionsRecord, reviewed: bool = True ) -> Ass
     already-run set) it inherits the source's acknowledged sections; when not, it starts with none, so the
     user must walk each section to complete it -- the copied values are a starting point, not a finished
     set."""
-    label = unique_label( f'{record.label} copy', _labels( record.organization ) )
+    label = unique_label( f'{record.label} copy', assumptions_labels( record.organization ) )
     clone = AssumptionsRecord(
         organization = record.organization, label = label,
         acknowledged_sections = list( record.acknowledged_sections ) if reviewed else list() )
     return save_assumptions( clone, load_assumptions( record ) )
 
 
-def _labels( organization: Organization ) -> list:
+def assumptions_labels( organization: Organization ) -> list:
+    """The labels of the organization's SAVED assumptions sets -- the taken names a new/copied set avoids."""
     return [ record.label for record in assumptions_for( organization ) ]
 
 
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new set, since many coexist per organization."""
-    return numbered_label( 'Assumptions', _labels( organization ) )
+    return numbered_label( 'Assumptions', assumptions_labels( organization ) )
 
 
 def _initial_assumptions() -> Assumptions:

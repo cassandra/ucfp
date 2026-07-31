@@ -29,7 +29,8 @@ from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
 from ucfp.inputs.scenarios.exploration import (
-    component_usage, overwrite_working, save_working, scenario_exploration, working_scenario )
+    COPY, OVERWRITE, component_usage, overwrite_working, save_working, scenario_exploration,
+    working_scenario )
 from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
@@ -276,7 +277,7 @@ class ExploreView( InputGatedMixin, View ):
             component: {
                 'changed'     : getattr( working_inputs, component ) != getattr( source_inputs, component ),
                 'shared_with' : usage[ component ],
-                'default'     : 'overwrite' if usage[ component ] == 0 else 'copy' }
+                'default'     : OVERWRITE if usage[ component ] == 0 else COPY }
             for component in ( 'plans', 'assumptions' ) }
 
     def _context( self, request, source, runs, selected, forms, drift, save_options ) -> dict:
@@ -374,14 +375,14 @@ class SaveView( InputGatedMixin, View ):
     """`.../explore/save/` -- persist the sandbox per the destination each component's card selects:
     `dest_<component>` = 'copy' (a new independent set) or 'overwrite' (write into the source's existing set,
     in place). All-overwrite updates the anchor; any 'copy' branches a new scenario named `name`. One action
-    for both 'update this scenario' and 'save as new' -- the split Update/Save buttons folded into it."""
+    for both 'update this scenario' and 'save as new'."""
 
     def post( self, request ):
         organization = request.organization
         exploration  = scenario_exploration( organization )
         if exploration is not None:
             destinations = {
-                component: ( 'copy' if request.POST.get( f'dest_{component}' ) == 'copy' else 'overwrite' )
+                component: ( COPY if request.POST.get( f'dest_{component}' ) == COPY else OVERWRITE )
                 for component in ( 'plans', 'assumptions' ) }
             save_working(
                 organization, exploration.source, destinations, request.POST.get( 'name', '' ) )

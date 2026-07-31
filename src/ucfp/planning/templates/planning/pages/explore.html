@@ -94,13 +94,15 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
         <div class="text-muted mb-1">
           {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
         </div>
-        <span class="text-muted">When you save:</span>
-        <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="overwrite"
-               form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
-          {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
-        <label class="mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="copy"
-               form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
-          new copy</label>
+        <div role="radiogroup" aria-label="Plans — what to do when you save">
+          <span class="text-muted">When you save:</span>
+          <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="overwrite"
+                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
+            {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
+          <label class="mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="copy"
+                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
+            new copy</label>
+        </div>
       </div>
       {% endwith %}
     </div>
@@ -149,13 +151,15 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
         <div class="text-muted mb-1">
           {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
         </div>
-        <span class="text-muted">When you save:</span>
-        <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="overwrite"
-               form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
-          {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
-        <label class="mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="copy"
-               form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
-          new copy</label>
+        <div role="radiogroup" aria-label="Assumptions — what to do when you save">
+          <span class="text-muted">When you save:</span>
+          <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="overwrite"
+                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
+            {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
+          <label class="mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="copy"
+                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
+            new copy</label>
+        </div>
       </div>
       {% endwith %}
     </div>

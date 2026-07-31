@@ -74,20 +74,21 @@ def clone_plans( record: PlansRecord, reviewed: bool = True ) -> PlansRecord:
     already-run set) it inherits the source's acknowledged sections; when not, it starts with none, so the
     user must walk each section to complete it -- the copied values are a starting point, not a finished
     set."""
-    label = unique_label( f'{record.label} copy', _labels( record.organization ) )
+    label = unique_label( f'{record.label} copy', plans_labels( record.organization ) )
     clone = PlansRecord(
         organization = record.organization, label = label,
         acknowledged_sections = list( record.acknowledged_sections ) if reviewed else list() )
     return save_plans( clone, load_plans( record ) )
 
 
-def _labels( organization: Organization ) -> list:
+def plans_labels( organization: Organization ) -> list:
+    """The labels of the organization's SAVED Plans sets -- the taken names a new or copied set must avoid."""
     return [ record.label for record in plans_for( organization ) ]
 
 
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new set, since many coexist per organization."""
-    return numbered_label( 'Plans', _labels( organization ) )
+    return numbered_label( 'Plans', plans_labels( organization ) )
 
 
 def _initial_plans() -> Plans:

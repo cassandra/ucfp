@@ -1,7 +1,7 @@
 """The `ScenarioExploration` seam: the org's single exploration owns a WORKING scenario copy and
 names the SAVED anchor it was seeded from. Entry/ownership, in-place tweaks that leave the anchor alone,
-Update/Save-as-new write-back, re-anchoring on Save-as-new, and the cascade teardown of the owned copy
-when the anchor is deleted are the behaviours worth pinning.
+the per-component save (overwrite in place vs copy into a new scenario) with its re-anchor, and the
+cascade teardown of the owned copy when the anchor is deleted are the behaviours worth pinning.
 """
 from decimal import Decimal
 
@@ -114,8 +114,28 @@ class ScenarioExplorationTest( TestCase ):
         self.assertNotEqual( result.pk, source.pk )                  # a new scenario...
         self.assertNotEqual( result.plans_id, source.plans_id )      # ...with independent components
         self.assertNotEqual( result.assumptions_id, source.assumptions_id )
+        self.assertEqual(                                            # copies are SAVED sets, no WORKING leak
+            PlansRecord.objects.get( pk = result.plans_id ).usage_role, UsageRole.SAVED )
         self.assertEqual( load_scenario( source ), _rich_scenario() )   # source untouched
         self.assertEqual( scenario_exploration( self.organization ).source_id, result.id )   # re-anchored
+
+    def test_save_working_copy_dedupes_new_component_names_and_defaults_a_blank_name( self ):
+        source = self._saved( _rich_scenario(), 'Base' )
+        enter_exploration( self.organization, source )
+        overwrite_working( self.organization, Scenario() )
+        both = { 'plans': 'copy', 'assumptions': 'copy' }
+        first = save_working( self.organization, source, both, 'Test' )
+        enter_exploration( self.organization, source )               # a fresh exploration, same anchor
+        overwrite_working( self.organization, Scenario() )
+        second = save_working( self.organization, source, both, 'Test' )
+        self.assertEqual( PlansRecord.objects.get( pk = first.plans_id ).label, 'Test Plans' )
+        self.assertEqual(                                           # a colliding copy name is deduped
+            PlansRecord.objects.get( pk = second.plans_id ).label, 'Test Plans 2' )
+        enter_exploration( self.organization, source )
+        overwrite_working( self.organization, Scenario() )
+        blank = save_working( self.organization, source, both )      # no name
+        self.assertEqual(                                           # blank name -> the default label
+            PlansRecord.objects.get( pk = blank.plans_id ).label, 'Saved scenario Plans' )
 
     def test_save_working_mixed_branches_but_shares_the_overwritten_component( self ):
         source = self._saved( _rich_scenario(), 'Base' )
