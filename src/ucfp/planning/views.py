@@ -28,9 +28,9 @@ from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
-from ucfp.inputs.scenarios.repository import (
-    load_scenario, save_working_as_scenario, save_working_over_scenario, scenarios_for,
-    set_working_scenario, working_scenario )
+from ucfp.inputs.scenarios.exploration import (
+    overwrite_working, save_working_as_scenario, save_working_over_scenario, working_scenario )
+from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
@@ -201,7 +201,7 @@ class EnterExploreView( InputGatedMixin, View ):
             ScenarioRecord, uuid = form.cleaned_data[ 'scenario' ], organization = organization,
             usage_role = UsageRole.SAVED )
         _remember_selection( request, form, scenario_record )
-        enter_explore( organization, load_scenario( scenario_record ) )
+        enter_explore( organization, scenario_record )
         return redirect( 'explore', scenario = scenario_record.uuid )
 
 
@@ -308,7 +308,7 @@ class _ExploreSectionAutosaveView( InputGatedMixin, View ):
             current = load_scenario( working )
             form    = self.form_class( request.POST, scenario = current )
             if form.is_valid():
-                set_working_scenario( organization, form.apply( current ) )
+                overwrite_working( organization, form.apply( current ) )
         return antinode.response()
 
 

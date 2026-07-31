@@ -11,8 +11,10 @@ from common.dataclass_json import from_json_data
 from organization.models import Organization
 
 from ucfp.inputs.enums import UsageRole
+from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
-from ucfp.inputs.scenarios.repository import load_scenario, set_working_scenario, working_scenario
+from ucfp.inputs.scenarios.exploration import enter_exploration, working_scenario
+from ucfp.inputs.scenarios.repository import load_scenario
 from ucfp.inputs.scenarios.schemas import Scenario
 
 from .enums import PlanningFeature
@@ -27,12 +29,12 @@ from .schemas import ProjectionRun
 _TRANSIENT_KEEP = 25
 
 
-def enter_explore( organization: Organization, scenario: Scenario ) -> None:
-    """Start a fresh exploration of `scenario`: fork it into the single working scenario (overwriting
-    whatever was there) and clear the prior session's transient runs, so the workspace re-projects the
-    entered scenario's *current* state rather than showing a stale run from an earlier session. The
-    initial run is produced lazily by the workspace view once no transient runs remain."""
-    set_working_scenario( organization, scenario )
+def enter_explore( organization: Organization, source: ScenarioRecord ) -> None:
+    """Start a fresh exploration of `source`: seed the working copy from it, anchor the exploration to it,
+    and clear the prior session's transient runs, so the workspace re-projects the entered scenario's
+    *current* state rather than showing a stale run from an earlier session. The initial run is produced
+    lazily by the workspace view once no transient runs remain."""
+    enter_exploration( organization, source )
     _clear_transient_runs( organization )
 
 
