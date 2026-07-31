@@ -32,7 +32,7 @@ from ucfp.inputs.assumptions.repository import (
     assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
     load_assumptions, rename_assumptions, save_assumptions )
 from ucfp.inputs.scenarios.repository import (
-    create_scenario, existing_pairings, scenarios_for, start_scenario )
+    create_scenario, ensure_default_scenario, existing_pairings, scenarios_for )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -69,18 +69,33 @@ class ScenariosHomeView( View ):
     editors but to no planning perspective (forecast, retirement, ...) -- the main nav reaches those."""
 
     def get( self, request ):
-        organization = request.organization
+        organization   = request.organization
+        profile_record = completed_profile( organization )
         # `select_related` the components (the list shows each scenario's Plans/Assumptions labels), and
         # prefetch each set's referencing scenarios so a delete confirmation can warn which scenarios it
         # would cascade away (a scenario references its Plans/Assumptions).
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
-            'profile_complete' : completed_profile( organization ) is not None,
-            'scenarios'        : scenarios_for( organization ).select_related( 'plans', 'assumptions' ),
+            'profile_complete' : profile_record is not None,
+            'scenarios'        : self._scenario_rows( profile_record, organization ),
             'plans'            : plans_for( organization ).prefetch_related( 'scenarios' ),
             'assumptions'      : assumptions_for( organization ).prefetch_related( 'scenarios' ),
         } )
+
+    @staticmethod
+    def _scenario_rows( profile_record, organization ):
+        """Each saved scenario with whether its build is complete -- both components' flows walked -- so an
+        in-progress one (e.g. the freshly-created Default) can offer to resume its setup."""
+        if profile_record is None:
+            return list()
+        plans_ids       = { record.id for record in complete_plans( profile_record, organization ) }
+        assumptions_ids = { record.id for record in complete_assumptions( profile_record, organization ) }
+        rows = list()
+        for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' ):
+            complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
+            rows.append( { 'scenario': scenario, 'complete': complete } )
+        return rows
 
 
 def _require_complete_profile( request ):
@@ -121,10 +136,10 @@ class ScenarioCombineForm( forms.Form ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ScenarioNewView( View ):
     """`/inputs/scenarios/new/` -- create a new Future Scenario, the normal (repeatable) way: *combine* an
-    existing Plans with an existing Assumptions. It routes by what the organization has: no complete
-    components yet -> the first-time build-both bootstrap (`scenario_build`); complete components but every
-    pairing already used -> a hint to make a new Plans/Assumptions first; otherwise the combine form. A
-    completed Profile is the prerequisite."""
+    existing Plans with an existing Assumptions. It routes by what the organization has: not enough
+    complete components to pair (the Default scenario is still being set up) -> the Scenarios page, to
+    finish it; complete components but every pairing already used -> a hint to make a new Plans/Assumptions
+    first; otherwise the combine form. A completed Profile is the prerequisite."""
 
     _FORM_TEMPLATE = 'inputs/scenario_new.html'
     _HINT_TEMPLATE = 'inputs/panes/scenario_combinations_exhausted.html'
@@ -134,11 +149,12 @@ class ScenarioNewView( View ):
         if profile_record is None:
             return _require_complete_profile( request )
         plans, assumptions = self._components( profile_record, request.organization )
-        if not plans or not assumptions:                   # nothing to pair yet -> the bootstrap build
-            return redirect( 'scenario_build' )
+        if not plans or not assumptions:                   # nothing complete to pair yet -> finish setup
+            return redirect( 'scenarios_home' )
         if not self._has_available_pairing( request.organization, plans, assumptions ):
             return render( request, self._HINT_TEMPLATE, {} )
-        return render( request, self._FORM_TEMPLATE, { 'form': self._form( request.organization, plans, assumptions ) } )
+        return render(
+            request, self._FORM_TEMPLATE, { 'form': self._form( request.organization, plans, assumptions ) } )
 
     def post( self, request ):
         organization   = request.organization
@@ -174,36 +190,6 @@ class ScenarioNewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class ScenarioBuildStartView( View ):
-    """`/inputs/scenarios/build/` -- the first-scenario *bootstrap*: with no components yet to combine,
-    author a Plans and an Assumptions in one pass. GET explains what a scenario is (forward-looking, unlike
-    the Profile's facts) and takes a name; POST mints the scenario with its own Plans and Assumptions
-    (named after it), makes them the editing target, marks the build in progress, and opens the two-part
-    flow at the first Plans section. Reached from `ScenarioNewView` when there is nothing to pair (or
-    directly); a completed Profile is the prerequisite. Later scenarios combine existing components instead
-    (`ScenarioNewView`)."""
-
-    _TEMPLATE = 'inputs/scenario_build_start.html'
-
-    def get( self, request ):
-        if completed_profile( request.organization ) is None:
-            return _require_complete_profile( request )
-        return render( request, self._TEMPLATE, {} )
-
-    def post( self, request ):
-        organization = request.organization
-        if completed_profile( organization ) is None:
-            return _require_complete_profile( request )
-        name     = ( request.POST.get( 'name' ) or '' ).strip() or 'Future Scenario'
-        scenario = start_scenario( organization, name )
-        _select( request, 'current_plans_uuid', scenario.plans )
-        _select( request, 'current_assumptions_uuid', scenario.assumptions )
-        request.session_state.scenario_building = str( scenario.uuid )
-        request.session_state.to_session( request )
-        return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
 class ScenarioResumeView( View ):
     """`/inputs/scenarios/<uuid>/resume/` -- resume building a half-built scenario: make its Plans and
     Assumptions the editing target, mark the build in progress, and re-enter the two-part flow at the
@@ -224,11 +210,20 @@ class ScenarioResumeView( View ):
 class FlowEntryView( View ):
     """`/inputs/<flow>/` -- edit a single input flow (Profile, Plans, or Assumptions) on its own. `flow`
     is set per route via `as_view`. Profile is the standalone first flow; Plans/Assumptions are edited on
-    their own here (and, in the scenario-building flow, chained -- see `InterviewView`)."""
+    their own here (and, in the scenario-building flow, chained -- see `InterviewView`).
+
+    Entering the Profile flow binds the Profile to the organization's Default scenario: it ensures a
+    Default Plans + Assumptions + Scenario exist and makes those components the editing target, so the
+    profile's straddle sections (Property, Income) write their shared, profile-derived data into the
+    Default's Plans rather than minting a stray one."""
 
     flow = None
 
     def get( self, request ):
+        if self.flow == 'profile':
+            default = ensure_default_scenario( request.organization )
+            _select( request, 'current_plans_uuid', default.plans )
+            _select( request, 'current_assumptions_uuid', default.assumptions )
         first = first_section_of_flow( self.flow )
         if first is None:
             raise Http404( f'No sections in flow {self.flow!r}.' )

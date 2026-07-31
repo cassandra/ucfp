@@ -61,14 +61,24 @@ def create_scenario( organization: Organization, plans: PlansRecord, assumptions
         plans = plans, assumptions = assumptions, usage_role = UsageRole.SAVED )
 
 
-def start_scenario( organization: Organization, name: str ) -> ScenarioRecord:
-    """Begin a new scenario named `name`: mint its own Plans and Assumptions (named after it) and a
-    scenario referencing them, as one unit. The build flow fills the components in; the scenario exists
-    from the outset (name-first), so an abandoned build leaves a resumable, if incomplete, scenario."""
+def default_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]:
+    """The organization's base scenario -- the oldest saved one, which the profile flow's shared data
+    (the straddle sections' rental income) binds to. None before the first profile setup creates it."""
+    return scenarios_for( organization ).order_by( 'created_datetime' ).first()
+
+
+def ensure_default_scenario( organization: Organization ) -> ScenarioRecord:
+    """Guarantee the organization has a scenario for the Profile to bind to. On first profile setup it
+    mints a `Default Plans` and `Default Assumptions` and combines them into a `Default Scenario` -- all
+    incomplete until their flows are walked, so completeness detection still drives the setup. Idempotent:
+    returns the existing base scenario when one is already present, so no duplicate Default is created."""
+    base = default_scenario( organization )
+    if base is not None:
+        return base
     with transaction.atomic():
-        plans       = rename_plans( create_plans( organization ), f'{name} Plans' )
-        assumptions = rename_assumptions( create_assumptions( organization ), f'{name} Assumptions' )
-        return create_scenario( organization, plans, assumptions, name )
+        plans       = rename_plans( create_plans( organization ), 'Default Plans' )
+        assumptions = rename_assumptions( create_assumptions( organization ), 'Default Assumptions' )
+        return create_scenario( organization, plans, assumptions, 'Default Scenario' )
 
 
 def rename_scenario( record: ScenarioRecord, label: str ) -> ScenarioRecord:

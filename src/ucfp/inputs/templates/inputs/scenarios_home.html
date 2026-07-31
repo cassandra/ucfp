@@ -25,10 +25,19 @@ arrive with #90; this page is feature-agnostic -- it links to no single feature.
     <span class="ml-auto small text-muted">a plan + an outlook, named</span>
   </div>
   <ul class="list-group list-group-flush">
-    {% for scenario in scenarios %}
+    {% for row in scenarios %}
     <li class="list-group-item d-flex align-items-center py-2">
-      <span class="font-weight-bold">{{ scenario.label }}</span>
-      <span class="ml-auto small text-muted">{{ scenario.plans.label }} + {{ scenario.assumptions.label }}</span>
+      <span class="font-weight-bold">{{ row.scenario.label }}</span>
+      {% if not row.complete %}
+      <form method="post" action="{% url 'scenario_resume' row.scenario.uuid %}" class="m-0 ml-2">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-link p-0">Finish setup &rarr;</button>
+      </form>
+      {% endif %}
+      <span class="ml-auto small text-muted">
+        {{ row.scenario.plans.label }} + {{ row.scenario.assumptions.label }}
+        {% if not row.complete %}<span class="badge badge-secondary ml-1">in progress</span>{% endif %}
+      </span>
     </li>
     {% empty %}
     <li class="list-group-item text-muted small">No scenarios yet.</li>
