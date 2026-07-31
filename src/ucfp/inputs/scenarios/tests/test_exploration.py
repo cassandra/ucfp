@@ -19,8 +19,10 @@ from ucfp.inputs.plans.schemas import DrawdownPolicy, Plans
 from ucfp.jurisdiction.enums import StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 from ucfp.inputs.scenarios.exploration import (
+    component_usage,
     enter_exploration,
     overwrite_working,
+    save_working,
     save_working_as_scenario,
     save_working_over_scenario,
     scenario_exploration,
@@ -150,6 +152,53 @@ class ScenarioExplorationTest( TestCase ):
         overwrite_working( self.organization, Scenario() )
         variant = save_working_as_scenario( self.organization, 'Variant', source )
         self.assertEqual( scenario_exploration( self.organization ).source_id, variant.id )
+
+    def test_save_working_all_overwrite_updates_the_source_in_place( self ):
+        source = self._saved( _rich_scenario(), 'Base' )
+        enter_exploration( self.organization, source )
+        overwrite_working( self.organization, Scenario() )            # tweak the sandbox to empty
+        result = save_working(
+            self.organization, source, { 'plans': 'overwrite', 'assumptions': 'overwrite' } )
+        self.assertEqual( result.pk, source.pk )                     # same scenario, no new one minted
+        self.assertEqual( scenarios_for( self.organization ).count(), 1 )
+        reloaded = scenarios_for( self.organization ).get( uuid = source.uuid )
+        self.assertEqual( load_scenario( reloaded ), Scenario() )     # source's own sets now hold the values
+
+    def test_save_working_all_copy_branches_an_independent_scenario( self ):
+        source = self._saved( _rich_scenario(), 'Base' )
+        enter_exploration( self.organization, source )
+        overwrite_working( self.organization, Scenario() )
+        result = save_working(
+            self.organization, source, { 'plans': 'copy', 'assumptions': 'copy' }, 'Test' )
+        self.assertNotEqual( result.pk, source.pk )                  # a new scenario...
+        self.assertNotEqual( result.plans_id, source.plans_id )      # ...with independent components
+        self.assertNotEqual( result.assumptions_id, source.assumptions_id )
+        self.assertEqual( load_scenario( source ), _rich_scenario() )   # source untouched
+        self.assertEqual( scenario_exploration( self.organization ).source_id, result.id )   # re-anchored
+
+    def test_save_working_mixed_branches_but_shares_the_overwritten_component( self ):
+        source = self._saved( _rich_scenario(), 'Base' )
+        enter_exploration( self.organization, source )
+        overwrite_working(                                           # change only the Plans
+            self.organization, Scenario( plans = Plans(), assumptions = _rich_assumptions() ) )
+        result = save_working(
+            self.organization, source, { 'plans': 'copy', 'assumptions': 'overwrite' }, 'Test' )
+        self.assertNotEqual( result.pk, source.pk )                  # a new scenario,
+        self.assertNotEqual( result.plans_id, source.plans_id )      # its copied Plans is independent,
+        self.assertEqual( result.assumptions_id, source.assumptions_id )   # its Assumptions shared w/ source
+
+    def test_component_usage_counts_other_scenarios_sharing_a_component( self ):
+        plans       = save_plans(
+            PlansRecord( organization = self.organization, label = 'P' ), _rich_plans() )
+        assumptions = save_assumptions(
+            AssumptionsRecord( organization = self.organization, label = 'A' ), _rich_assumptions() )
+        first = create_scenario( self.organization, plans, assumptions, 'First' )
+        create_scenario( self.organization, plans, assumptions, 'Second' )   # shares both with First
+        usage = component_usage( first )
+        self.assertEqual( usage[ 'plans' ], 1 )                      # one other scenario references each,
+        self.assertEqual( usage[ 'assumptions' ], 1 )
+        solo = self._saved( _rich_scenario(), 'Solo' )
+        self.assertEqual( component_usage( solo )[ 'plans' ], 0 )    # a private component: no others
 
     def test_deleting_the_anchor_cascades_and_tears_down_the_owned_working_copy( self ):
         source      = self._saved( _rich_scenario(), 'Base' )

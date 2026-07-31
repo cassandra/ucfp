@@ -15,11 +15,11 @@ from django.db import transaction
 from organization.models import Organization
 
 from ..assumptions.repository import (
-    assumptions_for, clone_assumptions, load_assumptions, rename_assumptions, save_assumptions )
+    assumptions_for, clone_assumptions, rename_assumptions, save_assumptions )
 from ..enums import UsageRole
 from ..models import AssumptionsRecord, PlansRecord, ScenarioExploration, ScenarioRecord
 from ..naming import unique_label
-from ..plans.repository import clone_plans, load_plans, plans_for, rename_plans, save_plans
+from ..plans.repository import clone_plans, plans_for, rename_plans, save_plans
 from .repository import create_scenario, load_scenario
 from .schemas import Scenario
 
@@ -66,17 +66,61 @@ def overwrite_working( organization: Organization, scenario: Scenario ) -> Optio
     return working
 
 
-def save_working_over_scenario( organization: Organization, record: ScenarioRecord ) -> ScenarioRecord:
-    """Write the sandbox's values into `record`'s referenced Plans and Assumptions -- the 'update this
-    scenario' action. Because those components are shared, this propagates to every scenario referencing
-    them, which is the intent. The anchor is unchanged. Raises if there is no working scenario."""
-    working = working_scenario( organization )
-    if working is None:
+def save_working(
+        organization: Organization, source: ScenarioRecord, destinations: dict,
+        name: str = '' ) -> ScenarioRecord:
+    """Persist the sandbox against `source`, per component. `destinations` maps 'plans' and 'assumptions' to
+    'overwrite' (write the working values into `source`'s existing set, in place -- propagating to every
+    scenario that shares it) or 'copy' (a new independent set holding the working values).
+
+    If every component is 'overwrite', `source` itself is updated in place and returned -- no new scenario.
+    If any is 'copy', a new scenario named `name` is created: its 'copy' components are new independent sets,
+    its 'overwrite' components are `source`'s existing sets (shared, and written in place). Either way the
+    exploration re-anchors to the result. Raises if there is no working scenario.
+
+    This is the one save primitive: an all-'overwrite' call is "update this scenario", an all-'copy' call is
+    "save as a new independent scenario", and a mix branches while sharing the overwritten sets -- each an
+    explicit choice of what propagates."""
+    exploration = scenario_exploration( organization )
+    if exploration is None:
         raise ValueError( 'No working scenario to save.' )
-    with transaction.atomic():                             # both components update together, or neither
-        save_plans( record.plans, load_plans( working.plans ) )
-        save_assumptions( record.assumptions, load_assumptions( working.assumptions ) )
-    return record
+    sandbox = load_scenario( exploration.working )
+    label   = name.strip() or 'Saved scenario'             # only when a component is copied into a new set
+    with transaction.atomic():                             # writes, new scenario, and re-anchor together
+        if destinations[ 'plans' ] == 'overwrite':
+            plans = save_plans( source.plans, sandbox.plans )   # in place; propagates to any sharer
+        else:
+            plans = rename_plans(
+                save_plans( clone_plans( source.plans ), sandbox.plans ),
+                unique_label( f'{label} Plans', _plans_labels( organization ) ) )
+        if destinations[ 'assumptions' ] == 'overwrite':
+            assumptions = save_assumptions( source.assumptions, sandbox.assumptions )
+        else:
+            assumptions = rename_assumptions(
+                save_assumptions( clone_assumptions( source.assumptions ), sandbox.assumptions ),
+                unique_label( f'{label} Assumptions', _assumptions_labels( organization ) ) )
+        # A copy needs a home scenario; when nothing is copied, the source's identity is unchanged.
+        record = ( create_scenario( organization, plans, assumptions, label )
+                   if 'copy' in destinations.values() else source )
+        exploration.source = record
+        exploration.save()
+        return record
+
+
+def component_usage( source: ScenarioRecord ) -> dict:
+    """How many *other* scenarios reference each of `source`'s components -- the sharing scope, for showing
+    it and for defaulting a component's save to an in-place overwrite (private: no others) or a protective
+    copy (shared: some). SAVED scenarios only, since the working sandbox references its own copies."""
+    return {
+        'plans'       : source.plans.scenarios.exclude( pk = source.pk ).count(),
+        'assumptions' : source.assumptions.scenarios.exclude( pk = source.pk ).count() }
+
+
+def save_working_over_scenario( organization: Organization, record: ScenarioRecord ) -> ScenarioRecord:
+    """Write the sandbox's values into `record`'s Plans and Assumptions in place -- the 'update this
+    scenario' action, an all-'overwrite' `save_working`. Propagates to every scenario sharing those sets,
+    which is the intent. Raises if there is no working scenario."""
+    return save_working( organization, record, { 'plans': 'overwrite', 'assumptions': 'overwrite' } )
 
 
 def save_working_as_scenario(
