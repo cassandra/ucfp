@@ -81,6 +81,21 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
           </div>
         </form>
       </div>
+      {# How these Plans save: a radio per the unified Save button below (associated by form=), plus the
+         sharing scope. Smart-defaulted -- overwrite in place when private, a protective copy when shared. #}
+      {% with opt=save_options.plans %}
+      <div class="card-footer py-2 small">
+        <div class="text-muted mb-1">
+          {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
+        </div>
+        <label class="mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="overwrite"
+               form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
+          Update in place</label>
+        <label class="mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="copy"
+               form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
+          Save as copy</label>
+      </div>
+      {% endwith %}
     </div>
   </div>
 
@@ -120,13 +135,26 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
           </div>
         </form>
       </div>
+      {% with opt=save_options.assumptions %}
+      <div class="card-footer py-2 small">
+        <div class="text-muted mb-1">
+          {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
+        </div>
+        <label class="mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="overwrite"
+               form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
+          Update in place</label>
+        <label class="mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="copy"
+               form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
+          Save as copy</label>
+      </div>
+      {% endwith %}
     </div>
   </div>
 </div>
 
-<!-- SCENARIO controls (first, right under the inputs): update the explored scenario or save a new one,
-     with a drill-down of exactly what an update would overwrite. Separate forms, so outside the tweak
-     form above. -->
+<!-- SCENARIO controls: one Save button (below) persists the sandbox per each card's destination toggle --
+     all "update in place" updates this scenario; any "save as copy" branches a new one (named). The drift
+     drill-down shows what an in-place overwrite would change. -->
 <div class="card mb-3">
   <div class="card-body d-flex flex-wrap align-items-center">
     <div class="mr-auto my-1">
@@ -143,35 +171,14 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
       {% endif %}
     </div>
 
-    <form method="post" action="{% url 'explore_update_scenario' %}" class="my-1 mr-3">
+    {# One Save. The per-card radios post with this form (form= association); the name shows and the label
+       flips to "Save as new" when any card is "copy" (see the script below). #}
+    <form method="post" action="{% url 'explore_save' %}" id="explore-save-form" class="form-inline my-1 mr-3">
       {% csrf_token %}
-      <button type="submit" class="btn btn-success btn-sm" {% if not drift %}disabled{% endif %}>
-        Update &ldquo;{{ source.label }}&rdquo;</button>
-    </form>
-
-    <form method="post" action="{% url 'explore_save_scenario' %}" class="my-1 mr-3">
-      {% csrf_token %}
-      <div class="form-inline">
-        <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="New scenario name"
-               aria-label="New scenario name">
-        <button type="submit" class="btn btn-outline-secondary btn-sm">Save as new</button>
-      </div>
-      {% comment %}
-      Sharing is opt-in, per unchanged component: by default the new scenario gets its own copy, so a later
-      Update to it won't touch the source. A changed component always forks, so it offers no choice.
-      {% endcomment %}
-      {% if not changed.plans or not changed.assumptions %}
-      <div class="small text-muted mt-1">
-        {% if not changed.plans %}
-        <label class="d-block mb-0 font-weight-normal"><input type="checkbox" name="share_plans">
-          Share &ldquo;{{ source.plans.label }}&rdquo; (else a new copy)</label>
-        {% endif %}
-        {% if not changed.assumptions %}
-        <label class="d-block mb-0 font-weight-normal"><input type="checkbox" name="share_assumptions">
-          Share &ldquo;{{ source.assumptions.label }}&rdquo; (else a new copy)</label>
-        {% endif %}
-      </div>
-      {% endif %}
+      <input type="text" name="name" id="explore-save-name" class="form-control form-control-sm mr-2 d-none"
+             placeholder="New scenario name" aria-label="New scenario name">
+      <button type="submit" id="explore-save-button" class="btn btn-success btn-sm"
+              data-update-label="Update &ldquo;{{ source.label }}&rdquo;" data-new-label="Save as new">Save</button>
     </form>
 
     {% comment %}
@@ -255,6 +262,24 @@ loaded before content, and AN.post adds the CSRF token from the cookie.
               { section: section.data( 'curate-key' ), keys: keys.join( ',' ) },
               { suppressLoader: true } );
    } );
+ })();
+</script>
+
+{% comment %}
+Adapt the single Save to the card toggles: any component set to "copy" means a new scenario, so reveal the
+name field and label the button "Save as new"; otherwise it updates this scenario in place. Runs on load so
+the smart defaults are reflected, and on every toggle change.
+{% endcomment %}
+<script>
+ (function () {
+   var button = $( '#explore-save-button' );
+   function refresh() {
+     var anyCopy = $( '.js-save-dest[value="copy"]:checked' ).length > 0;
+     $( '#explore-save-name' ).toggleClass( 'd-none', !anyCopy );
+     button.text( anyCopy ? button.data( 'new-label' ) : button.data( 'update-label' ) );
+   }
+   $( 'body' ).on( 'change', '.js-save-dest', refresh );
+   refresh();
  })();
 </script>
 {% endblock %}

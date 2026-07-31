@@ -29,8 +29,7 @@ from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
 from ucfp.inputs.scenarios.exploration import (
-    overwrite_working, save_working_as_scenario, save_working_over_scenario, scenario_exploration,
-    working_scenario )
+    component_usage, overwrite_working, save_working, scenario_exploration, working_scenario )
 from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
@@ -256,12 +255,10 @@ class ExploreView( InputGatedMixin, View ):
                 scenario = working_inputs, selected = state.explore_curated_rates ) }
         # Drift is measured against the saved source scenario -- exactly what an "update" would overwrite.
         drift    = value_changes( source_inputs, working_inputs )
-        # Which components diverged -- the same equality Save-as-new forks on. A changed one always forks;
-        # an unchanged one is copied unless the user opts to share it, so only unchanged ones are shareable.
-        changed  = { 'plans'       : working_inputs.plans != source_inputs.plans,
-                     'assumptions' : working_inputs.assumptions != source_inputs.assumptions }
+        save_options = self._save_options( source, working_inputs, source_inputs )
         return render(
-            request, self._TEMPLATE, self._context( request, source, runs, selected, forms, drift, changed ) )
+            request, self._TEMPLATE,
+            self._context( request, source, runs, selected, forms, drift, save_options ) )
 
     def post( self, request ):                             # Re-run: project the auto-saved working scenario
         organization = request.organization
@@ -269,7 +266,20 @@ class ExploreView( InputGatedMixin, View ):
             run_working_scenario( organization, self._frame( request ) )
         return redirect( 'explore' )
 
-    def _context( self, request, source, runs, selected, forms, drift, changed ) -> dict:
+    @staticmethod
+    def _save_options( source, working_inputs, source_inputs ) -> dict:
+        """Per-component context for the card save controls: whether the component diverged, how many other
+        scenarios share it, and the smart default -- overwrite it in place when it is private, a protective
+        copy when it is shared."""
+        usage = component_usage( source )
+        return {
+            component: {
+                'changed'     : getattr( working_inputs, component ) != getattr( source_inputs, component ),
+                'shared_with' : usage[ component ],
+                'default'     : 'overwrite' if usage[ component ] == 0 else 'copy' }
+            for component in ( 'plans', 'assumptions' ) }
+
+    def _context( self, request, source, runs, selected, forms, drift, save_options ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
         books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
@@ -281,7 +291,7 @@ class ExploreView( InputGatedMixin, View ):
             'stopped_early'  : run.result.stopped_early,
             'drift'          : drift,                          # curated changes vs the source scenario
             'drift_summary'  : describe_changes( drift ),
-            'changed'        : changed,                        # per-component divergence -> save choices
+            'save_options'   : save_options,                   # per-component card save controls + defaults
             **forms,
         }
         context.update( run_books_table_context( request, run, books ) )
@@ -360,35 +370,21 @@ class ExploreCurationView( InputGatedMixin, View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class UpdateScenarioView( InputGatedMixin, View ):
-    """`.../explore/update-scenario/` -- overwrite the explored saved scenario (the exploration's anchor)
-    with the working copy's current inputs. The common 'save my changes' action, distinct from minting a
-    new scenario; the anchor's name is unchanged and the exploration stays on it."""
+class SaveView( InputGatedMixin, View ):
+    """`.../explore/save/` -- persist the sandbox per the destination each component's card selects:
+    `dest_<component>` = 'copy' (a new independent set) or 'overwrite' (write into the source's existing set,
+    in place). All-overwrite updates the anchor; any 'copy' branches a new scenario named `name`. One action
+    for both 'update this scenario' and 'save as new' -- the split Update/Save buttons folded into it."""
 
     def post( self, request ):
         organization = request.organization
         exploration  = scenario_exploration( organization )
         if exploration is not None:
-            save_working_over_scenario( organization, exploration.source )
-        return redirect( 'explore' )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class SaveScenarioView( InputGatedMixin, View ):
-    """`.../explore/save-scenario/` -- promote the working scenario to a new, separately named saved
-    scenario. Each component becomes an independent copy unless the user ticked "share" for an unchanged one
-    (the `share_<component>` checkboxes), keeping sharing an explicit choice. The exploration re-anchors to
-    the new scenario, so a subsequent update targets it rather than the one it was forked from."""
-
-    def post( self, request ):
-        organization = request.organization
-        exploration  = scenario_exploration( organization )
-        if exploration is not None:
-            name  = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
-            share = frozenset(
-                component for component in ( 'plans', 'assumptions' )
-                if request.POST.get( f'share_{component}' ) )
-            save_working_as_scenario( organization, name, exploration.source, share )
+            destinations = {
+                component: ( 'copy' if request.POST.get( f'dest_{component}' ) == 'copy' else 'overwrite' )
+                for component in ( 'plans', 'assumptions' ) }
+            save_working(
+                organization, exploration.source, destinations, request.POST.get( 'name', '' ) )
         return redirect( 'explore' )
 
 

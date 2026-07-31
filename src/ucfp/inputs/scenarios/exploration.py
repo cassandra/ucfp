@@ -116,50 +116,6 @@ def component_usage( source: ScenarioRecord ) -> dict:
         'assumptions' : source.assumptions.scenarios.exclude( pk = source.pk ).count() }
 
 
-def save_working_over_scenario( organization: Organization, record: ScenarioRecord ) -> ScenarioRecord:
-    """Write the sandbox's values into `record`'s Plans and Assumptions in place -- the 'update this
-    scenario' action, an all-'overwrite' `save_working`. Propagates to every scenario sharing those sets,
-    which is the intent. Raises if there is no working scenario."""
-    return save_working( organization, record, { 'plans': 'overwrite', 'assumptions': 'overwrite' } )
-
-
-def save_working_as_scenario(
-        organization: Organization, label: str, source: ScenarioRecord,
-        share: frozenset = frozenset() ) -> ScenarioRecord:
-    """Fork the sandbox into a new saved scenario named `label`. Each component becomes a **new independent
-    set** -- `source`'s set cloned and stamped with the sandbox's values (a plain copy where the user left it
-    untouched, the tweak-fork where they changed it) -- unless the user explicitly asked to **share** an
-    unchanged component with `source` (its key in `share`), in which case the new scenario references it so a
-    later edit still propagates to both, by the user's choice. A *changed* component can never be shared (it
-    diverged), so `share` is honoured only for components equal to the source's. Raises if there is no
-    working scenario.
-
-    A forked set is cloned from `source` (which carries its completeness) rather than from the sandbox copies
-    (which hold only data), so it is runnable at once. Finally the exploration re-anchors to the new scenario,
-    so the sandbox now represents it and a later Update targets it rather than the one it was forked from."""
-    exploration = scenario_exploration( organization )
-    if exploration is None:
-        raise ValueError( 'No working scenario to save.' )
-    sandbox = load_scenario( exploration.working )
-    origin  = load_scenario( source )
-    with transaction.atomic():                             # forks, new scenario, and re-anchor land together
-        if 'plans' in share and sandbox.plans == origin.plans:
-            plans = source.plans                           # shared by explicit choice: edits still propagate
-        else:
-            copy  = save_plans( clone_plans( source.plans ), sandbox.plans )
-            plans = rename_plans( copy, unique_label( f'{label} Plans', _plans_labels( organization ) ) )
-        if 'assumptions' in share and sandbox.assumptions == origin.assumptions:
-            assumptions = source.assumptions
-        else:
-            copy        = save_assumptions( clone_assumptions( source.assumptions ), sandbox.assumptions )
-            assumptions = rename_assumptions(
-                copy, unique_label( f'{label} Assumptions', _assumptions_labels( organization ) ) )
-        record = create_scenario( organization, plans, assumptions, label )
-        exploration.source = record                        # the sandbox now represents the saved variation
-        exploration.save()
-        return record
-
-
 def _plans_labels( organization: Organization ) -> list:
     return [ record.label for record in plans_for( organization ) ]
 
