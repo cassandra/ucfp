@@ -10,6 +10,7 @@ from common.healthcheck import do_healthcheck
 from common.request_utils import is_ajax
 
 from ucfp.inputs.mixins import InputGatedMixin
+from ucfp.inputs.state import completed_profile
 
 
 def error_response( request             : HttpRequest,
@@ -147,12 +148,14 @@ class HealthView( View ):
 
 
 class HomeView( InputGatedMixin, View ):
-    """The landing page. `InputGatedMixin` attaches `request.input_state` so the page can lead a
-    first-time user (EMPTY) into the guided interview, nudge a partway one (PARTIAL) to finish, or
-    offer a returning one (READY) the input editors -- feature navigation lives in the top menu."""
+    """The landing page. It needs only a Profile (not a scenario -- those belong to the features that use
+    them), so it leads a user without a *complete* profile to set one up, and otherwise points at the
+    features (in the top menu). Gating on completeness, not existence: an auto-created empty profile is not
+    yet a set-up profile."""
 
     def get(self, request, *args, **kwargs):
-        return render( request, 'pages/home.html', { 'input_state': request.input_state } )
+        return render( request, 'pages/home.html', {
+            'profile_complete': completed_profile( request.organization ) is not None } )
 
 
 class ManifestView( View ):

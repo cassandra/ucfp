@@ -1,0 +1,12 @@
+{% comment %}
+Reusable gate: shown by any page that needs a completed Profile but does not have one yet. The Profile is
+the universal first setup -- everything else depends on it -- so this leads the way, before a feature's
+own (e.g. scenario) gate. Renders nothing once a complete profile exists, so a page may include it
+unconditionally and follow it with its own gate. Reads no context.
+{% endcomment %}
+<div class="alert alert-info mt-3">
+  <h2 class="h5 mb-2">Set up your profile</h2>
+  <p class="mb-3">Every plan starts from your situation today &mdash; who it's for, your accounts, income,
+    and debts. Set up your profile first; the planning features build on it.</p>
+  <a href="{% url 'flow_profile' %}" class="btn btn-primary">Set up your profile</a>
+</div>

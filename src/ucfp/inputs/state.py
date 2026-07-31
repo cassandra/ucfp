@@ -10,12 +10,15 @@ still missing; `READY` (all three) clears this gate, leaving only the chosen-bun
 """
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 from organization.models import Organization
 
 from ucfp.inputs.assumptions.repository import assumptions_for
+from ucfp.inputs.interview import applicable_sections, flow_of
+from ucfp.inputs.models import ProfileRecord
 from ucfp.inputs.plans.repository import plans_for
-from ucfp.inputs.profile.repository import profiles_for
+from ucfp.inputs.profile.repository import latest_profile, load_profile, profiles_for
 
 
 class InputReadiness( Enum ):
@@ -65,3 +68,27 @@ def input_state( organization : Organization ) -> InputState:
         has_profile     = profiles_for( organization ).exists(),
         has_plans       = plans_for( organization ).exists(),
         has_assumptions = assumptions_for( organization ).exists() )
+
+
+def completed_profile( organization : Organization ) -> Optional[ ProfileRecord ]:
+    """The organization's profile if it is *complete*, else None -- the gate the home page and every
+    profile-needing feature use. Mere existence is not enough: entering the profile flow auto-creates an
+    empty record, so a profile counts only once every applicable profile-flow section has been reviewed
+    and it carries the validity a run needs (a filing status). Parallels the complete-vs-in-progress split
+    for scenarios."""
+    record = latest_profile( organization )
+    if record is None:
+        return None
+    return record if profile_is_complete( record ) else None
+
+
+def profile_is_complete( record : ProfileRecord ) -> bool:
+    """Whether `record` is a fully set-up profile: every applicable, live profile-flow section reviewed,
+    and a filing status present (the one profile-level fact a forecast cannot run without)."""
+    profile      = load_profile( record )
+    acknowledged = record.acknowledged_section_keys
+    reviewed_all = all(
+        section.key in acknowledged
+        for section in applicable_sections( profile )
+        if flow_of( section ) == 'profile' and section.form is not None )
+    return reviewed_all and profile.filing_status is not None

@@ -6,7 +6,9 @@
 
 {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
 
-{% if scenarios %}
+{% if not has_profile %}
+{% include 'inputs/panes/profile_required.html' %}
+{% elif scenarios %}
 <form method="post" class="mt-3">
   {% csrf_token %}
   {{ form.as_p }}

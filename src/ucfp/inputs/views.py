@@ -38,6 +38,7 @@ from .interview import (
     first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
+from .state import completed_profile, profile_is_complete
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
@@ -71,10 +72,12 @@ class ScenariosHomeView( View ):
         # prefetch each set's referencing scenarios so a delete confirmation can warn which scenarios it
         # would cascade away (a scenario references its Plans/Assumptions).
         return render( request, _SCENARIOS_TEMPLATE, {
-            'active_nav'  : 'scenarios',
-            'scenarios'   : scenarios_for( organization ).select_related( 'plans', 'assumptions' ),
-            'plans'       : plans_for( organization ).prefetch_related( 'scenarios' ),
-            'assumptions' : assumptions_for( organization ).prefetch_related( 'scenarios' ),
+            'active_nav'       : 'scenarios',
+            # Building a scenario needs a completed profile first, so the page leads with the profile gate.
+            'profile_complete' : completed_profile( organization ) is not None,
+            'scenarios'        : scenarios_for( organization ).select_related( 'plans', 'assumptions' ),
+            'plans'            : plans_for( organization ).prefetch_related( 'scenarios' ),
+            'assumptions'      : assumptions_for( organization ).prefetch_related( 'scenarios' ),
         } )
 
 
@@ -89,13 +92,13 @@ class ScenarioBuildStartView( View ):
     _TEMPLATE = 'inputs/scenario_build_start.html'
 
     def get( self, request ):
-        if latest_profile( request.organization ) is None:
+        if completed_profile( request.organization ) is None:
             return self._require_profile( request )
         return render( request, self._TEMPLATE, {} )
 
     def post( self, request ):
         organization = request.organization
-        if latest_profile( organization ) is None:
+        if completed_profile( organization ) is None:
             return self._require_profile( request )
         name     = ( request.POST.get( 'name' ) or '' ).strip() or 'Future Scenario'
         scenario = start_scenario( organization, name )
@@ -107,7 +110,8 @@ class ScenarioBuildStartView( View ):
 
     @staticmethod
     def _require_profile( request ):
-        """No Profile yet: it is the universal prerequisite, so route to it and return here once done."""
+        """No *complete* Profile yet: it is the universal prerequisite, so route to it and return here once
+        it is done."""
         request.session_state.post_setup_return = reverse( 'scenario_build' )
         request.session_state.to_session( request )
         return redirect( 'flow_profile' )
@@ -371,14 +375,14 @@ class InterviewView( View ):
     def _completion_destination( request, flow, building ) -> str:
         """Where a completed flow lands. A scenario build (Plans then Assumptions) finishes at the end of
         Assumptions: clear the in-progress marker and return the user wherever a feature deflected them
-        (else home). A standalone Profile likewise returns whence deflected; a standalone component edit
-        ends on the Scenarios landing."""
+        (else home). Finishing the standalone Profile loops back to its first section, where the header
+        now shows it is complete; a standalone component edit ends on the Scenarios landing."""
         if building:                                           # end of the two-part build (Assumptions done)
             request.session_state.scenario_building = None
             request.session_state.to_session( request )
             return _consume_post_setup_return( request )
         if flow == 'profile':
-            return _consume_post_setup_return( request )
+            return reverse( 'interview_section', kwargs = { 'section': first_section_of_flow( 'profile' ).key } )
         return reverse( 'scenarios_home' )
 
     @staticmethod
@@ -467,9 +471,33 @@ class InterviewView( View ):
             'flow_heading'         : self._flow_heading( request, flow ),
             # The scenario being built (its name), so the component flows breadcrumb it during a build.
             'building_scenario'    : self._building_scenario_name( request ),
+            # The last step of the flow context shows "Finish" rather than "Next" (in a build, the last
+            # Plans step chains into Assumptions, so it is not the finish).
+            'is_last'              : self._is_last_step( request, sections, section, flow ),
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,
+            **self._profile_status( request, flow ),
+        }
+
+    @staticmethod
+    def _is_last_step( request, sections, section, flow ) -> bool:
+        """Whether this section is the flow context's final step. False for the last Plans step of a build,
+        which chains into Assumptions rather than finishing."""
+        if next_section_after( sections, section.key ) is not None:
+            return False
+        return not ( request.session_state.scenario_building and flow == 'plans' )
+
+    @staticmethod
+    def _profile_status( request, flow ) -> dict:
+        """The Profile flow's header status -- whether the profile is complete and when it was last
+        updated -- so its landing shows setup state. Empty for the component flows."""
+        if flow != 'profile':
+            return dict()
+        record = latest_profile( request.organization )
+        return {
+            'profile_complete': record is not None and profile_is_complete( record ),
+            'profile_updated' : record.updated_datetime if record is not None else None,
         }
 
     def _flow_heading( self, request, flow ) -> str:

@@ -27,6 +27,7 @@ from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
+from ucfp.inputs.state import completed_profile
 from ucfp.inputs.scenarios.repository import (
     load_scenario, save_working_as_scenario, save_working_over_scenario, scenarios_for,
     set_working_scenario, working_scenario )
@@ -101,7 +102,7 @@ class FinancialForecastView( InputGatedMixin, View ):
 
     def post( self, request ):                             # "Run forecast": project a complete scenario
         organization   = request.organization
-        profile_record = latest_profile( organization )
+        profile_record = completed_profile( organization )
         complete, _in_progress = self._scenarios( organization, profile_record )
         form = ForecastForm( request.POST, scenarios = complete )
         if profile_record is None or not form.is_valid():
@@ -133,17 +134,17 @@ class FinancialForecastView( InputGatedMixin, View ):
     @staticmethod
     def _scenarios( organization, profile_record ):
         """The org's (complete, in_progress) scenarios against the current profile -- both empty when there
-        is no profile yet (nothing is runnable without one)."""
+        is no *complete* profile yet (nothing is runnable, and the profile gate leads first)."""
         if profile_record is None:
             return list(), list()
         return partition_scenarios( organization, profile_record )
 
     def _context( self, request, form = None, error = None ) -> dict:
         organization   = request.organization
-        profile_record = latest_profile( organization )
+        profile_record = completed_profile( organization )   # completeness, not mere existence
         complete, in_progress = self._scenarios( organization, profile_record )
         return {
-            'has_profile'  : profile_record is not None,
+            'has_profile'  : profile_record is not None,   # a *complete* profile
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
             'in_progress'  : in_progress,                  # half-built scenarios to resume
             'needs_setup'  : profile_record is None or not complete,
