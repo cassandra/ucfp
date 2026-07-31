@@ -95,10 +95,10 @@ class ScenarioRecord( TimestampedModel ):
     reference it: a scenario is meaningless without both parts, so a dangling one is not worth keeping.
 
     Partitioned by `usage_role`: SAVED scenarios are the user's kept set; the single WORKING scenario per
-    organization (enforced by a partial unique constraint) is the exploration sandbox, referencing WORKING
-    copies of a Plans and an Assumptions that the user tweaks -- Save/Update writes those copies back into
-    the referenced SAVED components (propagation is intended). The WORKING sandbox trio is one permanent
-    per-organization row, reused across sessions (overwritten in place), not torn down between explorations."""
+    organization is the exploration sandbox, referencing WORKING copies of a Plans and an Assumptions that
+    the user tweaks -- Save/Update writes those copies back into the referenced SAVED components
+    (propagation is intended). The WORKING sandbox is owned by a `ScenarioExploration`, which holds the
+    one-per-organization invariant and names the SAVED scenario the sandbox was seeded from."""
 
     uuid  = models.UUIDField( default = uuid.uuid4, unique = True, editable = False )
     label = models.CharField( max_length = 255 )
@@ -113,13 +113,30 @@ class ScenarioRecord( TimestampedModel ):
 
     class Meta:
         indexes = [ models.Index( fields = [ 'organization', 'usage_role', 'updated_datetime' ] ) ]
-        # At most one WORKING (sandbox) scenario per organization. Matched against the stored enum value
-        # ('working'), since `LabeledEnumField` persists the name lowercased.
-        constraints = [
-            models.UniqueConstraint(
-                fields = [ 'organization' ], condition = models.Q( usage_role = 'working' ),
-                name = 'one_working_scenario_per_organization' ),
-        ]
 
     def __str__( self ):
         return f'{self.label} ({self.organization})'
+
+
+class ScenarioExploration( TimestampedModel ):
+    """The organization's single in-progress exploration -- a scenario being tweaked against a saved anchor.
+    It *owns* the WORKING scenario copy (the tweakable inputs) and names the SAVED `source` it was seeded
+    from: the baseline a drift diff is measured against, and the default target a save writes back to. One
+    per organization (the sandbox is org-level, so `organization` is unique -- this is where the
+    one-working-scenario invariant now lives).
+
+    Feature-agnostic by design: the runs an exploration produces are tagged by planning feature, but the
+    exploration itself is just "a scenario under tweak", so a later feature could explore the same way.
+    Deleting the `source` deletes the exploration (a variation is meaningless without its anchor, so
+    `source` is never null); a `post_delete` receiver tears down the owned WORKING copy, which nothing else
+    references, so a cascade leaves no orphan."""
+
+    organization = models.OneToOneField(
+        Organization, on_delete = models.CASCADE, related_name = 'scenario_exploration' )
+    working = models.OneToOneField(
+        ScenarioRecord, on_delete = models.CASCADE, related_name = 'owning_exploration' )
+    source  = models.ForeignKey(
+        ScenarioRecord, on_delete = models.CASCADE, related_name = 'anchored_explorations' )
+
+    def __str__( self ):
+        return f'Exploration of {self.source.label} ({self.organization})'

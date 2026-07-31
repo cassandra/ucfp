@@ -1,6 +1,7 @@
-"""The Scenario record + repository (#89): a scenario *references* a Plans and an Assumptions rather than
-copying them. Reference resolution, propagation of a shared-component edit, the single working sandbox,
-the save-as-new fork into independent components, and the delete cascade are the behaviours worth pinning.
+"""The Scenario record + repository: a scenario *references* a Plans and an Assumptions rather than
+copying them. Reference resolution, propagation of a shared-component edit, and the delete cascade are the
+behaviours worth pinning here. The WORKING sandbox and its save-back lifecycle are covered in
+`test_exploration`.
 """
 from decimal import Decimal
 
@@ -20,11 +21,7 @@ from ucfp.jurisdiction.law import TaxProjection
 from ucfp.inputs.scenarios.repository import (
     create_scenario,
     load_scenario,
-    save_working_as_scenario,
-    save_working_over_scenario,
     scenarios_for,
-    set_working_scenario,
-    working_scenario,
 )
 from ucfp.inputs.scenarios.schemas import Scenario
 
@@ -59,9 +56,6 @@ class ScenarioRepositoryTest( TestCase ):
             _rich_assumptions() )
         return plans, assumptions
 
-    def _reload( self, record ):
-        return scenarios_for( self.organization ).get( uuid = record.uuid )
-
     def test_scenario_resolves_its_referenced_components( self ):
         plans, assumptions = self._components()
         record = create_scenario( self.organization, plans, assumptions, label = 'Base' )
@@ -75,59 +69,6 @@ class ScenarioRepositoryTest( TestCase ):
         save_plans( plans, Plans() )                                    # refine the shared Plans
         for record in scenarios_for( self.organization ):              # re-fetched from the DB
             self.assertEqual( load_scenario( record ).plans, Plans() )  # both reflect it -- no copies
-
-    def test_saved_list_excludes_the_working_sandbox_and_orders_by_recency( self ):
-        plans, assumptions = self._components()
-        first  = create_scenario( self.organization, plans, assumptions, label = 'First' )
-        second = create_scenario( self.organization, plans, assumptions, label = 'Second' )
-        set_working_scenario( self.organization, _rich_scenario() )    # the sandbox must not appear
-        listed = list( scenarios_for( self.organization ) )
-        self.assertEqual( [ record.uuid for record in listed ], [ second.uuid, first.uuid ] )
-
-    def test_working_sandbox_is_single_and_overwritten( self ):
-        set_working_scenario( self.organization, Scenario() )
-        set_working_scenario( self.organization, _rich_scenario() )
-        self.assertEqual(
-            self.organization.scenarios.filter( usage_role = UsageRole.WORKING ).count(), 1 )
-        self.assertEqual( load_scenario( working_scenario( self.organization ) ), _rich_scenario() )
-
-    def test_update_writes_the_sandbox_into_the_referenced_components( self ):
-        plans, assumptions = self._components()
-        scenario = create_scenario( self.organization, plans, assumptions, label = 'Base' )
-        set_working_scenario( self.organization, Scenario() )          # sandbox diverges to empty
-        save_working_over_scenario( self.organization, scenario )
-        self.assertEqual( load_scenario( self._reload( scenario ) ), Scenario() )   # written into the refs
-
-    def test_save_as_new_forks_only_the_changed_component( self ):
-        plans, assumptions = self._components()
-        source = create_scenario( self.organization, plans, assumptions, label = 'Base' )
-        set_working_scenario( self.organization, load_scenario( source ) )   # enter the sandbox...
-        set_working_scenario(                                               # ...then change only the Plans
-            self.organization, Scenario( plans = Plans(), assumptions = _rich_assumptions() ) )
-        variant = save_working_as_scenario( self.organization, 'Variant', source )
-        self.assertEqual( variant.usage_role, UsageRole.SAVED )
-        self.assertNotEqual( variant.plans_id, source.plans_id )       # the changed Plans is forked...
-        self.assertEqual( variant.assumptions_id, source.assumptions_id )   # ...the unchanged one is shared
-        forked_plans = PlansRecord.objects.get( pk = variant.plans_id )     # re-fetched, not the in-memory clone
-        self.assertEqual( forked_plans.usage_role, UsageRole.SAVED )    # the fork is a user-facing set
-        self.assertEqual( load_scenario( self._reload( variant ) ).plans, Plans() )
-
-    def test_save_as_new_shares_both_components_when_nothing_changed( self ):
-        plans, assumptions = self._components()
-        source = create_scenario( self.organization, plans, assumptions, label = 'Base' )
-        set_working_scenario( self.organization, load_scenario( source ) )   # sandbox identical to source
-        variant = save_working_as_scenario( self.organization, 'Variant', source )
-        self.assertEqual( variant.plans_id, source.plans_id )          # nothing changed -> both shared,
-        self.assertEqual( variant.assumptions_id, source.assumptions_id )   # nothing forked
-
-    def test_save_as_new_forks_both_components_when_both_changed( self ):
-        plans, assumptions = self._components()
-        source = create_scenario( self.organization, plans, assumptions, label = 'Base' )
-        set_working_scenario( self.organization, load_scenario( source ) )
-        set_working_scenario( self.organization, Scenario() )          # both diverge to empty
-        variant = save_working_as_scenario( self.organization, 'Variant', source )
-        self.assertNotEqual( variant.plans_id, source.plans_id )       # both changed -> both forked
-        self.assertNotEqual( variant.assumptions_id, source.assumptions_id )
 
     def test_deleting_a_referenced_component_cascades_to_its_scenarios( self ):
         plans, assumptions = self._components()

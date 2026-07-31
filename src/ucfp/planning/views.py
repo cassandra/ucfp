@@ -28,13 +28,14 @@ from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
-from ucfp.inputs.scenarios.repository import (
-    load_scenario, save_working_as_scenario, save_working_over_scenario, scenarios_for,
-    set_working_scenario, working_scenario )
+from ucfp.inputs.scenarios.exploration import (
+    overwrite_working, save_working_as_scenario, save_working_over_scenario, scenario_exploration,
+    working_scenario )
+from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
-from .explore import enter_explore, run_working_scenario, transient_runs
+from .explore import run_working_scenario, start_fresh_exploration, transient_runs
 from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
@@ -139,10 +140,12 @@ class FinancialForecastView( InputGatedMixin, View ):
         organization   = request.organization
         profile_record = completed_profile( organization )   # completeness, not mere existence
         complete, in_progress = self._scenarios( organization, profile_record )
+        exploration    = scenario_exploration( organization )
         return {
             'has_profile'  : profile_record is not None,   # a *complete* profile
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
             'in_progress'  : in_progress,                  # half-built scenarios to resume
+            'resume'       : self._resume( exploration ) if exploration is not None else None,
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),
             'results'      : PlanningResultRecord.objects.select_related( 'run' ).filter(
@@ -150,6 +153,16 @@ class FinancialForecastView( InputGatedMixin, View ):
                 usage_role = UsageRole.SAVED ).order_by( '-created_datetime' ),
             'error'        : error,
         }
+
+    @staticmethod
+    def _resume( exploration ) -> dict:
+        """The in-progress exploration surfaced on the hub: its anchor and how far the sandbox has diverged,
+        so Resume can say what it returns to -- the anchor as-is, or a variation of it."""
+        drift = value_changes( load_scenario( exploration.source ), load_scenario( exploration.working ) )
+        return {
+            'source'       : exploration.source,
+            'drift_summary': describe_changes( drift ),
+            'changed'      : bool( drift ) }
 
     @staticmethod
     def _selection_defaults( request ) -> dict:
@@ -188,9 +201,11 @@ class RunResultsView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class EnterExploreView( InputGatedMixin, View ):
-    """`/plan/financial-forecast/explore/enter/` -- fork the hub's chosen saved scenario into the working
-    copy and open its Explore workspace. The scenario's uuid (POSTed from the hub picker) rides in the
-    workspace URL as the exploration's source, and the target a save can overwrite."""
+    """`/plan/financial-forecast/explore/enter/` -- from the hub, start or resume exploring the chosen saved
+    scenario, then redirect to the workspace. Idempotent: re-entering the scenario already in progress
+    resumes it (tweaks and run history intact); choosing a different one re-seeds the sandbox and anchors to
+    it. The frame rides in the POSTed form and is remembered for the workspace, which lives at the uuid-less
+    `/explore/`. A hard restart of the same scenario is the workspace's own Reset, not a re-entry."""
 
     def post( self, request ):
         organization = request.organization
@@ -201,25 +216,31 @@ class EnterExploreView( InputGatedMixin, View ):
             ScenarioRecord, uuid = form.cleaned_data[ 'scenario' ], organization = organization,
             usage_role = UsageRole.SAVED )
         _remember_selection( request, form, scenario_record )
-        enter_explore( organization, load_scenario( scenario_record ) )
-        return redirect( 'explore', scenario = scenario_record.uuid )
+        exploration = scenario_exploration( organization )
+        # Same anchor already in progress -> resume (keep the tweaks and run history); a new or switched
+        # anchor -> start fresh (re-seed and clear runs). A hard restart of the same anchor is Reset.
+        if exploration is None or exploration.source_id != scenario_record.id:
+            start_fresh_exploration( organization, scenario_record )
+        return redirect( 'explore' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ExploreView( InputGatedMixin, View ):
-    """`/plan/financial-forecast/explore/<scenario>/` -- the exploration workspace for a saved scenario:
-    the working copy's inputs, an explicit re-run, the transient-run history, and the selected run's
-    results table. The `<scenario>` uuid is the exploration's source -- displayed as its name, and (in a
-    later sub-step) the target a save overwrites and the baseline a drift diff compares against."""
+    """`/plan/financial-forecast/explore/` -- the exploration workspace: the working copy's inputs, an
+    explicit re-run, the transient-run history, and the selected run's results table. It reads the
+    organization's single in-progress exploration (uuid-less, since there is only one), whose `source` is
+    the saved scenario it is anchored to -- displayed as its name, the target a save overwrites, and the
+    baseline the drift diff compares against. Redirects to the hub when no exploration is in progress."""
 
     _TEMPLATE = 'planning/pages/explore.html'
 
-    def get( self, request, scenario ):
+    def get( self, request ):
         organization = request.organization
-        source  = self._source( organization, scenario )
-        working = working_scenario( organization )
-        if working is None:
+        exploration = scenario_exploration( organization )
+        if exploration is None:
             return redirect( 'financial_forecast' )        # nothing to explore yet
+        source  = exploration.source
+        working = exploration.working
         runs = list( transient_runs( organization ) )
         if not runs:                                       # first entry: produce the initial run
             run_working_scenario( organization, self._frame( request ) )
@@ -237,20 +258,11 @@ class ExploreView( InputGatedMixin, View ):
         return render(
             request, self._TEMPLATE, self._context( request, source, runs, selected, forms, drift ) )
 
-    def post( self, request, scenario ):                   # Re-run: project the auto-saved working scenario
+    def post( self, request ):                             # Re-run: project the auto-saved working scenario
         organization = request.organization
-        source = self._source( organization, scenario )
-        if working_scenario( organization ) is not None:   # the dials auto-save; Re-run only re-projects
+        if scenario_exploration( organization ) is not None:   # the dials auto-save; Re-run only re-projects
             run_working_scenario( organization, self._frame( request ) )
-        return redirect( 'explore', scenario = source.uuid )
-
-    @staticmethod
-    def _source( organization, scenario ) -> ScenarioRecord:
-        """The saved scenario this exploration is anchored to (the URL's uuid), 404 if not the org's.
-        Its Plans/Assumptions are joined in, since the workspace shows their labels."""
-        return get_object_or_404(
-            ScenarioRecord.objects.select_related( 'plans', 'assumptions' ),
-            uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
+        return redirect( 'explore' )
 
     def _context( self, request, source, runs, selected, forms, drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
@@ -299,42 +311,40 @@ class _ExploreSectionAutosaveView( InputGatedMixin, View ):
 
     form_class = None
 
-    def post( self, request, scenario ):
+    def post( self, request ):
         organization = request.organization
-        get_object_or_404(                                 # 404 unless the scenario is this org's
-            ScenarioRecord, uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
         working = working_scenario( organization )
         if working is not None:
             current = load_scenario( working )
             form    = self.form_class( request.POST, scenario = current )
             if form.is_valid():
-                set_working_scenario( organization, form.apply( current ) )
+                overwrite_working( organization, form.apply( current ) )
         return antinode.response()
 
 
 class ExplorePlansAutosaveView( _ExploreSectionAutosaveView ):
-    """`.../explore/<scenario>/plans/` -- self-save the Living Expenses dials into the working scenario."""
+    """`.../explore/plans/` -- self-save the Living Expenses dials into the working scenario."""
 
     form_class = LivingExpensesExploreForm
 
 
 class ExploreAssumptionsAutosaveView( _ExploreSectionAutosaveView ):
-    """`.../explore/<scenario>/assumptions/` -- self-save the Economic dials into the working scenario."""
+    """`.../explore/assumptions/` -- self-save the Economic dials into the working scenario."""
 
     form_class = EconomicAssumptionsExploreForm
 
 
 class ExploreCurationView( InputGatedMixin, View ):
-    """`.../explore/<scenario>/curate/` -- persist which inputs a section keeps visible when collapsed
-    (the curated subset). Visual only -- saved silently to the session when the user closes the picker,
-    keyed by section. Unknown sections are ignored."""
+    """`.../explore/curate/` -- persist which inputs a section keeps visible when collapsed (the curated
+    subset). Visual only -- saved silently to the session when the user closes the picker, keyed by section.
+    Unknown sections are ignored."""
 
     _SESSION_FIELD = {
         'expenses' : 'explore_curated_expenses',
         'rates'    : 'explore_curated_rates',
     }
 
-    def post( self, request, scenario ):
+    def post( self, request ):
         field = self._SESSION_FIELD.get( request.POST.get( 'section' ) )
         if field is not None:
             keys = [ key for key in ( request.POST.get( 'keys' ) or '' ).split( ',' ) if key ]
@@ -345,48 +355,59 @@ class ExploreCurationView( InputGatedMixin, View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class UpdateScenarioView( InputGatedMixin, View ):
-    """`.../explore/<scenario>/update-scenario/` -- overwrite the explored saved scenario with the working
-    copy's current inputs. The common 'save my changes' action, distinct from minting a new scenario; its
-    name is unchanged and the exploration stays anchored to it."""
+    """`.../explore/update-scenario/` -- overwrite the explored saved scenario (the exploration's anchor)
+    with the working copy's current inputs. The common 'save my changes' action, distinct from minting a
+    new scenario; the anchor's name is unchanged and the exploration stays on it."""
 
-    def post( self, request, scenario ):
+    def post( self, request ):
         organization = request.organization
-        source = get_object_or_404(
-            ScenarioRecord, uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
-        if working_scenario( organization ) is not None:
-            save_working_over_scenario( organization, source )
-        return redirect( 'explore', scenario = source.uuid )
+        exploration  = scenario_exploration( organization )
+        if exploration is not None:
+            save_working_over_scenario( organization, exploration.source )
+        return redirect( 'explore' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class SaveScenarioView( InputGatedMixin, View ):
-    """`.../explore/<scenario>/save-scenario/` -- promote the working scenario to a new, separately named
-    saved scenario (a copy; the working copy keeps churning). The exploration re-anchors to the new
-    scenario, so a subsequent update targets it rather than the one it was forked from."""
+    """`.../explore/save-scenario/` -- promote the working scenario to a new, separately named saved
+    scenario (a copy; the working copy keeps churning). The exploration re-anchors to the new scenario, so a
+    subsequent update targets it rather than the one it was forked from."""
 
-    def post( self, request, scenario ):
+    def post( self, request ):
         organization = request.organization
-        source = get_object_or_404(
-            ScenarioRecord, uuid = scenario, organization = organization, usage_role = UsageRole.SAVED )
-        if working_scenario( organization ) is not None:
+        exploration  = scenario_exploration( organization )
+        if exploration is not None:
             name = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
-            record = save_working_as_scenario( organization, name, source )
-            return redirect( 'explore', scenario = record.uuid )
-        return redirect( 'explore', scenario = source.uuid )
+            save_working_as_scenario( organization, name, exploration.source )
+        return redirect( 'explore' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ResetExploreView( InputGatedMixin, View ):
+    """`.../explore/reset/` -- discard the sandbox's changes and run history, starting the exploration over
+    from its anchor. The explicit hard restart: re-entering the same scenario from the hub resumes rather
+    than resets (so a refresh is safe), and this is how the user asks to begin again on the same anchor."""
+
+    def post( self, request ):
+        organization = request.organization
+        exploration  = scenario_exploration( organization )
+        if exploration is not None:
+            start_fresh_exploration( organization, exploration.source )   # re-seed anchor, clear runs
+        return redirect( 'explore' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class KeepRunView( InputGatedMixin, View ):
-    """`.../explore/<scenario>/keep-run/` -- retain a transient run: mark it SAVED so it is kept (and drops
-    out of the transient strip and its prune) rather than churned away."""
+    """`.../explore/keep-run/` -- retain a transient run: mark it SAVED so it is kept (and drops out of the
+    transient strip and its prune) rather than churned away."""
 
-    def post( self, request, scenario ):
+    def post( self, request ):
         organization = request.organization
         result = get_object_or_404(
             PlanningResultRecord, run__uuid = request.POST.get( 'run' ), organization = organization )
         result.usage_role = UsageRole.SAVED
         result.save( update_fields = [ 'usage_role', 'updated_datetime' ] )
-        return redirect( 'explore', scenario = scenario )
+        return redirect( 'explore' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
