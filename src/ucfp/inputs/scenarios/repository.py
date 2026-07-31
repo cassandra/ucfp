@@ -146,7 +146,12 @@ def save_working_as_scenario(
     """Fork the sandbox into a new saved scenario named `label`, forking **only the component(s) the user
     changed** relative to `source`: a diverged component is copied into a new SAVED set (named after the
     scenario), an unchanged one is shared with `source` so edits to it still propagate to both. Raises if
-    there is no working scenario."""
+    there is no working scenario.
+
+    A diverged component is forked by cloning `source`'s set -- which carries its completeness -- then
+    stamping the sandbox's tweaked *values* over it. The sandbox copies hold only data (no review state),
+    so cloning them would yield an incomplete set; but the user was exploring an already-complete scenario,
+    so the fork should be runnable at once."""
     working = working_scenario( organization )
     if working is None:
         raise ValueError( 'No working scenario to save.' )
@@ -154,11 +159,13 @@ def save_working_as_scenario(
     origin  = load_scenario( source )
     with transaction.atomic():                             # the forks and the new scenario land together
         if sandbox.plans != origin.plans:
-            plans = rename_plans( clone_plans( working.plans ), f'{label} Plans' )
+            fork  = save_plans( clone_plans( source.plans ), sandbox.plans )
+            plans = rename_plans( fork, f'{label} Plans' )
         else:
             plans = source.plans                           # unchanged: share it, so edits still propagate
         if sandbox.assumptions != origin.assumptions:
-            assumptions = rename_assumptions( clone_assumptions( working.assumptions ), f'{label} Assumptions' )
+            fork        = save_assumptions( clone_assumptions( source.assumptions ), sandbox.assumptions )
+            assumptions = rename_assumptions( fork, f'{label} Assumptions' )
         else:
             assumptions = source.assumptions
         return create_scenario( organization, plans, assumptions, label )
