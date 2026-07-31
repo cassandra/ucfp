@@ -22,7 +22,7 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
 
 <div class="d-flex align-items-baseline justify-content-between mb-2">
   <div>
-    <h1 class="h3 mb-0">Explore <span class="text-muted">— {{ source.label }}{% if drift %} (with changes){% endif %}</span></h1>
+    <h1 class="h3 mb-0">Explore <span class="text-muted">— {{ source.label }}{% if drift %} (unsaved changes){% endif %}</span></h1>
     <div class="text-muted small">Tweaks apply to a working copy — the saved scenario changes only when
       you save.</div>
   </div>
@@ -94,12 +94,13 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
         <div class="text-muted mb-1">
           {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
         </div>
-        <label class="mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="overwrite"
+        <span class="text-muted">When you save:</span>
+        <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="overwrite"
                form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
-          Update in place</label>
+          {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
         <label class="mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="copy"
                form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
-          Save as copy</label>
+          new copy</label>
       </div>
       {% endwith %}
     </div>
@@ -148,12 +149,13 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
         <div class="text-muted mb-1">
           {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
         </div>
-        <label class="mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="overwrite"
+        <span class="text-muted">When you save:</span>
+        <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="overwrite"
                form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
-          Update in place</label>
+          {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
         <label class="mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="copy"
                form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
-          Save as copy</label>
+          new copy</label>
       </div>
       {% endwith %}
     </div>
@@ -161,9 +163,9 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
 </div>
 
 {% comment %}
-SCENARIO controls: one Save button (below) persists the sandbox per each card's destination toggle -- all
-"update in place" updates this scenario; any "save as copy" branches a new one (named). The drift drill-down
-shows what an in-place overwrite would change.
+SCENARIO controls: one Save button (below) commits the working copy per each card's "when you save" toggle
+-- every component set to update writes to this scenario; any set to a new copy branches a new one (named).
+The drift drill-down shows what an update would change.
 {% endcomment %}
 <div class="card mb-3">
   <div class="card-body d-flex flex-wrap align-items-center">
@@ -185,12 +187,15 @@ shows what an in-place overwrite would change.
     One Save. The per-card radios post with this form (form= association); the name shows and the label
     flips to "Save as new" when any card is "copy" (see the script below).
     {% endcomment %}
-    <form method="post" action="{% url 'explore_save' %}" id="explore-save-form" class="form-inline my-1 mr-3">
+    <form method="post" action="{% url 'explore_save' %}" id="explore-save-form" class="my-1 mr-3">
       {% csrf_token %}
-      <input type="text" name="name" id="explore-save-name" class="form-control form-control-sm mr-2 d-none"
-             placeholder="New scenario name" aria-label="New scenario name">
-      <button type="submit" id="explore-save-button" class="btn btn-success btn-sm"
-              data-update-label="Update &ldquo;{{ source.label }}&rdquo;" data-new-label="Save as new">Save</button>
+      <div class="form-inline">
+        <input type="text" name="name" id="explore-save-name" class="form-control form-control-sm mr-2 d-none"
+               placeholder="New scenario name" aria-label="New scenario name">
+        <button type="submit" id="explore-save-button" class="btn btn-success btn-sm"
+                data-update-label="Update &ldquo;{{ source.label }}&rdquo;" data-new-label="Save as new">Save</button>
+      </div>
+      <div class="small text-muted mt-1">Your edits are held in a working copy — nothing is kept until you save.</div>
     </form>
 
     {% comment %}
