@@ -35,7 +35,7 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
        reveals every input with a checkbox to choose which stay. -->
   <div class="col-md-6 mb-3">
     <div class="card h-100 curate-section" id="plans-section"
-         data-curate-save="{% url 'explore_curate' scenario=source.uuid %}" data-curate-key="expenses">
+         data-curate-save="{% url 'explore_curate' %}" data-curate-key="expenses">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between mb-2">
           <h2 class="h6 mb-0">Plans
@@ -45,7 +45,7 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
             <span class="curate-close d-none">{% icon 'check' size='sm' %} Done</span>
           </button>
         </div>
-        <form method="post" action="{% url 'explore_save_plans' scenario=source.uuid %}"
+        <form method="post" action="{% url 'explore_save_plans' %}"
               class="{{ AppConst.AUTOSAVE_CLASS }} border rounded p-2">
           {% csrf_token %}
           <div class="font-weight-bold small mb-2">Living Expenses</div>
@@ -87,7 +87,7 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
   <!-- Assumptions column: Economic Assumptions -- all rates; same curate/collapse as Plans. -->
   <div class="col-md-6 mb-3">
     <div class="card h-100 curate-section" id="assumptions-section"
-         data-curate-save="{% url 'explore_curate' scenario=source.uuid %}" data-curate-key="rates">
+         data-curate-save="{% url 'explore_curate' %}" data-curate-key="rates">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between mb-2">
           <h2 class="h6 mb-0">Assumptions
@@ -98,7 +98,7 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
             <span class="curate-close d-none">{% icon 'check' size='sm' %} Done</span>
           </button>
         </div>
-        <form method="post" action="{% url 'explore_save_assumptions' scenario=source.uuid %}"
+        <form method="post" action="{% url 'explore_save_assumptions' %}"
               class="{{ AppConst.AUTOSAVE_CLASS }} border rounded p-2">
           {% csrf_token %}
           <div class="font-weight-bold small mb-2">Economic Assumptions
@@ -143,13 +143,13 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
       {% endif %}
     </div>
 
-    <form method="post" action="{% url 'explore_update_scenario' scenario=source.uuid %}" class="my-1 mr-3">
+    <form method="post" action="{% url 'explore_update_scenario' %}" class="my-1 mr-3">
       {% csrf_token %}
       <button type="submit" class="btn btn-success btn-sm" {% if not drift %}disabled{% endif %}>
         Update &ldquo;{{ source.label }}&rdquo;</button>
     </form>
 
-    <form method="post" action="{% url 'explore_save_scenario' scenario=source.uuid %}" class="form-inline my-1">
+    <form method="post" action="{% url 'explore_save_scenario' %}" class="form-inline my-1">
       {% csrf_token %}
       <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="New scenario name"
              aria-label="New scenario name">
@@ -162,19 +162,19 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
      one's output. Keeping a run saves only that output; the scenario is unaffected. -->
 <div class="card mb-3">
   <div class="card-body py-2 d-flex flex-wrap align-items-center">
-    <form method="post" action="{% url 'explore' scenario=source.uuid %}" class="my-1 mr-3">
+    <form method="post" action="{% url 'explore' %}" class="my-1 mr-3">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary">&#8635; Re-run</button>
     </form>
     <div class="d-flex align-items-center flex-wrap my-1 mr-auto">
       <span class="text-muted small mr-2">Recent runs</span>
       {% for result in transient_runs %}
-      <a href="{% url 'explore' scenario=source.uuid %}?run={{ result.run.uuid }}"
+      <a href="{% url 'explore' %}?run={{ result.run.uuid }}"
          class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}">
         {{ result.label }}</a>
       {% endfor %}
     </div>
-    <form method="post" action="{% url 'explore_keep_run' scenario=source.uuid %}" class="my-1">
+    <form method="post" action="{% url 'explore_keep_run' %}" class="my-1">
       {% csrf_token %}
       <input type="hidden" name="run" value="{{ selected.run.uuid }}">
       <button type="submit" class="btn btn-outline-success btn-sm"
