@@ -247,6 +247,7 @@ class ExploreView( InputGatedMixin, View ):
             runs = list( transient_runs( organization ) )
         selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
         working_inputs = load_scenario( working )
+        source_inputs  = load_scenario( source )
         state    = request.session_state
         forms    = {
             'living_form' : LivingExpensesExploreForm(
@@ -254,9 +255,13 @@ class ExploreView( InputGatedMixin, View ):
             'econ_form'   : EconomicAssumptionsExploreForm(
                 scenario = working_inputs, selected = state.explore_curated_rates ) }
         # Drift is measured against the saved source scenario -- exactly what an "update" would overwrite.
-        drift    = value_changes( load_scenario( source ), working_inputs )
+        drift    = value_changes( source_inputs, working_inputs )
+        # Which components diverged -- the same equality Save-as-new forks on. A changed one always forks;
+        # an unchanged one is copied unless the user opts to share it, so only unchanged ones are shareable.
+        changed  = { 'plans'       : working_inputs.plans != source_inputs.plans,
+                     'assumptions' : working_inputs.assumptions != source_inputs.assumptions }
         return render(
-            request, self._TEMPLATE, self._context( request, source, runs, selected, forms, drift ) )
+            request, self._TEMPLATE, self._context( request, source, runs, selected, forms, drift, changed ) )
 
     def post( self, request ):                             # Re-run: project the auto-saved working scenario
         organization = request.organization
@@ -264,7 +269,7 @@ class ExploreView( InputGatedMixin, View ):
             run_working_scenario( organization, self._frame( request ) )
         return redirect( 'explore' )
 
-    def _context( self, request, source, runs, selected, forms, drift ) -> dict:
+    def _context( self, request, source, runs, selected, forms, drift, changed ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
         books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
@@ -276,6 +281,7 @@ class ExploreView( InputGatedMixin, View ):
             'stopped_early'  : run.result.stopped_early,
             'drift'          : drift,                          # curated changes vs the source scenario
             'drift_summary'  : describe_changes( drift ),
+            'changed'        : changed,                        # per-component divergence -> save choices
             **forms,
         }
         context.update( run_books_table_context( request, run, books ) )
@@ -370,15 +376,19 @@ class UpdateScenarioView( InputGatedMixin, View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class SaveScenarioView( InputGatedMixin, View ):
     """`.../explore/save-scenario/` -- promote the working scenario to a new, separately named saved
-    scenario (a copy; the working copy keeps churning). The exploration re-anchors to the new scenario, so a
-    subsequent update targets it rather than the one it was forked from."""
+    scenario. Each component becomes an independent copy unless the user ticked "share" for an unchanged one
+    (the `share_<component>` checkboxes), keeping sharing an explicit choice. The exploration re-anchors to
+    the new scenario, so a subsequent update targets it rather than the one it was forked from."""
 
     def post( self, request ):
         organization = request.organization
         exploration  = scenario_exploration( organization )
         if exploration is not None:
-            name = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
-            save_working_as_scenario( organization, name, exploration.source )
+            name  = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
+            share = frozenset(
+                component for component in ( 'plans', 'assumptions' )
+                if request.POST.get( f'share_{component}' ) )
+            save_working_as_scenario( organization, name, exploration.source, share )
         return redirect( 'explore' )
 
 

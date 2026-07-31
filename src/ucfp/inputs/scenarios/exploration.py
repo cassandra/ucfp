@@ -15,10 +15,11 @@ from django.db import transaction
 from organization.models import Organization
 
 from ..assumptions.repository import (
-    clone_assumptions, load_assumptions, rename_assumptions, save_assumptions )
+    assumptions_for, clone_assumptions, load_assumptions, rename_assumptions, save_assumptions )
 from ..enums import UsageRole
 from ..models import AssumptionsRecord, PlansRecord, ScenarioExploration, ScenarioRecord
-from ..plans.repository import clone_plans, load_plans, rename_plans, save_plans
+from ..naming import unique_label
+from ..plans.repository import clone_plans, load_plans, plans_for, rename_plans, save_plans
 from .repository import create_scenario, load_scenario
 from .schemas import Scenario
 
@@ -79,37 +80,48 @@ def save_working_over_scenario( organization: Organization, record: ScenarioReco
 
 
 def save_working_as_scenario(
-        organization: Organization, label: str, source: ScenarioRecord ) -> ScenarioRecord:
-    """Fork the sandbox into a new saved scenario named `label`, forking **only the component(s) the user
-    changed** relative to `source`: a diverged component is copied into a new SAVED set (named after the
-    scenario), an unchanged one is shared with `source` so edits to it still propagate to both. Raises if
-    there is no working scenario.
+        organization: Organization, label: str, source: ScenarioRecord,
+        share: frozenset = frozenset() ) -> ScenarioRecord:
+    """Fork the sandbox into a new saved scenario named `label`. Each component becomes a **new independent
+    set** -- `source`'s set cloned and stamped with the sandbox's values (a plain copy where the user left it
+    untouched, the tweak-fork where they changed it) -- unless the user explicitly asked to **share** an
+    unchanged component with `source` (its key in `share`), in which case the new scenario references it so a
+    later edit still propagates to both, by the user's choice. A *changed* component can never be shared (it
+    diverged), so `share` is honoured only for components equal to the source's. Raises if there is no
+    working scenario.
 
-    A diverged component is forked by cloning `source`'s set -- which carries its completeness -- then
-    stamping the sandbox's tweaked *values* over it. The sandbox copies hold only data (no review state),
-    so cloning them would yield an incomplete set; but the user was exploring an already-complete scenario,
-    so the fork should be runnable at once. Finally the exploration re-anchors to the new scenario, so the
-    sandbox now represents it and a later Update targets it rather than the one it was forked from."""
+    A forked set is cloned from `source` (which carries its completeness) rather than from the sandbox copies
+    (which hold only data), so it is runnable at once. Finally the exploration re-anchors to the new scenario,
+    so the sandbox now represents it and a later Update targets it rather than the one it was forked from."""
     exploration = scenario_exploration( organization )
     if exploration is None:
         raise ValueError( 'No working scenario to save.' )
     sandbox = load_scenario( exploration.working )
     origin  = load_scenario( source )
     with transaction.atomic():                             # forks, new scenario, and re-anchor land together
-        if sandbox.plans != origin.plans:
-            fork  = save_plans( clone_plans( source.plans ), sandbox.plans )
-            plans = rename_plans( fork, f'{label} Plans' )
+        if 'plans' in share and sandbox.plans == origin.plans:
+            plans = source.plans                           # shared by explicit choice: edits still propagate
         else:
-            plans = source.plans                           # unchanged: share it, so edits still propagate
-        if sandbox.assumptions != origin.assumptions:
-            fork        = save_assumptions( clone_assumptions( source.assumptions ), sandbox.assumptions )
-            assumptions = rename_assumptions( fork, f'{label} Assumptions' )
-        else:
+            copy  = save_plans( clone_plans( source.plans ), sandbox.plans )
+            plans = rename_plans( copy, unique_label( f'{label} Plans', _plans_labels( organization ) ) )
+        if 'assumptions' in share and sandbox.assumptions == origin.assumptions:
             assumptions = source.assumptions
+        else:
+            copy        = save_assumptions( clone_assumptions( source.assumptions ), sandbox.assumptions )
+            assumptions = rename_assumptions(
+                copy, unique_label( f'{label} Assumptions', _assumptions_labels( organization ) ) )
         record = create_scenario( organization, plans, assumptions, label )
         exploration.source = record                        # the sandbox now represents the saved variation
         exploration.save()
         return record
+
+
+def _plans_labels( organization: Organization ) -> list:
+    return [ record.label for record in plans_for( organization ) ]
+
+
+def _assumptions_labels( organization: Organization ) -> list:
+    return [ record.label for record in assumptions_for( organization ) ]
 
 
 def _mint_working( organization: Organization, scenario: Scenario ) -> ScenarioRecord:

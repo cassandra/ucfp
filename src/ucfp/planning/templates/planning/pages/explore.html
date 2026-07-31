@@ -149,11 +149,29 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
         Update &ldquo;{{ source.label }}&rdquo;</button>
     </form>
 
-    <form method="post" action="{% url 'explore_save_scenario' %}" class="form-inline my-1 mr-3">
+    <form method="post" action="{% url 'explore_save_scenario' %}" class="my-1 mr-3">
       {% csrf_token %}
-      <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="New scenario name"
-             aria-label="New scenario name">
-      <button type="submit" class="btn btn-outline-secondary btn-sm">Save as new</button>
+      <div class="form-inline">
+        <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="New scenario name"
+               aria-label="New scenario name">
+        <button type="submit" class="btn btn-outline-secondary btn-sm">Save as new</button>
+      </div>
+      {% comment %}
+      Sharing is opt-in, per unchanged component: by default the new scenario gets its own copy, so a later
+      Update to it won't touch the source. A changed component always forks, so it offers no choice.
+      {% endcomment %}
+      {% if not changed.plans or not changed.assumptions %}
+      <div class="small text-muted mt-1">
+        {% if not changed.plans %}
+        <label class="d-block mb-0 font-weight-normal"><input type="checkbox" name="share_plans">
+          Share &ldquo;{{ source.plans.label }}&rdquo; (else a new copy)</label>
+        {% endif %}
+        {% if not changed.assumptions %}
+        <label class="d-block mb-0 font-weight-normal"><input type="checkbox" name="share_assumptions">
+          Share &ldquo;{{ source.assumptions.label }}&rdquo; (else a new copy)</label>
+        {% endif %}
+      </div>
+      {% endif %}
     </form>
 
     {% comment %}

@@ -102,7 +102,7 @@ class ScenarioExplorationTest( TestCase ):
         reloaded = scenarios_for( self.organization ).get( uuid = source.uuid )
         self.assertEqual( load_scenario( reloaded ), Scenario() )      # written into the shared refs
 
-    def test_save_as_new_forks_only_the_changed_component( self ):
+    def test_save_as_new_copies_the_unchanged_component_by_default( self ):
         source = self._saved( _rich_scenario(), 'Base' )
         enter_exploration( self.organization, source )
         overwrite_working(                                            # change only the Plans
@@ -110,17 +110,31 @@ class ScenarioExplorationTest( TestCase ):
         variant = save_working_as_scenario( self.organization, 'Variant', source )
         self.assertEqual( variant.usage_role, UsageRole.SAVED )
         self.assertNotEqual( variant.plans_id, source.plans_id )      # the changed Plans is forked...
-        self.assertEqual( variant.assumptions_id, source.assumptions_id )   # ...the unchanged one is shared
-        forked_plans = PlansRecord.objects.get( pk = variant.plans_id )   # re-fetched, not the clone
-        self.assertEqual( forked_plans.usage_role, UsageRole.SAVED )  # a user-facing set, not a WORKING leak
-        self.assertEqual( load_scenario( variant ).plans, Plans() )
+        self.assertNotEqual( variant.assumptions_id, source.assumptions_id )   # ...the unchanged one copied,
+        copied_assumptions = AssumptionsRecord.objects.get( pk = variant.assumptions_id )
+        forked_plans       = PlansRecord.objects.get( pk = variant.plans_id )
+        # both are independent user-facing SAVED sets (no WORKING leak), so a later Update can't reach source
+        self.assertEqual( copied_assumptions.usage_role, UsageRole.SAVED )
+        self.assertEqual( forked_plans.usage_role, UsageRole.SAVED )
+        self.assertEqual(                                            # the sandbox's values are preserved
+            load_scenario( variant ), Scenario( plans = Plans(), assumptions = _rich_assumptions() ) )
 
-    def test_save_as_new_shares_both_components_when_nothing_changed( self ):
+    def test_save_as_new_copies_both_components_when_nothing_changed( self ):
         source  = self._saved( _rich_scenario(), 'Base' )
         enter_exploration( self.organization, source )
         variant = save_working_as_scenario( self.organization, 'Variant', source )
-        self.assertEqual( variant.plans_id, source.plans_id )
-        self.assertEqual( variant.assumptions_id, source.assumptions_id )
+        self.assertNotEqual( variant.plans_id, source.plans_id )      # independent copies by default,
+        self.assertNotEqual( variant.assumptions_id, source.assumptions_id )   # not shared aliases
+
+    def test_save_as_new_shares_an_unchanged_component_only_when_asked( self ):
+        source = self._saved( _rich_scenario(), 'Base' )
+        enter_exploration( self.organization, source )
+        overwrite_working(                                            # change only the Plans
+            self.organization, Scenario( plans = Plans(), assumptions = _rich_assumptions() ) )
+        variant = save_working_as_scenario(                          # ask to share both components...
+            self.organization, 'Variant', source, share = frozenset( { 'plans', 'assumptions' } ) )
+        self.assertNotEqual( variant.plans_id, source.plans_id )      # ...but the changed Plans still forks,
+        self.assertEqual( variant.assumptions_id, source.assumptions_id )   # only the unchanged one is shared
 
     def test_save_as_new_forks_both_components_when_both_changed( self ):
         source  = self._saved( _rich_scenario(), 'Base' )
