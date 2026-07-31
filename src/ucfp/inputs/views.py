@@ -9,6 +9,7 @@ The remaining views are the sub-editors each section pane drills into.
 """
 from dataclasses import replace
 
+from django import forms
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -30,7 +31,8 @@ from ucfp.inputs.plans.repository import (
 from ucfp.inputs.assumptions.repository import (
     assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
     load_assumptions, rename_assumptions, save_assumptions )
-from ucfp.inputs.scenarios.repository import scenarios_for, start_scenario
+from ucfp.inputs.scenarios.repository import (
+    create_scenario, existing_pairings, scenarios_for, start_scenario )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -38,7 +40,7 @@ from .interview import (
     first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
-from .state import completed_profile, profile_is_complete
+from .state import complete_assumptions, complete_plans, completed_profile, profile_is_complete
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
@@ -81,25 +83,117 @@ class ScenariosHomeView( View ):
         } )
 
 
+def _require_complete_profile( request ):
+    """Redirect a user without a complete Profile to set one up -- the universal prerequisite for building
+    or combining a scenario. No return is stashed: the Profile flow ends on its own landing (the user then
+    heads to the feature), so a return here would not be honoured."""
+    return redirect( 'flow_profile' )
+
+
+class ScenarioCombineForm( forms.Form ):
+    """Combine an existing Plans with an existing Assumptions into a new named scenario. The choices are the
+    organization's *complete* components (injected by the view); a pairing already covered by a scenario is
+    rejected, since a scenario is exactly a distinct combination."""
+
+    name        = forms.CharField( label = 'Scenario name', max_length = 255, required = False )
+    plans       = forms.ChoiceField( label = 'Plans' )
+    assumptions = forms.ChoiceField( label = 'Assumptions' )
+
+    def __init__( self, *args, plans = None, assumptions = None, taken = frozenset(), **kwargs ):
+        super().__init__( *args, **kwargs )
+        self._taken = taken
+        self.fields[ 'plans' ].choices = [
+            ( str( record.uuid ), record.label ) for record in ( plans or [] ) ]
+        self.fields[ 'assumptions' ].choices = [
+            ( str( record.uuid ), record.label ) for record in ( assumptions or [] ) ]
+        for field in ( 'plans', 'assumptions' ):
+            self.fields[ field ].widget.attrs[ 'class' ] = 'custom-select'
+
+    def clean( self ):
+        cleaned = super().clean()
+        pairing = ( cleaned.get( 'plans' ), cleaned.get( 'assumptions' ) )
+        if None not in pairing and pairing in self._taken:
+            raise forms.ValidationError(
+                'That combination is already a scenario -- pick a different Plans or Assumptions.' )
+        return cleaned
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioNewView( View ):
+    """`/inputs/scenarios/new/` -- create a new Future Scenario, the normal (repeatable) way: *combine* an
+    existing Plans with an existing Assumptions. It routes by what the organization has: no complete
+    components yet -> the first-time build-both bootstrap (`scenario_build`); complete components but every
+    pairing already used -> a hint to make a new Plans/Assumptions first; otherwise the combine form. A
+    completed Profile is the prerequisite."""
+
+    _FORM_TEMPLATE = 'inputs/scenario_new.html'
+    _HINT_TEMPLATE = 'inputs/panes/scenario_combinations_exhausted.html'
+
+    def get( self, request ):
+        profile_record = completed_profile( request.organization )
+        if profile_record is None:
+            return _require_complete_profile( request )
+        plans, assumptions = self._components( profile_record, request.organization )
+        if not plans or not assumptions:                   # nothing to pair yet -> the bootstrap build
+            return redirect( 'scenario_build' )
+        if not self._has_available_pairing( request.organization, plans, assumptions ):
+            return render( request, self._HINT_TEMPLATE, {} )
+        return render( request, self._FORM_TEMPLATE, { 'form': self._form( request.organization, plans, assumptions ) } )
+
+    def post( self, request ):
+        organization   = request.organization
+        profile_record = completed_profile( organization )
+        if profile_record is None:
+            return _require_complete_profile( request )
+        plans, assumptions = self._components( profile_record, organization )
+        form = self._form( organization, plans, assumptions, request.POST )
+        if not form.is_valid():
+            return render( request, self._FORM_TEMPLATE, { 'form': form } )
+        by_uuid_plans       = { str( record.uuid ): record for record in plans }
+        by_uuid_assumptions = { str( record.uuid ): record for record in assumptions }
+        name = ( form.cleaned_data[ 'name' ] or '' ).strip() or 'Future Scenario'
+        create_scenario(
+            organization, by_uuid_plans[ form.cleaned_data[ 'plans' ] ],
+            by_uuid_assumptions[ form.cleaned_data[ 'assumptions' ] ], name )
+        return redirect( _consume_post_setup_return( request ) )
+
+    @staticmethod
+    def _components( profile_record, organization ):
+        return ( complete_plans( profile_record, organization ),
+                 complete_assumptions( profile_record, organization ) )
+
+    @staticmethod
+    def _has_available_pairing( organization, plans, assumptions ) -> bool:
+        taken = existing_pairings( organization )
+        return any( ( str( p.uuid ), str( a.uuid ) ) not in taken for p in plans for a in assumptions )
+
+    @staticmethod
+    def _form( organization, plans, assumptions, data = None ):
+        return ScenarioCombineForm(
+            data, plans = plans, assumptions = assumptions, taken = existing_pairings( organization ) )
+
+
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ScenarioBuildStartView( View ):
-    """`/inputs/scenarios/build/` -- begin building a new Future Scenario. GET explains what a scenario is
-    (forward-looking, unlike the Profile's facts) and takes a name; POST mints the scenario with its own
-    Plans and Assumptions (named after it), makes them the editing target, marks the build in progress,
-    and opens the two-part flow at the first Plans section. A Profile is the prerequisite -- without one
-    the user is sent to build it first and returned here."""
+    """`/inputs/scenarios/build/` -- the first-scenario *bootstrap*: with no components yet to combine,
+    author a Plans and an Assumptions in one pass. GET explains what a scenario is (forward-looking, unlike
+    the Profile's facts) and takes a name; POST mints the scenario with its own Plans and Assumptions
+    (named after it), makes them the editing target, marks the build in progress, and opens the two-part
+    flow at the first Plans section. Reached from `ScenarioNewView` when there is nothing to pair (or
+    directly); a completed Profile is the prerequisite. Later scenarios combine existing components instead
+    (`ScenarioNewView`)."""
 
     _TEMPLATE = 'inputs/scenario_build_start.html'
 
     def get( self, request ):
         if completed_profile( request.organization ) is None:
-            return self._require_profile( request )
+            return _require_complete_profile( request )
         return render( request, self._TEMPLATE, {} )
 
     def post( self, request ):
         organization = request.organization
         if completed_profile( organization ) is None:
-            return self._require_profile( request )
+            return _require_complete_profile( request )
         name     = ( request.POST.get( 'name' ) or '' ).strip() or 'Future Scenario'
         scenario = start_scenario( organization, name )
         _select( request, 'current_plans_uuid', scenario.plans )
@@ -107,14 +201,6 @@ class ScenarioBuildStartView( View ):
         request.session_state.scenario_building = str( scenario.uuid )
         request.session_state.to_session( request )
         return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
-
-    @staticmethod
-    def _require_profile( request ):
-        """No *complete* Profile yet: it is the universal prerequisite, so route to it and return here once
-        it is done."""
-        request.session_state.post_setup_return = reverse( 'scenario_build' )
-        request.session_state.to_session( request )
-        return redirect( 'flow_profile' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

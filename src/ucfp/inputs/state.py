@@ -85,10 +85,32 @@ def completed_profile( organization : Organization ) -> Optional[ ProfileRecord 
 def profile_is_complete( record : ProfileRecord ) -> bool:
     """Whether `record` is a fully set-up profile: every applicable, live profile-flow section reviewed,
     and a filing status present (the one profile-level fact a forecast cannot run without)."""
-    profile      = load_profile( record )
+    profile = load_profile( record )
+    return ( _flow_reviewed( profile, record, 'profile' )
+             and profile.filing_status is not None )
+
+
+def complete_plans( profile_record : ProfileRecord, organization : Organization ) -> list:
+    """The organization's Plans sets whose plans-flow sections have all been reviewed -- the ones ready to
+    combine into a runnable scenario. `profile_record` supplies the conditional-section context."""
+    profile = load_profile( profile_record )
+    return [ record for record in plans_for( organization )
+             if _flow_reviewed( profile, record, 'plans' ) ]
+
+
+def complete_assumptions( profile_record : ProfileRecord, organization : Organization ) -> list:
+    """The organization's Assumptions sets whose assumptions-flow sections have all been reviewed -- the
+    ones ready to combine into a runnable scenario."""
+    profile = load_profile( profile_record )
+    return [ record for record in assumptions_for( organization )
+             if _flow_reviewed( profile, record, 'assumptions' ) ]
+
+
+def _flow_reviewed( profile, record, flow : str ) -> bool:
+    """Whether `record` has had every applicable, live section of `flow` reviewed -- the completeness a
+    component or the profile shares (a scenario's overall run-readiness adds cross-input checks)."""
     acknowledged = record.acknowledged_section_keys
-    reviewed_all = all(
+    return all(
         section.key in acknowledged
         for section in applicable_sections( profile )
-        if flow_of( section ) == 'profile' and section.form is not None )
-    return reviewed_all and profile.filing_status is not None
+        if flow_of( section ) == flow and section.form is not None )

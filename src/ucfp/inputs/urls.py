@@ -10,6 +10,7 @@ from . import views
 
 urlpatterns = [
     path( 'scenarios/', views.ScenariosHomeView.as_view(), name = 'scenarios_home' ),
+    path( 'scenarios/new/', views.ScenarioNewView.as_view(), name = 'scenario_new' ),
     path( 'scenarios/build/', views.ScenarioBuildStartView.as_view(), name = 'scenario_build' ),
     path( 'scenarios/<uuid:uuid>/resume/', views.ScenarioResumeView.as_view(), name = 'scenario_resume' ),
 

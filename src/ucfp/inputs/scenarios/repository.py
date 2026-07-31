@@ -43,6 +43,15 @@ def latest_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]:
     return scenarios_for( organization ).first()
 
 
+def existing_pairings( organization: Organization ) -> set:
+    """The (plans_uuid, assumptions_uuid) pairs the organization's scenarios already cover, as strings --
+    so a new scenario can offer only combinations not yet defined (uuids to match the component choosers)."""
+    return {
+        ( str( plans_uuid ), str( assumptions_uuid ) )
+        for plans_uuid, assumptions_uuid
+        in scenarios_for( organization ).values_list( 'plans__uuid', 'assumptions__uuid' ) }
+
+
 def create_scenario( organization: Organization, plans: PlansRecord, assumptions: AssumptionsRecord,
                      label: Optional[ str ] = None ) -> ScenarioRecord:
     """Mint a saved scenario referencing the given Plans and Assumptions records -- the single place that
