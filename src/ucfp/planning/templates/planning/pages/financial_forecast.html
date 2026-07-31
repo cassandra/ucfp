@@ -7,8 +7,10 @@
 {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
 
 {% if resume %}
-{# Offered only while an exploration is in progress; keyed off the exploration's own anchor (not the
-   chooser below), and linking to the uuid-less workspace so it resumes without re-seeding. #}
+{% comment %}
+Offered only while an exploration is in progress; keyed off the exploration's own anchor (not the
+chooser below), and linking to the uuid-less workspace so it resumes without re-seeding.
+{% endcomment %}
 <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between">
   <span class="my-1">Exploration in progress &mdash;
     {% if resume.changed %}a variation of <strong>{{ resume.source.label }}</strong>

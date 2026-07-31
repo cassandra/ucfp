@@ -22,17 +22,21 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
 
 <div class="d-flex align-items-baseline justify-content-between mb-2">
   <div>
-    <h1 class="h3 mb-0">Explore <span class="text-muted">— {{ source.label }}{% if drift %} (with changes){% endif %}</span></h1>
+    <h1 class="h3 mb-0">Explore <span class="text-muted">— {{ source.label }}{% if drift %} (unsaved changes){% endif %}</span></h1>
     <div class="text-muted small">Tweaks apply to a working copy — the saved scenario changes only when
       you save.</div>
   </div>
 </div>
 
-<!-- TOP: two input columns, each an independent auto-saving section form. Editing a dial persists it to
-     the working scenario immediately (js-autosave, silent); Re-run (below) re-projects the saved edits. -->
+{% comment %}
+TOP: two input columns, each an independent auto-saving section form. Editing a dial persists it to the
+working scenario immediately (js-autosave, silent); Re-run (below) re-projects the saved edits.
+{% endcomment %}
 <div class="row">
-  <!-- Plans column: Living Expenses -- all expenses; the curated subset shows when collapsed, the gear
-       reveals every input with a checkbox to choose which stay. -->
+  {% comment %}
+  Plans column: Living Expenses -- all expenses; the curated subset shows when collapsed, the gear reveals
+  every input with a checkbox to choose which stay.
+  {% endcomment %}
   <div class="col-md-6 mb-3">
     <div class="card h-100 curate-section" id="plans-section"
          data-curate-save="{% url 'explore_curate' %}" data-curate-key="expenses">
@@ -49,7 +53,7 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
               class="{{ AppConst.AUTOSAVE_CLASS }} border rounded p-2">
           {% csrf_token %}
           <div class="font-weight-bold small mb-2">Living Expenses</div>
-          <!-- One row per expense, one editable cell per age band (the columns). -->
+          {# One row per expense, one editable cell per age band (the columns). #}
           <div class="table-responsive">
             <table class="table table-sm mb-1">
               <thead>
@@ -81,10 +85,30 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
           </div>
         </form>
       </div>
+      {% comment %}
+      How these Plans save: a radio per the unified Save button below (associated by form=), plus the
+      sharing scope. Smart-defaulted -- overwrite in place when private, a protective copy when shared.
+      {% endcomment %}
+      {% with opt=save_options.plans %}
+      <div class="card-footer py-2 small">
+        <div class="text-muted mb-1">
+          {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
+        </div>
+        <div role="radiogroup" aria-label="Plans — what to do when you save">
+          <span class="text-muted">When you save:</span>
+          <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="overwrite"
+                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
+            {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
+          <label class="mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="copy"
+                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
+            new copy</label>
+        </div>
+      </div>
+      {% endwith %}
     </div>
   </div>
 
-  <!-- Assumptions column: Economic Assumptions -- all rates; same curate/collapse as Plans. -->
+  {# Assumptions column: Economic Assumptions -- all rates; same curate/collapse as Plans. #}
   <div class="col-md-6 mb-3">
     <div class="card h-100 curate-section" id="assumptions-section"
          data-curate-save="{% url 'explore_curate' %}" data-curate-key="rates">
@@ -105,8 +129,10 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
             <span class="text-muted font-weight-normal">(% per year)</span></div>
           <div class="form-row">
             {% for row in econ_form.rows %}
-            <!-- The flex sits on an inner wrapper, not the curate-row: Bootstrap's .d-flex is !important
-                 and would override .d-none, so a row that also carried d-flex could never hide. -->
+            {% comment %}
+            The flex sits on an inner wrapper, not the curate-row: Bootstrap's .d-flex is !important and
+            would override .d-none, so a row that also carried d-flex could never hide.
+            {% endcomment %}
             <div class="form-group col-12 mb-2 curate-row{% if not row.selected %} d-none{% endif %}"
                  data-key="{{ row.handle }}">
               <div class="d-flex align-items-center">
@@ -120,13 +146,31 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
           </div>
         </form>
       </div>
+      {% with opt=save_options.assumptions %}
+      <div class="card-footer py-2 small">
+        <div class="text-muted mb-1">
+          {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
+        </div>
+        <div role="radiogroup" aria-label="Assumptions — what to do when you save">
+          <span class="text-muted">When you save:</span>
+          <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="overwrite"
+                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
+            {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
+          <label class="mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="copy"
+                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
+            new copy</label>
+        </div>
+      </div>
+      {% endwith %}
     </div>
   </div>
 </div>
 
-<!-- SCENARIO controls (first, right under the inputs): update the explored scenario or save a new one,
-     with a drill-down of exactly what an update would overwrite. Separate forms, so outside the tweak
-     form above. -->
+{% comment %}
+SCENARIO controls: one Save button (below) commits the working copy per each card's "when you save" toggle
+-- every component set to update writes to this scenario; any set to a new copy branches a new one (named).
+The drift drill-down shows what an update would change.
+{% endcomment %}
 <div class="card mb-3">
   <div class="card-body d-flex flex-wrap align-items-center">
     <div class="mr-auto my-1">
@@ -143,17 +187,19 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
       {% endif %}
     </div>
 
-    <form method="post" action="{% url 'explore_update_scenario' %}" class="my-1 mr-3">
+    {% comment %}
+    One Save. The per-card radios post with this form (form= association); the name shows and the label
+    flips to "Save as new" when any card is "copy" (see the script below).
+    {% endcomment %}
+    <form method="post" action="{% url 'explore_save' %}" id="explore-save-form" class="my-1 mr-3">
       {% csrf_token %}
-      <button type="submit" class="btn btn-success btn-sm" {% if not drift %}disabled{% endif %}>
-        Update &ldquo;{{ source.label }}&rdquo;</button>
-    </form>
-
-    <form method="post" action="{% url 'explore_save_scenario' %}" class="form-inline my-1 mr-3">
-      {% csrf_token %}
-      <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="New scenario name"
-             aria-label="New scenario name">
-      <button type="submit" class="btn btn-outline-secondary btn-sm">Save as new</button>
+      <div class="form-inline">
+        <input type="text" name="name" id="explore-save-name" class="form-control form-control-sm mr-2 d-none"
+               placeholder="New scenario name" aria-label="New scenario name">
+        <button type="submit" id="explore-save-button" class="btn btn-success btn-sm"
+                data-update-label="Update &ldquo;{{ source.label }}&rdquo;" data-new-label="Save as new">Save</button>
+      </div>
+      <div class="small text-muted mt-1">Your edits are held in a working copy — nothing is kept until you save.</div>
     </form>
 
     {% comment %}
@@ -169,8 +215,10 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
   </div>
 </div>
 
-<!-- RE-RUN controls (second): re-project the auto-saved edits, browse recent transient runs, or keep
-     one's output. Keeping a run saves only that output; the scenario is unaffected. -->
+{% comment %}
+RE-RUN controls (second): re-project the auto-saved edits, browse recent transient runs, or keep one's
+output. Keeping a run saves only that output; the scenario is unaffected.
+{% endcomment %}
 <div class="card mb-3">
   <div class="card-body py-2 d-flex flex-wrap align-items-center">
     <form method="post" action="{% url 'explore' %}" class="my-1 mr-3">
@@ -194,7 +242,7 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
   </div>
 </div>
 
-<!-- BOTTOM: selected run's results -->
+{# BOTTOM: selected run's results #}
 <div class="card mb-4">
   <div class="card-body">
     <div class="d-flex align-items-baseline justify-content-between mb-2">
@@ -237,6 +285,24 @@ loaded before content, and AN.post adds the CSRF token from the cookie.
               { section: section.data( 'curate-key' ), keys: keys.join( ',' ) },
               { suppressLoader: true } );
    } );
+ })();
+</script>
+
+{% comment %}
+Adapt the single Save to the card toggles: any component set to "copy" means a new scenario, so reveal the
+name field and label the button "Save as new"; otherwise it updates this scenario in place. Runs on load so
+the smart defaults are reflected, and on every toggle change.
+{% endcomment %}
+<script>
+ (function () {
+   var button = $( '#explore-save-button' );
+   function refresh() {
+     var anyCopy = $( '.js-save-dest[value="copy"]:checked' ).length > 0;
+     $( '#explore-save-name' ).toggleClass( 'd-none', !anyCopy );
+     button.text( anyCopy ? button.data( 'new-label' ) : button.data( 'update-label' ) );
+   }
+   $( 'body' ).on( 'change', '.js-save-dest', refresh );
+   refresh();
  })();
 </script>
 {% endblock %}

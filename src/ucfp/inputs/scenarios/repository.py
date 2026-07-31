@@ -100,7 +100,11 @@ def delete_scenario( record: ScenarioRecord ) -> None:
     record.delete()
 
 
+def scenario_labels( organization: Organization ) -> list:
+    """The labels of the organization's SAVED scenarios -- the taken names an auto-generated name avoids."""
+    return [ record.label for record in scenarios_for( organization ) ]
+
+
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new scenario, since many coexist per organization."""
-    return numbered_label(
-        'Scenario', [ record.label for record in scenarios_for( organization ) ] )
+    return numbered_label( 'Scenario', scenario_labels( organization ) )

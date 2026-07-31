@@ -1,7 +1,7 @@
 """The `ScenarioExploration` seam: the org's single exploration owns a WORKING scenario copy and
 names the SAVED anchor it was seeded from. Entry/ownership, in-place tweaks that leave the anchor alone,
-Update/Save-as-new write-back, re-anchoring on Save-as-new, and the cascade teardown of the owned copy
-when the anchor is deleted are the behaviours worth pinning.
+the per-component save (overwrite in place vs copy into a new scenario) with its re-anchor, and the
+cascade teardown of the owned copy when the anchor is deleted are the behaviours worth pinning.
 """
 from decimal import Decimal
 
@@ -19,10 +19,10 @@ from ucfp.inputs.plans.schemas import DrawdownPolicy, Plans
 from ucfp.jurisdiction.enums import StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 from ucfp.inputs.scenarios.exploration import (
+    component_usage,
     enter_exploration,
     overwrite_working,
-    save_working_as_scenario,
-    save_working_over_scenario,
+    save_working,
     scenario_exploration,
     working_scenario,
 )
@@ -94,48 +94,73 @@ class ScenarioExplorationTest( TestCase ):
         self.assertEqual( scenario_exploration( self.organization ).source_id, source.id )   # anchor kept
         self.assertEqual( load_scenario( source ), _rich_scenario() )                # source untouched
 
-    def test_update_writes_the_sandbox_into_the_anchor_components( self ):
+    def test_save_working_all_overwrite_updates_the_source_in_place( self ):
         source = self._saved( _rich_scenario(), 'Base' )
         enter_exploration( self.organization, source )
-        overwrite_working( self.organization, Scenario() )
-        save_working_over_scenario( self.organization, source )
+        overwrite_working( self.organization, Scenario() )            # tweak the sandbox to empty
+        result = save_working(
+            self.organization, source, { 'plans': 'overwrite', 'assumptions': 'overwrite' } )
+        self.assertEqual( result.pk, source.pk )                     # same scenario, no new one minted
+        self.assertEqual( scenarios_for( self.organization ).count(), 1 )
         reloaded = scenarios_for( self.organization ).get( uuid = source.uuid )
-        self.assertEqual( load_scenario( reloaded ), Scenario() )      # written into the shared refs
+        self.assertEqual( load_scenario( reloaded ), Scenario() )     # source's own sets now hold the values
 
-    def test_save_as_new_forks_only_the_changed_component( self ):
+    def test_save_working_all_copy_branches_an_independent_scenario( self ):
         source = self._saved( _rich_scenario(), 'Base' )
         enter_exploration( self.organization, source )
-        overwrite_working(                                            # change only the Plans
-            self.organization, Scenario( plans = Plans(), assumptions = _rich_assumptions() ) )
-        variant = save_working_as_scenario( self.organization, 'Variant', source )
-        self.assertEqual( variant.usage_role, UsageRole.SAVED )
-        self.assertNotEqual( variant.plans_id, source.plans_id )      # the changed Plans is forked...
-        self.assertEqual( variant.assumptions_id, source.assumptions_id )   # ...the unchanged one is shared
-        forked_plans = PlansRecord.objects.get( pk = variant.plans_id )   # re-fetched, not the clone
-        self.assertEqual( forked_plans.usage_role, UsageRole.SAVED )  # a user-facing set, not a WORKING leak
-        self.assertEqual( load_scenario( variant ).plans, Plans() )
+        overwrite_working( self.organization, Scenario() )
+        result = save_working(
+            self.organization, source, { 'plans': 'copy', 'assumptions': 'copy' }, 'Test' )
+        self.assertNotEqual( result.pk, source.pk )                  # a new scenario...
+        self.assertNotEqual( result.plans_id, source.plans_id )      # ...with independent components
+        self.assertNotEqual( result.assumptions_id, source.assumptions_id )
+        self.assertEqual(                                            # copies are SAVED sets, no WORKING leak
+            PlansRecord.objects.get( pk = result.plans_id ).usage_role, UsageRole.SAVED )
+        self.assertEqual( load_scenario( source ), _rich_scenario() )   # source untouched
+        self.assertEqual( scenario_exploration( self.organization ).source_id, result.id )   # re-anchored
 
-    def test_save_as_new_shares_both_components_when_nothing_changed( self ):
-        source  = self._saved( _rich_scenario(), 'Base' )
-        enter_exploration( self.organization, source )
-        variant = save_working_as_scenario( self.organization, 'Variant', source )
-        self.assertEqual( variant.plans_id, source.plans_id )
-        self.assertEqual( variant.assumptions_id, source.assumptions_id )
-
-    def test_save_as_new_forks_both_components_when_both_changed( self ):
-        source  = self._saved( _rich_scenario(), 'Base' )
-        enter_exploration( self.organization, source )
-        overwrite_working( self.organization, Scenario() )            # both diverge to empty
-        variant = save_working_as_scenario( self.organization, 'Variant', source )
-        self.assertNotEqual( variant.plans_id, source.plans_id )      # both changed -> both forked
-        self.assertNotEqual( variant.assumptions_id, source.assumptions_id )
-
-    def test_save_as_new_re_anchors_the_exploration_to_the_new_scenario( self ):
-        source  = self._saved( _rich_scenario(), 'Base' )
+    def test_save_working_copy_dedupes_new_component_names_and_defaults_a_blank_name( self ):
+        source = self._saved( _rich_scenario(), 'Base' )
         enter_exploration( self.organization, source )
         overwrite_working( self.organization, Scenario() )
-        variant = save_working_as_scenario( self.organization, 'Variant', source )
-        self.assertEqual( scenario_exploration( self.organization ).source_id, variant.id )
+        both = { 'plans': 'copy', 'assumptions': 'copy' }
+        first = save_working( self.organization, source, both, 'Test' )
+        enter_exploration( self.organization, source )               # a fresh exploration, same anchor
+        overwrite_working( self.organization, Scenario() )
+        second = save_working( self.organization, source, both, 'Test' )
+        self.assertEqual( PlansRecord.objects.get( pk = first.plans_id ).label, 'Test Plans' )
+        self.assertEqual(                                           # a colliding copy name is deduped
+            PlansRecord.objects.get( pk = second.plans_id ).label, 'Test Plans 2' )
+        enter_exploration( self.organization, source )
+        overwrite_working( self.organization, Scenario() )
+        blank = save_working( self.organization, source, both )      # no name
+        self.assertEqual( blank.label, 'Base copy' )                # unnamed save -> a "<source> copy"
+        self.assertEqual(                                          # and the copied set is named to match
+            PlansRecord.objects.get( pk = blank.plans_id ).label, 'Base copy Plans' )
+
+    def test_save_working_mixed_branches_but_shares_the_overwritten_component( self ):
+        source = self._saved( _rich_scenario(), 'Base' )
+        enter_exploration( self.organization, source )
+        overwrite_working(                                           # change only the Plans
+            self.organization, Scenario( plans = Plans(), assumptions = _rich_assumptions() ) )
+        result = save_working(
+            self.organization, source, { 'plans': 'copy', 'assumptions': 'overwrite' }, 'Test' )
+        self.assertNotEqual( result.pk, source.pk )                  # a new scenario,
+        self.assertNotEqual( result.plans_id, source.plans_id )      # its copied Plans is independent,
+        self.assertEqual( result.assumptions_id, source.assumptions_id )   # its Assumptions shared w/ source
+
+    def test_component_usage_counts_other_scenarios_sharing_a_component( self ):
+        plans       = save_plans(
+            PlansRecord( organization = self.organization, label = 'P' ), _rich_plans() )
+        assumptions = save_assumptions(
+            AssumptionsRecord( organization = self.organization, label = 'A' ), _rich_assumptions() )
+        first = create_scenario( self.organization, plans, assumptions, 'First' )
+        create_scenario( self.organization, plans, assumptions, 'Second' )   # shares both with First
+        usage = component_usage( first )
+        self.assertEqual( usage[ 'plans' ], 1 )                      # one other scenario references each,
+        self.assertEqual( usage[ 'assumptions' ], 1 )
+        solo = self._saved( _rich_scenario(), 'Solo' )
+        self.assertEqual( component_usage( solo )[ 'plans' ], 0 )    # a private component: no others
 
     def test_deleting_the_anchor_cascades_and_tears_down_the_owned_working_copy( self ):
         source      = self._saved( _rich_scenario(), 'Base' )
