@@ -4,9 +4,12 @@
 <h1 class="mb-1">{{ flow_heading }}</h1>
 {% comment %}
 Profile is a standalone top-level page (the heading names it), so it needs no breadcrumb. Plans and
-Assumptions are scenario components reached from the Scenarios page, so they breadcrumb back to it.
+Assumptions are scenario components: while a scenario is being built they breadcrumb that Future Scenario;
+edited on their own they breadcrumb back to the Scenarios page.
 {% endcomment %}
-{% if flow != 'profile' %}
+{% if building_scenario %}
+<p class="text-muted mb-4">Future Scenario: <strong>{{ building_scenario }}</strong> &rsaquo; {{ flow_title }}</p>
+{% elif flow != 'profile' %}
 <p class="text-muted mb-4">
   <a href="{% url 'scenarios_home' %}">Scenarios</a> &rsaquo; {{ flow_title }}
 </p>

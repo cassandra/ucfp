@@ -15,10 +15,11 @@ from django.db.models import QuerySet
 
 from organization.models import Organization
 
-from ..assumptions.repository import clone_assumptions, load_assumptions, rename_assumptions, save_assumptions
+from ..assumptions.repository import (
+    clone_assumptions, create_assumptions, load_assumptions, rename_assumptions, save_assumptions )
 from ..enums import UsageRole
 from ..models import AssumptionsRecord, PlansRecord, ScenarioRecord
-from ..plans.repository import clone_plans, load_plans, rename_plans, save_plans
+from ..plans.repository import clone_plans, create_plans, load_plans, rename_plans, save_plans
 from .schemas import Scenario
 
 
@@ -49,6 +50,16 @@ def create_scenario( organization: Organization, plans: PlansRecord, assumptions
     return ScenarioRecord.objects.create(
         organization = organization, label = label or _default_label( organization ),
         plans = plans, assumptions = assumptions, usage_role = UsageRole.SAVED )
+
+
+def start_scenario( organization: Organization, name: str ) -> ScenarioRecord:
+    """Begin a new scenario named `name`: mint its own Plans and Assumptions (named after it) and a
+    scenario referencing them, as one unit. The build flow fills the components in; the scenario exists
+    from the outset (name-first), so an abandoned build leaves a resumable, if incomplete, scenario."""
+    with transaction.atomic():
+        plans       = rename_plans( create_plans( organization ), f'{name} Plans' )
+        assumptions = rename_assumptions( create_assumptions( organization ), f'{name} Assumptions' )
+        return create_scenario( organization, plans, assumptions, name )
 
 
 def rename_scenario( record: ScenarioRecord, label: str ) -> ScenarioRecord:

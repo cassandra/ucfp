@@ -30,13 +30,13 @@ from ucfp.inputs.plans.repository import (
 from ucfp.inputs.assumptions.repository import (
     assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
     load_assumptions, rename_assumptions, save_assumptions )
-from ucfp.inputs.scenarios.repository import scenarios_for
+from ucfp.inputs.scenarios.repository import scenarios_for, start_scenario
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
     Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
     first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
-from .models import AssumptionsRecord, PlansRecord
+from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
@@ -75,6 +75,41 @@ class ScenariosHomeView( View ):
             'plans'       : plans_for( organization ).prefetch_related( 'scenarios' ),
             'assumptions' : assumptions_for( organization ).prefetch_related( 'scenarios' ),
         } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioBuildStartView( View ):
+    """`/inputs/scenarios/build/` -- begin building a new Future Scenario. GET explains what a scenario is
+    (forward-looking, unlike the Profile's facts) and takes a name; POST mints the scenario with its own
+    Plans and Assumptions (named after it), makes them the editing target, marks the build in progress,
+    and opens the two-part flow at the first Plans section. A Profile is the prerequisite -- without one
+    the user is sent to build it first and returned here."""
+
+    _TEMPLATE = 'inputs/scenario_build_start.html'
+
+    def get( self, request ):
+        if latest_profile( request.organization ) is None:
+            return self._require_profile( request )
+        return render( request, self._TEMPLATE, {} )
+
+    def post( self, request ):
+        organization = request.organization
+        if latest_profile( organization ) is None:
+            return self._require_profile( request )
+        name     = ( request.POST.get( 'name' ) or '' ).strip() or 'Future Scenario'
+        scenario = start_scenario( organization, name )
+        _select( request, 'current_plans_uuid', scenario.plans )
+        _select( request, 'current_assumptions_uuid', scenario.assumptions )
+        request.session_state.scenario_building = str( scenario.uuid )
+        request.session_state.to_session( request )
+        return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
+
+    @staticmethod
+    def _require_profile( request ):
+        """No Profile yet: it is the universal prerequisite, so route to it and return here once done."""
+        request.session_state.post_setup_return = reverse( 'scenario_build' )
+        request.session_state.to_session( request )
+        return redirect( 'flow_profile' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -303,17 +338,41 @@ class InterviewView( View ):
             return self._swap( request, self._flow_sections( profile, flow ), current, form )
         profile   = self._store( request, current, form, profile, other )
         following = next_section_after( self._flow_sections( profile, flow ), current.key )
-        if following is None:                                   # flow complete
-            # Profile is the standalone first setup, so it returns the user wherever a feature deflected
-            # them (else home); the component flows end on the Scenarios landing.
-            destination = ( _consume_post_setup_return( request ) if flow == 'profile'
-                            else reverse( 'scenarios_home' ) )
-            return antinode.redirect_response( destination )
+        building  = request.session_state.scenario_building
+        if following is None and building and flow == 'plans':
+            following = first_section_of_flow( 'assumptions' )  # scenario build: chain Plans -> Assumptions
+        if following is None:                                   # nothing more to present -- this flow ends
+            return antinode.redirect_response( self._completion_destination( request, flow, building ) )
         self._seed_and_acknowledge( request, following )       # the advanced-to section is now presented
         next_sections = self._flow_sections( profile, flow_of( following ) )
         next_profile, next_other = self._load( request, following )
         next_form = self._form( following, next_profile, next_other )
         return self._swap( request, next_sections, following, next_form )
+
+    @staticmethod
+    def _completion_destination( request, flow, building ) -> str:
+        """Where a completed flow lands. A scenario build (Plans then Assumptions) finishes at the end of
+        Assumptions: clear the in-progress marker and return the user wherever a feature deflected them
+        (else home). A standalone Profile likewise returns whence deflected; a standalone component edit
+        ends on the Scenarios landing."""
+        if building:                                           # end of the two-part build (Assumptions done)
+            request.session_state.scenario_building = None
+            request.session_state.to_session( request )
+            return _consume_post_setup_return( request )
+        if flow == 'profile':
+            return _consume_post_setup_return( request )
+        return reverse( 'scenarios_home' )
+
+    @staticmethod
+    def _building_scenario_name( request ):
+        """The label of the scenario currently being built, or None when no build is in progress -- the
+        breadcrumb context for the two-part build flow."""
+        uuid = request.session_state.scenario_building
+        if uuid is None:
+            return None
+        record = ScenarioRecord.objects.filter(
+            uuid = uuid, organization = request.organization ).first()
+        return record.label if record is not None else None
 
     @staticmethod
     def _flow_sections( profile, flow ):
@@ -388,6 +447,8 @@ class InterviewView( View ):
             'active_nav'           : 'profile' if flow == 'profile' else 'scenarios',
             'flow_title'           : flow_title( flow ),
             'flow_heading'         : self._flow_heading( request, flow ),
+            # The scenario being built (its name), so the component flows breadcrumb it during a build.
+            'building_scenario'    : self._building_scenario_name( request ),
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,
