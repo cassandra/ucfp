@@ -10,6 +10,7 @@ from common.dataclass_json import from_json_data
 
 from organization.models import Organization
 
+from ucfp.accounts.models import BooksOfAccountRecord
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
@@ -35,7 +36,7 @@ def enter_explore( organization: Organization, source: ScenarioRecord ) -> None:
     *current* state rather than showing a stale run from an earlier session. The initial run is produced
     lazily by the workspace view once no transient runs remain."""
     enter_exploration( organization, source )
-    _clear_transient_runs( organization )
+    clear_transient_runs( organization )
 
 
 def run_working_scenario(
@@ -84,11 +85,12 @@ def transient_runs( organization: Organization ):
 
 def _delete_transient_runs( results ) -> None:
     """Delete the given transient runs by dropping each captured run's books; the `ProjectionRunRecord`
-    and `PlanningResultRecord` cascade away, so no orphans remain. The single home for the how; callers
-    choose which runs."""
-    for result in list( results ):
-        result.run.books.delete()
-        continue
+    and `PlanningResultRecord` cascade away, so no orphans remain. One bulk delete over the books (each
+    run's `books_id` read straight off the joined-in run, never traversing a possibly-gone books row), so
+    it stays correct even when another teardown -- an organization cascade -- is removing the same rows
+    concurrently. The single home for the how; callers choose which runs."""
+    book_ids = [ result.run.books_id for result in results ]
+    BooksOfAccountRecord.objects.filter( pk__in = book_ids ).delete()
     return
 
 
@@ -98,8 +100,9 @@ def _prune_transient_runs( organization: Organization ) -> None:
     return
 
 
-def _clear_transient_runs( organization: Organization ) -> None:
-    """Drop every transient run -- the fresh-session reset when *starting* an exploration from the hub
-    (resuming keeps them). Kept SAVED runs are untouched, as they are not transient."""
+def clear_transient_runs( organization: Organization ) -> None:
+    """Drop every transient run -- the fresh-session reset when *starting* (or Resetting) an exploration,
+    and the teardown when an exploration is deleted (its anchor removed). Kept SAVED runs are untouched, as
+    they are not transient."""
     _delete_transient_runs( transient_runs( organization ) )
     return
