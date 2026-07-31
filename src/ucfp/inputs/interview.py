@@ -1,4 +1,4 @@
-"""The guided interview that builds a plan's initial inputs.
+"""The section interview that builds a plan's initial inputs.
 
 The interview is one *sequential* view over the same Profile (facts), Plans (the contemplated
 future), and Assumptions (the exogenous outlook) aggregates the free-form edit pages own: a
@@ -662,10 +662,10 @@ def next_section_after( sections : list, key : str ) -> Optional[ Section ]:
 
 
 # ===== Flows =====
-# The interview is three flows the user can run separately or, guided, in sequence. A section's flow
-# is its primary aggregate, so the spine partitions with no extra metadata: Profile (facts) first,
-# then Plans, then Assumptions. The straddle sections (properties, income) write Profile and Plans
-# and live in the Profile flow, co-presenting their plan fields for entry convenience.
+# The interview is three flows: Profile stands alone, and Plans then Assumptions chain during a scenario
+# build. A section's flow is its primary aggregate, so the spine partitions with no extra metadata:
+# Profile (facts) first, then Plans, then Assumptions. The straddle sections (properties, income) write
+# Profile and Plans and live in the Profile flow, co-presenting their plan fields for entry convenience.
 
 FLOWS = [
     ( 'profile'    , 'Profile' ),
@@ -694,14 +694,3 @@ def first_section_of_flow( flow_key : str ) -> Optional[ Section ]:
     """The first live (form-backed) section of a flow, or None if it has none yet."""
     return next( ( section for section in sections_in_flow( flow_key )
                    if section.form is not None ), None )
-
-
-def next_flow_entry( flow_key : str ) -> Optional[ Section ]:
-    """The first live section of the flow after `flow_key` in guided order, or None at the end --
-    where the guided interview advances when a flow completes."""
-    keys = [ key for key, _ in FLOWS ]
-    for key in keys[ keys.index( flow_key ) + 1 : ]:
-        section = first_section_of_flow( key )
-        if section is not None:
-            return section
-    return None

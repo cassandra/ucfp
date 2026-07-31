@@ -1,7 +1,8 @@
 {% comment %}
 One section pane: the section's self-saving `outer_template` -- a pane that persists its own edits
-through its own async view -- above a Next form that only advances the flow. The pane renders outside
-the Next form because nesting a form inside it would be invalid HTML.
+through its own async view -- above an advance form that only moves the flow on. The pane renders outside
+that form because nesting a form inside it would be invalid HTML. The button reads "Finish" on the flow's
+last step (`is_last`), else "Next".
 {% endcomment %}
 <div id="{{ section_target }}">
   <h2 class="h4 mb-3">{{ current_section.title }}</h2>
@@ -10,6 +11,6 @@ the Next form because nesting a form inside it would be invalid HTML.
         action="{% url 'interview_section' section=current_section.key %}"
         data-async="#{{ section_target }}">
     {% csrf_token %}
-    <button type="submit" class="btn btn-primary mt-3">Next</button>
+    <button type="submit" class="btn btn-primary mt-3">{% if is_last %}Finish{% else %}Next{% endif %}</button>
   </form>
 </div>

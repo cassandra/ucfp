@@ -1,13 +1,15 @@
-"""The inputs area -- the Scenarios landing plus the guided interview and its per-flow editors.
+"""The inputs area -- the Scenarios landing plus the section interview and its per-flow editors.
 
 The Scenarios landing (`/inputs/scenarios/`) lists the organization's scenarios and hosts the Plans and
 Assumptions management; the Profile is edited on its own flow (reached from the nav). The interview is
 one section machinery run as three flows (Profile, Plans, Assumptions): `FlowEntryView` enters a single
-flow, `InterviewHomeView` runs all three guided, and `InterviewView` drives one section at a time over
-the typed aggregates. The remaining views are the sub-editors each section pane drills into.
+flow and `InterviewView` drives one section at a time over the typed aggregates. Profile is the
+standalone first setup; the Plans/Assumptions flows compose into a scenario (the build flow chains them).
+The remaining views are the sub-editors each section pane drills into.
 """
 from dataclasses import replace
 
+from django import forms
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -29,13 +31,18 @@ from ucfp.inputs.plans.repository import (
 from ucfp.inputs.assumptions.repository import (
     assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
     load_assumptions, rename_assumptions, save_assumptions )
-from ucfp.inputs.scenarios.repository import scenarios_for
+from ucfp.inputs.scenarios.repository import (
+    create_scenario, delete_scenario, ensure_default_scenario, existing_pairings, rename_scenario,
+    scenarios_for )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
-    SECTIONS, Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
-    first_section_of_flow, flow_of, flow_title, next_flow_entry, next_section_after, section_for )
-from .models import AssumptionsRecord, PlansRecord
+    Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
+    first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
+from .enums import UsageRole
+from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
+from .state import (
+    completed_assumptions, completed_plans, completed_profile, flow_reviewed, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
@@ -64,39 +71,228 @@ class ScenariosHomeView( View ):
     editors but to no planning perspective (forecast, retirement, ...) -- the main nav reaches those."""
 
     def get( self, request ):
-        organization = request.organization
-        # `select_related` the components (the list shows each scenario's Plans/Assumptions labels), and
-        # prefetch each set's referencing scenarios so a delete confirmation can warn which scenarios it
-        # would cascade away (a scenario references its Plans/Assumptions).
+        organization   = request.organization
+        profile_record = completed_profile( organization )
+        profile        = load_profile( profile_record ) if profile_record is not None else None
+        # Fetch each component set once (prefetching each set's scenarios for the delete-cascade warning),
+        # then compute completeness on those rows -- `flow_reviewed` reads their JSON only, no extra query.
+        plans       = self._component_rows( plans_for( organization ), profile, 'plans' )
+        assumptions = self._component_rows( assumptions_for( organization ), profile, 'assumptions' )
+        complete_ids = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
+                         { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
         return render( request, _SCENARIOS_TEMPLATE, {
-            'active_nav'  : 'scenarios',
-            'scenarios'   : scenarios_for( organization ).select_related( 'plans', 'assumptions' ),
-            'plans'       : plans_for( organization ).prefetch_related( 'scenarios' ),
-            'assumptions' : assumptions_for( organization ).prefetch_related( 'scenarios' ),
+            'active_nav'       : 'scenarios',
+            # Building a scenario needs a completed profile first, so the page leads with the profile gate.
+            'profile_complete' : profile_record is not None,
+            'scenarios'        : self._scenario_rows( organization, *complete_ids ),
+            'plans'            : plans,
+            'assumptions'      : assumptions,
         } )
+
+    @staticmethod
+    def _component_rows( records, profile, flow ):
+        """Each component as a `{record, complete}` row -- complete when its flow is fully walked, so the
+        list can flag the ones still needing setup (an incomplete component is absent from scenario
+        building until finished). None profile means no completeness (the profile gate shows instead)."""
+        return [ { 'record': record,
+                   'complete': profile is not None and flow_reviewed( profile, record, flow ) }
+                 for record in records.prefetch_related( 'scenarios' ) ]
+
+    @staticmethod
+    def _scenario_rows( organization, plans_ids, assumptions_ids ):
+        """Each saved scenario as a `{scenario, complete}` row -- complete when both its components' flows
+        are walked -- so an in-progress one (e.g. the freshly-created Default) can offer to resume setup."""
+        rows = list()
+        for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' ):
+            complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
+            rows.append( { 'scenario': scenario, 'complete': complete } )
+        return rows
+
+
+_RENAME_PANE = 'inputs/panes/inline_rename.html'
+
+
+def _rename_or_conflict( request, record, *, siblings, kind, aria, bold, rename ):
+    """Apply an inline rename unless the new name is already used by another of `siblings` (same type, same
+    organization). A valid rename (or a blank, ignored) saves silently, so the field keeps focus while
+    editing; only a duplicate re-renders the pane -- reverting the field with a warning. Editing the field
+    clears that warning client-side (see the js-rename handler), so no re-render on success is needed."""
+    label = request.POST.get( 'label', '' ).strip()
+    if not label:
+        return antinode.response()
+    if not siblings.filter( label__iexact = label ).exclude( pk = record.pk ).exists():
+        rename( record, label )
+        return antinode.response()
+    pane = render_to_string( _RENAME_PANE, {
+        'kind': kind, 'uuid': record.uuid, 'rename_url': request.path, 'label': record.label,
+        'aria': aria, 'bold': bold, 'warning': 'That name is already in use.' }, request = request )
+    return antinode.response( replace_map = { f'rename-{kind}-{record.uuid}': pane } )
+
+
+def _redirect_to_profile_setup( request ):
+    """Send a user without a complete Profile to set one up -- the universal prerequisite for building or
+    combining a scenario. No return is stashed: the Profile flow ends on its own landing (the user then
+    heads to the feature via the nav), so a return here would not be honoured."""
+    return redirect( 'flow_profile' )
+
+
+class ScenarioCombineForm( forms.Form ):
+    """Combine an existing Plans with an existing Assumptions into a new named scenario. The choices are the
+    organization's *complete* components (injected by the view); a pairing already covered by a scenario is
+    rejected, since a scenario is exactly a distinct combination."""
+
+    name        = forms.CharField( label = 'Scenario name', max_length = 255 )
+    plans       = forms.ChoiceField( label = 'Plans' )
+    assumptions = forms.ChoiceField( label = 'Assumptions' )
+
+    def __init__( self, *args, plans = None, assumptions = None, taken = frozenset(),
+                  taken_names = frozenset(), **kwargs ):
+        super().__init__( *args, **kwargs )
+        self._taken       = taken
+        self._taken_names = taken_names
+        self.fields[ 'plans' ].choices = [
+            ( str( record.uuid ), record.label ) for record in ( plans or [] ) ]
+        self.fields[ 'assumptions' ].choices = [
+            ( str( record.uuid ), record.label ) for record in ( assumptions or [] ) ]
+        self.fields[ 'name' ].widget.attrs[ 'class' ] = 'form-control'
+        for field in ( 'plans', 'assumptions' ):
+            self.fields[ field ].widget.attrs[ 'class' ] = 'custom-select'
+
+    def clean_name( self ):
+        name = self.cleaned_data[ 'name' ].strip()
+        if name.lower() in self._taken_names:
+            raise forms.ValidationError( 'A scenario with that name already exists -- pick another.' )
+        return name
+
+    def clean( self ):
+        cleaned = super().clean()
+        pairing = ( cleaned.get( 'plans' ), cleaned.get( 'assumptions' ) )
+        if None not in pairing and pairing in self._taken:
+            raise forms.ValidationError(
+                'That combination is already a scenario -- pick a different Plans or Assumptions.' )
+        return cleaned
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class InterviewHomeView( View ):
-    """`/inputs/interview/` -- start the *guided* interview: run all three flows (Profile, Plans,
-    Assumptions) in sequence, ending on the Scenarios landing. The guided flag drives the flow chaining
-    in `InterviewView`."""
+class ScenarioNewView( View ):
+    """`/inputs/scenarios/new/` -- create a new Future Scenario, the normal (repeatable) way: *combine* an
+    existing Plans with an existing Assumptions. It routes by what the organization has: not enough
+    complete components to pair (the Default scenario is still being set up) -> the Scenarios page, to
+    finish it; complete components but every pairing already used -> a hint to make a new Plans/Assumptions
+    first; otherwise the combine form. A completed Profile is the prerequisite."""
+
+    _FORM_TEMPLATE = 'inputs/scenario_new.html'
+    _HINT_TEMPLATE = 'inputs/panes/scenario_combinations_exhausted.html'
 
     def get( self, request ):
-        request.session[ 'interview_guided' ] = True
-        return redirect( 'interview_section', section = SECTIONS[ 0 ].key )
+        profile_record = completed_profile( request.organization )
+        if profile_record is None:
+            return _redirect_to_profile_setup( request )
+        plans, assumptions = self._components( profile_record, request.organization )
+        if not plans or not assumptions:                   # nothing complete to pair yet -> finish setup
+            return redirect( 'scenarios_home' )
+        if not self._has_available_pairing( request.organization, plans, assumptions ):
+            return render( request, self._HINT_TEMPLATE, {} )
+        return render(
+            request, self._FORM_TEMPLATE, { 'form': self._form( request.organization, plans, assumptions ) } )
+
+    def post( self, request ):
+        organization   = request.organization
+        profile_record = completed_profile( organization )
+        if profile_record is None:
+            return _redirect_to_profile_setup( request )
+        plans, assumptions = self._components( profile_record, organization )
+        form = self._form( organization, plans, assumptions, request.POST )
+        if not form.is_valid():
+            return render( request, self._FORM_TEMPLATE, { 'form': form } )
+        by_uuid_plans       = { str( record.uuid ): record for record in plans }
+        by_uuid_assumptions = { str( record.uuid ): record for record in assumptions }
+        create_scenario(
+            organization, by_uuid_plans[ form.cleaned_data[ 'plans' ] ],
+            by_uuid_assumptions[ form.cleaned_data[ 'assumptions' ] ], form.cleaned_data[ 'name' ] )
+        return redirect( 'scenarios_home' )
+
+    @staticmethod
+    def _components( profile_record, organization ):
+        return ( completed_plans( profile_record, organization ),
+                 completed_assumptions( profile_record, organization ) )
+
+    @staticmethod
+    def _has_available_pairing( organization, plans, assumptions ) -> bool:
+        taken = existing_pairings( organization )
+        return any( ( str( p.uuid ), str( a.uuid ) ) not in taken for p in plans for a in assumptions )
+
+    @staticmethod
+    def _form( organization, plans, assumptions, data = None ):
+        taken_names = { record.label.lower() for record in scenarios_for( organization ) }
+        return ScenarioCombineForm(
+            data, plans = plans, assumptions = assumptions, taken = existing_pairings( organization ),
+            taken_names = taken_names )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioResumeView( View ):
+    """`/inputs/scenarios/<uuid>/resume/` -- resume building a half-built scenario: make its Plans and
+    Assumptions the editing target, mark the build in progress, and re-enter the two-part flow at the
+    first Plans section (the stepper shows what is already done). POST, since it changes editing state."""
+
+    def post( self, request, uuid ):
+        organization = request.organization
+        scenario = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
+        _select( request, 'current_plans_uuid', scenario.plans )
+        _select( request, 'current_assumptions_uuid', scenario.assumptions )
+        request.session_state.scenario_building = str( scenario.uuid )
+        request.session_state.to_session( request )
+        return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioRenameView( View ):
+    """`/inputs/scenarios/<uuid>/rename/` -- rename a scenario from the Scenarios page's inline editor.
+    Saves silently; a blank name is ignored and a duplicate is rejected with a warning."""
+
+    def post( self, request, uuid ):
+        organization = request.organization
+        record = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
+        return _rename_or_conflict(
+            request, record, siblings = scenarios_for( organization ), kind = 'scenario',
+            aria = 'Scenario name', bold = True, rename = rename_scenario )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioDeleteView( View ):
+    """`/inputs/scenarios/<uuid>/delete/` -- delete a scenario (the Scenarios page asks first). Only the
+    pairing is removed; its Plans and Assumptions live on for other scenarios. Clears the chooser's stored
+    selection if it pointed here."""
+
+    def post( self, request, uuid ):
+        record = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = request.organization, usage_role = UsageRole.SAVED )
+        _forget_if_current( request, 'current_scenario_uuid', record )
+        delete_scenario( record )
+        return redirect( 'scenarios_home' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class FlowEntryView( View ):
-    """`/inputs/<flow>/` -- edit a single input flow (Profile, Plans, or Assumptions) on its own,
-    without guided chaining: it ends on the Scenarios landing at the flow's last section. `flow` is set
-    per route via `as_view`."""
+    """`/inputs/<flow>/` -- edit a single input flow (Profile, Plans, or Assumptions) on its own. `flow`
+    is set per route via `as_view`. Profile is the standalone first flow; Plans/Assumptions are edited on
+    their own here (and, in the scenario-building flow, chained -- see `InterviewView`).
+
+    Entering the Profile flow binds the Profile to the organization's Default scenario: it ensures a
+    Default Plans + Assumptions + Scenario exist and makes those components the editing target, so the
+    profile's straddle sections (Property, Income) write their shared, profile-derived data into the
+    Default's Plans rather than minting a stray one."""
 
     flow = None
 
     def get( self, request ):
-        request.session[ 'interview_guided' ] = False
+        if self.flow == 'profile':
+            default = ensure_default_scenario( request.organization )
+            _select( request, 'current_plans_uuid', default.plans )
+            _select( request, 'current_assumptions_uuid', default.assumptions )
         first = first_section_of_flow( self.flow )
         if first is None:
             raise Http404( f'No sections in flow {self.flow!r}.' )
@@ -163,52 +359,54 @@ class AssumptionsSelectView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class PlansRenameView( View ):
-    """`/inputs/plans/<uuid>/rename/` -- rename a Plans set from the hub's inline editor. Saves the new
-    label in the background and replies silently; a blank name is ignored (non-blocking)."""
+    """`/inputs/plans/<uuid>/rename/` -- rename a Plans set from the Scenarios page's inline editor. Saves
+    silently; a blank name is ignored and a duplicate is rejected with a warning (non-blocking)."""
 
     def post( self, request, uuid ):
-        record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
-        label  = request.POST.get( 'label', '' ).strip()
-        if label:
-            rename_plans( record, label )
-        return antinode.response()
+        organization = request.organization
+        record = get_object_or_404( PlansRecord, uuid = uuid, organization = organization )
+        return _rename_or_conflict(
+            request, record, siblings = plans_for( organization ), kind = 'plan', aria = 'Plan name',
+            bold = False, rename = rename_plans )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class AssumptionsRenameView( View ):
-    """`/inputs/assumptions/<uuid>/rename/` -- rename an assumptions set from the hub's inline editor.
-    Saves the new label in the background and replies silently; a blank name is ignored."""
+    """`/inputs/assumptions/<uuid>/rename/` -- rename an assumptions set from the Scenarios page's inline
+    editor. Saves silently; a blank name is ignored and a duplicate is rejected with a warning."""
 
     def post( self, request, uuid ):
-        record = get_object_or_404(
-            AssumptionsRecord, uuid = uuid, organization = request.organization )
-        label  = request.POST.get( 'label', '' ).strip()
-        if label:
-            rename_assumptions( record, label )
-        return antinode.response()
+        organization = request.organization
+        record = get_object_or_404( AssumptionsRecord, uuid = uuid, organization = organization )
+        return _rename_or_conflict(
+            request, record, siblings = assumptions_for( organization ), kind = 'assumptions',
+            aria = 'Assumptions name', bold = False, rename = rename_assumptions )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class PlansCloneView( View ):
-    """`/inputs/plans/<uuid>/clone/` -- duplicate a Plans set (its contents plus a "copy" name), make
-    the copy the current editing target, and open it for tweaking. POST, since it creates a record."""
+    """`/inputs/plans/<uuid>/clone/` -- duplicate a Plans set (its contents plus a "copy" name), make the
+    copy the current editing target, and open it for review. POST, since it creates a record. The copy
+    starts unreviewed (`reviewed = False`): its values seed the new set, but the user walks each section to
+    confirm them before it counts as complete."""
 
     def post( self, request, uuid ):
         source = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
-        _select( request, 'current_plans_uuid', clone_plans( source ) )
+        _select( request, 'current_plans_uuid', clone_plans( source, reviewed = False ) )
         return redirect( 'flow_plans' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class AssumptionsCloneView( View ):
     """`/inputs/assumptions/<uuid>/clone/` -- duplicate an Assumptions set (its contents plus a "copy"
-    name), make the copy the current editing target, and open it for tweaking. POST, since it creates
-    a record."""
+    name), make the copy the current editing target, and open it for review. POST, since it creates a
+    record. The copy starts unreviewed (`reviewed = False`): its values seed the new set, but the user
+    walks each section to confirm them before it counts as complete."""
 
     def post( self, request, uuid ):
         source = get_object_or_404(
             AssumptionsRecord, uuid = uuid, organization = request.organization )
-        _select( request, 'current_assumptions_uuid', clone_assumptions( source ) )
+        _select( request, 'current_assumptions_uuid', clone_assumptions( source, reviewed = False ) )
         return redirect( 'flow_assumptions' )
 
 
@@ -241,7 +439,7 @@ class AssumptionsDeleteView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class InterviewView( View ):
-    """`/inputs/interview/<section>/` -- one section of the guided setup: an antinode-swapped
+    """`/inputs/interview/<section>/` -- one section of the interview: an antinode-swapped
     linear flow over the organization's current Profile, Plans, and Assumptions. A full GET renders
     the whole page; an async GET (a stepper revisit) or a POST swaps just the section pane and
     refreshes the stepper.
@@ -302,15 +500,43 @@ class InterviewView( View ):
             return self._swap( request, self._flow_sections( profile, flow ), current, form )
         profile   = self._store( request, current, form, profile, other )
         following = next_section_after( self._flow_sections( profile, flow ), current.key )
-        if following is None and request.session.get( 'interview_guided' ):
-            following = next_flow_entry( flow )         # guided: advance into the next flow
-        if following is None:
-            return antinode.redirect_response( reverse( 'scenarios_home' ) )
+        building  = request.session_state.scenario_building
+        if following is None and building and flow == 'plans':
+            following = first_section_of_flow( 'assumptions' )  # scenario build: chain Plans -> Assumptions
+        if following is None:                                   # nothing more to present -- this flow ends
+            return antinode.redirect_response( self._completion_destination( request, flow, building ) )
         self._seed_and_acknowledge( request, following )       # the advanced-to section is now presented
         next_sections = self._flow_sections( profile, flow_of( following ) )
         next_profile, next_other = self._load( request, following )
         next_form = self._form( following, next_profile, next_other )
         return self._swap( request, next_sections, following, next_form )
+
+    @staticmethod
+    def _completion_destination( request, flow, building ) -> str:
+        """Where a completed flow lands. A scenario build (Plans then Assumptions) finishes at the end of
+        Assumptions: clear the in-progress marker and land on the Scenarios page. Finishing the standalone
+        Profile loops back to its first section, where the header now shows it is complete; a standalone
+        component edit likewise ends on the Scenarios page. Features are reached from the nav, so no flow
+        threads a return destination."""
+        if building:                                           # end of the two-part build (Assumptions done)
+            request.session_state.scenario_building = None
+            request.session_state.to_session( request )
+            return reverse( 'scenarios_home' )
+        if flow == 'profile':
+            first = first_section_of_flow( 'profile' )
+            return reverse( 'interview_section', kwargs = { 'section': first.key } )
+        return reverse( 'scenarios_home' )
+
+    @staticmethod
+    def _building_scenario_name( request ):
+        """The label of the scenario currently being built, or None when no build is in progress -- the
+        breadcrumb context for the two-part build flow."""
+        uuid = request.session_state.scenario_building
+        if uuid is None:
+            return None
+        record = ScenarioRecord.objects.filter(
+            uuid = uuid, organization = request.organization ).first()
+        return record.label if record is not None else None
 
     @staticmethod
     def _flow_sections( profile, flow ):
@@ -384,20 +610,53 @@ class InterviewView( View ):
             # is its own home; Plans and Assumptions are scenario components, under Scenarios.
             'active_nav'           : 'profile' if flow == 'profile' else 'scenarios',
             'flow_title'           : flow_title( flow ),
-            'flow_heading'         : self._flow_heading( request, flow ),
+            'flow_heading'         : flow_title( flow ),   # the record's own name is the inline rename below
+            # The scenario being built (its name), so the component flows breadcrumb it during a build.
+            'building_scenario'    : self._building_scenario_name( request ),
+            # The component being edited, as an inline rename in the header, so its name can be changed
+            # here (e.g. straight after a create or clone) rather than only on the Scenarios page.
+            'component_rename'     : self._component_rename( request, flow ),
+            # The last step of the flow context shows "Finish" rather than "Next" (in a build, the last
+            # Plans step chains into Assumptions, so it is not the finish).
+            'is_last'              : self._is_last_step( request, sections, section, flow ),
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,
+            **self._profile_status( request, flow ),
         }
 
-    def _flow_heading( self, request, flow ) -> str:
-        """The flow's title with the record being edited named, for the page heading -- "Plans: Base
-        case", "Assumptions: Optimistic" -- so the user sees which of several they are editing. The
-        single-record Profile shows just its title."""
-        title = flow_title( flow )
-        if flow in ( 'plans', 'assumptions' ):
-            return f'{title}: {self._flow_record( request, flow ).label}'
-        return title
+    @staticmethod
+    def _is_last_step( request, sections, section, flow ) -> bool:
+        """Whether this section is the flow context's final step. False for the last Plans step of a build,
+        which chains into Assumptions rather than finishing."""
+        if next_section_after( sections, section.key ) is not None:
+            return False
+        return not ( request.session_state.scenario_building and flow == 'plans' )
+
+    @staticmethod
+    def _profile_status( request, flow ) -> dict:
+        """The Profile flow's header status -- whether the profile is complete and when it was last
+        updated -- so its landing shows setup state. Empty for the component flows."""
+        if flow != 'profile':
+            return dict()
+        record = latest_profile( request.organization )
+        return {
+            'profile_complete': record is not None and profile_is_complete( record ),
+            'profile_updated' : record.updated_datetime if record is not None else None,
+        }
+
+    @staticmethod
+    def _component_rename( request, flow ):
+        """The Plans/Assumptions record this flow edits, as inline-rename fields for the header (kind, uuid,
+        label, and its rename endpoint). None for the single-record Profile, which is not named."""
+        if flow == 'plans':
+            record, kind, route = current_plans_record( request ), 'plan', 'plan_rename'
+        elif flow == 'assumptions':
+            record, kind, route = current_assumptions_record( request ), 'assumptions', 'assumptions_rename'
+        else:
+            return None
+        return { 'kind': kind, 'uuid': record.uuid, 'label': record.label,
+                 'rename_url': reverse( route, kwargs = { 'uuid': record.uuid } ) }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

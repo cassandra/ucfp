@@ -1,9 +1,9 @@
 {% extends "pages/app_base.html" %}
 
 {% comment %}
-The Scenarios landing (#91). A placeholder: it lists the organization's saved scenarios and provides the
-Plans and Assumptions management (a scenario combines those). Scenario building and per-scenario actions
-arrive with #90; this page is feature-agnostic -- it links to no single feature.
+The Scenarios landing. Lists the organization's saved scenarios -- each with an inline rename, a delete,
+and (while in progress) a "Finish setup" -- and manages the Plans and Assumptions components a scenario
+combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links to no single feature.
 {% endcomment %}
 
 {% block app_content %}
@@ -14,23 +14,45 @@ arrive with #90; this page is feature-agnostic -- it links to no single feature.
   manage scenarios here.
 </p>
 
+{% if not profile_complete %}
+{# A scenario builds on the profile's facts, so a completed profile comes first. #}
+{% include 'inputs/panes/profile_required.html' %}
+{% else %}
+
 <div class="card mb-4">
   <div class="card-header bg-white d-flex align-items-center">
     <strong>Your scenarios</strong>
     <span class="ml-auto small text-muted">a plan + an outlook, named</span>
   </div>
   <ul class="list-group list-group-flush">
-    {% for scenario in scenarios %}
+    {% for row in scenarios %}
     <li class="list-group-item d-flex align-items-center py-2">
-      <span class="font-weight-bold">{{ scenario.label }}</span>
-      <span class="ml-auto small text-muted">{{ scenario.plans.label }} + {{ scenario.assumptions.label }}</span>
+      {% url 'scenario_rename' row.scenario.uuid as rename_url %}
+      {% include 'inputs/panes/inline_rename.html' with kind='scenario' uuid=row.scenario.uuid rename_url=rename_url label=row.scenario.label aria='Scenario name' bold=True %}
+      <span class="d-flex align-items-center flex-shrink-0">
+        <span class="small text-muted mr-3">
+          {{ row.scenario.plans.label }} + {{ row.scenario.assumptions.label }}
+          {% if not row.complete %}<span class="badge badge-secondary ml-1">in progress</span>{% endif %}
+        </span>
+        {% if not row.complete %}
+        <form method="post" action="{% url 'scenario_resume' row.scenario.uuid %}" class="m-0 mr-3">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-link p-0">Finish setup &rarr;</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'scenario_delete' row.scenario.uuid %}" class="m-0"
+              data-confirm="Delete &quot;{{ row.scenario.label }}&quot;? Its Plans and Assumptions are kept. This cannot be undone.">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
+        </form>
+      </span>
     </li>
     {% empty %}
     <li class="list-group-item text-muted small">No scenarios yet.</li>
     {% endfor %}
   </ul>
-  <div class="card-footer bg-white border-0 small text-muted">
-    Building and managing scenarios arrives soon.
+  <div class="card-footer bg-white border-0">
+    <a href="{% url 'scenario_new' %}" class="btn btn-outline-primary btn-sm">+ New Future Scenario</a>
   </div>
 </div>
 
@@ -43,24 +65,23 @@ arrive with #90; this page is feature-agnostic -- it links to no single feature.
         <span class="ml-auto small text-muted">strategies to compare</span>
       </div>
       <ul class="list-group list-group-flush">
-        {% for plan in plans %}
+        {% for row in plans %}
         <li class="list-group-item d-flex align-items-center py-2">
-          <form method="post" action="{% url 'plan_rename' plan.uuid %}"
-                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
-            {% csrf_token %}
-            <input type="text" name="label" value="{{ plan.label }}" aria-label="Plan name"
-                   class="form-control form-control-sm border-0 bg-transparent px-1">
-            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
-            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
-          </form>
+          {% url 'plan_rename' row.record.uuid as rename_url %}
+          {% include 'inputs/panes/inline_rename.html' with kind='plan' uuid=row.record.uuid rename_url=rename_url label=row.record.label aria='Plan name' %}
           <span class="d-flex align-items-center flex-shrink-0">
-            <a href="{% url 'plan_select' plan.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
-            <form method="post" action="{% url 'plan_clone' plan.uuid %}" class="m-0 mr-3">
+            {% if row.complete %}
+            <a href="{% url 'plan_select' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'plan_clone' row.record.uuid %}" class="m-0 mr-3">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
             </form>
-            <form method="post" action="{% url 'plan_delete' plan.uuid %}" class="m-0"
-                  data-confirm="Delete &quot;{{ plan.label }}&quot;?{% if plan.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in plan.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
+            {% else %}
+            <span class="badge badge-secondary mr-2">needs setup</span>
+            <a href="{% url 'plan_select' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
+            {% endif %}
+            <form method="post" action="{% url 'plan_delete' row.record.uuid %}" class="m-0"
+                  data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
             </form>
@@ -86,24 +107,23 @@ arrive with #90; this page is feature-agnostic -- it links to no single feature.
         <span class="ml-auto small text-muted">outlook to vary</span>
       </div>
       <ul class="list-group list-group-flush">
-        {% for item in assumptions %}
+        {% for row in assumptions %}
         <li class="list-group-item d-flex align-items-center py-2">
-          <form method="post" action="{% url 'assumptions_rename' item.uuid %}"
-                class="{{ AppConst.AUTOSAVE_CLASS }} flex-grow-1 mr-2 m-0">
-            {% csrf_token %}
-            <input type="text" name="label" value="{{ item.label }}" aria-label="Assumptions name"
-                   class="form-control form-control-sm border-0 bg-transparent px-1">
-            {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
-            <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
-          </form>
+          {% url 'assumptions_rename' row.record.uuid as rename_url %}
+          {% include 'inputs/panes/inline_rename.html' with kind='assumptions' uuid=row.record.uuid rename_url=rename_url label=row.record.label aria='Assumptions name' %}
           <span class="d-flex align-items-center flex-shrink-0">
-            <a href="{% url 'assumptions_select' item.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
-            <form method="post" action="{% url 'assumptions_clone' item.uuid %}" class="m-0 mr-3">
+            {% if row.complete %}
+            <a href="{% url 'assumptions_select' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'assumptions_clone' row.record.uuid %}" class="m-0 mr-3">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
             </form>
-            <form method="post" action="{% url 'assumptions_delete' item.uuid %}" class="m-0"
-                  data-confirm="Delete &quot;{{ item.label }}&quot;?{% if item.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in item.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
+            {% else %}
+            <span class="badge badge-secondary mr-2">needs setup</span>
+            <a href="{% url 'assumptions_select' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
+            {% endif %}
+            <form method="post" action="{% url 'assumptions_delete' row.record.uuid %}" class="m-0"
+                  data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
             </form>
@@ -122,4 +142,5 @@ arrive with #90; this page is feature-agnostic -- it links to no single feature.
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock %}

@@ -15,10 +15,12 @@ from django.db.models import QuerySet
 
 from organization.models import Organization
 
-from ..assumptions.repository import clone_assumptions, load_assumptions, rename_assumptions, save_assumptions
+from ..assumptions.repository import (
+    clone_assumptions, create_assumptions, load_assumptions, rename_assumptions, save_assumptions )
 from ..enums import UsageRole
 from ..models import AssumptionsRecord, PlansRecord, ScenarioRecord
-from ..plans.repository import clone_plans, load_plans, rename_plans, save_plans
+from ..naming import numbered_label
+from ..plans.repository import clone_plans, create_plans, load_plans, rename_plans, save_plans
 from .schemas import Scenario
 
 
@@ -42,6 +44,15 @@ def latest_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]:
     return scenarios_for( organization ).first()
 
 
+def existing_pairings( organization: Organization ) -> set:
+    """The (plans_uuid, assumptions_uuid) pairs the organization's scenarios already cover, as strings --
+    so a new scenario can offer only combinations not yet defined (uuids to match the component choosers)."""
+    return {
+        ( str( plans_uuid ), str( assumptions_uuid ) )
+        for plans_uuid, assumptions_uuid
+        in scenarios_for( organization ).values_list( 'plans__uuid', 'assumptions__uuid' ) }
+
+
 def create_scenario( organization: Organization, plans: PlansRecord, assumptions: AssumptionsRecord,
                      label: Optional[ str ] = None ) -> ScenarioRecord:
     """Mint a saved scenario referencing the given Plans and Assumptions records -- the single place that
@@ -49,6 +60,32 @@ def create_scenario( organization: Organization, plans: PlansRecord, assumptions
     return ScenarioRecord.objects.create(
         organization = organization, label = label or _default_label( organization ),
         plans = plans, assumptions = assumptions, usage_role = UsageRole.SAVED )
+
+
+def default_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]:
+    """The organization's base scenario -- the oldest saved one, which the profile flow's shared data
+    (the straddle sections' rental income) binds to. Oldest is a stable identity for the Default: there is
+    no `is_default` marker, and by construction the first scenario an organization gets is the Default that
+    profile setup creates. None before that first setup."""
+    return scenarios_for( organization ).order_by( 'created_datetime' ).first()
+
+
+def ensure_default_scenario( organization: Organization ) -> ScenarioRecord:
+    """Guarantee the organization has a scenario for the Profile to bind to. On first profile setup it
+    mints a `Default Plans` and `Default Assumptions` and combines them into a `Default Scenario` -- all
+    incomplete until their flows are walked, so completeness detection still drives the setup. Idempotent:
+    returns the existing base scenario when one is already present, so no duplicate Default is created."""
+    with transaction.atomic():
+        # Serialize per organization so a double-entry into profile setup can't mint two Defaults. The
+        # SAVED partition has no uniqueness constraint and an empty scenario set can't be row-locked, so
+        # the organization row is the lock (a no-op on SQLite, which serializes writes anyway).
+        Organization.objects.select_for_update().filter( pk = organization.pk ).first()
+        base = default_scenario( organization )
+        if base is not None:
+            return base
+        plans       = rename_plans( create_plans( organization ), 'Default Plans' )
+        assumptions = rename_assumptions( create_assumptions( organization ), 'Default Assumptions' )
+        return create_scenario( organization, plans, assumptions, 'Default Scenario' )
 
 
 def rename_scenario( record: ScenarioRecord, label: str ) -> ScenarioRecord:
@@ -109,7 +146,12 @@ def save_working_as_scenario(
     """Fork the sandbox into a new saved scenario named `label`, forking **only the component(s) the user
     changed** relative to `source`: a diverged component is copied into a new SAVED set (named after the
     scenario), an unchanged one is shared with `source` so edits to it still propagate to both. Raises if
-    there is no working scenario."""
+    there is no working scenario.
+
+    A diverged component is forked by cloning `source`'s set -- which carries its completeness -- then
+    stamping the sandbox's tweaked *values* over it. The sandbox copies hold only data (no review state),
+    so cloning them would yield an incomplete set; but the user was exploring an already-complete scenario,
+    so the fork should be runnable at once."""
     working = working_scenario( organization )
     if working is None:
         raise ValueError( 'No working scenario to save.' )
@@ -117,11 +159,13 @@ def save_working_as_scenario(
     origin  = load_scenario( source )
     with transaction.atomic():                             # the forks and the new scenario land together
         if sandbox.plans != origin.plans:
-            plans = rename_plans( clone_plans( working.plans ), f'{label} Plans' )
+            fork  = save_plans( clone_plans( source.plans ), sandbox.plans )
+            plans = rename_plans( fork, f'{label} Plans' )
         else:
             plans = source.plans                           # unchanged: share it, so edits still propagate
         if sandbox.assumptions != origin.assumptions:
-            assumptions = rename_assumptions( clone_assumptions( working.assumptions ), f'{label} Assumptions' )
+            fork        = save_assumptions( clone_assumptions( source.assumptions ), sandbox.assumptions )
+            assumptions = rename_assumptions( fork, f'{label} Assumptions' )
         else:
             assumptions = source.assumptions
         return create_scenario( organization, plans, assumptions, label )
@@ -129,4 +173,5 @@ def save_working_as_scenario(
 
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new scenario, since many coexist per organization."""
-    return f'Scenario {scenarios_for( organization ).count() + 1}'
+    return numbered_label(
+        'Scenario', [ record.label for record in scenarios_for( organization ) ] )

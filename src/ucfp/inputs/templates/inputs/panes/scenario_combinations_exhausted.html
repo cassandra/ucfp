@@ -1,0 +1,19 @@
+{% extends "pages/app_base.html" %}
+
+{% comment %}
+Shown by "New Scenario" when every combination of the organization's current Plans and Assumptions is
+already a scenario. A new scenario needs a new component to pair, so this points at the Clone/New actions
+on the Scenarios page rather than a combine form.
+{% endcomment %}
+
+{% block app_content %}
+<h1 class="mb-1">New Future Scenario</h1>
+<p class="text-muted mb-4">Scenarios</p>
+
+<div class="alert alert-info">
+  <h2 class="h5 mb-2">Every combination is already a scenario</h2>
+  <p class="mb-2">Each pairing of your current Plans and Assumptions already has a scenario. To make a new
+    one, first add or clone a Plans or an Assumptions &mdash; then pair the new component.</p>
+  <a href="{% url 'scenarios_home' %}" class="btn btn-primary">Go to Scenarios</a>
+</div>
+{% endblock %}

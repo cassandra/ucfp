@@ -6,7 +6,9 @@
 
 {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
 
-{% if scenarios %}
+{% if not has_profile %}
+{% include 'inputs/panes/profile_required.html' %}
+{% elif scenarios %}
 <form method="post" class="mt-3">
   {% csrf_token %}
   {{ form.as_p }}
@@ -14,12 +16,9 @@
   <button type="submit" class="btn btn-outline-primary ml-2"
           formaction="{% url 'explore_enter' %}">Explore &amp; tweak &rarr;</button>
 </form>
+<p class="text-muted small mt-2">or <a href="{% url 'scenario_new' %}">create another Future Scenario</a>.</p>
 {% else %}
-<div class="alert alert-info mt-3">
-  <p class="mb-1">No scenarios yet.</p>
-  <p class="mb-0">A scenario bundles a complete set of plans and assumptions to project.
-    <a href="#" title="The scenario builder arrives in a later phase">Build a scenario &rarr;</a></p>
-</div>
+{% include 'planning/panes/scenario_required.html' %}
 {% endif %}
 
 <h2 class="h4 mt-5">Saved runs</h2>

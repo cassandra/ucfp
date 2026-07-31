@@ -16,6 +16,7 @@ from organization.models import Organization
 
 from ..enums import UsageRole
 from ..models import AssumptionsRecord
+from ..naming import numbered_label, unique_label
 from .defaults import default_assumptions
 from .schemas import Assumptions
 
@@ -69,20 +70,27 @@ def rename_assumptions( record: AssumptionsRecord, label: str ) -> AssumptionsRe
     return record
 
 
-def clone_assumptions( record: AssumptionsRecord ) -> AssumptionsRecord:
-    """Mint a new assumptions set holding a copy of `record`'s contents, named "<label> copy" -- the
-    basis for tweaking a variant without disturbing the original. The copy goes through the typed
-    load/save seam, so it is fully independent of the source; it also inherits the source's acknowledged
-    sections, since a copy of a reviewed set has itself been reviewed."""
+def clone_assumptions( record: AssumptionsRecord, reviewed: bool = True ) -> AssumptionsRecord:
+    """Mint a new assumptions set holding a copy of `record`'s contents, named "<label> copy" -- the basis
+    for tweaking a variant without disturbing the original. The copy goes through the typed load/save seam,
+    so it is fully independent of the source. When `reviewed` (the default, e.g. an Explore fork of an
+    already-run set) it inherits the source's acknowledged sections; when not, it starts with none, so the
+    user must walk each section to complete it -- the copied values are a starting point, not a finished
+    set."""
+    label = unique_label( f'{record.label} copy', _labels( record.organization ) )
     clone = AssumptionsRecord(
-        organization = record.organization, label = f'{record.label} copy',
-        acknowledged_sections = list( record.acknowledged_sections ) )
+        organization = record.organization, label = label,
+        acknowledged_sections = list( record.acknowledged_sections ) if reviewed else list() )
     return save_assumptions( clone, load_assumptions( record ) )
+
+
+def _labels( organization: Organization ) -> list:
+    return [ record.label for record in assumptions_for( organization ) ]
 
 
 def _default_label( organization: Organization ) -> str:
     """A distinguishable default name for a new set, since many coexist per organization."""
-    return f'Assumptions {assumptions_for( organization ).count() + 1}'
+    return numbered_label( 'Assumptions', _labels( organization ) )
 
 
 def _initial_assumptions() -> Assumptions:

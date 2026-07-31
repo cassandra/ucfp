@@ -1,0 +1,45 @@
+{% extends "pages/app_base.html" %}
+
+{% comment %}
+New Future Scenario, the normal way: combine an existing Plans with an existing Assumptions and name
+the pairing. Creating variations of the components themselves is separate -- the Clone/New actions on the
+Scenarios page. The choosers list only complete components, so the combined scenario is runnable at once.
+{% endcomment %}
+
+{% block app_content %}
+<h1 class="mb-1">New Future Scenario</h1>
+<p class="text-muted mb-4">Scenarios</p>
+
+<div class="row">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <p>A <strong>Future Scenario</strong> pairs a set of <strong>Plans</strong> with a set of
+          <strong>Assumptions</strong>. Pick the combination to project and name it. To vary the Plans or
+          Assumptions themselves, clone or add one on the <a href="{% url 'scenarios_home' %}">Scenarios
+          page</a> first.</p>
+        <form method="post" action="{% url 'scenario_new' %}" class="mt-3">
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+          <div class="alert alert-warning">{{ form.non_field_errors }}</div>
+          {% endif %}
+          <div class="form-group">
+            <label for="{{ form.plans.id_for_label }}">Plans</label>
+            {{ form.plans }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.assumptions.id_for_label }}">Assumptions</label>
+            {{ form.assumptions }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.name.id_for_label }}">Scenario name</label>
+            {{ form.name }}
+            {% for error in form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary">Create scenario</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
