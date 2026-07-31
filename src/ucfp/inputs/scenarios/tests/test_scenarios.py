@@ -1,4 +1,4 @@
-"""The Scenario record + repository (#89): a scenario *references* a Plans and an Assumptions rather than
+"""The Scenario record + repository: a scenario *references* a Plans and an Assumptions rather than
 copying them. Reference resolution, propagation of a shared-component edit, and the delete cascade are the
 behaviours worth pinning here. The WORKING sandbox and its save-back lifecycle are covered in
 `test_exploration`.

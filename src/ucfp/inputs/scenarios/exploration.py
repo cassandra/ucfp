@@ -90,10 +90,10 @@ def save_working_as_scenario(
     so cloning them would yield an incomplete set; but the user was exploring an already-complete scenario,
     so the fork should be runnable at once. Finally the exploration re-anchors to the new scenario, so the
     sandbox now represents it and a later Update targets it rather than the one it was forked from."""
-    working = working_scenario( organization )
-    if working is None:
+    exploration = scenario_exploration( organization )
+    if exploration is None:
         raise ValueError( 'No working scenario to save.' )
-    sandbox = load_scenario( working )
+    sandbox = load_scenario( exploration.working )
     origin  = load_scenario( source )
     with transaction.atomic():                             # forks, new scenario, and re-anchor land together
         if sandbox.plans != origin.plans:
@@ -107,7 +107,8 @@ def save_working_as_scenario(
         else:
             assumptions = source.assumptions
         record = create_scenario( organization, plans, assumptions, label )
-        _reanchor( organization, record )
+        exploration.source = record                        # the sandbox now represents the saved variation
+        exploration.save()
         return record
 
 
@@ -124,12 +125,3 @@ def _mint_working( organization: Organization, scenario: Scenario ) -> ScenarioR
     return ScenarioRecord.objects.create(
         organization = organization, label = 'Working scenario', usage_role = UsageRole.WORKING,
         plans = working_plans, assumptions = working_assumptions )
-
-
-def _reanchor( organization: Organization, source: ScenarioRecord ) -> None:
-    """Re-point the current exploration's anchor to `source` -- so drift and a later Update measure against
-    the newly saved scenario rather than the one the sandbox was forked from."""
-    exploration = scenario_exploration( organization )
-    if exploration is not None:
-        exploration.source = source
-        exploration.save()

@@ -30,11 +30,13 @@ from .schemas import ProjectionRun
 _TRANSIENT_KEEP = 25
 
 
-def enter_explore( organization: Organization, source: ScenarioRecord ) -> None:
+def start_fresh_exploration( organization: Organization, source: ScenarioRecord ) -> None:
     """Start a fresh exploration of `source`: seed the working copy from it, anchor the exploration to it,
     and clear the prior session's transient runs, so the workspace re-projects the entered scenario's
     *current* state rather than showing a stale run from an earlier session. The initial run is produced
-    lazily by the workspace view once no transient runs remain."""
+    lazily by the workspace view once no transient runs remain. The planning-side wrapper over the inputs
+    seam `enter_exploration`: it adds the transient-run clear that makes the session *fresh* (re-entering
+    the same anchor without this -- a plain resume -- deliberately keeps the runs)."""
     enter_exploration( organization, source )
     clear_transient_runs( organization )
 

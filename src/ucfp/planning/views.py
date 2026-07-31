@@ -35,7 +35,7 @@ from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
-from .explore import enter_explore, run_working_scenario, transient_runs
+from .explore import run_working_scenario, start_fresh_exploration, transient_runs
 from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
@@ -217,8 +217,10 @@ class EnterExploreView( InputGatedMixin, View ):
             usage_role = UsageRole.SAVED )
         _remember_selection( request, form, scenario_record )
         exploration = scenario_exploration( organization )
+        # Same anchor already in progress -> resume (keep the tweaks and run history); a new or switched
+        # anchor -> start fresh (re-seed and clear runs). A hard restart of the same anchor is Reset.
         if exploration is None or exploration.source_id != scenario_record.id:
-            enter_explore( organization, scenario_record )     # new or switched anchor: seed + clear runs
+            start_fresh_exploration( organization, scenario_record )
         return redirect( 'explore' )
 
 
@@ -390,7 +392,7 @@ class ResetExploreView( InputGatedMixin, View ):
         organization = request.organization
         exploration  = scenario_exploration( organization )
         if exploration is not None:
-            enter_explore( organization, exploration.source )   # re-seed from the anchor + clear the runs
+            start_fresh_exploration( organization, exploration.source )   # re-seed anchor, clear runs
         return redirect( 'explore' )
 
 

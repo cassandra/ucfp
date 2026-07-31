@@ -18,4 +18,6 @@ from .explore import clear_transient_runs
 
 @receiver( post_delete, sender = ScenarioExploration )
 def clear_transient_runs_on_exploration_delete( sender, instance, **kwargs ) -> None:
-    clear_transient_runs( instance.organization )
+    """Drop the exploration's transient runs. Filters by `organization_id` rather than dereferencing
+    `instance.organization`, so it never loads a row the same cascade may be deleting."""
+    clear_transient_runs( instance.organization_id )

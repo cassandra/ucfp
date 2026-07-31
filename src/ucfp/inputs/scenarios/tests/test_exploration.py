@@ -1,4 +1,4 @@
-"""The `ScenarioExploration` seam (#92): the org's single exploration owns a WORKING scenario copy and
+"""The `ScenarioExploration` seam: the org's single exploration owns a WORKING scenario copy and
 names the SAVED anchor it was seeded from. Entry/ownership, in-place tweaks that leave the anchor alone,
 Update/Save-as-new write-back, re-anchoring on Save-as-new, and the cascade teardown of the owned copy
 when the anchor is deleted are the behaviours worth pinning.
@@ -111,6 +111,8 @@ class ScenarioExplorationTest( TestCase ):
         self.assertEqual( variant.usage_role, UsageRole.SAVED )
         self.assertNotEqual( variant.plans_id, source.plans_id )      # the changed Plans is forked...
         self.assertEqual( variant.assumptions_id, source.assumptions_id )   # ...the unchanged one is shared
+        forked_plans = PlansRecord.objects.get( pk = variant.plans_id )   # re-fetched, not the clone
+        self.assertEqual( forked_plans.usage_role, UsageRole.SAVED )  # a user-facing set, not a WORKING leak
         self.assertEqual( load_scenario( variant ).plans, Plans() )
 
     def test_save_as_new_shares_both_components_when_nothing_changed( self ):
@@ -119,6 +121,14 @@ class ScenarioExplorationTest( TestCase ):
         variant = save_working_as_scenario( self.organization, 'Variant', source )
         self.assertEqual( variant.plans_id, source.plans_id )
         self.assertEqual( variant.assumptions_id, source.assumptions_id )
+
+    def test_save_as_new_forks_both_components_when_both_changed( self ):
+        source  = self._saved( _rich_scenario(), 'Base' )
+        enter_exploration( self.organization, source )
+        overwrite_working( self.organization, Scenario() )            # both diverge to empty
+        variant = save_working_as_scenario( self.organization, 'Variant', source )
+        self.assertNotEqual( variant.plans_id, source.plans_id )      # both changed -> both forked
+        self.assertNotEqual( variant.assumptions_id, source.assumptions_id )
 
     def test_save_as_new_re_anchors_the_exploration_to_the_new_scenario( self ):
         source  = self._saved( _rich_scenario(), 'Base' )

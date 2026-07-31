@@ -2,7 +2,7 @@
 {% load common_tags icons %}
 
 {% comment %}
-The Explore workspace (#87 Phase 2), for the scenario named by `source`. Top: two input columns
+The Explore workspace, for the scenario named by `source`. Top: two input columns
 (Plans | Assumptions), each an auto-saving section holding all of its inputs, with a "Choose inputs"
 gear that reveals every input plus a checkbox to curate which stay visible when collapsed (saved to the
 session per section on close -- see the curate script below). Then the Scenario controls (update `source`
@@ -156,8 +156,10 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
       <button type="submit" class="btn btn-outline-secondary btn-sm">Save as new</button>
     </form>
 
-    <!-- Discard the sandbox and its run history and start over from the anchor -- the explicit hard
-         restart (re-entering the same scenario from the hub resumes instead). -->
+    {% comment %}
+    Discard the sandbox and its run history and start over from the anchor -- the explicit hard restart
+    (re-entering the same scenario from the hub resumes instead).
+    {% endcomment %}
     <form method="post" action="{% url 'explore_reset' %}" class="my-1">
       {% csrf_token %}
       <button type="submit" class="btn btn-outline-danger btn-sm"
