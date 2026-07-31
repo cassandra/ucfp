@@ -387,25 +387,28 @@ class AssumptionsRenameView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class PlansCloneView( View ):
-    """`/inputs/plans/<uuid>/clone/` -- duplicate a Plans set (its contents plus a "copy" name), make
-    the copy the current editing target, and open it for tweaking. POST, since it creates a record."""
+    """`/inputs/plans/<uuid>/clone/` -- duplicate a Plans set (its contents plus a "copy" name), make the
+    copy the current editing target, and open it for review. POST, since it creates a record. The copy
+    starts unreviewed (`reviewed = False`): its values seed the new set, but the user walks each section to
+    confirm them before it counts as complete."""
 
     def post( self, request, uuid ):
         source = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
-        _select( request, 'current_plans_uuid', clone_plans( source ) )
+        _select( request, 'current_plans_uuid', clone_plans( source, reviewed = False ) )
         return redirect( 'flow_plans' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class AssumptionsCloneView( View ):
     """`/inputs/assumptions/<uuid>/clone/` -- duplicate an Assumptions set (its contents plus a "copy"
-    name), make the copy the current editing target, and open it for tweaking. POST, since it creates
-    a record."""
+    name), make the copy the current editing target, and open it for review. POST, since it creates a
+    record. The copy starts unreviewed (`reviewed = False`): its values seed the new set, but the user
+    walks each section to confirm them before it counts as complete."""
 
     def post( self, request, uuid ):
         source = get_object_or_404(
             AssumptionsRecord, uuid = uuid, organization = request.organization )
-        _select( request, 'current_assumptions_uuid', clone_assumptions( source ) )
+        _select( request, 'current_assumptions_uuid', clone_assumptions( source, reviewed = False ) )
         return redirect( 'flow_assumptions' )
 
 
@@ -608,9 +611,12 @@ class InterviewView( View ):
             # is its own home; Plans and Assumptions are scenario components, under Scenarios.
             'active_nav'           : 'profile' if flow == 'profile' else 'scenarios',
             'flow_title'           : flow_title( flow ),
-            'flow_heading'         : self._flow_heading( request, flow ),
+            'flow_heading'         : flow_title( flow ),   # the record's own name is the inline rename below
             # The scenario being built (its name), so the component flows breadcrumb it during a build.
             'building_scenario'    : self._building_scenario_name( request ),
+            # The component being edited, as an inline rename in the header, so its name can be changed
+            # here (e.g. straight after a create or clone) rather than only on the Scenarios page.
+            'component_rename'     : self._component_rename( request, flow ),
             # The last step of the flow context shows "Finish" rather than "Next" (in a build, the last
             # Plans step chains into Assumptions, so it is not the finish).
             'is_last'              : self._is_last_step( request, sections, section, flow ),
@@ -640,14 +646,18 @@ class InterviewView( View ):
             'profile_updated' : record.updated_datetime if record is not None else None,
         }
 
-    def _flow_heading( self, request, flow ) -> str:
-        """The flow's title with the record being edited named, for the page heading -- "Plans: Base
-        case", "Assumptions: Optimistic" -- so the user sees which of several they are editing. The
-        single-record Profile shows just its title."""
-        title = flow_title( flow )
-        if flow in ( 'plans', 'assumptions' ):
-            return f'{title}: {self._flow_record( request, flow ).label}'
-        return title
+    @staticmethod
+    def _component_rename( request, flow ):
+        """The Plans/Assumptions record this flow edits, as inline-rename fields for the header (kind, uuid,
+        label, and its rename endpoint). None for the single-record Profile, which is not named."""
+        if flow == 'plans':
+            record, kind, route = current_plans_record( request ), 'plan', 'plan_rename'
+        elif flow == 'assumptions':
+            record, kind, route = current_assumptions_record( request ), 'assumptions', 'assumptions_rename'
+        else:
+            return None
+        return { 'kind': kind, 'uuid': record.uuid, 'label': record.label,
+                 'rename_url': reverse( route, kwargs = { 'uuid': record.uuid } ) }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

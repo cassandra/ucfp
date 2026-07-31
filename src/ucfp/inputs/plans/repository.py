@@ -67,14 +67,17 @@ def rename_plans( record: PlansRecord, label: str ) -> PlansRecord:
     return record
 
 
-def clone_plans( record: PlansRecord ) -> PlansRecord:
-    """Mint a new Plans set holding a copy of `record`'s contents, named "<label> copy" -- the basis
-    for tweaking a variant without disturbing the original. The copy goes through the typed load/save
-    seam, so it is fully independent of the source; it also inherits the source's acknowledged sections,
-    since a copy of a reviewed set has itself been reviewed."""
+def clone_plans( record: PlansRecord, reviewed: bool = True ) -> PlansRecord:
+    """Mint a new Plans set holding a copy of `record`'s contents, named "<label> copy" -- the basis for
+    tweaking a variant without disturbing the original. The copy goes through the typed load/save seam, so
+    it is fully independent of the source. When `reviewed` (the default, e.g. an Explore fork of an
+    already-run set) it inherits the source's acknowledged sections; when not, it starts with none, so the
+    user must walk each section to complete it -- the copied values are a starting point, not a finished
+    set."""
     label = unique_label( f'{record.label} copy', _labels( record.organization ) )
-    clone = PlansRecord( organization = record.organization, label = label,
-                         acknowledged_sections = list( record.acknowledged_sections ) )
+    clone = PlansRecord(
+        organization = record.organization, label = label,
+        acknowledged_sections = list( record.acknowledged_sections ) if reviewed else list() )
     return save_plans( clone, load_plans( record ) )
 
 

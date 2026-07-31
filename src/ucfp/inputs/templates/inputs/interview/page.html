@@ -4,8 +4,9 @@
 <h1 class="mb-1">{{ flow_heading }}</h1>
 {% comment %}
 Profile is a standalone top-level page: instead of a breadcrumb its header shows whether the profile is
-complete and when it was last updated. Plans and Assumptions are scenario components: while a scenario is
-being built they breadcrumb that Future Scenario; edited on their own they breadcrumb back to Scenarios.
+complete and when it was last updated. Plans and Assumptions are scenario components: a breadcrumb (the
+Future Scenario while building, else Scenarios) and an inline rename of the component being edited, so its
+name can be changed right here -- handy straight after a create or clone that gave it a default name.
 {% endcomment %}
 {% if flow == 'profile' %}
 <p class="mb-4">
@@ -16,12 +17,18 @@ being built they breadcrumb that Future Scenario; edited on their own they bread
   {% endif %}
   {% if profile_updated %}<span class="text-muted small ml-1">last updated {{ profile_updated|date:"F Y" }}</span>{% endif %}
 </p>
-{% elif building_scenario %}
-<p class="text-muted mb-4">Future Scenario: <strong>{{ building_scenario }}</strong> &rsaquo; {{ flow_title }}</p>
 {% else %}
-<p class="text-muted mb-4">
-  <a href="{% url 'scenarios_home' %}">Scenarios</a> &rsaquo; {{ flow_title }}
-</p>
+{% if building_scenario %}
+<p class="text-muted mb-2">Future Scenario: <strong>{{ building_scenario }}</strong> &rsaquo; {{ flow_title }}</p>
+{% else %}
+<p class="text-muted mb-2"><a href="{% url 'scenarios_home' %}">Scenarios</a> &rsaquo; {{ flow_title }}</p>
+{% endif %}
+{% if component_rename %}
+<div class="d-flex align-items-center mb-4" style="max-width:28rem">
+  <label class="text-muted small mr-2 mb-0 flex-shrink-0">Name</label>
+  {% include 'inputs/panes/inline_rename.html' with kind=component_rename.kind uuid=component_rename.uuid rename_url=component_rename.rename_url label=component_rename.label aria=flow_title|add:' name' bold=True %}
+</div>
+{% endif %}
 {% endif %}
 <div class="row">
   <div class="col-md-3 mb-4">
