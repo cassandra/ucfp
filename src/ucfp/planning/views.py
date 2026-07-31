@@ -4,7 +4,7 @@ The hub (`/plan/financial-forecast/`) orchestrates the flow without re-implement
 plans forms: it links out to them, makes the forecast bundle explicit (which profile, which plans,
 which assumptions, the frame), runs it, and lists past runs. The results page (`/run/<uuid>/`) shows
 a captured run -- the net-worth trajectory derived from its persisted books, whether it stopped
-early, and the notices. The guided interview and the input editors live in the `inputs` app.
+early, and the notices. The interview and the input editors live in the `inputs` app.
 """
 
 from django.db import transaction

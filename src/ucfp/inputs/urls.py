@@ -1,4 +1,4 @@
-"""`/inputs/` -- the inputs area: the Scenarios landing, the three editable flows, and the guided interview.
+"""`/inputs/` -- the inputs area: the Scenarios landing, the three editable flows, and the section interview.
 
 All served by this app's own views. The interview's section routes keep stable `name`s
 (`interview_section`, `residence`, ...) so existing `{% url %}` references resolve unchanged; the
@@ -15,7 +15,7 @@ urlpatterns = [
     path( 'scenarios/<uuid:uuid>/rename/', views.ScenarioRenameView.as_view(), name = 'scenario_rename' ),
     path( 'scenarios/<uuid:uuid>/delete/', views.ScenarioDeleteView.as_view(), name = 'scenario_delete' ),
 
-    # The three input flows, each editable on its own (the guided interview chains them).
+    # The three input flows, each editable on its own (a scenario build chains Plans then Assumptions).
     path( 'profile/', views.FlowEntryView.as_view( flow = 'profile' ), name = 'flow_profile' ),
     path( 'plans/', views.FlowEntryView.as_view( flow = 'plans' ), name = 'flow_plans' ),
     path( 'plans/new/', views.PlansNewView.as_view(), name = 'plan_new' ),

@@ -8,7 +8,7 @@ rename view re-renders here when the new name is already taken, reverting the fi
   <form method="post" action="{{ rename_url }}" class="{{ AppConst.AUTOSAVE_CLASS }} m-0">
     {% csrf_token %}
     <input type="text" name="label" value="{{ label }}" aria-label="{{ aria }}"
-           class="form-control form-control-sm{% if bold %} font-weight-bold{% endif %}{% if warning %} is-invalid{% endif %}">
+           class="js-rename form-control form-control-sm{% if bold %} font-weight-bold{% endif %}{% if warning %} is-invalid{% endif %}">
     {% if warning %}<div class="invalid-feedback d-block">{{ warning }}</div>{% endif %}
     {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
     <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>

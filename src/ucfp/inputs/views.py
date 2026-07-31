@@ -1,4 +1,4 @@
-"""The inputs area -- the Scenarios landing plus the guided interview and its per-flow editors.
+"""The inputs area -- the Scenarios landing plus the section interview and its per-flow editors.
 
 The Scenarios landing (`/inputs/scenarios/`) lists the organization's scenarios and hosts the Plans and
 Assumptions management; the Profile is edited on its own flow (reached from the nav). The interview is
@@ -41,7 +41,8 @@ from .interview import (
     first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
-from .state import complete_assumptions, complete_plans, completed_profile, profile_is_complete
+from .state import (
+    completed_assumptions, completed_plans, completed_profile, flow_reviewed, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
@@ -72,37 +73,35 @@ class ScenariosHomeView( View ):
     def get( self, request ):
         organization   = request.organization
         profile_record = completed_profile( organization )
-        plans_ids       = { record.id for record in complete_plans( profile_record, organization ) } \
-            if profile_record else set()
-        assumptions_ids = { record.id for record in complete_assumptions( profile_record, organization ) } \
-            if profile_record else set()
-        # `select_related`/prefetch: the scenario rows show component labels, and each component's delete
-        # confirmation warns which scenarios it would cascade away (a scenario references its components).
+        profile        = load_profile( profile_record ) if profile_record is not None else None
+        # Fetch each component set once (prefetching each set's scenarios for the delete-cascade warning),
+        # then compute completeness on those rows -- `flow_reviewed` reads their JSON only, no extra query.
+        plans       = self._component_rows( plans_for( organization ), profile, 'plans' )
+        assumptions = self._component_rows( assumptions_for( organization ), profile, 'assumptions' )
+        complete_ids = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
+                         { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
             'profile_complete' : profile_record is not None,
-            'scenarios'        : self._scenario_rows( organization, plans_ids, assumptions_ids ),
-            'plans'            : self._marked( plans_for( organization ).prefetch_related( 'scenarios' ),
-                                               plans_ids ),
-            'assumptions'      : self._marked(
-                assumptions_for( organization ).prefetch_related( 'scenarios' ), assumptions_ids ),
+            'scenarios'        : self._scenario_rows( organization, *complete_ids ),
+            'plans'            : plans,
+            'assumptions'      : assumptions,
         } )
 
     @staticmethod
-    def _marked( records, complete_ids ):
-        """Tag each component with `is_complete` (its flow fully walked), so the list can flag the ones
-        still needing setup -- an incomplete component is absent from scenario building until finished."""
-        tagged = list()
-        for record in records:
-            record.is_complete = record.id in complete_ids
-            tagged.append( record )
-        return tagged
+    def _component_rows( records, profile, flow ):
+        """Each component as a `{record, complete}` row -- complete when its flow is fully walked, so the
+        list can flag the ones still needing setup (an incomplete component is absent from scenario
+        building until finished). None profile means no completeness (the profile gate shows instead)."""
+        return [ { 'record': record,
+                   'complete': profile is not None and flow_reviewed( profile, record, flow ) }
+                 for record in records.prefetch_related( 'scenarios' ) ]
 
     @staticmethod
     def _scenario_rows( organization, plans_ids, assumptions_ids ):
-        """Each saved scenario with whether its build is complete -- both components' flows walked -- so an
-        in-progress one (e.g. the freshly-created Default) can offer to resume its setup."""
+        """Each saved scenario as a `{scenario, complete}` row -- complete when both its components' flows
+        are walked -- so an in-progress one (e.g. the freshly-created Default) can offer to resume setup."""
         rows = list()
         for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' ):
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
@@ -113,29 +112,27 @@ class ScenariosHomeView( View ):
 _RENAME_PANE = 'inputs/panes/inline_rename.html'
 
 
-def _rename_or_conflict( request, record, siblings, kind, aria, bold, rename ):
-    """Apply an inline rename unless the new name is already used by another of `siblings` (same type,
-    same organization). A blank name is ignored (non-blocking). Otherwise the rename pane is always
-    re-rendered: a duplicate reverts the field and shows a warning; a valid name saves and re-renders
-    without one -- so a prior warning is cleared once an acceptable name is entered."""
+def _rename_or_conflict( request, record, *, siblings, kind, aria, bold, rename ):
+    """Apply an inline rename unless the new name is already used by another of `siblings` (same type, same
+    organization). A valid rename (or a blank, ignored) saves silently, so the field keeps focus while
+    editing; only a duplicate re-renders the pane -- reverting the field with a warning. Editing the field
+    clears that warning client-side (see the js-rename handler), so no re-render on success is needed."""
     label = request.POST.get( 'label', '' ).strip()
     if not label:
         return antinode.response()
-    if siblings.filter( label__iexact = label ).exclude( pk = record.pk ).exists():
-        display, warning = record.label, 'That name is already in use.'
-    else:
+    if not siblings.filter( label__iexact = label ).exclude( pk = record.pk ).exists():
         rename( record, label )
-        display, warning = label, None
+        return antinode.response()
     pane = render_to_string( _RENAME_PANE, {
-        'kind': kind, 'uuid': record.uuid, 'rename_url': request.path, 'label': display,
-        'aria': aria, 'bold': bold, 'warning': warning }, request = request )
+        'kind': kind, 'uuid': record.uuid, 'rename_url': request.path, 'label': record.label,
+        'aria': aria, 'bold': bold, 'warning': 'That name is already in use.' }, request = request )
     return antinode.response( replace_map = { f'rename-{kind}-{record.uuid}': pane } )
 
 
-def _require_complete_profile( request ):
-    """Redirect a user without a complete Profile to set one up -- the universal prerequisite for building
-    or combining a scenario. No return is stashed: the Profile flow ends on its own landing (the user then
-    heads to the feature), so a return here would not be honoured."""
+def _redirect_to_profile_setup( request ):
+    """Send a user without a complete Profile to set one up -- the universal prerequisite for building or
+    combining a scenario. No return is stashed: the Profile flow ends on its own landing (the user then
+    heads to the feature via the nav), so a return here would not be honoured."""
     return redirect( 'flow_profile' )
 
 
@@ -190,7 +187,7 @@ class ScenarioNewView( View ):
     def get( self, request ):
         profile_record = completed_profile( request.organization )
         if profile_record is None:
-            return _require_complete_profile( request )
+            return _redirect_to_profile_setup( request )
         plans, assumptions = self._components( profile_record, request.organization )
         if not plans or not assumptions:                   # nothing complete to pair yet -> finish setup
             return redirect( 'scenarios_home' )
@@ -203,7 +200,7 @@ class ScenarioNewView( View ):
         organization   = request.organization
         profile_record = completed_profile( organization )
         if profile_record is None:
-            return _require_complete_profile( request )
+            return _redirect_to_profile_setup( request )
         plans, assumptions = self._components( profile_record, organization )
         form = self._form( organization, plans, assumptions, request.POST )
         if not form.is_valid():
@@ -217,8 +214,8 @@ class ScenarioNewView( View ):
 
     @staticmethod
     def _components( profile_record, organization ):
-        return ( complete_plans( profile_record, organization ),
-                 complete_assumptions( profile_record, organization ) )
+        return ( completed_plans( profile_record, organization ),
+                 completed_assumptions( profile_record, organization ) )
 
     @staticmethod
     def _has_available_pairing( organization, plans, assumptions ) -> bool:
@@ -260,8 +257,8 @@ class ScenarioRenameView( View ):
         record = get_object_or_404(
             ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
         return _rename_or_conflict(
-            request, record, scenarios_for( organization ), 'scenario', 'Scenario name', True,
-            rename_scenario )
+            request, record, siblings = scenarios_for( organization ), kind = 'scenario',
+            aria = 'Scenario name', bold = True, rename = rename_scenario )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -369,7 +366,8 @@ class PlansRenameView( View ):
         organization = request.organization
         record = get_object_or_404( PlansRecord, uuid = uuid, organization = organization )
         return _rename_or_conflict(
-            request, record, plans_for( organization ), 'plan', 'Plan name', False, rename_plans )
+            request, record, siblings = plans_for( organization ), kind = 'plan', aria = 'Plan name',
+            bold = False, rename = rename_plans )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -381,8 +379,8 @@ class AssumptionsRenameView( View ):
         organization = request.organization
         record = get_object_or_404( AssumptionsRecord, uuid = uuid, organization = organization )
         return _rename_or_conflict(
-            request, record, assumptions_for( organization ), 'assumptions', 'Assumptions name', False,
-            rename_assumptions )
+            request, record, siblings = assumptions_for( organization ), kind = 'assumptions',
+            aria = 'Assumptions name', bold = False, rename = rename_assumptions )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -441,7 +439,7 @@ class AssumptionsDeleteView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class InterviewView( View ):
-    """`/inputs/interview/<section>/` -- one section of the guided setup: an antinode-swapped
+    """`/inputs/interview/<section>/` -- one section of the interview: an antinode-swapped
     linear flow over the organization's current Profile, Plans, and Assumptions. A full GET renders
     the whole page; an async GET (a stepper revisit) or a POST swaps just the section pane and
     refreshes the stepper.
@@ -525,7 +523,8 @@ class InterviewView( View ):
             request.session_state.to_session( request )
             return reverse( 'scenarios_home' )
         if flow == 'profile':
-            return reverse( 'interview_section', kwargs = { 'section': first_section_of_flow( 'profile' ).key } )
+            first = first_section_of_flow( 'profile' )
+            return reverse( 'interview_section', kwargs = { 'section': first.key } )
         return reverse( 'scenarios_home' )
 
     @staticmethod

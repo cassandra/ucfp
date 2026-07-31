@@ -422,6 +422,12 @@ window.App.Inputs = (function () {
             event.preventDefault();
             saveForm( $( this ) );
         } );
+        // Inline rename: clear the "name already in use" warning as soon as the user edits, so a valid
+        // save need not re-render the field (which would steal focus). The server only re-renders the
+        // pane on a genuine conflict.
+        $( 'body' ).on( 'input', '.js-rename.is-invalid', function () {
+            $( this ).removeClass( 'is-invalid' ).siblings( '.invalid-feedback' ).remove();
+        } );
 
         // Draw-order reorder (Cash Plan): the up/down buttons move a row within its list and save.
         // Each row carries a hidden draw_order input, so the form then serializes the classes in the

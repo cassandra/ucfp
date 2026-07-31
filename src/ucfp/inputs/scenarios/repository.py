@@ -64,7 +64,9 @@ def create_scenario( organization: Organization, plans: PlansRecord, assumptions
 
 def default_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]:
     """The organization's base scenario -- the oldest saved one, which the profile flow's shared data
-    (the straddle sections' rental income) binds to. None before the first profile setup creates it."""
+    (the straddle sections' rental income) binds to. Oldest is a stable identity for the Default: there is
+    no `is_default` marker, and by construction the first scenario an organization gets is the Default that
+    profile setup creates. None before that first setup."""
     return scenarios_for( organization ).order_by( 'created_datetime' ).first()
 
 
@@ -73,10 +75,14 @@ def ensure_default_scenario( organization: Organization ) -> ScenarioRecord:
     mints a `Default Plans` and `Default Assumptions` and combines them into a `Default Scenario` -- all
     incomplete until their flows are walked, so completeness detection still drives the setup. Idempotent:
     returns the existing base scenario when one is already present, so no duplicate Default is created."""
-    base = default_scenario( organization )
-    if base is not None:
-        return base
     with transaction.atomic():
+        # Serialize per organization so a double-entry into profile setup can't mint two Defaults. The
+        # SAVED partition has no uniqueness constraint and an empty scenario set can't be row-locked, so
+        # the organization row is the lock (a no-op on SQLite, which serializes writes anyway).
+        Organization.objects.select_for_update().filter( pk = organization.pk ).first()
+        base = default_scenario( organization )
+        if base is not None:
+            return base
         plans       = rename_plans( create_plans( organization ), 'Default Plans' )
         assumptions = rename_assumptions( create_assumptions( organization ), 'Default Assumptions' )
         return create_scenario( organization, plans, assumptions, 'Default Scenario' )
