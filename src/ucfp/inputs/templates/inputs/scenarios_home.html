@@ -29,8 +29,8 @@ arrive with #90; this page is feature-agnostic -- it links to no single feature.
     <li class="list-group-item text-muted small">No scenarios yet.</li>
     {% endfor %}
   </ul>
-  <div class="card-footer bg-white border-0 small text-muted">
-    Building and managing scenarios arrives soon.
+  <div class="card-footer bg-white border-0">
+    <a href="{% url 'scenario_build' %}" class="btn btn-outline-primary btn-sm">+ New Future Scenario</a>
   </div>
 </div>
 

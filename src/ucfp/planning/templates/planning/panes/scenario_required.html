@@ -1,0 +1,35 @@
+{% comment %}
+Reusable gate: shown by a planning feature that needs a Future Scenario but has no complete one to run.
+Solicits the prerequisites in order -- Profile first, then a scenario -- and offers to resume a half-built
+scenario. Reads `has_profile` and `in_progress` from the surrounding context; the including view stashes
+`post_setup_return` so building/resuming lands back on the feature.
+{% endcomment %}
+{% if not has_profile %}
+<div class="alert alert-info mt-3">
+  <h2 class="h5 mb-2">Set up your profile first</h2>
+  <p class="mb-3">A forecast starts from your situation today. Set up your profile, then you can build a
+    Future Scenario to project.</p>
+  <a href="{% url 'flow_profile' %}" class="btn btn-primary">Set up your profile</a>
+</div>
+{% else %}
+<div class="alert alert-info mt-3">
+  <h2 class="h5 mb-2">Build a Future Scenario to forecast</h2>
+  <p class="mb-2">A forecast projects a <strong>Future Scenario</strong> &mdash; the plans you're
+    contemplating and the assumptions you expect. Build one to run this feature.</p>
+  {% if in_progress %}
+  <p class="mb-1">You have a scenario in progress:</p>
+  <ul class="mb-3">
+    {% for scenario in in_progress %}
+    <li class="d-flex align-items-center">
+      <span class="font-weight-bold mr-2">{{ scenario.label }}</span>
+      <form method="post" action="{% url 'scenario_resume' scenario.uuid %}" class="m-0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-link p-0">Resume building &rarr;</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <a href="{% url 'scenario_build' %}" class="btn btn-primary">Build a Future Scenario</a>
+</div>
+{% endif %}

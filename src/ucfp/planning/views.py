@@ -37,6 +37,7 @@ from .explore import enter_explore, run_working_scenario, transient_runs
 from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
+from .gating import partition_scenarios
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture
@@ -85,27 +86,29 @@ def _remember_selection( request, form, scenario_record ) -> None:
 
 
 class FinancialForecastView( InputGatedMixin, View ):
-    """`/plan/financial-forecast/` -- the hub: pick a saved scenario and a frame, then either run it as-is
-    (this view's POST) or open it in Explore (the `Explore` button posts the same form to
-    `EnterExploreView`), and browse kept runs. A scenario is the run-ready unit (a validated Plans +
-    Assumptions bundle); the hub only *selects* one -- it never builds or edits scenarios. With none yet,
-    it points at the (not-yet-built) scenario builder rather than offering a run."""
+    """`/plan/financial-forecast/` -- the hub: pick a complete scenario and a frame, then either run it
+    (this view's POST) or open it in Explore, and browse kept runs. The forecast needs a scenario, so it
+    solicits its prerequisites lazily, in order: no Profile -> build the Profile first; a Profile but no
+    *complete* scenario -> build one (or resume a half-built one); otherwise the chooser runs a complete
+    one. A feature-deflected setup returns here (`post_setup_return`)."""
 
     def get( self, request ):
-        return render( request, _HUB_TEMPLATE, self._context( request ) )
+        context = self._context( request )
+        if context[ 'needs_setup' ]:                       # stash the return so setup lands back here
+            request.session_state.post_setup_return = request.path
+            request.session_state.to_session( request )
+        return render( request, _HUB_TEMPLATE, context )
 
-    def post( self, request ):                             # "Run forecast": project the scenario as-is
-        organization = request.organization
-        form = ForecastForm( request.POST, scenarios = scenarios_for( organization ) )
-        if not form.is_valid():
+    def post( self, request ):                             # "Run forecast": project a complete scenario
+        organization   = request.organization
+        profile_record = latest_profile( organization )
+        complete, _in_progress = self._scenarios( organization, profile_record )
+        form = ForecastForm( request.POST, scenarios = complete )
+        if profile_record is None or not form.is_valid():
             return render( request, _HUB_TEMPLATE, self._context( request, form = form ) )
         scenario_record = get_object_or_404(
             ScenarioRecord, uuid = form.cleaned_data[ 'scenario' ], organization = organization,
             usage_role = UsageRole.SAVED )
-        profile_record = latest_profile( organization )
-        if profile_record is None:
-            return render( request, _HUB_TEMPLATE, self._context(
-                request, form = form, error = 'Set up a profile before running a forecast.' ) )
         _remember_selection( request, form, scenario_record )
         scenario = load_scenario( scenario_record )
         frame    = resolve_frame(
@@ -127,17 +130,29 @@ class FinancialForecastView( InputGatedMixin, View ):
                 request, _HUB_TEMPLATE, self._context( request, form = form, error = str( error ) ) )
         return redirect( 'run_results', run_uuid = run.uuid )
 
+    @staticmethod
+    def _scenarios( organization, profile_record ):
+        """The org's (complete, in_progress) scenarios against the current profile -- both empty when there
+        is no profile yet (nothing is runnable without one)."""
+        if profile_record is None:
+            return list(), list()
+        return partition_scenarios( organization, profile_record )
+
     def _context( self, request, form = None, error = None ) -> dict:
-        organization = request.organization
-        scenarios = scenarios_for( organization )
+        organization   = request.organization
+        profile_record = latest_profile( organization )
+        complete, in_progress = self._scenarios( organization, profile_record )
         return {
-            'scenarios' : scenarios,
-            'form'      : form or ForecastForm(
-                scenarios = scenarios, initial = self._selection_defaults( request ) ),
-            'results'   : PlanningResultRecord.objects.select_related( 'run' ).filter(
+            'has_profile'  : profile_record is not None,
+            'scenarios'    : complete,                     # the chooser offers only runnable scenarios
+            'in_progress'  : in_progress,                  # half-built scenarios to resume
+            'needs_setup'  : profile_record is None or not complete,
+            'form'         : form or ForecastForm(
+                scenarios = complete, initial = self._selection_defaults( request ) ),
+            'results'      : PlanningResultRecord.objects.select_related( 'run' ).filter(
                 organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
                 usage_role = UsageRole.SAVED ).order_by( '-created_datetime' ),
-            'error'     : error,
+            'error'        : error,
         }
 
     @staticmethod

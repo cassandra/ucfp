@@ -11,6 +11,7 @@ from . import views
 urlpatterns = [
     path( 'scenarios/', views.ScenariosHomeView.as_view(), name = 'scenarios_home' ),
     path( 'scenarios/build/', views.ScenarioBuildStartView.as_view(), name = 'scenario_build' ),
+    path( 'scenarios/<uuid:uuid>/resume/', views.ScenarioResumeView.as_view(), name = 'scenario_resume' ),
 
     # The three input flows, each editable on its own (the guided interview chains them).
     path( 'profile/', views.FlowEntryView.as_view( flow = 'profile' ), name = 'flow_profile' ),

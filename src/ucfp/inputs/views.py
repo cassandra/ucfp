@@ -36,6 +36,7 @@ from ucfp.inputs.plans.enums import EventKind
 from .interview import (
     Aggregate, AccountsForm, HomeForm, SubjectsForm, applicable_sections,
     first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
+from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
@@ -110,6 +111,23 @@ class ScenarioBuildStartView( View ):
         request.session_state.post_setup_return = reverse( 'scenario_build' )
         request.session_state.to_session( request )
         return redirect( 'flow_profile' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioResumeView( View ):
+    """`/inputs/scenarios/<uuid>/resume/` -- resume building a half-built scenario: make its Plans and
+    Assumptions the editing target, mark the build in progress, and re-enter the two-part flow at the
+    first Plans section (the stepper shows what is already done). POST, since it changes editing state."""
+
+    def post( self, request, uuid ):
+        organization = request.organization
+        scenario = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
+        _select( request, 'current_plans_uuid', scenario.plans )
+        _select( request, 'current_assumptions_uuid', scenario.assumptions )
+        request.session_state.scenario_building = str( scenario.uuid )
+        request.session_state.to_session( request )
+        return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
