@@ -115,18 +115,21 @@ _RENAME_PANE = 'inputs/panes/inline_rename.html'
 
 def _rename_or_conflict( request, record, siblings, kind, aria, bold, rename ):
     """Apply an inline rename unless the new name is already used by another of `siblings` (same type,
-    same organization). A blank name is ignored (non-blocking); a duplicate reverts the field and shows a
-    warning by re-rendering just that rename pane; otherwise the rename is saved silently."""
+    same organization). A blank name is ignored (non-blocking). Otherwise the rename pane is always
+    re-rendered: a duplicate reverts the field and shows a warning; a valid name saves and re-renders
+    without one -- so a prior warning is cleared once an acceptable name is entered."""
     label = request.POST.get( 'label', '' ).strip()
     if not label:
         return antinode.response()
     if siblings.filter( label__iexact = label ).exclude( pk = record.pk ).exists():
-        pane = render_to_string( _RENAME_PANE, {
-            'kind': kind, 'uuid': record.uuid, 'rename_url': request.path, 'label': record.label,
-            'aria': aria, 'bold': bold, 'warning': 'That name is already in use.' }, request = request )
-        return antinode.response( replace_map = { f'rename-{kind}-{record.uuid}': pane } )
-    rename( record, label )
-    return antinode.response()
+        display, warning = record.label, 'That name is already in use.'
+    else:
+        rename( record, label )
+        display, warning = label, None
+    pane = render_to_string( _RENAME_PANE, {
+        'kind': kind, 'uuid': record.uuid, 'rename_url': request.path, 'label': display,
+        'aria': aria, 'bold': bold, 'warning': warning }, request = request )
+    return antinode.response( replace_map = { f'rename-{kind}-{record.uuid}': pane } )
 
 
 def _require_complete_profile( request ):
