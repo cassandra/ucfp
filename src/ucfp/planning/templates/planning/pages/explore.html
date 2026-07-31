@@ -22,7 +22,7 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
 
 <div class="d-flex align-items-baseline justify-content-between mb-2">
   <div>
-    <h1 class="h3 mb-0">Explore <span class="text-muted">— {{ source.label }}</span></h1>
+    <h1 class="h3 mb-0">Explore <span class="text-muted">— {{ source.label }}{% if drift %} (with changes){% endif %}</span></h1>
     <div class="text-muted small">Tweaks apply to a working copy — the saved scenario changes only when
       you save.</div>
   </div>
@@ -149,11 +149,20 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
         Update &ldquo;{{ source.label }}&rdquo;</button>
     </form>
 
-    <form method="post" action="{% url 'explore_save_scenario' %}" class="form-inline my-1">
+    <form method="post" action="{% url 'explore_save_scenario' %}" class="form-inline my-1 mr-3">
       {% csrf_token %}
       <input type="text" name="name" class="form-control form-control-sm mr-2" placeholder="New scenario name"
              aria-label="New scenario name">
       <button type="submit" class="btn btn-outline-secondary btn-sm">Save as new</button>
+    </form>
+
+    <!-- Discard the sandbox and its run history and start over from the anchor -- the explicit hard
+         restart (re-entering the same scenario from the hub resumes instead). -->
+    <form method="post" action="{% url 'explore_reset' %}" class="my-1">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-danger btn-sm"
+              title="Discard your changes and run history, starting over from the saved scenario">
+        Reset to &ldquo;{{ source.label }}&rdquo;</button>
     </form>
   </div>
 </div>

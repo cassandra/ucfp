@@ -140,10 +140,12 @@ class FinancialForecastView( InputGatedMixin, View ):
         organization   = request.organization
         profile_record = completed_profile( organization )   # completeness, not mere existence
         complete, in_progress = self._scenarios( organization, profile_record )
+        exploration    = scenario_exploration( organization )
         return {
             'has_profile'  : profile_record is not None,   # a *complete* profile
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
             'in_progress'  : in_progress,                  # half-built scenarios to resume
+            'resume'       : self._resume( exploration ) if exploration is not None else None,
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),
             'results'      : PlanningResultRecord.objects.select_related( 'run' ).filter(
@@ -151,6 +153,16 @@ class FinancialForecastView( InputGatedMixin, View ):
                 usage_role = UsageRole.SAVED ).order_by( '-created_datetime' ),
             'error'        : error,
         }
+
+    @staticmethod
+    def _resume( exploration ) -> dict:
+        """The in-progress exploration surfaced on the hub: its anchor and how far the sandbox has diverged,
+        so Resume can say what it returns to -- the anchor as-is, or a variation of it."""
+        drift = value_changes( load_scenario( exploration.source ), load_scenario( exploration.working ) )
+        return {
+            'source'       : exploration.source,
+            'drift_summary': describe_changes( drift ),
+            'changed'      : bool( drift ) }
 
     @staticmethod
     def _selection_defaults( request ) -> dict:
@@ -365,6 +377,20 @@ class SaveScenarioView( InputGatedMixin, View ):
         if exploration is not None:
             name = ( request.POST.get( 'name' ) or '' ).strip() or 'Saved scenario'
             save_working_as_scenario( organization, name, exploration.source )
+        return redirect( 'explore' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ResetExploreView( InputGatedMixin, View ):
+    """`.../explore/reset/` -- discard the sandbox's changes and run history, starting the exploration over
+    from its anchor. The explicit hard restart: re-entering the same scenario from the hub resumes rather
+    than resets (so a refresh is safe), and this is how the user asks to begin again on the same anchor."""
+
+    def post( self, request ):
+        organization = request.organization
+        exploration  = scenario_exploration( organization )
+        if exploration is not None:
+            enter_explore( organization, exploration.source )   # re-seed from the anchor + clear the runs
         return redirect( 'explore' )
 
 

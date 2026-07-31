@@ -25,6 +25,8 @@ urlpatterns = [
           name = 'explore_save_scenario' ),
     path( 'financial-forecast/explore/keep-run/', views.KeepRunView.as_view(),
           name = 'explore_keep_run' ),
+    path( 'financial-forecast/explore/reset/', views.ResetExploreView.as_view(),
+          name = 'explore_reset' ),
     path( 'retirement-timing/',
           views.ComingSoonView.as_view( feature_key = 'retirement_timing' ),
           name = 'retirement_timing' ),
