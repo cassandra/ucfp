@@ -12,6 +12,8 @@ urlpatterns = [
     path( 'scenarios/', views.ScenariosHomeView.as_view(), name = 'scenarios_home' ),
     path( 'scenarios/new/', views.ScenarioNewView.as_view(), name = 'scenario_new' ),
     path( 'scenarios/<uuid:uuid>/resume/', views.ScenarioResumeView.as_view(), name = 'scenario_resume' ),
+    path( 'scenarios/<uuid:uuid>/rename/', views.ScenarioRenameView.as_view(), name = 'scenario_rename' ),
+    path( 'scenarios/<uuid:uuid>/delete/', views.ScenarioDeleteView.as_view(), name = 'scenario_delete' ),
 
     # The three input flows, each editable on its own (the guided interview chains them).
     path( 'profile/', views.FlowEntryView.as_view( flow = 'profile' ), name = 'flow_profile' ),

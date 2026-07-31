@@ -32,7 +32,8 @@ from ucfp.inputs.assumptions.repository import (
     assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
     load_assumptions, rename_assumptions, save_assumptions )
 from ucfp.inputs.scenarios.repository import (
-    create_scenario, ensure_default_scenario, existing_pairings, scenarios_for )
+    create_scenario, delete_scenario, ensure_default_scenario, existing_pairings, rename_scenario,
+    scenarios_for )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -204,6 +205,34 @@ class ScenarioResumeView( View ):
         request.session_state.scenario_building = str( scenario.uuid )
         request.session_state.to_session( request )
         return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioRenameView( View ):
+    """`/inputs/scenarios/<uuid>/rename/` -- rename a scenario from the Scenarios page's inline editor.
+    Saves the new label in the background and replies silently; a blank name is ignored (non-blocking)."""
+
+    def post( self, request, uuid ):
+        record = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = request.organization, usage_role = UsageRole.SAVED )
+        label  = request.POST.get( 'label', '' ).strip()
+        if label:
+            rename_scenario( record, label )
+        return antinode.response()
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioDeleteView( View ):
+    """`/inputs/scenarios/<uuid>/delete/` -- delete a scenario (the Scenarios page asks first). Only the
+    pairing is removed; its Plans and Assumptions live on for other scenarios. Clears the chooser's stored
+    selection if it pointed here."""
+
+    def post( self, request, uuid ):
+        record = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = request.organization, usage_role = UsageRole.SAVED )
+        _forget_if_current( request, 'current_scenario_uuid', record )
+        delete_scenario( record )
+        return redirect( 'scenarios_home' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
