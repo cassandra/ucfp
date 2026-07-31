@@ -134,8 +134,9 @@ class ScenarioExplorationTest( TestCase ):
         enter_exploration( self.organization, source )
         overwrite_working( self.organization, Scenario() )
         blank = save_working( self.organization, source, both )      # no name
-        self.assertEqual(                                           # blank name -> the default label
-            PlansRecord.objects.get( pk = blank.plans_id ).label, 'Saved scenario Plans' )
+        self.assertEqual( blank.label, 'Base copy' )                # unnamed save -> a "<source> copy"
+        self.assertEqual(                                          # and the copied set is named to match
+            PlansRecord.objects.get( pk = blank.plans_id ).label, 'Base copy Plans' )
 
     def test_save_working_mixed_branches_but_shares_the_overwritten_component( self ):
         source = self._saved( _rich_scenario(), 'Base' )

@@ -20,7 +20,7 @@ from ..enums import UsageRole
 from ..models import AssumptionsRecord, PlansRecord, ScenarioExploration, ScenarioRecord
 from ..naming import unique_label
 from ..plans.repository import clone_plans, plans_labels, rename_plans, save_plans
-from .repository import create_scenario, load_scenario
+from .repository import create_scenario, load_scenario, scenario_labels
 from .schemas import Scenario
 
 # A component's save destination: OVERWRITE the source's existing (shared) set in place, or COPY the
@@ -80,7 +80,8 @@ def save_working(
     unrecognised value defaults to `OVERWRITE`.
 
     If every component is `OVERWRITE`, `source` itself is updated in place and returned -- no new scenario.
-    If any is `COPY`, a new scenario named `name` is created: its `COPY` components are new independent sets,
+    If any is `COPY`, a new scenario named `name` (a distinct "<source> copy" when `name` is blank) is
+    created: its `COPY` components are new independent sets,
     its `OVERWRITE` components are `source`'s existing sets (shared, and written in place). Either way the
     exploration re-anchors to the result. Raises if there is no working scenario.
 
@@ -93,7 +94,8 @@ def save_working(
     destinations = { component: ( COPY if destinations.get( component ) == COPY else OVERWRITE )
                      for component in ( 'plans', 'assumptions' ) }   # normalise: fill/repair to a clean pair
     sandbox = load_scenario( exploration.working )
-    label   = name.strip() or 'Saved scenario'             # used only when a component is copied to a new set
+    # The name for a copied set / new scenario; an unnamed save defaults to a distinct "<source> copy".
+    label   = name.strip() or unique_label( f'{source.label} copy', scenario_labels( organization ) )
     with transaction.atomic():                             # writes, new scenario, and re-anchor together
         if destinations[ 'plans' ] == OVERWRITE:
             plans = save_plans( source.plans, sandbox.plans )   # in place; propagates to any sharer
