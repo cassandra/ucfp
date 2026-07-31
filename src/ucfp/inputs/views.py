@@ -171,7 +171,7 @@ class ScenarioNewView( View ):
         create_scenario(
             organization, by_uuid_plans[ form.cleaned_data[ 'plans' ] ],
             by_uuid_assumptions[ form.cleaned_data[ 'assumptions' ] ], name )
-        return redirect( _consume_post_setup_return( request ) )
+        return redirect( 'scenarios_home' )
 
     @staticmethod
     def _components( profile_record, organization ):
@@ -228,18 +228,6 @@ class FlowEntryView( View ):
         if first is None:
             raise Http404( f'No sections in flow {self.flow!r}.' )
         return redirect( 'interview_section', section = first.key )
-
-
-def _consume_post_setup_return( request ) -> str:
-    """Where to send the user now that deflected setup has completed: the path a feature stashed when it
-    sent them here, popped so it fires once, else the home page. The counterpart to the gate that sets
-    `post_setup_return`."""
-    destination = request.session_state.post_setup_return
-    if destination:
-        request.session_state.post_setup_return = None
-        request.session_state.to_session( request )
-        return destination
-    return reverse( 'home' )
 
 
 def _select( request, field, record ):
@@ -455,13 +443,14 @@ class InterviewView( View ):
     @staticmethod
     def _completion_destination( request, flow, building ) -> str:
         """Where a completed flow lands. A scenario build (Plans then Assumptions) finishes at the end of
-        Assumptions: clear the in-progress marker and return the user wherever a feature deflected them
-        (else home). Finishing the standalone Profile loops back to its first section, where the header
-        now shows it is complete; a standalone component edit ends on the Scenarios landing."""
+        Assumptions: clear the in-progress marker and land on the Scenarios page. Finishing the standalone
+        Profile loops back to its first section, where the header now shows it is complete; a standalone
+        component edit likewise ends on the Scenarios page. Features are reached from the nav, so no flow
+        threads a return destination."""
         if building:                                           # end of the two-part build (Assumptions done)
             request.session_state.scenario_building = None
             request.session_state.to_session( request )
-            return _consume_post_setup_return( request )
+            return reverse( 'scenarios_home' )
         if flow == 'profile':
             return reverse( 'interview_section', kwargs = { 'section': first_section_of_flow( 'profile' ).key } )
         return reverse( 'scenarios_home' )

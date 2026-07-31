@@ -1,8 +1,8 @@
 {% comment %}
 Reusable gate: shown by a planning feature that needs a Future Scenario but has no complete one to run.
 Assumes a completed Profile already exists (the profile gate leads, one step earlier). Offers to build a
-scenario, or resume a half-built one. Reads `in_progress` from the surrounding context; the including view
-stashes `post_setup_return` so building/resuming lands back on the feature.
+scenario, or resume a half-built one. Reads `in_progress` from the surrounding context. Building or
+resuming ends on the Scenarios page; the user returns to a feature via the nav.
 {% endcomment %}
 <div class="alert alert-info mt-3">
   <h2 class="h5 mb-2">Build a Future Scenario to forecast</h2>

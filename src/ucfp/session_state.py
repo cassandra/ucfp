@@ -61,11 +61,6 @@ class SessionState:
     # it rather than the most-recent one. A stale value (scenario deleted) simply does not preselect.
     current_scenario_uuid : Optional[ str ] = None
 
-    # Where to send the user once they finish the setup a feature deflected them into (Profile-first, or
-    # building a scenario) -- the path they were trying to reach. One-shot: the deflecting gate sets it and
-    # the completing flow consumes and clears it, falling back to home. Intent, not history.
-    post_setup_return : Optional[ str ] = None
-
     # The scenario currently being built, by uuid -- set while the Plans->Assumptions build flow runs, so
     # the interview chains the two component flows and finalizes on completion. Cleared when the build
     # finishes; None means no build is in progress.
@@ -97,7 +92,6 @@ class SessionState:
         request.session[ 'current_plans_uuid' ] = self.current_plans_uuid
         request.session[ 'current_assumptions_uuid' ] = self.current_assumptions_uuid
         request.session[ 'current_scenario_uuid' ] = self.current_scenario_uuid
-        request.session[ 'post_setup_return' ] = self.post_setup_return
         request.session[ 'scenario_building' ] = self.scenario_building
         request.session[ 'explore_curated_expenses' ] = self.explore_curated_expenses
         request.session[ 'explore_curated_rates' ] = self.explore_curated_rates
@@ -118,7 +112,6 @@ class SessionState:
             current_plans_uuid = request.session.get( 'current_plans_uuid' ),
             current_assumptions_uuid = request.session.get( 'current_assumptions_uuid' ),
             current_scenario_uuid = request.session.get( 'current_scenario_uuid' ),
-            post_setup_return = request.session.get( 'post_setup_return' ),
             scenario_building = request.session.get( 'scenario_building' ),
             explore_curated_expenses = request.session.get( 'explore_curated_expenses' ),
             explore_curated_rates = request.session.get( 'explore_curated_rates' ),

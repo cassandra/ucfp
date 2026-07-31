@@ -91,14 +91,10 @@ class FinancialForecastView( InputGatedMixin, View ):
     (this view's POST) or open it in Explore, and browse kept runs. The forecast needs a scenario, so it
     solicits its prerequisites lazily, in order: no Profile -> build the Profile first; a Profile but no
     *complete* scenario -> build one (or resume a half-built one); otherwise the chooser runs a complete
-    one. A feature-deflected setup returns here (`post_setup_return`)."""
+    one. Setup flows land on the Scenarios page when done; the user returns via the nav."""
 
     def get( self, request ):
-        context = self._context( request )
-        if context[ 'needs_setup' ]:                       # stash the return so setup lands back here
-            request.session_state.post_setup_return = request.path
-            request.session_state.to_session( request )
-        return render( request, _HUB_TEMPLATE, context )
+        return render( request, _HUB_TEMPLATE, self._context( request ) )
 
     def post( self, request ):                             # "Run forecast": project a complete scenario
         organization   = request.organization
@@ -147,7 +143,6 @@ class FinancialForecastView( InputGatedMixin, View ):
             'has_profile'  : profile_record is not None,   # a *complete* profile
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
             'in_progress'  : in_progress,                  # half-built scenarios to resume
-            'needs_setup'  : profile_record is None or not complete,
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),
             'results'      : PlanningResultRecord.objects.select_related( 'run' ).filter(
