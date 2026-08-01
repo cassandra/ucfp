@@ -4,21 +4,24 @@ Profile > Income states the income facts (sources, amounts, the SS/pension benef
 WHEN they happen: each *general* income flow's start/stop window (the Plans' per-flow `IncomeTiming`,
 keyed by the flow's handle) and when Social Security and a pension are claimed (`RetirementTiming` per
 subject). It reads the flows and entitlements from the Profile and writes only the Plans timing --
-mirroring how the property-expenses read the Profile's properties and write only the Plans. A rental's
-rent is not timed here: it runs until its property's sale event, clipped to that date at materialize.
+the Facts/Plans straddle the property-expenses follow (they read the Profile's properties, write only
+the Plans). A rental's rent is not timed here: it runs until its property's sale event, clipped to that
+date at materialize.
 The date is canonical; the age beside it is a convenience `inputs.js` keeps in sync from the subject's
 (fixed) birthdate.
 
 The section is a two-column shell: the timing on the left; the right column is a placeholder for the
-retirement contributions pane (#99).
+retirement contributions pane.
 """
 from dataclasses import replace
 from datetime import date
+from typing import Optional
 
 from django import forms
 
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.plans.schemas import IncomeTiming, RetirementTiming
+from ucfp.inputs.profile.schemas import IncomeFlow, SubjectProfile
 from ucfp.inputs.widgets import IsoDateInput
 
 
@@ -49,42 +52,57 @@ class RetirementForm( forms.Form ):
 
     # --- field construction ------------------------------------------------
 
-    def _add_window_fields( self, i : int, flow ):
+    def _add_window_fields( self, i : int, flow : IncomeFlow ):
         entry     = self._income_timing.get( flow.handle )
         start_on  = entry.start if entry is not None else None
         end_on    = entry.end if entry is not None else None
         birthdate = self._birthdate( flow.subject_handle )   # None for household income (no subject)
-        self.fields[ self._key( 'f', i, 'from' ) ]  = forms.DateField(
-            required = False, initial = start_on, widget = IsoDateInput() )
-        self.fields[ self._key( 'f', i, 'until' ) ] = forms.DateField(
-            required = False, initial = end_on, widget = IsoDateInput() )
+        self.fields[ self._key( 'f', i, 'from' ) ]  = self._date_field(
+            start_on, f'{flow.name} income from date' )
+        self.fields[ self._key( 'f', i, 'until' ) ] = self._date_field(
+            end_on, f'{flow.name} income until date' )
         if birthdate is not None:
-            self.fields[ self._key( 'f', i, 'from_age' ) ] = forms.IntegerField(
-                required = False, min_value = 0, max_value = 120,
-                initial = self._derived_age( start_on, birthdate ) )
-            self.fields[ self._key( 'f', i, 'until_age' ) ] = forms.IntegerField(
-                required = False, min_value = 0, max_value = 120,
-                initial = self._derived_age( end_on, birthdate ) )
+            self.fields[ self._key( 'f', i, 'from_age' ) ]  = self._age_field(
+                start_on, birthdate, f'{flow.name} income from age' )
+            self.fields[ self._key( 'f', i, 'until_age' ) ] = self._age_field(
+                end_on, birthdate, f'{flow.name} income until age' )
             self._link_age( self._key( 'f', i, 'from' ), self._key( 'f', i, 'from_age' ), birthdate )
             self._link_age( self._key( 'f', i, 'until' ), self._key( 'f', i, 'until_age' ), birthdate )
 
-    def _add_entitlement_fields( self, m : int, subject ):
+    def _add_entitlement_fields( self, m : int, subject : SubjectProfile ):
         timing   = self._timing.get( subject.handle )
         claiming = timing.government_pension_claiming_date if timing is not None else None
         start    = timing.pension_start if timing is not None else None
-        self._add_election_field( m, 'ss', claiming, subject.birthdate )
-        self._add_election_field( m, 'pen', start, subject.birthdate )
+        self._add_election_field( m, 'ss', 'Social Security claim', subject, claiming )
+        self._add_election_field( m, 'pen', 'pension start', subject, start )
 
-    def _add_election_field( self, m : int, kind : str, date_initial, birthdate ):
-        self.fields[ self._key( 's', m, f'{kind}_from' ) ] = forms.DateField(
-            required = False, initial = date_initial, widget = IsoDateInput() )
-        self.fields[ self._key( 's', m, f'{kind}_from_age' ) ] = forms.IntegerField(
-            required = False, min_value = 0, max_value = 120,
-            initial = self._derived_age( date_initial, birthdate ) )
+    def _add_election_field( self, m : int, kind : str, label : str, subject : SubjectProfile,
+                             date_initial : Optional[ date ] ):
+        self.fields[ self._key( 's', m, f'{kind}_from' ) ] = self._date_field(
+            date_initial, f'{subject.name} {label} date' )
+        self.fields[ self._key( 's', m, f'{kind}_from_age' ) ] = self._age_field(
+            date_initial, subject.birthdate, f'{subject.name} {label} age' )
         self._link_age(
-            self._key( 's', m, f'{kind}_from' ), self._key( 's', m, f'{kind}_from_age' ), birthdate )
+            self._key( 's', m, f'{kind}_from' ), self._key( 's', m, f'{kind}_from_age' ),
+            subject.birthdate )
 
-    def _link_age( self, date_key : str, age_key : str, birthdate ):
+    @staticmethod
+    def _date_field( initial : Optional[ date ], aria_label : str ) -> forms.DateField:
+        """A window/election date field, labelled for assistive tech (the pane shows only a visual
+        caption, so each input carries its own `aria-label`)."""
+        return forms.DateField(
+            required = False, initial = initial,
+            widget = IsoDateInput( attrs = { 'aria-label' : aria_label } ) )
+
+    def _age_field( self, on : Optional[ date ], birthdate : date,
+                    aria_label : str ) -> forms.IntegerField:
+        """The age helper beside a date, seeded from the date and labelled for assistive tech."""
+        return forms.IntegerField(
+            required = False, min_value = 0, max_value = 120,
+            initial = self._derived_age( on, birthdate ),
+            widget = forms.NumberInput( attrs = { 'aria-label' : aria_label } ) )
+
+    def _link_age( self, date_key : str, age_key : str, birthdate : date ):
         """Tag a date/age pair so `inputs.js` keeps them in sync from the subject's fixed birthdate. The
         shared hooks come from `AppConst` so the client and this markup cannot drift."""
         shared = { f'data-{AppConst.BIRTHDATE_DATA_ATTR}' : birthdate.isoformat() }
@@ -95,12 +113,12 @@ class RetirementForm( forms.Form ):
             { 'class' : AppConst.AGE_FIELD_CLASS,
               f'data-{AppConst.DATE_FIELD_DATA_ATTR}' : f'id_{date_key}', **shared } )
 
-    def _birthdate( self, handle ):
+    def _birthdate( self, handle : Optional[ str ] ) -> Optional[ date ]:
         subject = next( ( s for s in self._subjects if s.handle == handle ), None )
         return subject.birthdate if subject is not None else None
 
     @staticmethod
-    def _derived_age( on : date, birthdate : date ):
+    def _derived_age( on : Optional[ date ], birthdate : Optional[ date ] ) -> Optional[ int ]:
         if on is None or birthdate is None:
             return None
         return on.year - birthdate.year
@@ -111,7 +129,8 @@ class RetirementForm( forms.Form ):
 
     # --- date-canonical resolution -----------------------------------------
 
-    def _endpoint( self, prefix : str, index : int, part : str, birthdate ):
+    def _endpoint( self, prefix : str, index : int, part : str,
+                   birthdate : Optional[ date ] ) -> Optional[ date ]:
         """A window/election date: the date is canonical; the age is a fallback for a JS-less client that
         submitted an age but no date."""
         on = self.cleaned_data.get( self._key( prefix, index, part ) )
@@ -154,7 +173,7 @@ class RetirementForm( forms.Form ):
                            'from_age' : self[ self._key( 's', m, 'pen_from_age' ) ] } )
         return rows
 
-    def _subject_name( self, handle ):
+    def _subject_name( self, handle : Optional[ str ] ) -> str:
         subject = next( ( s for s in self._subjects if s.handle == handle ), None )
         return subject.name if subject is not None else 'Household'
 
@@ -177,7 +196,8 @@ class RetirementForm( forms.Form ):
     def _merged_timing( self ) -> list:
         timing = list()
         for m, subject in enumerate( self._subjects ):
-            current = self._timing.get( subject.handle ) or RetirementTiming( subject_handle = subject.handle )
+            current = self._timing.get( subject.handle ) or RetirementTiming(
+                subject_handle = subject.handle )
             timing.append( replace(
                 current,
                 government_pension_claiming_date = self._endpoint( 's', m, 'ss_from', subject.birthdate ),

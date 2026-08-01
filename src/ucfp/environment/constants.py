@@ -48,11 +48,9 @@ class AppConst:
     DATE_CONTEXT_BIRTHDATE = 'birthdate'  # a past date bounded at today
 
     # Data-attribute tokens (jQuery .data() keys; prepend ``data-`` for raw
-    # HTML). BIRTHDATES holds a handle->ISO-date map on the table container;
-    # the rest wire one date/age field to its partner and to a birthdate.
-    BIRTHDATES_DATA_ATTR    = 'birthdates'
+    # HTML) wiring one date/age field to its partner and to its subject's
+    # (fixed) birthdate.
     BIRTHDATE_DATA_ATTR     = 'birthdate'
-    SUBJECT_FIELD_DATA_ATTR = 'subject-field'
     AGE_FIELD_DATA_ATTR     = 'age-field'
     DATE_FIELD_DATA_ATTR    = 'date-field'
 

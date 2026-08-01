@@ -22,7 +22,7 @@ from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.inputs.profile.schemas import GovernmentPensionEntitlement, IncomeFlow, PensionEntitlement
 
 _RENTAL_INTERVAL = Duration( 1, TimeUnit.MONTH )   # rent is a monthly item; general income a stream
-_INCOME_HANDLE_PREFIX = 'income-'                  # a general flow's stable handle (Retirement timing keys on it)
+_INCOME_HANDLE_PREFIX = 'income-'                  # a general flow's stable handle; Retirement keys on it
 # The age a pension's base is quoted at. Unused until off-normal-start reduction terms exist; a fixed
 # placeholder here, since the start age is a plan (the Retirement section), not a fact.
 _PENSION_NORMAL_AGE = 65
@@ -32,8 +32,8 @@ class IncomeTableForm( forms.Form ):
     """The income *facts* table: each general line's name / recipient / amount (with a blank row to add
     one), each rental's rent, and the SS and pension benefit amounts per subject. `apply` rebuilds the
     profile's income flows (rental preserved by `property_handle`, general from the rows, each with a
-    stable `handle`) and the entitlement facts. Timing is the Retirement section's job -- this form does
-    not touch the Plans."""
+    stable `handle`) and the entitlement facts. Editing timing is the Retirement section's job; the only
+    Plans it touches is to reap a deleted flow's orphaned timing."""
 
     _EXTRA_ROWS = 1
     # A general row's subject may be a person (their wages, taxed per worker) or the whole household
@@ -143,10 +143,17 @@ class IncomeTableForm( forms.Form ):
     # --- apply -------------------------------------------------------------
 
     def apply( self, profile, plans ):
+        rebuilt = self._general_flows() + self._rental_flows()
+        removed = ( { flow.handle for flow in self._profile.income_flows }
+                    - { flow.handle for flow in rebuilt } )
+        # Editing timing is the Retirement section's job, but a deleted flow's orphaned timing is reaped
+        # here (the only place a flow is removed) -- else it could re-bind to a later flow reclaiming its
+        # `income-N` handle. Mirrors how the Debts section reaps a removed debt's repayment plan.
+        plans   = _plans_without_income_timing( plans, removed ) if removed else plans
         updated_profile = replace(
-            profile, income_flows = self._general_flows() + self._rental_flows(),
+            profile, income_flows = rebuilt,
             government_pension = self._entitlements(), pensions = self._pensions() )
-        return updated_profile, plans   # timing (the Plans) is the Retirement section's
+        return updated_profile, plans
 
     def _general_flows( self ) -> list:
         flows, taken = list(), { flow.handle for flow in self._general }
@@ -158,7 +165,8 @@ class IncomeTableForm( forms.Form ):
             if amount is None or not subject:
                 continue
             household = subject == self._HOUSEHOLD
-            handle    = self.cleaned_data.get( self._key( 'g', i, 'handle' ) ) or _minted_income_handle( taken )
+            submitted = self.cleaned_data.get( self._key( 'g', i, 'handle' ) )
+            handle    = submitted or _minted_income_handle( taken )   # existing row keeps its handle
             taken.add( handle )
             flows.append( IncomeFlow(
                 handle = handle,
@@ -198,6 +206,13 @@ class IncomeTableForm( forms.Form ):
                     subject_handle = subject.handle, base_annual_amount = amount,
                     normal_start_age = _PENSION_NORMAL_AGE ) )
         return pensions
+
+
+def _plans_without_income_timing( plans, removed_handles : set ):
+    """`plans` with the per-flow `IncomeTiming` for the removed income flows dropped -- the orphan reap a
+    flow deletion triggers, so a stale window cannot re-bind to a later flow that reclaims its handle."""
+    return replace( plans, income_timing = [ entry for entry in plans.income_timing
+                                             if entry.flow_handle not in removed_handles ] )
 
 
 def _minted_income_handle( taken : set ) -> str:

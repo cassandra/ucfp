@@ -1,7 +1,7 @@
 {% comment %}
 The Retirement section pane (Plans flow): the income/entitlement timing on the left, managed by its own
-async view (`RetirementView`) outside the section's Next form; a placeholder card on the right that #99
-fills with the retirement-contributions pane. The timing reads the income facts and entitlements
+async view (`RetirementView`) outside the section's Next form; a placeholder card on the right for the
+retirement-contributions pane. The timing reads the income facts and entitlements
 declared in the Profile (the Income and Subjects steps) and writes only the Plans. Next advances when
 you're done.
 {% endcomment %}
@@ -10,7 +10,7 @@ you're done.
   pension begin.</p>
 <div class="row">
   {% comment %}
-  Two equal columns -- the timing on the left, the retirement-savings pane (#99) on the right -- that
+  Two equal columns -- the timing on the left, the retirement-savings pane on the right -- that
   stack on narrower viewports (below lg) so neither is squeezed. The timing pane renders each flow as a
   compact block (From/Until as stacked labeled lines), so it fits a half-width column without a wide
   table.

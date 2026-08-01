@@ -314,5 +314,6 @@
    fits comfortably in an equal half-width column (the sibling column holds the
    contributions pane), rather than a wide table that overflows.
    ========================================================================= */
-.retirement-timing .js-date { width: 8.5rem; }
-.retirement-timing .js-age  { width: 3.25rem; }
+.retirement-timing .js-date       { width: 8.5rem; }
+.retirement-timing .js-age        { width: 3.25rem; }
+.retirement-timing .timing-label  { width: 3rem; }   /* From / Until / Claim, so the dates align */

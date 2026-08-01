@@ -1086,8 +1086,9 @@ class CreditCardView( SelfSavingPaneView ):
 
 class IncomeTableView( SelfSavingPaneView ):
     """`/inputs/interview/income/table/` -- the §5 income *facts* table. Its line set can change, so a
-    save that adds or removes a line re-renders the pane; a pure value edit stays silent. This pane
-    writes only the Profile -- the income timing is the separate Retirement (`RetirementView`) pane."""
+    save that adds or removes a line re-renders the pane; a pure value edit stays silent. It edits the
+    Profile facts; the income timing is the separate Retirement (`RetirementView`) pane, save for reaping
+    a removed flow's orphaned timing, so the pair is saved atomically."""
 
     template     = 'inputs/interview/sections/income_table.html'
     target       = 'income-table'
@@ -1100,9 +1101,9 @@ class IncomeTableView( SelfSavingPaneView ):
     def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
         before = self._line_count( profile )
-        profile, _plans = form.apply( profile, plans )
-        save_profile( request.organization, profile )
-        return self._line_count( profile ) != before           # a line was added or removed
+        profile, plans = form.apply( profile, plans )
+        _save_profile_and_plans( request, profile, plans )      # a removed flow reaps its orphaned timing
+        return self._line_count( profile ) != before            # a line was added or removed
 
     @staticmethod
     def _line_count( profile ) -> int:

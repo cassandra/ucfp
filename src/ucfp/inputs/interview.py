@@ -650,7 +650,7 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/debt_plan.html' ),
     # When each income runs and each entitlement is claimed -- the timing over the income *facts*
     # declared in Income (Profile flow). Sits before Cash management, which balances this income
-    # against the outflows above. Grown by #99 with a contributions pane.
+    # against the outflows above.
     Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
              outer_template = 'inputs/interview/sections/retirement.html' ),
     # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set up

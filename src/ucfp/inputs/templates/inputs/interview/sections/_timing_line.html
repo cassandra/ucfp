@@ -7,7 +7,7 @@ Usage: {% include 'inputs/interview/sections/_timing_line.html' with label='From
 {% endcomment %}
 <div class="mb-1">
   <div class="d-flex align-items-center">
-    <span class="text-muted small flex-shrink-0" style="width:3rem">{{ label }}</span>
+    <span class="text-muted small flex-shrink-0 timing-label">{{ label }}</span>
     {% if age %}<span class="text-muted small mr-1">age</span>{{ age }}<span class="text-muted small mx-2">on</span>{% endif %}
     {{ date }}
   </div>
