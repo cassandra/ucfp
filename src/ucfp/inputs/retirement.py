@@ -1,0 +1,192 @@
+"""The Retirement section: the *timing* of income and entitlements -- a plan over the income facts.
+
+Profile > Income states the income facts (sources, amounts, the SS/pension benefit). This section owns
+WHEN they happen: each *general* income flow's start/stop window (the Plans' per-flow `IncomeTiming`,
+keyed by the flow's handle) and when Social Security and a pension are claimed (`RetirementTiming` per
+subject). It reads the flows and entitlements from the Profile and writes only the Plans timing --
+mirroring how the property-expenses read the Profile's properties and write only the Plans. A rental's
+rent is not timed here: it runs until its property's sale event, clipped to that date at materialize.
+The date is canonical; the age beside it is a convenience `inputs.js` keeps in sync from the subject's
+(fixed) birthdate.
+
+The section is a two-column shell: the timing on the left; the right column is a placeholder for the
+retirement contributions pane (#99).
+"""
+from dataclasses import replace
+from datetime import date
+
+from django import forms
+
+from ucfp.environment.constants import AppConst
+from ucfp.inputs.plans.schemas import IncomeTiming, RetirementTiming
+from ucfp.inputs.widgets import IsoDateInput
+
+
+class RetirementForm( forms.Form ):
+    """When each income runs and each entitlement is claimed. Per general income flow (read from the
+    Profile): a from/until window, with an age helper when the flow is a person's; per subject: the
+    Social Security claiming and pension start dates. `apply` rebuilds the Plans' per-flow `income_timing`
+    (only for the current general flows, so timing for a deleted flow self-prunes) and the per-subject
+    `timing`; the Profile is untouched. Rentals are excluded -- their rent is clipped to the property's
+    sale event at materialize, not timed here."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        super().__init__( data )
+        self._subjects = list( profile.subjects ) if profile is not None else list()
+        # Only general income flows are timed here. A rental's rent is not a retirement decision: it
+        # runs until the property's sale event, clipped to that date at materialize (`_clipped_to_sale`),
+        # so a property-linked flow gets no window row and no `income_timing` entry.
+        self._flows    = ( [ flow for flow in profile.income_flows if flow.property_handle is None ]
+                           if profile is not None else list() )
+        self._income_timing = { entry.flow_handle: entry
+                                for entry in ( plans.income_timing if plans is not None else [] ) }
+        self._timing   = { entry.subject_handle: entry
+                           for entry in ( plans.timing if plans is not None else [] ) }
+        for i, flow in enumerate( self._flows ):
+            self._add_window_fields( i, flow )
+        for m, subject in enumerate( self._subjects ):
+            self._add_entitlement_fields( m, subject )
+
+    # --- field construction ------------------------------------------------
+
+    def _add_window_fields( self, i : int, flow ):
+        entry     = self._income_timing.get( flow.handle )
+        start_on  = entry.start if entry is not None else None
+        end_on    = entry.end if entry is not None else None
+        birthdate = self._birthdate( flow.subject_handle )   # None for household income (no subject)
+        self.fields[ self._key( 'f', i, 'from' ) ]  = forms.DateField(
+            required = False, initial = start_on, widget = IsoDateInput() )
+        self.fields[ self._key( 'f', i, 'until' ) ] = forms.DateField(
+            required = False, initial = end_on, widget = IsoDateInput() )
+        if birthdate is not None:
+            self.fields[ self._key( 'f', i, 'from_age' ) ] = forms.IntegerField(
+                required = False, min_value = 0, max_value = 120,
+                initial = self._derived_age( start_on, birthdate ) )
+            self.fields[ self._key( 'f', i, 'until_age' ) ] = forms.IntegerField(
+                required = False, min_value = 0, max_value = 120,
+                initial = self._derived_age( end_on, birthdate ) )
+            self._link_age( self._key( 'f', i, 'from' ), self._key( 'f', i, 'from_age' ), birthdate )
+            self._link_age( self._key( 'f', i, 'until' ), self._key( 'f', i, 'until_age' ), birthdate )
+
+    def _add_entitlement_fields( self, m : int, subject ):
+        timing   = self._timing.get( subject.handle )
+        claiming = timing.government_pension_claiming_date if timing is not None else None
+        start    = timing.pension_start if timing is not None else None
+        self._add_election_field( m, 'ss', claiming, subject.birthdate )
+        self._add_election_field( m, 'pen', start, subject.birthdate )
+
+    def _add_election_field( self, m : int, kind : str, date_initial, birthdate ):
+        self.fields[ self._key( 's', m, f'{kind}_from' ) ] = forms.DateField(
+            required = False, initial = date_initial, widget = IsoDateInput() )
+        self.fields[ self._key( 's', m, f'{kind}_from_age' ) ] = forms.IntegerField(
+            required = False, min_value = 0, max_value = 120,
+            initial = self._derived_age( date_initial, birthdate ) )
+        self._link_age(
+            self._key( 's', m, f'{kind}_from' ), self._key( 's', m, f'{kind}_from_age' ), birthdate )
+
+    def _link_age( self, date_key : str, age_key : str, birthdate ):
+        """Tag a date/age pair so `inputs.js` keeps them in sync from the subject's fixed birthdate. The
+        shared hooks come from `AppConst` so the client and this markup cannot drift."""
+        shared = { f'data-{AppConst.BIRTHDATE_DATA_ATTR}' : birthdate.isoformat() }
+        self.fields[ date_key ].widget.attrs.update(
+            { 'class' : AppConst.DATE_FIELD_CLASS,
+              f'data-{AppConst.AGE_FIELD_DATA_ATTR}' : f'id_{age_key}', **shared } )
+        self.fields[ age_key ].widget.attrs.update(
+            { 'class' : AppConst.AGE_FIELD_CLASS,
+              f'data-{AppConst.DATE_FIELD_DATA_ATTR}' : f'id_{date_key}', **shared } )
+
+    def _birthdate( self, handle ):
+        subject = next( ( s for s in self._subjects if s.handle == handle ), None )
+        return subject.birthdate if subject is not None else None
+
+    @staticmethod
+    def _derived_age( on : date, birthdate : date ):
+        if on is None or birthdate is None:
+            return None
+        return on.year - birthdate.year
+
+    @staticmethod
+    def _key( prefix : str, index : int, part : str ) -> str:
+        return f'{prefix}{index}_{part}'
+
+    # --- date-canonical resolution -----------------------------------------
+
+    def _endpoint( self, prefix : str, index : int, part : str, birthdate ):
+        """A window/election date: the date is canonical; the age is a fallback for a JS-less client that
+        submitted an age but no date."""
+        on = self.cleaned_data.get( self._key( prefix, index, part ) )
+        if on is not None:
+            return on
+        age = self.cleaned_data.get( self._key( prefix, index, f'{part}_age' ) )
+        if age is not None and birthdate is not None:
+            return _at_age( birthdate, age )
+        return None
+
+    # --- template rows -----------------------------------------------------
+
+    @property
+    def has_flows( self ) -> bool:
+        return bool( self._flows )
+
+    @property
+    def income_rows( self ) -> list:
+        rows = list()
+        for i, flow in enumerate( self._flows ):
+            has_age = flow.subject_handle is not None
+            rows.append( {
+                'name'      : flow.name,
+                'subject'   : self._subject_name( flow.subject_handle ),
+                'from'      : self[ self._key( 'f', i, 'from' ) ],
+                'from_age'  : self[ self._key( 'f', i, 'from_age' ) ] if has_age else None,
+                'until'     : self[ self._key( 'f', i, 'until' ) ],
+                'until_age' : self[ self._key( 'f', i, 'until_age' ) ] if has_age else None } )
+        return rows
+
+    @property
+    def entitlement_rows( self ) -> list:
+        rows = list()
+        for m, subject in enumerate( self._subjects ):
+            rows.append( { 'subject' : subject.name, 'name' : 'Social Security',
+                           'from' : self[ self._key( 's', m, 'ss_from' ) ],
+                           'from_age' : self[ self._key( 's', m, 'ss_from_age' ) ] } )
+            rows.append( { 'subject' : subject.name, 'name' : 'Pension',
+                           'from' : self[ self._key( 's', m, 'pen_from' ) ],
+                           'from_age' : self[ self._key( 's', m, 'pen_from_age' ) ] } )
+        return rows
+
+    def _subject_name( self, handle ):
+        subject = next( ( s for s in self._subjects if s.handle == handle ), None )
+        return subject.name if subject is not None else 'Household'
+
+    # --- apply -------------------------------------------------------------
+
+    def apply( self, profile, plans ):
+        return profile, replace(
+            plans, income_timing = self._income_timing_out(), timing = self._merged_timing() )
+
+    def _income_timing_out( self ) -> list:
+        timing = list()
+        for i, flow in enumerate( self._flows ):
+            birthdate = self._birthdate( flow.subject_handle )
+            timing.append( IncomeTiming(
+                flow_handle = flow.handle,
+                start = self._endpoint( 'f', i, 'from', birthdate ),
+                end   = self._endpoint( 'f', i, 'until', birthdate ) ) )
+        return timing
+
+    def _merged_timing( self ) -> list:
+        timing = list()
+        for m, subject in enumerate( self._subjects ):
+            current = self._timing.get( subject.handle ) or RetirementTiming( subject_handle = subject.handle )
+            timing.append( replace(
+                current,
+                government_pension_claiming_date = self._endpoint( 's', m, 'ss_from', subject.birthdate ),
+                pension_start = self._endpoint( 's', m, 'pen_from', subject.birthdate ) ) )
+        return timing
+
+
+def _at_age( birthdate : date, age : int ) -> date:
+    try:
+        return birthdate.replace( year = birthdate.year + age )
+    except ValueError:   # 29 Feb in a non-leap target year
+        return birthdate.replace( year = birthdate.year + age, day = 28 )

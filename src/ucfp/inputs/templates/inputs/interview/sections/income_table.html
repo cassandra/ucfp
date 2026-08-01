@@ -1,43 +1,34 @@
 {% comment %}
-The §5 income table, auto-saved. Each income line is a row: general lines have an
-editable name/subject and a remove box; rental rows show the property, household-owned (the rent is set
-here, the property in §3); the last two rows per subject are the Social Security and pension
-entitlements (a stated benefit and a claiming/start date, no end -- they run for life). The date is
-canonical; the small age beside it is a convenience that inputs.js keeps in lockstep both ways.
-Edits save in the background; only a genuine input error (bad date, negative amount) re-renders here.
+The §5 income *facts* table, auto-saved. Each income line is a row: general lines have an editable
+name/subject and a remove box (and a hidden stable handle the Retirement section's timing keys onto);
+rental rows show the property, household-owned (the rent is set here, the property in §3); the last two
+rows per subject are the Social Security and pension entitlement amounts. WHEN each income runs -- the
+windows and claiming dates -- is the separate Retirement section, not here. Edits save in the
+background; only a genuine input error (a negative amount) re-renders here.
 {% endcomment %}
-<div data-{{ AppConst.BIRTHDATES_DATA_ATTR }}='{{ income_form.subject_birthdates_json|safe }}'>
+<div>
   <form method="post" action="{% url 'income_table' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <table class="table table-sm w-auto">
       <thead>
-        <tr><th>Subject</th><th>Income</th><th>Amount</th><th>Per</th><th>From (date / age)</th><th>Until (date / age)</th><th></th></tr>
+        <tr><th>Subject</th><th>Income</th><th>Amount</th><th>Per</th><th></th></tr>
       </thead>
       <tbody>
         {% for row in income_form.income_rows %}
         <tr>
           <td>{% if row.kind == 'general' %}{{ row.subject }}{% else %}<span class="text-muted">{{ row.subject_name }}</span>{% endif %}</td>
           <td>
-            {{ row.name }}
+            {{ row.name }}{% if row.handle %}{{ row.handle }}{% endif %}
             {% if row.note %}<span class="text-muted small d-block">{{ row.note }}</span>{% endif %}
           </td>
           <td>{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
           <td class="text-muted">{{ row.cadence }}</td>
-          <td>
-            {{ row.from }}{% if row.from_age %} <span class="text-muted small">age</span> {{ row.from_age }}{% endif %}
-            {% if row.from.errors %}<span class="text-danger small d-block">{{ row.from.errors|join:" " }}</span>{% endif %}
-          </td>
-          <td>
-            {% if row.until %}{{ row.until }}{% if row.until_age %} <span class="text-muted small">age</span> {{ row.until_age }}{% endif %}
-            {% elif row.kind == 'entitlement' %}<span class="text-muted small">for life</span>{% endif %}
-            {% if row.until.errors %}<span class="text-danger small d-block">{{ row.until.errors|join:" " }}</span>{% endif %}
-          </td>
           <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    <p class="text-muted small">Fill the blank row to add an income line; enter an age or a precise
-      date for any "From"/"Until". Changes save automatically.</p>
+    <p class="text-muted small">Fill the blank row to add an income line. When each income runs is set
+      in the Retirement step. Changes save automatically.</p>
   </form>
 </div>

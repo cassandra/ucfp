@@ -87,38 +87,6 @@ def _mortgages( profile, property_handle : str ) -> list:
     return [ debt.handle for debt in profile.debts if debt.secured_asset == property_handle ]
 
 
-def _end_property_flows( profile, plans, property_handle : str, sale_date ):
-    """End the sold property's rental income at `sale_date` -- cap its per-flow Plans income window
-    (keyed by the rental's handle) at the sale. Its operating expenses are constant amounts clipped to
-    the sale at materialize (from the sale event), not here. The mortgage is not ended here either: the
-    sale's `contribute` emits a scheduled loan payoff that clears it from the proceeds at the sale date."""
-    return profile, replace( plans, income_timing = _cap_income_timing(
-        plans.income_timing, property_handle, sale_date ) )
-
-
-def _reopen_property_flows( profile, plans, property_handle : str, sale_date ):
-    return profile, replace( plans, income_timing = _uncap_income_timing(
-        plans.income_timing, property_handle, sale_date ) )
-
-
-def _cap_income_timing( timing : list, flow_handle : str, end_date ) -> list:
-    """`timing` with the matching flow's window ended at `end_date` (its end pulled in if open or later),
-    so the income is zero past the sale."""
-    return [ replace( entry, end = end_date )
-             if entry.flow_handle == flow_handle and ( entry.end is None or entry.end > end_date )
-             else entry
-             for entry in timing ]
-
-
-def _uncap_income_timing( timing : list, flow_handle : str, end_date ) -> list:
-    """Best-effort reverse of `_cap_income_timing`: re-open a window a sale had capped exactly at
-    `end_date`."""
-    return [ replace( entry, end = None )
-             if entry.flow_handle == flow_handle and entry.end == end_date
-             else entry
-             for entry in timing ]
-
-
 def _pretax_accounts( profile ) -> list:
     return [ ( asset.handle, asset.name ) for asset in profile.assets
              if asset.asset_class is AssetClass.PRETAX_RETIREMENT ]
@@ -233,9 +201,10 @@ class EventType:
         return profile, event
 
     def cascade_on_add( self, event : PlanEvent, profile, plans ):
-        """Adjust other inputs when this event is added -- a sale ends its property's income and
-        operating expenses at the sale date. Runs once, at add time (stateless and best-effort); the
-        default changes nothing. Returns the (possibly updated) profile and plans."""
+        """Adjust other inputs when this event is added. Runs once, at add time (stateless and
+        best-effort); the default changes nothing. Returns the (possibly updated) profile and plans.
+        (A property sale needs no such cascade -- its rental income and operating expenses are clipped
+        to the sale date at materialize, from the event itself.)"""
         return profile, plans
 
     def cascade_on_remove( self, event : PlanEvent, profile, plans ):
@@ -335,14 +304,9 @@ class SellPropertyEvent( EventType ):
         for loan_handle in _mortgages( profile, property_handle ):
             into.scheduled_events.append( ScheduledLoanPayoff(
                 event_date = event.date, loan = loan_handle ) )
-
-    def cascade_on_add( self, event : PlanEvent, profile, plans ):
-        return _end_property_flows(
-            profile, plans, event.selections[ PROPERTY_ROLE ], event.date )
-
-    def cascade_on_remove( self, event : PlanEvent, profile, plans ):
-        return _reopen_property_flows(
-            profile, plans, event.selections[ PROPERTY_ROLE ], event.date )
+        # A sale needs no income cascade: rental rent is clipped to the sale date at materialize
+        # (`_clipped_to_sale`, from this event's `property_sales`), as are the property's operating
+        # expenses. Only the mortgage payoff above is contributed here.
 
 
 class LoanPayoffEvent( EventType ):
