@@ -9,11 +9,17 @@ you're done.
   entered earlier. Set a retirement date by capping a salary and choosing when Social Security and any
   pension begin.</p>
 <div class="row">
-  <div class="col-md-7">
+  {% comment %}
+  Two equal columns -- the timing on the left, the retirement-savings pane (#99) on the right -- that
+  stack on narrower viewports (below lg) so neither is squeezed. The timing pane renders each flow as a
+  compact block (From/Until as stacked labeled lines), so it fits a half-width column without a wide
+  table.
+  {% endcomment %}
+  <div class="col-12 col-lg-6">
     {% include 'inputs/interview/sections/retirement_pane.html' with retirement_form=form.retirement_form %}
   </div>
 
-  <div class="col-md-5">
+  <div class="col-12 col-lg-6 mt-3 mt-lg-0">
     <div class="card bg-light">
       <div class="card-body">
         <h3 class="h6 mb-2">Retirement savings</h3>

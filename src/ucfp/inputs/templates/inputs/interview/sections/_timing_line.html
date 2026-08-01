@@ -1,0 +1,15 @@
+{% comment %}
+One timing line in the Retirement pane: a `label` (From / Until / Claim), then the `age` input -- the
+prominent one, so it leads -- and the exact `date` beside it. The age is present only when the flow is a
+person's (household income passes no age, leaving just the date). inputs.js keeps the two in lockstep;
+the date is authoritative.
+Usage: {% include 'inputs/interview/sections/_timing_line.html' with label='From' date=row.from age=row.from_age %}
+{% endcomment %}
+<div class="mb-1">
+  <div class="d-flex align-items-center">
+    <span class="text-muted small flex-shrink-0" style="width:3rem">{{ label }}</span>
+    {% if age %}<span class="text-muted small mr-1">age</span>{{ age }}<span class="text-muted small mx-2">on</span>{% endif %}
+    {{ date }}
+  </div>
+  {% if date.errors %}<div class="text-danger small">{{ date.errors|join:" " }}</div>{% endif %}
+</div>
