@@ -309,7 +309,7 @@ class Plans:
     property_expenses: list[ PropertyExpense ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
-    # Tax planning: Roth conversions (pre-tax -> Roth) and scheduled withdrawals (retirement -> cash),
+    # Tax planning: Roth conversions (pre-tax -> Roth) and scheduled withdrawals (pre-tax -> cash),
     # each one-time or a recurring ladder
     roth_conversions: list[ RothConversion ] = field( default_factory = list )
     withdrawals: list[ Withdrawal ] = field( default_factory = list )

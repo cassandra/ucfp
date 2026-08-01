@@ -34,6 +34,12 @@ from .enums import DebtKind, HousingTenure
 PRIMARY_SUBJECT_HANDLE = 'subject'
 PARTNER_SUBJECT_HANDLE = 'partner'
 
+# The per-subject retirement account handles: `{prefix}{subject handle}`. The Accounts step mints them
+# (one pre-tax and one Roth per subject, always present at $0), and materialization resolves a Roth
+# conversion's target by them -- so the prefix lives here, referred back to, never re-typed as a literal.
+PRETAX_ACCOUNT_HANDLE_PREFIX = 'pretax-'
+ROTH_ACCOUNT_HANDLE_PREFIX   = 'roth-'
+
 # The residence asset the home section mints, and the stable identity of a tenant's rented home --
 # a synthetic handle (there is no owned asset behind it) that keys the rented-home column and its
 # overrides in the property-expenses matrix. Both are shared with the Home Expenses step.

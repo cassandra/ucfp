@@ -21,15 +21,16 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
-    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RESIDENCE_ASSET_HANDLE,
-    RESIDENCE_MORTGAGE_HANDLE, AssetProfile, Debt, Profile, SubjectProfile )
+    PARTNER_SUBJECT_HANDLE, PRETAX_ACCOUNT_HANDLE_PREFIX, PRIMARY_SUBJECT_HANDLE,
+    RESIDENCE_ASSET_HANDLE, RESIDENCE_MORTGAGE_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX,
+    AssetProfile, Debt, Profile, SubjectProfile )
+from ucfp.inputs.compatibility import plans_without_accounts
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
 from ucfp.jurisdiction.labels import local_label
 
-from .contributions import ContributionsForm
-from .realization_plans import ConversionsForm, WithdrawalsForm
 from .credit_card import CreditCardPlanForm
+from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
 from .events import EventsForm
@@ -134,10 +135,12 @@ class SubjectsForm( forms.Form ):
 
     def apply( self, profile : Profile, plans : Plans ):
         subjects = self._subjects()
+        assets   = _synced_retirement_accounts( profile.assets, subjects )
+        removed  = { asset.handle for asset in profile.assets } - { asset.handle for asset in assets }
         updated  = replace(
             profile, subjects = subjects, filing_status = self._filing_status( subjects ),
-            assets = _synced_retirement_accounts( profile.assets, subjects ) )
-        return updated, plans
+            assets = assets )
+        return updated, plans_without_accounts( plans, removed ) if removed else plans
 
     def _has_partner( self ) -> bool:
         """A partner is inferred from filled fields -- no separate opt-in checkbox. `clean` has
@@ -342,8 +345,10 @@ class AccountsForm( forms.Form ):
     # Each subject's tax-advantaged retirement, per wrapper the projection distinguishes:
     # (field prefix, handle prefix, engine asset class, jurisdiction concept for the local label).
     _RETIREMENT = (
-        ( 'pretax', 'pretax-', AssetClass.PRETAX_RETIREMENT, JurisdictionConcept.PRETAX_RETIREMENT ),
-        ( 'roth', 'roth-', AssetClass.ROTH, JurisdictionConcept.TAX_FREE_RETIREMENT ),
+        ( 'pretax', PRETAX_ACCOUNT_HANDLE_PREFIX,
+          AssetClass.PRETAX_RETIREMENT, JurisdictionConcept.PRETAX_RETIREMENT ),
+        ( 'roth', ROTH_ACCOUNT_HANDLE_PREFIX,
+          AssetClass.ROTH, JurisdictionConcept.TAX_FREE_RETIREMENT ),
     )
     _ACCOUNT_CLASSES = frozenset(
         [ item[ 2 ] for item in _TAXABLE ] + [ item[ 2 ] for item in _RETIREMENT ] )
@@ -715,9 +720,9 @@ SECTIONS = [
     # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
     Section( 'cash-plan'   , 'Cash management', ( Aggregate.PLANS, ), CashPlanSectionForm,
              outer_template = 'inputs/interview/sections/cash_plan.html' ),
-    # Advanced, optional tax moves -- Roth conversions (scheduled withdrawals arrive with the recurrence
-    # work). The deliberate-tax-lever counterpart to Cash management's automatic funding, and distinct
-    # from the tax Assumptions (the tax environment). Shares the events machinery, scoped to its groups.
+    # Advanced, optional tax moves -- Roth conversions and scheduled withdrawals. The deliberate-tax-lever
+    # counterpart to Cash management's automatic funding, and distinct from the tax Assumptions (the tax
+    # environment).
     Section( 'tax-planning', 'Tax Planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
              outer_template = 'inputs/interview/sections/tax_planning.html' ),
     # One-off money moves and life events (transfers, a property sale, receipts, payments, death). Last

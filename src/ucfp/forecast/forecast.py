@@ -726,10 +726,10 @@ class Forecast:
         """Expand the recurring realizations active this interval into realization PeriodEvents:
         annualize the per-occurrence amount (x the interval's occurrences per year), inflate it from the
         forecast start, and prorate to the interval -- realized from the holding (to cash, or to the
-        destination for a conversion). Annualized and window-gated exactly like `_contribution_lines_for`
-        (its withdrawal/conversion mirror), so the same cadence yields the same yearly total as a
-        contribution; it emits an asset realization rather than a contribution line, so the realize clamp,
-        the retirement tax, the penalty, and RMDs all apply as for a one-off."""
+        destination for a conversion). Annualized and window-gated like `_contribution_lines_for` (keep the
+        two in step), so the same cadence yields the same yearly total; it emits an asset realization rather
+        than a contribution line, so the realize clamp, the retirement tax, the penalty, and RMDs all apply
+        as for a one-off."""
         events = list()
         for recurring in self._parameters.recurring_realizations:
             if not recurring.window.covers( span.start_date ):
@@ -743,6 +743,7 @@ class Forecast:
                 event_date = span.start_date, holding = recurring.holding,
                 amount = amount, destination = recurring.destination )
             events.append( realization.to_period_event( self._baseline.holding_by_handle, chart ) )
+            continue
         return events
 
     def _clip_to_window( self, span : DateSpan, window : DateWindow ) -> Optional[ tuple[ date, date ] ]:

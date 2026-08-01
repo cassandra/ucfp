@@ -43,7 +43,8 @@ from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.expenses import OWNED_PROPERTY_CONTEXT
 from ucfp.inputs.plans.defaults import default_drawdown
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
-from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, RENTED_HOME_HANDLE
+from ucfp.inputs.profile.schemas import (
+    AssetProfile, Debt, Profile, RENTED_HOME_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX )
 from ucfp.inputs.plans.enums import CreditCardPlanMode
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanRepayment, Plans, RetirementTiming, Vehicle )
@@ -628,6 +629,7 @@ def _contributions( profile : Profile, plans : Plans ) -> list[ RetirementContri
         contributions.append( RetirementContribution(
             account = contribution.account_handle, amount = annual, source = contribution.source,
             window = _age_window( contribution.start_age, contribution.end_age, birthdate ) ) )
+        continue
     return contributions
 
 
@@ -641,19 +643,20 @@ def _roth_conversions( profile : Profile, plans : Plans ) -> tuple[ list, list ]
     scheduled, recurring = list(), list()
     for conversion in plans.roth_conversions:
         owner  = owner_of.get( conversion.source_handle )
-        target = f'roth-{owner}' if owner is not None else None
+        target = f'{ROTH_ACCOUNT_HANDLE_PREFIX}{owner}' if owner is not None else None
         if target is None or target not in handles:
             continue
         _planned_realization(
             conversion, target, owner_birthdates.get( conversion.source_handle ), scheduled, recurring )
+        continue
     return scheduled, recurring
 
 
 def _withdrawals( profile : Profile, plans : Plans ) -> tuple[ list, list ]:
     """The Plans' scheduled withdrawals as (single-date realizations, recurring realizations) -- deliberate
-    draws from a retirement account to cash (destination None), landing in cash in the accrual phase before
-    the automatic cash-management drawdown. The source's class drives the tax (pre-tax as ordinary income
-    plus any penalty/RMD, Roth tax-free); a withdrawal from an unknown account is skipped."""
+    draws from a pre-tax retirement account to cash (destination None), landing in cash in the accrual
+    phase before the automatic cash-management drawdown. The draw is ordinary income (plus any penalty or
+    RMD); a withdrawal from an unknown account is skipped."""
     owner_birthdates = _owner_birthdates( profile )
     handles          = { asset.handle for asset in profile.assets }
     scheduled, recurring = list(), list()
@@ -662,6 +665,7 @@ def _withdrawals( profile : Profile, plans : Plans ) -> tuple[ list, list ]:
             continue
         _planned_realization(
             withdrawal, None, owner_birthdates.get( withdrawal.source_handle ), scheduled, recurring )
+        continue
     return scheduled, recurring
 
 

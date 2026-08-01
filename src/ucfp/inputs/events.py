@@ -10,8 +10,8 @@ this one uniform surface, so consistency holds without a registry of declarative
 A *reference* is the load-bearing concept: an entity the event points at, by `role`, with the valid
 candidates drawn from the profile. The picker auto-fills a single candidate and asks only when there
 is a real choice -- we never silently default. (Two further modes build on this base: *provision*
-creates an implied entity -- a Roth conversion's Roth account -- and *cascade* adjusts other
-inputs -- a home sale ending its mortgage.)
+creates an implied entity the event needs, and *cascade* adjusts other inputs -- a home sale ending
+its mortgage.)
 """
 from dataclasses import dataclass, replace
 from typing import Callable, Optional
@@ -140,7 +140,7 @@ class EventType:
     def provision( self, event : PlanEvent, profile ):
         """Bring into existence any entity this event implies, returning the (possibly updated)
         profile and event. Runs once, when the event is added; the run then just reads the result.
-        The default provisions nothing; a Roth conversion creates the Roth account it lands in."""
+        The default provisions nothing."""
         return profile, event
 
     def cascade_on_add( self, event : PlanEvent, profile, plans ):

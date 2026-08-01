@@ -13,7 +13,7 @@ reflow (`form-row` columns) so the block fits the half-width column.
   <p class="text-muted small">Recurring contributions into your retirement accounts.</p>
   <form method="post" action="{% url 'contributions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    {% for row in contributions_form.contribution_rows %}
+    {% for row in contributions_form.plan_rows %}
     <div class="border rounded p-2 mb-2">
       {% if row.handle %}{{ row.handle }}{% endif %}
       <div class="mb-2">
