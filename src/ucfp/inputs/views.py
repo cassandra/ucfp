@@ -46,6 +46,7 @@ from .state import (
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
+from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .external_factors import ExternalFactorsForm
 from .cash_plan import DrawdownForm
 from .transaction_costs import TransactionCostsForm
@@ -1065,6 +1066,69 @@ class DebtPlanView( SelfSavingPaneView ):
         save_plans( current_plans_record( request ), plans )
 
 
+class ContributionsView( SelfSavingPaneView ):
+    """`/inputs/interview/retirement/contributions/edit/` -- the recurring-contributions table of the
+    Retirement section. Its row set can change, so a save that adds or removes a contribution re-renders
+    the pane; a pure value edit stays silent. It writes only the Plans."""
+
+    template     = 'inputs/interview/sections/contributions_pane.html'
+    target       = 'contributions'
+    context_name = 'contributions_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return ContributionsForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        before = len( plans.contributions )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return len( plans.contributions ) != before            # a contribution was added or removed
+
+
+class ConversionsView( SelfSavingPaneView ):
+    """`/inputs/interview/tax-planning/conversions/edit/` -- the Roth conversions table of the Tax
+    Planning section. Its row set can change, so a save that adds or removes a conversion re-renders the
+    pane; a pure value edit stays silent. It writes only the Plans."""
+
+    template     = 'inputs/interview/sections/conversions_pane.html'
+    target       = 'conversions'
+    context_name = 'conversions_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return ConversionsForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        before = len( plans.roth_conversions )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return len( plans.roth_conversions ) != before         # a conversion was added or removed
+
+
+class WithdrawalsView( SelfSavingPaneView ):
+    """`/inputs/interview/tax-planning/withdrawals/edit/` -- the scheduled-withdrawals table of the Tax
+    Planning section. Its row set can change, so a save that adds or removes a withdrawal re-renders the
+    pane; a pure value edit stays silent. It writes only the Plans."""
+
+    template     = 'inputs/interview/sections/withdrawals_pane.html'
+    target       = 'withdrawals'
+    context_name = 'withdrawals_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return WithdrawalsForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        before = len( plans.withdrawals )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return len( plans.withdrawals ) != before              # a withdrawal was added or removed
+
+
 class CreditCardView( SelfSavingPaneView ):
     """`/inputs/interview/debt/cards/` -- the per-card paydown calculators of the Debt plan section. It
     persists the card plans; the card set is fixed by the declared debts (the mode switch and the live
@@ -1277,8 +1341,7 @@ class EventAddView( View ):
 
     def _list( self, request, profile, plans ):
         return render_to_string(
-            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) },
-            request = request )
+            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) }, request = request )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -1304,5 +1367,4 @@ class EventDeleteView( View ):
                     save_profile( organization, profile )
                 save_plans( current_plans_record( request ), plans )
         return antinode.response( main_content = render_to_string(
-            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) },
-            request = request ) )
+            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) }, request = request ) )

@@ -1,0 +1,55 @@
+{% comment %}
+The recurring retirement contributions of the Retirement section (id=contributions), auto-saved. One
+block per contribution -- the account it funds, a per-occurrence amount at a chosen cadence, its source
+(which sets the tax treatment and annual limit), and an optional age window (the account owner's) -- plus
+a blank block to add one. The row set can change, so adding/removing a contribution re-renders; a value
+edit saves silently. Non-blocking: a block without both an account and an amount simply is not saved.
+When there is no retirement account yet, it says so rather than offering an empty picker. The fields
+reflow (`form-row` columns) so the block fits the half-width column.
+{% endcomment %}
+<div id="contributions">
+  <h3 class="h6">Retirement savings</h3>
+  {% if contributions_form.has_accounts %}
+  <p class="text-muted small">Recurring contributions into your retirement accounts.</p>
+  <form method="post" action="{% url 'contributions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    {% for row in contributions_form.plan_rows %}
+    <div class="border rounded p-2 mb-2">
+      {% if row.handle %}{{ row.handle }}{% endif %}
+      <div class="mb-2">
+        <label class="text-muted small mb-0 d-block">Account</label>
+        {{ row.account }}
+      </div>
+      <div class="d-flex flex-wrap align-items-end mb-2">
+        <div class="mr-3">
+          <label class="text-muted small mb-0 d-block">Amount</label>
+          {{ row.amount }}
+          {% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}
+        </div>
+        <div>{% include 'inputs/interview/sections/_cadence.html' with cadence=row.cadence %}</div>
+      </div>
+      <div class="mb-2">
+        <label class="text-muted small mb-0 d-block">Source</label>
+        {{ row.source }}
+      </div>
+      <div class="d-flex flex-wrap">
+        <div class="mr-3">
+          <label class="text-muted small mb-0 d-block">From age</label>
+          {{ row.start_age }}
+        </div>
+        <div>
+          <label class="text-muted small mb-0 d-block">Until age</label>
+          {{ row.end_age }}
+        </div>
+      </div>
+      {% if row.remove %}<label class="small text-muted mb-0 mt-2 d-block">{{ row.remove }} remove</label>{% endif %}
+    </div>
+    {% endfor %}
+    <p class="text-muted small">Fill the blank block to add a contribution; leave the ages blank to
+      contribute from now, indefinitely. Changes save automatically.</p>
+  </form>
+  {% else %}
+  <p class="text-muted">Set up your accounts first (the Accounts step); each person's retirement
+    accounts then appear here to contribute to.</p>
+  {% endif %}
+</div>

@@ -56,6 +56,14 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
         if contribution.account_handle not in accounts:
             issues.append(
                 f'a contribution to an unknown account "{contribution.account_handle}";' )
+    for conversion in plans.roth_conversions:
+        if conversion.source_handle not in accounts:
+            issues.append(
+                f'a Roth conversion from an unknown account "{conversion.source_handle}";' )
+    for withdrawal in plans.withdrawals:
+        if withdrawal.source_handle not in accounts:
+            issues.append(
+                f'a withdrawal from an unknown account "{withdrawal.source_handle}";' )
     for repayment in plans.loan_repayments:
         if repayment.debt_handle not in debts:
             issues.append( f'a repayment plan for an unknown debt "{repayment.debt_handle}";' )
@@ -105,3 +113,16 @@ def _reaped_debt_event( event, removed: set ) -> bool:
     if event.kind is EventKind.CARD_PAYOFF:
         return event.selections.get( CARD_ROLE ) in removed
     return False
+
+
+def plans_without_accounts( plans: Plans, removed: set ) -> Plans:
+    """Every Plans reference to a removed account handle stripped -- a contribution into it, and a Roth
+    conversion or scheduled withdrawal from it -- so a removed retirement account (a departed subject's)
+    leaves no dangling plan. The account counterpart of `plans_without_debts`, called when a subject is
+    dropped. (Events and the sweep also name accounts; those are left to the drift check, since they target
+    the shared taxable accounts rather than a departed subject's retirement ones.)"""
+    return replace(
+        plans,
+        contributions    = [ c for c in plans.contributions if c.account_handle not in removed ],
+        roth_conversions = [ v for v in plans.roth_conversions if v.source_handle not in removed ],
+        withdrawals      = [ w for w in plans.withdrawals if w.source_handle not in removed ] )

@@ -266,6 +266,26 @@ class RetirementContribution:
     window  : DateWindow = DateWindow()
 
 
+@dataclass( frozen = True )
+class RecurringRealization:
+    """A recurring realization of a holding over a window -- the recurring counterpart of a single
+    `ScheduledRealization`. A scheduled withdrawal when `destination` is None (proceeds to the cash hub),
+    a Roth conversion when `destination` is another holding's handle (pre-tax -> Roth). `amount` is the
+    per-occurrence figure in today's dollars at `interval` cadence; the Forecast realizes, per interval,
+    the annualized amount (per-occurrence x the interval's occurrences per year x the interval's share of
+    the year), inflated to nominal, from the holding -- clamped to its value (a partial draw when short,
+    never an overdraft). Annualized like a retirement contribution rather than counted per calendar date,
+    so a given cadence realizes the same yearly total whether it is a contribution, a withdrawal, or a
+    conversion. Applied in the accrual phase before the cash-management drawdown; tax, the early-withdrawal
+    penalty, and RMDs follow the holding's class exactly as for a one-off realization."""
+
+    holding     : Handle
+    amount      : Decimal
+    interval    : Duration
+    window      : DateWindow         = DateWindow()
+    destination : Optional[ Handle ] = None
+
+
 class ScheduledEvent:
     """Base for a user-scheduled money-movement event: it references the holdings it touches by
     their planner-minted `Handle`, and the date it occurs, and resolves to a `PeriodEvent`
@@ -507,6 +527,7 @@ class ForecastParameters:
     expense_streams   : list[ ExpenseStream ]                = field( default_factory = list )
     loans             : list[ LoanParameters ]               = field( default_factory = list )
     contributions     : list[ RetirementContribution ]       = field( default_factory = list )
+    recurring_realizations : list[ RecurringRealization ]    = field( default_factory = list )
     events            : list[ ScheduledEvent ]               = field( default_factory = list )
     cash_account      : CashAccountParameters                = field(
         default_factory = CashAccountParameters )

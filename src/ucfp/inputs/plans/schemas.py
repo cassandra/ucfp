@@ -114,12 +114,54 @@ class PropertyExpense:
 
 @dataclass( frozen = True )
 class Contribution:
-    """A recurring retirement contribution -- mirrors the engine `RetirementContribution`.
-    `account_handle` targets a profile holding; `source` sets its tax treatment."""
+    """A planned recurring retirement contribution: a per-occurrence `amount` at `interval` cadence into
+    the retirement holding `account_handle`, over an optional age window (`start_age`/`end_age` -- the
+    account owner's age; no start = from now, no end = indefinitely). `source` sets the money source and
+    deductibility (see the engine `ContributionSource`). Materialization annualizes it (occurrences/year
+    x amount) and resolves the ages to a date window for the engine `RetirementContribution`. `handle` is
+    a stable per-row identity (minted `contribution-N`)."""
+    handle: str
     account_handle: str
-    annual_amount: Decimal
+    amount: Decimal
     source: ContributionSource
-    through: Optional[ date ] = None
+    interval: Duration
+    start_age: Optional[ int ] = None
+    end_age: Optional[ int ] = None
+
+
+# --- Tax planning ---------------------------------------------------------
+
+@dataclass( frozen = True )
+class RothConversion:
+    """A planned Roth conversion of pre-tax retirement money to the source owner's Roth account. One-time
+    (a single `start_age`, no `interval`) or recurring (an `interval` cadence over the owner's age window
+    `start_age`/`end_age` -- no start = from now, no end = indefinitely). `amount` is the per-occurrence
+    conversion in today's dollars, inflation-indexed. `source_handle` is the pre-tax account converted
+    from; the Roth target is that owner's Roth (always present, so not restated). `handle` is a stable
+    per-row identity (minted `conversion-N`)."""
+    handle: str
+    source_handle: str
+    amount: Decimal
+    interval: Optional[ Duration ] = None
+    start_age: Optional[ int ] = None
+    end_age: Optional[ int ] = None
+
+
+@dataclass( frozen = True )
+class Withdrawal:
+    """A planned scheduled withdrawal from a pre-tax retirement account to cash -- a deliberate tax lever
+    (bracket-filling, RMDs, pre-conversion draws), taxed as ordinary income, landing in cash before the
+    automatic cash-management drawdown. One-time (a single `start_age`, no `interval`) or recurring (an
+    `interval` cadence over the owner's age window `start_age`/`end_age` -- no start = from now, no end =
+    indefinitely). `amount` is the per-occurrence draw in today's dollars, inflation-indexed; it is bounded
+    by the account's value (a partial draw when short). `source_handle` is the pre-tax account drawn from.
+    `handle` is a stable per-row identity (minted `withdrawal-N`)."""
+    handle: str
+    source_handle: str
+    amount: Decimal
+    interval: Optional[ Duration ] = None
+    start_age: Optional[ int ] = None
+    end_age: Optional[ int ] = None
 
 
 # --- Loan paydown ---------------------------------------------------------
@@ -267,6 +309,10 @@ class Plans:
     property_expenses: list[ PropertyExpense ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
+    # Tax planning: Roth conversions (pre-tax -> Roth) and scheduled withdrawals (pre-tax -> cash),
+    # each one-time or a recurring ladder
+    roth_conversions: list[ RothConversion ] = field( default_factory = list )
+    withdrawals: list[ Withdrawal ] = field( default_factory = list )
     # Loan repayment (rate/term per amortizing debt) and extra-principal paydown
     loan_repayments: list[ LoanRepayment ] = field( default_factory = list )
     prepayments: list[ LoanPrepayment ] = field( default_factory = list )

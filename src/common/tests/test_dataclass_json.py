@@ -30,7 +30,7 @@ from ucfp.inputs.profile.schemas import (
 from ucfp.inputs.plans.schemas import (
     Vehicle, VehiclePlan, VehicleRunningCost, Contribution, CreditCardPlan, DrawdownPolicy,
     HealthCoverageAssumption, IncomeTiming, LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense,
-    RetirementTiming, Plans )
+    RetirementTiming, RothConversion, Withdrawal, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
 
@@ -106,8 +106,16 @@ def _sample_plans():
                 applies_to = ( PropertyContext.RESIDENCE, ), interval = Duration( 1, TimeUnit.YEAR ),
                 default_amount = Decimal( '580' ), count = 3, cost_each = Decimal( '2900' ),
                 lifespan = 15 ) ],
-        contributions = [ Contribution( account_handle = '401k', annual_amount = Decimal( '23000' ),
-                                        source = ContributionSource.WAGE ) ],
+        contributions = [ Contribution(
+            handle = 'contribution-1', account_handle = '401k', amount = Decimal( '1900' ),
+            source = ContributionSource.WAGE, interval = Duration( 1, TimeUnit.MONTH ),
+            start_age = 50, end_age = 65 ) ],
+        roth_conversions = [ RothConversion(
+            handle = 'conversion-1', source_handle = 'pretax-subject', amount = Decimal( '30000' ),
+            interval = Duration( 1, TimeUnit.YEAR ), start_age = 63, end_age = 70 ) ],
+        withdrawals = [ Withdrawal(
+            handle = 'withdrawal-1', source_handle = 'pretax-subject', amount = Decimal( '20000' ),
+            start_age = 72 ) ],
         loan_repayments = [ LoanRepayment( debt_handle = 'mort',
                                            interest_rate = Rate( Decimal( '0.0425' ) ),
                                            remaining_term = Duration( 25, TimeUnit.YEAR ) ) ],

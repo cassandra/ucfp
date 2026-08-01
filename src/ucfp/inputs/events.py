@@ -10,11 +10,10 @@ this one uniform surface, so consistency holds without a registry of declarative
 A *reference* is the load-bearing concept: an entity the event points at, by `role`, with the valid
 candidates drawn from the profile. The picker auto-fills a single candidate and asks only when there
 is a real choice -- we never silently default. (Two further modes build on this base: *provision*
-creates an implied entity -- a Roth conversion's Roth account -- and *cascade* adjusts other
-inputs -- a home sale ending its mortgage.)
+creates an implied entity the event needs, and *cascade* adjusts other inputs -- a home sale ending
+its mortgage.)
 """
 from dataclasses import dataclass, replace
-from decimal import Decimal
 from typing import Callable, Optional
 
 from django import forms
@@ -22,11 +21,10 @@ from django import forms
 from common.recurrence import OneTime
 from common.schedule import Schedule
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
     ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
-from ucfp.inputs.profile.schemas import AssetProfile
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.widgets import IsoDateInput
@@ -87,61 +85,6 @@ def _mortgages( profile, property_handle : str ) -> list:
     return [ debt.handle for debt in profile.debts if debt.secured_asset == property_handle ]
 
 
-def _pretax_accounts( profile ) -> list:
-    return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.asset_class is AssetClass.PRETAX_RETIREMENT ]
-
-
-# The handle minted for a Roth account a conversion provisions for an owner who has none.
-_ROTH_HANDLE_PREFIX = 'roth-'
-
-
-def _owner_of( profile, handle : str ) -> Optional[ str ]:
-    asset = next( ( asset for asset in profile.assets if asset.handle == handle ), None )
-    return asset.owner_handle if asset is not None else None
-
-
-def _subject_name( profile, handle : str ) -> str:
-    subject = next( ( subject for subject in profile.subjects if subject.handle == handle ), None )
-    return subject.name if subject is not None else handle
-
-
-def _existing_roth_handle( profile, owner_handle : str ) -> Optional[ str ]:
-    """The handle of a Roth account the owner already holds -- the first found, since a conversion
-    needs no choice among several -- or None if they hold none."""
-    roth = next( ( asset for asset in profile.assets
-                   if asset.asset_class is AssetClass.ROTH and asset.owner_handle == owner_handle ),
-                 None )
-    return roth.handle if roth is not None else None
-
-
-def _minted_roth_handle( profile, owner_handle : str ) -> str:
-    """A fresh handle for a newly-provisioned Roth, unique among the profile's holdings (not
-    assuming the owner's natural handle is free)."""
-    taken  = { asset.handle for asset in profile.assets }
-    base   = f'{_ROTH_HANDLE_PREFIX}{owner_handle}'
-    handle = base
-    suffix = 2
-    while handle in taken:
-        handle = f'{base}-{suffix}'
-        suffix += 1
-    return handle
-
-
-def _ensure_roth_account( profile, owner_handle : str ):
-    """The Roth account a conversion for `owner_handle` lands in -- the owner's existing one if they
-    have any, otherwise a new empty Roth provisioned for them (the conversion implies it exists).
-    Returns the (possibly updated) profile and the Roth's handle."""
-    existing = _existing_roth_handle( profile, owner_handle )
-    if existing is not None:
-        return profile, existing
-    handle  = _minted_roth_handle( profile, owner_handle )
-    account = AssetProfile(
-        handle = handle, name = f'{_subject_name( profile, owner_handle )} Roth',
-        asset_class = AssetClass.ROTH, opening_value = Decimal( '0' ), owner_handle = owner_handle )
-    return replace( profile, assets = list( profile.assets ) + [ account ] ), handle
-
-
 def _names( profile ) -> dict:
     names = { subject.handle: subject.name for subject in profile.subjects }
     names.update( { asset.handle: asset.name for asset in profile.assets } )
@@ -197,7 +140,7 @@ class EventType:
     def provision( self, event : PlanEvent, profile ):
         """Bring into existence any entity this event implies, returning the (possibly updated)
         profile and event. Runs once, when the event is added; the run then just reads the result.
-        The default provisions nothing; a Roth conversion creates the Roth account it lands in."""
+        The default provisions nothing."""
         return profile, event
 
     def cascade_on_add( self, event : PlanEvent, profile, plans ):
@@ -253,31 +196,6 @@ class TransferEvent( EventType ):
         into.scheduled_events.append( ScheduledTransfer(
             event_date = event.date, source = event.selections[ SOURCE_ROLE ],
             target = event.selections[ TARGET_ROLE ], amount = event.amount ) )
-
-
-class RothConversionEvent( EventType ):
-    kind  = EventKind.ROTH_CONVERSION
-    group = _ACCOUNTS_GROUP
-
-    def references( self, profile ) -> list:
-        return [ ReferenceSpec( SOURCE_ROLE, 'From pre-tax account', _pretax_accounts ) ]
-
-    def provision( self, event : PlanEvent, profile ):
-        """The conversion lands in the source owner's Roth -- found or created. The resolved Roth
-        handle is recorded as the target selection, so materialization just reads it."""
-        owner = _owner_of( profile, event.selections[ SOURCE_ROLE ] )
-        profile, roth_handle = _ensure_roth_account( profile, owner )
-        return profile, replace(
-            event, selections = { **event.selections, TARGET_ROLE: roth_handle } )
-
-    def summary( self, event : PlanEvent, profile ) -> str:
-        source = _names( profile ).get( event.selections.get( SOURCE_ROLE ) )
-        return f'Roth conversion of {_money( event.amount )} from {source}'
-
-    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.scheduled_events.append( ScheduledRealization(
-            event_date = event.date, holding = event.selections[ SOURCE_ROLE ],
-            amount = event.amount, destination = event.selections[ TARGET_ROLE ] ) )
 
 
 class SellPropertyEvent( EventType ):
@@ -466,7 +384,7 @@ class DeathEvent( EventType ):
 # --- Registry -------------------------------------------------------------
 
 _EVENT_TYPES = (
-    TransferEvent(), RothConversionEvent(), SellPropertyEvent(), LoanPayoffEvent(),
+    TransferEvent(), SellPropertyEvent(), LoanPayoffEvent(),
     CardPayoffEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(), GeneralPaymentEvent(),
     CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
 
@@ -478,8 +396,7 @@ def handler_for( kind : EventKind ) -> EventType:
 
 
 def offerable_menu( profile ) -> list:
-    """The offerable kinds, grouped in display order -- (group, [types]) for each non-empty
-    group."""
+    """The offerable kinds, grouped in display order -- (group, [types]) for each non-empty group."""
     offerable = [ event_type for event_type in _EVENT_TYPES if event_type.offerable( profile ) ]
     grouped   = list()
     for group in _GROUP_ORDER:
@@ -574,8 +491,8 @@ class EventsForm:
     events and the offerable kinds for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
-        self._profile  = profile
-        self._plans = plans
+        self._profile = profile
+        self._plans   = plans
 
     def is_valid( self ) -> bool:
         return True

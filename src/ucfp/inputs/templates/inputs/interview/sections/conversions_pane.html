@@ -1,0 +1,25 @@
+{% comment %}
+The Roth conversions of the Tax Planning section (id=conversions), auto-saved. One block per conversion
+(the shared realization-plan row) plus a blank block to add one. The row set can change, so adding or
+removing a conversion re-renders; a value edit saves silently. Non-blocking: a block without both a source
+and an amount is not saved. When there is no pre-tax account, it says so rather than offering an empty
+picker.
+{% endcomment %}
+<div id="conversions">
+  <h3 class="h6">Roth conversions</h3>
+  {% if conversions_form.has_accounts %}
+  <p class="text-muted small">Move pre-tax retirement money into your Roth -- once, or as a multi-year
+    ladder. Each conversion is taxed as ordinary income in its year.</p>
+  <form method="post" action="{% url 'conversions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    {% for row in conversions_form.plan_rows %}
+    {% include 'inputs/interview/sections/_realization_plan_row.html' with row=row source_label='From account' %}
+    {% endfor %}
+    <p class="text-muted small">Fill the blank block to add a conversion; leave the cadence blank for a
+      one-time conversion at the From age. Changes save automatically.</p>
+  </form>
+  {% else %}
+  <p class="text-muted">Set up your accounts first (the Accounts step); each person's pre-tax retirement
+    account then appears here to convert from.</p>
+  {% endif %}
+</div>

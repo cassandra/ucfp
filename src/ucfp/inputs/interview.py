@@ -21,13 +21,16 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
-    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, RESIDENCE_ASSET_HANDLE,
-    RESIDENCE_MORTGAGE_HANDLE, AssetProfile, Debt, Profile, SubjectProfile )
+    PARTNER_SUBJECT_HANDLE, PRETAX_ACCOUNT_HANDLE_PREFIX, PRIMARY_SUBJECT_HANDLE,
+    RESIDENCE_ASSET_HANDLE, RESIDENCE_MORTGAGE_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX,
+    AssetProfile, Debt, Profile, SubjectProfile )
+from ucfp.inputs.compatibility import plans_without_accounts
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
 from ucfp.jurisdiction.labels import local_label
 
 from .credit_card import CreditCardPlanForm
+from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
 from .events import EventsForm
@@ -132,9 +135,12 @@ class SubjectsForm( forms.Form ):
 
     def apply( self, profile : Profile, plans : Plans ):
         subjects = self._subjects()
+        assets   = _synced_retirement_accounts( profile.assets, subjects )
+        removed  = { asset.handle for asset in profile.assets } - { asset.handle for asset in assets }
         updated  = replace(
-            profile, subjects = subjects, filing_status = self._filing_status( subjects ) )
-        return updated, plans
+            profile, subjects = subjects, filing_status = self._filing_status( subjects ),
+            assets = assets )
+        return updated, plans_without_accounts( plans, removed ) if removed else plans
 
     def _has_partner( self ) -> bool:
         """A partner is inferred from filled fields -- no separate opt-in checkbox. `clean` has
@@ -339,8 +345,10 @@ class AccountsForm( forms.Form ):
     # Each subject's tax-advantaged retirement, per wrapper the projection distinguishes:
     # (field prefix, handle prefix, engine asset class, jurisdiction concept for the local label).
     _RETIREMENT = (
-        ( 'pretax', 'pretax-', AssetClass.PRETAX_RETIREMENT, JurisdictionConcept.PRETAX_RETIREMENT ),
-        ( 'roth', 'roth-', AssetClass.ROTH, JurisdictionConcept.TAX_FREE_RETIREMENT ),
+        ( 'pretax', PRETAX_ACCOUNT_HANDLE_PREFIX,
+          AssetClass.PRETAX_RETIREMENT, JurisdictionConcept.PRETAX_RETIREMENT ),
+        ( 'roth', ROTH_ACCOUNT_HANDLE_PREFIX,
+          AssetClass.ROTH, JurisdictionConcept.TAX_FREE_RETIREMENT ),
     )
     _ACCOUNT_CLASSES = frozenset(
         [ item[ 2 ] for item in _TAXABLE ] + [ item[ 2 ] for item in _RETIREMENT ] )
@@ -386,7 +394,7 @@ class AccountsForm( forms.Form ):
         for subject in profile.subjects:
             for prefix, handle_prefix, _asset_class, _concept in cls._RETIREMENT:
                 handle = f'{handle_prefix}{subject.handle}'
-                if handle in by_handle:
+                if handle in by_handle and by_handle[ handle ].opening_value:   # $0 placeholders show blank
                     initial[ cls._retire_field( prefix, subject.handle ) ] = \
                         by_handle[ handle ].opening_value
         return initial
@@ -406,16 +414,41 @@ class AccountsForm( forms.Form ):
             accounts.append( AssetProfile(
                 handle = handle, name = asset_class.label,
                 asset_class = asset_class, opening_value = value ) )
+        # Each subject's retirement accounts are likewise kept at $0 when blank: a retirement account is
+        # a valid contribution / withdrawal target whether or not it holds an opening balance (you can
+        # open one by contributing), and the engine needs the holding to exist for a contribution to land.
         for subject in self._subjects:
             for prefix, handle_prefix, asset_class, _concept in self._RETIREMENT:
-                value = self.cleaned_data.get( self._retire_field( prefix, subject.handle ) )
-                if value is not None:
-                    accounts.append( AssetProfile(
-                        handle = f'{handle_prefix}{subject.handle}',
-                        name = f'{subject.name} {asset_class.label}',
-                        asset_class = asset_class, opening_value = value,
-                        owner_handle = subject.handle ) )
+                entered = self.cleaned_data.get( self._retire_field( prefix, subject.handle ) )
+                value   = entered or Decimal( '0' )
+                accounts.append( AssetProfile(
+                    handle = f'{handle_prefix}{subject.handle}',
+                    name = f'{subject.name} {asset_class.label}',
+                    asset_class = asset_class, opening_value = value,
+                    owner_handle = subject.handle ) )
         return accounts
+
+
+def _synced_retirement_accounts( assets : list, subjects : list ) -> list:
+    """`assets` with each subject's retirement accounts guaranteed present -- a pre-tax and a Roth per
+    subject, created at $0 when absent and preserved with their balance when present -- and any retirement
+    account whose owner is no longer a subject dropped. Non-retirement assets are untouched. This keeps
+    the subject<->retirement-account invariant in step whenever a person is added or removed (the Accounts
+    step edits the balances), so a partner added after setup immediately has fundable accounts. Reuses
+    `AccountsForm._RETIREMENT` as the single source of the account kinds so the two cannot drift."""
+    by_handle          = { asset.handle : asset for asset in assets }
+    retirement_classes = { asset_class for _f, _h, asset_class, _c in AccountsForm._RETIREMENT }
+    provisioned        = list()
+    for subject in subjects:
+        for _field, handle_prefix, asset_class, _concept in AccountsForm._RETIREMENT:
+            handle   = f'{handle_prefix}{subject.handle}'
+            existing = by_handle.get( handle )
+            provisioned.append( existing if existing is not None else AssetProfile(
+                handle = handle, name = f'{subject.name} {asset_class.label}',
+                asset_class = asset_class, opening_value = Decimal( '0' ),
+                owner_handle = subject.handle ) )
+    kept = [ asset for asset in assets if asset.asset_class not in retirement_classes ]
+    return kept + provisioned
 
 
 class AccountsSectionForm:
@@ -459,9 +492,10 @@ class IncomeSectionForm:
 
 
 class RetirementSectionForm:
-    """§ Retirement L0 -- the pane. A no-op section form: the income/entitlement timing self-saves
-    through `RetirementView`, so Next just advances. It exposes the timing form, which reads the income
-    facts and entitlements declared in the Profile and writes only the Plans."""
+    """§ Retirement L0 -- the pane. A no-op section form: the income/entitlement timing and the
+    recurring contributions each self-save through their own async view (`RetirementView`,
+    `ContributionsView`), so Next just advances. It exposes both forms -- the timing (reading the income
+    facts and entitlements from the Profile) and the contributions -- each writing only the Plans."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -473,6 +507,35 @@ class RetirementSectionForm:
     @property
     def retirement_form( self ):
         return RetirementForm( profile = self._profile, plans = self._plans )
+
+    @property
+    def contributions_form( self ):
+        return ContributionsForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class TaxPlanningSectionForm:
+    """§ Tax Planning L0 -- the pane. A no-op section form: the Roth conversions and the scheduled
+    withdrawals each self-save through their own async view (`ConversionsView`, `WithdrawalsView`), so
+    Next just advances. It exposes both forms; they read the retirement accounts from the Profile and
+    write only the Plans."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def conversions_form( self ):
+        return ConversionsForm( profile = self._profile, plans = self._plans )
+
+    @property
+    def withdrawals_form( self ):
+        return WithdrawalsForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
         return profile, plans
@@ -657,8 +720,13 @@ SECTIONS = [
     # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
     Section( 'cash-plan'   , 'Cash management', ( Aggregate.PLANS, ), CashPlanSectionForm,
              outer_template = 'inputs/interview/sections/cash_plan.html' ),
-    # One-off money moves and life events (transfers, Roth conversions, a property sale, receipts).
-    # Last in the Plans flow -- a catch-all that can reference any entity declared above.
+    # Advanced, optional tax moves -- Roth conversions and scheduled withdrawals. The deliberate-tax-lever
+    # counterpart to Cash management's automatic funding, and distinct from the tax Assumptions (the tax
+    # environment).
+    Section( 'tax-planning', 'Tax Planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
+             outer_template = 'inputs/interview/sections/tax_planning.html' ),
+    # One-off money moves and life events (transfers, a property sale, receipts, payments, death). Last
+    # in the Plans flow -- a catch-all that can reference any entity declared above.
     Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
