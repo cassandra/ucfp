@@ -18,7 +18,6 @@ from ucfp.inputs.plans.schemas import RothConversion, Withdrawal
 from ucfp.parameter_sets.enums import CadenceDomain
 
 _PRETAX              = AssetClass.PRETAX_RETIREMENT
-_RETIREMENT_CLASSES  = ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH )
 _REALIZATION_DOMAIN  = CadenceDomain.WK_MO_YR   # weekly / monthly / yearly; blank magnitude = one-time
 
 
@@ -176,9 +175,11 @@ class ConversionsForm( RealizationPlanForm ):
 
 
 class WithdrawalsForm( RealizationPlanForm ):
-    """Scheduled withdrawals: deliberate draws from a retirement account (pre-tax or Roth) to cash."""
+    """Pre-tax account withdrawals: deliberate draws from a pre-tax retirement account to cash (a tax
+    lever -- the draw is ordinary income). A Roth draw is tax-free and not a tax move, so it is not
+    offered here."""
 
-    _ACCOUNT_CLASSES = _RETIREMENT_CLASSES
+    _ACCOUNT_CLASSES = ( _PRETAX, )
     _HANDLE_PREFIX   = 'withdrawal-'
     _KEY_PREFIX      = 'w'
 

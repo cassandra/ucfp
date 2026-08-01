@@ -149,13 +149,13 @@ class RothConversion:
 
 @dataclass( frozen = True )
 class Withdrawal:
-    """A planned scheduled withdrawal from a retirement account to cash -- a deliberate tax lever
-    (bracket-filling, RMDs, pre-conversion draws), landing in cash before the automatic cash-management
-    drawdown. One-time (a single `start_age`, no `interval`) or recurring (an `interval` cadence over the
-    owner's age window `start_age`/`end_age` -- no start = from now, no end = indefinitely). `amount` is
-    the per-occurrence draw in today's dollars, inflation-indexed; it is bounded by the account's value (a
-    partial draw when short). `source_handle` is the retirement account drawn from; its class drives the
-    tax. `handle` is a stable per-row identity (minted `withdrawal-N`)."""
+    """A planned scheduled withdrawal from a pre-tax retirement account to cash -- a deliberate tax lever
+    (bracket-filling, RMDs, pre-conversion draws), taxed as ordinary income, landing in cash before the
+    automatic cash-management drawdown. One-time (a single `start_age`, no `interval`) or recurring (an
+    `interval` cadence over the owner's age window `start_age`/`end_age` -- no start = from now, no end =
+    indefinitely). `amount` is the per-occurrence draw in today's dollars, inflation-indexed; it is bounded
+    by the account's value (a partial draw when short). `source_handle` is the pre-tax account drawn from.
+    `handle` is a stable per-row identity (minted `withdrawal-N`)."""
     handle: str
     source_handle: str
     amount: Decimal
