@@ -87,6 +87,7 @@ def materialize(
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
     vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
     conversion_events, conversion_recurring = _roth_conversions( profile, plans )
+    withdrawal_events, withdrawal_recurring = _withdrawals( profile, plans )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -105,8 +106,8 @@ def materialize(
         expense_streams  = recurring_streams + expense_streams + vehicle_streams,
         loans            = _loans( profile, plans ),
         contributions    = _contributions( profile, plans ),
-        recurring_realizations = conversion_recurring,
-        events           = events.scheduled_events + card_events + conversion_events,
+        recurring_realizations = conversion_recurring + withdrawal_recurring,
+        events           = events.scheduled_events + card_events + conversion_events + withdrawal_events,
         cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
@@ -632,9 +633,8 @@ def _contributions( profile : Profile, plans : Plans ) -> list[ RetirementContri
 
 def _roth_conversions( profile : Profile, plans : Plans ) -> tuple[ list, list ]:
     """The Plans' Roth conversions as (single-date realizations, recurring realizations). Each converts a
-    pre-tax account to its owner's Roth (always present): a one-time conversion (no `interval`) is a single
-    `ScheduledRealization` at the owner's `start_age`; a recurring one is a `RecurringRealization` over the
-    owner's age window, inflation-indexed. A conversion whose owner or Roth cannot be resolved is skipped."""
+    pre-tax account to its owner's Roth (always present), inflation-indexed. A conversion whose owner or
+    Roth cannot be resolved is skipped."""
     owner_birthdates = _owner_birthdates( profile )
     owner_of         = { asset.handle : asset.owner_handle for asset in profile.assets }
     handles          = { asset.handle for asset in profile.assets }
@@ -644,21 +644,44 @@ def _roth_conversions( profile : Profile, plans : Plans ) -> tuple[ list, list ]
         target = f'roth-{owner}' if owner is not None else None
         if target is None or target not in handles:
             continue
-        birthdate = owner_birthdates.get( conversion.source_handle )
-        if conversion.interval is None:
-            on = ( _at_year( birthdate, conversion.start_age )
-                   if birthdate is not None and conversion.start_age is not None else None )
-            if on is not None:
-                scheduled.append( ScheduledRealization(
-                    event_date = on, holding = conversion.source_handle,
-                    amount = conversion.amount, destination = target ) )
-        else:
-            recurring.append( RecurringRealization(
-                holding = conversion.source_handle, amount = conversion.amount,
-                cadence = Recurrence( conversion.interval ),
-                window = _age_window( conversion.start_age, conversion.end_age, birthdate ),
-                destination = target ) )
+        _planned_realization(
+            conversion, target, owner_birthdates.get( conversion.source_handle ), scheduled, recurring )
     return scheduled, recurring
+
+
+def _withdrawals( profile : Profile, plans : Plans ) -> tuple[ list, list ]:
+    """The Plans' scheduled withdrawals as (single-date realizations, recurring realizations) -- deliberate
+    draws from a retirement account to cash (destination None), landing in cash in the accrual phase before
+    the automatic cash-management drawdown. The source's class drives the tax (pre-tax as ordinary income
+    plus any penalty/RMD, Roth tax-free); a withdrawal from an unknown account is skipped."""
+    owner_birthdates = _owner_birthdates( profile )
+    handles          = { asset.handle for asset in profile.assets }
+    scheduled, recurring = list(), list()
+    for withdrawal in plans.withdrawals:
+        if withdrawal.source_handle not in handles:
+            continue
+        _planned_realization(
+            withdrawal, None, owner_birthdates.get( withdrawal.source_handle ), scheduled, recurring )
+    return scheduled, recurring
+
+
+def _planned_realization( plan, destination, birthdate, scheduled : list, recurring : list ) -> None:
+    """Dispatch one planned realization (a conversion or withdrawal -- `source_handle`, `amount`,
+    `interval`, `start_age`, `end_age`) into `scheduled` or `recurring`: a one-time plan (no `interval`) is
+    a single `ScheduledRealization` at the owner's `start_age`, a recurring one a `RecurringRealization`
+    over the owner's age window. `destination` is the Roth handle for a conversion, None (-> cash) for a
+    withdrawal."""
+    if plan.interval is None:
+        on = ( _at_year( birthdate, plan.start_age )
+               if birthdate is not None and plan.start_age is not None else None )
+        if on is not None:
+            scheduled.append( ScheduledRealization(
+                event_date = on, holding = plan.source_handle, amount = plan.amount,
+                destination = destination ) )
+    else:
+        recurring.append( RecurringRealization(
+            holding = plan.source_handle, amount = plan.amount, cadence = Recurrence( plan.interval ),
+            window = _age_window( plan.start_age, plan.end_age, birthdate ), destination = destination ) )
 
 
 def _owner_birthdates( profile : Profile ) -> dict:

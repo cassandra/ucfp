@@ -1,11 +1,13 @@
 {% comment %}
-The Tax Planning section pane (Plans flow): the deliberate tax moves. Today the Roth conversions pane
-(scheduled withdrawals join it with the withdrawal work), managed by its own async view
-(`ConversionsView`) outside the section's Next form; it reads the pre-tax accounts from the Profile and
-writes only the Plans. Distinct from the tax *Assumptions* (the tax environment, e.g. current-law vs
-sunset): this section is where the user schedules the tax *moves*.
+The Tax Planning section pane (Plans flow): the deliberate tax moves -- the Roth conversions and the
+scheduled withdrawals, each managed by its own async view (`ConversionsView`, `WithdrawalsView`) outside
+the section's Next form; both read the retirement accounts from the Profile and write only the Plans.
+Distinct from the tax *Assumptions* (the tax environment, e.g. current-law vs sunset): this section is
+where the user schedules the tax *moves*.
 {% endcomment %}
 <p class="text-muted">Advanced and optional: deliberate tax moves. Basic retirement funding is already
   automatic -- Cash management draws from your accounts to cover shortfalls -- so use this section only
-  for tax strategy, such as Roth conversions (and, as your plan matures, scheduled withdrawals).</p>
+  for tax strategy: Roth conversions and scheduled withdrawals (bracket-filling, RMDs, pre-conversion
+  draws).</p>
 {% include 'inputs/interview/sections/conversions_pane.html' with conversions_form=form.conversions_form %}
+{% include 'inputs/interview/sections/withdrawals_pane.html' with withdrawals_form=form.withdrawals_form %}

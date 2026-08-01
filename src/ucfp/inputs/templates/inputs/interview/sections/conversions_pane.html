@@ -1,10 +1,9 @@
 {% comment %}
 The Roth conversions of the Tax Planning section (id=conversions), auto-saved. One block per conversion
--- the pre-tax account it converts from, an amount, and the timing: leave "every N years" blank for a
-one-time conversion (at the From age), or set it for a recurring ladder over the From/Until age window --
-plus a blank block to add one. The row set can change, so adding/removing re-renders; a value edit saves
-silently. Non-blocking: a block without both a source and an amount is not saved. When there is no pre-tax
-account, it says so rather than offering an empty picker. The fields reflow so the block fits the pane.
+(the shared realization-plan row) plus a blank block to add one. The row set can change, so adding or
+removing a conversion re-renders; a value edit saves silently. Non-blocking: a block without both a source
+and an amount is not saved. When there is no pre-tax account, it says so rather than offering an empty
+picker.
 {% endcomment %}
 <div id="conversions">
   <h3 class="h6">Roth conversions</h3>
@@ -13,33 +12,8 @@ account, it says so rather than offering an empty picker. The fields reflow so t
     ladder. Each conversion is taxed as ordinary income in its year.</p>
   <form method="post" action="{% url 'conversions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    {% for row in conversions_form.conversion_rows %}
-    <div class="border rounded p-2 mb-2">
-      {% if row.handle %}{{ row.handle }}{% endif %}
-      <div class="mb-2">
-        <label class="text-muted small mb-0 d-block">From account</label>
-        {{ row.source }}
-      </div>
-      <div class="d-flex flex-wrap align-items-end mb-2">
-        <div class="mr-3">
-          <label class="text-muted small mb-0 d-block">Amount</label>
-          {{ row.amount }}
-          {% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}
-        </div>
-        <div class="text-muted small">every {{ row.every }} years <span class="ml-1">(blank = once)</span></div>
-      </div>
-      <div class="d-flex flex-wrap">
-        <div class="mr-3">
-          <label class="text-muted small mb-0 d-block">From age</label>
-          {{ row.start_age }}
-        </div>
-        <div>
-          <label class="text-muted small mb-0 d-block">Until age</label>
-          {{ row.end_age }}
-        </div>
-      </div>
-      {% if row.remove %}<label class="small text-muted mb-0 mt-2 d-block">{{ row.remove }} remove</label>{% endif %}
-    </div>
+    {% for row in conversions_form.plan_rows %}
+    {% include 'inputs/interview/sections/_realization_plan_row.html' with row=row source_label='From account' %}
     {% endfor %}
     <p class="text-muted small">Fill the blank block to add a conversion; leave "every ... years" blank
       for a one-time conversion at the From age. Changes save automatically.</p>

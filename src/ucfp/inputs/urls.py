@@ -53,6 +53,8 @@ urlpatterns = [
           name = 'contributions' ),
     path( 'interview/tax-planning/conversions/edit/', views.ConversionsView.as_view(),
           name = 'conversions' ),
+    path( 'interview/tax-planning/withdrawals/edit/', views.WithdrawalsView.as_view(),
+          name = 'withdrawals' ),
     path( 'interview/properties/residence/', views.ResidenceView.as_view(), name = 'residence' ),
     path( 'interview/properties/possessions/', views.PossessionsView.as_view(),
           name = 'possessions' ),

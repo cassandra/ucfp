@@ -28,7 +28,7 @@ from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, Jurisdict
 from ucfp.jurisdiction.labels import local_label
 
 from .contributions import ContributionsForm
-from .conversions import ConversionsForm
+from .realization_plans import ConversionsForm, WithdrawalsForm
 from .credit_card import CreditCardPlanForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
@@ -414,7 +414,8 @@ class AccountsForm( forms.Form ):
         # open one by contributing), and the engine needs the holding to exist for a contribution to land.
         for subject in self._subjects:
             for prefix, handle_prefix, asset_class, _concept in self._RETIREMENT:
-                value = self.cleaned_data.get( self._retire_field( prefix, subject.handle ) ) or Decimal( '0' )
+                entered = self.cleaned_data.get( self._retire_field( prefix, subject.handle ) )
+                value   = entered or Decimal( '0' )
                 accounts.append( AssetProfile(
                     handle = f'{handle_prefix}{subject.handle}',
                     name = f'{subject.name} {asset_class.label}',
@@ -511,10 +512,10 @@ class RetirementSectionForm:
 
 
 class TaxPlanningSectionForm:
-    """§ Tax Planning L0 -- the pane. A no-op section form: the Roth conversions self-save through
-    `ConversionsView`, so Next just advances. It exposes the conversions form (scheduled withdrawals join
-    it with the withdrawal work); it reads the pre-tax accounts from the Profile and writes only the
-    Plans."""
+    """§ Tax Planning L0 -- the pane. A no-op section form: the Roth conversions and the scheduled
+    withdrawals each self-save through their own async view (`ConversionsView`, `WithdrawalsView`), so
+    Next just advances. It exposes both forms; they read the retirement accounts from the Profile and
+    write only the Plans."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -526,6 +527,10 @@ class TaxPlanningSectionForm:
     @property
     def conversions_form( self ):
         return ConversionsForm( profile = self._profile, plans = self._plans )
+
+    @property
+    def withdrawals_form( self ):
+        return WithdrawalsForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
         return profile, plans

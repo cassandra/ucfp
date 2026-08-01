@@ -147,6 +147,23 @@ class RothConversion:
     end_age: Optional[ int ] = None
 
 
+@dataclass( frozen = True )
+class Withdrawal:
+    """A planned scheduled withdrawal from a retirement account to cash -- a deliberate tax lever
+    (bracket-filling, RMDs, pre-conversion draws), landing in cash before the automatic cash-management
+    drawdown. One-time (a single `start_age`, no `interval`) or recurring (an `interval` cadence over the
+    owner's age window `start_age`/`end_age` -- no start = from now, no end = indefinitely). `amount` is
+    the per-occurrence draw in today's dollars, inflation-indexed; it is bounded by the account's value (a
+    partial draw when short). `source_handle` is the retirement account drawn from; its class drives the
+    tax. `handle` is a stable per-row identity (minted `withdrawal-N`)."""
+    handle: str
+    source_handle: str
+    amount: Decimal
+    interval: Optional[ Duration ] = None
+    start_age: Optional[ int ] = None
+    end_age: Optional[ int ] = None
+
+
 # --- Loan paydown ---------------------------------------------------------
 
 @dataclass( frozen = True )
@@ -292,8 +309,10 @@ class Plans:
     property_expenses: list[ PropertyExpense ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
-    # Tax planning: Roth conversions (pre-tax -> Roth), one-time or a recurring ladder
+    # Tax planning: Roth conversions (pre-tax -> Roth) and scheduled withdrawals (retirement -> cash),
+    # each one-time or a recurring ladder
     roth_conversions: list[ RothConversion ] = field( default_factory = list )
+    withdrawals: list[ Withdrawal ] = field( default_factory = list )
     # Loan repayment (rate/term per amortizing debt) and extra-principal paydown
     loan_repayments: list[ LoanRepayment ] = field( default_factory = list )
     prepayments: list[ LoanPrepayment ] = field( default_factory = list )

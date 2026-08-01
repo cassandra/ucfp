@@ -56,6 +56,14 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
         if contribution.account_handle not in accounts:
             issues.append(
                 f'a contribution to an unknown account "{contribution.account_handle}";' )
+    for conversion in plans.roth_conversions:
+        if conversion.source_handle not in accounts:
+            issues.append(
+                f'a Roth conversion from an unknown account "{conversion.source_handle}";' )
+    for withdrawal in plans.withdrawals:
+        if withdrawal.source_handle not in accounts:
+            issues.append(
+                f'a withdrawal from an unknown account "{withdrawal.source_handle}";' )
     for repayment in plans.loan_repayments:
         if repayment.debt_handle not in debts:
             issues.append( f'a repayment plan for an unknown debt "{repayment.debt_handle}";' )

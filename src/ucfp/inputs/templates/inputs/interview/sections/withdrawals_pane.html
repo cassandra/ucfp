@@ -1,0 +1,27 @@
+{% comment %}
+The scheduled withdrawals of the Tax Planning section (id=withdrawals), auto-saved. One block per
+withdrawal (the shared realization-plan row) plus a blank block to add one -- a deliberate draw from a
+retirement account to cash, landing before the automatic cash-management drawdown. The row set can change,
+so adding or removing re-renders; a value edit saves silently. Non-blocking: a block without both a source
+and an amount is not saved. When there is no retirement account, it says so rather than offering an empty
+picker.
+{% endcomment %}
+<div id="withdrawals">
+  <h3 class="h6 mt-4">Scheduled withdrawals</h3>
+  {% if withdrawals_form.has_accounts %}
+  <p class="text-muted small">Draw a set amount from a retirement account -- once, or on a schedule -- as
+    a tax lever (bracket-filling, RMDs, pre-conversion draws). A pre-tax draw is ordinary income; a Roth
+    draw is tax-free. It is bounded by the account's value.</p>
+  <form method="post" action="{% url 'withdrawals' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    {% for row in withdrawals_form.plan_rows %}
+    {% include 'inputs/interview/sections/_realization_plan_row.html' with row=row source_label='From account' %}
+    {% endfor %}
+    <p class="text-muted small">Fill the blank block to add a withdrawal; leave "every ... years" blank
+      for a one-time withdrawal at the From age. Changes save automatically.</p>
+  </form>
+  {% else %}
+  <p class="text-muted">Set up your accounts first (the Accounts step); each person's retirement accounts
+    then appear here to withdraw from.</p>
+  {% endif %}
+</div>

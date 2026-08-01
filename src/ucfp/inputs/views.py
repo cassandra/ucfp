@@ -46,7 +46,7 @@ from .state import (
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .contributions import ContributionsForm
-from .conversions import ConversionsForm
+from .realization_plans import ConversionsForm, WithdrawalsForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
 from .cash_plan import DrawdownForm
@@ -1107,6 +1107,27 @@ class ConversionsView( SelfSavingPaneView ):
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
         return len( plans.roth_conversions ) != before         # a conversion was added or removed
+
+
+class WithdrawalsView( SelfSavingPaneView ):
+    """`/inputs/interview/tax-planning/withdrawals/edit/` -- the scheduled-withdrawals table of the Tax
+    Planning section. Its row set can change, so a save that adds or removes a withdrawal re-renders the
+    pane; a pure value edit stays silent. It writes only the Plans."""
+
+    template     = 'inputs/interview/sections/withdrawals_pane.html'
+    target       = 'withdrawals'
+    context_name = 'withdrawals_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return WithdrawalsForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        before = len( plans.withdrawals )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return len( plans.withdrawals ) != before              # a withdrawal was added or removed
 
 
 class CreditCardView( SelfSavingPaneView ):
