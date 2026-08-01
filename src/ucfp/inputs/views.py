@@ -1256,20 +1256,20 @@ class EventAddView( View ):
     _FORM_TEMPLATE = 'inputs/interview/sections/event_form.html'
     _LIST_TEMPLATE = 'inputs/interview/sections/events_list.html'
 
-    def get( self, request, kind ):
+    def get( self, request, section, kind ):
         profile, _ = _current_profile_and_plans( request )
         if request.GET.get( 'collapse' ):
-            return antinode.response( main_content = self._menu( request, profile ) )
+            return antinode.response( main_content = self._menu( request, profile, section ) )
         form = EventForm( event_type = self._event_type( kind ), profile = profile )
-        return antinode.response( main_content = self._form( request, kind, form ) )
+        return antinode.response( main_content = self._form( request, section, kind, form ) )
 
-    def post( self, request, kind ):
+    def post( self, request, section, kind ):
         organization = request.organization
         profile, plans = _current_profile_and_plans( request )
         event_type = self._event_type( kind )
         form = EventForm( request.POST, event_type = event_type, profile = profile )
         if not form.is_valid():
-            return antinode.response( main_content = self._form( request, kind, form ) )
+            return antinode.response( main_content = self._form( request, section, kind, form ) )
         original = profile
         profile, event = event_type.provision( form.build_event(), profile )
         profile, plans = event_type.cascade_on_add( event, profile, plans )
@@ -1279,8 +1279,8 @@ class EventAddView( View ):
                 save_profile( organization, profile )
             save_plans( current_plans_record( request ), plans )
         return antinode.response(
-            main_content = self._menu( request, profile ),
-            replace_map  = { 'events-list': self._list( request, profile, plans ) } )
+            main_content = self._menu( request, profile, section ),
+            replace_map  = { 'events-list': self._list( request, profile, plans, section ) } )
 
     @staticmethod
     def _event_type( kind ):
@@ -1289,17 +1289,18 @@ class EventAddView( View ):
             raise Http404( f'No event kind {kind!r}.' )
         return handler_for( resolved )
 
-    def _menu( self, request, profile ):
+    def _menu( self, request, profile, section ):
         return render_to_string(
-            self._MENU_TEMPLATE, { 'menu': menu_context( profile ) }, request = request )
+            self._MENU_TEMPLATE, { 'menu': menu_context( profile, section ), 'section': section },
+            request = request )
 
-    def _form( self, request, kind, form ):
+    def _form( self, request, section, kind, form ):
         return render_to_string(
-            self._FORM_TEMPLATE, { 'form': form, 'kind': kind }, request = request )
+            self._FORM_TEMPLATE, { 'form': form, 'kind': kind, 'section': section }, request = request )
 
-    def _list( self, request, profile, plans ):
+    def _list( self, request, profile, plans, section ):
         return render_to_string(
-            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) },
+            self._LIST_TEMPLATE, { 'events': events_context( profile, plans, section ), 'section': section },
             request = request )
 
 
@@ -1310,7 +1311,7 @@ class EventDeleteView( View ):
 
     _LIST_TEMPLATE = 'inputs/interview/sections/events_list.html'
 
-    def post( self, request, index ):
+    def post( self, request, section, index ):
         organization = request.organization
         profile, plans = _current_profile_and_plans( request )
         events = list( plans.events )
@@ -1326,5 +1327,5 @@ class EventDeleteView( View ):
                     save_profile( organization, profile )
                 save_plans( current_plans_record( request ), plans )
         return antinode.response( main_content = render_to_string(
-            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) },
+            self._LIST_TEMPLATE, { 'events': events_context( profile, plans, section ), 'section': section },
             request = request ) )

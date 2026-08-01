@@ -31,7 +31,7 @@ from .contributions import ContributionsForm
 from .credit_card import CreditCardPlanForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
-from .events import EventsForm
+from .events import EventsForm, TaxPlanningForm
 from .external_factors import ExternalFactorsSectionForm
 from .cash_plan import CashPlanSectionForm
 from .transaction_costs import TransactionCostsSectionForm
@@ -688,8 +688,13 @@ SECTIONS = [
     # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
     Section( 'cash-plan'   , 'Cash management', ( Aggregate.PLANS, ), CashPlanSectionForm,
              outer_template = 'inputs/interview/sections/cash_plan.html' ),
-    # One-off money moves and life events (transfers, Roth conversions, a property sale, receipts).
-    # Last in the Plans flow -- a catch-all that can reference any entity declared above.
+    # Advanced, optional tax moves -- Roth conversions (scheduled withdrawals arrive with the recurrence
+    # work). The deliberate-tax-lever counterpart to Cash management's automatic funding, and distinct
+    # from the tax Assumptions (the tax environment). Shares the events machinery, scoped to its groups.
+    Section( 'tax-planning', 'Tax Planning', ( Aggregate.PLANS, ), TaxPlanningForm,
+             outer_template = 'inputs/interview/sections/tax_planning.html' ),
+    # One-off money moves and life events (transfers, a property sale, receipts, payments, death). Last
+    # in the Plans flow -- a catch-all that can reference any entity declared above.
     Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),

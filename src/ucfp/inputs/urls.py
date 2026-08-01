@@ -77,7 +77,8 @@ urlpatterns = [
           name = 'vehicle_expenses' ),
     path( 'interview/living-expenses/edit/', views.RecurringExpensesView.as_view(),
           name = 'recurring_expenses' ),
-    path( 'interview/events/add/<str:kind>/', views.EventAddView.as_view(), name = 'event_add' ),
-    path( 'interview/events/delete/<int:index>/', views.EventDeleteView.as_view(),
+    path( 'interview/<str:section>/event/add/<str:kind>/', views.EventAddView.as_view(),
+          name = 'event_add' ),
+    path( 'interview/<str:section>/event/delete/<int:index>/', views.EventDeleteView.as_view(),
           name = 'event_delete' ),
 ]

@@ -43,13 +43,29 @@ LOAN_ROLE      = 'loan'
 CARD_ROLE      = 'card'
 
 # Menu groups, in display order.
-_ACCOUNTS_GROUP  = 'Accounts'
-_PROPERTY_GROUP  = 'Property'
-_MONEY_IN_GROUP  = 'Money in'
-_MONEY_OUT_GROUP = 'Money out'
-_HOUSEHOLD_GROUP = 'Household'
-_GROUP_ORDER     = ( _ACCOUNTS_GROUP, _PROPERTY_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP,
-                     _HOUSEHOLD_GROUP )
+_ACCOUNTS_GROUP      = 'Accounts'
+_PROPERTY_GROUP      = 'Property'
+_MONEY_IN_GROUP      = 'Money in'
+_MONEY_OUT_GROUP     = 'Money out'
+_HOUSEHOLD_GROUP     = 'Household'
+_TAX_PLANNING_GROUP  = 'Tax Planning'
+_GROUP_ORDER         = ( _ACCOUNTS_GROUP, _PROPERTY_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP,
+                         _HOUSEHOLD_GROUP, _TAX_PLANNING_GROUP )
+
+# Events are split across two Plans sections by group: Tax Planning hosts the deliberate tax moves (Roth
+# conversions -- and, later, scheduled withdrawals); Money movements hosts everything else (the bespoke
+# one-offs). The two never render together (separate interview steps), so they share the pane's DOM ids
+# and differ only in which groups their menu offers and which events their list shows.
+MONEY_MOVEMENTS_SECTION = 'events'
+TAX_PLANNING_SECTION    = 'tax-planning'
+
+
+def _groups_for( section : str ) -> tuple:
+    """The event groups a section shows -- just Tax Planning for the tax-planning step, everything else
+    for Money movements."""
+    if section == TAX_PLANNING_SECTION:
+        return ( _TAX_PLANNING_GROUP, )
+    return tuple( group for group in _GROUP_ORDER if group != _TAX_PLANNING_GROUP )
 
 
 @dataclass( frozen = True )
@@ -257,7 +273,7 @@ class TransferEvent( EventType ):
 
 class RothConversionEvent( EventType ):
     kind  = EventKind.ROTH_CONVERSION
-    group = _ACCOUNTS_GROUP
+    group = _TAX_PLANNING_GROUP                        # a tax move -- lives in the Tax Planning section
 
     def references( self, profile ) -> list:
         return [ ReferenceSpec( SOURCE_ROLE, 'From pre-tax account', _pretax_accounts ) ]
@@ -477,10 +493,11 @@ def handler_for( kind : EventKind ) -> EventType:
     return _BY_KIND[ kind ]
 
 
-def offerable_menu( profile ) -> list:
-    """The offerable kinds, grouped in display order -- (group, [types]) for each non-empty
-    group."""
-    offerable = [ event_type for event_type in _EVENT_TYPES if event_type.offerable( profile ) ]
+def offerable_menu( profile, groups ) -> list:
+    """The offerable kinds within `groups`, grouped in display order -- (group, [types]) for each
+    non-empty group."""
+    offerable = [ event_type for event_type in _EVENT_TYPES
+                  if event_type.group in groups and event_type.offerable( profile ) ]
     grouped   = list()
     for group in _GROUP_ORDER:
         members = [ event_type for event_type in offerable if event_type.group == group ]
@@ -502,19 +519,23 @@ def event_contributions( profile, plans, subjects : dict ) -> EventContributions
 
 # --- View/template context -------------------------------------------------
 
-def menu_context( profile ) -> list:
-    """The add menu for the templates: each group's offerable kinds as `{kind slug, label}`."""
+def menu_context( profile, section ) -> list:
+    """The add menu for a section's pane: each group's offerable kinds as `{kind slug, label}`, limited
+    to the groups that section shows."""
     return [ { 'group': group,
                'types': [ { 'kind': event_type.kind.name.lower(), 'label': event_type.label }
                           for event_type in types ] }
-             for group, types in offerable_menu( profile ) ]
+             for group, types in offerable_menu( profile, _groups_for( section ) ) ]
 
 
-def events_context( profile, plans ) -> list:
-    """The events list for the templates: each event's row index and human summary."""
+def events_context( profile, plans, section ) -> list:
+    """A section's events list for the templates: each event's row index (into the whole `plans.events`,
+    so deletes still address the right one) and human summary -- filtered to the section's groups."""
+    groups = _groups_for( section )
     events = plans.events if plans is not None else list()
     return [ { 'index': index, 'summary': handler_for( event.kind ).summary( event, profile ) }
-             for index, event in enumerate( events ) ]
+             for index, event in enumerate( events )
+             if handler_for( event.kind ).group in groups ]
 
 
 # --- Forms ----------------------------------------------------------------
@@ -569,24 +590,39 @@ class EventForm( forms.Form ):
 
 
 class EventsForm:
-    """§7 L0 -- the plan's events. A no-op section form: events are added and removed through the
-    `EventAddView`/`EventDeleteView`, so advancing does nothing but move on. It exposes the current
-    events and the offerable kinds for the pane."""
+    """L0 -- one events section's pane. A no-op section form: events are added and removed through the
+    `EventAddView`/`EventDeleteView`, so advancing does nothing but move on. It exposes the section's
+    events and offerable kinds (filtered to the section's groups) and its `section` key for the pane's
+    add/delete URLs. Money movements is this base; Tax Planning is `TaxPlanningForm` below."""
+
+    _SECTION = MONEY_MOVEMENTS_SECTION
 
     def __init__( self, data = None, *, profile = None, plans = None ):
-        self._profile  = profile
-        self._plans = plans
+        self._profile = profile
+        self._plans   = plans
 
     def is_valid( self ) -> bool:
         return True
 
     @property
+    def section( self ) -> str:
+        return self._SECTION
+
+    @property
     def events( self ) -> list:
-        return events_context( self._profile, self._plans )
+        return events_context( self._profile, self._plans, self._SECTION )
 
     @property
     def menu( self ) -> list:
-        return menu_context( self._profile )
+        return menu_context( self._profile, self._SECTION )
 
     def apply( self, profile, plans ):
         return profile, plans
+
+
+class TaxPlanningForm( EventsForm ):
+    """L0 -- the Tax Planning section's pane. The events section for the deliberate tax moves (Roth
+    conversions; scheduled withdrawals arrive with the recurrence work). Same machinery as
+    `EventsForm`, scoped to the Tax Planning groups."""
+
+    _SECTION = TAX_PLANNING_SECTION

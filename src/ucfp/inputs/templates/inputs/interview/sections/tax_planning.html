@@ -1,0 +1,13 @@
+{% comment %}
+The Tax Planning section pane (Plans flow): the deliberate tax moves -- Roth conversions today (scheduled
+withdrawals arrive with the recurrence work). It reuses the same events machinery as Money movements,
+scoped to the Tax Planning groups; the list and the add menu render outside the section's Next form.
+Distinct from the tax *Assumptions* (the tax environment, e.g. current-law vs sunset): this section is
+where the user schedules the tax *moves*.
+{% endcomment %}
+<p class="text-muted">Advanced and optional: deliberate tax moves. Basic retirement funding is already
+  automatic -- Cash management draws from your accounts to cover shortfalls -- so use this section only
+  for tax strategy, such as Roth conversions (and, as your plan matures, scheduled withdrawals for
+  bracket-filling).</p>
+{% include 'inputs/interview/sections/events_list.html' with events=form.events section=form.section %}
+{% include 'inputs/interview/sections/events_menu.html' with menu=form.menu section=form.section %}
