@@ -114,12 +114,19 @@ class PropertyExpense:
 
 @dataclass( frozen = True )
 class Contribution:
-    """A recurring retirement contribution -- mirrors the engine `RetirementContribution`.
-    `account_handle` targets a profile holding; `source` sets its tax treatment."""
+    """A planned recurring retirement contribution: a per-occurrence `amount` at `interval` cadence into
+    the retirement holding `account_handle`, over an optional age window (`start_age`/`end_age` -- the
+    account owner's age; no start = from now, no end = indefinitely). `source` sets the money source and
+    deductibility (see the engine `ContributionSource`). Materialization annualizes it (occurrences/year
+    x amount) and resolves the ages to a date window for the engine `RetirementContribution`. `handle` is
+    a stable per-row identity (minted `contribution-N`)."""
+    handle: str
     account_handle: str
-    annual_amount: Decimal
+    amount: Decimal
     source: ContributionSource
-    through: Optional[ date ] = None
+    interval: Duration
+    start_age: Optional[ int ] = None
+    end_age: Optional[ int ] = None
 
 
 # --- Loan paydown ---------------------------------------------------------

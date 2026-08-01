@@ -103,7 +103,7 @@ def materialize(
             + events.expense_items + card_items + _vehicle_expenses( plans ) + vehicle_items ),
         expense_streams  = recurring_streams + expense_streams + vehicle_streams,
         loans            = _loans( profile, plans ),
-        contributions    = _contributions( plans ),
+        contributions    = _contributions( profile, plans ),
         events           = events.scheduled_events + card_events,
         cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
@@ -612,11 +612,37 @@ def _property_expense_tax_class( expense, asset : Optional[ AssetProfile ] ) -> 
 
 # --- Plans: knobs -------------------------------------------------------
 
-def _contributions( plans : Plans ) -> list[ RetirementContribution ]:
-    return [ RetirementContribution(
-        account = contribution.account_handle, amount = contribution.annual_amount,
-        source = contribution.source, window = DateWindow( end = contribution.through ) )
-        for contribution in plans.contributions ]
+def _contributions( profile : Profile, plans : Plans ) -> list[ RetirementContribution ]:
+    """The Plans' retirement contributions as engine contributions. Each is annualized (its
+    per-occurrence amount x the cadence's occurrences per year) into the engine's annual, wage-grown
+    `RetirementContribution`, over the owner's age window resolved to dates. The account owner's birthdate
+    anchors the ages; a contribution to an unowned/unknown account simply runs unbounded (non-blocking)."""
+    owner_birthdates = _owner_birthdates( profile )
+    contributions = list()
+    for contribution in plans.contributions:
+        birthdate = owner_birthdates.get( contribution.account_handle )
+        annual    = contribution.amount * contribution.interval.occurrences_per_year()
+        contributions.append( RetirementContribution(
+            account = contribution.account_handle, amount = annual, source = contribution.source,
+            window = _age_window( contribution.start_age, contribution.end_age, birthdate ) ) )
+    return contributions
+
+
+def _owner_birthdates( profile : Profile ) -> dict:
+    """account handle -> its owner's birthdate, for the accounts that have an owner (retirement holdings
+    are individual). Unowned accounts are absent, so their contributions resolve to no age bound."""
+    by_subject = { subject.handle : subject.birthdate for subject in profile.subjects }
+    return { asset.handle : by_subject[ asset.owner_handle ]
+             for asset in profile.assets
+             if asset.owner_handle is not None and asset.owner_handle in by_subject }
+
+
+def _age_window( start_age, end_age, birthdate : Optional[ date ] ) -> DateWindow:
+    """A [start_age, end_age] pair as a date window against `birthdate` -- each bound present only when
+    both its age and the birthdate are known, else left open (no bound)."""
+    start = _at_year( birthdate, start_age ) if start_age is not None and birthdate is not None else None
+    end = _at_year( birthdate, end_age ) if end_age is not None and birthdate is not None else None
+    return DateWindow( start = start, end = end )
 
 
 def _cash_account( plans : Plans ) -> CashAccountParameters:

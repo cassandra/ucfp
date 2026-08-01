@@ -45,6 +45,7 @@ from .state import (
     completed_assumptions, completed_plans, completed_profile, flow_reviewed, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
+from .contributions import ContributionsForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
 from .cash_plan import DrawdownForm
@@ -1063,6 +1064,27 @@ class DebtPlanView( SelfSavingPaneView ):
         profile, plans = _current_profile_and_plans( request )
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
+
+
+class ContributionsView( SelfSavingPaneView ):
+    """`/inputs/interview/retirement/contributions/edit/` -- the recurring-contributions table of the
+    Retirement section. Its row set can change, so a save that adds or removes a contribution re-renders
+    the pane; a pure value edit stays silent. It writes only the Plans."""
+
+    template     = 'inputs/interview/sections/contributions_pane.html'
+    target       = 'contributions'
+    context_name = 'contributions_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return ContributionsForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        before = len( plans.contributions )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return len( plans.contributions ) != before            # a contribution was added or removed
 
 
 class CreditCardView( SelfSavingPaneView ):

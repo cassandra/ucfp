@@ -49,6 +49,8 @@ urlpatterns = [
           name = 'transaction_costs' ),
     path( 'interview/cash-plan/edit/', views.CashPlanView.as_view(), name = 'cash_plan' ),
     path( 'interview/retirement/edit/', views.RetirementView.as_view(), name = 'retirement' ),
+    path( 'interview/retirement/contributions/edit/', views.ContributionsView.as_view(),
+          name = 'contributions' ),
     path( 'interview/properties/residence/', views.ResidenceView.as_view(), name = 'residence' ),
     path( 'interview/properties/possessions/', views.PossessionsView.as_view(),
           name = 'possessions' ),
