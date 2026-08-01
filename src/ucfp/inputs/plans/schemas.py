@@ -35,11 +35,22 @@ from .enums import CreditCardPlanMode, EventKind
 class RetirementTiming:
     """Per-subject benefit-election timing -- the dates Social Security and a pension are claimed /
     started. Each selects into that subject's profile entitlement facts, so the realized benefit is
-    derived from the entitlement plus the election rather than stored. (A wage's end is no longer a
-    retirement date here -- it lives on the wage's own income line.)"""
+    derived from the entitlement plus the election rather than stored. (A wage's start/stop is not a
+    retirement date here -- it lives in `IncomeTiming`, keyed to the flow.)"""
     subject_handle: str
     government_pension_claiming_date: Optional[ date ] = None
     pension_start: Optional[ date ] = None
+
+
+@dataclass( frozen = True )
+class IncomeTiming:
+    """When one income flow is active -- the *plan* over a Profile income *fact* (`IncomeFlow`), keyed to
+    it by `flow_handle`. `start`/`end` are optional and editable: no start means from the forecast's
+    start, no end means for life -- so a fact-defined income can be given a planned stop, or a future
+    start (a stopgap for future income until a dedicated recurring money-in event exists)."""
+    flow_handle: str
+    start: Optional[ date ] = None
+    end: Optional[ date ] = None
 
 
 # --- Recurring expenses ---------------------------------------------------
@@ -246,8 +257,9 @@ class Plans:
     """One named set of the user's contemplated future, grouped by section. Serialized whole into a
     `Plans` record's JSON, and materialized (with a Profile and Assumptions) into
     `ForecastParameters`."""
-    # Timing
+    # Timing: per-subject entitlement elections, and per-flow income start/stop windows
     timing: list[ RetirementTiming ] = field( default_factory = list )
+    income_timing: list[ IncomeTiming ] = field( default_factory = list )
     # Recurring expenses (`LIVING`-class) and the shared span timeline (until-ages, last None)
     expense_spans: list[ Optional[ int ] ] = field( default_factory = lambda: [ None ] )
     recurring_expenses: list[ RecurringExpense ] = field( default_factory = list )

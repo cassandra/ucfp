@@ -58,6 +58,7 @@ from .properties import (
     properties_context )
 from .property_expenses import PropertyExpensesForm
 from .recurring_expenses import RecurringExpensesForm
+from .retirement import RetirementForm
 
 _SCENARIOS_TEMPLATE = 'inputs/scenarios_home.html'
 
@@ -1084,30 +1085,51 @@ class CreditCardView( SelfSavingPaneView ):
 
 
 class IncomeTableView( SelfSavingPaneView ):
-    """`/inputs/interview/income/table/` -- the §5 income table. Its line set can change, so a save
-    that adds or removes a line re-renders the pane; a pure value edit stays silent. The age<->date
-    sync is done client-side (`inputs.js`)."""
+    """`/inputs/interview/income/table/` -- the §5 income *facts* table. Its line set can change, so a
+    save that adds or removes a line re-renders the pane; a pure value edit stays silent. It edits the
+    Profile facts; the income timing is the separate Retirement (`RetirementView`) pane, save for reaping
+    a removed flow's orphaned timing, so the pair is saved atomically."""
 
     template     = 'inputs/interview/sections/income_table.html'
     target       = 'income-table'
     context_name = 'income_form'
 
     def build_form( self, request, data = None ):
-        profile, plans = _current_profile_and_plans( request )
-        return IncomeTableForm( data, profile = profile, plans = plans )
+        profile, _plans = _current_profile_and_plans( request )
+        return IncomeTableForm( data, profile = profile )
 
     def persist( self, request, form ):
         profile, plans = _current_profile_and_plans( request )
         before = self._line_count( profile )
         profile, plans = form.apply( profile, plans )
-        _save_profile_and_plans( request, profile, plans )
-        return self._line_count( profile ) != before           # a line was added or removed
+        _save_profile_and_plans( request, profile, plans )      # a removed flow reaps its orphaned timing
+        return self._line_count( profile ) != before            # a line was added or removed
 
     @staticmethod
     def _line_count( profile ) -> int:
         """The general income lines (the only rows whose count changes); rental and entitlement rows
         are fixed by the properties and subjects."""
         return sum( 1 for flow in profile.income_flows if flow.property_handle is None )
+
+
+class RetirementView( SelfSavingPaneView ):
+    """`/inputs/interview/retirement/edit/` -- the income/entitlement *timing* of the Retirement section.
+    It reads the income facts and entitlements from the Profile and persists only the Plans timing; the
+    row set is fixed by the declared flows and subjects, so a half-entered window simply stores no
+    timing. The age<->date sync is done client-side (`inputs.js`)."""
+
+    template     = 'inputs/interview/sections/retirement_pane.html'
+    target       = 'retirement'
+    context_name = 'retirement_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return RetirementForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

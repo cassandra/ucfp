@@ -10,13 +10,12 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
-from common.date_window import DateWindow
 from common.dataclass_json import DataclassJsonError, from_json_data, to_json_data
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass, RealPropertyType
-from ucfp.forecast.parameters import ContributionSource, WindowedAmount
+from ucfp.forecast.parameters import ContributionSource
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.parameter_sets.enums import (
     CadenceDomain, ExpenseCategory, ExpenseClass, PropertyContext, Realization )
@@ -30,7 +29,7 @@ from ucfp.inputs.profile.schemas import (
     IncomeFlow, PensionEntitlement, Profile, PropertyProfile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
     Vehicle, VehiclePlan, VehicleRunningCost, Contribution, CreditCardPlan, DrawdownPolicy,
-    HealthCoverageAssumption, LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense,
+    HealthCoverageAssumption, IncomeTiming, LoanRepayment, PlanEvent, PropertyExpense, RecurringExpense,
     RetirementTiming, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
@@ -54,13 +53,10 @@ def _sample_profile():
         debts = [ Debt( handle = 'mort', name = 'Mortgage', kind = DebtKind.MORTGAGE,
                         balance = Decimal( '250000' ), secured_asset = 'home' ) ],
         income_flows = [
-            IncomeFlow( name = 'Salary', subject_handle = 'you',
-                        income_tax_class = IncomeTaxClass.WAGES,
-                        schedule = [ WindowedAmount( Decimal( '120000' ),
-                                                     DateWindow( end = date( 2035, 1, 1 ) ) ) ] ),
-            IncomeFlow( name = 'Home rent', subject_handle = 'you',
-                        income_tax_class = IncomeTaxClass.GROSS_RENTAL,
-                        schedule = [ WindowedAmount( Decimal( '2500' ) ) ],
+            IncomeFlow( handle = 'income-0', name = 'Salary', subject_handle = 'you',
+                        income_tax_class = IncomeTaxClass.WAGES, amount = Decimal( '120000' ) ),
+            IncomeFlow( handle = 'home', name = 'Home rent', subject_handle = 'you',
+                        income_tax_class = IncomeTaxClass.GROSS_RENTAL, amount = Decimal( '2500' ),
                         interval = Duration( 1, TimeUnit.MONTH ), property_handle = 'home' ) ],
         pensions = [ PensionEntitlement( subject_handle = 'you',
                                          base_annual_amount = Decimal( '30000' ),
@@ -91,6 +87,8 @@ def _sample_plans():
             subject_handle = 'you',
             government_pension_claiming_date = date( 2040, 1, 1 ),
             pension_start = date( 2038, 1, 1 ) ) ],
+        income_timing = [ IncomeTiming( flow_handle = 'income-0', end = date( 2035, 1, 1 ) ),
+                          IncomeTiming( flow_handle = 'home' ) ],
         expense_spans = [ 70, 80, None ],
         recurring_expenses = [ RecurringExpense(
             name = 'Travel', handle = 'travel', category = ExpenseCategory.DISCRETIONARY,

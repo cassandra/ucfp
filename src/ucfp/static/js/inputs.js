@@ -1,9 +1,9 @@
 // Client-side behaviors for the inputs section. Two concerns live here:
 //
-//   AgeDateSync - the income table's convenience age columns. The date is canonical (see
-//     ucfp/inputs/income.py); the age beside it is kept in lockstep client-side so the server only
-//     ever reads dates. A field's birthdate is either baked in (entitlement rows) or resolved live
-//     from the row's chosen subject against a handle->ISO map on the table container.
+//   AgeDateSync - the convenience age input beside a planning date (the Retirement timing pane). The
+//     date is canonical; the age is kept in lockstep client-side so the server only ever reads dates.
+//     Each date/age pair carries its subject's fixed birthdate as a data-attribute, so the sync is a
+//     per-field attribute read.
 //
 //   AutoSave - silent background saving for any inputs form. On every edit the form is serialized
 //     and posted via antinode with the loader suppressed; an empty reply means no DOM swap, so
@@ -36,24 +36,12 @@ window.App.Inputs = (function () {
     const classSelector = name => '.' + name;
     const dataAttr      = name => 'data-' + name;
 
-    // ----- AgeDateSync: keep each age column in step with its canonical date -----
+    // ----- AgeDateSync: keep an age input in step with its canonical date -----
 
-    // The handle->ISO-date map lives on the nearest container that carries it (the income table),
-    // so the lookup is id-free and works for any date/age field nested inside such a container.
-    function birthdateMap( $field ) {
-        const $container = $field.closest( '[' + dataAttr( C.BIRTHDATES_DATA_ATTR ) + ']' );
-        try { return JSON.parse( $container.attr( dataAttr( C.BIRTHDATES_DATA_ATTR ) ) || '{}' ); }
-        catch ( e ) { return {}; }
-    }
-
-    // A date/age field's birthdate is either baked in (entitlement rows) or resolved live from the
-    // row's currently chosen subject (general rows).
+    // A date/age field's birthdate is baked into the field as a data-attribute (the owning subject is
+    // fixed), so resolving it is a plain attribute read.
     function birthdateFor( $field ) {
-        const fixed = $field.attr( dataAttr( C.BIRTHDATE_DATA_ATTR ) );
-        if ( fixed ) { return fixed; }
-        const subjectId = $field.attr( dataAttr( C.SUBJECT_FIELD_DATA_ATTR ) );
-        if ( ! subjectId ) { return null; }
-        return birthdateMap( $field )[ $( '#' + subjectId ).val() ] || null;
+        return $field.attr( dataAttr( C.BIRTHDATE_DATA_ATTR ) ) || null;
     }
 
     // The birthday in (birth.year + age); 29 Feb in a non-leap target year falls back to the 28th,

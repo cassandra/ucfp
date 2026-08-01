@@ -1,0 +1,35 @@
+{% comment %}
+The income/entitlement *timing* of the Retirement section (id=retirement), auto-saved. One block per
+income flow -- its start/stop window, with an age helper beside each date when the flow is a person's
+(the date is canonical; inputs.js keeps the age in lockstep from the subject's fixed birthdate) -- and,
+per subject, when Social Security is claimed and a pension starts. The blocks are fixed by the income
+facts and subjects declared in the Profile, so editing here never adds or removes one; edits save in the
+background, re-rendering only to surface a bad value. Leaving a window blank means "runs the whole
+horizon"; Social Security and a pension run for life once claimed. The compact block layout (From/Until
+as stacked labeled lines) fits an equal half-width column beside the retirement-savings pane.
+{% endcomment %}
+<div id="retirement" class="retirement-timing">
+  <form method="post" action="{% url 'retirement' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    {% if retirement_form.has_flows %}
+    <h3 class="h6">When each income runs</h3>
+    {% for row in retirement_form.income_rows %}
+    <div class="mb-3">
+      <div class="fw-semibold">{{ row.name }} <span class="text-muted small">{{ row.subject }}</span></div>
+      {% include 'inputs/interview/sections/_timing_line.html' with label='From' date=row.from age=row.from_age %}
+      {% include 'inputs/interview/sections/_timing_line.html' with label='Until' date=row.until age=row.until_age %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <h3 class="h6 mt-3">When benefits are claimed</h3>
+    {% for row in retirement_form.entitlement_rows %}
+    <div class="mb-3">
+      <div class="fw-semibold">{{ row.name }} <span class="text-muted small">{{ row.subject }}</span></div>
+      {% include 'inputs/interview/sections/_timing_line.html' with label='Claim' date=row.from age=row.from_age %}
+    </div>
+    {% endfor %}
+    <p class="text-muted small">Enter an age or a precise date for any point; leave an income's window
+      blank to run it across the whole plan. Changes save automatically.</p>
+  </form>
+</div>

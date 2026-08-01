@@ -36,6 +36,7 @@ from .cash_plan import CashPlanSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
+from .retirement import RetirementForm
 from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
@@ -438,19 +439,40 @@ class AccountsSectionForm:
 
 
 class IncomeSectionForm:
-    """§5 L0 -- the income pane. A no-op section form: income is edited and saved through the
-    `IncomeTableView`, so Next just advances. It exposes the income table for the pane."""
+    """§5 L0 -- the income *facts* pane. A no-op section form: income is edited and saved through the
+    `IncomeTableView`, so Next just advances. It exposes the income table for the pane. When each income
+    runs -- the timing -- is the separate Retirement (Plans) section, so this pane touches only the
+    Profile."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
-        self._profile  = profile
-        self._plans = plans
+        self._profile = profile
 
     def is_valid( self ) -> bool:
         return True
 
     @property
     def income_table( self ):
-        return IncomeTableForm( profile = self._profile, plans = self._plans )
+        return IncomeTableForm( profile = self._profile )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class RetirementSectionForm:
+    """§ Retirement L0 -- the pane. A no-op section form: the income/entitlement timing self-saves
+    through `RetirementView`, so Next just advances. It exposes the timing form, which reads the income
+    facts and entitlements declared in the Profile and writes only the Plans."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def retirement_form( self ):
+        return RetirementForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
         return profile, plans
@@ -605,31 +627,40 @@ SECTIONS = [
     # properties must exist before the user works through Income or a rental's rent goes unnoticed.
     Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
-    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, Aggregate.PLANS ), IncomeSectionForm,
+    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
     # adjustable on its property. Facts only; the repayment plan per debt is the Debt plan step below,
     # which opens the Plans flow.
     Section( 'debt'        , 'Debts', form = DebtsSectionForm,
              outer_template = 'inputs/interview/sections/debts.html' ),
-    # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal).
-    # Opens the Plans flow, reading the debts declared just above.
-    Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
-             outer_template = 'inputs/interview/sections/debt_plan.html' ),
-    # Spending, split into three focused steps ordered largest cost to smallest. Home Expenses shows
-    # only when the household has a dwelling with operating costs (see `applicable_sections`).
+    # The Plans flow opens with spending, then the debt repayment plan (another recurring outflow),
+    # then retirement income timing, then the cash orchestration, then one-off events. Living Expenses
+    # opens the flow; Home Expenses shows only when the household has a dwelling with operating costs
+    # (see `applicable_sections`).
+    Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
+             outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
              outer_template = 'inputs/interview/sections/home_expenses.html' ),
     Section( 'vehicle-expenses', 'Vehicle Expenses', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
              outer_template = 'inputs/interview/sections/vehicle_expenses.html' ),
-    Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
-             outer_template = 'inputs/interview/sections/living_expenses.html' ),
-    Section( 'events'      , 'Plans & events', ( Aggregate.PLANS, ), EventsForm,
-             outer_template = 'inputs/interview/sections/events.html' ),
-    # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set
-    # up in the same pane). The last Plans step, after events, since it references the accounts above.
-    Section( 'cash-plan'   , 'Cash Plan', ( Aggregate.PLANS, ), CashPlanSectionForm,
+    # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal),
+    # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.
+    Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
+             outer_template = 'inputs/interview/sections/debt_plan.html' ),
+    # When each income runs and each entitlement is claimed -- the timing over the income *facts*
+    # declared in Income (Profile flow). Sits before Cash management, which balances this income
+    # against the outflows above.
+    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
+             outer_template = 'inputs/interview/sections/retirement.html' ),
+    # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set up
+    # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
+    Section( 'cash-plan'   , 'Cash management', ( Aggregate.PLANS, ), CashPlanSectionForm,
              outer_template = 'inputs/interview/sections/cash_plan.html' ),
+    # One-off money moves and life events (transfers, Roth conversions, a property sale, receipts).
+    # Last in the Plans flow -- a catch-all that can reference any entity declared above.
+    Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
+             outer_template = 'inputs/interview/sections/events.html' ),
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html' ),
@@ -664,8 +695,8 @@ def next_section_after( sections : list, key : str ) -> Optional[ Section ]:
 # ===== Flows =====
 # The interview is three flows: Profile stands alone, and Plans then Assumptions chain during a scenario
 # build. A section's flow is its primary aggregate, so the spine partitions with no extra metadata:
-# Profile (facts) first, then Plans, then Assumptions. The straddle sections (properties, income) write
-# Profile and Plans and live in the Profile flow, co-presenting their plan fields for entry convenience.
+# Profile (facts) first, then Plans, then Assumptions. The one straddle section (Properties) writes
+# Profile and Plans and lives in the Profile flow, co-presenting its plan fields for entry convenience.
 
 FLOWS = [
     ( 'profile'    , 'Profile' ),

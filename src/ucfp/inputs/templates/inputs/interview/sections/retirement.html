@@ -1,0 +1,31 @@
+{% comment %}
+The Retirement section pane (Plans flow): the income/entitlement timing on the left, managed by its own
+async view (`RetirementView`) outside the section's Next form; a placeholder card on the right for the
+retirement-contributions pane. The timing reads the income facts and entitlements
+declared in the Profile (the Income and Subjects steps) and writes only the Plans. Next advances when
+you're done.
+{% endcomment %}
+<p class="text-muted">When your income and benefits start and stop -- the plan over the income you
+  entered earlier. Set a retirement date by capping a salary and choosing when Social Security and any
+  pension begin.</p>
+<div class="row">
+  {% comment %}
+  Two equal columns -- the timing on the left, the retirement-savings pane on the right -- that
+  stack on narrower viewports (below lg) so neither is squeezed. The timing pane renders each flow as a
+  compact block (From/Until as stacked labeled lines), so it fits a half-width column without a wide
+  table.
+  {% endcomment %}
+  <div class="col-12 col-lg-6">
+    {% include 'inputs/interview/sections/retirement_pane.html' with retirement_form=form.retirement_form %}
+  </div>
+
+  <div class="col-12 col-lg-6 mt-3 mt-lg-0">
+    <div class="card bg-light">
+      <div class="card-body">
+        <h3 class="h6 mb-2">Retirement savings</h3>
+        <p class="text-muted small mb-0">Recurring retirement contributions and withdrawals will live
+          here.</p>
+      </div>
+    </div>
+  </div>
+</div>

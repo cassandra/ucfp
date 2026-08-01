@@ -23,7 +23,6 @@ from typing import Optional
 from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass, RealPropertyType
-from ucfp.forecast.parameters import WindowedAmount
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
 
 from .enums import DebtKind, HousingTenure
@@ -109,18 +108,22 @@ class Debt:
 @dataclass( frozen = True )
 class IncomeFlow:
     """One income the household receives -- salary, consulting, rental rent, or other ordinary
-    income -- the income twin of the Plans' `ExpenseFlow`. `subject_handle` is who receives it (for
-    per-subject tax, e.g. the per-worker wage cap), or None for household income (rent, which the
-    engine taxes as one aggregate); `income_tax_class` its treatment; `schedule` the amount over time spans (a
-    `WindowedAmount` per span, one open-ended row a constant amount); `interval` None is a smoothed
-    stream, a `Duration` an item placed at that cadence (rent is monthly). `property_handle` ties
-    rental income to its property -- carried through to the engine so a sale ends it and per-property
-    tax can key on it; None for non-property income. A subject may have several (shifting jobs,
+    income -- the income twin of the Plans' `ExpenseFlow`. `handle` is its stable identity, which the
+    Plans' income timing references. `subject_handle` is who receives it (for per-subject tax, e.g. the
+    per-worker wage cap), or None for household income (rent, which the engine taxes as one aggregate);
+    `income_tax_class` its treatment; `amount` its level in today's dollars, a fact the engine grows and
+    gates to the window; `interval` None is a smoothed stream, a `Duration` an item placed at that cadence
+    (rent is monthly). `property_handle` ties rental income to its property -- carried through to the engine
+    so a sale ends it and per-property tax can key on it; None for non-property income.
+
+    The *window* the income is active over (start/stop) is a **plan**, not a fact -- it lives in the Plans'
+    per-flow `IncomeTiming` keyed by `handle`, not here. A subject may have several flows (shifting jobs,
     overlapping incomes)."""
+    handle: str
     name: str
     subject_handle: Optional[ str ]
     income_tax_class: IncomeTaxClass
-    schedule: list[ WindowedAmount ]
+    amount: Decimal
     interval: Optional[ Duration ] = None
     property_handle: Optional[ str ] = None
 
