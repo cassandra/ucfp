@@ -29,17 +29,16 @@ from datetime import date
 
 from django import forms
 
-from common.date_window import DateWindow
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.environment.constants import AppConst
-from ucfp.forecast.parameters import WindowedAmount
 from ucfp.inputs.profile.schemas import GovernmentPensionEntitlement, IncomeFlow, PensionEntitlement
-from ucfp.inputs.plans.schemas import RetirementTiming
+from ucfp.inputs.plans.schemas import IncomeTiming, RetirementTiming
 from ucfp.inputs.widgets import IsoDateInput
 
 _RENTAL_INTERVAL = Duration( 1, TimeUnit.MONTH )   # rent is a monthly item; general income a stream
+_INCOME_HANDLE_PREFIX = 'income-'                  # a general flow's stable handle (Plans timing keys on it)
 
 
 class IncomeTableForm( forms.Form ):
@@ -69,6 +68,8 @@ class IncomeTableForm( forms.Form ):
                            if flow.property_handle is not None }
         self._timing   = { entry.subject_handle: entry
                            for entry in ( plans.timing if plans is not None else [] ) }
+        self._income_timing = { entry.flow_handle: entry
+                                for entry in ( plans.income_timing if plans is not None else [] ) }
         self._gov      = { entitlement.subject_handle: entitlement
                            for entitlement in
                            ( profile.government_pension if profile is not None else [] ) }
@@ -93,13 +94,15 @@ class IncomeTableForm( forms.Form ):
             self.fields[ self._key( 'g', i, 'remove' ) ] = forms.BooleanField( required = False )
         self.fields[ self._key( 'g', i, 'name' ) ]    = name
         self.fields[ self._key( 'g', i, 'subject' ) ] = subject
-        row       = flow.schedule[ 0 ] if flow is not None and flow.schedule else None
+        amount    = flow.amount if flow is not None else None
+        timing    = self._income_timing.get( flow.handle ) if flow is not None else None
         birthdate = self._birthdate( flow.subject_handle ) if flow is not None else None
-        self._add_window_fields( 'g', i, row, birthdate )
+        self._add_window_fields( 'g', i, amount, timing, birthdate )
 
     def _add_rental_fields( self, k : int, flow ):
-        row = flow.schedule[ 0 ] if flow is not None and flow.schedule else None
-        self._add_window_fields( 'r', k, row, None, with_age = False )
+        amount = flow.amount if flow is not None else None
+        timing = self._income_timing.get( flow.handle ) if flow is not None else None
+        self._add_window_fields( 'r', k, amount, timing, None, with_age = False )
 
     def _add_entitlement_fields( self, m : int, subject ):
         """Social Security and pension as table rows for the subject: a stated benefit (FRA / base)
@@ -126,14 +129,15 @@ class IncomeTableForm( forms.Form ):
         self._link_age( self._key( 's', m, f'{kind}_from' ), self._key( 's', m, f'{kind}_from_age' ),
                         birthdate = birthdate )
 
-    def _add_window_fields( self, prefix : str, index : int, row, birthdate, with_age = True ):
-        """The amount + from/until date fields for a row, seeded from a `WindowedAmount` `row`. When
-        `with_age`, an age field beside each date is seeded with the date's whole-year age (the client
-        keeps the two in sync; the server falls back to the age only when its date is blank)."""
-        start_on = row.window.start if row is not None else None
-        end_on   = row.window.end if row is not None else None
+    def _add_window_fields( self, prefix : str, index : int, amount, timing, birthdate, with_age = True ):
+        """The amount + from/until date fields for a row: the `amount` (a Profile fact) and the start/end
+        from the Plans `timing` entry (an `IncomeTiming`, or None). When `with_age`, an age field beside
+        each date is seeded with the date's whole-year age (the client keeps the two in sync; the server
+        falls back to the age only when its date is blank)."""
+        start_on = timing.start if timing is not None else None
+        end_on   = timing.end if timing is not None else None
         self.fields[ self._key( prefix, index, 'amount' ) ] = forms.DecimalField(
-            required = False, min_value = 0, initial = row.amount if row is not None else None )
+            required = False, min_value = 0, initial = amount )
         self.fields[ self._key( prefix, index, 'from' ) ]  = forms.DateField(
             required = False, initial = start_on, widget = IsoDateInput() )
         self.fields[ self._key( prefix, index, 'until' ) ] = forms.DateField(
@@ -274,15 +278,21 @@ class IncomeTableForm( forms.Form ):
     # --- apply -------------------------------------------------------------
 
     def apply( self, profile, plans ):
-        flows = self._general_flows() + self._rental_flows()
-        updated_profile  = replace(
-            profile, income_flows = flows,
+        general_flows, general_timing = self._general_income()
+        rental_flows, rental_timing = self._rental_income()
+        updated_profile = replace(
+            profile, income_flows = general_flows + rental_flows,
             government_pension = self._entitlements(), pensions = self._pensions() )
-        updated_plans = replace( plans, timing = self._merged_timing() )
+        updated_plans = replace(
+            plans, timing = self._merged_timing(),
+            income_timing = general_timing + rental_timing )
         return updated_profile, updated_plans
 
-    def _general_flows( self ) -> list:
-        flows = list()
+    def _general_income( self ) -> tuple:
+        """The general income rows as paired (flows [Profile facts], timing [Plans windows]). The flow and
+        its window are built together, so their `handle`s always match; the handle is positional here
+        (stable once the facts and timing are edited in separate sections -- issue #99 onward)."""
+        flows, timing = list(), list()
         for i in range( self._general_rows ):
             if i < len( self._general ) and self.cleaned_data.get( self._key( 'g', i, 'remove' ) ):
                 continue
@@ -294,31 +304,36 @@ class IncomeTableForm( forms.Form ):
             # ordinary income, aggregate-taxed with no subject and no per-subject age helper.
             household = subject == self._HOUSEHOLD
             birthdate = None if household else self._birthdate( subject )
-            window    = DateWindow(
-                start = self._endpoint( 'g', i, 'from', birthdate ),
-                end   = self._endpoint( 'g', i, 'until', birthdate ) )
+            handle    = f'{_INCOME_HANDLE_PREFIX}{i}'
             flows.append( IncomeFlow(
+                handle = handle,
                 name = self.cleaned_data.get( self._key( 'g', i, 'name' ) ) or 'Income',
                 subject_handle = None if household else subject,
                 income_tax_class = IncomeTaxClass.ORDINARY if household else IncomeTaxClass.WAGES,
-                schedule = [ WindowedAmount( amount, window ) ] ) )
-        return flows
+                amount = amount ) )
+            timing.append( IncomeTiming(
+                flow_handle = handle,
+                start = self._endpoint( 'g', i, 'from', birthdate ),
+                end   = self._endpoint( 'g', i, 'until', birthdate ) ) )
+        return flows, timing
 
-    def _rental_flows( self ) -> list:
-        flows = list()
+    def _rental_income( self ) -> tuple:
+        """Each rental's rent as paired (flow, timing); the flow's `handle` is its property's asset
+        handle, so its window survives edits and the sale cascade can key on it."""
+        flows, timing = list(), list()
         for k, rental in enumerate( self._rentals ):
             amount = self.cleaned_data.get( self._key( 'r', k, 'amount' ) )
             if amount is None:
                 continue
-            window = DateWindow(
-                start = self.cleaned_data.get( self._key( 'r', k, 'from' ) ),
-                end = self.cleaned_data.get( self._key( 'r', k, 'until' ) ) )
             flows.append( IncomeFlow(
-                name = rental.name, subject_handle = None,   # rent is household income
-                income_tax_class = IncomeTaxClass.GROSS_RENTAL,
-                schedule = [ WindowedAmount( amount, window ) ],
+                handle = rental.handle, name = rental.name, subject_handle = None,   # rent is household
+                income_tax_class = IncomeTaxClass.GROSS_RENTAL, amount = amount,
                 interval = _RENTAL_INTERVAL, property_handle = rental.handle ) )
-        return flows
+            timing.append( IncomeTiming(
+                flow_handle = rental.handle,
+                start = self.cleaned_data.get( self._key( 'r', k, 'from' ) ),
+                end = self.cleaned_data.get( self._key( 'r', k, 'until' ) ) ) )
+        return flows, timing
 
     def _entitlements( self ) -> list:
         entitlements = list()

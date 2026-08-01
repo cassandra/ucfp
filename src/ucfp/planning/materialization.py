@@ -83,7 +83,7 @@ def materialize(
     expense_streams, expense_items = _property_expenses(
         profile, plans, assets_by_handle, events.property_sales )
     flow_streams, flow_items = _income_flows(
-        profile, subjects_by_handle, events.property_sales )
+        profile, plans, subjects_by_handle, events.property_sales )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
     vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
     return ForecastParameters(
@@ -376,20 +376,25 @@ def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:
 # --- Profile: flows (income entitlements) ----------------------------------
 
 def _income_flows(
-        profile : Profile, subjects_by_handle : dict[ str, Subject ],
+        profile : Profile, plans : Plans, subjects_by_handle : dict[ str, Subject ],
         sale_dates : dict ) -> tuple[ list, list ]:
     """The profile's income flows as (streams, items): a flow with no interval is a smoothed stream,
-    one with an interval an item placed at that cadence (rent is monthly). The flow's `schedule`
-    carries its own window, and its `property_handle` is carried to the engine as the income's
-    `source_handle` (rental income keeps its property link). A property-linked flow is clipped to its
-    property's sale date -- when a rental is sold, its rent stops with it (the mirror of how a
-    property's operating expenses are clipped)."""
+    one with an interval an item placed at that cadence (rent is monthly). The flow carries the amount
+    (a Profile fact); its active window is a Plans decision (the per-flow `IncomeTiming`, keyed by the
+    flow handle). `property_handle` is carried to the engine as the income's `source_handle` (rental
+    income keeps its property link). A property-linked flow is clipped to its property's sale date --
+    when a rental is sold, its rent stops with it (the mirror of how a property's operating expenses are
+    clipped)."""
+    timing = { entry.flow_handle: entry for entry in plans.income_timing }
     streams, items = list(), list()
     for flow in profile.income_flows:
         subject = ( subjects_by_handle[ flow.subject_handle ]
                     if flow.subject_handle is not None else None )   # None -> household income
+        entry  = timing.get( flow.handle )
+        window = DateWindow( start = entry.start, end = entry.end ) if entry is not None else DateWindow()
         amounts = _clipped_to_sale(
-            Schedule( tuple( flow.schedule ) ), sale_dates.get( flow.property_handle ) )
+            Schedule( ( WindowedAmount( flow.amount, window ), ) ),
+            sale_dates.get( flow.property_handle ) )
         if flow.interval is None:
             streams.append( IncomeStream(
                 subject = subject, income_tax_class = flow.income_tax_class,
