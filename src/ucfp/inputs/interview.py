@@ -634,28 +634,33 @@ SECTIONS = [
     # which opens the Plans flow.
     Section( 'debt'        , 'Debts', form = DebtsSectionForm,
              outer_template = 'inputs/interview/sections/debts.html' ),
-    # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal).
-    # Opens the Plans flow, reading the debts declared just above.
-    Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
-             outer_template = 'inputs/interview/sections/debt_plan.html' ),
-    # When each income runs and each entitlement is claimed -- the timing over the income *facts*
-    # declared in Income above. Opens the Plans flow; grown by #99 with a contributions pane.
-    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
-             outer_template = 'inputs/interview/sections/retirement.html' ),
-    # Spending, split into three focused steps ordered largest cost to smallest. Home Expenses shows
-    # only when the household has a dwelling with operating costs (see `applicable_sections`).
+    # The Plans flow opens with spending, then the debt repayment plan (another recurring outflow),
+    # then retirement income timing, then the cash orchestration, then one-off events. Living Expenses
+    # opens the flow; Home Expenses shows only when the household has a dwelling with operating costs
+    # (see `applicable_sections`).
+    Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
+             outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
              outer_template = 'inputs/interview/sections/home_expenses.html' ),
     Section( 'vehicle-expenses', 'Vehicle Expenses', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
              outer_template = 'inputs/interview/sections/vehicle_expenses.html' ),
-    Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
-             outer_template = 'inputs/interview/sections/living_expenses.html' ),
-    Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
-             outer_template = 'inputs/interview/sections/events.html' ),
-    # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set
-    # up in the same pane). The last Plans step, after events, since it references the accounts above.
+    # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal),
+    # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.
+    Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
+             outer_template = 'inputs/interview/sections/debt_plan.html' ),
+    # When each income runs and each entitlement is claimed -- the timing over the income *facts*
+    # declared in Income (Profile flow). Sits before Cash management, which balances this income
+    # against the outflows above. Grown by #99 with a contributions pane.
+    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
+             outer_template = 'inputs/interview/sections/retirement.html' ),
+    # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set up
+    # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
     Section( 'cash-plan'   , 'Cash management', ( Aggregate.PLANS, ), CashPlanSectionForm,
              outer_template = 'inputs/interview/sections/cash_plan.html' ),
+    # One-off money moves and life events (transfers, Roth conversions, a property sale, receipts).
+    # Last in the Plans flow -- a catch-all that can reference any entity declared above.
+    Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
+             outer_template = 'inputs/interview/sections/events.html' ),
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html' ),
