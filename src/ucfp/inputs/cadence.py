@@ -18,10 +18,11 @@ _MAX_MAGNITUDE = 50
 
 # The units each editable domain offers, in display order; `FIXED` offers none (not editable).
 _UNITS_BY_DOMAIN = {
-    CadenceDomain.FIXED   : (),
-    CadenceDomain.WK_MO   : ( TimeUnit.WEEK, TimeUnit.MONTH ),
-    CadenceDomain.MO_YR   : ( TimeUnit.MONTH, TimeUnit.YEAR ),
-    CadenceDomain.N_YEARS : ( TimeUnit.YEAR, ),
+    CadenceDomain.FIXED    : (),
+    CadenceDomain.WK_MO    : ( TimeUnit.WEEK, TimeUnit.MONTH ),
+    CadenceDomain.MO_YR    : ( TimeUnit.MONTH, TimeUnit.YEAR ),
+    CadenceDomain.WK_MO_YR : ( TimeUnit.WEEK, TimeUnit.MONTH, TimeUnit.YEAR ),
+    CadenceDomain.N_YEARS  : ( TimeUnit.YEAR, ),
 }
 
 
@@ -93,6 +94,37 @@ def read_cadence( form, prefix, interval, domain ):
     cleaned   = form.cleaned_data
     count     = cleaned.get( _count_key( prefix ) ) or ( interval.count if interval else 1 )
     unit_name = cleaned.get( _unit_key( prefix ) ) or ( interval.unit.name if interval else units[ 0 ].name )
+    return Duration( count, TimeUnit[ unit_name ] )
+
+
+def add_optional_cadence_fields( form, prefix, interval, domain ) -> None:
+    """Like `add_cadence_fields`, but the magnitude may be left blank to mean *no* recurrence (a one-time
+    plan). Seeded from `interval` when recurring, else a blank magnitude with the unit defaulting to the
+    domain's coarsest (a one-time plan reads as "every [ ] years"). A no-op for a `FIXED` domain."""
+    units = cadence_units( domain )
+    if not units:
+        return
+    magnitude = forms.IntegerField( required = False, min_value = 1, max_value = _MAX_MAGNITUDE )
+    magnitude.initial = interval.count if interval is not None else None      # blank -> one-time
+    magnitude.widget.attrs[ 'aria-label' ] = 'Cadence magnitude'
+    form.fields[ _count_key( prefix ) ] = magnitude
+    unit = forms.ChoiceField( required = False, choices = [ ( u.name, u.label ) for u in units ] )
+    unit.initial = interval.unit.name if interval is not None else units[ -1 ].name
+    unit.widget.attrs[ 'aria-label' ] = 'Cadence unit'
+    form.fields[ _unit_key( prefix ) ] = unit
+
+
+def read_optional_cadence( form, prefix, domain ):
+    """The interval for an optional-cadence row: `None` when the magnitude is left blank (a one-time
+    plan), else `Duration(magnitude, unit)`. A blank unit falls back to the domain's coarsest."""
+    units = cadence_units( domain )
+    if not units:
+        return None
+    cleaned = form.cleaned_data
+    count   = cleaned.get( _count_key( prefix ) )
+    if not count:
+        return None
+    unit_name = cleaned.get( _unit_key( prefix ) ) or units[ -1 ].name
     return Duration( count, TimeUnit[ unit_name ] )
 
 

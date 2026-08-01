@@ -12,22 +12,23 @@ from dataclasses import replace
 
 from django import forms
 
-from common.recurrence import Duration, TimeUnit
-
 from ucfp.accounts.enums import AssetClass
+from ucfp.inputs.cadence import add_optional_cadence_fields, cadence_cells, read_optional_cadence
 from ucfp.inputs.plans.schemas import RothConversion, Withdrawal
+from ucfp.parameter_sets.enums import CadenceDomain
 
-_PRETAX             = AssetClass.PRETAX_RETIREMENT
-_RETIREMENT_CLASSES = ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH )
-_MAX_EVERY          = 50
+_PRETAX              = AssetClass.PRETAX_RETIREMENT
+_RETIREMENT_CLASSES  = ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH )
+_REALIZATION_DOMAIN  = CadenceDomain.WK_MO_YR   # weekly / monthly / yearly; blank magnitude = one-time
 
 
 class RealizationPlanForm( forms.Form ):
     """Shared base for a Tax Planning realization table: a row per plan -- a source account, amount, an
-    optional "every N years" cadence (blank = one-time), and the age window (the "From age" alone for a
-    one-time plan, both "From age" and "Until age" for a ladder) -- plus a blank row to add one, keyed to
-    a stable handle. `apply` rebuilds the subclass's Plans list from the rows. A subclass sets
-    `_ACCOUNT_CLASSES`, `_HANDLE_PREFIX`, `_KEY_PREFIX`, and implements the three Plans hooks."""
+    optional cadence (an "every N weeks/months/years" control whose blank magnitude means one-time), and
+    the age window (the "From age" alone for a one-time plan, both "From age" and "Until age" for a ladder)
+    -- plus a blank row to add one, keyed to a stable handle. `apply` rebuilds the subclass's Plans list
+    from the rows. A subclass sets `_ACCOUNT_CLASSES`, `_HANDLE_PREFIX`, `_KEY_PREFIX`, and implements the
+    three Plans hooks."""
 
     _EXTRA_ROWS      = 1
     _ACCOUNT_CLASSES = ()      # subclass: the valid source asset classes
@@ -72,8 +73,9 @@ class RealizationPlanForm( forms.Form ):
             initial = entry.source_handle if entry is not None else None )
         self.fields[ self._key( i, 'amount' ) ] = forms.DecimalField(
             required = False, min_value = 0, initial = entry.amount if entry is not None else None )
-        self.fields[ self._key( i, 'every' ) ] = forms.IntegerField(
-            required = False, min_value = 1, max_value = _MAX_EVERY, initial = self._every( entry ) )
+        add_optional_cadence_fields(
+            self, self._cadence( i ), entry.interval if entry is not None else None,
+            _REALIZATION_DOMAIN )
         self.fields[ self._key( i, 'start_age' ) ] = forms.IntegerField(
             required = False, min_value = 0, max_value = 120,
             initial = entry.start_age if entry is not None else None )
@@ -91,12 +93,11 @@ class RealizationPlanForm( forms.Form ):
             return candidates
         return [ ( '', 'Choose...' ) ] + candidates
 
-    @staticmethod
-    def _every( entry ):
-        return entry.interval.count if entry is not None and entry.interval is not None else None
-
     def _key( self, index : int, part : str ) -> str:
         return f'{self._KEY_PREFIX}{index}_{part}'
+
+    def _cadence( self, index : int ) -> str:
+        return f'{self._KEY_PREFIX}{index}_cad'
 
     def _sole_account( self ):
         """The lone account when there is only one (its picker has no placeholder, so a blank submit
@@ -110,10 +111,11 @@ class RealizationPlanForm( forms.Form ):
         rows = list()
         for i in range( self._rows ):
             existing = i < len( self._entries )
+            interval = self._entries[ i ].interval if existing else None
             rows.append( {
                 'source'    : self[ self._key( i, 'source' ) ],
                 'amount'    : self[ self._key( i, 'amount' ) ],
-                'every'     : self[ self._key( i, 'every' ) ],
+                'cadence'   : cadence_cells( self, self._cadence( i ), interval, _REALIZATION_DOMAIN ),
                 'start_age' : self[ self._key( i, 'start_age' ) ],
                 'end_age'   : self[ self._key( i, 'end_age' ) ],
                 'handle'    : self[ self._key( i, 'handle' ) ] if existing else None,
@@ -138,8 +140,7 @@ class RealizationPlanForm( forms.Form ):
             submitted = self.cleaned_data.get( self._key( i, 'handle' ) )
             handle    = submitted or self._minted_handle( taken )
             taken.add( handle )
-            every    = self.cleaned_data.get( self._key( i, 'every' ) )
-            interval = Duration( every, TimeUnit.YEAR ) if every else None   # blank = one-time
+            interval = read_optional_cadence( self, self._cadence( i ), _REALIZATION_DOMAIN )
             entries.append( self._build_entry(
                 handle, source, amount, interval,
                 self.cleaned_data.get( self._key( i, 'start_age' ) ),

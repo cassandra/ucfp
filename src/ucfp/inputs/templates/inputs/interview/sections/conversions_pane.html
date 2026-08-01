@@ -15,8 +15,8 @@ picker.
     {% for row in conversions_form.plan_rows %}
     {% include 'inputs/interview/sections/_realization_plan_row.html' with row=row source_label='From account' %}
     {% endfor %}
-    <p class="text-muted small">Fill the blank block to add a conversion; leave "every ... years" blank
-      for a one-time conversion at the From age. Changes save automatically.</p>
+    <p class="text-muted small">Fill the blank block to add a conversion; leave the cadence blank for a
+      one-time conversion at the From age. Changes save automatically.</p>
   </form>
   {% else %}
   <p class="text-muted">Set up your accounts first (the Accounts step); each person's pre-tax retirement

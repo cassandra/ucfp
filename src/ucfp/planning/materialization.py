@@ -680,7 +680,7 @@ def _planned_realization( plan, destination, birthdate, scheduled : list, recurr
                 destination = destination ) )
     else:
         recurring.append( RecurringRealization(
-            holding = plan.source_handle, amount = plan.amount, cadence = Recurrence( plan.interval ),
+            holding = plan.source_handle, amount = plan.amount, interval = plan.interval,
             window = _age_window( plan.start_age, plan.end_age, birthdate ), destination = destination ) )
 
 

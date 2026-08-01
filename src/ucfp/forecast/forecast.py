@@ -708,7 +708,8 @@ class Forecast:
             continue
         return lines
 
-    def _events_for( self, span : DateSpan, bookkeeper : Bookkeeper ) -> list[ PeriodEvent ]:
+    def _events_for(
+            self, span : DateSpan, year_fraction : Decimal, bookkeeper : Bookkeeper ) -> list[ PeriodEvent ]:
         """Resolve the scheduled events occurring in this interval into PeriodEvents, binding
         their holding handles to the running accounts (and via the chart the cash hub and the
         equity accounts an external receipt/disbursement moves). Order is preserved, so
@@ -718,29 +719,29 @@ class Forecast:
         scheduled = [
             event.to_period_event( self._baseline.holding_by_handle, chart )
             for event in self._parameters.events if event.in_span( span ) ]
-        return scheduled + self._recurring_realization_events_for( span, chart )
+        return scheduled + self._recurring_realization_events_for( span, year_fraction, chart )
 
-    def _recurring_realization_events_for( self, span : DateSpan, chart : Chart ) -> list[ PeriodEvent ]:
-        """Expand the recurring realizations active this interval into realization PeriodEvents: the
-        cadence's occurrences in the interval x the per-occurrence amount, inflated from the forecast
-        start, realized from the holding (to cash, or to the destination for a conversion). Mirrors
-        `_expense_item_lines_for`, but emits an asset realization rather than an expense line -- so the
-        realize clamp, the retirement tax, the penalty, and RMDs all apply exactly as for a one-off."""
+    def _recurring_realization_events_for(
+            self, span : DateSpan, year_fraction : Decimal, chart : Chart ) -> list[ PeriodEvent ]:
+        """Expand the recurring realizations active this interval into realization PeriodEvents:
+        annualize the per-occurrence amount (x the interval's occurrences per year), inflate it from the
+        forecast start, and prorate to the interval -- realized from the holding (to cash, or to the
+        destination for a conversion). Annualized and window-gated exactly like `_contribution_lines_for`
+        (its withdrawal/conversion mirror), so the same cadence yields the same yearly total as a
+        contribution; it emits an asset realization rather than a contribution line, so the realize clamp,
+        the retirement tax, the penalty, and RMDs all apply as for a one-off."""
         events = list()
         for recurring in self._parameters.recurring_realizations:
-            clipped = self._clip_to_window( span, recurring.window )
-            if clipped is None:
-                continue
-            start, end = clipped
-            since = ( recurring.window.start if recurring.window.start is not None
-                      else self._parameters.start_date )
-            occurrences = recurring.cadence.count_in( start = start, end = end, since = since )
-            if occurrences == 0:
+            if not recurring.window.covers( span.start_date ):
                 continue
             factor = self._inflation_factor( span.start_date.year )
+            annual = recurring.amount * recurring.interval.occurrences_per_year()
+            amount = annual * factor * year_fraction
+            if amount <= 0:
+                continue
             realization = ScheduledRealization(
-                event_date = start, holding = recurring.holding,
-                amount = occurrences * recurring.amount * factor, destination = recurring.destination )
+                event_date = span.start_date, holding = recurring.holding,
+                amount = amount, destination = recurring.destination )
             events.append( realization.to_period_event( self._baseline.holding_by_handle, chart ) )
         return events
 
@@ -816,7 +817,7 @@ class Forecast:
             expense_lines     = self._expense_lines_for( span, year_fraction ),
             liability_terms   = self._liability_terms_for( span, bookkeeper ),
             contribution_lines = self._contribution_lines_for( span, year_fraction, bookkeeper ),
-            events            = self._events_for( span, bookkeeper ),
+            events            = self._events_for( span, year_fraction, bookkeeper ),
             funding_policy    = self._funding_policy_for( span ),
             tax_engine        = tax_engine,
             full_tax_year     = self._is_full_tax_year( span, tax_engine ),

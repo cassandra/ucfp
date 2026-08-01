@@ -19,7 +19,7 @@ from ucfp.inputs.plans.schemas import Contribution
 from ucfp.parameter_sets.enums import CadenceDomain
 
 _RETIREMENT_CLASSES  = ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH )
-_CONTRIBUTION_DOMAIN = CadenceDomain.MO_YR                  # contributions recur monthly or annually
+_CONTRIBUTION_DOMAIN = CadenceDomain.WK_MO_YR              # weekly (per-paycheck), monthly, or annually
 _DEFAULT_INTERVAL    = Duration( 1, TimeUnit.MONTH )
 _HANDLE_PREFIX       = 'contribution-'
 

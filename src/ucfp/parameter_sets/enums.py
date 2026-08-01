@@ -72,10 +72,11 @@ class CadenceDomain( LabeledEnum ):
     fixed `Realization`. `FIXED` is not editable (the amount only; the cadence is the seeded one); the
     others let the user pick a magnitude and unit within the named range, reading "Every N units"."""
 
-    FIXED   = ( 'Fixed', 'Not editable; the seeded cadence, amount only.' )
-    WK_MO   = ( 'Weekly to monthly', 'Every N weeks or months.' )
-    MO_YR   = ( 'Monthly to yearly', 'Every N months or years.' )
-    N_YEARS = ( 'Every N years', 'Every N years.' )
+    FIXED    = ( 'Fixed', 'Not editable; the seeded cadence, amount only.' )
+    WK_MO    = ( 'Weekly to monthly', 'Every N weeks or months.' )
+    MO_YR    = ( 'Monthly to yearly', 'Every N months or years.' )
+    WK_MO_YR = ( 'Weekly to yearly', 'Every N weeks, months, or years.' )
+    N_YEARS  = ( 'Every N years', 'Every N years.' )
 
 
 class CatalogScope( LabeledEnum ):
