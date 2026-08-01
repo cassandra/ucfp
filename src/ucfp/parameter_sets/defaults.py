@@ -168,25 +168,25 @@ def _general_expense_catalog() -> ExpenseCatalog:
     # (group, item) order is (category declaration order, order), independent of the authoring order here.
     return ExpenseCatalog( [
         # --- Living: everyday -- continuous consumption, smoothed; entered weekly or monthly.
-        _expense( 'Food', 'food', everyday, 10, '150', living, weekly, smooth, wk_mo ),
-        _expense( 'Consumables', 'consumables', everyday, 20, '50', living, weekly, smooth, wk_mo ),
-        _expense( 'Clothes', 'clothes', everyday, 30, '1250', living, yearly, smooth, mo_yr ),
+        _expense( 'Food', 'food', everyday, 10, '170', living, weekly, smooth, wk_mo ),
+        _expense( 'Consumables', 'consumables', everyday, 20, '28', living, weekly, smooth, wk_mo ),
+        _expense( 'Clothes', 'clothes', everyday, 30, '1800', living, yearly, smooth, mo_yr ),
         _expense( 'Grooming', 'grooming', everyday, 40, '960', living, yearly, smooth, mo_yr ),
         # --- Living: discretionary -- smoothed budgets, subscriptions (fixed monthly), discrete events.
         _expense( 'Vacations', 'vacations', discretionary, 10, '10000', living, yearly, discrete, mo_yr ),
-        _expense( 'Transportation / Travel', 'travel', discretionary, 20, '900', living, quarterly, smooth, mo_yr ),
-        _expense( 'Dining Out', 'dining-out', discretionary, 30, '75', living, weekly, smooth, wk_mo ),
+        _expense( 'Transportation / Travel', 'travel', discretionary, 20, '0', living, quarterly, smooth, mo_yr ),
+        _expense( 'Dining Out', 'dining-out', discretionary, 30, '85', living, weekly, smooth, wk_mo ),
         _expense( 'Entertainment', 'entertainment', discretionary, 40, '50', living, weekly, smooth, wk_mo ),
         _expense( 'Cable TV / Streaming', 'cable-streaming', discretionary, 50, '100', living, monthly, discrete, fixed ),
         _expense( 'Hobbies', 'hobbies', discretionary, 60, '150', living, quarterly, smooth, mo_yr ),
         _durable( 'Computer Purchase', 'computer-purchase', discretionary, 70, 2, '1500', 4, living ),
         _expense( 'Computer Services', 'computer-services', discretionary, 80, '300', living, yearly, smooth, mo_yr ),
         _expense( 'Gifts', 'gifts', discretionary, 90, '3000', living, yearly, smooth, mo_yr ),
-        _expense( 'Health & Fitness', 'health-fitness', discretionary, 100, '40', living, monthly, discrete, fixed ),
-        _expense( 'Furniture', 'furniture', discretionary, 110, '500', living, yearly, smooth, mo_yr ),
+        _expense( 'Health & Fitness', 'health-fitness', discretionary, 100, '70', living, monthly, discrete, fixed ),
+        _expense( 'Furniture', 'furniture', discretionary, 110, '700', living, yearly, smooth, mo_yr ),
         # --- Living: health -- unpredictable medical costs smoothed; the premium a discrete monthly bill.
-        _expense( 'Medical Expenses', 'medical-expenses', health, 10, '7200', medical, yearly, smooth, mo_yr ),
-        _expense( 'Health Insurance', 'health-insurance', health, 20, '2200', medical, monthly, discrete, mo_yr ),
+        _expense( 'Medical Expenses', 'medical-expenses', health, 10, '4500', medical, yearly, smooth, mo_yr ),
+        _expense( 'Health Insurance', 'health-insurance', health, 20, '550', medical, monthly, discrete, mo_yr ),
         # --- Living: miscellaneous -- household costs not tied to a single dwelling; discrete annual bills.
         _expense( 'Umbrella Insurance', 'umbrella-insurance', misc, 10, '500', living, yearly, discrete, mo_yr ),
         _expense( 'Professional Fees', 'professional-fees', misc, 20, '500', living, yearly, discrete, mo_yr ),
@@ -195,35 +195,35 @@ def _general_expense_catalog() -> ExpenseCatalog:
         # for a rental. `applies_to` scopes each row: owned dwellings, occupied (owned plus a tenant's
         # rented home, for utilities), a rented home alone (rent), or an owned rental alone (management).
         # --- Property: taxes & insurance -- tax/insurance let the user pick monthly (escrow) or yearly.
-        _expense( 'Property Tax', 'property-tax', taxes, 10, '6000', salt, yearly, discrete, mo_yr, applies_to = owned ),
+        _expense( 'Property Tax', 'property-tax', taxes, 10, '5500', salt, yearly, discrete, mo_yr, applies_to = owned ),
         _expense( 'Property Insurance', 'property-insurance', taxes, 20, '2500', living, yearly, discrete, mo_yr, applies_to = owned ),
-        _expense( 'HOA / Coop Fee', 'hoa-fee', taxes, 30, '300', living, monthly, discrete, fixed, applies_to = owned ),
+        _expense( 'HOA / Coop Fee', 'hoa-fee', taxes, 30, '0', living, monthly, discrete, fixed, applies_to = owned ),
         # --- Property: utilities & services -- fixed monthly bills; utilities also seed a rented home.
-        _expense( 'Water / Wastewater', 'water', utilities, 10, '200', living, monthly, discrete, fixed, applies_to = occupied ),
-        _expense( 'Electric', 'electric', utilities, 20, '250', living, monthly, discrete, fixed, applies_to = occupied ),
+        _expense( 'Water / Wastewater', 'water', utilities, 10, '90', living, monthly, discrete, fixed, applies_to = occupied ),
+        _expense( 'Electric', 'electric', utilities, 20, '150', living, monthly, discrete, fixed, applies_to = occupied ),
         _expense( 'Gas Utility', 'gas-utility', utilities, 30, '80', living, monthly, discrete, fixed, applies_to = occupied ),
         _expense( 'Phone Service', 'phone-service', utilities, 40, '100', living, monthly, discrete, fixed, applies_to = occupied ),
-        _expense( 'Internet', 'internet', utilities, 50, '100', living, monthly, discrete, fixed, applies_to = occupied ),
+        _expense( 'Internet', 'internet', utilities, 50, '80', living, monthly, discrete, fixed, applies_to = occupied ),
         _expense( 'Property Management', 'property-management', utilities, 60, '240', rental_expense, monthly, discrete, fixed, applies_to = rental_only ),
         # --- Property: maintenance & repair -- ongoing upkeep, then the capital replacements (durables).
-        _expense( 'Maintenance / Repair', 'maintenance-repair', upkeep, 10, '200', living, monthly, smooth, mo_yr, applies_to = owned ),
+        _expense( 'Maintenance / Repair', 'maintenance-repair', upkeep, 10, '250', living, monthly, smooth, mo_yr, applies_to = owned ),
         _expense( 'Pest Control', 'pest-control', upkeep, 20, '110', living, quarterly, discrete, fixed, applies_to = owned ),
-        _expense( 'Pool Maintenance', 'pool-maintenance', upkeep, 30, '125', living, monthly, discrete, fixed, applies_to = owned ),
-        _expense( 'Lawn Maintenance', 'lawn-maintenance', upkeep, 40, '125', living, monthly, discrete, fixed, applies_to = owned ),
+        _expense( 'Pool Maintenance', 'pool-maintenance', upkeep, 30, '0', living, monthly, discrete, fixed, applies_to = owned ),
+        _expense( 'Lawn Maintenance', 'lawn-maintenance', upkeep, 40, '0', living, monthly, discrete, fixed, applies_to = owned ),
         _durable( 'Lawn Tools', 'lawn-tools', upkeep, 50, 4, '500', 20, living, applies_to = owned ),
         _expense( 'A/C Cost', 'ac-cost', upkeep, 60, '9000', living, every_15y, smooth, n_years, applies_to = owned ),
         _durable( 'Appliance', 'appliance', upkeep, 70, 3, '2900', 15, living, applies_to = owned ),
         _expense( 'Roof Cost', 'roof-cost', upkeep, 80, '15000', living, every_20y, smooth, n_years, applies_to = owned ),
         # --- Property: rent -- a tenant's rented home only.
-        _expense( 'Rent', 'rent', rent_cat, 10, '1500', living, monthly, discrete, fixed, applies_to = rented_only ),
+        _expense( 'Rent', 'rent', rent_cat, 10, '1600', living, monthly, discrete, fixed, applies_to = rented_only ),
         # Vehicle running costs seed the per-car running costs of the Vehicle Expenses step (applied at
         # materialization to each owned vehicle over its window); the car purchase/financing itself is
         # entered per vehicle, not a catalog item. Insurance is a discrete bill; the rest are smoothed
         # (fuel continuous, maintenance/repair unpredictable).
-        _expense( 'Auto Insurance', 'auto-insurance', vehicle, 10, '750', living, semiannual, discrete, mo_yr ),
+        _expense( 'Auto Insurance', 'auto-insurance', vehicle, 10, '850', living, semiannual, discrete, mo_yr ),
         _expense( 'Auto Maintenance', 'auto-maintenance', vehicle, 20, '300', living, yearly, smooth, mo_yr ),
         _expense( 'Auto Repair', 'auto-repair', vehicle, 30, '1000', living, yearly, smooth, mo_yr ),
-        _expense( 'Gasoline', 'gasoline', vehicle, 40, '20', living, weekly, smooth, wk_mo ),
+        _expense( 'Gasoline', 'gasoline', vehicle, 40, '30', living, weekly, smooth, wk_mo ),
     ] )
 
 

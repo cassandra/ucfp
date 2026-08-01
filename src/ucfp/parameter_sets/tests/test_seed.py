@@ -97,7 +97,7 @@ class LoadPathTest( TestCase ):
         # accidental change to the seeded set is caught.
         self.assertEqual( len( catalog.expenses ), 41 )
         food = next( expense for expense in catalog.expenses if expense.name == 'Food' )
-        self.assertEqual( food.default_amount, Decimal( '150' ) )
+        self.assertEqual( food.default_amount, Decimal( '170' ) )
         # Two groupings place a row: its applicability class (which surface) and its visual category
         # (the ordered section), with an explicit item order within the category.
         self.assertEqual( food.expense_class, ExpenseClass.LIVING )

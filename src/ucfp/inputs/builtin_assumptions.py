@@ -26,6 +26,6 @@ class BuiltinAssumptions:
 
 
 BUILTIN_ASSUMPTIONS = BuiltinAssumptions(
-    credit_card_apr      = Rate.percent( Decimal( 18 ) ),
-    auto_loan_apr        = Rate.percent( Decimal( 6 ) ),
+    credit_card_apr      = Rate.percent( Decimal( 21 ) ),
+    auto_loan_apr        = Rate.percent( Decimal( '7.5' ) ),
     auto_loan_term_years = 5 )
