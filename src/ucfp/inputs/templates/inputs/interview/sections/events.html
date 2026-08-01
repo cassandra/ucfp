@@ -6,5 +6,5 @@ section's Next form (a nested form would be invalid HTML).
 {% endcomment %}
 <p class="text-muted">Add the plans and one-off events you expect -- transfers, windfalls, gifts, and
   the like. Each becomes an input the forecast reads.</p>
-{% include 'inputs/interview/sections/events_list.html' with events=form.events section=form.section %}
-{% include 'inputs/interview/sections/events_menu.html' with menu=form.menu section=form.section %}
+{% include 'inputs/interview/sections/events_list.html' with events=form.events %}
+{% include 'inputs/interview/sections/events_menu.html' with menu=form.menu %}

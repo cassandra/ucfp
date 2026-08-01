@@ -46,6 +46,7 @@ from .state import (
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .contributions import ContributionsForm
+from .conversions import ConversionsForm
 from .credit_card import CreditCardPlanForm
 from .external_factors import ExternalFactorsForm
 from .cash_plan import DrawdownForm
@@ -1087,6 +1088,27 @@ class ContributionsView( SelfSavingPaneView ):
         return len( plans.contributions ) != before            # a contribution was added or removed
 
 
+class ConversionsView( SelfSavingPaneView ):
+    """`/inputs/interview/tax-planning/conversions/edit/` -- the Roth conversions table of the Tax
+    Planning section. Its row set can change, so a save that adds or removes a conversion re-renders the
+    pane; a pure value edit stays silent. It writes only the Plans."""
+
+    template     = 'inputs/interview/sections/conversions_pane.html'
+    target       = 'conversions'
+    context_name = 'conversions_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return ConversionsForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        before = len( plans.roth_conversions )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return len( plans.roth_conversions ) != before         # a conversion was added or removed
+
+
 class CreditCardView( SelfSavingPaneView ):
     """`/inputs/interview/debt/cards/` -- the per-card paydown calculators of the Debt plan section. It
     persists the card plans; the card set is fixed by the declared debts (the mode switch and the live
@@ -1256,20 +1278,20 @@ class EventAddView( View ):
     _FORM_TEMPLATE = 'inputs/interview/sections/event_form.html'
     _LIST_TEMPLATE = 'inputs/interview/sections/events_list.html'
 
-    def get( self, request, section, kind ):
+    def get( self, request, kind ):
         profile, _ = _current_profile_and_plans( request )
         if request.GET.get( 'collapse' ):
-            return antinode.response( main_content = self._menu( request, profile, section ) )
+            return antinode.response( main_content = self._menu( request, profile ) )
         form = EventForm( event_type = self._event_type( kind ), profile = profile )
-        return antinode.response( main_content = self._form( request, section, kind, form ) )
+        return antinode.response( main_content = self._form( request, kind, form ) )
 
-    def post( self, request, section, kind ):
+    def post( self, request, kind ):
         organization = request.organization
         profile, plans = _current_profile_and_plans( request )
         event_type = self._event_type( kind )
         form = EventForm( request.POST, event_type = event_type, profile = profile )
         if not form.is_valid():
-            return antinode.response( main_content = self._form( request, section, kind, form ) )
+            return antinode.response( main_content = self._form( request, kind, form ) )
         original = profile
         profile, event = event_type.provision( form.build_event(), profile )
         profile, plans = event_type.cascade_on_add( event, profile, plans )
@@ -1279,8 +1301,8 @@ class EventAddView( View ):
                 save_profile( organization, profile )
             save_plans( current_plans_record( request ), plans )
         return antinode.response(
-            main_content = self._menu( request, profile, section ),
-            replace_map  = { 'events-list': self._list( request, profile, plans, section ) } )
+            main_content = self._menu( request, profile ),
+            replace_map  = { 'events-list': self._list( request, profile, plans ) } )
 
     @staticmethod
     def _event_type( kind ):
@@ -1289,19 +1311,17 @@ class EventAddView( View ):
             raise Http404( f'No event kind {kind!r}.' )
         return handler_for( resolved )
 
-    def _menu( self, request, profile, section ):
+    def _menu( self, request, profile ):
         return render_to_string(
-            self._MENU_TEMPLATE, { 'menu': menu_context( profile, section ), 'section': section },
-            request = request )
+            self._MENU_TEMPLATE, { 'menu': menu_context( profile ) }, request = request )
 
-    def _form( self, request, section, kind, form ):
+    def _form( self, request, kind, form ):
         return render_to_string(
-            self._FORM_TEMPLATE, { 'form': form, 'kind': kind, 'section': section }, request = request )
+            self._FORM_TEMPLATE, { 'form': form, 'kind': kind }, request = request )
 
-    def _list( self, request, profile, plans, section ):
+    def _list( self, request, profile, plans ):
         return render_to_string(
-            self._LIST_TEMPLATE, { 'events': events_context( profile, plans, section ), 'section': section },
-            request = request )
+            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) }, request = request )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -1311,7 +1331,7 @@ class EventDeleteView( View ):
 
     _LIST_TEMPLATE = 'inputs/interview/sections/events_list.html'
 
-    def post( self, request, section, index ):
+    def post( self, request, index ):
         organization = request.organization
         profile, plans = _current_profile_and_plans( request )
         events = list( plans.events )
@@ -1327,5 +1347,4 @@ class EventDeleteView( View ):
                     save_profile( organization, profile )
                 save_plans( current_plans_record( request ), plans )
         return antinode.response( main_content = render_to_string(
-            self._LIST_TEMPLATE, { 'events': events_context( profile, plans, section ), 'section': section },
-            request = request ) )
+            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) }, request = request ) )

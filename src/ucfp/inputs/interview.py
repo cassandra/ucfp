@@ -28,10 +28,11 @@ from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, Jurisdict
 from ucfp.jurisdiction.labels import local_label
 
 from .contributions import ContributionsForm
+from .conversions import ConversionsForm
 from .credit_card import CreditCardPlanForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
-from .events import EventsForm, TaxPlanningForm
+from .events import EventsForm
 from .external_factors import ExternalFactorsSectionForm
 from .cash_plan import CashPlanSectionForm
 from .transaction_costs import TransactionCostsSectionForm
@@ -509,6 +510,27 @@ class RetirementSectionForm:
         return profile, plans
 
 
+class TaxPlanningSectionForm:
+    """§ Tax Planning L0 -- the pane. A no-op section form: the Roth conversions self-save through
+    `ConversionsView`, so Next just advances. It exposes the conversions form (scheduled withdrawals join
+    it with the withdrawal work); it reads the pre-tax accounts from the Profile and writes only the
+    Plans."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def conversions_form( self ):
+        return ConversionsForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
 class DebtsSectionForm:
     """§ Debts L0 -- the Debts pane. A no-op section form: the debts are edited and saved through
     `DebtsView`, so Next just advances. It exposes the one debts list -- every debt, mortgages
@@ -691,7 +713,7 @@ SECTIONS = [
     # Advanced, optional tax moves -- Roth conversions (scheduled withdrawals arrive with the recurrence
     # work). The deliberate-tax-lever counterpart to Cash management's automatic funding, and distinct
     # from the tax Assumptions (the tax environment). Shares the events machinery, scoped to its groups.
-    Section( 'tax-planning', 'Tax Planning', ( Aggregate.PLANS, ), TaxPlanningForm,
+    Section( 'tax-planning', 'Tax Planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
              outer_template = 'inputs/interview/sections/tax_planning.html' ),
     # One-off money moves and life events (transfers, a property sale, receipts, payments, death). Last
     # in the Plans flow -- a catch-all that can reference any entity declared above.

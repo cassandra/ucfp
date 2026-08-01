@@ -14,7 +14,6 @@ creates an implied entity -- a Roth conversion's Roth account -- and *cascade* a
 inputs -- a home sale ending its mortgage.)
 """
 from dataclasses import dataclass, replace
-from decimal import Decimal
 from typing import Callable, Optional
 
 from django import forms
@@ -22,11 +21,10 @@ from django import forms
 from common.recurrence import OneTime
 from common.schedule import Schedule
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
     ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
-from ucfp.inputs.profile.schemas import AssetProfile
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.widgets import IsoDateInput
@@ -43,29 +41,13 @@ LOAN_ROLE      = 'loan'
 CARD_ROLE      = 'card'
 
 # Menu groups, in display order.
-_ACCOUNTS_GROUP      = 'Accounts'
-_PROPERTY_GROUP      = 'Property'
-_MONEY_IN_GROUP      = 'Money in'
-_MONEY_OUT_GROUP     = 'Money out'
-_HOUSEHOLD_GROUP     = 'Household'
-_TAX_PLANNING_GROUP  = 'Tax Planning'
-_GROUP_ORDER         = ( _ACCOUNTS_GROUP, _PROPERTY_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP,
-                         _HOUSEHOLD_GROUP, _TAX_PLANNING_GROUP )
-
-# Events are split across two Plans sections by group: Tax Planning hosts the deliberate tax moves (Roth
-# conversions -- and, later, scheduled withdrawals); Money movements hosts everything else (the bespoke
-# one-offs). The two never render together (separate interview steps), so they share the pane's DOM ids
-# and differ only in which groups their menu offers and which events their list shows.
-MONEY_MOVEMENTS_SECTION = 'events'
-TAX_PLANNING_SECTION    = 'tax-planning'
-
-
-def _groups_for( section : str ) -> tuple:
-    """The event groups a section shows -- just Tax Planning for the tax-planning step, everything else
-    for Money movements."""
-    if section == TAX_PLANNING_SECTION:
-        return ( _TAX_PLANNING_GROUP, )
-    return tuple( group for group in _GROUP_ORDER if group != _TAX_PLANNING_GROUP )
+_ACCOUNTS_GROUP  = 'Accounts'
+_PROPERTY_GROUP  = 'Property'
+_MONEY_IN_GROUP  = 'Money in'
+_MONEY_OUT_GROUP = 'Money out'
+_HOUSEHOLD_GROUP = 'Household'
+_GROUP_ORDER     = ( _ACCOUNTS_GROUP, _PROPERTY_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP,
+                     _HOUSEHOLD_GROUP )
 
 
 @dataclass( frozen = True )
@@ -101,61 +83,6 @@ def _mortgages( profile, property_handle : str ) -> list:
     """The handles of the debts secured by `property_handle` -- the mortgages a sale pays off. A
     property may carry more than one (e.g. a first and a second), so this is a list, not a flag."""
     return [ debt.handle for debt in profile.debts if debt.secured_asset == property_handle ]
-
-
-def _pretax_accounts( profile ) -> list:
-    return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.asset_class is AssetClass.PRETAX_RETIREMENT ]
-
-
-# The handle minted for a Roth account a conversion provisions for an owner who has none.
-_ROTH_HANDLE_PREFIX = 'roth-'
-
-
-def _owner_of( profile, handle : str ) -> Optional[ str ]:
-    asset = next( ( asset for asset in profile.assets if asset.handle == handle ), None )
-    return asset.owner_handle if asset is not None else None
-
-
-def _subject_name( profile, handle : str ) -> str:
-    subject = next( ( subject for subject in profile.subjects if subject.handle == handle ), None )
-    return subject.name if subject is not None else handle
-
-
-def _existing_roth_handle( profile, owner_handle : str ) -> Optional[ str ]:
-    """The handle of a Roth account the owner already holds -- the first found, since a conversion
-    needs no choice among several -- or None if they hold none."""
-    roth = next( ( asset for asset in profile.assets
-                   if asset.asset_class is AssetClass.ROTH and asset.owner_handle == owner_handle ),
-                 None )
-    return roth.handle if roth is not None else None
-
-
-def _minted_roth_handle( profile, owner_handle : str ) -> str:
-    """A fresh handle for a newly-provisioned Roth, unique among the profile's holdings (not
-    assuming the owner's natural handle is free)."""
-    taken  = { asset.handle for asset in profile.assets }
-    base   = f'{_ROTH_HANDLE_PREFIX}{owner_handle}'
-    handle = base
-    suffix = 2
-    while handle in taken:
-        handle = f'{base}-{suffix}'
-        suffix += 1
-    return handle
-
-
-def _ensure_roth_account( profile, owner_handle : str ):
-    """The Roth account a conversion for `owner_handle` lands in -- the owner's existing one if they
-    have any, otherwise a new empty Roth provisioned for them (the conversion implies it exists).
-    Returns the (possibly updated) profile and the Roth's handle."""
-    existing = _existing_roth_handle( profile, owner_handle )
-    if existing is not None:
-        return profile, existing
-    handle  = _minted_roth_handle( profile, owner_handle )
-    account = AssetProfile(
-        handle = handle, name = f'{_subject_name( profile, owner_handle )} Roth',
-        asset_class = AssetClass.ROTH, opening_value = Decimal( '0' ), owner_handle = owner_handle )
-    return replace( profile, assets = list( profile.assets ) + [ account ] ), handle
 
 
 def _names( profile ) -> dict:
@@ -269,31 +196,6 @@ class TransferEvent( EventType ):
         into.scheduled_events.append( ScheduledTransfer(
             event_date = event.date, source = event.selections[ SOURCE_ROLE ],
             target = event.selections[ TARGET_ROLE ], amount = event.amount ) )
-
-
-class RothConversionEvent( EventType ):
-    kind  = EventKind.ROTH_CONVERSION
-    group = _TAX_PLANNING_GROUP                        # a tax move -- lives in the Tax Planning section
-
-    def references( self, profile ) -> list:
-        return [ ReferenceSpec( SOURCE_ROLE, 'From pre-tax account', _pretax_accounts ) ]
-
-    def provision( self, event : PlanEvent, profile ):
-        """The conversion lands in the source owner's Roth -- found or created. The resolved Roth
-        handle is recorded as the target selection, so materialization just reads it."""
-        owner = _owner_of( profile, event.selections[ SOURCE_ROLE ] )
-        profile, roth_handle = _ensure_roth_account( profile, owner )
-        return profile, replace(
-            event, selections = { **event.selections, TARGET_ROLE: roth_handle } )
-
-    def summary( self, event : PlanEvent, profile ) -> str:
-        source = _names( profile ).get( event.selections.get( SOURCE_ROLE ) )
-        return f'Roth conversion of {_money( event.amount )} from {source}'
-
-    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.scheduled_events.append( ScheduledRealization(
-            event_date = event.date, holding = event.selections[ SOURCE_ROLE ],
-            amount = event.amount, destination = event.selections[ TARGET_ROLE ] ) )
 
 
 class SellPropertyEvent( EventType ):
@@ -482,7 +384,7 @@ class DeathEvent( EventType ):
 # --- Registry -------------------------------------------------------------
 
 _EVENT_TYPES = (
-    TransferEvent(), RothConversionEvent(), SellPropertyEvent(), LoanPayoffEvent(),
+    TransferEvent(), SellPropertyEvent(), LoanPayoffEvent(),
     CardPayoffEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(), GeneralPaymentEvent(),
     CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
 
@@ -493,11 +395,9 @@ def handler_for( kind : EventKind ) -> EventType:
     return _BY_KIND[ kind ]
 
 
-def offerable_menu( profile, groups ) -> list:
-    """The offerable kinds within `groups`, grouped in display order -- (group, [types]) for each
-    non-empty group."""
-    offerable = [ event_type for event_type in _EVENT_TYPES
-                  if event_type.group in groups and event_type.offerable( profile ) ]
+def offerable_menu( profile ) -> list:
+    """The offerable kinds, grouped in display order -- (group, [types]) for each non-empty group."""
+    offerable = [ event_type for event_type in _EVENT_TYPES if event_type.offerable( profile ) ]
     grouped   = list()
     for group in _GROUP_ORDER:
         members = [ event_type for event_type in offerable if event_type.group == group ]
@@ -519,23 +419,19 @@ def event_contributions( profile, plans, subjects : dict ) -> EventContributions
 
 # --- View/template context -------------------------------------------------
 
-def menu_context( profile, section ) -> list:
-    """The add menu for a section's pane: each group's offerable kinds as `{kind slug, label}`, limited
-    to the groups that section shows."""
+def menu_context( profile ) -> list:
+    """The add menu for the templates: each group's offerable kinds as `{kind slug, label}`."""
     return [ { 'group': group,
                'types': [ { 'kind': event_type.kind.name.lower(), 'label': event_type.label }
                           for event_type in types ] }
-             for group, types in offerable_menu( profile, _groups_for( section ) ) ]
+             for group, types in offerable_menu( profile ) ]
 
 
-def events_context( profile, plans, section ) -> list:
-    """A section's events list for the templates: each event's row index (into the whole `plans.events`,
-    so deletes still address the right one) and human summary -- filtered to the section's groups."""
-    groups = _groups_for( section )
+def events_context( profile, plans ) -> list:
+    """The events list for the templates: each event's row index and human summary."""
     events = plans.events if plans is not None else list()
     return [ { 'index': index, 'summary': handler_for( event.kind ).summary( event, profile ) }
-             for index, event in enumerate( events )
-             if handler_for( event.kind ).group in groups ]
+             for index, event in enumerate( events ) ]
 
 
 # --- Forms ----------------------------------------------------------------
@@ -590,12 +486,9 @@ class EventForm( forms.Form ):
 
 
 class EventsForm:
-    """L0 -- one events section's pane. A no-op section form: events are added and removed through the
-    `EventAddView`/`EventDeleteView`, so advancing does nothing but move on. It exposes the section's
-    events and offerable kinds (filtered to the section's groups) and its `section` key for the pane's
-    add/delete URLs. Money movements is this base; Tax Planning is `TaxPlanningForm` below."""
-
-    _SECTION = MONEY_MOVEMENTS_SECTION
+    """§7 L0 -- the plan's events. A no-op section form: events are added and removed through the
+    `EventAddView`/`EventDeleteView`, so advancing does nothing but move on. It exposes the current
+    events and the offerable kinds for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -605,24 +498,12 @@ class EventsForm:
         return True
 
     @property
-    def section( self ) -> str:
-        return self._SECTION
-
-    @property
     def events( self ) -> list:
-        return events_context( self._profile, self._plans, self._SECTION )
+        return events_context( self._profile, self._plans )
 
     @property
     def menu( self ) -> list:
-        return menu_context( self._profile, self._SECTION )
+        return menu_context( self._profile )
 
     def apply( self, profile, plans ):
         return profile, plans
-
-
-class TaxPlanningForm( EventsForm ):
-    """L0 -- the Tax Planning section's pane. The events section for the deliberate tax moves (Roth
-    conversions; scheduled withdrawals arrive with the recurrence work). Same machinery as
-    `EventsForm`, scoped to the Tax Planning groups."""
-
-    _SECTION = TAX_PLANNING_SECTION

@@ -712,11 +712,37 @@ class Forecast:
         """Resolve the scheduled events occurring in this interval into PeriodEvents, binding
         their holding handles to the running accounts (and via the chart the cash hub and the
         equity accounts an external receipt/disbursement moves). Order is preserved, so
-        same-interval events apply as authored."""
+        same-interval events apply as authored. The recurring realizations (scheduled withdrawals,
+        Roth conversion ladders) expand into per-interval realizations appended after them."""
         chart = bookkeeper.chart
-        return [
+        scheduled = [
             event.to_period_event( self._baseline.holding_by_handle, chart )
             for event in self._parameters.events if event.in_span( span ) ]
+        return scheduled + self._recurring_realization_events_for( span, chart )
+
+    def _recurring_realization_events_for( self, span : DateSpan, chart : Chart ) -> list[ PeriodEvent ]:
+        """Expand the recurring realizations active this interval into realization PeriodEvents: the
+        cadence's occurrences in the interval x the per-occurrence amount, inflated from the forecast
+        start, realized from the holding (to cash, or to the destination for a conversion). Mirrors
+        `_expense_item_lines_for`, but emits an asset realization rather than an expense line -- so the
+        realize clamp, the retirement tax, the penalty, and RMDs all apply exactly as for a one-off."""
+        events = list()
+        for recurring in self._parameters.recurring_realizations:
+            clipped = self._clip_to_window( span, recurring.window )
+            if clipped is None:
+                continue
+            start, end = clipped
+            since = ( recurring.window.start if recurring.window.start is not None
+                      else self._parameters.start_date )
+            occurrences = recurring.cadence.count_in( start = start, end = end, since = since )
+            if occurrences == 0:
+                continue
+            factor = self._inflation_factor( span.start_date.year )
+            realization = ScheduledRealization(
+                event_date = start, holding = recurring.holding,
+                amount = occurrences * recurring.amount * factor, destination = recurring.destination )
+            events.append( realization.to_period_event( self._baseline.holding_by_handle, chart ) )
+        return events
 
     def _clip_to_window( self, span : DateSpan, window : DateWindow ) -> Optional[ tuple[ date, date ] ]:
         """The inclusive `[start, end]` overlap of `span` and `window`, or None if they do

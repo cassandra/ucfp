@@ -129,6 +129,24 @@ class Contribution:
     end_age: Optional[ int ] = None
 
 
+# --- Tax planning ---------------------------------------------------------
+
+@dataclass( frozen = True )
+class RothConversion:
+    """A planned Roth conversion of pre-tax retirement money to the source owner's Roth account. One-time
+    (a single `start_age`, no `interval`) or recurring (an `interval` cadence over the owner's age window
+    `start_age`/`end_age` -- no start = from now, no end = indefinitely). `amount` is the per-occurrence
+    conversion in today's dollars, inflation-indexed. `source_handle` is the pre-tax account converted
+    from; the Roth target is that owner's Roth (always present, so not restated). `handle` is a stable
+    per-row identity (minted `conversion-N`)."""
+    handle: str
+    source_handle: str
+    amount: Decimal
+    interval: Optional[ Duration ] = None
+    start_age: Optional[ int ] = None
+    end_age: Optional[ int ] = None
+
+
 # --- Loan paydown ---------------------------------------------------------
 
 @dataclass( frozen = True )
@@ -274,6 +292,8 @@ class Plans:
     property_expenses: list[ PropertyExpense ] = field( default_factory = list )
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
+    # Tax planning: Roth conversions (pre-tax -> Roth), one-time or a recurring ladder
+    roth_conversions: list[ RothConversion ] = field( default_factory = list )
     # Loan repayment (rate/term per amortizing debt) and extra-principal paydown
     loan_repayments: list[ LoanRepayment ] = field( default_factory = list )
     prepayments: list[ LoanPrepayment ] = field( default_factory = list )

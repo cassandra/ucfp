@@ -28,8 +28,8 @@ from ucfp.forecast.economic_outlook import EconomicOutlook
 from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
     ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
-    RetirementContribution, ScheduledExternalDisbursement, Subject, SubsidizedHealthCoverage,
-    TransactionCosts, WindowedAmount )
+    RecurringRealization, RetirementContribution, ScheduledExternalDisbursement,
+    ScheduledRealization, Subject, SubsidizedHealthCoverage, TransactionCosts, WindowedAmount )
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
@@ -86,6 +86,7 @@ def materialize(
         profile, plans, subjects_by_handle, events.property_sales )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
     vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
+    conversion_events, conversion_recurring = _roth_conversions( profile, plans )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -104,7 +105,8 @@ def materialize(
         expense_streams  = recurring_streams + expense_streams + vehicle_streams,
         loans            = _loans( profile, plans ),
         contributions    = _contributions( profile, plans ),
-        events           = events.scheduled_events + card_events,
+        recurring_realizations = conversion_recurring,
+        events           = events.scheduled_events + card_events + conversion_events,
         cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
@@ -626,6 +628,37 @@ def _contributions( profile : Profile, plans : Plans ) -> list[ RetirementContri
             account = contribution.account_handle, amount = annual, source = contribution.source,
             window = _age_window( contribution.start_age, contribution.end_age, birthdate ) ) )
     return contributions
+
+
+def _roth_conversions( profile : Profile, plans : Plans ) -> tuple[ list, list ]:
+    """The Plans' Roth conversions as (single-date realizations, recurring realizations). Each converts a
+    pre-tax account to its owner's Roth (always present): a one-time conversion (no `interval`) is a single
+    `ScheduledRealization` at the owner's `start_age`; a recurring one is a `RecurringRealization` over the
+    owner's age window, inflation-indexed. A conversion whose owner or Roth cannot be resolved is skipped."""
+    owner_birthdates = _owner_birthdates( profile )
+    owner_of         = { asset.handle : asset.owner_handle for asset in profile.assets }
+    handles          = { asset.handle for asset in profile.assets }
+    scheduled, recurring = list(), list()
+    for conversion in plans.roth_conversions:
+        owner  = owner_of.get( conversion.source_handle )
+        target = f'roth-{owner}' if owner is not None else None
+        if target is None or target not in handles:
+            continue
+        birthdate = owner_birthdates.get( conversion.source_handle )
+        if conversion.interval is None:
+            on = ( _at_year( birthdate, conversion.start_age )
+                   if birthdate is not None and conversion.start_age is not None else None )
+            if on is not None:
+                scheduled.append( ScheduledRealization(
+                    event_date = on, holding = conversion.source_handle,
+                    amount = conversion.amount, destination = target ) )
+        else:
+            recurring.append( RecurringRealization(
+                holding = conversion.source_handle, amount = conversion.amount,
+                cadence = Recurrence( conversion.interval ),
+                window = _age_window( conversion.start_age, conversion.end_age, birthdate ),
+                destination = target ) )
+    return scheduled, recurring
 
 
 def _owner_birthdates( profile : Profile ) -> dict:
