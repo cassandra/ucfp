@@ -20,8 +20,9 @@ audit -- so a future month-vs-year regression fails loudly here:
   profile's year-end net worth matches across granularities to rounding -- including loan-bearing
   profiles -- the check that would have caught the expense-lumping defect this suite was born from.
 - **Outcomes hold to the materiality bar.** Depletion year is identical across granularities at
-  the null and growth tiers; at the funding/full tiers (real draws) it may differ by at most one
-  year, and refining the granularity converges (quarterly lies between annual and monthly).
+  the null tier (zero economics, so nothing compounds); once economic rates apply (the growth,
+  funding, and full tiers) a depletion landing near a year boundary may differ by at most one
+  year, and refining the granularity converges (quarterly agrees with monthly).
 
 What this suite deliberately does NOT assert as invariant -- legitimate may-drift documented in
 `FORECAST_ENGINE.md`: draw/balance-driven income (ordinary withdrawals/RMDs, realized gains,
@@ -43,8 +44,8 @@ _PURE_STREAM_INCOME  = ( IncomeTaxClass.WAGES, IncomeTaxClass.SOCIAL_SECURITY, I
 _PURE_STREAM_EXPENSE = ( ExpenseTaxClass.LIVING, )
 
 # Tiers by how much legitimate divergence they admit (see granularity_profiles).
-_LOW_TIERS     = ( 'null', 'growth' )     # outcomes must be identical across granularities
-_FUNDING_TIERS = ( 'funding', 'full' )    # real draws: depletion year may differ by <= 1
+_EXACT_TIER     = ( 'null', )                       # no economics: depletion identical across granularities
+_DRIFTING_TIERS = ( 'growth', 'funding', 'full' )   # rates compound: depletion may differ by <= 1, converging
 
 _REL_TOL = Decimal( '1e-6' )              # rounding/quantization noise floor; real drift is >> this
 _ZERO    = Decimal( '0' )
@@ -171,11 +172,13 @@ class GranularityInvarianceTest( unittest.TestCase ):
                 continue
             continue
 
-    def test_depletion_year_identical_at_low_tiers( self ):
-        """At the null and growth tiers (no funding draws), the depletion outcome is identical
-        across every granularity, from either start -- the strongest form of the materiality bar."""
+    def test_depletion_year_identical_at_the_null_tier( self ):
+        """At the null tier (zero economics, so nothing compounds) the depletion outcome is identical
+        across every granularity, from either start -- the strongest form of the materiality bar. Once
+        rates compound (the growth tier and up) a boundary-straddling depletion may differ by one year;
+        that is checked separately."""
         for profile_name, build in PROFILES.items():
-            for tier_name in _LOW_TIERS:
+            for tier_name in _EXACT_TIER:
                 for start_name, start in STARTS.items():
                     comparison = compare( start( TIERS[ tier_name ]( build() ) ) )
                     years = { name : outcome.depletion_year
@@ -189,11 +192,12 @@ class GranularityInvarianceTest( unittest.TestCase ):
                 continue
             continue
 
-    def test_depletion_year_within_one_at_funding_tiers( self ):
-        """At the funding/full tiers, draw-frequency drift may move depletion by at most one year;
-        refining the granularity converges (quarterly agrees with monthly). Holds from either start."""
+    def test_depletion_year_within_one_once_rates_compound( self ):
+        """Once economic rates apply (the growth, funding, and full tiers), compounding-on-flows and
+        draw-frequency drift may move a boundary-straddling depletion by at most one year; refining the
+        granularity converges (quarterly agrees with monthly). Holds from either start."""
         for profile_name, build in PROFILES.items():
-            for tier_name in _FUNDING_TIERS:
+            for tier_name in _DRIFTING_TIERS:
                 for start_name, start in STARTS.items():
                     comparison = compare( start( TIERS[ tier_name ]( build() ) ) )
                     years = [ outcome.depletion_year for _figures, outcome in comparison.values()

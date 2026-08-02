@@ -78,10 +78,9 @@ class EconomicParameters:
             IncomeTaxClass.WAGES           : self.wage_growth,
             IncomeTaxClass.SOCIAL_SECURITY : self.social_security_cola,
             IncomeTaxClass.PENSION         : self.pension_cola,
-            # Generic ordinary income (other income, taxable receipts) has no dedicated rate yet, so it
-            # rides the pension COLA -- a placeholder pending a general-income growth rate, not a claim
-            # that other income tracks pensions.
-            IncomeTaxClass.ORDINARY        : self.pension_cola,
+            # Generic ordinary income (other income, taxable receipts) tracks general inflation, distinct
+            # from the pension COLA that PENSION now carries.
+            IncomeTaxClass.ORDINARY        : self.inflation,
             IncomeTaxClass.GROSS_RENTAL    : self.rental_increase,
         }.get( income_tax_class, ZERO_RATE )
 
