@@ -19,12 +19,13 @@ loss carryover to thread forward. AGI and the modified-AGI variants are surfaced
 `TaxFigures` on the assessment (see `figures.py`); NIIT uses `niit_magi`, the PTC uses
 `aca_magi`, and `irmaa_magi` is ready for the Scenario's IRMAA.
 
-A simplified state income tax rides alongside: a single flat rate (the engine's
-`state_income_tax_rate`, zero by default) applied to federal AGI, booked as its own
+A simplified state income tax rides alongside: a flat rate (the engine's `state_income_tax`
+policy, no tax by default) on federal AGI less the state's exemption of retirement income
+(taxable Social Security, pensions, and pre-tax withdrawals), booked as its own
 `STATE_INCOME_TAX` charge. It reads AGI but feeds nothing back -- not SALT, not any federal
-figure -- so it stays an isolated leaf. Flat means it is not projected, so it is an engine
-argument rather than a `TaxParameters` field. This is not a model of any state's real tax
-(no brackets, deductions, or credits); see `subdivision_tax.py`.
+figure -- so it stays an isolated leaf. Flat and unprojected, so it is an engine argument
+rather than a `TaxParameters` field. This is not a model of any state's real tax (no brackets,
+real deductions, or credits); see `subdivision_tax.py`.
 
 The stack, bottom to top: ordinary income at ordinary brackets; then the §1250 (25%)
 and collectibles (28%) maximum-rate long-term gains, each taxed at ordinary rates
@@ -60,7 +61,6 @@ from decimal import Decimal
 from typing import Iterator, NamedTuple, Optional
 
 from common.date_span import DateSpan
-from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.jurisdiction.brackets import BracketTable
@@ -84,6 +84,7 @@ from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
 from .filing import resolve_filing_status
 from .parameters import StandardDeduction, TaxParameters
+from .subdivision_tax import StateIncomeTax
 from .state import CapitalLossCarryover, PassiveLossCarryover, TaxState
 
 _ZERO        = Decimal( '0' )
@@ -138,11 +139,12 @@ class USFederalTaxEngine( TaxEngine ):
     """Assesses US federal income tax for one fiscal year against the parameters it
     is constructed with."""
 
-    def __init__( self, parameters : TaxParameters, state_income_tax_rate : Rate = ZERO_RATE ):
-        self._parameters            = parameters
-        # A constructor argument, not a `TaxParameters` field: never COLA-indexed, so it is the same
-        # for every projected year. ZERO_RATE for a no-income-tax state, which the charge filter drops.
-        self._state_income_tax_rate = state_income_tax_rate
+    def __init__( self, parameters : TaxParameters,
+                  state_income_tax : StateIncomeTax = StateIncomeTax() ):
+        self._parameters       = parameters
+        # A constructor argument, not a `TaxParameters` field: the flat state surcharge is never
+        # COLA-indexed, so it is the same for every projected year. Default is no state tax.
+        self._state_income_tax = state_income_tax
 
     def assess( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
                 opening_tax_state : Optional[ TaxState ] ) -> TaxAssessment:
@@ -239,7 +241,7 @@ class USFederalTaxEngine( TaxEngine ):
         payroll_tax = self._payroll_tax( status, fiscal_window )
         premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.health_enrollment )
 
-        state_income_tax = self._state_income_tax_rate.change_on( agi )
+        state_income_tax = self._state_income_tax_charge( fiscal_window, agi, taxable_ss )
 
         # Income tax splits into its rate layers, each its own account; payroll tax and NIIT stand
         # apart. The refundable premium credit offsets the ordinary income tax (its natural home).
@@ -603,3 +605,15 @@ class USFederalTaxEngine( TaxEngine ):
         surtax   = rules.additional_medicare_rate * max(
             _ZERO, total_wages - rules.additional_medicare_thresholds[ status ] )
         return social_security + medicare + surtax
+
+    def _state_income_tax_charge(
+            self, fiscal_window : FiscalWindowView, agi : Decimal, taxable_ss : Decimal ) -> Decimal:
+        """The simplified state income tax: the flat rate on federal AGI, less the state's exemption of
+        retirement income -- a share of taxable Social Security and of pension + pre-tax
+        retirement-distribution income (most states exempt Social Security, and several exempt pensions
+        and retirement-account withdrawals). Reads AGI but feeds nothing back."""
+        policy     = self._state_income_tax
+        retirement = ( fiscal_window.income( IncomeTaxClass.PENSION )
+                       + fiscal_window.income( IncomeTaxClass.RETIREMENT_DISTRIBUTION ) )
+        exempt     = policy.social_security_exempt * taxable_ss + policy.retirement_exempt * retirement
+        return policy.rate.change_on( max( _ZERO, agi - exempt ) )

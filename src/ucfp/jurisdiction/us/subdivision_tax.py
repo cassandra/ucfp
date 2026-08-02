@@ -11,10 +11,24 @@ chosen to make the forecast *somewhat* more accurate, not to reproduce any state
 are plain data: adjust a number here without touching structure. Named `subdivision_tax` (not
 `state`) because `us/state.py` already holds the engine's carryforward tax *state*.
 """
+from dataclasses import dataclass
 from decimal import Decimal
 
 from common.labeled_enum import LabeledEnum
-from common.rate import Rate
+from common.rate import Rate, ZERO_RATE
+
+
+@dataclass( frozen = True )
+class StateIncomeTax:
+    """A household's state income-tax policy: a flat `rate` on federal AGI, less the state's exemption
+    of retirement income. `social_security_exempt` and `retirement_exempt` are the fractions (0..1) of
+    taxable Social Security and of pension + pre-tax retirement-distribution income the state removes
+    from the base -- 0 fully taxes it, 1 fully exempts it. The default is no state tax (zero rate, no
+    exemptions); a rate with zero exemptions is the earlier flat-on-AGI model."""
+
+    rate                   : Rate    = ZERO_RATE
+    social_security_exempt : Decimal = Decimal( '0' )
+    retirement_exempt      : Decimal = Decimal( '0' )
 
 
 class USState( LabeledEnum ):

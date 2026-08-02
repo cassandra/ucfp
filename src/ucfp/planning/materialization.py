@@ -33,6 +33,7 @@ from ucfp.forecast.parameters import (
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.us.subdivision_tax import StateIncomeTax
 from ucfp.planning.social_security import GovernmentPensionMember, realized_government_pensions
 
 from ucfp.parameter_sets.enums import PropertyContext, Realization
@@ -757,6 +758,6 @@ def _statute( profile : Profile, assumptions : Assumptions ):
     if assumptions.tax_projection is None:
         raise ValueError( 'Assumptions must carry a tax projection (from the default library).' )
     return StatuteProfile(
-        jurisdiction_type     = profile.jurisdiction_type,
-        tax_projection        = assumptions.tax_projection,
-        state_income_tax_rate = profile.state_income_tax_rate )
+        jurisdiction_type = profile.jurisdiction_type,
+        tax_projection    = assumptions.tax_projection,
+        state_income_tax  = StateIncomeTax( rate = profile.state_income_tax_rate ) )

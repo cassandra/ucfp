@@ -19,6 +19,7 @@ from common.rate import Rate, ZERO_RATE
 from .engine import TaxEngine
 from .enums import StatuteForecastType, JurisdictionType
 from .us.engine import USFederalTaxEngine
+from .us.subdivision_tax import StateIncomeTax
 from .us.parameters import BASE_YEAR, federal_2026
 
 
@@ -53,13 +54,14 @@ class StatuteProfile:
     sourced from the Assumptions). Composed at materialization from those two aggregates; the engine
     treats the result as a black box.
 
-    `state_income_tax_rate` is the simplified per-state surcharge -- a flat rate on federal AGI, a
-    Profile fact. Jurisdiction-neutral here (just a rate); which US state it came from stays on the
-    Profile. Zero means no state income tax."""
+    `state_income_tax` is the simplified per-state surcharge -- a flat rate on federal AGI less the
+    state's exemption of retirement income (Social Security, pensions, withdrawals), composed at
+    materialization from the Profile's chosen state and (overridable) rate. Its default is no state
+    income tax."""
 
-    jurisdiction_type     : JurisdictionType
-    tax_projection        : TaxProjection
-    state_income_tax_rate : Rate = ZERO_RATE
+    jurisdiction_type : JurisdictionType
+    tax_projection    : TaxProjection
+    state_income_tax  : StateIncomeTax = StateIncomeTax()
 
 
 class Statute:
@@ -81,12 +83,12 @@ class Statute:
         forecast_type = self._profile.tax_projection.forecast_type
         # The flat state surcharge is the same every year (not projected), so both branches pass it
         # through unchanged; only the federal parameters differ by projection.
-        state_rate    = self._profile.state_income_tax_rate
+        state_tax     = self._profile.state_income_tax
         if forecast_type is StatuteForecastType.CURRENT_LAW:
-            return USFederalTaxEngine( federal_2026(), state_rate )
+            return USFederalTaxEngine( federal_2026(), state_tax )
         if forecast_type is StatuteForecastType.COLA_INDEXED:
             return USFederalTaxEngine(
-                federal_2026().indexed( self._cola_factor( year ) ), state_rate )
+                federal_2026().indexed( self._cola_factor( year ) ), state_tax )
         raise NotImplementedError(
             f'Tax forecast {forecast_type} is not supported.' )
 
