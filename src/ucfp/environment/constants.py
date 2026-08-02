@@ -111,6 +111,12 @@ class AppConst:
     STATE_SELECT_CLASS   = 'js-state-select'  # the state <select> whose change fills the rate
     STATE_RATE_CLASS     = 'js-state-rate'    # the rate input (percent) filled from the chosen state
     STATE_RATE_DATA_ATTR = 'state-rate'       # a state option's representative rate (percent)
+    # Choosing a state also shows, read-only, which retirement income it exempts: each option carries
+    # the Social Security and pension/retirement status words, which the select's change (and load) writes
+    # into the exemptions readout beside the rate. Blank for the "other" option and no-income-tax states.
+    STATE_EXEMPTIONS_CLASS         = 'js-state-exemptions'  # the read-only exemptions readout
+    STATE_SS_STATUS_DATA_ATTR      = 'state-ss-status'          # an option's Social Security status word
+    STATE_RETIREMENT_STATUS_DATA_ATTR = 'state-retirement-status'   # an option's pension/retirement status word
 
     # A durable expense's count-entry calculator (Appliance, Lawn Tools, Computer Purchase). A toggle
     # reveals a panel of count/cost/cadence inputs; as they change, the client fills the amount

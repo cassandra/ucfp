@@ -240,3 +240,18 @@ def state_tax_policy( state : Optional[ USState ], rate : Rate ) -> StateIncomeT
     social_security_exempt, retirement_exempt = _RETIREMENT_EXEMPTION[ state ]
     return StateIncomeTax( rate = rate, social_security_exempt = social_security_exempt,
                            retirement_exempt = retirement_exempt )
+
+
+def exemption_words( state : USState ) -> tuple[ str, str ]:
+    """The state's Social Security and pension/retirement exemptions as read-only words
+    ('Exempt' / 'Partially exempt' / 'Taxed') -- for the People-section summary of what is applied."""
+    social_security, retirement = _RETIREMENT_EXEMPTION[ state ]
+    return ( _exemption_word( social_security ), _exemption_word( retirement ) )
+
+
+def _exemption_word( fraction : Decimal ) -> str:
+    if fraction >= 1:
+        return 'Exempt'
+    if fraction > 0:
+        return 'Partially exempt'
+    return 'Taxed'

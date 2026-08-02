@@ -10,7 +10,8 @@ from common.rate import Rate
 from ucfp.accounts.enums import IncomeTaxClass
 from ucfp.jurisdiction.us.engine import USFederalTaxEngine
 from ucfp.jurisdiction.us.parameters import federal_2026
-from ucfp.jurisdiction.us.subdivision_tax import StateIncomeTax, USState, state_tax_policy
+from ucfp.jurisdiction.us.subdivision_tax import (
+    StateIncomeTax, USState, exemption_words, state_tax_policy )
 
 _D = Decimal
 
@@ -106,6 +107,12 @@ class PerStatePolicyTest( unittest.TestCase ):
         # SS (20k) exempt, pension (30k) taxed -> 5% of 30k
         self.assertEqual(
             engine._state_income_tax_charge( window, _D( '50000' ), _D( '20000' ) ), _D( '1500.00' ) )
+
+    def test_exemption_words_read_out_the_status( self ):
+        # the read-only UI summary: fraction 1 -> Exempt, 0.5 -> Partially exempt, 0 -> Taxed
+        self.assertEqual( exemption_words( USState.ILLINOIS ), ( 'Exempt', 'Exempt' ) )
+        self.assertEqual( exemption_words( USState.CALIFORNIA ), ( 'Exempt', 'Taxed' ) )
+        self.assertEqual( exemption_words( USState.CONNECTICUT ), ( 'Partially exempt', 'Partially exempt' ) )
 
 
 if __name__ == '__main__':
