@@ -200,20 +200,23 @@ class TransferEvent( EventType ):
                  f'{names.get( event.selections.get( TARGET_ROLE ) )}' )
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        source  = event.selections[ SOURCE_ROLE ]
-        target  = event.selections[ TARGET_ROLE ]
-        classes = _asset_classes( profile )
+        source       = event.selections[ SOURCE_ROLE ]
+        target       = event.selections[ TARGET_ROLE ]
+        classes      = _asset_classes( profile )
         source_class = classes.get( source )
-        if ( source_class is not None ) and source_class.accrues_unrealized_gains:
-            # Moving out of an appreciating holding is a sale: realize the proportional embedded gain
-            # into the source class's realized-gain income (a capital gain for stocks, an ordinary
-            # distribution for a pre-tax account) rather than a no-tax value move. A cash target lands
-            # in the cash hub (destination None); a holding target is a conversion that re-establishes
-            # basis there. A face-value source (cash, CDs) keeps the plain transfer below.
-            destination = None if classes.get( target ) is AssetClass.CASH else target
+        target_class = classes.get( target )
+        # Moving out of an appreciating holding is a sale: realize the proportional embedded gain into
+        # the source class's realized-gain income (a capital gain for stocks, an ordinary distribution
+        # for a pre-tax account) rather than a no-tax value move. A face-value source (cash, CDs) has
+        # no gain and takes the plain transfer below.
+        realizes_gain = ( source_class is not None ) and source_class.accrues_unrealized_gains
+        if realizes_gain:
+            # Proceeds to the cash hub for a cash target, else a conversion into the target holding
+            # (which re-establishes basis there).
+            target_is_cash_hub = target_class is AssetClass.CASH
             into.scheduled_events.append( ScheduledRealization(
                 event_date = event.date, holding = source, amount = event.amount,
-                destination = destination ) )
+                destination = None if target_is_cash_hub else target ) )
             return
         into.scheduled_events.append( ScheduledTransfer(
             event_date = event.date, source = source, target = target, amount = event.amount ) )
