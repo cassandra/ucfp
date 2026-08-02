@@ -77,6 +77,7 @@ class EconomicParameters:
         return {
             IncomeTaxClass.WAGES           : self.wage_growth,
             IncomeTaxClass.SOCIAL_SECURITY : self.social_security_cola,
+            IncomeTaxClass.PENSION         : self.pension_cola,
             IncomeTaxClass.ORDINARY        : self.pension_cola,
             IncomeTaxClass.GROSS_RENTAL    : self.rental_increase,
         }.get( income_tax_class, ZERO_RATE )

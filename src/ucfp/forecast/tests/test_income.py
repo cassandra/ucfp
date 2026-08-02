@@ -113,6 +113,23 @@ def _run_one_time_income_forecast():
     return Forecast( parameters ).run()
 
 
+def _run_income_class_forecast( income_tax_class ):
+    """A single retiree with $40,000/yr of income of `income_tax_class`, full-year 2026, current law --
+    used to compare how a class is booked and taxed (e.g. PENSION vs generic ORDINARY)."""
+    person = Subject( 'Ret', date( 1950, 1, 1 ), 'ret' )
+    parameters = ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( 2026, 12, 31 ),
+        filing_status = FilingStatus.SINGLE,
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+        subjects      = [ person ],
+        assets        = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ) ],
+        income_streams = [ IncomeStream(
+            person, income_tax_class, Schedule.constant( WindowedAmount( Decimal( '40000' ) ) ) ) ],
+    )
+    return Forecast( parameters ).run()
+
+
 class IncomeForecastTests( unittest.TestCase ):
 
     def test_recurring_income_item_resolves_count_times_amount( self ):
@@ -124,6 +141,24 @@ class IncomeForecastTests( unittest.TestCase ):
             reader.ledger.natural_balance( ordinary, through = date( 2026, 12, 31 ) ), Decimal( '60000' ) )
         self.assertEqual(
             reader.ledger.natural_balance( ordinary, through = date( 2027, 12, 31 ) ), Decimal( '120000' ) )
+
+    def test_pension_books_its_own_account_and_taxes_like_ordinary_income( self ):
+        # Pension income is its own class (so a state exemption can target it), but folds into ordinary
+        # income for federal tax -- identical result to the same amount of generic ordinary income.
+        pension  = Bookkeeper( _run_income_class_forecast( IncomeTaxClass.PENSION ).books )
+        ordinary = Bookkeeper( _run_income_class_forecast( IncomeTaxClass.ORDINARY ).books )
+        through  = date( 2026, 12, 31 )
+        pension_accounts  = [ a for a in pension.chart.accounts()
+                              if a.income_tax_class == IncomeTaxClass.PENSION ]
+        ordinary_accounts = [ a for a in pension.chart.accounts()
+                              if a.income_tax_class == IncomeTaxClass.ORDINARY ]
+        self.assertEqual( len( pension_accounts ), 1 )                       # pension has its own account
+        self.assertEqual(
+            pension.ledger.natural_balance( pension_accounts[ 0 ], through = through ), Decimal( '40000' ) )
+        self.assertEqual( ordinary_accounts, [] )                           # not booked as generic ordinary
+        self.assertEqual(                                                    # taxed exactly as ordinary income
+            pension.ledger.net_worth( through = through ),
+            ordinary.ledger.net_worth( through = through ) )
 
     def test_one_time_income_item_posts_once_in_its_year( self ):
         result = _run_one_time_income_forecast()

@@ -439,7 +439,7 @@ def _entitlement_income(
     for pension in profile.pensions:
         streams.append( IncomeStream(
             subject = subjects_by_handle[ pension.subject_handle ],
-            income_tax_class = IncomeTaxClass.ORDINARY,
+            income_tax_class = IncomeTaxClass.PENSION,
             amounts = Schedule.constant( WindowedAmount( pension.base_annual_amount ) ),
             window = DateWindow( start = _pension_start( timing.get( pension.subject_handle ) ) ) ) )
     # Social Security is realized couple-aware (the spousal benefit couples the two subjects), so it

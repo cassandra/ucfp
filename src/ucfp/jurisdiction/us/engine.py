@@ -154,9 +154,10 @@ class USFederalTaxEngine( TaxEngine ):
         carryover  = tax_state.capital_loss_carryover
 
         wages               = fiscal_window.income( IncomeTaxClass.WAGES )
-        # Retirement distributions (RMDs, pre-tax withdrawals) are their own income line for the
-        # books but tax exactly as ordinary income, so they fold in here.
+        # Pensions and retirement distributions (RMDs, pre-tax withdrawals) are their own income lines
+        # for the books but tax exactly as ordinary income, so they fold in here.
         ordinary_other      = ( fiscal_window.income( IncomeTaxClass.ORDINARY )
+                                + fiscal_window.income( IncomeTaxClass.PENSION )
                                 + fiscal_window.income( IncomeTaxClass.RETIREMENT_DISTRIBUTION ) )
         taxable_interest    = fiscal_window.income( IncomeTaxClass.TAXABLE_INTEREST )
         tax_exempt_interest = fiscal_window.income( IncomeTaxClass.TAX_EXEMPT_INTEREST )
