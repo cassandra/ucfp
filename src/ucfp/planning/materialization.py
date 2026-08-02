@@ -33,6 +33,7 @@ from ucfp.forecast.parameters import (
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.planning.social_security import GovernmentPensionMember, realized_government_pensions
 
 from ucfp.parameter_sets.enums import PropertyContext, Realization
 
@@ -441,29 +442,40 @@ def _entitlement_income(
             income_tax_class = IncomeTaxClass.ORDINARY,
             amounts = Schedule.constant( WindowedAmount( pension.base_annual_amount ) ),
             window = DateWindow( start = _pension_start( timing.get( pension.subject_handle ) ) ) ) )
-    for entitlement in profile.government_pension:
-        subject = subjects_by_handle[ entitlement.subject_handle ]
-        claiming = _claiming_date(
-            timing.get( entitlement.subject_handle ), entitlement.subject_handle )
+    # Social Security is realized couple-aware (the spousal benefit couples the two subjects), so it
+    # goes through the household realizer rather than a per-entitlement loop.
+    for realized in realized_government_pensions(
+            _government_pension_members( profile, subjects_by_handle, timing ), government_pension ):
         streams.append( IncomeStream(
-            subject = subject,
+            subject = subjects_by_handle[ realized.subject_handle ],
             income_tax_class = government_pension.income_tax_class(),
-            amounts = Schedule.constant( WindowedAmount( government_pension.realized_annual_benefit(
-                entitlement.monthly_at_normal_age, subject.birthdate, claiming ) ) ),
-            window = DateWindow( start = claiming ) ) )
+            amounts = realized.amounts,
+            window = DateWindow( start = realized.start_date ) ) )
     return streams
+
+
+def _government_pension_members(
+        profile : Profile, subjects_by_handle : dict[ str, Subject ],
+        timing : dict ) -> list[ GovernmentPensionMember ]:
+    """Every household subject as a Social Security member: their entered PIA and claiming date when
+    they have an entitlement, else None -- a subject with no entitlement is a potential non-earning
+    spouse the realizer may top up with a spousal benefit."""
+    entitlement_by_handle = { e.subject_handle: e for e in profile.government_pension }
+    members = list()
+    for handle, subject in subjects_by_handle.items():
+        entitlement  = entitlement_by_handle.get( handle )
+        claim_timing = timing.get( handle )
+        members.append( GovernmentPensionMember(
+            subject_handle = handle,
+            birthdate      = subject.birthdate,
+            pia_monthly    = entitlement.monthly_at_normal_age if entitlement is not None else None,
+            claiming_date  = ( claim_timing.government_pension_claiming_date
+                               if claim_timing is not None else None ) ) )
+    return members
 
 
 def _pension_start( timing : Optional[ RetirementTiming ] ) -> Optional[ date ]:
     return timing.pension_start if timing is not None else None
-
-
-def _claiming_date( timing : Optional[ RetirementTiming ], subject_handle : str ) -> date:
-    if timing is None or timing.government_pension_claiming_date is None:
-        raise ValueError(
-            f'The government pension for "{subject_handle}" needs a claiming date in the plans '
-            'timing.' )
-    return timing.government_pension_claiming_date
 
 
 def _annualized( amounts : Schedule, interval : Optional[ Duration ] ) -> Schedule:
