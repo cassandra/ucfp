@@ -1,9 +1,10 @@
 # Project Goals & Requirements
 
-> **Status: draft, high-churn.** This is the most volatile project document. It
-> captures *what* we are building and *why*. Expect frequent change. It is
-> paired with [project-phase.md](project-phase.md), which captures the *how* and
-> *when* constraints of the current phase.
+> **Status: stabilizing.** The core model and main flows have converged, so this
+> is far less volatile than it was, though it still evolves as features are added.
+> It captures *what* we are building and *why*, and is paired with
+> [project-phase.md](project-phase.md), which captures the *how* and *when*
+> constraints of the current (hardening) phase.
 
 ## Problem & Purpose
 
@@ -28,33 +29,28 @@ Several planning *perspectives*, all in the financial-planning realm:
 These are different lenses over a shared core financial model (see below), at
 different timescales.
 
-## Core Model (direction)
+## Core Model (implemented)
 
 A **double-entry bookkeeping** foundation, chosen for robustness in projecting
 finances. Five top-level account types: Assets, Liabilities, Equity,
-Income/Revenue, Expenses.
+Income/Revenue, Expenses. The core primitives and the projection layer are now
+**built and stable**: the double-entry `Account` / `Transaction` / `Entry` model,
+the `Baseline`, the input aggregates (`Profile` / `Plans` / `Assumptions`), the
+forecast engine, and captured projection runs.
 
-Settled direction:
+Settled model decisions:
 
-- **Current state is a snapshot** of finances (a GNUCash export, or manual
-  entry), likely modeled as an initial **"seed" opening transaction** so the
-  books balance from t0.
+- **Current state is a snapshot** of finances (a GNUCash export, or manual entry),
+  modeled as an initial **"seed" opening transaction** so the books balance from t0.
 - **Real past transactions are NOT stored here** — GNUCash remains the system of
   record for actual transaction history. We keep **historical snapshots**, not a
   past journal.
-- The first work is to set down the core double-entry model. The bar: convince
-  ourselves it is a good foundation for the planning variations *before*
-  detailing projection, plan persistence, or distributions.
-
-The agreed core model and the locked naming conventions
-(`Account` / `Transaction` / `Entry` / `Baseline`, and the deferred
-`Scenario` / `Parameters` / `Projection` / `Profile`) are captured in **GitHub
-issue #1** (`[Feature] Implement the initial double-entry core data model`).
-Only `Baseline` joins the immediate build alongside the double-entry primitives.
+- A captured run stores **materialized outputs** (an immutable projection), not
+  merely its inputs.
 
 > Transient design specs live in issues, not repo docs. An in-repo model/
-> architecture document is warranted only *after* implementation, in an
-> appropriate (different) location.
+> architecture document is warranted once the design merits one, in an appropriate
+> location distinct from these transient project docs.
 
 ## Primary Goals
 
@@ -99,15 +95,10 @@ Only `Baseline` joins the immediate build alongside the double-entry primitives.
 
 ## Open Questions
 
-_Held at high level for now (see core-data-model.md "Deferred"); not to be
-detailed until the projection layer:_
+_Larger directions not yet built; each detailed in its own issue when taken up:_
 
-- The **Monte Carlo / sweep layer** (name TBD) that generates many `Scenario`s
-  over sampled/enumerated `Parameters`.
-- How `Parameters` model **recurring/time-parameterized** future transactions
-  across differing timescales.
-- Whether a captured `Projection` stores **inputs** (recompute) or **materialized
-  outputs** (immutable), and how it references its `Baseline`.
+- The **Monte Carlo / sweep layer** (name TBD) that generates and compares many
+  scenarios over sampled or enumerated parameters — including the **Social Security
+  timing** comparison.
 - Mechanism and direction of **GNUCash integration** (import format, frequency,
-  plan-vs-baseline reconciliation).
-- The `Profile` model for planning subjects (needed first for Social Security).
+  plan-vs-actual reconciliation) — still the largest unbuilt piece.

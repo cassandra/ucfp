@@ -8,11 +8,15 @@ In all code we write, we strive for extremely well factored code. We are thought
 
 ## Current Project Phase (transient)
 
-This project is pre-release and greenfield. The two imported documents below
-establish the *current* assumptions — no legacy data, minimal tests, a
-provisional core model, and dual self-host/cloud deployment. They are
-**transient** and will be retired at first release. Read them before proposing
-"pragmatic" shortcuts or legacy/back-compat handling.
+This project is **pre-release, in a hardening phase**: the core model and main
+flows have converged into a good working system, and we are gearing up for a first
+release with real tests, disciplined reviews, and UI polish. It is still
+pre-release — no production data yet, so schema and migrations stay flexible until
+v1. The two imported documents below establish the *current* assumptions; they are
+**transient** and will tighten or retire at first release. Read them before either
+proposing mature-software patterns (data migrations, back-compat shims) **or**
+assuming the earlier prototype posture (skipping tests, deferring UI polish,
+churning the core model).
 
 @dev/project/project-phase.md
 @dev/project/project-goals.md
