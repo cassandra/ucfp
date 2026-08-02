@@ -6,9 +6,35 @@ to the field's planning `context`: birthdates sit decades in the past, planning 
 so the picker must not be anchored to the current month. Without JavaScript the field degrades to a
 plain ISO text box, which the server still accepts -- the picker is a progressive enhancement.
 """
+from decimal import Decimal
+
 from django import forms
 
+from common.rate import Rate
+
 from ucfp.environment.constants import AppConst
+from ucfp.jurisdiction.us.subdivision_tax import USState, representative_rate
+
+
+def percent_str( rate : Rate ) -> str:
+    """A `Rate` as a bare percent string, trailing zeros trimmed: 0.06 -> '6', 0.0307 -> '3.07'."""
+    return format( ( rate.fraction * Decimal( '100' ) ).normalize(), 'f' )
+
+
+class StateRateSelect( forms.Select ):
+    """A state <select> that tags each option with its representative income-tax rate (percent) in a
+    data attribute, so the client can auto-fill the rate field when the state changes. The blank
+    'other / not listed' option carries zero."""
+
+    def create_option( self, name, value, label, selected, index, subindex = None, attrs = None ):
+        option = super().create_option( name, value, label, selected, index, subindex, attrs )
+        if value:
+            state   = USState.from_name( str( value ) )
+            percent = percent_str( representative_rate( state ) )
+        else:
+            percent = '0'
+        option[ 'attrs' ][ f'data-{AppConst.STATE_RATE_DATA_ATTR}' ] = percent
+        return option
 
 
 class IsoDateInput( forms.DateInput ):

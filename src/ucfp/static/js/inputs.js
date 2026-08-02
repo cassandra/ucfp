@@ -219,6 +219,24 @@ window.App.Inputs = (function () {
             .each( function () { applySwitch( $( this ) ); } );
     }
 
+    // ----- StateTaxAutofill: fill the state income-tax rate from the chosen state -----
+    // Picking a state copies that option's representative rate (a data attribute on the option) into
+    // the rate input, which the user may then override. Bound directly on the select so it fires in
+    // the target phase, before the form's delegated autosave serializes -- so the filled rate is saved
+    // in the same request. Re-applied after each render; namespaced to stay idempotent.
+
+    function enhanceStateAutofill( $scope ) {
+        ( $scope || $( document.body ) ).find( classSelector( C.STATE_SELECT_CLASS ) )
+            .off( 'change.stateAutofill' )
+            .on( 'change.stateAutofill', function () {
+                const $select = $( this );
+                const rate    = $select.find( 'option:selected' )
+                    .attr( dataAttr( C.STATE_RATE_DATA_ATTR ) );
+                $select.closest( 'form' ).find( classSelector( C.STATE_RATE_CLASS ) )
+                    .val( rate || '' );
+            } );
+    }
+
     // ----- CreditCardCalculator: a live, advisory paydown figure per card -----
     // Display-only. As a card's mode/inputs change, write a "how long / how much" figure into its
     // readout at the assumed APR the card widget carries (rendered from BUILTIN_ASSUMPTIONS, the same
@@ -524,6 +542,7 @@ window.App.Inputs = (function () {
         enhanceSwitches( $( document.body ) );
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
+        enhanceStateAutofill( $( document.body ) );
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
@@ -531,6 +550,7 @@ window.App.Inputs = (function () {
                 enhanceSwitches( $( document.body ) );
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
+                enhanceStateAutofill( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }

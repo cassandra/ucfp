@@ -1,26 +1,54 @@
 {% comment %}
-The self-saving Subjects form (id=subjects): the primary person and an optional partner. The
-js-autosave form posts each edit to `SubjectsView`, which persists silently and re-renders this pane
-only on a genuine field error (a half-entered partner). The partner is an optional block (the
-js-optional pattern -- see inputs.js) revealed by "Add a partner" and cleared by "Remove partner";
-the server infers a partner purely from the partner fields being filled, so clearing them (which
-Remove does, then auto-saves) is what means "no partner". Nothing is required -- an incomplete person
-is simply not held. Reads `subjects_form`.
+The self-saving Subjects form (id=subjects): the people inputs on the left, the tax-basis pane
+(jurisdiction, state income tax, and the inferred filing status) on the right -- all one auto-saving
+form, so a state pick saves alongside the people edits and both columns re-render together on error.
+Posts each edit to `SubjectsView`, which persists silently and refreshes the read-only filing-status
+readout (id=filing-status), re-rendering this pane only on a genuine field error (a half-entered
+partner). The partner is an optional block (the js-optional pattern -- see inputs.js) revealed by "Add
+a partner" and cleared by "Remove partner"; the server infers a partner purely from the partner fields
+being filled, so clearing them (which Remove does, then auto-saves) is what means "no partner".
+Choosing a state fills a typical rate client-side (see `enhanceStateAutofill` in inputs.js), which the
+user may override. Nothing is required -- an incomplete person is simply not held. Reads `subjects_form`.
 {% endcomment %}
 <div id="subjects">
   <form method="post" action="{% url 'subjects' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    {% include 'inputs/interview/sections/subjects_errors.html' %}
-    {% include 'inputs/interview/_field.html' with field=subjects_form.subject_name %}
-    {% include 'inputs/interview/_field.html' with field=subjects_form.subject_birthdate %}
+    <div class="row">
+      <div class="col-md-7">
+        {% include 'inputs/interview/sections/subjects_errors.html' %}
+        {% include 'inputs/interview/_field.html' with field=subjects_form.subject_name %}
+        {% include 'inputs/interview/_field.html' with field=subjects_form.subject_birthdate %}
 
-    <div class="{{ AppConst.OPTIONAL_CLASS }} mt-3">
-      <button type="button" class="{{ AppConst.OPTIONAL_ADD_CLASS }} btn btn-sm btn-outline-secondary" hidden>Add a partner</button>
-      <div class="{{ AppConst.OPTIONAL_BODY_CLASS }}">
-        <p class="text-muted mb-1">Partner</p>
-        {% include 'inputs/interview/_field.html' with field=subjects_form.partner_name %}
-        {% include 'inputs/interview/_field.html' with field=subjects_form.partner_birthdate %}
-        <button type="button" class="{{ AppConst.OPTIONAL_REMOVE_CLASS }} btn btn-sm btn-link text-muted px-0" hidden>Remove partner</button>
+        <div class="{{ AppConst.OPTIONAL_CLASS }} mt-3">
+          <button type="button" class="{{ AppConst.OPTIONAL_ADD_CLASS }} btn btn-sm btn-outline-secondary" hidden>Add a partner</button>
+          <div class="{{ AppConst.OPTIONAL_BODY_CLASS }}">
+            <p class="text-muted mb-1">Partner</p>
+            {% include 'inputs/interview/_field.html' with field=subjects_form.partner_name %}
+            {% include 'inputs/interview/_field.html' with field=subjects_form.partner_birthdate %}
+            <button type="button" class="{{ AppConst.OPTIONAL_REMOVE_CLASS }} btn btn-sm btn-link text-muted px-0" hidden>Remove partner</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-5">
+        <div class="card bg-light">
+          <div class="card-body">
+            <h3 class="h6 mb-3">Tax basis</h3>
+            <div class="mb-2">
+              <div class="text-muted small">Tax jurisdiction</div>
+              <div>{{ subjects_form.jurisdiction_label }}</div>
+            </div>
+            <div class="mb-3">
+              <div class="text-muted small">Filing status</div>
+              <div id="filing-status">{{ subjects_form.filing_status_label }}</div>
+            </div>
+            <div class="text-muted small mb-1">State Tax rate (%)</div>
+            <div class="d-flex align-items-center">
+              {{ subjects_form.us_state }}
+              {{ subjects_form.state_income_tax_rate }}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </form>

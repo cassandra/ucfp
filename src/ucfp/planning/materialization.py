@@ -744,5 +744,6 @@ def _statute( profile : Profile, assumptions : Assumptions ):
     if assumptions.tax_projection is None:
         raise ValueError( 'Assumptions must carry a tax projection (from the default library).' )
     return StatuteProfile(
-        jurisdiction_type = profile.jurisdiction_type,
-        tax_projection = assumptions.tax_projection )
+        jurisdiction_type     = profile.jurisdiction_type,
+        tax_projection        = assumptions.tax_projection,
+        state_income_tax_rate = profile.state_income_tax_rate )

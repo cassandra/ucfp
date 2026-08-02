@@ -17,6 +17,8 @@ from typing import Optional
 
 from django import forms
 
+from common.rate import Rate, ZERO_RATE
+
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
@@ -28,6 +30,7 @@ from ucfp.inputs.compatibility import plans_without_accounts
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
 from ucfp.jurisdiction.labels import local_label
+from ucfp.jurisdiction.us.subdivision_tax import USState
 
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
@@ -45,7 +48,7 @@ from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
-from .widgets import IsoDateInput
+from .widgets import IsoDateInput, StateRateSelect, percent_str
 
 
 class Aggregate( Enum ):
@@ -65,6 +68,11 @@ class Section:
     aggregates: tuple = ( Aggregate.PROFILE, )
     form: Optional[ type ] = None
     outer_template: Optional[ str ] = None   # the section's self-saving pane, rendered above Next
+
+
+# The People section's state income-tax picker. The blank choice is the "no named state" case
+# (custom or not-listed): the rate stays freely editable and defaults to zero.
+_STATE_NONE_LABEL = 'Other or not listed'
 
 
 class SubjectsForm( forms.Form ):
@@ -88,6 +96,17 @@ class SubjectsForm( forms.Form ):
     partner_birthdate = forms.DateField(
         label = 'Birthdate', required = False,
         widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
+    us_state          = forms.ChoiceField(
+        label = 'State', required = False,
+        choices = [ ( '', _STATE_NONE_LABEL ) ] + USState.choices(),
+        widget = StateRateSelect( attrs = {
+            'class' : f'{AppConst.STATE_SELECT_CLASS} custom-select custom-select-sm flex-grow-1 mr-2',
+            'aria-label' : 'State' } ) )
+    state_income_tax_rate = forms.DecimalField(
+        label = 'State Tax rate (%)', required = False, min_value = 0, max_value = 100,
+        widget = forms.NumberInput( attrs = {
+            'class' : f'{AppConst.STATE_RATE_CLASS} form-control form-control-sm', 'step' : 'any',
+            'aria-label' : 'State tax rate (percent)' } ) )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile ) if profile is not None else None
@@ -122,6 +141,11 @@ class SubjectsForm( forms.Form ):
             partner = profile.subjects[ 1 ]
             initial[ 'partner_name' ]      = partner.name
             initial[ 'partner_birthdate' ] = partner.birthdate
+        if profile.us_state is not None:
+            initial[ 'us_state' ] = profile.us_state.name.lower()
+        # Show the rate only when non-zero; a fresh profile (or a no-income-tax state) leaves it blank.
+        if profile.state_income_tax_rate.fraction:
+            initial[ 'state_income_tax_rate' ] = percent_str( profile.state_income_tax_rate )
         return initial
 
     def clean( self ):
@@ -139,8 +163,19 @@ class SubjectsForm( forms.Form ):
         removed  = { asset.handle for asset in profile.assets } - { asset.handle for asset in assets }
         updated  = replace(
             profile, subjects = subjects, filing_status = self._filing_status( subjects ),
-            assets = assets )
+            assets = assets, us_state = self._us_state(),
+            state_income_tax_rate = self._state_income_tax_rate() )
         return updated, plans_without_accounts( plans, removed ) if removed else plans
+
+    def _us_state( self ) -> Optional[ USState ]:
+        """The chosen state, or None for the 'other / not listed' blank."""
+        name = self.cleaned_data.get( 'us_state' )
+        return USState.from_name( name ) if name else None
+
+    def _state_income_tax_rate( self ) -> Rate:
+        """The entered percent as a `Rate`; a blank rate is no state income tax (zero)."""
+        percent = self.cleaned_data.get( 'state_income_tax_rate' )
+        return Rate( percent / Decimal( '100' ) ) if percent else ZERO_RATE
 
     def _has_partner( self ) -> bool:
         """A partner is inferred from filled fields -- no separate opt-in checkbox. `clean` has
