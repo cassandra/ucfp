@@ -240,14 +240,32 @@ class BooksTableDefinition:
         return None
 
     def adapt( self, catalog : 'BooksTableColumnCatalog' ) -> 'BooksTableDefinition':
-        """Fit to a books: drop any column it does not offer (an account that is not here, a class it
-        lacks), preserving order. Fall back to the default view if nothing survives. Both the frontier
-        and the removed subset are filtered, so the removed set stays within the frontier."""
-        kept    = tuple( key for key in self.column_keys if key in catalog )
+        """Fit to a books and reveal newcomers. First drop any column the run does not offer (an account
+        that is not here, a class it lacks), preserving order; fall back to the default view if nothing
+        survives. Then, under each already-expanded summary, reveal the catalog members that appeared
+        after the lens was set -- added collapsed at the end of the group, so an account created by a
+        later edit (e.g. a partner's income once the subject exists) surfaces without the user resetting
+        the view. A collapsed summary reveals nothing (its members stay rolled up); the removed set and
+        the user's order/reordering are preserved. Adapt-on-read: the stored lens is left untouched."""
+        kept    = [ key for key in self.column_keys if key in catalog ]
         removed = tuple( key for key in self.removed_keys if key in catalog )
         if not kept:
             return catalog.default_definition()
-        return BooksTableDefinition( kept, removed )
+        present  = set( kept )
+        revealed = list( kept )
+        for summary_key in kept:
+            column = catalog.get( summary_key )
+            if not isinstance( column, BooksSummaryColumn ):
+                continue
+            if not any( member in present for member in column.member_keys ):
+                continue                                        # a collapsed summary reveals nothing
+            newcomers = [ member for member in column.member_keys
+                          if ( member in catalog ) and ( member not in present ) ]
+            if not newcomers:
+                continue
+            end = _subtree_block( catalog, revealed, summary_key )[ 1 ]
+            revealed[ end : end ] = newcomers                   # newcomers land collapsed, group-tail
+        return BooksTableDefinition( tuple( revealed ), removed )
 
     def expand( self, catalog : 'BooksTableColumnCatalog',
                 key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
