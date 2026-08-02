@@ -51,10 +51,15 @@ class StatuteProfile:
     """The statute the engine resolves: which jurisdiction's law (`jurisdiction_type` -- a fact about
     the household, sourced from the Profile) projected how (`tax_projection` -- the forward view,
     sourced from the Assumptions). Composed at materialization from those two aggregates; the engine
-    treats the result as a black box."""
+    treats the result as a black box.
 
-    jurisdiction_type : JurisdictionType
-    tax_projection    : TaxProjection
+    `state_income_tax_rate` is the simplified per-state surcharge -- a flat rate on federal AGI, a
+    Profile fact. Jurisdiction-neutral here (just a rate); which US state it came from stays on the
+    Profile. Zero means no state income tax."""
+
+    jurisdiction_type     : JurisdictionType
+    tax_projection        : TaxProjection
+    state_income_tax_rate : Rate = ZERO_RATE
 
 
 class Statute:
@@ -74,10 +79,14 @@ class Statute:
             raise NotImplementedError(
                 f'Tax law {self._profile.jurisdiction_type} has no engine yet.' )
         forecast_type = self._profile.tax_projection.forecast_type
+        # The flat state surcharge is the same every year (not projected), so both branches pass it
+        # through unchanged; only the federal parameters differ by projection.
+        state_rate    = self._profile.state_income_tax_rate
         if forecast_type is StatuteForecastType.CURRENT_LAW:
-            return USFederalTaxEngine( federal_2025() )
+            return USFederalTaxEngine( federal_2025(), state_rate )
         if forecast_type is StatuteForecastType.COLA_INDEXED:
-            return USFederalTaxEngine( federal_2025().indexed( self._cola_factor( year ) ) )
+            return USFederalTaxEngine(
+                federal_2025().indexed( self._cola_factor( year ) ), state_rate )
         raise NotImplementedError(
             f'Tax forecast {forecast_type} is not supported.' )
 

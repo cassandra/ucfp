@@ -20,10 +20,12 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
+from common.rate import Rate, ZERO_RATE
 from common.recurrence import Duration
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass, RealPropertyType
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType
+from ucfp.jurisdiction.us.subdivision_tax import USState
 
 from .enums import DebtKind, HousingTenure
 
@@ -176,6 +178,11 @@ class Profile:
     # The household's tax jurisdiction -- a fact these facts are all expressed under (account tax
     # classes, entitlements, filing status). US federal is the only one modeled today.
     jurisdiction_type: JurisdictionType = JurisdictionType.US_FEDERAL
+    # The household's US state and its simplified income-tax rate (a flat rate on federal AGI). The
+    # state is a UI convenience that auto-fills the rate; the rate is the source of truth the engine
+    # reads (user-overridable). None state / zero rate = no state income tax modeled.
+    us_state: Optional[ USState ] = None
+    state_income_tax_rate: Rate = ZERO_RATE
     # What you own
     assets: list[ AssetProfile ] = field( default_factory = list )
     # What you owe

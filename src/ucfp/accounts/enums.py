@@ -302,6 +302,8 @@ class ExpenseTaxClass( LabeledEnum ):
     COLLECTIBLES_TAX        = ( 'Collectibles Tax', 'Tax on collectibles gains, capped at its own rate.' )
     PAYROLL_TAX             = ( 'Payroll Tax', 'FICA / Medicare on wages.' )
     NIIT                    = ( 'Net Investment Income Tax', '3.8% net investment income tax.' )
+    STATE_INCOME_TAX        = (
+        'State Income Tax', 'A flat per-state rate on federal AGI; a simplified estimate, not real brackets.' )
     EARLY_WITHDRAWAL_PENALTY = (
         'Early-Withdrawal Penalty', '10% additional tax on early retirement withdrawals.' )
 
@@ -322,6 +324,7 @@ _TAX_PAYMENT_EXPENSE_CLASSES = frozenset( (
     ExpenseTaxClass.COLLECTIBLES_TAX,
     ExpenseTaxClass.PAYROLL_TAX,
     ExpenseTaxClass.NIIT,
+    ExpenseTaxClass.STATE_INCOME_TAX,
     ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,
 ) )
 

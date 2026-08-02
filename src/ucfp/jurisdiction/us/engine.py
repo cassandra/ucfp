@@ -19,6 +19,13 @@ loss carryover to thread forward. AGI and the modified-AGI variants are surfaced
 `TaxFigures` on the assessment (see `figures.py`); NIIT uses `niit_magi`, the PTC uses
 `aca_magi`, and `irmaa_magi` is ready for the Scenario's IRMAA.
 
+A simplified state income tax rides alongside: a single flat rate (the engine's
+`state_income_tax_rate`, zero by default) applied to federal AGI, booked as its own
+`STATE_INCOME_TAX` charge. It reads AGI but feeds nothing back -- not SALT, not any federal
+figure -- so it stays an isolated leaf. Flat means it is not projected, so it is an engine
+argument rather than a `TaxParameters` field. This is not a model of any state's real tax
+(no brackets, deductions, or credits); see `subdivision_tax.py`.
+
 The stack, bottom to top: ordinary income at ordinary brackets; then the §1250 (25%)
 and collectibles (28%) maximum-rate long-term gains, each taxed at ordinary rates
 stacked on ordinary income but capped at its maximum rate; then the 0/15/20%
@@ -53,6 +60,7 @@ from decimal import Decimal
 from typing import Iterator, NamedTuple, Optional
 
 from common.date_span import DateSpan
+from common.rate import Rate, ZERO_RATE
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.jurisdiction.brackets import BracketTable
@@ -130,8 +138,13 @@ class USFederalTaxEngine( TaxEngine ):
     """Assesses US federal income tax for one fiscal year against the parameters it
     is constructed with."""
 
-    def __init__( self, parameters : TaxParameters ):
-        self._parameters = parameters
+    def __init__( self, parameters : TaxParameters, state_income_tax_rate : Rate = ZERO_RATE ):
+        self._parameters            = parameters
+        # A flat state income-tax rate on federal AGI -- the simplified per-state surcharge. Flat
+        # (never COLA-indexed), so it rides beside the year's projected federal parameters rather
+        # than inside them, and is the same for every projected year. ZERO_RATE for a no-income-tax
+        # state, which the charge filter then drops.
+        self._state_income_tax_rate = state_income_tax_rate
 
     def assess( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
                 opening_tax_state : Optional[ TaxState ] ) -> TaxAssessment:
@@ -227,6 +240,10 @@ class USFederalTaxEngine( TaxEngine ):
         payroll_tax = self._payroll_tax( status, fiscal_window )
         premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.health_enrollment )
 
+        # A flat state income tax on federal AGI -- the simplified per-state surcharge, its own
+        # charge that reads AGI but feeds nothing back (not SALT, not any federal figure).
+        state_income_tax = self._state_income_tax_rate.change_on( agi )
+
         # Income tax splits into its rate layers, each its own account; payroll tax and NIIT stand
         # apart. The refundable premium credit offsets the ordinary income tax (its natural home).
         income_tax_charges = (
@@ -235,7 +252,8 @@ class USFederalTaxEngine( TaxEngine ):
             ( ExpenseTaxClass.SECTION_1250_TAX, income_tax.section_1250 ),
             ( ExpenseTaxClass.COLLECTIBLES_TAX, income_tax.collectibles ),
             ( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ),
-            ( ExpenseTaxClass.NIIT, niit ) )
+            ( ExpenseTaxClass.NIIT, niit ),
+            ( ExpenseTaxClass.STATE_INCOME_TAX, state_income_tax ) )
         charges = [ TaxCharge( tax_class, amount )
                     for tax_class, amount in income_tax_charges if amount > 0 ]
         credits = []
