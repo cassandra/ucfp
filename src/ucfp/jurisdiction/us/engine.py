@@ -11,8 +11,9 @@ Pipeline (strict DAG): property-sale adjustments from `TaxContext.properties` (�
 residence-gain exclusion; §1250 rental depreciation recapture from the deterministic
 schedule) -> capital-gains netting (short vs long, with the prior year's
 loss carryover applied first, character-preserving) -> Social-Security taxability
-worksheet -> AGI -> the greater of the standard and itemized deductions -> split
-taxable income across rate buckets -> tax on the stack -> the 3.8% net investment
+worksheet -> AGI -> the simplified state income tax (a flat function of AGI, so it lands
+here) -> the greater of the standard and itemized deductions (the state income tax joins
+SALT) -> split taxable income across rate buckets -> tax on the stack -> the 3.8% net investment
 income tax (NIIT, on its own MAGI) -> employee FICA on wages -> the ACA premium tax
 credit (a refundable credit, on its own MAGI) -> total -> charges + credits, plus the
 loss carryover to thread forward. AGI and the modified-AGI variants are surfaced as
@@ -22,10 +23,11 @@ loss carryover to thread forward. AGI and the modified-AGI variants are surfaced
 A simplified state income tax rides alongside: a flat rate (the engine's `state_income_tax`
 policy, no tax by default) on federal AGI less the state's exemption of retirement income
 (taxable Social Security, pensions, and pre-tax withdrawals), booked as its own
-`STATE_INCOME_TAX` charge. It reads AGI but feeds nothing back -- not SALT, not any federal
-figure -- so it stays an isolated leaf. Flat and unprojected, so it is an engine argument
-rather than a `TaxParameters` field. This is not a model of any state's real tax (no brackets,
-real deductions, or credits); see `subdivision_tax.py`.
+`STATE_INCOME_TAX` charge. It reads AGI and feeds one federal figure -- it joins the SALT
+itemized deduction (capped) -- but nothing feeds back to it, so the pipeline stays acyclic.
+Flat and unprojected, so it is an engine argument rather than a `TaxParameters` field. This is
+not a model of any state's real tax (no brackets, real deductions, or credits); see
+`subdivision_tax.py`.
 
 The stack, bottom to top: ordinary income at ordinary brackets; then the §1250 (25%)
 and collectibles (28%) maximum-rate long-term gains, each taxed at ordinary rates
@@ -222,9 +224,12 @@ class USFederalTaxEngine( TaxEngine ):
             tax_exempt_interest     = tax_exempt_interest,
             untaxed_social_security = ss_gross - taxable_ss,
         )
+        # Computed before the deduction step because it feeds the SALT itemized deduction, then reused
+        # as its own charge below. State tax depends only on AGI, so a single pass stays acyclic.
+        state_income_tax = self._state_income_tax_charge( fiscal_window, agi, taxable_ss )
         deduction  = max(
             self._standard_deduction( status, tax_context, agi ),
-            self._itemized_deduction( fiscal_window, agi ) )
+            self._itemized_deduction( fiscal_window, agi, state_income_tax ) )
 
         taxable_income = max( _ZERO, agi - deduction )
         split          = self._split_taxable_income(
@@ -240,8 +245,6 @@ class USFederalTaxEngine( TaxEngine ):
 
         payroll_tax = self._payroll_tax( status, fiscal_window )
         premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.health_enrollment )
-
-        state_income_tax = self._state_income_tax_charge( fiscal_window, agi, taxable_ss )
 
         # Income tax splits into its rate layers, each its own account; payroll tax and NIIT stand
         # apart. The refundable premium credit offsets the ordinary income tax (its natural home).
@@ -507,16 +510,19 @@ class USFederalTaxEngine( TaxEngine ):
         deduction += standard.senior_bonus * seniors * self._senior_phaseout_factor( standard, agi )
         return deduction
 
-    def _itemized_deduction( self, fiscal_window : FiscalWindowView, agi : Decimal ) -> Decimal:
+    def _itemized_deduction(
+            self, fiscal_window : FiscalWindowView, agi : Decimal, state_income_tax : Decimal ) -> Decimal:
         """Total itemized deductions: medical above the AGI floor, SALT up to its
-        cap, mortgage interest, and charitable gifts up to the AGI ceiling. The
-        mortgage acquisition-debt limit and the charitable carryover of the excess are
-        not modeled."""
+        cap, mortgage interest, and charitable gifts up to the AGI ceiling. SALT is the
+        ledger's state/local taxes (property tax) plus the modeled `state_income_tax`,
+        together capped -- the state income tax accrued this year deducts the same year
+        (an accrual simplification of cash-basis taxes-paid). The mortgage
+        acquisition-debt limit and the charitable carryover of the excess are not modeled."""
         rules   = self._parameters.itemized_rules
         medical = max(
             _ZERO,
             fiscal_window.expense( ExpenseTaxClass.MEDICAL ) - rules.medical_floor_rate * agi )
-        salt       = min( fiscal_window.expense( ExpenseTaxClass.SALT ), rules.salt_cap )
+        salt       = min( fiscal_window.expense( ExpenseTaxClass.SALT ) + state_income_tax, rules.salt_cap )
         mortgage   = fiscal_window.expense( ExpenseTaxClass.MORTGAGE_INTEREST )
         charitable = min( fiscal_window.expense( ExpenseTaxClass.CHARITABLE ),
                           rules.charitable_agi_limit * agi )
@@ -611,7 +617,8 @@ class USFederalTaxEngine( TaxEngine ):
         """The simplified state income tax: the flat rate on federal AGI, less the state's exemption of
         retirement income -- a share of taxable Social Security and of pension + pre-tax
         retirement-distribution income (most states exempt Social Security, and several exempt pensions
-        and retirement-account withdrawals). Reads AGI but feeds nothing back."""
+        and retirement-account withdrawals). Reads AGI; its result joins the federal SALT deduction,
+        but nothing feeds back to it."""
         policy     = self._state_income_tax
         retirement = ( fiscal_window.income( IncomeTaxClass.PENSION )
                        + fiscal_window.income( IncomeTaxClass.RETIREMENT_DISTRIBUTION ) )

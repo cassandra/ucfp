@@ -294,7 +294,7 @@ class ExpenseTaxClass( LabeledEnum ):
     LIVING                  = ( 'Living', 'Non-deductible living expenses (the bulk).' )
     MEDICAL                 = ( 'Medical', 'Deductible above the AGI floor.' )
     MORTGAGE_INTEREST       = ( 'Mortgage Interest', 'Itemizable mortgage interest, with limits.' )
-    SALT                    = ( 'SALT', 'State/local income + property tax; capped.' )
+    SALT                    = ( 'SALT', 'Property tax booked here; the engine folds in the modeled state income tax; capped.' )
     CHARITABLE              = ( 'Charitable', 'Itemizable charitable gifts; AGI-limited.' )
     NON_DEDUCTIBLE_INTEREST = ( 'Non-Deductible Interest', 'Auto/personal/credit-card interest.' )
     RENTAL_EXPENSE          = ( 'Rental Expense', 'Netted against rental income.' )
