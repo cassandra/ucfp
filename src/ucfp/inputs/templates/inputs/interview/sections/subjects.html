@@ -1,29 +1,9 @@
 {% comment %}
-The Subjects section pane (Profile flow): the self-saving people form on the left, a read-only tax-
-basis pane (jurisdiction + inferred filing status) to its right. The people form renders outside the
-section's Next form (a nested form would be invalid HTML) and persists each edit on its own through
-`SubjectsView`; that view also refreshes the filing-status readout below (id=filing-status), which
-reflects saved facts. The editor comes from the section wrapper (`form.subjects_form`), shared with
-the readout so both read one instance.
+The Subjects section pane (Profile flow) -- a thin bridge to the self-saving pane fragment, passing the
+section's editor down. The pane (`subjects_pane.html`, id=subjects) is one auto-saving form laying out
+the people inputs and the tax-basis card (jurisdiction, state income tax, filing status); it persists
+each edit through `SubjectsView`, which also refreshes the filing-status readout (id=filing-status)
+inside it. The editor comes from the section wrapper (`form.subjects_form`), shared so the pane and its
+readouts read one instance.
 {% endcomment %}
-<div class="row">
-  <div class="col-md-7">
-    {% include 'inputs/interview/sections/subjects_pane.html' with subjects_form=form.subjects_form %}
-  </div>
-
-  <div class="col-md-5">
-    <div class="card bg-light">
-      <div class="card-body">
-        <h3 class="h6 mb-3">Jurisdiction</h3>
-        <div class="mb-2">
-          <div class="text-muted small">Tax jurisdiction</div>
-          <div>{{ form.subjects_form.jurisdiction_label }}</div>
-        </div>
-        <div>
-          <div class="text-muted small">Filing status</div>
-          <div id="filing-status">{{ form.subjects_form.filing_status_label }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+{% include 'inputs/interview/sections/subjects_pane.html' with subjects_form=form.subjects_form %}

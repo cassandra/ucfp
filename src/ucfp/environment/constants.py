@@ -105,6 +105,13 @@ class AppConst:
     PROPERTY_DEFAULT_CLASS  = 'js-property-default'   # a row's Default amount input
     PROPERTY_OVERRIDE_CLASS = 'js-property-override'  # a per-property override input in the same row
 
+    # The People section's state income-tax picker: choosing a state auto-fills its representative rate
+    # (each option carries the percent) into the rate input, which stays overridable. The select is
+    # enhanced (bound directly), so the fill lands before the form's autosave serializes.
+    STATE_SELECT_CLASS   = 'js-state-select'  # the state <select> whose change fills the rate
+    STATE_RATE_CLASS     = 'js-state-rate'    # the rate input (percent) filled from the chosen state
+    STATE_RATE_DATA_ATTR = 'state-rate'       # a state option's representative rate (percent)
+
     # A durable expense's count-entry calculator (Appliance, Lawn Tools, Computer Purchase). A toggle
     # reveals a panel of count/cost/cadence inputs; as they change, the client fills the amount
     # target(s) with count x cost and writes a live "per year" readout. The amount stays authoritative
