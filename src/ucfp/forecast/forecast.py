@@ -99,6 +99,7 @@ _CAPITAL_GAIN_CLASSES = (
 _ORDINARY_UNTAXED_CLASSES = (
     IncomeTaxClass.WAGES,
     IncomeTaxClass.ORDINARY,
+    IncomeTaxClass.PENSION,
     IncomeTaxClass.RETIREMENT_DISTRIBUTION,
     IncomeTaxClass.TAXABLE_INTEREST,
     IncomeTaxClass.QUALIFIED_DIVIDENDS,

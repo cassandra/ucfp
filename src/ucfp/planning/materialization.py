@@ -33,6 +33,7 @@ from ucfp.forecast.parameters import (
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
+from ucfp.jurisdiction.us.subdivision_tax import state_tax_policy
 from ucfp.planning.social_security import GovernmentPensionMember, realized_government_pensions
 
 from ucfp.parameter_sets.enums import PropertyContext, Realization
@@ -439,7 +440,7 @@ def _entitlement_income(
     for pension in profile.pensions:
         streams.append( IncomeStream(
             subject = subjects_by_handle[ pension.subject_handle ],
-            income_tax_class = IncomeTaxClass.ORDINARY,
+            income_tax_class = IncomeTaxClass.PENSION,
             amounts = Schedule.constant( WindowedAmount( pension.base_annual_amount ) ),
             window = DateWindow( start = _pension_start( timing.get( pension.subject_handle ) ) ) ) )
     # Social Security is realized couple-aware (the spousal benefit couples the two subjects), so it
@@ -757,6 +758,6 @@ def _statute( profile : Profile, assumptions : Assumptions ):
     if assumptions.tax_projection is None:
         raise ValueError( 'Assumptions must carry a tax projection (from the default library).' )
     return StatuteProfile(
-        jurisdiction_type     = profile.jurisdiction_type,
-        tax_projection        = assumptions.tax_projection,
-        state_income_tax_rate = profile.state_income_tax_rate )
+        jurisdiction_type = profile.jurisdiction_type,
+        tax_projection    = assumptions.tax_projection,
+        state_income_tax  = state_tax_policy( profile.us_state, profile.state_income_tax_rate ) )

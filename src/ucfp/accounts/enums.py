@@ -214,7 +214,11 @@ class IncomeTaxClass( LabeledEnum ):
     """
 
     WAGES               = ( 'Wages', 'Earned income; ordinary rate, plus FICA.' )
-    ORDINARY            = ( 'Ordinary Income', 'Ordinary rate, not investment income (e.g. a pension).' )
+    ORDINARY            = ( 'Ordinary Income', 'Ordinary rate, not investment income (e.g. a taxable receipt).' )
+    PENSION             = (
+        'Pension',
+        'A pension/annuity benefit; taxed as ordinary income, but tracked apart from generic ordinary '
+        'income because it is retirement income a state may exempt.' )
     RETIREMENT_DISTRIBUTION = (
         'Retirement Distribution', 'Pre-tax retirement withdrawals and RMDs; taxed as ordinary income.' )
     TAXABLE_INTEREST    = ( 'Taxable Interest', 'Ordinary rate; net investment income (bank/bond/CD).' )

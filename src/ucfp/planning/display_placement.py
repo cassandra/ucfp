@@ -7,10 +7,10 @@ axes are stamped:
   - Expenses, by catalog `handle` -> `ExpenseClass` surface then `ExpenseCategory` section.
   - Income, by `IncomeTaxClass` -> a coarser income *source* (a meaningful rollup -- e.g. Investment
     Income totals interest, dividends and gains) then the owning *subject* then the tax class itself.
-    Because income accounts are keyed by (subject, tax class), pension and pre-tax retirement
-    withdrawals share one `ORDINARY` account and so one source ("Pension & Withdrawals") -- named
-    honestly for that engine-set granularity rather than split. The trailing tax-class rung gives each
-    account a run-stable column key (one account per rung), the income mirror of the Taxes & Fees rung.
+    Pensions (`PENSION`) and pre-tax retirement withdrawals (`RETIREMENT_DISTRIBUTION`) share one
+    source ("Pension & Withdrawals") though they are distinct classes; other ordinary income
+    (`ORDINARY`) rolls up under "Other Income". The trailing tax-class rung gives each account a
+    run-stable column key (one account per rung), the income mirror of the Taxes & Fees rung.
   - Assets, by `AssetClass` -> the input *pane* the assets step groups them under (Financial Accounts /
     Properties / Possessions) then the asset class then the holding itself, keyed by its handle and
     ordered by profile position -- so several holdings of one class each keep a run-stable column.
@@ -103,8 +103,9 @@ _PANE_BY_CLASS = { asset_class : ( order, pane )
 _INCOME_SOURCES = [
     _Grouping( 'earned', 'Earned Income', ( IncomeTaxClass.WAGES, ) ),
     _Grouping( 'pension-withdrawals', 'Pension & Withdrawals',
-               ( IncomeTaxClass.ORDINARY, IncomeTaxClass.RETIREMENT_DISTRIBUTION ) ),
+               ( IncomeTaxClass.PENSION, IncomeTaxClass.RETIREMENT_DISTRIBUTION ) ),
     _Grouping( 'social-security', 'Social Security', ( IncomeTaxClass.SOCIAL_SECURITY, ) ),
+    _Grouping( 'other', 'Other Income', ( IncomeTaxClass.ORDINARY, ) ),
     _Grouping( 'investment', 'Investment Income',
                ( IncomeTaxClass.TAXABLE_INTEREST, IncomeTaxClass.TAX_EXEMPT_INTEREST,
                  IncomeTaxClass.QUALIFIED_DIVIDENDS, IncomeTaxClass.LONG_TERM_GAINS,

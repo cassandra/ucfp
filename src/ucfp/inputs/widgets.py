@@ -13,7 +13,7 @@ from django import forms
 from common.rate import Rate
 
 from ucfp.environment.constants import AppConst
-from ucfp.jurisdiction.us.subdivision_tax import USState, representative_rate
+from ucfp.jurisdiction.us.subdivision_tax import USState, exemption_words, representative_rate
 
 
 def percent_str( rate : Rate ) -> str:
@@ -22,18 +22,22 @@ def percent_str( rate : Rate ) -> str:
 
 
 class StateRateSelect( forms.Select ):
-    """A state <select> that tags each option with its representative income-tax rate (percent) in a
-    data attribute, so the client can auto-fill the rate field when the state changes. The blank
-    'other / not listed' option carries zero."""
+    """A state <select> that tags each option with its representative income-tax rate (percent) and its
+    retirement-income exemption status words, so the client can auto-fill the rate and show the applied
+    exemptions when the state changes. The blank 'other / not listed' option and no-income-tax states
+    carry a zero rate and no exemption words (there is nothing to exempt)."""
 
     def create_option( self, name, value, label, selected, index, subindex = None, attrs = None ):
         option = super().create_option( name, value, label, selected, index, subindex, attrs )
-        if value:
-            state   = USState.from_name( str( value ) )
-            percent = percent_str( representative_rate( state ) )
-        else:
-            percent = '0'
-        option[ 'attrs' ][ f'data-{AppConst.STATE_RATE_DATA_ATTR}' ] = percent
+        state  = USState.from_name( str( value ) ) if value else None
+        rate   = representative_rate( state ) if state is not None else None
+        percent = percent_str( rate ) if rate is not None else '0'
+        # Exemption words only for a state that actually levies a tax; blank otherwise (nothing applies).
+        levies_tax = bool( rate is not None and rate.fraction )
+        ss_status, retirement_status = exemption_words( state ) if levies_tax else ( '', '' )
+        option[ 'attrs' ][ f'data-{AppConst.STATE_RATE_DATA_ATTR}' ]              = percent
+        option[ 'attrs' ][ f'data-{AppConst.STATE_SS_STATUS_DATA_ATTR}' ]         = ss_status
+        option[ 'attrs' ][ f'data-{AppConst.STATE_RETIREMENT_STATUS_DATA_ATTR}' ] = retirement_status
         return option
 
 

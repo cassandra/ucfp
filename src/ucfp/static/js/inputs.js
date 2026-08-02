@@ -234,7 +234,23 @@ window.App.Inputs = (function () {
                     .attr( dataAttr( C.STATE_RATE_DATA_ATTR ) );
                 $select.closest( 'form' ).find( classSelector( C.STATE_RATE_CLASS ) )
                     .val( rate || '' );
-            } );
+                showStateExemptions( $select );
+            } )
+            .each( function () { showStateExemptions( $( this ) ); } );   // populate on load
+    }
+
+    // Display-only: write the chosen state's retirement-income exemption words (carried per option) into
+    // the read-only readout, or clear it for the "other" option and no-income-tax states.
+    function showStateExemptions( $select ) {
+        const $option    = $select.find( 'option:selected' );
+        const ss         = $option.attr( dataAttr( C.STATE_SS_STATUS_DATA_ATTR ) ) || '';
+        const retirement = $option.attr( dataAttr( C.STATE_RETIREMENT_STATUS_DATA_ATTR ) ) || '';
+        const $readout   = $select.closest( 'form' ).find( classSelector( C.STATE_EXEMPTIONS_CLASS ) );
+        if ( ss || retirement ) {
+            $readout.text( 'Social Security: ' + ss + '  ·  Pensions & retirement: ' + retirement );
+        } else {
+            $readout.empty();
+        }
     }
 
     // ----- CreditCardCalculator: a live, advisory paydown figure per card -----
