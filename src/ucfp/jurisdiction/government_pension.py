@@ -37,6 +37,20 @@ class GovernmentPension:
         raise NotImplementedError(
             f'No government pension schedule for jurisdiction {self._jurisdiction}.' )
 
+    def spousal_excess_annual_benefit(
+            self, entitlement_high_monthly : Decimal, entitlement_low_monthly : Decimal,
+            low_birthdate : date, low_claiming_date : date ) -> Decimal:
+        """The annual spousal top-up (today's dollars) the lower-entitlement spouse receives on top of
+        their own benefit when both are collecting -- a jurisdiction rule (US: up to half the higher
+        earner's entitlement, reduced for claiming before the lower spouse's normal retirement age).
+        Zero where the jurisdiction has no spousal benefit or the lower entitlement already meets the
+        threshold. The caller decides who is higher/lower and gates the both-collecting window."""
+        if self._jurisdiction is JurisdictionType.US_FEDERAL:
+            return us_social_security.spousal_excess_annual_benefit(
+                entitlement_high_monthly, entitlement_low_monthly, low_birthdate, low_claiming_date )
+        raise NotImplementedError(
+            f'No spousal benefit schedule for jurisdiction {self._jurisdiction}.' )
+
     def income_tax_class( self ) -> IncomeTaxClass:
         """The income tax-class the benefit is recognized in -- a jurisdiction rule (US Social
         Security carries the partial-inclusion treatment)."""

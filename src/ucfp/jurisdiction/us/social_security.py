@@ -8,15 +8,17 @@ credits for each month after, up to age 70; FRA slides with birth year (65 for 1
 earlier, to 67 for 1960 and later). Benefits are in today's dollars; the engine grows them by
 the Social Security COLA over the horizon.
 
-Not modeled: the earnings test before FRA; and family/spousal/survivor benefits.
+Spousal benefits are modeled (see `spousal_excess_annual_benefit`). Not modeled: the earnings test
+before FRA; and survivor benefits.
 """
 from datetime import date
 from decimal import Decimal
 
 from common.datetime_utils import elapsed_months
 
-_EARLY_BREAKPOINT  = 36   # months early at which the reduction rate steps down
-_DELAY_CEILING_AGE = 70   # delayed-retirement credits stop accruing at age 70
+_EARLY_BREAKPOINT  = 36        # months early at which the reduction rate steps down
+_DELAY_CEILING_AGE = 70        # delayed-retirement credits stop accruing at age 70
+_MIN_CLAIMING_AGE_MONTHS = 62 * 12   # spousal benefits cannot be claimed before age 62
 
 
 def realized_annual_benefit(
@@ -25,6 +27,21 @@ def realized_annual_benefit(
     the SSA adjustment factor for that claiming month, times twelve."""
     claiming_age_months = elapsed_months( birthdate, claiming_date )
     return pia_monthly * _adjustment_factor( birthdate.year, claiming_age_months ) * Decimal( 12 )
+
+
+def spousal_excess_annual_benefit(
+        pia_high_monthly : Decimal, pia_low_monthly : Decimal,
+        low_birthdate : date, low_claiming_date : date ) -> Decimal:
+    """The annual spousal top-up (today's dollars) the lower earner receives on top of their own
+    benefit: the excess of half the higher earner's PIA over the lower earner's own PIA, reduced for
+    claiming before the lower earner's full retirement age. Floors at zero (no top-up once the lower
+    earner's own PIA meets half the higher PIA), and is based on the higher earner's PIA -- the
+    full-retirement-age amount, not their own claiming-adjusted benefit."""
+    excess_monthly = max( Decimal( 0 ), pia_high_monthly / Decimal( 2 ) - pia_low_monthly )
+    if excess_monthly <= 0:
+        return Decimal( 0 )
+    factor = _spousal_factor( low_birthdate.year, elapsed_months( low_birthdate, low_claiming_date ) )
+    return excess_monthly * factor * Decimal( 12 )
 
 
 def full_retirement_age_months( birth_year : int ) -> int:
@@ -61,3 +78,25 @@ def _early_reduction( months_early : int ) -> Decimal:
     first  = min( months_early, _EARLY_BREAKPOINT )
     beyond = max( months_early - _EARLY_BREAKPOINT, 0 )
     return Decimal( first * 5 ) / Decimal( 900 ) + Decimal( beyond * 5 ) / Decimal( 1200 )
+
+
+def _spousal_factor( birth_year : int, claiming_age_months : int ) -> Decimal:
+    """The fraction of the spousal excess payable for claiming at `claiming_age_months`: exactly 1 at
+    or after full retirement age -- the spousal benefit earns no delayed-retirement credits, so it
+    caps at 50% of PIA -- and reduced before it, with the reduction capped at the age-62 maximum
+    (claiming a spousal benefit below 62 is not allowed, so it does not reduce further)."""
+    fra_months   = full_retirement_age_months( birth_year )
+    months_early = fra_months - claiming_age_months
+    if months_early <= 0:
+        return Decimal( 1 )
+    capped = min( months_early, fra_months - _MIN_CLAIMING_AGE_MONTHS )
+    return Decimal( 1 ) - _spousal_reduction( capped )
+
+
+def _spousal_reduction( months_early : int ) -> Decimal:
+    """The fraction of the spousal benefit lost for claiming `months_early` months before FRA: 25/36
+    of 1% a month for the first 36, then 5/12 of 1% a month. The integer month count is multiplied
+    before the single division, so whole-percent results stay exact (mirrors `_early_reduction`)."""
+    first  = min( months_early, _EARLY_BREAKPOINT )
+    beyond = max( months_early - _EARLY_BREAKPOINT, 0 )
+    return Decimal( first * 25 ) / Decimal( 3600 ) + Decimal( beyond * 5 ) / Decimal( 1200 )
