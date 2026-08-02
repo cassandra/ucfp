@@ -96,7 +96,7 @@ def _spousal_factor( birth_year : int, claiming_age_months : int ) -> Decimal:
 def _spousal_reduction( months_early : int ) -> Decimal:
     """The fraction of the spousal benefit lost for claiming `months_early` months before FRA: 25/36
     of 1% a month for the first 36, then 5/12 of 1% a month. The integer month count is multiplied
-    before the single division, so whole-percent results stay exact (mirrors `_early_reduction`)."""
+    before the single division, so whole-percent results stay exact."""
     first  = min( months_early, _EARLY_BREAKPOINT )
     beyond = max( months_early - _EARLY_BREAKPOINT, 0 )
     return Decimal( first * 25 ) / Decimal( 3600 ) + Decimal( beyond * 5 ) / Decimal( 1200 )

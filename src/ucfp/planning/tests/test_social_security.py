@@ -46,6 +46,20 @@ class RealizationTest( unittest.TestCase ):
         self.assertEqual(                                                               # higher: own only
             result[ 'hi' ].amounts.at( date( 2030, 1, 1 ) ).amount, Decimal( '36000' ) )
 
+    def test_lower_earner_claiming_after_the_higher_starts_already_topped_up( self ):
+        # higher (PIA 3000) claims at 62 in 2022; lower (PIA 1000) claims at 67 in 2027. Both are
+        # already collecting at the lower's start, so one segment carries own + spousal from day one:
+        # own_low at FRA 67 = 12000; excess = (1500-1000)*1.0*12 = 6000 -> 18000.
+        result = _realize(
+            _member( 'hi', 1960, '3000', 2022 ), _member( 'lo', 1960, '1000', 2027 ) )
+        lower = result[ 'lo' ].amounts
+        self.assertEqual( len( lower.segments ), 1 )
+        self.assertEqual( lower.at( date( 2028, 1, 1 ) ).amount, Decimal( '18000' ) )
+
+    def test_entitled_member_without_a_claiming_date_raises( self ):
+        with self.assertRaises( ValueError ):
+            _realize( _member( 'earner', 1960, '2000' ) )   # PIA entered, no claiming date
+
     def test_no_top_up_when_own_pia_meets_half_the_higher( self ):
         # own PIA 1600 exceeds half of 3000 (1500): the lower earner keeps a plain own-benefit schedule.
         result = _realize(

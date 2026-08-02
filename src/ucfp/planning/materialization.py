@@ -456,11 +456,12 @@ def _entitlement_income(
 
 def _government_pension_members(
         profile : Profile, subjects_by_handle : dict[ str, Subject ],
-        timing : dict ) -> list[ GovernmentPensionMember ]:
+        timing : dict[ str, RetirementTiming ] ) -> list[ GovernmentPensionMember ]:
     """Every household subject as a Social Security member: their entered PIA and claiming date when
     they have an entitlement, else None -- a subject with no entitlement is a potential non-earning
     spouse the realizer may top up with a spousal benefit."""
-    entitlement_by_handle = { e.subject_handle: e for e in profile.government_pension }
+    entitlement_by_handle = {
+        entitlement.subject_handle: entitlement for entitlement in profile.government_pension }
     members = list()
     for handle, subject in subjects_by_handle.items():
         entitlement  = entitlement_by_handle.get( handle )

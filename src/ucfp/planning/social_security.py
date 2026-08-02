@@ -69,13 +69,17 @@ def realized_government_pensions(
         return list()
     if len( active ) == 1:
         return [ _own_only( active[ 0 ], government_pension ) ]
-    return _couple( active, government_pension )
+    if len( active ) == 2:
+        return _couple( active, government_pension )
+    raise ValueError(
+        'Government pension realization models a household of at most two members (a couple); '
+        f'got {len( active )} entitled members.' )
 
 
 def _active_claims( members : list[ GovernmentPensionMember ] ) -> list[ _ActiveClaim ]:
     """Resolve members to active claims. A member with a PIA is active as entered (an entitled member
     missing a claiming date is an error). When a couple has exactly one entitled member, the other is
-    synthesized as a non-earning spouse: zero PIA, claiming on the earner's date."""
+    synthesized as a non-earning spouse."""
     entitled = [ member for member in members if member.pia_monthly is not None ]
     if not entitled:
         return list()
@@ -84,16 +88,30 @@ def _active_claims( members : list[ GovernmentPensionMember ] ) -> list[ _Active
             raise ValueError(
                 f'The government pension for "{member.subject_handle}" needs a claiming date in the '
                 'plans timing.' )
-    active = [ _ActiveClaim( member.subject_handle, member.birthdate,
-                             member.pia_monthly, member.claiming_date )
-               for member in entitled ]
-    if len( members ) == 2 and len( entitled ) == 1:
-        earner = entitled[ 0 ]
-        spouse = next( member for member in members
-                       if member.subject_handle != earner.subject_handle )
-        active.append( _ActiveClaim(
-            spouse.subject_handle, spouse.birthdate, Decimal( 0 ), earner.claiming_date ) )
+    active = [ _ActiveClaim(
+        subject_handle = member.subject_handle, birthdate = member.birthdate,
+        pia_monthly = member.pia_monthly, claiming_date = member.claiming_date )
+        for member in entitled ]
+    spouse = _non_earning_spouse_claim( entitled, members )
+    if spouse is not None:
+        active.append( spouse )
     return active
+
+
+def _non_earning_spouse_claim(
+        entitled : list[ GovernmentPensionMember ],
+        members : list[ GovernmentPensionMember ] ) -> Optional[ _ActiveClaim ]:
+    """The non-earning-spouse claim for a couple where exactly one member is entitled: the other member
+    at zero PIA claiming on the earner's date -- a pure spousal benefit, which cannot begin before the
+    earner has filed. None when both (or neither) are entitled, or there is no partner."""
+    if len( members ) != 2 or len( entitled ) != 1:
+        return None
+    earner = entitled[ 0 ]
+    spouse = next( member for member in members
+                   if member.subject_handle != earner.subject_handle )
+    return _ActiveClaim(
+        subject_handle = spouse.subject_handle, birthdate = spouse.birthdate,
+        pia_monthly = Decimal( 0 ), claiming_date = earner.claiming_date )
 
 
 def _own_only(
@@ -102,8 +120,9 @@ def _own_only(
     own = government_pension.realized_annual_benefit(
         claim.pia_monthly, claim.birthdate, claim.claiming_date )
     return RealizedGovernmentPension(
-        claim.subject_handle, claim.claiming_date,
-        Schedule.constant( WindowedAmount( own, DateWindow( start = claim.claiming_date ) ) ) )
+        subject_handle = claim.subject_handle, start_date = claim.claiming_date,
+        amounts = Schedule.constant(
+            WindowedAmount( own, DateWindow( start = claim.claiming_date ) ) ) )
 
 
 def _couple(
@@ -138,4 +157,6 @@ def _lower_with_spousal(
             WindowedAmount( own, DateWindow(
                 start = lower.claiming_date, end = both_collecting - timedelta( days = 1 ) ) ),
             WindowedAmount( own + excess, DateWindow( start = both_collecting ) ) )
-    return RealizedGovernmentPension( lower.subject_handle, lower.claiming_date, Schedule( segments ) )
+    return RealizedGovernmentPension(
+        subject_handle = lower.subject_handle, start_date = lower.claiming_date,
+        amounts = Schedule( segments ) )
