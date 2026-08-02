@@ -47,8 +47,9 @@ user may override. Nothing is required -- an incomplete person is simply not hel
               {{ subjects_form.us_state }}
               {{ subjects_form.state_income_tax_rate }}
             </div>
-            {# Read-only readout of the chosen state's retirement-income exemptions; filled by inputs.js #}
-            <div class="{{ AppConst.STATE_EXEMPTIONS_CLASS }} text-muted small mt-1"></div>
+            {# Read-only readout of the chosen state's retirement-income exemptions; filled by inputs.js.
+               aria-live so a screen reader announces the summary when it updates on a state change. #}
+            <div class="{{ AppConst.STATE_EXEMPTIONS_CLASS }} text-muted small mt-1" aria-live="polite"></div>
           </div>
         </div>
       </div>

@@ -13,7 +13,7 @@ are plain data: adjust a number here without touching structure. Named `subdivis
 """
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from common.labeled_enum import LabeledEnum
 from common.rate import Rate, ZERO_RATE
@@ -163,8 +163,17 @@ def representative_rate( state : USState ) -> Rate:
     return _REPRESENTATIVE_RATE[ state ]
 
 
-def _exempt( social_security : str, retirement : str ) -> tuple[ Decimal, Decimal ]:
-    return ( Decimal( social_security ), Decimal( retirement ) )
+class _ExemptionFractions( NamedTuple ):
+    """The fractions (0..1) of a state's Social Security and pension/withdrawal income removed from
+    its tax base -- 0 fully taxes it, 1 fully exempts it. Named fields (not a bare pair) so the two
+    distinct fractions are never unpacked by position."""
+
+    social_security : Decimal
+    retirement      : Decimal
+
+
+def _exempt( social_security : str, retirement : str ) -> _ExemptionFractions:
+    return _ExemptionFractions( Decimal( social_security ), Decimal( retirement ) )
 
 
 # The share of retirement income each state exempts from its base, as ( Social Security, pension +
@@ -173,7 +182,7 @@ def _exempt( social_security : str, retirement : str ) -> tuple[ Decimal, Decima
 # exclusions, or public-vs-private distinctions this flattens to a single fraction). The dominant signal:
 # most states exempt Social Security, and a few (IL, PA, MS, IA) exempt pensions and withdrawals broadly.
 # Plain data -- adjust a number here. No-income-tax states carry (1, 1); it is moot (their rate is 0).
-_RETIREMENT_EXEMPTION : dict[ USState, tuple[ Decimal, Decimal ] ] = {
+_RETIREMENT_EXEMPTION : dict[ USState, _ExemptionFractions ] = {
     USState.ALABAMA        : _exempt( '1.0', '0.5' ),   # exempts defined-benefit pensions, taxes IRA/401k
     USState.ALASKA         : _exempt( '1.0', '1.0' ),   # no income tax
     USState.ARIZONA        : _exempt( '1.0', '0.0' ),
@@ -237,16 +246,16 @@ def state_tax_policy( state : Optional[ USState ], rate : Rate ) -> StateIncomeT
     retirement-income exemptions. No state ("Other / not listed") is the flat rate with no exemptions."""
     if state is None:
         return StateIncomeTax( rate = rate )
-    social_security_exempt, retirement_exempt = _RETIREMENT_EXEMPTION[ state ]
-    return StateIncomeTax( rate = rate, social_security_exempt = social_security_exempt,
-                           retirement_exempt = retirement_exempt )
+    fractions = _RETIREMENT_EXEMPTION[ state ]
+    return StateIncomeTax( rate = rate, social_security_exempt = fractions.social_security,
+                           retirement_exempt = fractions.retirement )
 
 
 def exemption_words( state : USState ) -> tuple[ str, str ]:
     """The state's Social Security and pension/retirement exemptions as read-only words
     ('Exempt' / 'Partially exempt' / 'Taxed') -- for the People-section summary of what is applied."""
-    social_security, retirement = _RETIREMENT_EXEMPTION[ state ]
-    return ( _exemption_word( social_security ), _exemption_word( retirement ) )
+    fractions = _RETIREMENT_EXEMPTION[ state ]
+    return ( _exemption_word( fractions.social_security ), _exemption_word( fractions.retirement ) )
 
 
 def _exemption_word( fraction : Decimal ) -> str:

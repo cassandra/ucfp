@@ -33,8 +33,8 @@ class StateRateSelect( forms.Select ):
         rate   = representative_rate( state ) if state is not None else None
         percent = percent_str( rate ) if rate is not None else '0'
         # Exemption words only for a state that actually levies a tax; blank otherwise (nothing applies).
-        ss_status, retirement_status = ( exemption_words( state )
-                                         if ( rate is not None and rate.fraction ) else ( '', '' ) )
+        levies_tax = bool( rate is not None and rate.fraction )
+        ss_status, retirement_status = exemption_words( state ) if levies_tax else ( '', '' )
         option[ 'attrs' ][ f'data-{AppConst.STATE_RATE_DATA_ATTR}' ]              = percent
         option[ 'attrs' ][ f'data-{AppConst.STATE_SS_STATUS_DATA_ATTR}' ]         = ss_status
         option[ 'attrs' ][ f'data-{AppConst.STATE_RETIREMENT_STATUS_DATA_ATTR}' ] = retirement_status

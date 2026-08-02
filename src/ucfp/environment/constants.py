@@ -114,9 +114,9 @@ class AppConst:
     # Choosing a state also shows, read-only, which retirement income it exempts: each option carries
     # the Social Security and pension/retirement status words, which the select's change (and load) writes
     # into the exemptions readout beside the rate. Blank for the "other" option and no-income-tax states.
-    STATE_EXEMPTIONS_CLASS         = 'js-state-exemptions'  # the read-only exemptions readout
-    STATE_SS_STATUS_DATA_ATTR      = 'state-ss-status'          # an option's Social Security status word
-    STATE_RETIREMENT_STATUS_DATA_ATTR = 'state-retirement-status'   # an option's pension/retirement status word
+    STATE_EXEMPTIONS_CLASS            = 'js-state-exemptions'      # the read-only exemptions readout
+    STATE_SS_STATUS_DATA_ATTR         = 'state-ss-status'          # an option's Social Security status
+    STATE_RETIREMENT_STATUS_DATA_ATTR = 'state-retirement-status'  # an option's pension/retirement status
 
     # A durable expense's count-entry calculator (Appliance, Lawn Tools, Computer Purchase). A toggle
     # reveals a panel of count/cost/cadence inputs; as they change, the client fills the amount

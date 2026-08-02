@@ -17,22 +17,26 @@ _D = Decimal
 
 
 class _Window:
-    """A fiscal-window stub returning fixed pension / retirement-distribution income; every other
-    class is zero (the charge only reads those two, plus the AGI and taxable-SS passed in directly)."""
+    """A fiscal-window stub returning fixed pension / retirement-distribution / ordinary income; every
+    other class is zero (the charge only reads the retirement classes, plus the AGI and taxable-SS
+    passed in directly; ORDINARY is carried to prove it is NOT drawn into the exemption)."""
 
-    def __init__( self, pension = _D( '0' ), retirement_distribution = _D( '0' ) ):
+    def __init__( self, pension = _D( '0' ), retirement_distribution = _D( '0' ), ordinary = _D( '0' ) ):
         self._by_class = {
             IncomeTaxClass.PENSION                 : pension,
             IncomeTaxClass.RETIREMENT_DISTRIBUTION : retirement_distribution,
+            IncomeTaxClass.ORDINARY                : ordinary,
         }
 
     def income( self, income_tax_class ):
         return self._by_class.get( income_tax_class, _D( '0' ) )
 
 
-def _charge( policy, agi, taxable_ss = _D( '0' ), pension = _D( '0' ), retirement_distribution = _D( '0' ) ):
+def _charge( policy, agi, taxable_ss = _D( '0' ), pension = _D( '0' ), retirement_distribution = _D( '0' ),
+             ordinary = _D( '0' ) ):
     engine = USFederalTaxEngine( federal_2026(), policy )
-    window = _Window( pension = _D( pension ), retirement_distribution = _D( retirement_distribution ) )
+    window = _Window( pension = _D( pension ), retirement_distribution = _D( retirement_distribution ),
+                      ordinary = _D( ordinary ) )
     return engine._state_income_tax_charge( window, _D( agi ), _D( taxable_ss ) )
 
 
@@ -72,6 +76,14 @@ class StateIncomeTaxTest( unittest.TestCase ):
 
     def test_zero_rate_is_no_tax( self ):
         self.assertEqual( _charge( StateIncomeTax(), '100000', pension = '40000' ), _D( '0' ) )
+
+    def test_ordinary_income_is_taxed_even_where_retirement_income_is_fully_exempt( self ):
+        # The reason PENSION is its own class: a retirement-exempt state removes pension / withdrawals
+        # but NOT wages or other ordinary income. AGI 90k = 30k pension (exempt) + 60k ordinary (taxed).
+        policy = StateIncomeTax( rate = Rate.percent( _D( '5' ) ),
+                                 social_security_exempt = _D( '1' ), retirement_exempt = _D( '1' ) )
+        self.assertEqual(
+            _charge( policy, '90000', pension = '30000', ordinary = '60000' ), _D( '3000.00' ) )  # 5% of 60k
 
 
 class PerStatePolicyTest( unittest.TestCase ):
