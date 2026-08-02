@@ -19,7 +19,7 @@ from common.rate import Rate, ZERO_RATE
 from .engine import TaxEngine
 from .enums import StatuteForecastType, JurisdictionType
 from .us.engine import USFederalTaxEngine
-from .us.parameters import BASE_YEAR, federal_2025
+from .us.parameters import BASE_YEAR, federal_2026
 
 
 @dataclass( frozen = True )
@@ -83,10 +83,10 @@ class Statute:
         # through unchanged; only the federal parameters differ by projection.
         state_rate    = self._profile.state_income_tax_rate
         if forecast_type is StatuteForecastType.CURRENT_LAW:
-            return USFederalTaxEngine( federal_2025(), state_rate )
+            return USFederalTaxEngine( federal_2026(), state_rate )
         if forecast_type is StatuteForecastType.COLA_INDEXED:
             return USFederalTaxEngine(
-                federal_2025().indexed( self._cola_factor( year ) ), state_rate )
+                federal_2026().indexed( self._cola_factor( year ) ), state_rate )
         raise NotImplementedError(
             f'Tax forecast {forecast_type} is not supported.' )
 

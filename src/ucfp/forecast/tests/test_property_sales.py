@@ -114,7 +114,7 @@ class SecondHomeSaleTests( unittest.TestCase ):
         # No exclusion: the whole 400k is a long-term gain and is taxed. The exact ending net worth
         # pins that -- a §121-style exclusion would leave materially more, so this discriminates the
         # no-exclusion rule rather than merely asserting "some tax was taken".
-        self.assertEqual( ledger.net_worth( through = date( 2026, 12, 31 ) ), Decimal( '554010.00000' ) )
+        self.assertEqual( ledger.net_worth( through = date( 2026, 12, 31 ) ), Decimal( '554460.00000' ) )
 
     def test_second_home_loss_does_not_offset_other_gains( self ):
         # A stock realizes a 200k long-term gain; a second home bought for 200k but worth only 100k

@@ -13,7 +13,7 @@ from decimal import Decimal
 from common.rate import Rate
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile, Statute, StatuteProjection, TaxProjection
-from ucfp.jurisdiction.us.parameters import BASE_YEAR, federal_2025
+from ucfp.jurisdiction.us.parameters import BASE_YEAR, federal_2026
 
 _SINGLE = FilingStatus.SINGLE
 
@@ -21,7 +21,7 @@ _SINGLE = FilingStatus.SINGLE
 class TaxParameterIndexingTests( unittest.TestCase ):
 
     def setUp( self ):
-        self.base    = federal_2025()
+        self.base    = federal_2026()
         self.factor  = Decimal( '1.5' )
         self.indexed = self.base.indexed( self.factor )
 
@@ -82,20 +82,20 @@ class StatuteProjectionTests( unittest.TestCase ):
     def test_current_law_is_static_across_years( self ):
         engine = self._engine( StatuteForecastType.CURRENT_LAW, BASE_YEAR + 50 )
         self.assertEqual(
-            engine._parameters.fica_rules.ss_wage_base, federal_2025().fica_rules.ss_wage_base )
+            engine._parameters.fica_rules.ss_wage_base, federal_2026().fica_rules.ss_wage_base )
 
     def test_cola_indexed_compounds_from_the_base_year( self ):
         engine = self._engine(
             StatuteForecastType.COLA_INDEXED, BASE_YEAR + 2, cola = Rate( Decimal( '0.10' ) ) )
         self.assertEqual(
             engine._parameters.fica_rules.ss_wage_base,
-            federal_2025().fica_rules.ss_wage_base * Decimal( '1.10' ) ** 2 )
+            federal_2026().fica_rules.ss_wage_base * Decimal( '1.10' ) ** 2 )
 
     def test_cola_indexed_at_the_base_year_is_unchanged( self ):
         engine = self._engine(
             StatuteForecastType.COLA_INDEXED, BASE_YEAR, cola = Rate( Decimal( '0.10' ) ) )
         self.assertEqual(
-            engine._parameters.fica_rules.ss_wage_base, federal_2025().fica_rules.ss_wage_base )
+            engine._parameters.fica_rules.ss_wage_base, federal_2026().fica_rules.ss_wage_base )
 
     def test_cola_indexed_without_a_rate_is_rejected( self ):
         with self.assertRaises( ValueError ):

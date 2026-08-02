@@ -158,7 +158,7 @@ class ContributionValidationTests( unittest.TestCase ):
                 assets = assets ) ).run()
 
     def test_first_year_contribution_over_the_limit_is_rejected( self ):
-        # 40k deferral exceeds the 31000 catch-up 401(k) limit in the first year -> a planner error
+        # 40k deferral exceeds the 32500 catch-up 401(k) limit in the first year -> a planner error
         with self.assertRaises( ValueError ):
             Forecast( _parameters(
                 [ RetirementContribution( '401k', Decimal( '40000' ), ContributionSource.WAGE ) ] ) ).run()
@@ -187,8 +187,8 @@ class ContributionLimitTests( unittest.TestCase ):
         ) ).run()
 
     def test_catch_up_limit_applies_at_fifty_plus( self ):
-        # the subject is 51, so the 401(k) limit is 23500 + 7500 catch-up = 31000; a 30k deferral
-        # fits and is contributed in full (the 23500 base alone would clamp it)
+        # the subject is 51, so the 401(k) limit is 24500 + 8000 catch-up = 32500; a 30k deferral
+        # fits and is contributed in full (the 24500 base alone would clamp it)
         result = Forecast( _parameters(
             [ RetirementContribution( '401k', Decimal( '30000' ), ContributionSource.WAGE ) ] ) ).run()
         reader = Bookkeeper( result.books )
@@ -198,22 +198,22 @@ class ContributionLimitTests( unittest.TestCase ):
         self.assertEqual( _cap_notices( result ), [] )
 
     def test_contribution_clamped_when_growth_pushes_it_past_the_limit( self ):
-        # 30k in 2026 (under the 31000 limit); grown 10% it wants 33k in 2027, clamped to 31000
+        # 30k in 2026 (under the 32500 limit); grown 10% it wants 33k in 2027, clamped to 32500
         result = self._grown_contributions(
             [ RetirementContribution( '401k', Decimal( '30000' ), ContributionSource.WAGE ) ] )
         reader = Bookkeeper( result.books )
         self.assertEqual(
             reader.ledger.market_value( _holding( reader, '401k' ), through = date( 2027, 12, 31 ) ),
-            Decimal( '61000' ) )                                   # 30000 + clamped 31000
+            Decimal( '62500' ) )                                   # 30000 + clamped 32500
         caps = _cap_notices( result )
         self.assertEqual( len( caps ), 1 )
-        self.assertEqual( caps[ 0 ].amount, Decimal( '2000' ) )    # 33000 wanted - 31000 allowed
+        self.assertEqual( caps[ 0 ].amount, Decimal( '500' ) )     # 33000 wanted - 32500 allowed
         self.assertEqual( caps[ 0 ].severity, NoticeSeverity.WARNING )
 
     def test_contribution_clamp_still_applies_in_a_partial_year( self ):
         # the contribution limit is an exact real-dollar rule, not a bracket calculation, so it must
         # apply even in a partial year that income tax does not settle. A trailing 2027 ending Dec 30
-        # is not taxed, but growth still pushes the deferral past the 31000 limit and it is clamped.
+        # is not taxed, but growth still pushes the deferral past the 32500 limit and it is clamped.
         result = self._grown_contributions(
             [ RetirementContribution( '401k', Decimal( '30000' ), ContributionSource.WAGE ) ],
             end = date( 2027, 12, 30 ) )
@@ -222,7 +222,7 @@ class ContributionLimitTests( unittest.TestCase ):
 
     def test_contributions_to_two_accounts_share_one_limit( self ):
         # two 401(k)s for one owner share the single employer-plan limit: 15k + 15k = 30k fits in
-        # 2026, but grown 10% it is 33k in 2027 and is clamped to 31000 across both together
+        # 2026, but grown 10% it is 33k in 2027 and is clamped to 32500 across both together
         assets = [
             AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ),
             AssetParameters( '401k-A', AssetClass.PRETAX_RETIREMENT, Decimal( '0' ), Decimal( '0' ),
@@ -238,7 +238,7 @@ class ContributionLimitTests( unittest.TestCase ):
         combined = (
             reader.ledger.market_value( _holding( reader, '401k-a' ), through = through )
             + reader.ledger.market_value( _holding( reader, '401k-b' ), through = through ) )
-        self.assertEqual( combined, Decimal( '61000' ) )          # 30000 + clamped 31000
+        self.assertEqual( combined, Decimal( '62500' ) )          # 30000 + clamped 32500
         self.assertEqual( len( _cap_notices( result ) ), 1 )      # one notice for the shared group
 
 

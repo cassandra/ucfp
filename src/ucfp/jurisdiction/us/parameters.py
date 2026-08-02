@@ -2,7 +2,7 @@
 structure and logic).
 
 A `TaxParameters` is a single tax year's figures. The Scenario projects a per-year
-trajectory from a current-year baseline (`federal_2025`) -- indexing thresholds for
+trajectory from a current-year baseline (`federal_2026`) -- indexing thresholds for
 inflation, or applying a deliberate what-if such as a rate hike -- and constructs
 the per-period `USFederalTaxEngine` with that year's parameters. The Period never
 sees these; it treats tax as a black box.
@@ -187,61 +187,62 @@ class TaxParameters:
             aca                 = self.aca.indexed( factor ) )
 
 
-# The year `federal_2025` describes -- the baseline a COLA projection indexes forward from.
-BASE_YEAR = 2025
+# The year `federal_2026` describes -- the baseline a COLA projection indexes forward from.
+BASE_YEAR = 2026
 
 
-def federal_2025() -> TaxParameters:
-    """The 2025 current-year baseline -- the ground truth the Scenario projects from."""
+def federal_2026() -> TaxParameters:
+    """The 2026 current-year baseline -- the ground truth the Scenario projects from."""
     d = Decimal
     return TaxParameters(
         ordinary_brackets = {
             FilingStatus.MARRIED_JOINT : BracketTable( (
                 ( d( '0' ), d( '0.10' ) ),
-                ( d( '23850' ), d( '0.12' ) ),
-                ( d( '96950' ), d( '0.22' ) ),
-                ( d( '206700' ), d( '0.24' ) ),
-                ( d( '394600' ), d( '0.32' ) ),
-                ( d( '501050' ), d( '0.35' ) ),
-                ( d( '751600' ), d( '0.37' ) ),
+                ( d( '24800' ), d( '0.12' ) ),
+                ( d( '100800' ), d( '0.22' ) ),
+                ( d( '211400' ), d( '0.24' ) ),
+                ( d( '403550' ), d( '0.32' ) ),
+                ( d( '512450' ), d( '0.35' ) ),
+                ( d( '768700' ), d( '0.37' ) ),
             ) ),
             FilingStatus.SINGLE : BracketTable( (
                 ( d( '0' ), d( '0.10' ) ),
-                ( d( '11925' ), d( '0.12' ) ),
-                ( d( '48475' ), d( '0.22' ) ),
-                ( d( '103350' ), d( '0.24' ) ),
-                ( d( '197300' ), d( '0.32' ) ),
-                ( d( '250525' ), d( '0.35' ) ),
-                ( d( '626350' ), d( '0.37' ) ),
+                ( d( '12400' ), d( '0.12' ) ),
+                ( d( '50400' ), d( '0.22' ) ),
+                ( d( '105700' ), d( '0.24' ) ),
+                ( d( '201775' ), d( '0.32' ) ),
+                ( d( '256225' ), d( '0.35' ) ),
+                ( d( '640600' ), d( '0.37' ) ),
             ) ),
         },
         ltcg_brackets = {
             FilingStatus.MARRIED_JOINT : BracketTable( (
                 ( d( '0' ), d( '0' ) ),
-                ( d( '96700' ), d( '0.15' ) ),
-                ( d( '600050' ), d( '0.20' ) ),
+                ( d( '98900' ), d( '0.15' ) ),
+                ( d( '613700' ), d( '0.20' ) ),
             ) ),
             FilingStatus.SINGLE : BracketTable( (
                 ( d( '0' ), d( '0' ) ),
-                ( d( '48350' ), d( '0.15' ) ),
-                ( d( '533400' ), d( '0.20' ) ),
+                ( d( '49450' ), d( '0.15' ) ),
+                ( d( '545500' ), d( '0.20' ) ),
             ) ),
         },
         standard_deduction = {
             FilingStatus.MARRIED_JOINT : StandardDeduction(
-                d( '31500' ), d( '1600' ), d( '6000' ), d( '150000' ), d( '250000' ) ),
+                d( '32200' ), d( '1650' ), d( '6000' ), d( '150000' ), d( '250000' ) ),
             FilingStatus.SINGLE : StandardDeduction(
-                d( '15750' ), d( '2000' ), d( '6000' ), d( '150000' ), d( '250000' ) ),
+                d( '16100' ), d( '2050' ), d( '6000' ), d( '75000' ), d( '175000' ) ),
         },
         ss_thresholds = {
             FilingStatus.MARRIED_JOINT : SocialSecurityThresholds( d( '32000' ), d( '44000' ) ),
             FilingStatus.SINGLE : SocialSecurityThresholds( d( '25000' ), d( '34000' ) ),
         },
-        # SALT cap is the canonical $10,000; the temporary OBBBA $40,000 cap (with its
-        # high-income phasedown) is an alternative.
+        # SALT cap is the temporary OBBBA amount, $40,400 for 2026 (indexed 1% a year from the
+        # $40,000 2025 base). Its high-income phasedown -- reduce by 30% of MAGI over $505,000,
+        # floored at $10,000 -- is not modeled; the flat cap here is the no-phasedown case.
         itemized_rules = ItemizedRules(
             medical_floor_rate   = d( '0.075' ),
-            salt_cap             = d( '10000' ),
+            salt_cap             = d( '40400' ),
             charitable_agi_limit = d( '0.60' ),
         ),
         capital_loss_offset_cap = d( '3000' ),
@@ -260,17 +261,17 @@ def federal_2025() -> TaxParameters:
         # integer year-end ages the half-year reads as "under 59.5", i.e. age <= 59.
         early_withdrawal_rate = d( '0.10' ),
         early_withdrawal_age  = d( '59.5' ),
-        # 2025 employee limits: 401(k) elective deferral $23,500 (+$7,500 catch-up at 50+);
-        # IRA $7,000 (+$1,000 catch-up at 50+).
+        # 2026 employee limits: 401(k) elective deferral $24,500 (+$8,000 catch-up at 50+);
+        # IRA $7,500 (+$1,100 catch-up at 50+). The higher ages-60-63 catch-up is not modeled.
         contribution_limits = ContributionLimits(
-            elective_deferral          = d( '23500' ),
-            elective_deferral_catch_up = d( '7500' ),
-            ira                        = d( '7000' ),
-            ira_catch_up               = d( '1000' ),
+            elective_deferral          = d( '24500' ),
+            elective_deferral_catch_up = d( '8000' ),
+            ira                        = d( '7500' ),
+            ira_catch_up               = d( '1100' ),
             catch_up_age               = 50,
         ),
         fica_rules = FICARules(
-            ss_wage_base             = d( '176100' ),
+            ss_wage_base             = d( '184500' ),
             ss_rate                  = d( '0.062' ),
             medicare_rate            = d( '0.0145' ),
             additional_medicare_rate = d( '0.009' ),
@@ -279,12 +280,21 @@ def federal_2025() -> TaxParameters:
                 FilingStatus.SINGLE : d( '200000' ),
             },
         ),
+        # 2026 reverts to the ORIGINAL (pre-ARPA) ACA structure: the enhanced IRA/ARPA subsidies
+        # expired after 2025. The applicable-percentage curve rises to a 9.96% cap (Rev. Proc.
+        # 2025-25), steeper than the 8.5% enhanced cap, and a hard 400%-of-FPL eligibility cliff
+        # returns. Poverty figures are the 2025 HHS guidelines (48 states) used for 2026 coverage:
+        # $15,650 first person, +$5,500 each additional. The curve here is the best linear fit of
+        # the piecewise 2026 table (passing through 4.19% at 150% FPL and the 9.96% cap at 300%
+        # FPL); its lower ratio is the line's x-intercept, not a real FPL threshold. NOTE: the hard
+        # 400%-FPL cliff is NOT modeled -- the engine caps the applicable rate but keeps paying a
+        # credit above 400% FPL. See report/flags.
         aca = AcaParameters(
-            poverty_first_person      = d( '15960' ),
-            poverty_additional_person = d( '5680' ),
-            applicable_lower_ratio    = d( '1.5' ),
-            applicable_slope          = d( '0.034' ),
-            applicable_max_rate       = d( '0.085' ),
+            poverty_first_person      = d( '15650' ),
+            poverty_additional_person = d( '5500' ),
+            applicable_lower_ratio    = d( '0.41' ),
+            applicable_slope          = d( '0.0385' ),
+            applicable_max_rate       = d( '0.0996' ),
         ),
         passive_activity = PassiveActivityRules(
             loss_allowance = d( '25000' ),

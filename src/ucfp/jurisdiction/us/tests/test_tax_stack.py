@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from ucfp.jurisdiction.enums import FilingStatus
 from ucfp.jurisdiction.us.engine import USFederalTaxEngine, _TaxableSplit
-from ucfp.jurisdiction.us.parameters import federal_2025
+from ucfp.jurisdiction.us.parameters import federal_2026
 
 _MFJ = FilingStatus.MARRIED_JOINT
 
@@ -18,7 +18,7 @@ _MFJ = FilingStatus.MARRIED_JOINT
 class TaxStackOrderingTests( unittest.TestCase ):
 
     def setUp( self ):
-        self.parameters = federal_2025()
+        self.parameters = federal_2026()
         self.engine     = USFederalTaxEngine( self.parameters )
         self.cap        = self.parameters.section_1250_rate
 
