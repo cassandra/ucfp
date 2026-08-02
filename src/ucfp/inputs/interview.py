@@ -30,7 +30,7 @@ from ucfp.inputs.compatibility import plans_without_accounts
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
 from ucfp.jurisdiction.labels import local_label
-from ucfp.jurisdiction.us.subdivision_tax import USState, representative_rate
+from ucfp.jurisdiction.us.subdivision_tax import USState
 
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
@@ -48,7 +48,7 @@ from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
-from .widgets import IsoDateInput
+from .widgets import IsoDateInput, StateRateSelect, percent_str
 
 
 class Aggregate( Enum ):
@@ -75,25 +75,6 @@ class Section:
 _STATE_NONE_LABEL = 'Other or not listed'
 
 
-def _percent_str( rate : Rate ) -> str:
-    """A `Rate` as a bare percent string, trailing zeros trimmed: 0.06 -> '6', 0.0307 -> '3.07'."""
-    return format( ( rate.fraction * Decimal( '100' ) ).normalize(), 'f' )
-
-
-class _StateRateSelect( forms.Select ):
-    """A state <select> that tags each option with its representative income-tax rate (percent) in a
-    data attribute, so the client can auto-fill the rate field when the state changes. The blank
-    'other / not listed' option carries zero."""
-
-    def create_option( self, name, value, label, selected, index, subindex = None, attrs = None ):
-        option    = super().create_option( name, value, label, selected, index, subindex, attrs )
-        state_key = str( value ) if value else ''
-        percent   = _percent_str( representative_rate( USState.from_name( state_key ) ) ) \
-            if state_key else '0'
-        option[ 'attrs' ][ f'data-{AppConst.STATE_RATE_DATA_ATTR}' ] = percent
-        return option
-
-
 class SubjectsForm( forms.Form ):
     """§1 -- who the plan is for. Collects one subject and optionally a partner, and *infers* the
     filing status (joint when there is a partner) rather than asking it -- the engine supports only
@@ -118,8 +99,8 @@ class SubjectsForm( forms.Form ):
     us_state          = forms.ChoiceField(
         label = 'State', required = False,
         choices = [ ( '', _STATE_NONE_LABEL ) ] + USState.choices(),
-        widget = _StateRateSelect( attrs = {
-            'class' : f'{AppConst.STATE_SELECT_CLASS} form-select form-select-sm flex-grow-1',
+        widget = StateRateSelect( attrs = {
+            'class' : f'{AppConst.STATE_SELECT_CLASS} custom-select custom-select-sm flex-grow-1 mr-2',
             'aria-label' : 'State' } ) )
     state_income_tax_rate = forms.DecimalField(
         label = 'State Tax rate (%)', required = False, min_value = 0, max_value = 100,
@@ -164,7 +145,7 @@ class SubjectsForm( forms.Form ):
             initial[ 'us_state' ] = profile.us_state.name.lower()
         # Show the rate only when non-zero; a fresh profile (or a no-income-tax state) leaves it blank.
         if profile.state_income_tax_rate.fraction:
-            initial[ 'state_income_tax_rate' ] = _percent_str( profile.state_income_tax_rate )
+            initial[ 'state_income_tax_rate' ] = percent_str( profile.state_income_tax_rate )
         return initial
 
     def clean( self ):

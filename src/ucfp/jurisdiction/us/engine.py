@@ -140,10 +140,8 @@ class USFederalTaxEngine( TaxEngine ):
 
     def __init__( self, parameters : TaxParameters, state_income_tax_rate : Rate = ZERO_RATE ):
         self._parameters            = parameters
-        # A flat state income-tax rate on federal AGI -- the simplified per-state surcharge. Flat
-        # (never COLA-indexed), so it rides beside the year's projected federal parameters rather
-        # than inside them, and is the same for every projected year. ZERO_RATE for a no-income-tax
-        # state, which the charge filter then drops.
+        # A constructor argument, not a `TaxParameters` field: never COLA-indexed, so it is the same
+        # for every projected year. ZERO_RATE for a no-income-tax state, which the charge filter drops.
         self._state_income_tax_rate = state_income_tax_rate
 
     def assess( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
@@ -240,8 +238,6 @@ class USFederalTaxEngine( TaxEngine ):
         payroll_tax = self._payroll_tax( status, fiscal_window )
         premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.health_enrollment )
 
-        # A flat state income tax on federal AGI -- the simplified per-state surcharge, its own
-        # charge that reads AGI but feeds nothing back (not SALT, not any federal figure).
         state_income_tax = self._state_income_tax_rate.change_on( agi )
 
         # Income tax splits into its rate layers, each its own account; payroll tax and NIIT stand
