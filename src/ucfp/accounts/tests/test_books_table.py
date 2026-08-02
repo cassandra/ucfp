@@ -80,6 +80,41 @@ class AdaptRevealsNewColumnsTest( unittest.TestCase ):
         adapted = lens.adapt( _couple_catalog() )
         self.assertNotIn( 'acct:stale', _tokens( adapted ) )
 
+    def test_a_newcomer_lands_after_a_populated_sibling_block_not_mid_subtree( self ):
+        # 'you' is drilled to two accounts and both the type and source are expanded; the partner rung
+        # is the newcomer and must land at the SOURCE's group tail -- after the whole 'you' block, not
+        # spliced mid-subtree (the group-tail computation walking past a populated sibling).
+        catalog = BooksTableColumnCatalog( [
+            _summary( 'type:INCOME', [ 'src:ss' ] ),
+            _summary( 'src:ss', [ 'subj:you', 'subj:partner' ], parent = 'type:INCOME' ),
+            _summary( 'subj:you', [ 'acct:you1', 'acct:you2' ], parent = 'src:ss' ),
+            _leaf( 'acct:you1', 'subj:you' ),
+            _leaf( 'acct:you2', 'subj:you' ),
+            _summary( 'subj:partner', [ 'acct:partner' ], parent = 'src:ss' ),
+            _leaf( 'acct:partner', 'subj:partner' ) ] )
+        lens    = BooksTableDefinition(
+            _keys( 'type:INCOME', 'src:ss', 'subj:you', 'acct:you1', 'acct:you2' ) )
+        adapted = lens.adapt( catalog )
+        self.assertEqual(
+            _tokens( adapted ),
+            [ 'type:INCOME', 'src:ss', 'subj:you', 'acct:you1', 'acct:you2', 'subj:partner' ] )
+
+    def test_multiple_newcomers_append_in_member_order_at_the_group_tail( self ):
+        catalog = BooksTableColumnCatalog( [
+            _summary( 'type:INCOME', [ 'src:ss' ] ),
+            _summary( 'src:ss', [ 'subj:you', 'subj:a', 'subj:b' ], parent = 'type:INCOME' ),
+            _summary( 'subj:you', [ 'acct:you' ], parent = 'src:ss' ),
+            _leaf( 'acct:you', 'subj:you' ),
+            _summary( 'subj:a', [ 'acct:a' ], parent = 'src:ss' ),
+            _leaf( 'acct:a', 'subj:a' ),
+            _summary( 'subj:b', [ 'acct:b' ], parent = 'src:ss' ),
+            _leaf( 'acct:b', 'subj:b' ) ] )
+        lens    = BooksTableDefinition( _keys( 'type:INCOME', 'src:ss', 'subj:you', 'acct:you' ) )
+        adapted = lens.adapt( catalog )
+        self.assertEqual(
+            _tokens( adapted ),
+            [ 'type:INCOME', 'src:ss', 'subj:you', 'acct:you', 'subj:a', 'subj:b' ] )
+
 
 def _keys( *tokens ):
     return tuple( BooksColumnKey( token ) for token in tokens )

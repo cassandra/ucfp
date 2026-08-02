@@ -195,6 +195,30 @@ def _subtree_block( catalog : 'BooksTableColumnCatalog', keys : list,
     return start, end
 
 
+def _reveal_newcomers( catalog : 'BooksTableColumnCatalog', kept : list ) -> list:
+    """`kept` with each already-expanded summary's newly-appeared catalog members inserted -- collapsed,
+    at the summary's group tail. A summary is expanded when at least one of its immediate members is
+    present (a collapsed one reveals nothing, keeping its members rolled up). Newcomers are never
+    revisited (they are not added to the membership set), so they arrive collapsed for the user to
+    expand. Insertion recomputes the group tail against the growing list, so nested expanded summaries
+    stay contiguous."""
+    present  = set( kept )
+    revealed = list( kept )
+    for summary_key in kept:
+        column = catalog.get( summary_key )
+        if not isinstance( column, BooksSummaryColumn ):
+            continue
+        if not any( member in present for member in column.member_keys ):
+            continue
+        newcomers = [ member for member in column.member_keys
+                      if ( member in catalog ) and ( member not in present ) ]
+        if not newcomers:
+            continue
+        end = _subtree_block( catalog, revealed, summary_key )[ 1 ]
+        revealed[ end : end ] = newcomers
+    return revealed
+
+
 def _swap_sibling_blocks( catalog : 'BooksTableColumnCatalog', keys : list,
                           first_key : BooksColumnKey, second_key : BooksColumnKey ) -> list:
     """`keys` with the two columns' subtree blocks swapped -- each column carries its descendants. The
@@ -245,27 +269,13 @@ class BooksTableDefinition:
         survives. Then, under each already-expanded summary, reveal the catalog members that appeared
         after the lens was set -- added collapsed at the end of the group, so an account created by a
         later edit (e.g. a partner's income once the subject exists) surfaces without the user resetting
-        the view. A collapsed summary reveals nothing (its members stay rolled up); the removed set and
-        the user's order/reordering are preserved. Adapt-on-read: the stored lens is left untouched."""
+        the view. The removed set and the user's order/reordering are preserved, and the stored lens is
+        left untouched (adapt-on-read)."""
         kept    = [ key for key in self.column_keys if key in catalog ]
         removed = tuple( key for key in self.removed_keys if key in catalog )
         if not kept:
             return catalog.default_definition()
-        present  = set( kept )
-        revealed = list( kept )
-        for summary_key in kept:
-            column = catalog.get( summary_key )
-            if not isinstance( column, BooksSummaryColumn ):
-                continue
-            if not any( member in present for member in column.member_keys ):
-                continue                                        # a collapsed summary reveals nothing
-            newcomers = [ member for member in column.member_keys
-                          if ( member in catalog ) and ( member not in present ) ]
-            if not newcomers:
-                continue
-            end = _subtree_block( catalog, revealed, summary_key )[ 1 ]
-            revealed[ end : end ] = newcomers                   # newcomers land collapsed, group-tail
-        return BooksTableDefinition( tuple( revealed ), removed )
+        return BooksTableDefinition( tuple( _reveal_newcomers( catalog, kept ) ), removed )
 
     def expand( self, catalog : 'BooksTableColumnCatalog',
                 key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
