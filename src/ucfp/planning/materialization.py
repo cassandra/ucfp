@@ -33,7 +33,7 @@ from ucfp.forecast.parameters import (
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
-from ucfp.jurisdiction.us.subdivision_tax import StateIncomeTax
+from ucfp.jurisdiction.us.subdivision_tax import state_tax_policy
 from ucfp.planning.social_security import GovernmentPensionMember, realized_government_pensions
 
 from ucfp.parameter_sets.enums import PropertyContext, Realization
@@ -760,4 +760,4 @@ def _statute( profile : Profile, assumptions : Assumptions ):
     return StatuteProfile(
         jurisdiction_type = profile.jurisdiction_type,
         tax_projection    = assumptions.tax_projection,
-        state_income_tax  = StateIncomeTax( rate = profile.state_income_tax_rate ) )
+        state_income_tax  = state_tax_policy( profile.us_state, profile.state_income_tax_rate ) )

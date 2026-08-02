@@ -10,7 +10,7 @@ from common.rate import Rate
 from ucfp.accounts.enums import IncomeTaxClass
 from ucfp.jurisdiction.us.engine import USFederalTaxEngine
 from ucfp.jurisdiction.us.parameters import federal_2026
-from ucfp.jurisdiction.us.subdivision_tax import StateIncomeTax
+from ucfp.jurisdiction.us.subdivision_tax import StateIncomeTax, USState, state_tax_policy
 
 _D = Decimal
 
@@ -71,6 +71,41 @@ class StateIncomeTaxTest( unittest.TestCase ):
 
     def test_zero_rate_is_no_tax( self ):
         self.assertEqual( _charge( StateIncomeTax(), '100000', pension = '40000' ), _D( '0' ) )
+
+
+class PerStatePolicyTest( unittest.TestCase ):
+    """`state_tax_policy` resolves the chosen state's retirement-income exemptions and carries the
+    household's (overridable) rate. Values are coarse per-state approximations."""
+
+    def test_no_state_is_a_flat_rate_with_no_exemptions( self ):
+        policy = state_tax_policy( None, Rate.percent( _D( '5' ) ) )
+        self.assertEqual( policy.social_security_exempt, _D( '0' ) )
+        self.assertEqual( policy.retirement_exempt, _D( '0' ) )
+
+    def test_the_overridable_rate_is_carried_through( self ):
+        self.assertEqual(
+            state_tax_policy( USState.ILLINOIS, Rate.percent( _D( '3.5' ) ) ).rate,
+            Rate.percent( _D( '3.5' ) ) )
+
+    def test_full_exemption_state_leaves_a_retiree_no_state_tax( self ):
+        # Illinois exempts Social Security, pensions, and withdrawals: a retiree living on them owes ~none.
+        policy = state_tax_policy( USState.ILLINOIS, Rate.percent( _D( '5' ) ) )
+        self.assertEqual(
+            ( policy.social_security_exempt, policy.retirement_exempt ), ( _D( '1.0' ), _D( '1.0' ) ) )
+        engine = USFederalTaxEngine( federal_2026(), policy )
+        window = _Window( pension = _D( '30000' ) )                # AGI = 20k taxable SS + 30k pension
+        self.assertEqual( engine._state_income_tax_charge( window, _D( '50000' ), _D( '20000' ) ), _D( '0' ) )
+
+    def test_social_security_exempt_state_still_taxes_pension_income( self ):
+        # California exempts Social Security but fully taxes retirement income.
+        policy = state_tax_policy( USState.CALIFORNIA, Rate.percent( _D( '5' ) ) )
+        self.assertEqual(
+            ( policy.social_security_exempt, policy.retirement_exempt ), ( _D( '1.0' ), _D( '0.0' ) ) )
+        engine = USFederalTaxEngine( federal_2026(), policy )
+        window = _Window( pension = _D( '30000' ) )
+        # SS (20k) exempt, pension (30k) taxed -> 5% of 30k
+        self.assertEqual(
+            engine._state_income_tax_charge( window, _D( '50000' ), _D( '20000' ) ), _D( '1500.00' ) )
 
 
 if __name__ == '__main__':
