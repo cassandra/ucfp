@@ -224,10 +224,8 @@ class USFederalTaxEngine( TaxEngine ):
             tax_exempt_interest     = tax_exempt_interest,
             untaxed_social_security = ss_gross - taxable_ss,
         )
-        # The state income tax is a flat function of AGI (and the retirement exemption), so it is known
-        # before the deduction step and feeds the federal SALT itemized deduction (capped) -- computed
-        # once here and reused as its own charge below. State tax reads AGI but nothing feeds back to it,
-        # so the pipeline stays acyclic (one pass, exact within the model).
+        # Computed before the deduction step because it feeds the SALT itemized deduction, then reused
+        # as its own charge below. State tax depends only on AGI, so a single pass stays acyclic.
         state_income_tax = self._state_income_tax_charge( fiscal_window, agi, taxable_ss )
         deduction  = max(
             self._standard_deduction( status, tax_context, agi ),
@@ -619,8 +617,8 @@ class USFederalTaxEngine( TaxEngine ):
         """The simplified state income tax: the flat rate on federal AGI, less the state's exemption of
         retirement income -- a share of taxable Social Security and of pension + pre-tax
         retirement-distribution income (most states exempt Social Security, and several exempt pensions
-        and retirement-account withdrawals). Reads AGI; its result joins the federal SALT deduction
-        (see `_itemized_deduction`), but nothing feeds back to it."""
+        and retirement-account withdrawals). Reads AGI; its result joins the federal SALT deduction,
+        but nothing feeds back to it."""
         policy     = self._state_income_tax
         retirement = ( fiscal_window.income( IncomeTaxClass.PENSION )
                        + fiscal_window.income( IncomeTaxClass.RETIREMENT_DISTRIBUTION ) )
