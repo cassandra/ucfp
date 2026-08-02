@@ -21,7 +21,7 @@ from django import forms
 from common.recurrence import OneTime
 from common.schedule import Schedule
 
-from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
     ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
@@ -90,6 +90,13 @@ def _names( profile ) -> dict:
     names.update( { asset.handle: asset.name for asset in profile.assets } )
     names.update( { debt.handle: debt.name for debt in profile.debts } )
     return names
+
+
+def _asset_classes( profile ) -> dict:
+    """Each asset's class, keyed by its handle -- lets a transfer tell an appreciating holding (whose
+    move out is a sale that realizes a gain) from a face-value account (a plain, no-tax move)."""
+    return { asset.handle: asset.asset_class
+             for asset in profile.assets if asset.handle is not None }
 
 
 def _money( amount ) -> str:
@@ -193,9 +200,26 @@ class TransferEvent( EventType ):
                  f'{names.get( event.selections.get( TARGET_ROLE ) )}' )
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        source       = event.selections[ SOURCE_ROLE ]
+        target       = event.selections[ TARGET_ROLE ]
+        classes      = _asset_classes( profile )
+        source_class = classes.get( source )
+        target_class = classes.get( target )
+        # Moving out of an appreciating holding is a sale: realize the proportional embedded gain into
+        # the source class's realized-gain income (a capital gain for stocks, an ordinary distribution
+        # for a pre-tax account) rather than a no-tax value move. A face-value source (cash, CDs) has
+        # no gain and takes the plain transfer below.
+        realizes_gain = ( source_class is not None ) and source_class.accrues_unrealized_gains
+        if realizes_gain:
+            # Proceeds to the cash hub for a cash target, else a conversion into the target holding
+            # (which re-establishes basis there).
+            target_is_cash_hub = target_class is AssetClass.CASH
+            into.scheduled_events.append( ScheduledRealization(
+                event_date = event.date, holding = source, amount = event.amount,
+                destination = None if target_is_cash_hub else target ) )
+            return
         into.scheduled_events.append( ScheduledTransfer(
-            event_date = event.date, source = event.selections[ SOURCE_ROLE ],
-            target = event.selections[ TARGET_ROLE ], amount = event.amount ) )
+            event_date = event.date, source = source, target = target, amount = event.amount ) )
 
 
 class SellPropertyEvent( EventType ):
