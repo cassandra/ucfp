@@ -23,7 +23,7 @@ ENV_PREFIX = 'UCFP_'
 # The human-readable long form of the project name. Like ENV_PREFIX this is a
 # per-project token, kept here next to it as the single place to set it. Used
 # for display purposes (e.g. SITE_NAME) and referenced elsewhere in the code.
-PROJECT_NAME = 'UCFP'
+PROJECT_NAME = 'Landfall'
 
 # The version file lives at the project root and is the single source of truth
 # for the running version. The name is intentionally generic (no acronym) so

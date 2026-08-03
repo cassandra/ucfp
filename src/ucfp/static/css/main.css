@@ -17,9 +17,9 @@
   --white: #fdfdfd;
   --black: #020204;
 
-  --primary-color: #4c5bd4;
+  --primary-color: #1f5f8b;
   --on-primary-color: #ffffff;
-  --primary-highlight-color: #3b47a5;
+  --primary-highlight-color: #184c70;
 
   --secondary-color: #f5b945;
   --on-secondary-color: #1a1b3a;
@@ -33,8 +33,8 @@
   --on-success-color: #ffffff;
   --success-bg-light: #e8f5e8;
 
-  --info-color: #4c5bd4;
-  --info-bg-light: #eceefb;
+  --info-color: #1f5f8b;
+  --info-bg-light: #e7eff5;
 
   --warning-color: #ECA500;
   --on-warning-color: #ffffff;
