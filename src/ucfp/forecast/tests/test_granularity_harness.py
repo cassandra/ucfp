@@ -5,6 +5,8 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from django.test import tag
+
 from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
@@ -16,6 +18,7 @@ from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 _PROFILE = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 
 
+@tag( 'granularity' )
 class GranularityHarnessSmokeTest( unittest.TestCase ):
 
     def _params( self ):
