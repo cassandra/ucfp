@@ -49,6 +49,14 @@ class TaxStackOrderingTests( unittest.TestCase ):
         self.assertLess( parts.section_1250, self.cap * Decimal( '50000' ) )
         self.assertGreater( parts.section_1250, Decimal( '0' ) )
 
+    def test_ordinary_layer_taxes_the_brackets_exactly( self ):
+        # single, 100,000 of ordinary income: 10% of 12,400 + 12% of (50,400 - 12,400) + 22% of
+        # (100,000 - 50,400) = 1,240 + 4,560 + 10,912 = 16,712. The exact bracket dollar the stack
+        # ordering tests do not pin.
+        split = _TaxableSplit( Decimal( '100000' ), Decimal( '0' ), Decimal( '0' ), Decimal( '0' ) )
+        parts = self.engine._tax_on_stack( FilingStatus.SINGLE, split )
+        self.assertEqual( parts.ordinary, Decimal( '16712' ) )
+
 
 if __name__ == '__main__':
     unittest.main()
