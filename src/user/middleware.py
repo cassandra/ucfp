@@ -20,6 +20,8 @@ class AuthenticationMiddleware:
         'favicon',
         'home-javascript-files',
         'health',
+        'home',
+        'home_index',
         'notify_email_unsubscribe',
         'user_signin',
         'user_signin_magic_code',

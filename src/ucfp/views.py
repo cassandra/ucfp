@@ -1,6 +1,7 @@
 import json
 from typing import Dict
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.generic import View
@@ -148,10 +149,18 @@ class HealthView( View ):
 
 
 class HomeView( InputGatedMixin, View ):
-    """The landing page. It needs only a Profile (not a scenario -- those belong to the features that use
-    them), so it leads a user without a *complete* profile to set one up, and otherwise points at the
-    features (in the top menu). Gating on completeness, not existence: an auto-created empty profile is not
-    yet a set-up profile."""
+    """The site root, serving one of two pages by audience:
+
+    - the public marketing page for an anonymous visitor on an auth-enforced (cloud) deployment,
+      rendered directly without the organization/input gating a signed-in page needs; and
+    - the signed-in dashboard otherwise (a real user, or any self-host/dev run where
+      SUPPRESS_AUTHENTICATION collapses everyone to "in"), which points at the planning features.
+    """
+
+    def dispatch( self, request, *args, **kwargs ):
+        if not settings.SUPPRESS_AUTHENTICATION and not request.user.is_authenticated:
+            return render( request, 'pages/marketing.html', {} )
+        return super().dispatch( request, *args, **kwargs )
 
     def get(self, request, *args, **kwargs):
         return render( request, 'pages/home.html', {

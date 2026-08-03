@@ -124,6 +124,30 @@
     border-color: #d6d8db;
 }
 
+/* Map Bootstrap contextual text colors to the theme palette -- its .text-* utilities
+   otherwise use Bootstrap's own hues (e.g. .text-primary would be #007bff, not Trust
+   Blue). !important to match Bootstrap's own .text-* utilities. The paired .text-on-*
+   apply the foreground color for text sitting on a matching colored surface. */
+.text-primary   { color: var(--primary-color)   !important; }
+.text-secondary { color: var(--secondary-color) !important; }
+.text-tertiary  { color: var(--tertiary-color)  !important; }
+.text-success   { color: var(--success-color)   !important; }
+.text-info      { color: var(--info-color)      !important; }
+.text-warning   { color: var(--warning-color)   !important; }
+.text-danger,
+.text-error     { color: var(--error-color)     !important; }
+.text-muted     { color: var(--muted-color)     !important; }
+
+.text-on-primary   { color: var(--on-primary-color)   !important; }
+.text-on-secondary { color: var(--on-secondary-color) !important; }
+.text-on-tertiary  { color: var(--on-tertiary-color)  !important; }
+.text-on-success   { color: var(--on-success-color)   !important; }
+.text-on-info      { color: var(--on-info-color)      !important; }
+.text-on-warning   { color: var(--on-warning-color)   !important; }
+.text-on-danger,
+.text-on-error     { color: var(--on-error-color)     !important; }
+.text-on-muted     { color: var(--on-muted-color)     !important; }
+
 /* Map Bootstrap contextual backgrounds + buttons to the theme palette. */
 .bg-primary, .btn-primary {
     color: var(--on-primary-color) !important;
