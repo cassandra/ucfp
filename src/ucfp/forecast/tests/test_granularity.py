@@ -8,6 +8,8 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from django.test import tag
+
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.rate import Rate
 from common.schedule import Schedule
@@ -70,6 +72,7 @@ def _social_security( books ):
         IncomeTaxClass.SOCIAL_SECURITY, owner_handle = 'subject-a' )
 
 
+@tag( 'granularity' )
 class GranularityTests( unittest.TestCase ):
 
     def test_expense_flows_reconcile_exactly( self ):

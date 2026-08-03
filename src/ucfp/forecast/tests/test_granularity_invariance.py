@@ -33,6 +33,8 @@ granularity.)
 import unittest
 from decimal import Decimal
 
+from django.test import tag
+
 from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.tests.granularity_harness import GRANULARITIES, compare
 from ucfp.forecast.tests.granularity_profiles import PROFILES, STARTS, TIERS
@@ -74,6 +76,7 @@ def _earliest_depletion( comparison : dict ):
     return min( years ) if years else None
 
 
+@tag( 'granularity' )
 class GranularityInvarianceTest( unittest.TestCase ):
 
     def test_pure_stream_flows_invariant_across_granularity( self ):

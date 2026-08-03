@@ -4,10 +4,13 @@ The invariance *assertions* are separate (test_granularity_invariance.py); this 
 matrix is runnable -- including the mid-year-start partial first year (issue #17)."""
 import unittest
 
+from django.test import tag
+
 from ucfp.forecast.tests.granularity_harness import ANNUAL, MONTHLY, run_at, yearly_figures
 from ucfp.forecast.tests.granularity_profiles import PROFILES, STARTS, TIERS, matrix
 
 
+@tag( 'granularity' )
 class GranularityProfileMatrixTest( unittest.TestCase ):
 
     def test_matrix_covers_every_profile_tier_and_start( self ):
