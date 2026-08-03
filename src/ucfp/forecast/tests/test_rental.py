@@ -38,6 +38,8 @@ from ucfp.forecast.parameters import (
 from ucfp.forecast.tests.tax_helpers import total_income_tax
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
+from ucfp.jurisdiction.us.depreciation import accumulated_depreciation
+from ucfp.jurisdiction.us.state import PassiveLossCarryover, TaxState
 from ucfp.period.results import NoticeKind
 
 
@@ -152,9 +154,9 @@ class RentalSaleRecaptureTests( unittest.TestCase ):
         # the rental is emptied; its proceeds land in cash (less the year-end tax)
         self.assertEqual(
             ledger.market_value( reader.chart.account( 'rental' ), through = through ), Decimal( '0' ) )
-        # the appreciation (600k - 400k basis) is recognized as a long-term gain
-        long_term = reader.chart.income_account( IncomeTaxClass.LONG_TERM_GAINS )
-        self.assertEqual( ledger.natural_balance( long_term ), Decimal( '200000' ) )
+        # the appreciation (600k - 400k basis) is recognized as the rental's own long-term sale gain
+        rental_gain = reader.chart.income_account( IncomeTaxClass.RENTAL_SALE_GAIN )
+        self.assertEqual( ledger.natural_balance( rental_gain ), Decimal( '200000' ) )
         reader.assert_balanced()
 
     def test_recapture_raises_tax_at_sale( self ):
@@ -213,10 +215,10 @@ class PropertySaleClosingCostsTests( unittest.TestCase ):
 
     def test_closing_costs_reduce_the_recognized_gain( self ):
         without = self._gain(
-            self._run( AssetClass.REAL_ESTATE_RENTAL, TransactionCosts() ), IncomeTaxClass.LONG_TERM_GAINS )
+            self._run( AssetClass.REAL_ESTATE_RENTAL, TransactionCosts() ), IncomeTaxClass.RENTAL_SALE_GAIN )
         withc   = self._gain(
-            self._run( AssetClass.REAL_ESTATE_RENTAL, self._costs() ), IncomeTaxClass.LONG_TERM_GAINS )
-        # 6% of the 600k sale + 10k fixed = 46,000, taken off the long-term gain
+            self._run( AssetClass.REAL_ESTATE_RENTAL, self._costs() ), IncomeTaxClass.RENTAL_SALE_GAIN )
+        # 6% of the 600k sale + 10k fixed = 46,000, taken off the rental sale gain
         self.assertEqual( without - withc, Decimal( '46000' ) )
 
     def test_a_notice_reports_the_total( self ):
@@ -251,6 +253,99 @@ class PropertySaleClosingCostsTests( unittest.TestCase ):
                        if t.transaction_uuid == self._sale_cost_notices( run )[ 0 ].transaction_uuid )
         cash_credit = sum( ( e.signed_amount for e in txn.entries if e.account is cash ), Decimal( '0' ) )
         self.assertEqual( cash_credit, Decimal( '47000' ) )
+
+
+class BelowCostSaleRecaptureCapTests( unittest.TestCase ):
+    """A rental sold at its adjusted basis has zero total gain, so the §1250 cap recaptures nothing and
+    the sale adds no tax -- exactly as if it were held. (Before the cap, the full accumulated
+    depreciation was recaptured regardless of the sale price, over-taxing a below-cost sale.) The
+    rental's market value is its adjusted basis, so a full sale books a loss equal to the accumulated
+    depreciation, which the recapture exactly offsets to zero."""
+
+    _COST  = Decimal( '400000' )   # original cost basis
+    _BASIS = Decimal( '300000' )   # depreciable (building) portion
+    _ACQ   = date( 2010, 1, 1 )
+    _SALE  = date( 2026, 12, 31 )
+
+    def _adjusted_basis( self ):
+        recapture = accumulated_depreciation( self._BASIS, self._ACQ, self._SALE, RealPropertyType.RESIDENTIAL )
+        return self._COST - recapture
+
+    def _parameters( self, sell ):
+        subject = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
+        events  = [ ScheduledRealization( self._SALE, 'rental', None ) ] if sell else []   # a full sale
+        return ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.SINGLE,
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+            subjects      = [ subject ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ), handle = 'cash' ),
+                AssetParameters(
+                    # market value == adjusted basis, original cost 400k: a full sale books a loss of
+                    # the accumulated depreciation, which the §1250 recapture exactly offsets to zero.
+                    'Rental', AssetClass.REAL_ESTATE_RENTAL, self._adjusted_basis(), self._COST,
+                    handle = 'rental',
+                    property_attributes = PropertyAttributes(
+                        acquisition_date  = self._ACQ,
+                        depreciable_basis = self._BASIS,
+                        property_type     = RealPropertyType.RESIDENTIAL ) ) ],
+            income_streams = [ IncomeStream(
+                subject, IncomeTaxClass.ORDINARY,
+                Schedule.constant( WindowedAmount( Decimal( '80000' ) ) ) ) ],
+            events        = events,
+        )
+
+    def test_sale_at_adjusted_basis_recaptures_nothing( self ):
+        sold = _income_tax( Bookkeeper( Forecast( self._parameters( sell = True ) ).run().books ) )
+        held = _income_tax( Bookkeeper( Forecast( self._parameters( sell = False ) ).run().books ) )
+        self.assertEqual( sold, held )   # zero total gain -> no recapture, unlike the old full-accumulation
+
+
+class SuspendedLossReleaseOnSaleTests( unittest.TestCase ):
+    """End-to-end: a rental carrying suspended passive losses releases the whole balance in the year it
+    is sold (deductible against income), lowering that year's tax; held, the losses stay suspended. The
+    rental is sold at cost with no depreciation, so the sale itself adds no gain -- isolating the
+    release. A 200k salary keeps MAGI above the phase-out, so nothing but the disposition frees them."""
+
+    def _parameters( self, sell ):
+        subject = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
+        events  = [ ScheduledRealization( date( 2026, 12, 1 ), 'rental', Decimal( '400000' ) ) ] if sell else []
+        return ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.SINGLE,
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+            subjects      = [ subject ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ), handle = 'cash' ),
+                AssetParameters(
+                    'Rental', AssetClass.REAL_ESTATE_RENTAL, Decimal( '400000' ), Decimal( '400000' ),
+                    handle = 'rental',
+                    property_attributes = PropertyAttributes(
+                        acquisition_date  = date( 2010, 1, 1 ),
+                        depreciable_basis = Decimal( '0' ),          # no depreciation -> no §1250 recapture
+                        property_type     = RealPropertyType.RESIDENTIAL ) ) ],
+            income_streams = [ IncomeStream(
+                subject, IncomeTaxClass.ORDINARY,
+                Schedule.constant( WindowedAmount( Decimal( '200000' ) ) ) ) ],
+            events        = events,
+            initial_tax_state = TaxState(
+                passive_loss_carryover = PassiveLossCarryover( suspended = Decimal( '50000' ) ) ),
+        )
+
+    @staticmethod
+    def _closing_suspended( run ):
+        return run.steps[ -1 ].result.closing_tax_state.passive_loss_carryover.suspended
+
+    def test_selling_releases_suspended_losses_and_lowers_tax( self ):
+        sold_run = Forecast( self._parameters( sell = True ) ).run()
+        held_run = Forecast( self._parameters( sell = False ) ).run()
+        self.assertEqual( self._closing_suspended( sold_run ), Decimal( '0' ) )       # the sale releases it
+        self.assertEqual( self._closing_suspended( held_run ), Decimal( '50000' ) )   # held, it stays
+        self.assertLess(                                                              # and the release cuts tax
+            _income_tax( Bookkeeper( sold_run.books ) ), _income_tax( Bookkeeper( held_run.books ) ) )
 
 
 if __name__ == '__main__':

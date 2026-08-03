@@ -228,6 +228,7 @@ class IncomeTaxClass( LabeledEnum ):
     RESIDENCE_SECTION_121_GAIN = (
         'Residence Gain', 'Primary-residence gain; §121 exclusion, remainder long-term.' )
     SECOND_HOME_GAIN    = ( 'Second Home Gain', 'Personal-use second-home gain; long-term, no exclusion, loss non-deductible.' )
+    RENTAL_SALE_GAIN    = ( 'Rental Sale Gain', 'Gain on a rental sale; long-term, with accumulated depreciation recaptured as §1250.' )
     SECTION_1250_GAIN   = ( 'Section 1250 Gain', 'Unrecaptured depreciation; 25% max rate.' )
     COLLECTIBLES_GAINS  = ( 'Collectibles Gains', 'Collectibles; 28% max rate.' )
     SOCIAL_SECURITY     = ( 'Social Security', 'Benefits; partial-inclusion rule.' )
@@ -271,7 +272,7 @@ _REALIZED_GAIN_INCOME_CLASS = {
     AssetClass.DIVIDEND_STOCKS         : IncomeTaxClass.LONG_TERM_GAINS,
     AssetClass.BONDS                   : IncomeTaxClass.LONG_TERM_GAINS,
     AssetClass.REAL_ESTATE_RESIDENCE   : IncomeTaxClass.RESIDENCE_SECTION_121_GAIN,
-    AssetClass.REAL_ESTATE_RENTAL      : IncomeTaxClass.LONG_TERM_GAINS,
+    AssetClass.REAL_ESTATE_RENTAL      : IncomeTaxClass.RENTAL_SALE_GAIN,
     AssetClass.REAL_ESTATE_SECOND_HOME : IncomeTaxClass.SECOND_HOME_GAIN,
     AssetClass.PRETAX_RETIREMENT       : IncomeTaxClass.RETIREMENT_DISTRIBUTION,
     AssetClass.ROTH                    : IncomeTaxClass.TAX_FREE,

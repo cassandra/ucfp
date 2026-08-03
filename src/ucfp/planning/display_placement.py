@@ -110,7 +110,8 @@ _INCOME_SOURCES = [
                ( IncomeTaxClass.TAXABLE_INTEREST, IncomeTaxClass.TAX_EXEMPT_INTEREST,
                  IncomeTaxClass.QUALIFIED_DIVIDENDS, IncomeTaxClass.LONG_TERM_GAINS,
                  IncomeTaxClass.SHORT_TERM_GAINS, IncomeTaxClass.RESIDENCE_SECTION_121_GAIN,
-                 IncomeTaxClass.SECOND_HOME_GAIN, IncomeTaxClass.SECTION_1250_GAIN,
+                 IncomeTaxClass.SECOND_HOME_GAIN, IncomeTaxClass.RENTAL_SALE_GAIN,
+                 IncomeTaxClass.SECTION_1250_GAIN,
                  IncomeTaxClass.COLLECTIBLES_GAINS, IncomeTaxClass.TAX_FREE ) ),
     _Grouping( 'rental', 'Rental Income', ( IncomeTaxClass.GROSS_RENTAL, ) ),
 ]
