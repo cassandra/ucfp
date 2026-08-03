@@ -4,7 +4,7 @@ SCRIPTS = deploy/env-generate.py deploy/env-drift-check.sh deploy/local/run_cont
 	dev/dev-setup.sh install.sh update.sh
 
 .DEFAULT_GOAL := check
-.PHONY: check test test-parallel lint lint-strict test-js test-all \
+.PHONY: check check-release test test-e2e test-parallel lint lint-strict test-js test-all \
 	env-build env-build-dev env-drift-check fix-permissions \
 	check-docker docker-build docker-run docker-run-fg docker-stop
 
@@ -28,16 +28,26 @@ fix-permissions:
 env-drift-check:	fix-permissions
 	@bash deploy/env-drift-check.sh
 
-# What should pass before committing / in CI.
+# What should pass before committing / in CI (the dev gate): excludes the slow end-to-end forecast
+# smoke tests (@tag('e2e')), which are the release gate below.
 check:	lint test env-drift-check
 
+# The release gate: the dev checks plus the end-to-end forecast smoke suite.
+check-release:	lint test test-e2e env-drift-check
+
 # ----- Python / Django tests --------------------------------------------------
+# `test` is the default (dev) run and skips @tag('e2e') tests -- the slow, whole-forecast smoke
+# scenarios meant as a release gate, run by `test-e2e`. (Distinct from future browser E2E via
+# Playwright.) The tag is a plain Django test tag; the runner is a DiscoverRunner subclass.
 
 test:
-	cd src && ./manage.py test
+	cd src && ./manage.py test --exclude-tag e2e
+
+test-e2e:
+	cd src && ./manage.py test --tag e2e
 
 test-parallel:
-	cd src && ./manage.py test --parallel 4
+	cd src && ./manage.py test --parallel 4 --exclude-tag e2e
 
 # ----- flake8 -----------------------------------------------------------------
 # `lint` is the lenient CI config (real errors only); `lint-strict` additionally
@@ -66,8 +76,9 @@ test-js:
 	) &
 	@python -m http.server $(TEST_JS_PORT) --directory src/ucfp/static
 
-# All automated test suites we have. (E2E is added later when Playwright lands.)
-test-all:	test test-js
+# All automated test suites we have -- the dev tests, the end-to-end forecast smoke suite, and the
+# in-browser JS tests. (Browser E2E via Playwright is added later.)
+test-all:	test test-e2e test-js
 
 # ----- Docker (local self-hosted run) -----------------------------------------
 # The container is self-contained: supervisord runs redis + gunicorn + nginx
