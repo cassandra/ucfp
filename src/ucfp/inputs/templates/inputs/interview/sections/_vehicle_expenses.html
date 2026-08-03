@@ -21,7 +21,7 @@ not previewed here. Reads `vehicle_costs_form`.
         <tr>
           <th scope="row" class="font-weight-normal text-left">{{ row.name }}</th>
           <td class="text-right">{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
-          <td>{% include 'inputs/interview/sections/_cadence.html' with cadence=row.cadence %}</td>
+          <td>{% include 'inputs/components/_cadence.html' with cadence=row.cadence %}</td>
         </tr>
         {% endfor %}
       </tbody>

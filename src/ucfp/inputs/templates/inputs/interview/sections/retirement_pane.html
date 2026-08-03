@@ -16,8 +16,8 @@ as stacked labeled lines) fits an equal half-width column beside the retirement-
     {% for row in retirement_form.income_rows %}
     <div class="mb-3">
       <div class="fw-semibold">{{ row.name }} <span class="text-muted small">{{ row.subject }}</span></div>
-      {% include 'inputs/interview/sections/_timing_line.html' with label='From' date=row.from age=row.from_age %}
-      {% include 'inputs/interview/sections/_timing_line.html' with label='Until' date=row.until age=row.until_age %}
+      {% include 'inputs/components/_timing_line.html' with label='From' date=row.from age=row.from_age %}
+      {% include 'inputs/components/_timing_line.html' with label='Until' date=row.until age=row.until_age %}
     </div>
     {% endfor %}
     {% endif %}
@@ -26,7 +26,7 @@ as stacked labeled lines) fits an equal half-width column beside the retirement-
     {% for row in retirement_form.entitlement_rows %}
     <div class="mb-3">
       <div class="fw-semibold">{{ row.name }} <span class="text-muted small">{{ row.subject }}</span></div>
-      {% include 'inputs/interview/sections/_timing_line.html' with label='Claim' date=row.from age=row.from_age %}
+      {% include 'inputs/components/_timing_line.html' with label='Claim' date=row.from age=row.from_age %}
     </div>
     {% endfor %}
     <p class="text-muted small">Enter an age or a precise date for any point; leave an income's window

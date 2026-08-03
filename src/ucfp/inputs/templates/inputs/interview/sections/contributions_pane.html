@@ -19,7 +19,7 @@ reflow (`form-row` columns) so the block fits the half-width column.
       <div class="mb-2">{{ row.account.as_field_group }}</div>
       <div class="d-flex flex-wrap align-items-end mb-2">
         <div class="mr-3">{{ row.amount.as_field_group }}</div>
-        <div>{% include 'inputs/interview/sections/_cadence.html' with cadence=row.cadence %}</div>
+        <div>{% include 'inputs/components/_cadence.html' with cadence=row.cadence %}</div>
       </div>
       <div class="mb-2">{{ row.source.as_field_group }}</div>
       <div class="d-flex flex-wrap">

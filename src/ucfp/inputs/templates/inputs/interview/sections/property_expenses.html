@@ -23,11 +23,11 @@ property. With a single property the Default column collapses into one value col
         {% for row in section.rows %}
         <tr>
           <th scope="row" class="font-weight-normal text-left">{{ row.name }}
-            {% include 'inputs/interview/sections/_cadence.html' with cadence=row.cadence %}</th>
+            {% include 'inputs/components/_cadence.html' with cadence=row.cadence %}</th>
           {% for cell in row.cells %}
           {% if forloop.first and row.count_entry %}
           <td class="text-right {{ AppConst.CALC_CLASS }}">{{ cell }}
-            {% include 'inputs/interview/sections/_calculator.html' with calc=row.calculator %}</td>
+            {% include 'inputs/components/_calculator.html' with calc=row.calculator %}</td>
           {% elif cell %}
           <td class="text-right">{{ cell }}{% if cell.errors %}<span class="text-danger small d-block">{{ cell.errors|join:" " }}</span>{% endif %}</td>
           {% else %}

@@ -15,7 +15,7 @@ offering an empty picker.
   <form method="post" action="{% url 'withdrawals' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     {% for row in withdrawals_form.plan_rows %}
-    {% include 'inputs/interview/sections/_realization_plan_row.html' with row=row source_label='From account' %}
+    {% include 'inputs/components/_realization_plan_row.html' with row=row source_label='From account' %}
     {% endfor %}
     <p class="text-muted small">Fill the blank block to add a withdrawal; leave the cadence blank for a
       one-time withdrawal at the From age. Changes save automatically.</p>
