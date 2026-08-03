@@ -472,12 +472,18 @@ class USFederalTaxEngine( TaxEngine ):
         """The ACA premium tax credit: the benchmark plan cost less the household's
         expected contribution -- a share of income that is zero below the lower
         poverty-ratio and rises with the ratio to the cap -- floored at zero. Zero when
-        not enrolled. Enrollment-month proration, advance-PTC reconciliation, the
-        actual-premium cap, and the under-100%-FPL Medicaid floor are not modeled."""
+        not enrolled, and zero above the eligibility cliff (`applicable_upper_ratio`, 400%
+        FPL under reverted post-2025 law). Enrollment-month proration, advance-PTC
+        reconciliation, the actual-premium cap, and the under-100%-FPL Medicaid floor are
+        not modeled."""
         if enrollment is None:
             return _ZERO
         aca   = self._parameters.aca
         ratio = aca_magi / aca.poverty_line( enrollment.household_size )
+        # The eligibility cliff: no credit above the upper poverty-ratio (the benefit does not phase
+        # out -- it ends), so a household just over the line gets nothing.
+        if ratio > aca.applicable_upper_ratio:
+            return _ZERO
         applicable_rate = max( _ZERO, min(
             aca.applicable_max_rate, aca.applicable_slope * ( ratio - aca.applicable_lower_ratio ) ) )
         expected_contribution = applicable_rate * aca_magi
