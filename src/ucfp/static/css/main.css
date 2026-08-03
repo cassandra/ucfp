@@ -22,34 +22,36 @@
   --primary-highlight-color: #184c70;
 
   --secondary-color: #f5b945;
-  --on-secondary-color: #1a1b3a;
+  --on-secondary-color: #1e293b;
   --secondary-highlight-color: #f9d38a;
 
-  --tertiary-color: #020204;
+  --tertiary-color: #1e293b;
   --on-tertiary-color: #ffffff;
-  --tertiary-highlight-color: #7e7e81;
+  --tertiary-highlight-color: #475569;
 
   --success-color: #177219;
   --on-success-color: #ffffff;
   --success-bg-light: #e8f5e8;
 
   --info-color: #1f5f8b;
+  --on-info-color: #ffffff;
+  --info-highlight-color: #184c70;
   --info-bg-light: #e7eff5;
 
-  --warning-color: #ECA500;
-  --on-warning-color: #ffffff;
-  --warning-bg-light: #fef7e6;
+  --warning-color: #E8850C;
+  --on-warning-color: #1e293b;
+  --warning-bg-light: #fdeeda;
 
   --error-color: #721817;
   --on-error-color: #ffffff;
   --error-highlight-color: #a01111;
   --danger-color: var(--error-color);
 
-  --muted-color: #7e7e81;
+  --muted-color: #64748b;
   --on-muted-color: #ffffff;
   --muted-bg-light: #f8f9fa;
 
-  --line-color: #cccccc;
+  --line-color: #cbd5e1;
 }
 
 
@@ -123,18 +125,32 @@
 }
 
 /* Map Bootstrap contextual backgrounds + buttons to the theme palette. */
-.bg-primary, .bg-info, .btn-primary, .btn-info {
+.bg-primary, .btn-primary {
     color: var(--on-primary-color) !important;
     background-color: var(--primary-color) !important;
     border-color: var(--primary-highlight-color) !important;
 }
-.bg-primary a, .bg-info a, .btn-primary a, .btn-info a {
+.bg-primary a, .btn-primary a {
     color: var(--on-primary-color);
 }
-.bg-primary a:hover, .bg-primary a:focus, .bg-primary a:active,
-.bg-info a:hover, .bg-info a:focus, .bg-info a:active {
+.bg-primary a:hover, .bg-primary a:focus, .bg-primary a:active {
     opacity: 0.65;
     color: var(--on-primary-color);
+}
+
+/* info is a status color on its own token (currently equal to primary), kept
+   separate so identity (primary) and status (info) can diverge later. */
+.bg-info, .btn-info {
+    color: var(--on-info-color) !important;
+    background-color: var(--info-color) !important;
+    border-color: var(--info-highlight-color) !important;
+}
+.bg-info a, .btn-info a {
+    color: var(--on-info-color);
+}
+.bg-info a:hover, .bg-info a:focus, .bg-info a:active {
+    opacity: 0.65;
+    color: var(--on-info-color);
 }
 
 .bg-secondary, .btn-secondary, .badge-secondary {
@@ -176,6 +192,19 @@
     opacity: 0.65;
     color: var(--on-error-color);
 }
+
+/* Status: warning and success backgrounds, themed to the palette (Bootstrap's
+   defaults otherwise diverge). warning text is dark for contrast on amber. */
+.bg-warning, .btn-warning, .badge-warning {
+    color: var(--on-warning-color) !important;
+    background-color: var(--warning-color) !important;
+    border-color: var(--warning-color) !important;
+}
+.bg-success, .btn-success, .badge-success {
+    color: var(--on-success-color) !important;
+    background-color: var(--success-color) !important;
+    border-color: var(--success-color) !important;
+}
 .bg-muted, .btn-muted {
     color: var(--on-muted-color) !important;
     background-color: var(--muted-color) !important;
@@ -194,7 +223,7 @@
     border-color: var(--primary-highlight-color) !important;
 }
 .btn-outline-primary:focus {
-    box-shadow: 0 0 0 0.2rem rgba(23, 112, 114, 0.25) !important;
+    box-shadow: 0 0 0 0.2rem rgba(31, 95, 139, 0.30) !important;
 }
 
 .btn-outline-secondary {
@@ -209,7 +238,7 @@
     border-color: var(--secondary-highlight-color) !important;
 }
 .btn-outline-secondary:focus {
-    box-shadow: 0 0 0 0.2rem rgba(244, 95, 54, 0.25) !important;
+    box-shadow: 0 0 0 0.2rem rgba(245, 185, 69, 0.40) !important;
 }
 
 .btn-outline-tertiary {
@@ -224,7 +253,7 @@
     border-color: var(--tertiary-highlight-color) !important;
 }
 .btn-outline-tertiary:focus {
-    box-shadow: 0 0 0 0.2rem rgba(244, 95, 54, 0.25) !important;
+    box-shadow: 0 0 0 0.2rem rgba(30, 41, 59, 0.25) !important;
 }
 
 .btn-outline-danger {
