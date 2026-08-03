@@ -17,7 +17,7 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
         <div class="form-group">
           <label class="font-weight-normal mb-1">{{ drawdown_form.cash_floor.label }}
             <span class="text-muted small d-block">Kept on hand; topped up from your accounts when cash falls below it.</span></label>
-          <div class="input-group"><div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ drawdown_form.cash_floor }}</div>
+          {{ drawdown_form.cash_floor }}
           {% if drawdown_form.cash_floor.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_floor.errors|join:" " }}</span>{% endif %}
         </div>
         <label class="font-weight-normal mb-1">Draw order
@@ -43,7 +43,7 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
         <div class="form-group">
           <label class="font-weight-normal mb-1">{{ drawdown_form.cash_ceiling.label }}
             <span class="text-muted small d-block">Surplus above it is invested by the sweep below. Leave blank to let cash accumulate.</span></label>
-          <div class="input-group"><div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ drawdown_form.cash_ceiling }}</div>
+          {{ drawdown_form.cash_ceiling }}
           {% if drawdown_form.cash_ceiling.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_ceiling.errors|join:" " }}</span>{% endif %}
         </div>
         <label class="font-weight-normal mb-1">Invest the surplus into

@@ -10,6 +10,7 @@ from typing import Optional
 
 from django import forms
 
+from common.forms import MoneyField
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.parameter_sets.enums import CadenceDomain
@@ -142,7 +143,7 @@ def add_calculator_fields( form, prefix, count : Optional[ int ], cost_each : Op
     count_field.initial = count
     count_field.widget.attrs[ 'aria-label' ] = 'Item count'
     form.fields[ _calc_count_key( prefix ) ] = count_field
-    cost_field = forms.DecimalField( required = False, min_value = 0 )
+    cost_field = MoneyField( required = False, min_value = 0 )
     cost_field.initial = cost_each
     cost_field.widget.attrs[ 'aria-label' ] = 'Cost each'
     form.fields[ _calc_cost_key( prefix ) ] = cost_field

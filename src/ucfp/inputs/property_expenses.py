@@ -11,6 +11,8 @@ from typing import Optional
 
 from django import forms
 
+from common.forms import MoneyField
+
 from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseClass, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
@@ -132,7 +134,7 @@ class PropertyExpensesForm( forms.Form ):
         self._rows      = [ expense for expense in self._all if self._any_applicable( expense ) ]
         self._collapsed = len( self._handles ) <= 1
         for ri, expense in enumerate( self._rows ):
-            default = forms.DecimalField( required = False, min_value = 0 )
+            default = MoneyField( required = False, min_value = 0 )
             default.initial = self._collapsed_value( expense ) if self._collapsed else expense.default_amount
             default.widget.attrs[ 'placeholder' ] = '0'
             default.widget.attrs[ 'class' ] = self._default_class( expense )
@@ -147,7 +149,7 @@ class PropertyExpensesForm( forms.Form ):
             for hi, handle in enumerate( self._handles ):
                 if not self._applies( expense, handle ):
                     continue
-                override = forms.DecimalField( required = False, min_value = 0 )
+                override = MoneyField( required = False, min_value = 0 )
                 override.initial = expense.overrides.get( handle )
                 override.widget.attrs[ 'placeholder' ] = self._placeholder( expense.default_amount )
                 override.widget.attrs[ 'class' ] = AppConst.PROPERTY_OVERRIDE_CLASS

@@ -10,6 +10,8 @@ from dataclasses import replace
 
 from django import forms
 
+from common.forms import MoneyField
+
 from ucfp.parameter_sets.enums import ExpenseClass
 from ucfp.inputs.plans.schemas import VehiclePlan, VehicleRunningCost
 from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, read_cadence
@@ -65,7 +67,7 @@ class VehicleExpensesForm( forms.Form ):
         super().__init__( data )
         self._costs = merged_vehicle_costs( plans )
         for ci, cost in enumerate( self._costs ):
-            amount = forms.DecimalField( required = False, min_value = 0 )
+            amount = MoneyField( required = False, min_value = 0 )
             amount.initial = cost.amount
             amount.widget.attrs[ 'aria-label' ] = f'{cost.name} — per car'
             self.fields[ self._amount_key( ci ) ] = amount

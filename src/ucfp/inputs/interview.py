@@ -17,7 +17,9 @@ from typing import Optional
 
 from django import forms
 
+from common.forms import MoneyField, PercentField
 from common.rate import Rate, ZERO_RATE
+from common.widgets import PercentInput
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
@@ -102,9 +104,9 @@ class SubjectsForm( forms.Form ):
         widget = StateRateSelect( attrs = {
             'class' : f'{AppConst.STATE_SELECT_CLASS} custom-select custom-select-sm flex-grow-1 mr-2',
             'aria-label' : 'State' } ) )
-    state_income_tax_rate = forms.DecimalField(
+    state_income_tax_rate = PercentField(
         label = 'State Tax rate (%)', required = False, min_value = 0, max_value = 100,
-        widget = forms.NumberInput( attrs = {
+        widget = PercentInput( attrs = {
             'class' : f'{AppConst.STATE_RATE_CLASS} form-control form-control-sm', 'step' : 'any',
             'aria-label' : 'State tax rate (percent)' } ) )
 
@@ -253,9 +255,9 @@ class HomeForm( forms.Form ):
         label = 'Do you own or rent your home?', choices = _TENURE_CHOICES,
         initial = HousingTenure.OWN.name.lower(),
         widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
-    home_value       = forms.DecimalField( label = 'Current value', required = False, min_value = 0 )
-    purchase_price   = forms.DecimalField( label = 'Purchase price', required = False, min_value = 0 )
-    mortgage_balance = forms.DecimalField(
+    home_value       = MoneyField( label = 'Current value', required = False, min_value = 0 )
+    purchase_price   = MoneyField( label = 'Purchase price', required = False, min_value = 0 )
+    mortgage_balance = MoneyField(
         label = 'Mortgage balance owed (optional)', required = False, min_value = 0 )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -395,11 +397,11 @@ class AccountsForm( forms.Form ):
         jurisdiction   = ( profile.jurisdiction_type if profile is not None
                            else JurisdictionType.US_FEDERAL )
         for name, _handle, asset_class in self._TAXABLE:
-            self.fields[ name ] = forms.DecimalField(
+            self.fields[ name ] = MoneyField(
                 label = asset_class.label, required = False, min_value = 0 )
         for subject in self._subjects:
             for prefix, _handle_prefix, _asset_class, concept in self._RETIREMENT:
-                self.fields[ self._retire_field( prefix, subject.handle ) ] = forms.DecimalField(
+                self.fields[ self._retire_field( prefix, subject.handle ) ] = MoneyField(
                     label = local_label( jurisdiction, concept ), required = False, min_value = 0 )
 
     @staticmethod

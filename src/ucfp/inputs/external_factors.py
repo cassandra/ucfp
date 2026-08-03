@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from django import forms
 
+from common.forms import PercentField
 from common.rate import Rate
 
 from ucfp.forecast.economic_outlook import EconomicParameters
@@ -101,7 +102,7 @@ class ExternalFactorsForm( forms.Form ):
         super().__init__( data, initial = self._initial( assumptions ) )
         economics = self._seed( assumptions )
         for factor in _ALL_FACTORS:
-            field = forms.DecimalField( label = factor.label )
+            field = PercentField( label = factor.label )
             field.initial = getattr( economics, factor.field ).fraction * Decimal( '100' )
             self.fields[ factor.field ] = field
 

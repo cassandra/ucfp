@@ -10,6 +10,8 @@ from dataclasses import replace
 
 from django import forms
 
+from common.forms import MoneyField
+
 from ucfp.inputs.plans.schemas import Vehicle, VehiclePlan
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
 from ucfp.inputs.widgets import IsoDateInput
@@ -72,14 +74,14 @@ class VehicleForm( forms.Form ):
     name             = forms.CharField( label = 'Name', max_length = 100, required = False )
     purchase_date    = forms.DateField(
         label = 'Next purchase date', required = False, widget = IsoDateInput() )
-    purchase_price   = forms.DecimalField( label = 'Price per car', min_value = 0, required = False )
+    purchase_price   = MoneyField( label = 'Price per car', min_value = 0, required = False )
     recurrence_years = forms.IntegerField(
         label = 'Replace every (years)', min_value = 1, required = False )
     end_date         = forms.DateField(
         label = 'Owned until (optional)', required = False, widget = IsoDateInput() )
-    down_payment     = forms.DecimalField(
+    down_payment     = MoneyField(
         label = 'Down payment (if financed)', min_value = 0, required = False )
-    monthly_payment  = forms.DecimalField(
+    monthly_payment  = MoneyField(
         label = 'Monthly payment (if financed)', min_value = 0, required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
