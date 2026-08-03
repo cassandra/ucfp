@@ -106,6 +106,12 @@ def outcome( result : ForecastResult, params : ForecastParameters ) -> Outcome:
     return Outcome( depletion_year = depletion, terminal_net_worth = terminal )
 
 
+def total_lifetime_tax( result : ForecastResult, params : ForecastParameters ) -> Decimal:
+    """The total tax (every tax-payment class) booked over the whole horizon -- the sum of each
+    year's `YearFigures.total_tax`."""
+    return sum( ( figures.total_tax for figures in yearly_figures( result, params ) ), _ZERO )
+
+
 def compare( params : ForecastParameters ) -> dict:
     """Run `params` at every granularity and return `{ name : ( [ YearFigures ], Outcome ) }`."""
     comparison = dict()
