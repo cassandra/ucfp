@@ -196,7 +196,8 @@ class USFederalTaxEngine( TaxEngine ):
         long_term_gains  = (
             fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS )
             + ( residence_gain - residence_exclusion )
-            + second_home_gain + rental.long_term )
+            + second_home_gain
+            + rental.long_term )
         section_1250_gain = (
             fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN )
             + rental.section_1250 )
@@ -481,8 +482,6 @@ class USFederalTaxEngine( TaxEngine ):
         if combined >= _ZERO:
             return _PassiveActivity( deductible = combined, suspended = _ZERO )
         if self._rental_activity_fully_disposed( tax_context ):
-            # The activity is fully sold this year: the whole loss (this year's plus all suspended)
-            # frees up against any income, and no suspension carries on.
             return _PassiveActivity( deductible = combined, suspended = _ZERO )
         loss      = -combined
         allowance = self._passive_loss_allowance( phaseout_magi ) \
@@ -493,8 +492,7 @@ class USFederalTaxEngine( TaxEngine ):
     def _rental_activity_fully_disposed( self, tax_context : TaxContext ) -> bool:
         """Whether the aggregate rental activity is fully wound down this fiscal year -- at least one
         rental disposed and none still held. Under the single-aggregate-activity model a *partial*
-        disposition (some rentals still held) does not release the suspended losses; per-activity
-        release would need the per-property accounts deferred in #12."""
+        disposition (some rentals still held) does not release the suspended losses."""
         rentals = [ tax_property for tax_property in tax_context.properties
                     if tax_property.holding.asset_class == AssetClass.REAL_ESTATE_RENTAL ]
         return bool( rentals ) and all( tax_property.disposition is not None for tax_property in rentals )
