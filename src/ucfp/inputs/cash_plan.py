@@ -13,7 +13,6 @@ from decimal import Decimal, InvalidOperation
 from django import forms
 
 from common.forms import MoneyField
-from common.widgets import MoneyInput
 
 from .plans.defaults import LIQUID_DRAW_CLASSES, SWEEP_TARGET_CLASSES, default_drawdown
 from .plans.schemas import DrawdownPolicy
@@ -40,12 +39,8 @@ class DrawdownForm( forms.Form ):
     from the plan's drawdown policy (or the default); `apply` stores the edited policy back on the
     plans. A ceiling is kept only when a sweep names where to invest the surplus."""
 
-    cash_floor   = MoneyField(
-        label = 'Minimum cash', min_value = 0,
-        widget = MoneyInput( attrs = { 'class' : 'form-control' } ) )
-    cash_ceiling = MoneyField(
-        label = 'Maximum cash', min_value = 0, required = False,
-        widget = MoneyInput( attrs = { 'class' : 'form-control' } ) )
+    cash_floor   = MoneyField( label = 'Minimum cash', min_value = 0 )
+    cash_ceiling = MoneyField( label = 'Maximum cash', min_value = 0, required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )

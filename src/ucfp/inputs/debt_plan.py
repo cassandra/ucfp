@@ -13,7 +13,6 @@ from django import forms
 from common.forms import MoneyField, PercentField
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
-from common.widgets import MoneyInput, PercentInput
 
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.events import LOAN_ROLE
@@ -53,7 +52,7 @@ class DebtPlanForm( forms.Form ):
     def _build_fields( self, debt, repayment, extra_annual, payoff_date ):
         self.fields[ self._rate_field( debt.handle ) ] = PercentField(
             label = 'Interest rate (%)', required = False, min_value = 0,
-            widget = PercentInput( attrs = { 'class' : AppConst.LOAN_RATE_CLASS } ),
+            css_class = AppConst.LOAN_RATE_CLASS,
             initial = repayment.interest_rate.fraction * 100 if repayment is not None else None )
         self.fields[ self._term_field( debt.handle ) ] = forms.IntegerField(
             label = 'Months remaining', required = False, min_value = 1,
@@ -61,7 +60,7 @@ class DebtPlanForm( forms.Form ):
             initial = repayment.remaining_term.months() if repayment is not None else None )
         self.fields[ self._extra_field( debt.handle ) ] = MoneyField(
             label = 'Extra principal per month (optional)', required = False, min_value = 0,
-            widget = MoneyInput( attrs = { 'class' : AppConst.LOAN_EXTRA_CLASS } ),
+            css_class = AppConst.LOAN_EXTRA_CLASS,
             initial = extra_annual / 12 if extra_annual else None )
         self.fields[ self._payoff_field( debt.handle ) ] = forms.DateField(
             label = 'Pay off in full on (optional)', required = False,

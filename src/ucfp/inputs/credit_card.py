@@ -13,7 +13,6 @@ from decimal import Decimal
 from django import forms
 
 from common.forms import MoneyField
-from common.widgets import MoneyInput
 
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
@@ -61,7 +60,7 @@ class CreditCardPlanForm( forms.Form ):
         self.fields[ self._monthly_field( card.handle ) ] = MoneyField(
             label = 'Monthly payment', required = False, min_value = 0,
             initial = plan.monthly_payment if plan is not None else None,
-            widget = MoneyInput( attrs = { 'class' : AppConst.CREDIT_CARD_MONTHLY_CLASS } ) )
+            css_class = AppConst.CREDIT_CARD_MONTHLY_CLASS )
         self.fields[ self._date_field( card.handle ) ] = forms.DateField(
             label = 'Date', required = False,
             initial = plan.target_date if plan is not None else None,

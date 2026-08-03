@@ -5,6 +5,7 @@ default and these fail."""
 from django import forms
 from django.test import SimpleTestCase
 
+from common.forms import MoneyField, PercentField
 from common.widgets import MoneyInput, PercentInput
 
 
@@ -56,3 +57,26 @@ class AdornedWidgetTest(SimpleTestCase):
         self.assertIn('input-group', html)
         self.assertIn('>%<', html)
         self.assertIn('type="number"', html)
+
+    def test_money_and_percent_fields_default_to_their_affix_widgets(self):
+        self.assertIsInstance(MoneyField().widget, MoneyInput)
+        self.assertIsInstance(PercentField().widget, PercentInput)
+
+    def test_affix_widget_guarantees_form_control_merged_with_caller_classes(self):
+        # The input needs form-control to join its input-group affix; the widget adds it
+        # while preserving a caller-supplied class (e.g. a JS hook).
+        class F(forms.Form):
+            amt = MoneyField(css_class='js-hook')
+        html = str(F()['amt'])
+        self.assertIn('form-control', html)
+        self.assertIn('js-hook', html)
+
+
+class FieldsetRenderTest(SimpleTestCase):
+
+    def test_multiwidget_field_renders_through_the_fieldset_branch(self):
+        # A radio/checkbox field sets use_fieldset -> the field template's <fieldset>/<legend> path.
+        class F(forms.Form):
+            pick = forms.ChoiceField(choices=[('a', 'A'), ('b', 'B')], widget=forms.RadioSelect)
+        html = str(F()['pick'].as_field_group())
+        self.assertIn('<fieldset', html)
