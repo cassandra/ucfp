@@ -26,7 +26,7 @@ from ucfp.forecast.parameters import (
     Subject,
     WindowedAmount,
 )
-from ucfp.forecast.tests.granularity_harness import outcome, yearly_figures
+from ucfp.forecast.tests.granularity_harness import outcome, total_lifetime_tax, yearly_figures
 from ucfp.forecast.tests.granularity_profiles import PROFILES, full_tier
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
 from ucfp.jurisdiction.law import StatuteProfile, StatuteProjection, TaxProjection
@@ -41,10 +41,6 @@ def _total_expense_of_class( result, params, expense_class ):
                   for figures in yearly_figures( result, params ) ), _D( '0' ) )
 
 
-def _total_tax( result, params ):
-    return sum( ( figures.total_tax for figures in yearly_figures( result, params ) ), _D( '0' ) )
-
-
 class ExpenseInflationMetamorphicTests( unittest.TestCase ):
 
     def _living_expense_at_inflation( self, inflation ):
@@ -57,7 +53,8 @@ class ExpenseInflationMetamorphicTests( unittest.TestCase ):
             assets        = [ AssetParameters( 'Cash', AssetClass.CASH, _D( '1000000' ), _D( '1000000' ) ) ],
             expense_streams  = [ ExpenseStream(
                 'Living', ExpenseTaxClass.LIVING, Schedule.constant( WindowedAmount( _D( '50000' ) ) ) ) ],
-            economic_outlook = EconomicOutlook.constant( EconomicParameters( inflation = Rate( _D( inflation ) ) ) ),
+            economic_outlook = EconomicOutlook.constant(
+                EconomicParameters( inflation = Rate( _D( inflation ) ) ) ),
         )
         return _total_expense_of_class( Forecast( params ).run(), params, ExpenseTaxClass.LIVING )
 
@@ -78,7 +75,8 @@ class LoanPrepaymentMetamorphicTests( unittest.TestCase ):
             assets        = [ AssetParameters( 'Cash', AssetClass.CASH, _D( '500000' ), _D( '500000' ) ) ],
             loans         = [ LoanParameters(
                 'Mortgage', _D( '200000' ), Rate( _D( '0.05' ) ), Duration( 30, TimeUnit.YEAR ),
-                interest_class = ExpenseTaxClass.MORTGAGE_INTEREST, annual_extra_principal = _D( annual_extra ) ) ],
+                interest_class = ExpenseTaxClass.MORTGAGE_INTEREST,
+                annual_extra_principal = _D( annual_extra ) ) ],
         )
         return _total_expense_of_class( Forecast( params ).run(), params, ExpenseTaxClass.MORTGAGE_INTEREST )
 
@@ -98,13 +96,15 @@ class CashSweepMetamorphicTests( unittest.TestCase ):
             subjects      = [ _SUBJECT ],
             assets        = [
                 AssetParameters( 'Cash', AssetClass.CASH, _D( '200000' ), _D( '200000' ) ),
-                AssetParameters( 'Brokerage', AssetClass.STOCKS, _D( '0' ), _D( '0' ), handle = 'brokerage' ) ],
+                AssetParameters(
+                    'Brokerage', AssetClass.STOCKS, _D( '0' ), _D( '0' ), handle = 'brokerage' ) ],
             cash_account  = CashAccountParameters(
                 cash_ceiling = _D( ceiling ),
                 sweep_allocation = AssetAllocation( ( ( 'brokerage', _D( '1' ) ), ) ) ),
         )
-        reader = Bookkeeper( Forecast( params ).run().books )
-        return reader.ledger.market_value( reader.chart.account( 'brokerage' ), through = date( 2026, 12, 31 ) )
+        reader    = Bookkeeper( Forecast( params ).run().books )
+        brokerage = reader.chart.account( 'brokerage' )
+        return reader.ledger.market_value( brokerage, through = date( 2026, 12, 31 ) )
 
     def test_a_lower_ceiling_sweeps_more_into_the_brokerage( self ):
         self.assertGreater( self._swept_into_brokerage( '50000' ), self._swept_into_brokerage( '100000' ) )
@@ -117,7 +117,7 @@ class StatuteProjectionMetamorphicTests( unittest.TestCase ):
         params = replace(
             full_tier( PROFILES[ 'wage_earner' ]() ),
             statute = StatuteProfile( JurisdictionType.US_FEDERAL, projection ) )
-        return _total_tax( Forecast( params ).run(), params )
+        return total_lifetime_tax( Forecast( params ).run(), params )
 
     def test_cola_indexing_lowers_lifetime_tax_versus_frozen_brackets( self ):
         # Frozen brackets let nominal wage growth creep into higher brackets; indexing the brackets at

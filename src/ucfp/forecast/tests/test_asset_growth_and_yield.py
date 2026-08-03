@@ -41,19 +41,20 @@ class AssetGrowthAndYieldTests( unittest.TestCase ):
         holding = AssetParameters( 'Brokerage', AssetClass.STOCKS, _D( '100000' ), _D( '100000' ),
                                    handle = 'brokerage' )
         reader  = _run( holding, EconomicParameters( stock_appreciation = Rate( _D( '0.10' ) ) ) )
-        self.assertEqual(
-            reader.ledger.market_value( reader.chart.account( 'brokerage' ), through = _THROUGH ),
-            _D( '110000' ) )   # 100,000 + 10% appreciation, unrealized (untaxed)
+        market = reader.ledger.market_value( reader.chart.account( 'brokerage' ), through = _THROUGH )
+        self.assertEqual( market, _D( '110000' ) )   # 100,000 + 10% appreciation, held unrealized
 
     def test_dividend_yield_posts_to_the_qualified_dividends_account( self ):
         holding = AssetParameters(
-            'Dividend Fund', AssetClass.DIVIDEND_STOCKS, _D( '100000' ), _D( '100000' ), handle = 'dividends' )
+            'Dividend Fund', AssetClass.DIVIDEND_STOCKS, _D( '100000' ), _D( '100000' ),
+            handle = 'dividends' )
         reader  = _run( holding, EconomicParameters( stock_dividend = Rate( _D( '0.03' ) ) ) )
         dividends = reader.chart.income_account( IncomeTaxClass.QUALIFIED_DIVIDENDS )
         self.assertEqual( reader.ledger.natural_balance( dividends ), _D( '3000' ) )   # 3% of 100,000
 
     def test_bond_interest_posts_to_the_taxable_interest_account( self ):
-        holding = AssetParameters( 'Bonds', AssetClass.BONDS, _D( '100000' ), _D( '100000' ), handle = 'bonds' )
+        holding = AssetParameters(
+            'Bonds', AssetClass.BONDS, _D( '100000' ), _D( '100000' ), handle = 'bonds' )
         reader  = _run( holding, EconomicParameters( bond_interest = Rate( _D( '0.04' ) ) ) )
         interest = reader.chart.income_account( IncomeTaxClass.TAXABLE_INTEREST )
         self.assertEqual( reader.ledger.natural_balance( interest ), _D( '4000' ) )   # 4% of 100,000

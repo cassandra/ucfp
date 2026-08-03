@@ -13,7 +13,7 @@ from django.test import tag
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.forecast.forecast import Forecast
-from ucfp.forecast.tests.granularity_harness import outcome, yearly_figures
+from ucfp.forecast.tests.granularity_harness import outcome, total_lifetime_tax
 from ucfp.forecast.tests.granularity_profiles import PROFILES, full_tier
 
 _D = Decimal
@@ -45,8 +45,7 @@ class ForecastGoldenTrajectoryTests( unittest.TestCase ):
                 result = Forecast( params ).run()
                 Bookkeeper( result.books ).assert_balanced()   # double-entry conservation holds
                 run_outcome = outcome( result, params )
-                total_tax   = sum(
-                    ( figures.total_tax for figures in yearly_figures( result, params ) ), _D( '0' ) )
+                total_tax   = total_lifetime_tax( result, params )
                 depletion, terminal, tax = _GOLDEN[ name ]
                 self.assertEqual( run_outcome.depletion_year, depletion )
                 self.assertEqual( run_outcome.terminal_net_worth, terminal )
