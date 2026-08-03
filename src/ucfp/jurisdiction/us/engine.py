@@ -178,10 +178,14 @@ class USFederalTaxEngine( TaxEngine ):
         # A second home is personal-use like the residence -- its gain floors at zero (a loss is
         # non-deductible) -- but gets no exclusion, so the whole floored gain is long-term.
         second_home_gain = max( _ZERO, fiscal_window.income( IncomeTaxClass.SECOND_HOME_GAIN ) )
+        # A rental sale's gain is recognized in its own class (a distinct run-table line); it is a
+        # long-term gain, netted here with the others. Its accumulated depreciation is recaptured
+        # separately into the §1250 bucket below.
+        rental_sale_gain = fiscal_window.income( IncomeTaxClass.RENTAL_SALE_GAIN )
         long_term_gains  = (
             fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS )
             + ( residence_gain - residence_exclusion )
-            + second_home_gain )
+            + second_home_gain + rental_sale_gain )
         section_1250_gain = (
             fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN )
             + self._depreciation_recapture( tax_context ) )

@@ -152,9 +152,9 @@ class RentalSaleRecaptureTests( unittest.TestCase ):
         # the rental is emptied; its proceeds land in cash (less the year-end tax)
         self.assertEqual(
             ledger.market_value( reader.chart.account( 'rental' ), through = through ), Decimal( '0' ) )
-        # the appreciation (600k - 400k basis) is recognized as a long-term gain
-        long_term = reader.chart.income_account( IncomeTaxClass.LONG_TERM_GAINS )
-        self.assertEqual( ledger.natural_balance( long_term ), Decimal( '200000' ) )
+        # the appreciation (600k - 400k basis) is recognized as the rental's own long-term sale gain
+        rental_gain = reader.chart.income_account( IncomeTaxClass.RENTAL_SALE_GAIN )
+        self.assertEqual( ledger.natural_balance( rental_gain ), Decimal( '200000' ) )
         reader.assert_balanced()
 
     def test_recapture_raises_tax_at_sale( self ):
@@ -213,10 +213,10 @@ class PropertySaleClosingCostsTests( unittest.TestCase ):
 
     def test_closing_costs_reduce_the_recognized_gain( self ):
         without = self._gain(
-            self._run( AssetClass.REAL_ESTATE_RENTAL, TransactionCosts() ), IncomeTaxClass.LONG_TERM_GAINS )
+            self._run( AssetClass.REAL_ESTATE_RENTAL, TransactionCosts() ), IncomeTaxClass.RENTAL_SALE_GAIN )
         withc   = self._gain(
-            self._run( AssetClass.REAL_ESTATE_RENTAL, self._costs() ), IncomeTaxClass.LONG_TERM_GAINS )
-        # 6% of the 600k sale + 10k fixed = 46,000, taken off the long-term gain
+            self._run( AssetClass.REAL_ESTATE_RENTAL, self._costs() ), IncomeTaxClass.RENTAL_SALE_GAIN )
+        # 6% of the 600k sale + 10k fixed = 46,000, taken off the rental sale gain
         self.assertEqual( without - withc, Decimal( '46000' ) )
 
     def test_a_notice_reports_the_total( self ):
