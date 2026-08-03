@@ -1,70 +1,39 @@
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <radialGradient id="night" cx="50%" cy="42%" r="65%">
-      <stop offset="0%"  stop-color="#262a59"/>
-      <stop offset="100%" stop-color="#14152e"/>
-    </radialGradient>
-
-    <!-- Crescent = a disc with an offset disc punched out -->
-    <mask id="moon-cut">
-      <circle cx="56" cy="74" r="15" fill="#ffffff"/>
-      <circle cx="63" cy="69" r="13" fill="#000000"/>
-    </mask>
-
     <style>
-      /* Animations are CSS @keyframes so they run when the SVG is used as an
-         &lt;img&gt; (no external JS). Brand palette: Midnight indigo. */
-      .panel  { filter: drop-shadow(0 4px 12px rgba(0,0,0,0.25)); }
+      /* Animation is CSS @keyframes so it runs when the SVG is used as an
+         &lt;img&gt; (no external JS). Landfall brand: the logo's rayed sun,
+         with its fan of rays sweeping around the disc as the loading cue. */
+      .panel { filter: drop-shadow(0 4px 12px rgba(16, 24, 40, 0.18)); }
+      .rays  { transform-origin: 64px 64px; animation: sweep 1.1s linear infinite; }
+      .disc  { transform-origin: 64px 64px; animation: breathe 2.2s ease-in-out infinite; }
 
-      .ring   { transform-origin: 64px 64px; animation: spin 16s linear infinite; }
-      .moon   { transform-origin: 56px 74px; animation: breathe 4s ease-in-out infinite; }
+      @keyframes sweep   { to { transform: rotate(360deg); } }
+      @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
-      .z1 { animation: rise 3s ease-in-out infinite; }
-      .z2 { animation: rise 3s ease-in-out infinite 1s; }
-      .z3 { animation: rise 3s ease-in-out infinite 2s; }
-
-      .s1 { animation: twinkle 2.4s ease-in-out infinite; }
-      .s2 { animation: twinkle 2.4s ease-in-out infinite .8s; }
-      .s3 { animation: twinkle 2.4s ease-in-out infinite 1.6s; }
-      .s4 { animation: twinkle 3.1s ease-in-out infinite .4s; }
-
-      @keyframes spin    { to { transform: rotate(360deg); } }
-      @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
-      @keyframes rise {
-        0%   { opacity: 0; transform: translate(0, 8px); }
-        25%  { opacity: 1; }
-        65%  { opacity: 1; }
-        100% { opacity: 0; transform: translate(4px, -12px); }
+      /* Respect a user's reduced-motion preference: hold a static sun. */
+      @media (prefers-reduced-motion: reduce) {
+        .rays, .disc { animation: none; }
       }
-      @keyframes twinkle { 0%,100% { opacity: .2; } 50% { opacity: 1; } }
     </style>
   </defs>
 
-  <!-- Night-sky panel -->
-  <circle class="panel" cx="64" cy="64" r="56" fill="url(#night)"
-          stroke="#4c5bd4" stroke-opacity="0.35" stroke-width="1"/>
+  <!-- Light backdrop chip: keeps the mark legible over any page content -->
+  <circle class="panel" cx="64" cy="64" r="52" fill="#ffffff"
+          stroke="#1f5f8b" stroke-opacity="0.14" stroke-width="1"/>
 
-  <!-- Faint slowly-rotating orbit ring (loading cue) -->
-  <circle class="ring" cx="64" cy="64" r="49" fill="none"
-          stroke="#4c5bd4" stroke-opacity="0.3" stroke-width="1" stroke-dasharray="2,5"/>
-
-  <!-- Twinkling amber stars -->
-  <g fill="#f5b945">
-    <circle class="s1" cx="40" cy="34" r="2"/>
-    <circle class="s2" cx="30" cy="56" r="1.6"/>
-    <circle class="s3" cx="48" cy="46" r="1.4"/>
-    <circle class="s4" cx="36" cy="74" r="1.6"/>
+  <!-- Fan of rays: one ray shape placed across the top 180 degrees, with a
+       graduated opacity so a bright leading edge sweeps around while spinning. -->
+  <g class="rays" fill="none" stroke="#1f5f8b" stroke-width="5" stroke-linecap="round">
+    <path d="M64 41 L64 30" transform="rotate(90 64 64)"  stroke-opacity="1"/>
+    <path d="M64 41 L64 30" transform="rotate(60 64 64)"  stroke-opacity="0.82"/>
+    <path d="M64 41 L64 30" transform="rotate(30 64 64)"  stroke-opacity="0.66"/>
+    <path d="M64 41 L64 30" transform="rotate(0 64 64)"   stroke-opacity="0.52"/>
+    <path d="M64 41 L64 30" transform="rotate(-30 64 64)" stroke-opacity="0.40"/>
+    <path d="M64 41 L64 30" transform="rotate(-60 64 64)" stroke-opacity="0.30"/>
+    <path d="M64 41 L64 30" transform="rotate(-90 64 64)" stroke-opacity="0.22"/>
   </g>
 
-  <!-- Breathing crescent moon -->
-  <g class="moon">
-    <circle cx="56" cy="74" r="15" fill="#edeffb" mask="url(#moon-cut)"/>
-  </g>
-
-  <!-- Rising "zzz" (snore + loading), increasing size -->
-  <g fill="none" stroke="#c7cef2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-    <path class="z1" d="M 66 62 L 72 62 L 66 68 L 72 68"/>
-    <path class="z2" d="M 74 49 L 83 49 L 74 58 L 83 58"/>
-    <path class="z3" d="M 85 33 L 96 33 L 85 44 L 96 44"/>
-  </g>
+  <!-- Center disc: static sun, with a gentle breathe so the core feels alive -->
+  <circle class="disc" cx="64" cy="64" r="15" fill="#1f5f8b"/>
 </svg>
