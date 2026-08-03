@@ -53,7 +53,7 @@ buckets are excluded from the ST/LT netting, only their gains are taxed); per-pr
 mixed passive-activity participation (above); the foreign-earned-income exclusion add-back
 (a MAGI component treated as zero); the mortgage acquisition-debt limit and the charitable
 5-year carryover; ACA refinements (advance-PTC reconciliation, enrollment-month proration,
-the actual-premium cap, the under-100%-FPL Medicaid floor). Deliberate simplifications:
+the under-100%-FPL Medicaid floor). Deliberate simplifications:
 §1250 recapture is the full accumulated depreciation, not capped at the actual gain on a
 below-basis sale; RMDs are forced per pre-tax account, not aggregated across a person's IRAs;
 the senior-deduction phase-out keys on AGI, not its own MAGI; depreciation prorates by
@@ -471,11 +471,12 @@ class USFederalTaxEngine( TaxEngine ):
                              enrollment : Optional[ SubsidizedHealthEnrollment ] ) -> Decimal:
         """The ACA premium tax credit: the benchmark plan cost less the household's
         expected contribution -- a share of income that is zero below the lower
-        poverty-ratio and rises with the ratio to the cap -- floored at zero. Zero when
-        not enrolled, and zero above the eligibility cliff (`applicable_upper_ratio`, 400%
-        FPL under reverted post-2025 law). Enrollment-month proration, advance-PTC
-        reconciliation, the actual-premium cap, and the under-100%-FPL Medicaid floor are
-        not modeled."""
+        poverty-ratio and rises with the ratio to the cap -- floored at zero, then capped
+        at the actual premium paid (the credit cannot exceed what the household spent on its
+        plan). Zero when not enrolled, and zero above the eligibility cliff
+        (`applicable_upper_ratio`, 400% FPL under reverted post-2025 law). Enrollment-month
+        proration, advance-PTC reconciliation, and the under-100%-FPL Medicaid floor are not
+        modeled."""
         if enrollment is None:
             return _ZERO
         aca   = self._parameters.aca
@@ -487,7 +488,8 @@ class USFederalTaxEngine( TaxEngine ):
         applicable_rate = max( _ZERO, min(
             aca.applicable_max_rate, aca.applicable_slope * ( ratio - aca.applicable_lower_ratio ) ) )
         expected_contribution = applicable_rate * aca_magi
-        return max( _ZERO, enrollment.reference_premium - expected_contribution )
+        credit = max( _ZERO, enrollment.reference_premium - expected_contribution )
+        return min( credit, enrollment.actual_premium )
 
     def _taxable_social_security(
             self, status : FilingStatus, ss_gross : Decimal, other_income : Decimal ) -> Decimal:
