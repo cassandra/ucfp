@@ -13,7 +13,7 @@ picker.
   <form method="post" action="{% url 'conversions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     {% for row in conversions_form.plan_rows %}
-    {% include 'inputs/components/_realization_plan_row.html' with row=row source_label='From account' %}
+    {% include 'inputs/components/_realization_plan_row.html' with row=row %}
     {% endfor %}
     <p class="text-muted small">Fill the blank block to add a conversion; leave the cadence blank for a
       one-time conversion at the From age. Changes save automatically.</p>

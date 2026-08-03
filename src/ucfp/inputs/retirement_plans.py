@@ -37,6 +37,7 @@ class RetirementMovementForm( forms.Form ):
 
     _EXTRA_ROWS       = 1
     _ACCOUNT_CLASSES  = ()          # subclass: the valid source asset classes
+    _ACCOUNT_LABEL    = 'Account'   # subclass: the account picker's label (e.g. 'From account')
     _HANDLE_PREFIX    = ''          # subclass: minted handle prefix (e.g. 'contribution-')
     _KEY_PREFIX       = ''          # subclass: field-name namespace (e.g. 'c')
     _CADENCE_OPTIONAL = False       # subclass: True lets a row be one-time (blank cadence)
@@ -91,7 +92,7 @@ class RetirementMovementForm( forms.Form ):
 
     def _add_row_fields( self, i : int, entry ):
         self.fields[ self._key( i, 'account' ) ] = forms.ChoiceField(
-            label = 'Account', required = False, choices = self._account_choices(),
+            label = self._ACCOUNT_LABEL, required = False, choices = self._account_choices(),
             initial = self._entry_account( entry ) if entry is not None else None )
         self.fields[ self._key( i, 'amount' ) ] = MoneyField(
             label = 'Amount', required = False, min_value = 0,
@@ -149,7 +150,8 @@ class RetirementMovementForm( forms.Form ):
                 'start_age' : self[ self._key( i, 'start_age' ) ],
                 'end_age'   : self[ self._key( i, 'end_age' ) ],
                 'handle'    : self[ self._key( i, 'handle' ) ] if existing else None,
-                'remove'    : self[ self._key( i, 'remove' ) ] if existing else None }
+                'remove'    : self[ self._key( i, 'remove' ) ] if existing else None,
+                'cadence_optional' : self._CADENCE_OPTIONAL }
             row.update( self._extra_row( i ) )
             rows.append( row )
         return rows
@@ -234,6 +236,7 @@ class ConversionsForm( RetirementMovementForm ):
     One-time (a single age) or a recurring ladder."""
 
     _ACCOUNT_CLASSES  = ( _PRETAX, )
+    _ACCOUNT_LABEL    = 'From account'
     _HANDLE_PREFIX    = 'conversion-'
     _KEY_PREFIX       = 'v'
     _CADENCE_OPTIONAL = True
@@ -258,6 +261,7 @@ class WithdrawalsForm( RetirementMovementForm ):
     lever -- the draw is ordinary income). One-time or recurring."""
 
     _ACCOUNT_CLASSES  = ( _PRETAX, )
+    _ACCOUNT_LABEL    = 'From account'
     _HANDLE_PREFIX    = 'withdrawal-'
     _KEY_PREFIX       = 'w'
     _CADENCE_OPTIONAL = True
