@@ -1,0 +1,8 @@
+{% comment %}
+A number input adorned with a trailing "%" (Bootstrap 4 input-group). Used by
+common.widgets.PercentInput; composes inside the field template like any widget.
+{% endcomment %}
+<div class="input-group">
+  {% include "django/forms/widgets/number.html" %}
+  <div class="input-group-append"><span class="input-group-text">%</span></div>
+</div>

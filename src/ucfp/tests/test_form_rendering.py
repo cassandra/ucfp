@@ -5,6 +5,8 @@ default and these fail."""
 from django import forms
 from django.test import SimpleTestCase
 
+from common.widgets import MoneyInput, PercentInput
+
 
 class _DemoForm(forms.Form):
     amount = forms.DecimalField(label='Amount', help_text='Per month')
@@ -35,3 +37,22 @@ class FieldTemplateTest(SimpleTestCase):
         widget = str(_DemoForm()['amount'])
         self.assertIn('name="amount"', widget)
         self.assertNotIn('text-muted small mb-0 d-block', widget)
+
+
+class AdornedWidgetTest(SimpleTestCase):
+
+    def test_money_input_wraps_the_number_field_with_a_dollar_affix(self):
+        class F(forms.Form):
+            amt = forms.DecimalField(widget=MoneyInput())
+        html = str(F()['amt'])
+        self.assertIn('input-group', html)
+        self.assertIn('>$<', html)
+        self.assertIn('type="number"', html)
+
+    def test_percent_input_wraps_the_number_field_with_a_percent_affix(self):
+        class F(forms.Form):
+            rate = forms.DecimalField(widget=PercentInput())
+        html = str(F()['rate'])
+        self.assertIn('input-group', html)
+        self.assertIn('>%<', html)
+        self.assertIn('type="number"', html)
