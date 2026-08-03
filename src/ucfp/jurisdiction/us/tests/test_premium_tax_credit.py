@@ -36,6 +36,14 @@ class PremiumTaxCreditCliffTest( unittest.TestCase ):
     def test_credit_is_zero_above_the_cliff( self ):
         self.assertEqual( self._credit_at_ratio( '4.1' ), _D( '0' ) )
 
+    def test_cliff_zeroes_the_credit_even_with_a_cheap_plan( self ):
+        # Above the cliff the credit is zero regardless of a cheap actual premium: the cliff
+        # short-circuits before the actual-premium cap would apply.
+        enrollment = SubsidizedHealthEnrollment(
+            household_size = 1, reference_premium = _D( '8000' ), actual_premium = _D( '3000' ) )
+        self.assertEqual(
+            self.engine._premium_tax_credit( self.fpl * _D( '4.1' ), enrollment ), _D( '0' ) )
+
 
 class PremiumTaxCreditActualCapTest( unittest.TestCase ):
     """The credit cannot exceed the premium of the plan actually held. At 150% FPL the

@@ -14,12 +14,13 @@ from common.date_window import DateWindow
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
-from ucfp.inputs.plans.schemas import Plans, PropertyExpense, Vehicle, VehiclePlan, VehicleRunningCost
+from ucfp.inputs.plans.schemas import (
+    HealthCoverageAssumption, Plans, PropertyExpense, Vehicle, VehiclePlan, VehicleRunningCost )
 from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
 from ucfp.planning.materialization import (
-    _property_expenses, _vehicle_expenses, _vehicle_running_costs )
+    _health_coverage, _property_expenses, _vehicle_expenses, _vehicle_running_costs )
 
 _OWNED    = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
 _OCCUPIED = _OWNED + ( PropertyContext.RENTED_HOME, )
@@ -179,3 +180,19 @@ class VehicleRunningCostTests( unittest.TestCase ):
         self.assertEqual(                                  # no vehicles -> nothing to apply
             _vehicle_running_costs( self._plans( [], self._cost( Realization.SMOOTH, weekly ) ) ),
             ( [], [] ) )
+
+
+class HealthCoverageDefaultTests( unittest.TestCase ):
+    """`_health_coverage` resolves the input's optional actual premium: unset means "assume the
+    benchmark plan" (default to the reference premium), so the ACA credit's actual-premium cap does
+    not bind until the user names a cheaper plan; an explicit actual premium passes through."""
+
+    def test_unset_actual_premium_defaults_to_the_reference_premium( self ):
+        plans = Plans( health_coverage = HealthCoverageAssumption(
+            household_size = 1, reference_premium = Decimal( '8000' ) ) )
+        self.assertEqual( _health_coverage( plans ).actual_premium, Decimal( '8000' ) )
+
+    def test_explicit_actual_premium_passes_through( self ):
+        plans = Plans( health_coverage = HealthCoverageAssumption(
+            household_size = 1, reference_premium = Decimal( '8000' ), actual_premium = Decimal( '5000' ) ) )
+        self.assertEqual( _health_coverage( plans ).actual_premium, Decimal( '5000' ) )

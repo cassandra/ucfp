@@ -481,8 +481,7 @@ class USFederalTaxEngine( TaxEngine ):
             return _ZERO
         aca   = self._parameters.aca
         ratio = aca_magi / aca.poverty_line( enrollment.household_size )
-        # The eligibility cliff: no credit above the upper poverty-ratio (the benefit does not phase
-        # out -- it ends), so a household just over the line gets nothing.
+        # The eligibility cliff: above the upper poverty-ratio the benefit does not phase out -- it ends.
         if ratio > aca.applicable_upper_ratio:
             return _ZERO
         applicable_rate = max( _ZERO, min(

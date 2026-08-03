@@ -288,7 +288,7 @@ def federal_2026() -> TaxParameters:
         # returns. Poverty figures are the 2025 HHS guidelines (48 states) used for 2026 coverage:
         # $15,650 first person, +$5,500 each additional. The curve here is the best linear fit of
         # the piecewise 2026 table (passing through 4.19% at 150% FPL and the 9.96% cap at 300%
-        # FPL); its lower ratio is the line's x-intercept, not a real FPL threshold. NOTE: the hard
+        # FPL); its lower ratio is the line's x-intercept, not a real FPL threshold.
         aca = AcaParameters(
             poverty_first_person      = d( '15650' ),
             poverty_additional_person = d( '5500' ),

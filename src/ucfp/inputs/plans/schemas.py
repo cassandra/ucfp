@@ -287,7 +287,7 @@ class HealthCoverageAssumption:
     """An assumed income-subsidized (ACA-style) health-coverage premium credit -- mirrors the
     engine `SubsidizedHealthCoverage`. `actual_premium` is the premium of the plan actually held
     (which caps the credit); left unset it defaults to `reference_premium` at materialization --
-    i.e. assume enrolment in the benchmark plan, so the cap does not bind until a cheaper plan is
+    i.e. assume enrollment in the benchmark plan, so the cap does not bind until a cheaper plan is
     given."""
     household_size: int
     reference_premium: Decimal
