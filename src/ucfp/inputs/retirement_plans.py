@@ -90,17 +90,18 @@ class RetirementMovementForm( forms.Form ):
 
     def _add_row_fields( self, i : int, entry ):
         self.fields[ self._key( i, 'account' ) ] = forms.ChoiceField(
-            required = False, choices = self._account_choices(),
+            label = 'Account', required = False, choices = self._account_choices(),
             initial = self._entry_account( entry ) if entry is not None else None )
         self.fields[ self._key( i, 'amount' ) ] = forms.DecimalField(
-            required = False, min_value = 0, initial = entry.amount if entry is not None else None )
+            label = 'Amount', required = False, min_value = 0,
+            initial = entry.amount if entry is not None else None )
         self._add_cadence( i, entry )
         self._add_extra_fields( i, entry )
         self.fields[ self._key( i, 'start_age' ) ] = forms.IntegerField(
-            required = False, min_value = 0, max_value = 120,
+            label = 'From age', required = False, min_value = 0, max_value = 120,
             initial = entry.start_age if entry is not None else None )
         self.fields[ self._key( i, 'end_age' ) ] = forms.IntegerField(
-            required = False, min_value = 0, max_value = 120,
+            label = 'Until age', required = False, min_value = 0, max_value = 120,
             initial = entry.end_age if entry is not None else None )
         if entry is not None:
             self.fields[ self._key( i, 'handle' ) ] = forms.CharField(
@@ -209,7 +210,8 @@ class ContributionsForm( RetirementMovementForm ):
 
     def _add_extra_fields( self, i, entry ) -> None:
         self.fields[ self._key( i, 'source' ) ] = forms.ChoiceField(
-            required = False, choices = [ ( source.name, source.label ) for source in ContributionSource ],
+            label = 'Source', required = False,
+            choices = [ ( source.name, source.label ) for source in ContributionSource ],
             initial = ( entry.source if entry is not None else ContributionSource.PERSONAL ).name )
 
     def _extra_row( self, i ) -> dict:

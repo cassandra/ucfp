@@ -16,31 +16,15 @@ reflow (`form-row` columns) so the block fits the half-width column.
     {% for row in contributions_form.plan_rows %}
     <div class="border rounded p-2 mb-2">
       {% if row.handle %}{{ row.handle }}{% endif %}
-      <div class="mb-2">
-        <label class="text-muted small mb-0 d-block">Account</label>
-        {{ row.account }}
-      </div>
+      <div class="mb-2">{{ row.account.as_field_group }}</div>
       <div class="d-flex flex-wrap align-items-end mb-2">
-        <div class="mr-3">
-          <label class="text-muted small mb-0 d-block">Amount</label>
-          {{ row.amount }}
-          {% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}
-        </div>
+        <div class="mr-3">{{ row.amount.as_field_group }}</div>
         <div>{% include 'inputs/interview/sections/_cadence.html' with cadence=row.cadence %}</div>
       </div>
-      <div class="mb-2">
-        <label class="text-muted small mb-0 d-block">Source</label>
-        {{ row.source }}
-      </div>
+      <div class="mb-2">{{ row.source.as_field_group }}</div>
       <div class="d-flex flex-wrap">
-        <div class="mr-3">
-          <label class="text-muted small mb-0 d-block">From age</label>
-          {{ row.start_age }}
-        </div>
-        <div>
-          <label class="text-muted small mb-0 d-block">Until age</label>
-          {{ row.end_age }}
-        </div>
+        <div class="mr-3">{{ row.start_age.as_field_group }}</div>
+        <div>{{ row.end_age.as_field_group }}</div>
       </div>
       {% if row.remove %}<label class="small text-muted mb-0 mt-2 d-block">{{ row.remove }} remove</label>{% endif %}
     </div>

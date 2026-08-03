@@ -1,0 +1,23 @@
+{% comment %}
+Project field template for Django's template-based form rendering (Django 5).
+
+Renders one bound field as label -> widget -> help -> errors, styled for
+Bootstrap 4 and the theme, so every field rendered through {{ form }} or
+{{ field.as_field_group }} shares one consistent, accessible markup. It shadows
+Django's default django/forms/field.html (found first via the DIRS template dir);
+plain {{ field }} still renders just the widget and is unaffected.
+
+The label style here is the app-wide default (compact, muted -- matching the
+interview panes); restyle it here to change every field at once.
+{% endcomment %}
+{% if field.use_fieldset %}
+<fieldset{% if field.aria_describedby %} aria-describedby="{{ field.aria_describedby }}"{% endif %}>
+  {% if field.label %}{{ field.legend_tag }}{% endif %}
+  {{ field }}
+</fieldset>
+{% else %}
+{% if field.label %}<label class="text-muted small mb-0 d-block"{% if field.id_for_label %} for="{{ field.id_for_label }}"{% endif %}>{{ field.label }}</label>{% endif %}
+{{ field }}
+{% endif %}
+{% if field.help_text %}<small class="form-text text-muted"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|safe }}</small>{% endif %}
+{% if field.errors %}<span class="text-danger small d-block"{% if field.auto_id %} id="{{ field.auto_id }}_error"{% endif %}>{{ field.errors|join:" " }}</span>{% endif %}

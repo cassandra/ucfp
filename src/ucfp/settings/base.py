@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.forms',
     'pipeline',
     'django.contrib.humanize',
     'constance',
@@ -126,6 +127,13 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'ucfp.urls'
+
+# Use the template-based form renderer so form / field / widget rendering resolves
+# through the project template loaders. This lets templates/django/forms/field.html
+# shadow Django's default field markup app-wide (a single place to style every
+# field). Requires 'django.forms' in INSTALLED_APPS so its widget templates stay
+# resolvable via the app-directories loader.
+FORM_RENDERER = 'django.forms.renderers.TemplatesSetting'
 
 TEMPLATES = [
     {
