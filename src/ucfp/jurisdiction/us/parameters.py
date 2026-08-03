@@ -86,13 +86,15 @@ class AcaParameters:
     plus each additional) and the applicable-percentage curve -- the share of income a
     household is expected to contribute toward premiums, zero below
     `applicable_lower_ratio` x the poverty line and rising at `applicable_slope` per
-    unit of poverty-ratio up to `applicable_max_rate`."""
+    unit of poverty-ratio up to `applicable_max_rate`. `applicable_upper_ratio` is the
+    eligibility cliff: above it (reverted post-2025 law, 400% FPL) no credit is available."""
 
     poverty_first_person      : Decimal
     poverty_additional_person : Decimal
     applicable_lower_ratio    : Decimal
     applicable_slope          : Decimal
     applicable_max_rate       : Decimal
+    applicable_upper_ratio    : Decimal
 
     def poverty_line( self, household_size : int ) -> Decimal:
         """The federal poverty guideline for a household of `household_size`."""
@@ -286,15 +288,14 @@ def federal_2026() -> TaxParameters:
         # returns. Poverty figures are the 2025 HHS guidelines (48 states) used for 2026 coverage:
         # $15,650 first person, +$5,500 each additional. The curve here is the best linear fit of
         # the piecewise 2026 table (passing through 4.19% at 150% FPL and the 9.96% cap at 300%
-        # FPL); its lower ratio is the line's x-intercept, not a real FPL threshold. NOTE: the hard
-        # 400%-FPL cliff is NOT modeled -- the engine caps the applicable rate but keeps paying a
-        # credit above 400% FPL. See report/flags.
+        # FPL); its lower ratio is the line's x-intercept, not a real FPL threshold.
         aca = AcaParameters(
             poverty_first_person      = d( '15650' ),
             poverty_additional_person = d( '5500' ),
             applicable_lower_ratio    = d( '0.41' ),
             applicable_slope          = d( '0.0385' ),
             applicable_max_rate       = d( '0.0996' ),
+            applicable_upper_ratio    = d( '4.0' ),
         ),
         passive_activity = PassiveActivityRules(
             loss_allowance = d( '25000' ),

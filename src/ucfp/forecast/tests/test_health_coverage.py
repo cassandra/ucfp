@@ -53,7 +53,8 @@ class HealthCoverageTests( unittest.TestCase ):
             SubsidizedHealthCoverage(
                 window            = DateWindow(),
                 household_size    = 1,
-                reference_premium = Decimal( '8000' ) ) )
+                reference_premium = Decimal( '8000' ),
+                actual_premium    = Decimal( '8000' ) ) )
         self.assertLess( total_income_tax( reader ), Decimal( '0' ) )
 
     def test_no_coverage_yields_no_credit( self ):
@@ -67,7 +68,8 @@ class HealthCoverageTests( unittest.TestCase ):
             SubsidizedHealthCoverage(
                 window            = DateWindow( start = date( 2030, 1, 1 ) ),
                 household_size    = 1,
-                reference_premium = Decimal( '8000' ) ) )
+                reference_premium = Decimal( '8000' ),
+                actual_premium    = Decimal( '8000' ) ) )
         self.assertGreaterEqual( total_income_tax( reader ), Decimal( '0' ) )
 
 

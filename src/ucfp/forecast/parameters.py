@@ -438,14 +438,16 @@ class SubsidizedHealthCoverage:
     marketplace; employer and government-provided coverage are different buckets that need no
     node here). `household_size` is
     the covered tax-family size; `reference_premium` is the annual premium the subsidy is
-    computed against, in today's dollars. The Forecast hands the year's coverage to the tax
-    engine, which (US) treats it as ACA enrollment and computes the premium tax credit;
-    outside the window the household is uncovered (no subsidy). Coverage values are constant
-    over the window."""
+    computed against, in today's dollars; `actual_premium` is the premium of the plan actually
+    held, which caps the subsidy (the US PTC cannot exceed the premium paid). The Forecast hands
+    the year's coverage to the tax engine, which (US) treats it as ACA enrollment and computes
+    the premium tax credit; outside the window the household is uncovered (no subsidy). Coverage
+    values are constant over the window."""
 
     window            : DateWindow
     household_size    : int
     reference_premium : Decimal
+    actual_premium    : Decimal
 
     def covers( self, on_date : date ) -> bool:
         """Whether the household holds this coverage on `on_date`."""

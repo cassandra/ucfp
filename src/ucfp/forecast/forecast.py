@@ -955,7 +955,8 @@ class Forecast:
             coverage.household_size, self._parameters.subject_removals, span.end_date.year )
         return SubsidizedHealthEnrollment(
             household_size    = household_size,
-            reference_premium = coverage.reference_premium )
+            reference_premium = coverage.reference_premium,
+            actual_premium    = coverage.actual_premium )
 
     def _tax_properties_for( self, span : DateSpan ) -> tuple:
         """The engine's `TaxProperty` for each rental still held this fiscal year: its depreciation

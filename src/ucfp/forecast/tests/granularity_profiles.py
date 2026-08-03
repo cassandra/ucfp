@@ -217,7 +217,8 @@ def life_events() -> ForecastParameters:
             drew, IncomeTaxClass.ORDINARY, Schedule.constant( WindowedAmount( D( '50000' ) ) ),
             OneTime( date( 2032, 6, 1 ) ) ) ],
         expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '70000' ) ],
-        health_coverage = SubsidizedHealthCoverage( DateWindow( end = date( 2028, 12, 31 ) ), 1, D( '12000' ) ),
+        health_coverage = SubsidizedHealthCoverage(
+            DateWindow( end = date( 2028, 12, 31 ) ), 1, D( '12000' ), D( '12000' ) ),
         events = [ ScheduledExternalReceipt( date( 2030, 6, 1 ), D( '100000' ) ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '20000' ), cash_ceiling = D( '80000' ),

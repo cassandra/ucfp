@@ -731,9 +731,14 @@ def _health_coverage( plans : Plans ) -> Optional[ SubsidizedHealthCoverage ]:
     coverage = plans.health_coverage
     if coverage is None:
         return None
+    # An unset actual premium means "assume the benchmark plan", so the credit's actual-premium cap
+    # does not bind until the user names a cheaper plan.
+    actual_premium = ( coverage.actual_premium
+                       if coverage.actual_premium is not None else coverage.reference_premium )
     return SubsidizedHealthCoverage(
         window = DateWindow( start = coverage.start, end = coverage.through ),
-        household_size = coverage.household_size, reference_premium = coverage.reference_premium )
+        household_size = coverage.household_size, reference_premium = coverage.reference_premium,
+        actual_premium = actual_premium )
 
 
 # --- Assumptions: external factors (reuse engine types; no zero-fill) ---------
