@@ -10,6 +10,11 @@
 
       @keyframes sweep   { to { transform: rotate(360deg); } }
       @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+      /* Respect a user's reduced-motion preference: hold a static sun. */
+      @media (prefers-reduced-motion: reduce) {
+        .rays, .disc { animation: none; }
+      }
     </style>
   </defs>
 
