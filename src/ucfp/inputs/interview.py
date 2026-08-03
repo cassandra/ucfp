@@ -161,7 +161,7 @@ class SubjectsForm( forms.Form ):
 
     def apply( self, profile : Profile, plans : Plans ):
         subjects = self._subjects()
-        assets   = _synced_retirement_accounts( profile.assets, subjects )
+        assets   = _synced_taxable_accounts( _synced_retirement_accounts( profile.assets, subjects ) )
         removed  = { asset.handle for asset in profile.assets } - { asset.handle for asset in assets }
         updated  = replace(
             profile, subjects = subjects, filing_status = self._filing_status( subjects ),
@@ -485,6 +485,25 @@ def _synced_retirement_accounts( assets : list, subjects : list ) -> list:
                 asset_class = asset_class, opening_value = Decimal( '0' ),
                 owner_handle = subject.handle ) )
     kept = [ asset for asset in assets if asset.asset_class not in retirement_classes ]
+    return kept + provisioned
+
+
+def _synced_taxable_accounts( assets : list ) -> list:
+    """`assets` with each household taxable account guaranteed present -- the Cash hub and the sweep's
+    Stocks / Bonds / CDs / Dividend-Stocks homes -- created at $0 when absent and preserved with their
+    balance when present. Non-taxable assets are untouched. The default cash plan sweeps surplus into
+    Stocks and Bonds, so these homes must exist for a forecast to build even when the user never funds --
+    or ever opens -- the Accounts step (an all-blank Accounts is a valid choice). Reuses
+    `AccountsForm._TAXABLE` as the single source of the account kinds so the two cannot drift."""
+    by_handle       = { asset.handle : asset for asset in assets }
+    taxable_classes = { asset_class for _f, _h, asset_class in AccountsForm._TAXABLE }
+    provisioned     = list()
+    for _field, handle, asset_class in AccountsForm._TAXABLE:
+        existing = by_handle.get( handle )
+        provisioned.append( existing if existing is not None else AssetProfile(
+            handle = handle, name = asset_class.label,
+            asset_class = asset_class, opening_value = Decimal( '0' ) ) )
+    kept = [ asset for asset in assets if asset.asset_class not in taxable_classes ]
     return kept + provisioned
 
 
