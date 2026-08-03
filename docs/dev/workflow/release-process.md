@@ -23,7 +23,10 @@ droplet/MySQL deployment is separate -- see
 
 ## Pre-Release Verification
 1. Confirm CI passes on `staging`.
-2. Run local validation: `make check` (lint + test + env-drift-check).
+2. Run the full local validation gate: `make check-release` (lint + all test
+   tiers + env-drift-check). This runs the `granularity` differential suite and
+   the `e2e` forecast smoke that the fast `make check` dev gate skips -- the
+   release is the cadence those tiers are reserved for.
 3. Review the commits/PRs since the last release.
 
 ## Release Steps
