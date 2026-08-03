@@ -1,0 +1,97 @@
+{% extends "pages/base.html" %}
+{% load static %}
+{% load common_tags %}
+{% load icons %}
+{% comment %}
+  The public marketing page -- shown at the site root to an anonymous visitor on an auth-enforced
+  (cloud) deployment (see HomeView.dispatch). No app navbar; a plain site header, feature detail, a
+  sign-in call to action, the self-hosted option, and a standard site footer. Self-host / dev runs
+  (SUPPRESS_AUTHENTICATION) never reach this -- they land on the signed-in dashboard.
+
+  NOTE: the About / Contact / Privacy / Terms / self-host links are placeholders ("#") until those
+  pages exist.
+{% endcomment %}
+
+{% block content %}
+<header class="text-center py-5 bg-light">
+  <div class="container">
+    <img class="img-fluid mb-4" style="max-height: 72px" src="{% static 'img/app-logo-h200.png' %}"
+         alt="{% settings_value 'SITE_NAME' %}">
+    <h1 class="display-4 text-primary font-weight-bold mb-2">Can you retire?</h1>
+    <p class="lead text-muted mb-4">Find out for free.</p>
+    <a href="{% url 'user_signin' %}" class="btn btn-primary btn-lg">Sign in to get started</a>
+    <p class="small mt-3 mb-0">Prefer to keep your data private?
+      {% settings_value 'SITE_NAME' %} is open source:
+      <a class="text-primary font-weight-bold" target="_blank" href="https://github.com/cassandra/ucfp">self-host your own computer</a>.</p>
+  </div>
+</header>
+
+<section class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8 text-center">
+      <h2 class="h3 mb-3">One model for your all your financial planning</h2>
+      <p class="text-muted">Most calculators answer a single question at a single moment.
+        {% settings_value 'SITE_NAME' %} replaces the tangle of spreadsheets with one robust,
+        double-entry model so you can see whether your
+        money lasts, and keep your plan honest against reality as it unfolds.</p>
+    </div>
+  </div>
+</section>
+
+<section class="bg-light py-5">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4 text-center mb-4 mb-md-0">
+        {% icon 'clock' size='xxxl' color='primary' %}
+        <h3 class="h5 mt-3">Retirement</h3>
+        <p class="text-muted small">Long-horizon budgeting: how much you need, and when you can stop working.</p>
+      </div>
+      <div class="col-md-4 text-center">
+        {% icon 'shield' size='xxxl' color='primary' %}
+        <h3 class="h5 mt-3">Social Security timing</h3>
+        <p class="text-muted small">Compare claiming strategies to find the one that pays you most.</p>
+      </div>
+      <div class="col-md-4 text-center mb-4 mb-md-0">
+        {% icon 'dollar-sign' size='xxxl' color='primary' %}
+        <h3 class="h5 mt-3">Near-term cash flow</h3>
+        <p class="text-muted small">The next twelve months at fine granularity, so nothing catches you short.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <ul class="list-unstyled mb-0">
+        <li class="mb-3 d-flex">
+          <span class="mr-3">{% icon 'check-circle' color='success' %}</span>
+          <span><strong>Sanity-checked.</strong> A double-entry foundation keeps the books balanced and
+            catches the mistakes a spreadsheet quietly hides.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="text-center py-5 bg-primary text-white">
+  <div class="container">
+    <h2 class="h3 mb-3">See your number.</h2>
+    <a href="{% url 'user_signin' %}" class="btn btn-light btn-lg text-primary">Sign in: it's free</a>
+    <p class="small mt-3 mb-0">Prefer to keep your data private?
+      {% settings_value 'SITE_NAME' %} is open source: 
+      <a class="text-white font-weight-bold" target="_blank" href="https://github.com/cassandra/ucfp">self-host your own computer</a>.</p>
+  </div>
+</section>
+
+<footer class="py-4 bg-dark">
+  <div class="container d-flex flex-wrap justify-content-between align-items-center">
+    <small class="text-white-50">&copy; {% settings_value 'SITE_NAME' %}</small>
+    <ul class="list-inline mb-0">
+      <li class="list-inline-item"><a class="text-white-50" href="#">About</a></li>
+      <li class="list-inline-item"><a class="text-white-50" href="#">Contact</a></li>
+      <li class="list-inline-item"><a class="text-white-50" href="#">Privacy</a></li>
+      <li class="list-inline-item"><a class="text-white-50" href="#">Terms</a></li>
+    </ul>
+  </div>
+</footer>
+{% endblock %}
