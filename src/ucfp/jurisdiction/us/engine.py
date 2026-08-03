@@ -55,10 +55,11 @@ mixed passive-activity participation (above); the foreign-earned-income exclusio
 (a MAGI component treated as zero); the mortgage acquisition-debt limit and the charitable
 5-year carryover; ACA refinements (advance-PTC reconciliation, enrollment-month proration,
 the under-100%-FPL Medicaid floor). Deliberate simplifications:
-§1250 recapture is the full accumulated depreciation, not capped at the actual gain on a
-below-basis sale; RMDs are forced per pre-tax account, not aggregated across a person's IRAs;
+RMDs are forced per pre-tax account, not aggregated across a person's IRAs;
 the senior-deduction phase-out keys on AGI, not its own MAGI; depreciation prorates by
-elapsed days, not the §168 mid-month convention.
+elapsed days, not the §168 mid-month convention. §1250 recapture and a rental's long-term gain
+are aggregated across rentals sold in a year (per the single-activity assumption), not split
+per property.
 """
 from decimal import Decimal
 from typing import Iterator, NamedTuple, Optional
@@ -138,6 +139,15 @@ class _PassiveActivity( NamedTuple ):
     suspended  : Decimal
 
 
+class _RentalGainSplit( NamedTuple ):
+    """A rental disposition's gain split for tax: the §1250 unrecaptured-depreciation portion (the
+    25%-rate bucket) and the long-term remainder (the 0/15/20% bucket, possibly a loss). Recapture is
+    capped at the total gain, so a rental sold at or below its adjusted basis recaptures less, or none."""
+
+    section_1250 : Decimal
+    long_term    : Decimal
+
+
 class USFederalTaxEngine( TaxEngine ):
     """Assesses US federal income tax for one fiscal year against the parameters it
     is constructed with."""
@@ -178,17 +188,18 @@ class USFederalTaxEngine( TaxEngine ):
         # A second home is personal-use like the residence -- its gain floors at zero (a loss is
         # non-deductible) -- but gets no exclusion, so the whole floored gain is long-term.
         second_home_gain = max( _ZERO, fiscal_window.income( IncomeTaxClass.SECOND_HOME_GAIN ) )
-        # A rental sale's gain is recognized in its own class (a distinct run-table line); it is a
-        # long-term gain, netted here with the others. Its accumulated depreciation is recaptured
-        # separately into the §1250 bucket below.
-        rental_sale_gain = fiscal_window.income( IncomeTaxClass.RENTAL_SALE_GAIN )
+        # A rental disposition's gain (its own class) splits into §1250 depreciation recapture and a
+        # long-term remainder; recapture is capped at the actual total gain (see `_split_rental_gain`).
+        rental = self._split_rental_gain(
+            fiscal_window.income( IncomeTaxClass.RENTAL_SALE_GAIN ),
+            self._depreciation_recapture( tax_context ) )
         long_term_gains  = (
             fiscal_window.income( IncomeTaxClass.LONG_TERM_GAINS )
             + ( residence_gain - residence_exclusion )
-            + second_home_gain + rental_sale_gain )
+            + second_home_gain + rental.long_term )
         section_1250_gain = (
             fiscal_window.income( IncomeTaxClass.SECTION_1250_GAIN )
-            + self._depreciation_recapture( tax_context ) )
+            + rental.section_1250 )
 
         net_short = fiscal_window.income( IncomeTaxClass.SHORT_TERM_GAINS ) - carryover.short
         net_long  = long_term_gains - carryover.long
@@ -392,11 +403,21 @@ class USFederalTaxEngine( TaxEngine ):
         )
         return _NetCapital( _ZERO, _ZERO, offset, carryover )
 
+    def _split_rental_gain( self, book_gain : Decimal, recapture : Decimal ) -> _RentalGainSplit:
+        """Split a rental disposition's gain into its §1250 recapture and long-term remainder.
+        `book_gain` is proceeds minus original cost basis (netted across rentals sold this year);
+        `recapture` is the accumulated straight-line depreciation. The unrecaptured §1250 gain is the
+        recapture capped at the actual total gain (book gain + recapture) -- a rental sold at or below
+        its adjusted basis recaptures less, or none -- and the remainder (possibly a long-term loss)
+        stays long-term."""
+        total_gain   = book_gain + recapture
+        section_1250 = min( recapture, max( _ZERO, total_gain ) )
+        return _RentalGainSplit( section_1250 = section_1250, long_term = total_gain - section_1250 )
+
     def _depreciation_recapture( self, tax_context : TaxContext ) -> Decimal:
-        """The total §1250 unrecaptured depreciation from the year's rental dispositions,
-        added to the 25%-rate bucket: the accumulated straight-line depreciation through the
-        sale date. Recapture is not capped at the actual gain -- a non-negative gain recaptures
-        the full accumulation."""
+        """The accumulated straight-line depreciation from the year's rental dispositions (through each
+        sale date) -- the raw §1250 recapture, before `_split_rental_gain` caps it at the actual
+        gain."""
         recapture = _ZERO
         for tax_property in tax_context.properties:
             disposition = tax_property.disposition
