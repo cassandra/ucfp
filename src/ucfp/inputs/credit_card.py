@@ -12,6 +12,8 @@ from decimal import Decimal
 
 from django import forms
 
+from common.forms import MoneyField
+
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.events import CARD_ROLE
@@ -55,10 +57,10 @@ class CreditCardPlanForm( forms.Form ):
             required = False, choices = self._mode_choices(),
             initial = plan.mode.name if plan is not None else _CARRY,
             widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
-        self.fields[ self._monthly_field( card.handle ) ] = forms.DecimalField(
+        self.fields[ self._monthly_field( card.handle ) ] = MoneyField(
             label = 'Monthly payment', required = False, min_value = 0,
             initial = plan.monthly_payment if plan is not None else None,
-            widget = forms.NumberInput( attrs = { 'class' : AppConst.CREDIT_CARD_MONTHLY_CLASS } ) )
+            css_class = AppConst.CREDIT_CARD_MONTHLY_CLASS )
         self.fields[ self._date_field( card.handle ) ] = forms.DateField(
             label = 'Date', required = False,
             initial = plan.target_date if plan is not None else None,

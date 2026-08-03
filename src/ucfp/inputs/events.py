@@ -18,6 +18,7 @@ from typing import Callable, Optional
 
 from django import forms
 
+from common.forms import MoneyField
 from common.recurrence import OneTime
 from common.schedule import Schedule
 
@@ -473,7 +474,7 @@ class EventForm( forms.Form ):
         self._event_type = event_type
         self._profile    = profile
         if event_type.has_amount:
-            self.fields[ 'amount' ] = forms.DecimalField( label = 'Amount', min_value = 0 )
+            self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
         for spec in event_type.references( profile ):
             self.fields[ self._role_field( spec.role ) ] = forms.ChoiceField(
                 label = spec.label, choices = self._choices( spec.choices( profile ) ) )

@@ -15,6 +15,8 @@ from dataclasses import replace
 
 from django import forms
 
+from common.forms import MoneyField
+
 from ucfp.inputs.compatibility import plans_without_debts
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import Debt
@@ -60,7 +62,7 @@ class DebtsForm( forms.Form ):
             initial = debt.kind.name if debt else None )
         self.fields[ f'name_{index}' ]    = forms.CharField(
             required = False, max_length = 100, initial = debt.name if debt else None )
-        self.fields[ f'balance_{index}' ] = forms.DecimalField(
+        self.fields[ f'balance_{index}' ] = MoneyField(
             required = False, min_value = 0, initial = debt.balance if debt else None )
         if debt is not None:
             self.fields[ f'remove_{index}' ] = forms.BooleanField( required = False )

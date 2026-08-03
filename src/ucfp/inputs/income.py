@@ -16,6 +16,7 @@ from dataclasses import replace
 
 from django import forms
 
+from common.forms import MoneyField
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
@@ -75,11 +76,11 @@ class IncomeTableForm( forms.Form ):
             self.fields[ self._key( 'g', i, 'handle' ) ] = forms.CharField(
                 required = False, widget = forms.HiddenInput, initial = flow.handle )
         self.fields[ self._key( 'g', i, 'subject' ) ] = subject
-        self.fields[ self._key( 'g', i, 'amount' ) ]  = forms.DecimalField(
+        self.fields[ self._key( 'g', i, 'amount' ) ]  = MoneyField(
             required = False, min_value = 0, initial = flow.amount if flow is not None else None )
 
     def _add_rental_fields( self, k : int, flow ):
-        self.fields[ self._key( 'r', k, 'amount' ) ] = forms.DecimalField(
+        self.fields[ self._key( 'r', k, 'amount' ) ] = MoneyField(
             required = False, min_value = 0, initial = flow.amount if flow is not None else None )
 
     def _add_entitlement_fields( self, m : int, subject ):
@@ -87,10 +88,10 @@ class IncomeTableForm( forms.Form ):
         claimed is a plan, set in the Retirement section; here we capture only the benefit amounts."""
         gov     = self._gov.get( subject.handle )
         pension = self._pension.get( subject.handle )
-        self.fields[ self._key( 's', m, 'ssamt' ) ] = forms.DecimalField(
+        self.fields[ self._key( 's', m, 'ssamt' ) ] = MoneyField(
             required = False, min_value = 0,
             initial = gov.monthly_at_normal_age if gov is not None else None )
-        self.fields[ self._key( 's', m, 'penamt' ) ] = forms.DecimalField(
+        self.fields[ self._key( 's', m, 'penamt' ) ] = MoneyField(
             required = False, min_value = 0,
             initial = pension.base_annual_amount if pension is not None else None )
 

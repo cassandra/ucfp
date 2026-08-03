@@ -10,6 +10,8 @@ from decimal import Decimal
 
 from django import forms
 
+from common.forms import MoneyField
+
 from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseClass
 from ucfp.inputs.plans.schemas import RecurringExpense
@@ -81,7 +83,7 @@ class RecurringExpensesForm( forms.Form ):
             if durable:                                    # a durable's amount is filled by the calculator
                 add_calculator_fields( self, ei, expense.count, expense.cost_each, expense.lifespan )
             for si in range( len( self._spans ) ):
-                cell = forms.DecimalField( required = False, min_value = 0 )
+                cell = MoneyField( required = False, min_value = 0 )
                 cell.initial = expense.amounts[ si ] if si < len( expense.amounts ) else (
                     expense.amounts[ -1 ] if expense.amounts else None )
                 if durable:

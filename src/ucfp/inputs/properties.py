@@ -12,6 +12,8 @@ from dataclasses import dataclass, replace
 
 from django import forms
 
+from common.forms import MoneyField
+
 from ucfp.accounts.enums import AssetClass, RealPropertyType
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.compatibility import plans_without_debts
@@ -77,7 +79,7 @@ class _PropertyForm( forms.Form ):
     _PREFIX       : str   = ''
     _ASSET_FIELDS : tuple = ()
 
-    mortgage_balance = forms.DecimalField(
+    mortgage_balance = MoneyField(
         label = 'Mortgage balance owed (optional)', min_value = 0, required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
@@ -162,11 +164,11 @@ class RentalForm( _PropertyForm ):
                       'mortgage_balance', 'property_type' ]
 
     name             = forms.CharField( label = 'Name', max_length = 100, required = False )
-    value            = forms.DecimalField( label = 'Current value', min_value = 0, required = False )
-    building_basis   = forms.DecimalField(
+    value            = MoneyField( label = 'Current value', min_value = 0, required = False )
+    building_basis   = MoneyField(
         label = 'Building value at purchase, excludes land (for depreciation)',
         min_value = 0, required = False )
-    purchase_price   = forms.DecimalField( label = 'Purchase price', min_value = 0, required = False )
+    purchase_price   = MoneyField( label = 'Purchase price', min_value = 0, required = False )
     acquisition_date = forms.DateField(
         label = 'Purchase date', required = False,
         widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
@@ -207,8 +209,8 @@ class SecondHomeForm( _PropertyForm ):
     field_order   = [ 'name', 'value', 'purchase_price', 'mortgage_balance' ]
 
     name           = forms.CharField( label = 'Name', max_length = 100, required = False )
-    value          = forms.DecimalField( label = 'Current value', min_value = 0, required = False )
-    purchase_price = forms.DecimalField( label = 'Purchase price', min_value = 0, required = False )
+    value          = MoneyField( label = 'Current value', min_value = 0, required = False )
+    purchase_price = MoneyField( label = 'Purchase price', min_value = 0, required = False )
 
     @staticmethod
     def _asset_initial( asset ) -> dict:
@@ -299,7 +301,7 @@ class PossessionsForm( forms.Form ):
         item = self._items[ index ] if index < len( self._items ) else None
         self.fields[ f'name_{index}' ]  = forms.CharField(
             required = False, max_length = 100, initial = item.name if item else None )
-        self.fields[ f'value_{index}' ] = forms.DecimalField(
+        self.fields[ f'value_{index}' ] = MoneyField(
             required = False, min_value = 0, initial = item.opening_value if item else None )
         self.fields[ f'type_{index}' ]  = forms.ChoiceField(
             required = False, choices = self._TYPE_CHOICES,

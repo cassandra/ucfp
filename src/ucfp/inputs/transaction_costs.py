@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from django import forms
 
+from common.forms import MoneyField, PercentField
 from common.rate import Rate
 
 from ucfp.forecast.parameters import TransactionCosts
@@ -21,8 +22,8 @@ class TransactionCostsForm( forms.Form ):
     """The selling-costs editor: seeded from the assumptions (or the shared default), `apply` stores the
     edited costs back on the assumptions."""
 
-    realtor_fee = forms.DecimalField( label = 'Realtor fee' )        # percent of the sale price
-    fixed_cost  = forms.DecimalField( label = 'Other fixed costs' )  # dollars, in forecast-start terms
+    realtor_fee = PercentField( label = 'Realtor fee' )        # percent of the sale price
+    fixed_cost  = MoneyField( label = 'Other fixed costs' )    # dollars, in forecast-start terms
 
     def __init__( self, data = None, *, profile = None, assumptions = None ):
         super().__init__( data )
