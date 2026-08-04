@@ -2,7 +2,7 @@
 
 {% block app_content %}
 <h1 class="mb-1">Financial Forecast</h1>
-{% if has_profile %}<p class="text-muted">Pick a scenario and a frame, then run it as-is or open it in Explore to tweak variations.</p>{% endif %}
+{% if has_profile and scenarios %}<p class="text-muted">Pick a scenario and a frame, then run it as-is or open it in Explore to tweak variations.</p>{% endif %}
 
 {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
 
@@ -41,7 +41,7 @@ chooser below), and linking to the uuid-less workspace so it resumes without re-
 {% include 'planning/panes/scenario_required.html' %}
 {% endif %}
 
-{% if has_profile %}
+{% if has_profile and scenarios %}
 <h2 class="h4 mt-5">Saved runs</h2>
 {% if results %}
 <ul>

@@ -39,7 +39,7 @@ from .explore import run_working_scenario, start_fresh_exploration, transient_ru
 from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
-from .gating import partition_scenarios
+from .gating import partition_scenarios, scenario_started
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture
@@ -141,10 +141,15 @@ class FinancialForecastView( InputGatedMixin, View ):
         profile_record = completed_profile( organization )   # completeness, not mere existence
         complete, in_progress = self._scenarios( organization, profile_record )
         exploration    = scenario_exploration( organization )
+        # The one in-progress scenario the gate leads into -- a started one to resume, else the untouched
+        # Default to build. Either way the CTA enters *its* build flow (the Scenarios page is the only
+        # place that composes an entirely new scenario); `started` only drives the resume-vs-build wording.
+        started_scenario = next( ( s for s in in_progress if scenario_started( s ) ), None )
         return {
             'has_profile'  : profile_record is not None,   # a *complete* profile
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
-            'in_progress'  : in_progress,                  # half-built scenarios to resume
+            'build_scenario'         : started_scenario or ( in_progress[ 0 ] if in_progress else None ),
+            'build_scenario_started' : started_scenario is not None,
             'resume'       : self._resume( exploration ) if exploration is not None else None,
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),

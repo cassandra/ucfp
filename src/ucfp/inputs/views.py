@@ -234,9 +234,11 @@ class ScenarioNewView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ScenarioResumeView( View ):
-    """`/inputs/scenarios/<uuid>/resume/` -- resume building a half-built scenario: make its Plans and
-    Assumptions the editing target, mark the build in progress, and re-enter the two-part flow at the
-    first Plans section (the stepper shows what is already done). POST, since it changes editing state."""
+    """`/inputs/scenarios/<uuid>/resume/` -- enter a scenario's build flow: make its Plans and
+    Assumptions the editing target, mark the build in progress, and (re-)enter the two-part flow at the
+    first Plans section (the stepper shows what is already done). Serves both resuming a half-built
+    scenario and starting the untouched Default from a feature's scenario gate. POST, since it changes
+    editing state."""
 
     def post( self, request, uuid ):
         organization = request.organization

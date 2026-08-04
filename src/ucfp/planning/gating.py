@@ -27,6 +27,15 @@ def scenario_readiness( profile_record, scenario_record ) -> list:
         load_assumptions( scenario_record.assumptions ), acknowledged )
 
 
+def scenario_started( scenario_record ) -> bool:
+    """Whether the user has actually begun building this scenario -- any Plans or Assumptions step
+    reviewed. A Default scenario is auto-created when the Profile is set up, so a never-touched one is
+    'in progress' only by construction; this tells it apart from one the user has worked on and would
+    recognize resuming."""
+    return bool( scenario_record.plans.acknowledged_section_keys
+                 or scenario_record.assumptions.acknowledged_section_keys )
+
+
 def partition_scenarios( organization, profile_record ):
     """The organization's saved scenarios split into (complete, in_progress) against the current profile:
     complete ones are runnable now, in-progress ones are half-built and resumable."""

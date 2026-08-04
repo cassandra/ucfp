@@ -1,26 +1,34 @@
 {% comment %}
 Reusable gate: shown by a planning feature that needs a Future Scenario but has no complete one to run.
-Assumes a completed Profile already exists (the profile gate leads, one step earlier). Offers to build a
-scenario, or resume a half-built one. Reads `in_progress` from the surrounding context. Building or
+Assumes a completed Profile already exists (the profile gate leads, one step earlier). One primary CTA
+that leads straight into the scenario build flow (the first Plans section, chained through Assumptions)
+for `build_scenario` -- the in-progress scenario to work on. `build_scenario_started` picks the wording:
+resume a scenario the user has worked on, else build the untouched auto-created Default. Composing an
+entirely new scenario is reserved for the Scenarios page, so it is not offered here. Building or
 resuming ends on the Scenarios page; the user returns to a feature via the nav.
 {% endcomment %}
 <div class="alert alert-info mt-3">
-  <h2 class="h5 mb-2">Build a Future Scenario to forecast</h2>
-  <p class="mb-2">A forecast projects a <strong>Future Scenario</strong> &mdash; the plans you're
-    contemplating and the assumptions you expect. Build one to run this feature.</p>
-  {% if in_progress %}
-  <p class="mb-1">You have a scenario in progress:</p>
-  <ul class="mb-3">
-    {% for scenario in in_progress %}
-    <li class="d-flex align-items-center">
-      <span class="font-weight-bold mr-2">{{ scenario.label }}</span>
-      <form method="post" action="{% url 'scenario_resume' scenario.uuid %}" class="m-0">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-link p-0">Resume building &rarr;</button>
-      </form>
-    </li>
-    {% endfor %}
-  </ul>
+  {% if build_scenario %}
+  {% if build_scenario_started %}
+  <h2 class="h5 mb-2">Finish your Future Scenario</h2>
+  <p class="mb-3">You have one in progress &mdash; pick up where you left off, then come back here to
+    run your forecast.</p>
+  {% else %}
+  <h2 class="h5 mb-2">Next, build a Future Scenario</h2>
+  <p class="mb-3">A forecast also needs a <strong>Future Scenario</strong> &mdash; the plans you're
+    contemplating and the assumptions you expect. Build one now, then come back here to run your
+    forecast.</p>
   {% endif %}
+  <form method="post" action="{% url 'scenario_resume' build_scenario.uuid %}" class="m-0">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary">
+      {% if build_scenario_started %}Resume building {{ build_scenario.label }} &rarr;{% else %}Build a Future Scenario{% endif %}</button>
+  </form>
+  {% else %}
+  {% comment %} No scenario at all (the Default was removed): fall back to composing one on the Scenarios page. {% endcomment %}
+  <h2 class="h5 mb-2">Next, build a Future Scenario</h2>
+  <p class="mb-3">A forecast also needs a <strong>Future Scenario</strong> &mdash; the plans you're
+    contemplating and the assumptions you expect.</p>
   <a href="{% url 'scenario_new' %}" class="btn btn-primary">Build a Future Scenario</a>
+  {% endif %}
 </div>
