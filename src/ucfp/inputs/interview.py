@@ -127,10 +127,11 @@ class SubjectsForm( StyledFormMixin, forms.Form ):
     def filing_status_label( self ) -> str:
         """The filing status the engine will use, read from the saved profile and shown read-only. It
         reflects saved facts, so it updates on save rather than as the partner is edited -- there is
-        nothing to choose while single vs joint is fixed by whether a partner exists. A dash until a
-        primary person is entered (the filing status is unset until then)."""
+        nothing to choose while single vs joint is fixed by whether a partner exists. Defaults to
+        single: a primary person is always required, so single is the baseline until a partner makes
+        it joint."""
         status = self._profile.filing_status if self._profile is not None else None
-        return status.label if status is not None else '—'
+        return status.label if status is not None else FilingStatus.SINGLE.label
 
     @staticmethod
     def _initial( profile : Profile ) -> dict:
@@ -738,7 +739,7 @@ EXTERNAL_FACTORS_STEP = 'external-factors'
 # The interview's order. A section with a form is live; the rest are declared so the stepper shows
 # the full path ahead.
 SECTIONS = [
-    Section( SUBJECTS_STEP  , 'Who this plan is for', form = SubjectsSectionForm,
+    Section( SUBJECTS_STEP  , 'People', form = SubjectsSectionForm,
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),

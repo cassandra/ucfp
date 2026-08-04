@@ -183,6 +183,12 @@ a:hover, a:focus {
     border-color: var(--primary-color);
 }
 
+/* On the active (slate-blue) step, the reviewed / not-reviewed marker inherits the row's white
+   text so it contrasts, instead of a low-contrast green or muted grey on the blue. */
+.list-group-item.active .icon {
+    color: inherit;
+}
+
 /* Interview advance bar: keep Next / Finish reachable without scrolling to the bottom of
    a long section -- it sticks to the bottom of the viewport as a thin action bar. */
 .interview-advance {

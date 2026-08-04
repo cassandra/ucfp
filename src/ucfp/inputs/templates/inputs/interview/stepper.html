@@ -5,6 +5,7 @@ form) that is not the current one is a revisit link (async, into the section pan
 sections are plain. A section the user has already seen is marked acknowledged. The element ids come
 from the view (stepper_target / section_target).
 {% endcomment %}
+{% load icons %}
 <ol id="{{ stepper_target }}" class="list-group">
   {% for section in sections %}
   <li class="list-group-item d-flex justify-content-between align-items-center{% if section.key == current_section.key %} active{% endif %}">
@@ -17,9 +18,9 @@ from the view (stepper_target / section_target).
       {% endif %}
     </span>
     {% if section.key in acknowledged_sections %}
-    <span class="text-success small" title="Reviewed" aria-label="Reviewed">&check;</span>
+    {% icon 'check-circle' color='success' title='Reviewed' aria_label='Reviewed' %}
     {% else %}
-    <span class="text-muted small" title="Not yet reviewed" aria-label="Not yet reviewed">&hellip;</span>
+    {% icon 'circle' color='muted' title='Not yet reviewed' aria_label='Not yet reviewed' %}
     {% endif %}
   </li>
   {% endfor %}

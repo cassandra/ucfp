@@ -63,6 +63,12 @@ class AppConst:
     OPTIONAL_BODY_CLASS   = 'js-optional-body'    # the optional fields
     OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # clears + collapses the body
 
+    # A group of fields entered together -- both filled or both empty (e.g. a person's name and
+    # birthdate). While exactly one side is filled the person is mid-entry, so the autosave defers:
+    # it skips the background save (and the incomplete-pair validation and pane re-render that would
+    # steal focus from the field being filled) until the group is coherent. Driven by inputs.js.
+    PAIR_CLASS = 'js-pair'  # fields that must be entered together (both-or-neither)
+
     # A switch: a control (radio group / select) whose value reveals one of several sibling case
     # blocks and hides the rest (e.g. own vs rent showing different fields). All blocks render
     # visible without JS -- the server reads only the fields the chosen case makes relevant. Driven

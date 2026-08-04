@@ -37,6 +37,7 @@ AVAILABLE_ICONS = {
     'chevron-left',
     'chevron-right',
     'chevron-up',
+    'circle',
     'circle-slash',
     'clock',
     'clock-rotate',

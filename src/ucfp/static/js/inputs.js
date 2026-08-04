@@ -89,6 +89,19 @@ window.App.Inputs = (function () {
         AN.post( $form.attr( 'action' ), $form.serialize(), { suppressLoader: true } );
     }
 
+    // Whether the changed field sits in a both-or-neither group (PAIR_CLASS) that is still half-filled
+    // -- a person mid-entry (a name typed, its birthdate not yet). While so, the autosave holds off, so
+    // the incomplete-pair error (and the pane re-render that would steal focus from the field being
+    // filled) never fires until the pair is whole. Fields in no such group -- and a group wholly filled
+    // or wholly empty -- return false and save normally.
+    function pairMidEntry( $field ) {
+        const $pair = $field.closest( classSelector( C.PAIR_CLASS ) );
+        if ( ! $pair.length ) { return false; }
+        const values = $pair.find( ':input' ).map( function () { return ( $( this ).val() || '' ).trim(); } ).get();
+        const filled = values.filter( Boolean ).length;
+        return filled > 0 && filled < values.length;
+    }
+
     // ----- DatePicker: enhance date inputs, tuned to their planning context -----
     //
     // Dates here routinely sit decades from today (birthdates back, planning dates ahead), so a
@@ -439,6 +452,7 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'change', autosaveForm + ' :input', function () {
             const $field = $( this );
             syncField( $field );
+            if ( pairMidEntry( $field ) ) { return; }   // person mid-entry: defer until the pair is whole
             saveForm( $field.closest( 'form' ) );
         } );
         // Enter (or any submit) routes through the same silent save, never a full-page POST.
