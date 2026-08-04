@@ -49,11 +49,16 @@ class IsoDateInput( forms.DateInput ):
     ISO_FORMAT = '%Y-%m-%d'
 
     def __init__( self, *, context = AppConst.DATE_CONTEXT_FUTURE, attrs = None ):
-        hooks = {
-            'class'                                   : AppConst.DATE_FIELD_CLASS,
+        # Render as a Bootstrap control by default (so a date is styled without depending on a form-level
+        # mixin, which never runs over dynamically-added fields), merging -- not replacing -- any class
+        # the caller adds.
+        attrs   = dict( attrs or {} )
+        classes = ( f'form-control {AppConst.DATE_FIELD_CLASS} ' + attrs.pop( 'class', '' ) ).strip()
+        hooks   = {
+            'class'                                   : classes,
             f'data-{AppConst.DATE_CONTEXT_DATA_ATTR}' : context,
             'autocomplete'                            : 'off',
             'placeholder'                             : 'YYYY-MM-DD',
         }
-        hooks.update( attrs or {} )
+        hooks.update( attrs )
         super().__init__( attrs = hooks, format = self.ISO_FORMAT )

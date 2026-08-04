@@ -6,8 +6,8 @@ than showing empty tables.
 {% endcomment %}
 {% if form.debt_plan_form.has_debts %}
 <h3 class="h6">Loans</h3>
-<p class="text-muted">For each loan, how you'll pay it down. Changes save automatically, and Next
-  moves on when you're done.</p>
+<p class="text-muted">For each loan, its rate and remaining term -- and, optionally, extra principal or a
+  full-payoff date.</p>
 {% include 'inputs/interview/sections/debt_plan_list.html' with debt_plan_form=form.debt_plan_form %}
 {% endif %}
 

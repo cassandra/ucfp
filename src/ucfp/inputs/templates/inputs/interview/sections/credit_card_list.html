@@ -14,20 +14,19 @@ re-rendering only to surface a bad value.
     <div class="{{ AppConst.SWITCH_CLASS }} {{ AppConst.CREDIT_CARD_CLASS }} border rounded p-2 mb-2"
          data-{{ AppConst.CREDIT_CARD_BALANCE_DATA_ATTR }}="{{ row.balance }}"
          data-{{ AppConst.CREDIT_CARD_APR_DATA_ATTR }}="{{ credit_card_form.apr_percent }}">
-      <div class="fw-semibold">{{ row.name }}
-        <span class="text-muted small">balance {{ row.balance }}</span></div>
+      <div class="mb-2"><span class="font-weight-bold">{{ row.name }}</span>
+        <span class="text-muted small">balance {{ row.balance_display }}</span></div>
       {{ row.mode }}
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="MONTHLY COMBO">
-        {% include 'inputs/interview/_field.html' with field=row.monthly %}
+        {{ row.monthly.as_field_group }}
       </div>
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="BY_DATE COMBO LUMP">
-        {% include 'inputs/interview/_field.html' with field=row.date %}
+        {{ row.date.as_field_group }}
       </div>
       <p class="{{ AppConst.CREDIT_CARD_READOUT_CLASS }} text-info small mb-0"></p>
       {% if row.hint %}<p class="text-warning small mb-0">{{ row.hint }}</p>{% endif %}
     </div>
     {% endfor %}
-    <p class="text-muted small">Estimates assume about {{ credit_card_form.apr_percent }}% APR.
-      Changes save automatically.</p>
+    <p class="text-muted small">Estimates assume about {{ credit_card_form.apr_percent }}% APR.</p>
   </form>
 </div>

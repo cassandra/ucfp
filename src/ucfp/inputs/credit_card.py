@@ -62,10 +62,9 @@ class CreditCardPlanForm( forms.Form ):
             initial = plan.monthly_payment if plan is not None else None,
             css_class = AppConst.CREDIT_CARD_MONTHLY_CLASS )
         self.fields[ self._date_field( card.handle ) ] = forms.DateField(
-            label = 'Date', required = False,
+            label = 'Target date', required = False,
             initial = plan.target_date if plan is not None else None,
-            widget = IsoDateInput( attrs = {
-                'class' : f'{AppConst.DATE_FIELD_CLASS} {AppConst.CREDIT_CARD_DATE_CLASS}' } ) )
+            widget = IsoDateInput( attrs = { 'class' : AppConst.CREDIT_CARD_DATE_CLASS } ) )
 
     @staticmethod
     def _mode_choices() -> list:
@@ -97,12 +96,13 @@ class CreditCardPlanForm( forms.Form ):
 
     @property
     def rows( self ) -> list:
-        return [ { 'name'    : card.name,
-                   'balance' : card.balance,
-                   'mode'    : self[ self._mode_field( card.handle ) ],
-                   'monthly' : self[ self._monthly_field( card.handle ) ],
-                   'date'    : self[ self._date_field( card.handle ) ],
-                   'hint'    : self._payment_hint( card ) }
+        return [ { 'name'            : card.name,
+                   'balance'         : card.balance,
+                   'balance_display' : f'${card.balance:,.0f}' if card.balance is not None else '',
+                   'mode'            : self[ self._mode_field( card.handle ) ],
+                   'monthly'         : self[ self._monthly_field( card.handle ) ],
+                   'date'            : self[ self._date_field( card.handle ) ],
+                   'hint'            : self._payment_hint( card ) }
                  for card in self._cards ]
 
     def _payment_hint( self, card ) -> str:

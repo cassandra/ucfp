@@ -232,9 +232,17 @@ a:hover, a:focus {
 }
 
 /* Date and number inputs read better at a natural width than the full column. */
-.form-control.js-date,
+.form-control.js-date {
+    max-width: 8.5rem;   /* an ISO yyyy-mm-dd needs no more, so a date input does not sprawl */
+}
 .form-control[type="number"] {
     max-width: 12rem;
+}
+
+/* The Debt-plan loan card's rate and remaining-term hold only a few digits, so keep those number inputs
+   narrow rather than letting them fill the column (the affixed rate/extra fields are already compact). */
+#debt-plan .form-control[type="number"] {
+    max-width: 5rem;
 }
 
 /* Money inputs are sized for the largest value allowed (8 digits + 2 commas) and no wider, with the

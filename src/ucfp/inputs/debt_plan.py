@@ -51,19 +51,19 @@ class DebtPlanForm( forms.Form ):
 
     def _build_fields( self, debt, repayment, extra_annual, payoff_date ):
         self.fields[ self._rate_field( debt.handle ) ] = PercentField(
-            label = 'Interest rate (%)', required = False, min_value = 0,
+            label = 'Rate (%)', required = False, min_value = 0,
             css_class = AppConst.LOAN_RATE_CLASS,
             initial = repayment.interest_rate.fraction * 100 if repayment is not None else None )
         self.fields[ self._term_field( debt.handle ) ] = forms.IntegerField(
-            label = 'Months remaining', required = False, min_value = 1,
-            widget = forms.NumberInput( attrs = { 'class' : AppConst.LOAN_TERM_CLASS } ),
+            label = 'Months left', required = False, min_value = 1,
+            widget = forms.NumberInput( attrs = { 'class' : f'form-control {AppConst.LOAN_TERM_CLASS}' } ),
             initial = repayment.remaining_term.months() if repayment is not None else None )
         self.fields[ self._extra_field( debt.handle ) ] = MoneyField(
-            label = 'Extra principal per month (optional)', required = False, min_value = 0,
+            label = 'Extra/month', required = False, min_value = 0,
             css_class = AppConst.LOAN_EXTRA_CLASS,
             initial = extra_annual / 12 if extra_annual else None )
         self.fields[ self._payoff_field( debt.handle ) ] = forms.DateField(
-            label = 'Pay off in full on (optional)', required = False,
+            label = 'Pay off by', required = False,
             widget = IsoDateInput(), initial = payoff_date )
 
     @staticmethod
@@ -88,13 +88,14 @@ class DebtPlanForm( forms.Form ):
 
     @property
     def rows( self ) -> list:
-        return [ { 'name'    : debt.name,
-                   'kind'    : debt.kind.label,
-                   'balance' : debt.balance,
-                   'rate'    : self[ self._rate_field( debt.handle ) ],
-                   'term'    : self[ self._term_field( debt.handle ) ],
-                   'extra'   : self[ self._extra_field( debt.handle ) ],
-                   'payoff'  : self[ self._payoff_field( debt.handle ) ] }
+        return [ { 'name'            : debt.name,
+                   'kind'            : debt.kind.label,
+                   'balance'         : debt.balance,
+                   'balance_display' : f'${debt.balance:,.0f}' if debt.balance is not None else '',
+                   'rate'            : self[ self._rate_field( debt.handle ) ],
+                   'term'            : self[ self._term_field( debt.handle ) ],
+                   'extra'           : self[ self._extra_field( debt.handle ) ],
+                   'payoff'          : self[ self._payoff_field( debt.handle ) ] }
                  for debt in self._debts ]
 
     def apply( self, profile, plans ):
