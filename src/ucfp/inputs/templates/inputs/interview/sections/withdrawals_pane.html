@@ -9,16 +9,15 @@ offering an empty picker.
 <div id="withdrawals">
   <h3 class="h6">Pre-tax Account Withdrawals</h3>
   {% if withdrawals_form.has_accounts %}
-  <p class="text-muted small">Draw a set amount from a pre-tax retirement account -- once, or on a
-    schedule -- as a tax lever (bracket-filling, RMDs, pre-conversion draws). Each draw is ordinary
-    income, bounded by the account's value.</p>
+  <p class="text-muted small">Draw from a pre-tax account, once or on a schedule, as a tax lever
+    (bracket-filling, RMDs). Each draw is ordinary income.</p>
   <form method="post" action="{% url 'withdrawals' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     {% for row in withdrawals_form.plan_rows %}
     {% include 'inputs/components/_realization_plan_row.html' with row=row %}
     {% endfor %}
     <p class="text-muted small">Fill the blank block to add a withdrawal; leave the cadence blank for a
-      one-time withdrawal at the From age. Changes save automatically.</p>
+      one-time draw at the From age.</p>
   </form>
   {% else %}
   <p class="text-muted">Set up your accounts first (the Accounts step); each person's pre-tax retirement

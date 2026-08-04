@@ -110,10 +110,12 @@ def add_optional_cadence_fields( form, prefix, interval, domain ) -> None:
     magnitude = forms.IntegerField( required = False, min_value = 1, max_value = _MAX_MAGNITUDE )
     magnitude.initial = interval.count if interval is not None else None      # blank -> one-time
     magnitude.widget.attrs[ 'aria-label' ] = 'Cadence magnitude'
+    magnitude.widget.attrs[ 'class' ]      = 'form-control form-control-sm input-count'
     form.fields[ _count_key( prefix ) ] = magnitude
     unit = forms.ChoiceField( required = False, choices = [ ( u.name, u.label ) for u in units ] )
     unit.initial = interval.unit.name if interval is not None else units[ -1 ].name
     unit.widget.attrs[ 'aria-label' ] = 'Cadence unit'
+    unit.widget.attrs[ 'class' ]      = 'custom-select custom-select-sm cadence-unit'
     form.fields[ _unit_key( prefix ) ] = unit
 
 
