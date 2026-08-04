@@ -1,0 +1,14 @@
+{% comment %}
+One bound field as a horizontal row -- the input on the left, its label immediately to the right --
+for the compact two-column panes (e.g. Accounts). Input-first keeps the fill-in boxes aligned in a
+scannable left column and the label hugging its own input, avoiding the wide gap a label-then-input
+split leaves after short labels. The label matches the app-wide field style (compact, muted). Usage:
+{% include 'inputs/interview/_field_row.html' with field=form.some_field %}
+{% endcomment %}
+<div class="form-group row mb-2">
+  <div class="col-5">
+    {{ field }}
+    {% if field.errors %}<span class="text-danger small d-block">{{ field.errors|join:" " }}</span>{% endif %}
+  </div>
+  <label class="col-7 col-form-label text-muted small mb-0"{% if field.id_for_label %} for="{{ field.id_for_label }}"{% endif %}>{{ field.label }}</label>
+</div>

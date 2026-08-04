@@ -31,7 +31,7 @@ from ucfp.inputs.profile.schemas import (
 from ucfp.inputs.compatibility import plans_without_accounts
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
-from ucfp.jurisdiction.labels import local_label
+from ucfp.jurisdiction.labels import local_term
 from ucfp.jurisdiction.us.subdivision_tax import USState
 
 from .credit_card import CreditCardPlanForm
@@ -403,11 +403,21 @@ class AccountsForm( forms.Form ):
         for subject in self._subjects:
             for prefix, _handle_prefix, _asset_class, concept in self._RETIREMENT:
                 self.fields[ self._retire_field( prefix, subject.handle ) ] = MoneyField(
-                    label = local_label( jurisdiction, concept ), required = False, min_value = 0 )
+                    label = self._retirement_label( jurisdiction, concept ),
+                    required = False, min_value = 0 )
 
     @staticmethod
     def _retire_field( prefix : str, handle : str ) -> str:
         return f'{prefix}_{handle}'
+
+    @staticmethod
+    def _retirement_label( jurisdiction, concept ) -> str:
+        """A retirement account's field label in the grouped Accounts layout -- the tax treatment plus
+        the jurisdiction's local term, e.g. 'Pre-tax (401(k) / IRA)'. The enclosing 'Retirement -- <name>'
+        heading already carries 'retirement', so that redundant word is dropped from the concept label."""
+        treatment = concept.label.removesuffix( ' retirement' )
+        term      = local_term( jurisdiction, concept )
+        return f'{treatment} ({term})' if term else treatment
 
     @property
     def taxable_fields( self ) -> list:
