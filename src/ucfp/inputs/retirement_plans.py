@@ -93,7 +93,8 @@ class RetirementMovementForm( forms.Form ):
     def _add_row_fields( self, i : int, entry ):
         self.fields[ self._key( i, 'account' ) ] = forms.ChoiceField(
             label = self._ACCOUNT_LABEL, required = False, choices = self._account_choices(),
-            initial = self._entry_account( entry ) if entry is not None else None )
+            initial = self._entry_account( entry ) if entry is not None else None,
+            widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
         self.fields[ self._key( i, 'amount' ) ] = MoneyField(
             label = 'Amount', required = False, min_value = 0,
             initial = entry.amount if entry is not None else None )
@@ -101,10 +102,12 @@ class RetirementMovementForm( forms.Form ):
         self._add_extra_fields( i, entry )
         self.fields[ self._key( i, 'start_age' ) ] = forms.IntegerField(
             label = 'From age', required = False, min_value = 0, max_value = 120,
-            initial = entry.start_age if entry is not None else None )
+            initial = entry.start_age if entry is not None else None,
+            widget = forms.NumberInput( attrs = { 'class' : 'form-control input-age' } ) )
         self.fields[ self._key( i, 'end_age' ) ] = forms.IntegerField(
             label = 'Until age', required = False, min_value = 0, max_value = 120,
-            initial = entry.end_age if entry is not None else None )
+            initial = entry.end_age if entry is not None else None,
+            widget = forms.NumberInput( attrs = { 'class' : 'form-control input-age' } ) )
         if entry is not None:
             self.fields[ self._key( i, 'handle' ) ] = forms.CharField(
                 required = False, widget = forms.HiddenInput, initial = entry.handle )
@@ -201,6 +204,7 @@ class ContributionsForm( RetirementMovementForm ):
     tax treatment and the annual limit). Always recurring -- the cadence is required."""
 
     _ACCOUNT_CLASSES  = _RETIREMENT_CLASSES
+    _ACCOUNT_LABEL    = 'Destination account'   # money flows in, so name the account by its role
     _HANDLE_PREFIX    = 'contribution-'
     _KEY_PREFIX       = 'c'
     _DEFAULT_INTERVAL = Duration( 1, TimeUnit.MONTH )
@@ -215,7 +219,8 @@ class ContributionsForm( RetirementMovementForm ):
         self.fields[ self._key( i, 'source' ) ] = forms.ChoiceField(
             label = 'Source', required = False,
             choices = [ ( source.name, source.label ) for source in ContributionSource ],
-            initial = ( entry.source if entry is not None else ContributionSource.PERSONAL ).name )
+            initial = ( entry.source if entry is not None else ContributionSource.PERSONAL ).name,
+            widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
 
     def _extra_row( self, i ) -> dict:
         return { 'source' : self[ self._key( i, 'source' ) ] }

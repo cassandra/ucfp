@@ -27,10 +27,10 @@ def _profile( *assets ):
 class PlanRowShapeTests( unittest.TestCase ):
     """The shared row shape, and where the three subclasses legitimately diverge."""
 
-    def test_contributions_row_has_a_source_plain_account_label_and_required_cadence( self ):
+    def test_contributions_row_has_a_source_destination_account_label_and_required_cadence( self ):
         row = ContributionsForm( profile = _profile( _IRA ), plans = Plans() ).plan_rows[ 0 ]
         self.assertIsNotNone( row.get( 'source' ) )            # contributions add a funding source
-        self.assertEqual( row[ 'account' ].label, 'Account' )
+        self.assertEqual( row[ 'account' ].label, 'Destination account' )   # money flows in
         self.assertFalse( row[ 'cadence_optional' ] )          # always recurring
 
     def test_conversions_row_has_no_source_from_account_label_and_optional_cadence( self ):
