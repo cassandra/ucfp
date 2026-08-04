@@ -83,15 +83,5 @@
   </div>
 </section>
 
-<footer class="py-4 bg-dark">
-  <div class="container d-flex flex-wrap justify-content-between align-items-center">
-    <small class="text-white-50">&copy; {% settings_value 'SITE_NAME' %}</small>
-    <ul class="list-inline mb-0">
-      <li class="list-inline-item"><a class="text-white-50" href="#">About</a></li>
-      <li class="list-inline-item"><a class="text-white-50" href="#">Contact</a></li>
-      <li class="list-inline-item"><a class="text-white-50" href="#">Privacy</a></li>
-      <li class="list-inline-item"><a class="text-white-50" href="#">Terms</a></li>
-    </ul>
-  </div>
-</footer>
+{% include "components/base_footer.html" %}
 {% endblock %}

@@ -1,0 +1,68 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% comment %}
+  Public terms page. DRAFT starting point -- review the wording, the legal entity, the effective date,
+  and the contact with counsel before any public launch. The "not financial advice" disclaimer is
+  essential for a planning tool and should not be removed.
+{% endcomment %}
+
+{% block page_title %}Terms of Service{% endblock %}
+
+{% block public_content %}
+<h5 class="text-primary mt-4">General</h5>
+<p>These Terms govern your use of {% settings_value 'SITE_NAME' %} (the "Service"). By using the Service
+  you agree to these Terms. If you do not agree, do not use the Service. We may modify, suspend, or
+  discontinue the Service at any time without liability.</p>
+
+<h5 class="text-primary mt-4">Not financial advice</h5>
+<p>{% settings_value 'SITE_NAME' %} is a planning and educational tool. Its projections are estimates
+  based on the assumptions and figures you provide, and are <strong>not financial, investment, tax, or
+  legal advice</strong>. Outcomes are not guaranteed. Consult a qualified professional before making
+  decisions, and verify any figure that matters against authoritative sources.</p>
+
+<h5 class="text-primary mt-4">Age requirements</h5>
+<p>You must be at least 18 years old to use the Service. You are responsible for all activity under your
+  account.</p>
+
+<h5 class="text-primary mt-4">Account security</h5>
+<p>You are responsible for maintaining access to the email address associated with your account, which is
+  used for sign-in verification. Notify us immediately of any unauthorized use. We are not liable for loss
+  resulting from unauthorized access to your account.</p>
+
+<h5 class="text-primary mt-4">Your content</h5>
+<p>You own the financial information you enter. By using the Service you grant us a limited licence to
+  store and process it solely to provide the Service to you. You represent that you have the right to
+  provide the information you enter.</p>
+
+<h5 class="text-primary mt-4">Prohibited conduct</h5>
+<p>You agree not to:</p>
+<ul>
+  <li>Use the Service for any unlawful purpose</li>
+  <li>Attempt to gain unauthorized access to the Service or other users' accounts</li>
+  <li>Reverse engineer or extract source code beyond what the open-source licence permits</li>
+  <li>Use automated tools to scrape or disrupt the Service</li>
+  <li>Interfere with the proper functioning of the Service</li>
+</ul>
+
+<h5 class="text-primary mt-4">Open source</h5>
+<p>{% settings_value 'SITE_NAME' %} is available as open-source software under the MIT License; your use
+  of the source code is governed by that licence. These Terms govern your use of the hosted Service.</p>
+
+<h5 class="text-primary mt-4">Disclaimer of warranties</h5>
+<p>The Service is provided "as is" and "as available" without warranties of any kind. We do not warrant
+  that it will be uninterrupted, error-free, or that any projection is accurate.</p>
+
+<h5 class="text-primary mt-4">Limitation of liability</h5>
+<p>To the fullest extent permitted by law, we shall not be liable for any indirect, incidental, special,
+  consequential, or punitive damages, including loss of data or financial loss, arising from your use of
+  the Service.</p>
+
+<h5 class="text-primary mt-4">Changes to these Terms</h5>
+<p>We may update these Terms; material changes will be posted here with a new effective date. Continued
+  use after changes take effect constitutes acceptance.</p>
+
+<div class="text-center text-muted mt-4 pt-3 border-top">
+  <p class="mb-1"><strong>Effective date:</strong> August 2026</p>
+  <p class="mb-0"><strong>Contact:</strong> <a href="{% url 'contact' %}">reach us here</a>.</p>
+</div>
+{% endblock %}

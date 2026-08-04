@@ -1,0 +1,23 @@
+{% extends "pages/base.html" %}
+{% load static %}
+{% load common_tags %}
+{% comment %}
+  Shared layout for the public content pages (about / contact / privacy / terms): the logo header, a
+  readable single-column container, and the shared footer. No app navbar -- these are reachable while
+  signed out. A page fills `page_title` (the heading) and `public_content`.
+{% endcomment %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 760px;">
+  <div class="text-center mb-4">
+    <a href="{% url 'home' %}">
+      <img src="{% static 'img/app-logo-h200.png' %}" alt="{% settings_value 'SITE_NAME' %}" style="max-height: 56px;">
+    </a>
+    <h1 class="h3 mt-4 text-primary font-weight-bold">{% block page_title %}{% endblock %}</h1>
+  </div>
+
+  {% block public_content %}{% endblock %}
+
+  {% include "components/base_footer.html" %}
+</div>
+{% endblock %}

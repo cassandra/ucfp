@@ -1,0 +1,57 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% comment %}
+  Public privacy page. DRAFT starting point -- review the wording, the effective date, and the contact
+  before any public launch. Adapted for a financial-planning app (your financial data is yours).
+{% endcomment %}
+
+{% block page_title %}Privacy Policy{% endblock %}
+
+{% block public_content %}
+<p class="lead text-center text-muted mb-4">
+  Your financial data is yours. Here is how {% settings_value 'SITE_NAME' %} handles it.
+</p>
+
+<ol class="pl-4">
+  <li class="mb-3">
+    <strong class="text-primary">We only collect what you give us.</strong>
+    Your email address is required to sign in. Everything else &mdash; the accounts, income, expenses,
+    and plans you enter &mdash; is stored only because you chose to enter it.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">We use your data only to provide the service.</strong>
+    Your financial information is used to build and show you your own projections. Nothing else.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">We don't track you.</strong>
+    No third-party analytics, no advertising trackers, no behavioral profiling.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">We don't sell or share your data.</strong>
+    Your information stays between you and the service. It is never sold or shared for marketing.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">You can keep your data on your own machine.</strong>
+    {% settings_value 'SITE_NAME' %} is open source. If you would rather no one else host your data,
+    run your own private instance &mdash; your data never leaves your computer.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">We only use necessary cookies.</strong>
+    A session cookie keeps you signed in. There are no tracking cookies.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">You can delete your data anytime.</strong>
+    Remove individual records as you work, or contact us to delete your account and all associated data.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">We email you only when necessary.</strong>
+    Sign-in verification and critical service notices &mdash; no marketing.
+  </li>
+</ol>
+
+<div class="text-center text-muted mt-4 pt-3 border-top">
+  <p class="mb-1"><strong>Effective date:</strong> August 2026</p>
+  <p class="mb-0"><strong>Contact:</strong>
+    <a href="{% url 'contact' %}">reach us here</a>.</p>
+</div>
+{% endblock %}

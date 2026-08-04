@@ -1,0 +1,29 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% comment %}
+  Public about page. DRAFT starting point -- refine the story/positioning as the product settles.
+{% endcomment %}
+
+{% block page_title %}About {% settings_value 'SITE_NAME' %}{% endblock %}
+
+{% block public_content %}
+<p class="lead text-center text-muted mb-4">A single, well-modeled home for your financial planning.</p>
+
+<p>Most people answer "can I retire?" with a tangle of spreadsheets that grow unwieldy and hard to trust.
+  {% settings_value 'SITE_NAME' %} replaces them with one robust, double-entry model that spans your past,
+  present, and future &mdash; so you can see whether your money lasts, and keep your plan honest against
+  reality as it unfolds.</p>
+
+<p>It brings several planning perspectives together over one shared model: long-horizon
+  <strong>retirement</strong> budgeting, near-term <strong>cash flow</strong>, and
+  <strong>Social Security</strong> timing &mdash; each a different lens on the same finances, at a
+  different timescale.</p>
+
+<p>{% settings_value 'SITE_NAME' %} is open source. Use the free hosted version, or
+  <a href="https://github.com/cassandra/ucfp" target="_blank" rel="noopener">self-host your own private
+  instance</a> to keep your data entirely on your own machine.</p>
+
+<div class="text-center mt-4">
+  <a href="{% url 'home' %}" class="btn btn-primary">Get started</a>
+</div>
+{% endblock %}

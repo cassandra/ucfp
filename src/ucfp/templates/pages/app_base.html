@@ -1,5 +1,6 @@
 {% extends "pages/base.html" %}
 {% load common_tags %}
+{% load static %}
 {% comment %}
   The shared application shell: the top navbar + a content region, extended by every
   authenticated app page (home, the planning features, the inputs area, settings). Sign-in,
@@ -13,7 +14,9 @@
 {% with url_name=request.resolver_match.url_name %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
   <div class="container">
-    <a class="navbar-brand font-weight-bold" href="{% url 'home' %}">{% settings_value 'SITE_NAME' %}</a>
+    <a class="navbar-brand py-1" href="{% url 'home' %}">
+      <img src="{% static 'img/app-logo-inverse-h64.png' %}" height="36" alt="{% settings_value 'SITE_NAME' %}">
+    </a>
     <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#app-nav"
             aria-controls="app-nav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
@@ -65,5 +68,6 @@
 <main class="{% block main_container_class %}container{% endblock %} py-4">
   {% block app_content %}{% endblock %}
 </main>
+{% include "components/base_footer.html" %}
 {% endwith %}
 {% endblock %}

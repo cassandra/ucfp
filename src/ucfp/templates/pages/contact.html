@@ -1,0 +1,28 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% load icons %}
+{% comment %}
+  Public contact page. DRAFT starting point -- add a real support email address before public launch;
+  GitHub issues is the open-source channel in the meantime.
+{% endcomment %}
+
+{% block page_title %}Contact{% endblock %}
+
+{% block public_content %}
+<p class="lead text-center text-muted mb-4">We'd like to hear from you.</p>
+
+<ul class="list-unstyled">
+  <li class="mb-3 d-flex">
+    <span class="mr-3">{% icon 'code' color='primary' %}</span>
+    <span><strong>Bugs &amp; feature requests.</strong> Open an issue on
+      <a href="https://github.com/cassandra/ucfp/issues" target="_blank" rel="noopener">GitHub</a> &mdash;
+      the fastest way to reach the project.</span></li>
+  <li class="mb-3 d-flex">
+    <span class="mr-3">{% icon 'globe' color='primary' %}</span>
+    <span><strong>Self-hosting &amp; source.</strong> Everything lives in the
+      <a href="https://github.com/cassandra/ucfp" target="_blank" rel="noopener">repository</a>.</span></li>
+  <li class="d-flex">
+    <span class="mr-3">{% icon 'info-circle' color='primary' %}</span>
+    <span><strong>Everything else.</strong> A general support address will be listed here.</span></li>
+</ul>
+{% endblock %}
