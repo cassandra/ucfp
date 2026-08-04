@@ -253,8 +253,7 @@ class HomeForm( forms.Form ):
     _MORTGAGE_HANDLE  = RESIDENCE_MORTGAGE_HANDLE
 
     tenure           = forms.ChoiceField(
-        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES,
-        initial = HousingTenure.OWN.name.lower(),
+        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, required = False,
         widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
     home_value       = MoneyField( label = 'Current value', required = False, min_value = 0 )
     purchase_price   = MoneyField( label = 'Purchase price', required = False, min_value = 0 )
@@ -267,7 +266,7 @@ class HomeForm( forms.Form ):
 
     @classmethod
     def _initial( cls, profile : Profile ) -> dict:
-        initial   = { 'tenure': profile.home_tenure.name.lower() }
+        initial   = { 'tenure': profile.home_tenure.name.lower() } if profile.home_tenure else dict()
         residence = cls._find( profile.assets, cls._RESIDENCE_HANDLE )
         if residence is not None:
             initial[ 'home_value' ]     = residence.opening_value
@@ -287,8 +286,11 @@ class HomeForm( forms.Form ):
                 profile.debts, self._MORTGAGE_HANDLE, self._mortgage( existing_mortgage ) ) )
         return updated_profile, plans
 
-    def _tenure( self ) -> HousingTenure:
-        return HousingTenure[ self.cleaned_data[ 'tenure' ].upper() ]
+    def _tenure( self ) -> Optional[ HousingTenure ]:
+        """The chosen tenure, or None when the household has not yet answered the housing question --
+        the unselected initial state (distinct from the explicit 'Neither', which means no home)."""
+        choice = self.cleaned_data.get( 'tenure' )
+        return HousingTenure[ choice.upper() ] if choice else None
 
     def _owns( self ) -> bool:
         return self._tenure() is HousingTenure.OWN
