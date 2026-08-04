@@ -134,6 +134,15 @@ a:hover, a:focus {
     color: var(--primary-highlight-color);
 }
 
+/* Link-styled buttons (.btn-link) carry Bootstrap's own link hue, overriding the base `a` rule, so
+   theme them too. A contextual override (e.g. .text-danger on a Remove button) still wins. */
+.btn-link {
+    color: var(--primary-color);
+}
+.btn-link:hover, .btn-link:focus {
+    color: var(--primary-highlight-color);
+}
+
 /* Map Bootstrap contextual text colors to the theme palette -- its .text-* utilities
    otherwise use Bootstrap's own hues (e.g. .text-primary would be #007bff, not Trust
    Blue). !important to match Bootstrap's own .text-* utilities. The paired .text-on-*
