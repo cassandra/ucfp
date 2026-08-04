@@ -1,11 +1,10 @@
 {% comment %}
-The Other Possessions list of the Property pane (id=possessions), auto-saved. Each row is a tangible
-holding: a name, a type (precious metals / collectibles / vehicle or boat -- classes the engine
-treats differently), and a value. Fill the blank row to add one; the Remove box drops one. Edits save
-in the background; only a row added/removed or a bad value re-renders here.
+The Possessions list (id=possessions), auto-saved. Each row is a tangible non-real-estate holding: a
+name, a type (precious metals / collectibles / vehicle or boat -- classes the engine treats
+differently), and a value. Fill the blank row to add one; the Remove box drops one. Edits save in the
+background; only a row added/removed or a bad value re-renders here. The section heading names it.
 {% endcomment %}
 <div id="possessions">
-  <h3 class="h6">Other Possessions</h3>
   <form method="post" action="{% url 'possessions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <table class="table table-sm w-auto">

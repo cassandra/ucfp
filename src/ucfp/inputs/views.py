@@ -1003,9 +1003,9 @@ class SubjectsView( View ):
 
 
 class PossessionsView( SelfSavingPaneView ):
-    """`/inputs/interview/properties/possessions/` -- the Other Possessions list of the Property pane.
-    Its item set can change, so a save that adds or removes a row re-renders the pane; an incomplete
-    row simply does not materialize."""
+    """`/inputs/interview/properties/possessions/` -- the list behind the Possessions section (tangible
+    non-real-estate holdings). Its item set can change, so a save that adds or removes a row re-renders
+    the pane; an incomplete row simply does not materialize."""
 
     template     = 'inputs/interview/sections/possessions.html'
     target       = 'possessions'

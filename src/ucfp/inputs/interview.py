@@ -328,11 +328,11 @@ class HomeForm( forms.Form ):
         return next( ( item for item in items if item.handle == handle ), None )
 
 
-class PropertiesForm:
-    """§3 L0 -- the Properties pane. A no-op section form: the residence, the rentals, and the second
+class RealEstateForm:
+    """§3 L0 -- the Real Estate pane. A no-op section form: the residence, the rentals, and the second
     homes are each edited through their own async view, so Next just advances. It exposes the
     residence sub-form and the property lists for the pane (the rentals and second homes manage
-    themselves)."""
+    themselves). Other (non-real-estate) possessions are their own section -- `PossessionsSectionForm`."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile  = profile
@@ -347,7 +347,7 @@ class PropertiesForm:
 
     @property
     def property_panes( self ) -> list:
-        """Each mortgaged-property pane's render context for the Property section -- its heading, its
+        """Each mortgaged-property pane's render context for the Real Estate section -- its heading, its
         holdings, and the template config (ids, URL names, wording) from the shared `PropertyPane`.
         The section loops over these, so a new property kind is one pane, not another hand-wired
         block."""
@@ -355,6 +355,22 @@ class PropertiesForm:
                    'properties': properties_context( self._profile, pane.asset_class ),
                    **pane.template_context() }
                  for pane in PANES ]
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class PossessionsSectionForm:
+    """§ -- the Possessions pane: the household's tangible non-real-estate holdings (precious metals,
+    collectibles, vehicles, boats). A no-op section form: the list is edited through its own async view
+    (`PossessionsView`), so Next just advances. Exposes the possessions sub-form for the pane."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
 
     @property
     def possessions_form( self ):
@@ -755,12 +771,16 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    # Property precedes Income: declaring a rental creates its rent line on the Income step, so the
+    # Real Estate precedes Income: declaring a rental creates its rent line on the Income step, so the
     # properties must exist before the user works through Income or a rental's rent goes unnoticed.
-    Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
+    Section( 'properties'  , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
     Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
+    # Non-real-estate tangibles (precious metals, collectibles, vehicles, boats). After Income -- they
+    # carry no income, so they need not precede it like the rentals do.
+    Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
+             outer_template = 'inputs/interview/sections/possessions_section.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
     # adjustable on its property. Facts only; the repayment plan per debt is the Debt plan step below,
     # which opens the Plans flow.
