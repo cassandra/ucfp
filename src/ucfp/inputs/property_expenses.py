@@ -153,7 +153,7 @@ class PropertyExpensesForm( forms.Form ):
                 override = MoneyField( required = False, min_value = 0 )
                 override.initial = expense.overrides.get( handle )
                 override.widget.attrs[ 'placeholder' ] = self._placeholder( expense.default_amount )
-                override.widget.attrs[ 'class' ] = AppConst.PROPERTY_OVERRIDE_CLASS
+                override.widget.attrs[ 'class' ] += ' ' + AppConst.PROPERTY_OVERRIDE_CLASS   # keep money styling
                 override.widget.attrs[ 'aria-label' ] = self._cell_label(
                     expense, _column_label( profile, handle ) )
                 self.fields[ self._override_key( ri, hi ) ] = override
@@ -192,9 +192,10 @@ class PropertyExpensesForm( forms.Form ):
 
     @staticmethod
     def _placeholder( default : Optional[ Decimal ] ) -> str:
-        """A per-property cell's placeholder: the shared default it falls back to when left blank, or
-        '0' when the default itself is blank (the expense is then not charged)."""
-        return str( default ) if default is not None else '0'
+        """A per-property cell's placeholder: the shared default it falls back to when left blank --
+        thousands-grouped, as the amount shows once enhanced -- or '0' when the default itself is blank
+        (the expense is then not charged)."""
+        return f'{default:,}' if default is not None else '0'
 
     def _default_column_label( self ) -> str:
         """The first column's header: 'Default' with several properties, or the lone property's name

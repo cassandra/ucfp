@@ -5,6 +5,6 @@ renders outside the section's Next form and persists each edit on its own throug
 The pane comes from the section wrapper (`form.property_form`); this step is shown only when the
 household has a dwelling with operating costs, so the matrix always has rows.
 {% endcomment %}
-<p class="text-muted">Operating costs per property, using typical values -- property tax, insurance, and
-  the like. Set one shared amount and override it where a property differs.</p>
+<p class="text-muted">Operating costs per property -- property tax, insurance, utilities, and the like, at
+  typical values. Set a shared Default, and override it only where a property differs.</p>
 {% include 'inputs/interview/sections/property_expenses.html' with property_form=form.property_form %}
