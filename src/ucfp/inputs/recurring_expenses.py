@@ -85,8 +85,7 @@ class RecurringExpensesForm( forms.Form ):
                 add_calculator_fields( self, ei, expense.count, expense.cost_each, expense.lifespan )
             for si in range( len( self._spans ) ):
                 cell = MoneyField( required = False, min_value = 0 )
-                cell.initial = expense.amounts[ si ] if si < len( expense.amounts ) else (
-                    expense.amounts[ -1 ] if expense.amounts else None )
+                cell.initial = self._span_amount( expense, si )
                 if durable:
                     cell.widget.attrs[ 'readonly' ] = True
                     cell.widget.attrs[ 'class' ] += f' {AppConst.CALC_TARGET_CLASS}'   # keep money styling
@@ -142,8 +141,32 @@ class RecurringExpensesForm( forms.Form ):
             'calculator'  : ( calculator_cells(
                 self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ) )
                 if durable else None ),
-            'cells'       : [ self[ self._amount_key( ei, si ) ]
-                              for si in range( len( self._spans ) ) ] }
+            'cells'       : self._cells( ei, expense ) }
+
+    def _cells( self, ei : int, expense ) -> list:
+        """One amount cell per span, each flagged when its shown value differs from the previous span's
+        -- a step up or down -- so a reader can scan which expenses change with age. The first span is
+        the baseline (never flagged); an age-flat durable never changes."""
+        cells    = list()
+        previous = None
+        for si in range( len( self._spans ) ):
+            amount    = self._span_amount( expense, si )
+            direction = None
+            if previous is not None and amount is not None and amount != previous:
+                direction = 'up' if amount > previous else 'down'
+            cells.append( { 'field'     : self[ self._amount_key( ei, si ) ],
+                            'changed'   : direction is not None,
+                            'direction' : direction } )
+            previous = amount
+        return cells
+
+    @staticmethod
+    def _span_amount( expense, si : int ):
+        """The amount shown for span `si`: its own per-span value, or the last available when the span
+        list runs short (so a padded span reads as its predecessor, not as a change)."""
+        if si < len( expense.amounts ):
+            return expense.amounts[ si ]
+        return expense.amounts[ -1 ] if expense.amounts else None
 
     def apply( self, profile, plans ):
         columns  = self._columns()

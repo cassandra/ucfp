@@ -287,6 +287,23 @@ a:hover, a:focus {
     padding-top: 0;
 }
 
+/* Flag an amount that steps up or down from the previous age span, so a reader can scan which expenses
+   change with age. The whole money control (the $ addon and the field) is tinted so it stands out from
+   the unchanged white inputs, and a direction arrow sits to the right of the number -- where the eye
+   already is for right-aligned figures -- as a second, colour-independent cue. An unchanged cell still
+   renders the arrow, only hidden (.invisible), so every cell reserves the exact same width and the
+   numbers stay aligned in their column (once there is more than one span). */
+.span-changed .input-group-text,
+.span-changed .form-control.js-money {
+    background-color: var(--secondary-highlight-color);
+}
+.span-trend {
+    margin-left: 0.3rem;
+    color: var(--tertiary-highlight-color);
+    font-size: 0.8em;
+    vertical-align: middle;
+}
+
 /* Percent inputs carry a % affix (always an input-group), so their up/down spinners are noise --
    nobody nudges a rate a unit at a time. Suppress the spinners on affixed number inputs. (Money is a
    text input, so it has no spinners to begin with.) */
