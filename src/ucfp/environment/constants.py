@@ -106,6 +106,17 @@ class AppConst:
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.
     RECURRING_DELETE_CLASS  = 'js-recurring-delete'  # the per-column x control (carries data-span)
 
+    # The recurring-expenses table flags an amount that differs from the previous age span -- a tinted
+    # cell plus an up/down arrow -- so a reader can scan what changes with age. The server flags it on
+    # render; JS recomputes a row live as an amount is typed, since the pane saves silently and does not
+    # re-render. Template and JS share these tokens so the two sides cannot drift.
+    SPAN_AMOUNT_CLASS  = 'js-span-amount'   # a recurring amount input, scanned per row for changes
+    SPAN_CHANGED_CLASS = 'span-changed'     # a cell whose amount differs from the previous span (tinted)
+    SPAN_TREND_CLASS   = 'span-trend'       # the direction arrow beside a changed amount
+    SPAN_TREND_UP      = '↑'           # the arrow shown when the amount rose from the previous span
+    SPAN_TREND_DOWN    = '↓'           # the arrow shown when the amount fell from the previous span
+    SPAN_CHANGED_TITLE = 'Differs from the previous age span'  # the changed cell's tooltip
+
     # The property-expenses matrix's live default->placeholder mirror. A per-property cell shows the
     # row's shared Default as its placeholder (what a blank cell falls back to); editing the Default
     # updates those placeholders client-side, since the pane saves silently and never re-renders them.

@@ -33,7 +33,7 @@ an age to split it, clear a span's age to delete it. Ages are the primary person
             {% if row.count_entry %}{% include 'inputs/components/_calculator_toggle.html' with calc_id=row.calc_id %}{% endif %}</th>
           <td class="text-nowrap">{% include 'inputs/components/_cadence.html' with cadence=row.cadence hide_every=True %}</td>
           {% for cell in row.cells %}
-          <td class="text-right{% if cell.changed %} span-changed{% endif %}"{% if cell.changed %} title="Differs from the previous age span"{% endif %}>{{ cell.field }}{% if recurring_form.span_count > 1 %}<span class="span-trend{% if not cell.direction %} invisible{% endif %}" aria-hidden="true">{% if cell.direction == 'up' %}&#8593;{% else %}&#8595;{% endif %}</span>{% endif %}{% if cell.field.errors %}<span class="text-danger small d-block">{{ cell.field.errors|join:" " }}</span>{% endif %}</td>
+          <td class="text-right{% if cell.changed %} {{ AppConst.SPAN_CHANGED_CLASS }}{% endif %}"{% if cell.changed %} title="{{ AppConst.SPAN_CHANGED_TITLE }}"{% endif %}>{{ cell.field }}{% if recurring_form.span_count > 1 %}<span class="{{ AppConst.SPAN_TREND_CLASS }}{% if not cell.direction %} invisible{% endif %}" aria-hidden="true">{% if cell.direction == 'up' %}{{ AppConst.SPAN_TREND_UP }}{% else %}{{ AppConst.SPAN_TREND_DOWN }}{% endif %}</span>{% endif %}{% if cell.field.errors %}<span class="text-danger small d-block">{{ cell.field.errors|join:" " }}</span>{% endif %}</td>
           {% endfor %}
         </tr>
         {% if row.count_entry %}

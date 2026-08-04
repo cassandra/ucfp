@@ -504,6 +504,35 @@ window.App.Inputs = (function () {
         $panel.find( classSelector( C.CALC_READOUT_CLASS ) ).text( groupedThousands( annual ) );
     }
 
+    // The recurring-expenses table flags each amount that differs from the previous age span (a tinted
+    // cell plus an up/down arrow), so what changes with age is scannable. The server renders the flags;
+    // this recomputes a row live as one of its amounts is typed, since the pane saves silently and does
+    // not re-render. It mirrors the server exactly: the first span is the baseline, each amount is
+    // compared to the one on its left, and a blank amount reads as 0 (as it saves).
+    function updateSpanTrends( $row ) {
+        let previous = null;
+        $row.find( classSelector( C.SPAN_AMOUNT_CLASS ) ).each( function ( index ) {
+            const amount    = parseAmount( this.value ) || 0;
+            const changed   = index > 0 && amount !== previous;
+            const direction = ! changed ? null : ( amount > previous ? 'up' : 'down' );
+            setSpanTrend( $( this ), changed, direction );
+            previous = amount;
+        } );
+    }
+
+    // Apply (or clear) a cell's changed styling: tint the money control (a class on the cell) and show
+    // the matching arrow -- hidden when unchanged, so every cell keeps the same width and the number
+    // column stays aligned.
+    function setSpanTrend( $input, changed, direction ) {
+        const $cell = $input.closest( 'td' );
+        $cell.toggleClass( C.SPAN_CHANGED_CLASS, changed );
+        if ( changed ) { $cell.attr( 'title', C.SPAN_CHANGED_TITLE ); }
+        else           { $cell.removeAttr( 'title' ); }
+        $cell.find( classSelector( C.SPAN_TREND_CLASS ) )
+            .toggleClass( 'invisible', ! changed )
+            .text( direction === 'up' ? C.SPAN_TREND_UP : C.SPAN_TREND_DOWN );
+    }
+
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs
@@ -618,6 +647,12 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'input change', classSelector( C.CALC_PANEL_CLASS ) + ' :input', function () {
             updateCalculator( $( this ).closest( classSelector( C.CALC_PANEL_CLASS ) )
                 .attr( dataAttr( C.CALC_DATA_ATTR ) ) );
+        } );
+
+        // Re-flag a recurring row's changed amounts as one of them is typed, so the highlight tracks the
+        // edit without waiting for a re-render (the pane saves silently).
+        $( 'body' ).on( 'input change', classSelector( C.SPAN_AMOUNT_CLASS ), function () {
+            updateSpanTrends( $( this ).closest( 'tr' ) );
         } );
 
         // Mirror a property-expense row's Default into its blank per-property cells' placeholders as it

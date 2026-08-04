@@ -86,6 +86,7 @@ class RecurringExpensesForm( forms.Form ):
             for si in range( len( self._spans ) ):
                 cell = MoneyField( required = False, min_value = 0 )
                 cell.initial = self._span_amount( expense, si )
+                cell.widget.attrs[ 'class' ] += f' {AppConst.SPAN_AMOUNT_CLASS}'   # scanned for changes
                 if durable:
                     cell.widget.attrs[ 'readonly' ] = True
                     cell.widget.attrs[ 'class' ] += f' {AppConst.CALC_TARGET_CLASS}'   # keep money styling
