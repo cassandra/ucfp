@@ -18,8 +18,8 @@ name can be changed right here -- handy straight after a create or clone that ga
   {% if profile_updated %}<span class="text-muted small ml-1">last updated {{ profile_updated|date:"F Y" }}</span>{% endif %}
 </p>
 {% else %}
-{% if building_scenario %}
-<p class="text-muted mb-2">Future Scenario: <strong>{{ building_scenario }}</strong> &rsaquo; {{ flow_title }}</p>
+{% if editing_scenario_name %}
+<p class="text-muted mb-2">Future Scenario: <strong>{{ editing_scenario_name }}</strong> &rsaquo; {{ flow_title }}</p>
 {% else %}
 <p class="text-muted mb-2"><a href="{% url 'scenarios_home' %}">Scenarios</a> &rsaquo; {{ flow_title }}</p>
 {% endif %}

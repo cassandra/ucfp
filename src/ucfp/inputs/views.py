@@ -247,7 +247,7 @@ class ScenarioEditView( View ):
             ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
         _select( request, 'current_plans_uuid', scenario.plans )
         _select( request, 'current_assumptions_uuid', scenario.assumptions )
-        request.session_state.scenario_building = str( scenario.uuid )
+        request.session_state.editing_scenario = str( scenario.uuid )
         request.session_state.to_session( request )
         return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
 
@@ -298,7 +298,7 @@ class FlowEntryView( View ):
         # build, so a lone Plans edit does not wrongly chain into Assumptions (nor show the build
         # breadcrumb, nor finish on the Scenarios page). The scenario build enters through
         # `ScenarioEditView`, which sets the scope -- never through here.
-        request.session_state.scenario_building = None
+        request.session_state.editing_scenario = None
         request.session_state.to_session( request )
         if self.flow == 'profile':
             default = ensure_default_scenario( request.organization )
@@ -511,7 +511,7 @@ class InterviewView( View ):
             return self._swap( request, self._flow_sections( profile, flow ), current, form )
         profile   = self._store( request, current, form, profile, other )
         following = next_section_after( self._flow_sections( profile, flow ), current.key )
-        building  = request.session_state.scenario_building
+        building  = request.session_state.editing_scenario
         if following is None and building and flow == 'plans':
             following = first_section_of_flow( 'assumptions' )  # scenario build: chain Plans -> Assumptions
         if following is None:                                   # nothing more to present -- this flow ends
@@ -530,7 +530,7 @@ class InterviewView( View ):
         component edit likewise ends on the Scenarios page. Features are reached from the nav, so no flow
         threads a return destination."""
         if building:                                           # end of the two-part build (Assumptions done)
-            request.session_state.scenario_building = None
+            request.session_state.editing_scenario = None
             request.session_state.to_session( request )
             return reverse( 'scenarios_home' )
         if flow == 'profile':
@@ -539,10 +539,10 @@ class InterviewView( View ):
         return reverse( 'scenarios_home' )
 
     @staticmethod
-    def _building_scenario_name( request ):
+    def _editing_scenario_name( request ):
         """The label of the scenario currently being built, or None when no build is in progress -- the
         breadcrumb context for the two-part build flow."""
-        uuid = request.session_state.scenario_building
+        uuid = request.session_state.editing_scenario
         if uuid is None:
             return None
         record = ScenarioRecord.objects.filter(
@@ -623,7 +623,7 @@ class InterviewView( View ):
             'flow_title'           : flow_title( flow ),
             'flow_heading'         : flow_title( flow ),   # the record's own name is the inline rename below
             # The scenario being built (its name), so the component flows breadcrumb it during a build.
-            'building_scenario'    : self._building_scenario_name( request ),
+            'editing_scenario_name'    : self._editing_scenario_name( request ),
             # The component being edited, as an inline rename in the header, so its name can be changed
             # here (e.g. straight after a create or clone) rather than only on the Scenarios page.
             'component_rename'     : self._component_rename( request, flow ),
@@ -642,7 +642,7 @@ class InterviewView( View ):
         which chains into Assumptions rather than finishing."""
         if next_section_after( sections, section.key ) is not None:
             return False
-        return not ( request.session_state.scenario_building and flow == 'plans' )
+        return not ( request.session_state.editing_scenario and flow == 'plans' )
 
     @staticmethod
     def _profile_status( request, flow ) -> dict:
