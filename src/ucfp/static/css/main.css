@@ -192,7 +192,18 @@ a:hover, a:focus {
     border-top: 1px solid var(--line-color);
     padding: 0.75rem 0;
     margin-top: 1rem;
-    z-index: 100;
+    z-index: 2;                       /* above content, below pop-ups like the datepicker */
+}
+
+/* The datepicker pop-up must clear the sticky advance bar. */
+.datepicker {
+    z-index: 1030;
+}
+
+/* Date and number inputs read better at a natural width than the full column. */
+.form-control.js-date,
+.form-control[type="number"] {
+    max-width: 12rem;
 }
 
 /* Map Bootstrap contextual backgrounds + buttons to the theme palette. */

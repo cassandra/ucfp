@@ -247,7 +247,9 @@ window.App.Inputs = (function () {
         const retirement = $option.attr( dataAttr( C.STATE_RETIREMENT_STATUS_DATA_ATTR ) ) || '';
         const $readout   = $select.closest( 'form' ).find( classSelector( C.STATE_EXEMPTIONS_CLASS ) );
         if ( ss || retirement ) {
-            $readout.text( 'Social Security: ' + ss + '  ·  Pensions & retirement: ' + retirement );
+            $readout.empty()
+                .append( $( '<div>' ).text( 'Social Security: ' + ss ) )
+                .append( $( '<div>' ).text( 'Pensions & retirement: ' + retirement ) );
         } else {
             $readout.empty();
         }

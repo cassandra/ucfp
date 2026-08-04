@@ -25,7 +25,9 @@ user may override. Nothing is required -- an incomplete person is simply not hel
             <p class="text-muted mb-1">Partner</p>
             {{ subjects_form.partner_name.as_field_group }}
             {{ subjects_form.partner_birthdate.as_field_group }}
-            <button type="button" class="{{ AppConst.OPTIONAL_REMOVE_CLASS }} btn btn-sm btn-link text-muted px-0" hidden>Remove partner</button>
+            <div class="mt-2">
+              <button type="button" class="{{ AppConst.OPTIONAL_REMOVE_CLASS }} btn btn-sm btn-link text-danger px-0" hidden>Remove partner</button>
+            </div>
           </div>
         </div>
       </div>

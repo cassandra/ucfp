@@ -17,7 +17,7 @@ from typing import Optional
 
 from django import forms
 
-from common.forms import MoneyField, PercentField
+from common.forms import MoneyField, PercentField, StyledFormMixin
 from common.rate import Rate, ZERO_RATE
 from common.widgets import PercentInput
 
@@ -77,7 +77,7 @@ class Section:
 _STATE_NONE_LABEL = 'Other or not listed'
 
 
-class SubjectsForm( forms.Form ):
+class SubjectsForm( StyledFormMixin, forms.Form ):
     """§1 -- who the plan is for. Collects one subject and optionally a partner, and *infers* the
     filing status (joint when there is a partner) rather than asking it -- the engine supports only
     single vs joint, both fixed by whether a partner exists, so there is nothing to choose. The tax
@@ -102,12 +102,12 @@ class SubjectsForm( forms.Form ):
         label = 'State', required = False,
         choices = [ ( '', _STATE_NONE_LABEL ) ] + USState.choices(),
         widget = StateRateSelect( attrs = {
-            'class' : f'{AppConst.STATE_SELECT_CLASS} custom-select custom-select-sm flex-grow-1 mr-2',
+            'class' : f'{AppConst.STATE_SELECT_CLASS} custom-select flex-grow-1 mr-2',
             'aria-label' : 'State' } ) )
     state_income_tax_rate = PercentField(
         label = 'State Tax rate (%)', required = False, min_value = 0, max_value = 100,
         widget = PercentInput( attrs = {
-            'class' : f'{AppConst.STATE_RATE_CLASS} form-control form-control-sm', 'step' : 'any',
+            'class' : f'{AppConst.STATE_RATE_CLASS} form-control', 'step' : 'any',
             'aria-label' : 'State tax rate (percent)' } ) )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
