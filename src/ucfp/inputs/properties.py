@@ -279,7 +279,7 @@ class PossessionsForm( forms.Form ):
 
     _CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES, AssetClass.DEPRECIATING )
     _TYPE_CHOICES = (
-        ( '', 'Type...' ),
+        ( '', CHOOSE_PLACEHOLDER ),
         ( AssetClass.PRECIOUS_METALS.name, 'Precious metals' ),
         ( AssetClass.COLLECTIBLES.name, 'Collectibles' ),
         ( AssetClass.DEPRECIATING.name, 'Vehicle or boat' ),
@@ -299,12 +299,14 @@ class PossessionsForm( forms.Form ):
     def _build_row( self, index : int ):
         item = self._items[ index ] if index < len( self._items ) else None
         self.fields[ f'name_{index}' ]  = forms.CharField(
-            required = False, max_length = 100, initial = item.name if item else None )
+            required = False, max_length = 100, initial = item.name if item else None,
+            widget = forms.TextInput( attrs = { 'class' : 'form-control' } ) )
         self.fields[ f'value_{index}' ] = MoneyField(
             required = False, min_value = 0, initial = item.opening_value if item else None )
         self.fields[ f'type_{index}' ]  = forms.ChoiceField(
             required = False, choices = self._TYPE_CHOICES,
-            initial = item.asset_class.name if item else None )
+            initial = item.asset_class.name if item else None,
+            widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
         if item is not None:
             self.fields[ f'remove_{index}' ] = forms.BooleanField( required = False )
 

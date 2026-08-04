@@ -1,6 +1,7 @@
 {% comment %}
 The Possessions section pane: the household's tangible non-real-estate holdings (precious metals,
 collectibles, vehicles, boats), edited through the possessions list on its own async view. The
-section heading names it; this renders the section form's `possessions_form`.
+section heading names it; the intro orients, and this renders the section form's `possessions_form`.
 {% endcomment %}
+<p class="text-muted">Other valuables you own -- gold, art, a vehicle or boat, and the like.</p>
 {% include 'inputs/interview/sections/possessions.html' with possessions_form=form.possessions_form %}

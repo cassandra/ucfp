@@ -9,7 +9,7 @@ background; only a row added/removed or a bad value re-renders here. The section
     {% csrf_token %}
     <table class="table table-sm w-auto">
       <thead>
-        <tr><th>Item</th><th>Type</th><th>Value</th><th></th></tr>
+        <tr><th>Name</th><th>Type</th><th>Current Value</th><th></th></tr>
       </thead>
       <tbody>
         {% for row in possessions_form.rows %}
@@ -22,6 +22,6 @@ background; only a row added/removed or a bad value re-renders here. The section
         {% endfor %}
       </tbody>
     </table>
-    <p class="text-muted small">Gold, art, a vehicle or boat, and the like. Fill the blank row to add one.</p>
+    <p class="text-muted small">Fill the blank row to add one.</p>
   </form>
 </div>
