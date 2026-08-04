@@ -215,10 +215,24 @@ a:hover, a:focus {
     z-index: 1030;
 }
 
-/* Date and number inputs read better at a natural width than the full column. */
+/* Date, number, and money inputs read better at a natural width than the full column. */
 .form-control.js-date,
-.form-control[type="number"] {
+.form-control[type="number"],
+.form-control.js-money {
     max-width: 12rem;
+}
+
+/* Percent inputs carry a % affix (always an input-group), so their up/down spinners are noise --
+   nobody nudges a rate a unit at a time. Suppress the spinners on affixed number inputs. (Money is a
+   text input, so it has no spinners to begin with.) */
+.input-group input[type="number"]::-webkit-inner-spin-button,
+.input-group input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.input-group input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 /* Map Bootstrap contextual backgrounds + buttons to the theme palette. */

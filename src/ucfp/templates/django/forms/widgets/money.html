@@ -1,8 +1,10 @@
 {% comment %}
-A number input adorned with a leading "$" (Bootstrap 4 input-group). Used by
-common.widgets.MoneyInput; composes inside the field template like any widget.
+A text input adorned with a leading "$" (Bootstrap 4 input-group). Used by
+common.widgets.MoneyInput; a text (not number) input so its value can carry
+thousands separators, which inputs.js groups and MoneyField strips on the way in.
+Composes inside the field template like any widget.
 {% endcomment %}
 <div class="input-group">
   <div class="input-group-prepend"><span class="input-group-text">$</span></div>
-  {% include "django/forms/widgets/number.html" %}
+  {% include "django/forms/widgets/input.html" %}
 </div>

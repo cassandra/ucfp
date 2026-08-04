@@ -102,6 +102,58 @@ window.App.Inputs = (function () {
         return filled > 0 && filled < values.length;
     }
 
+    // ----- Money inputs: thousands grouping -----
+    //
+    // Money fields are plain text inputs (not number) so their value can carry thousands separators.
+    // Grouping runs as the user types (keeping the caret at the same digit) and once on the server-
+    // rendered initial values (enhanceMoneyInputs, on load and after each antinode render). The value
+    // stays a bare number to the server -- the MoneyField strips the separators on the way in -- and
+    // any client-side reader of a money value parses it through `parseAmount`, which tolerates them.
+
+    function groupedThousands( value ) {
+        const cleaned = String( value ).replace( /[^\d.]/g, '' );        // keep only digits and the point
+        if ( cleaned === '' ) { return ''; }
+        const dot   = cleaned.indexOf( '.' );
+        const whole = dot === -1 ? cleaned : cleaned.slice( 0, dot );
+        const frac  = dot === -1 ? '' : '.' + cleaned.slice( dot + 1 ).replace( /\./g, '' );
+        return whole.replace( /\B(?=(\d{3})+(?!\d))/g, ',' ) + frac;
+    }
+
+    // parseFloat, tolerant of the thousands separators money inputs carry (a no-op on comma-less values).
+    function parseAmount( value ) {
+        return parseFloat( String( value == null ? '' : value ).replace( /,/g, '' ) );
+    }
+
+    function digitsBefore( value, caret ) {
+        return ( value.slice( 0, caret ).match( /\d/g ) || [] ).length;
+    }
+
+    function caretPastDigits( value, digits ) {
+        if ( digits <= 0 ) { return 0; }
+        let seen = 0;
+        for ( let i = 0; i < value.length; i++ ) {
+            if ( /\d/.test( value[ i ] ) && ++seen === digits ) { return i + 1; }
+        }
+        return value.length;
+    }
+
+    // Regroup a money input in place, keeping the caret at the same digit so typing is undisturbed.
+    function groupMoneyInput( input ) {
+        const wanted    = digitsBefore( input.value, input.selectionStart );
+        const formatted = groupedThousands( input.value );
+        if ( formatted === input.value ) { return; }
+        input.value = formatted;
+        const caret = caretPastDigits( formatted, wanted );
+        input.setSelectionRange( caret, caret );
+    }
+
+    function enhanceMoneyInputs( $scope ) {
+        const sel = classSelector( C.MONEY_INPUT_CLASS );
+        ( $scope || $( document.body ) ).find( sel ).addBack( sel ).each( function () {
+            this.value = groupedThousands( this.value );
+        } );
+    }
+
     // ----- DatePicker: enhance date inputs, tuned to their planning context -----
     //
     // Dates here routinely sit decades from today (birthdates back, planning dates ahead), so a
@@ -338,7 +390,7 @@ window.App.Inputs = (function () {
         const rate = cardMonthlyRate( $card );
         const mode = cardMode( $card );
         const monthly = function () {
-            return parseFloat( $card.find( classSelector( C.CREDIT_CARD_MONTHLY_CLASS ) ).val() );
+            return parseAmount( $card.find( classSelector( C.CREDIT_CARD_MONTHLY_CLASS ) ).val() );
         };
         const targetMonths = function () {
             return monthsUntil( $card.find( classSelector( C.CREDIT_CARD_DATE_CLASS ) ).val() );
@@ -384,7 +436,7 @@ window.App.Inputs = (function () {
     // its readout, reusing the amortization mirrors above. Materialization is authoritative.
 
     function loanField( $loan, cls ) {
-        return parseFloat( $loan.find( classSelector( cls ) ).val() );
+        return parseAmount( $loan.find( classSelector( cls ) ).val() );
     }
 
     // A whole-month term as "29 yr 11 mo" (either part dropped when zero, but never both).
@@ -430,7 +482,7 @@ window.App.Inputs = (function () {
     // (count_/cost_/lifespan_), so the panel's inputs are found by name. The amount stays authoritative
     // (server recomputes on save); this fill is a live preview.
     function calcNumber( $panel, selector ) {
-        return parseFloat( $panel.find( selector ).val() ) || 0;
+        return parseAmount( $panel.find( selector ).val() ) || 0;
     }
 
     function updateCalculator( $calc ) {
@@ -439,10 +491,10 @@ window.App.Inputs = (function () {
         const cost     = calcNumber( $panel, '[name^="cost_"]' );
         const lifespan = calcNumber( $panel, '[name^="lifespan_"]' ) || 1;
         const annual   = Math.round( ( count * cost ) / lifespan );
-        // The readout mirrors the amount target verbatim (both bare whole dollars), so it matches the
-        // server's initial pre-JS render rather than reformatting on the first edit.
-        $calc.find( classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? annual : '' );
-        $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( annual );
+        // The readout mirrors the amount target, both thousands-grouped like every money value once the
+        // page has enhanced -- so the live preview reads the same as a saved-and-reloaded amount.
+        $calc.find( classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? groupedThousands( annual ) : '' );
+        $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( groupedThousands( annual ) );
     }
 
     $( function () {
@@ -526,6 +578,12 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'change', classSelector( C.SWITCH_CLASS ) + ' ' + classSelector( C.SWITCH_CONTROL_CLASS ),
             function () { applySwitch( $( this ).closest( classSelector( C.SWITCH_CLASS ) ) ); } );
 
+        // Group a money input's thousands as it is typed (money fields are text inputs, so a comma is a
+        // valid character); the MoneyField strips it back to a bare number on the server.
+        $( 'body' ).on( 'input', classSelector( C.MONEY_INPUT_CLASS ), function () {
+            groupMoneyInput( this );
+        } );
+
         // Refresh a credit card's advisory readout as its mode or inputs change.
         $( 'body' ).on( 'input change', classSelector( C.CREDIT_CARD_CLASS ) + ' :input',
             function () { updateCard( $( this ).closest( classSelector( C.CREDIT_CARD_CLASS ) ) ); } );
@@ -575,6 +633,7 @@ window.App.Inputs = (function () {
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
         enhanceStateAutofill( $( document.body ) );
+        enhanceMoneyInputs( $( document.body ) );
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
@@ -583,6 +642,7 @@ window.App.Inputs = (function () {
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
                 enhanceStateAutofill( $( document.body ) );
+                enhanceMoneyInputs( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }

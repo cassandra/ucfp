@@ -38,6 +38,7 @@ class AppConst:
     AUTOSAVE_CLASS = 'js-autosave'  # marks a <form> whose edits auto-save
     DATE_FIELD_CLASS = 'js-date'    # a date input: enhanced with a date picker
     AGE_FIELD_CLASS  = 'js-age'     # the age input beside a date in a date/age pair
+    MONEY_INPUT_CLASS = 'js-money'  # a money input: grouped with thousands separators as it is typed
 
     # A date input's planning context, which tunes where its picker opens and
     # how far it ranges (dates here are routinely decades from today, so the

@@ -42,13 +42,17 @@ class FieldTemplateTest(SimpleTestCase):
 
 class AdornedWidgetTest(SimpleTestCase):
 
-    def test_money_input_wraps_the_number_field_with_a_dollar_affix(self):
+    def test_money_input_wraps_a_text_field_with_a_dollar_affix(self):
         class F(forms.Form):
             amt = forms.DecimalField(widget=MoneyInput())
         html = str(F()['amt'])
         self.assertIn('input-group', html)
         self.assertIn('>$<', html)
-        self.assertIn('type="number"', html)
+        # A text (not number) input so its value can carry thousands separators, marked (js-money) for
+        # the grouping script and given a numeric keypad on mobile.
+        self.assertIn('type="text"', html)
+        self.assertIn('inputmode="decimal"', html)
+        self.assertIn('js-money', html)
 
     def test_percent_input_wraps_the_number_field_with_a_percent_affix(self):
         class F(forms.Form):

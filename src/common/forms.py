@@ -25,8 +25,15 @@ class _AffixField( forms.DecimalField ):
 
 
 class MoneyField( _AffixField ):
-    """A DecimalField shown as a currency input (leading $)."""
+    """A DecimalField shown as a currency input (leading $). Its input is plain text carrying thousands
+    separators as typed, so those separators (and surrounding whitespace) are stripped before the
+    decimal parse -- '122,000' becomes Decimal('122000')."""
     widget = MoneyInput
+
+    def to_python( self, value ):
+        if isinstance( value, str ):
+            value = value.replace( ',', '' ).strip()
+        return super().to_python( value )
 
 
 class PercentField( _AffixField ):
