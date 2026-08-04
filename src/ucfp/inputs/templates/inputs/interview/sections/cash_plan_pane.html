@@ -16,14 +16,14 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
       <div class="col-md-6 mb-3">
         <div class="form-group">
           <label class="font-weight-normal mb-1">{{ drawdown_form.cash_floor.label }}
-            <span class="text-muted small d-block">Kept on hand; topped up from your accounts when cash falls below it.</span></label>
+            <span class="text-muted small d-block">Kept on hand; topped up when cash falls below it.</span></label>
           {{ drawdown_form.cash_floor }}
           {% if drawdown_form.cash_floor.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_floor.errors|join:" " }}</span>{% endif %}
         </div>
         <label class="font-weight-normal mb-1">Draw order
-          <span class="text-muted small d-block">Below the minimum, sell from these in order. A
+          <span class="text-muted small d-block">When cash is low, sell from these in order. A
             <span class="d-inline-block rounded-circle bg-success align-middle" style="width:.5rem;height:.5rem"></span>
-            marks a type you hold today; the rest are skipped until you own them.</span></label>
+            is held today; the rest wait until you own them.</span></label>
         <ul class="list-unstyled mb-0 js-draw-order">
           {% for row in drawdown_form.draw_rows %}
           <li class="d-flex align-items-center border rounded p-2 mb-2 bg-white">
@@ -32,8 +32,8 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
             <span class="d-inline-block rounded-circle mr-2 {% if row.held %}bg-success{% else %}bg-light border{% endif %}"
                   style="width:.5rem;height:.5rem" title="{% if row.held %}held{% else %}not held yet{% endif %}"></span>
             <span class="flex-grow-1 {% if not row.held %}text-muted{% endif %}">{{ row.label }}</span>
-            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 mr-1 js-draw-up" aria-label="Move up">&uarr;</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 js-draw-down" aria-label="Move down">&darr;</button>
+            <button type="button" class="btn btn-sm btn-light py-0 px-2 mr-1 js-draw-up" aria-label="Move up">&uarr;</button>
+            <button type="button" class="btn btn-sm btn-light py-0 px-2 js-draw-down" aria-label="Move down">&darr;</button>
           </li>
           {% endfor %}
         </ul>
@@ -42,13 +42,13 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
       <div class="col-md-6 mb-3">
         <div class="form-group">
           <label class="font-weight-normal mb-1">{{ drawdown_form.cash_ceiling.label }}
-            <span class="text-muted small d-block">Surplus above it is invested by the sweep below. Leave blank to let cash accumulate.</span></label>
+            <span class="text-muted small d-block">Surplus above it is swept into the holdings below; blank lets cash accumulate.</span></label>
           {{ drawdown_form.cash_ceiling }}
           {% if drawdown_form.cash_ceiling.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_ceiling.errors|join:" " }}</span>{% endif %}
         </div>
         <label class="font-weight-normal mb-1">Invest the surplus into
-          <span class="text-muted small d-block">Above the maximum, the surplus is split across these holdings by weight
-            (weights are relative -- they need not add up to 100).</span></label>
+          <span class="text-muted small d-block">Split across these by weight (relative -- they need not
+            total 100).</span></label>
         <table class="table table-sm mb-1 js-sweep-table">
           <tbody>
             {% for row in drawdown_form.sweep_rows %}
@@ -68,16 +68,18 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
                 </div>
               </td>
               <td class="align-middle pr-0" style="width:2.5rem">
-                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 js-sweep-remove" aria-label="Remove">&times;</button>
+                <button type="button" class="btn btn-sm btn-link text-danger p-0 js-sweep-remove" aria-label="Remove">&times;</button>
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
-        <button type="button" class="btn btn-sm btn-outline-secondary js-sweep-add">&plus; Add holding</button>
-        <span class="text-muted small d-block mt-2">A maximum only takes effect once at least one holding is chosen to invest the surplus into.</span>
+        <button type="button" class="btn btn-sm btn-outline-primary js-sweep-add">&plus; Add holding</button>
       </div>
 
     </div>
+    <p class="text-muted small mb-0">Top-ups and sweeps are automatic; for deliberate tax moves -- Roth
+      conversions, scheduled withdrawals -- see the Tax Planning step. A maximum takes effect once at
+      least one holding is chosen to sweep into.</p>
   </form>
 </div>
