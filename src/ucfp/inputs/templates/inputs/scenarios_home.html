@@ -35,7 +35,7 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
           {% if not row.complete %}<span class="badge badge-secondary ml-1">in progress</span>{% endif %}
         </span>
         {% if not row.complete %}
-        <form method="post" action="{% url 'scenario_resume' row.scenario.uuid %}" class="m-0 mr-3">
+        <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0 mr-3">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm btn-link p-0">Finish setup &rarr;</button>
         </form>
@@ -52,7 +52,7 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
     {% endfor %}
   </ul>
   <div class="card-footer bg-white border-0">
-    <a href="{% url 'scenario_new' %}" class="btn btn-outline-primary btn-sm">+ New Future Scenario</a>
+    <a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary btn-sm">+ New Future Scenario</a>
   </div>
 </div>
 

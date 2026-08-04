@@ -10,8 +10,8 @@ from . import views
 
 urlpatterns = [
     path( 'scenarios/', views.ScenariosHomeView.as_view(), name = 'scenarios_home' ),
-    path( 'scenarios/new/', views.ScenarioNewView.as_view(), name = 'scenario_new' ),
-    path( 'scenarios/<uuid:uuid>/resume/', views.ScenarioResumeView.as_view(), name = 'scenario_resume' ),
+    path( 'scenarios/compose/', views.ScenarioComposeView.as_view(), name = 'scenario_compose' ),
+    path( 'scenarios/<uuid:uuid>/edit/', views.ScenarioEditView.as_view(), name = 'scenario_edit' ),
     path( 'scenarios/<uuid:uuid>/rename/', views.ScenarioRenameView.as_view(), name = 'scenario_rename' ),
     path( 'scenarios/<uuid:uuid>/delete/', views.ScenarioDeleteView.as_view(), name = 'scenario_delete' ),
 

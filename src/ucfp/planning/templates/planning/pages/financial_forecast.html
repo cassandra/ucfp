@@ -36,7 +36,7 @@ chooser below), and linking to the uuid-less workspace so it resumes without re-
   <button type="submit" class="btn btn-outline-primary ml-2"
           formaction="{% url 'explore_enter' %}">Explore &amp; tweak &rarr;</button>
 </form>
-<p class="text-muted small mt-2">or <a href="{% url 'scenario_new' %}">create another Future Scenario</a>.</p>
+<p class="text-muted small mt-2">or <a href="{% url 'scenario_compose' %}">create another Future Scenario</a>.</p>
 {% else %}
 {% include 'planning/panes/scenario_required.html' %}
 {% endif %}

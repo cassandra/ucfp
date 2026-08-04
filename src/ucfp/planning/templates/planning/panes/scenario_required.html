@@ -19,7 +19,7 @@ resuming ends on the Scenarios page; the user returns to a feature via the nav.
     contemplating and the assumptions you expect. Build one now, then come back here to run your
     forecast.</p>
   {% endif %}
-  <form method="post" action="{% url 'scenario_resume' build_scenario.uuid %}" class="m-0">
+  <form method="post" action="{% url 'scenario_edit' build_scenario.uuid %}" class="m-0">
     {% csrf_token %}
     <button type="submit" class="btn btn-primary">
       {% if build_scenario_started %}Resume building {{ build_scenario.label }} &rarr;{% else %}Build a Future Scenario{% endif %}</button>
@@ -29,6 +29,6 @@ resuming ends on the Scenarios page; the user returns to a feature via the nav.
   <h2 class="h5 mb-2">Next, build a Future Scenario</h2>
   <p class="mb-3">A forecast also needs a <strong>Future Scenario</strong> &mdash; the plans you're
     contemplating and the assumptions you expect.</p>
-  <a href="{% url 'scenario_new' %}" class="btn btn-primary">Build a Future Scenario</a>
+  <a href="{% url 'scenario_compose' %}" class="btn btn-primary">Build a Future Scenario</a>
   {% endif %}
 </div>

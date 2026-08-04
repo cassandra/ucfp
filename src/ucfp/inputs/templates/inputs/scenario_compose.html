@@ -18,7 +18,7 @@ Scenarios page. The choosers list only complete components, so the combined scen
           <strong>Assumptions</strong>. Pick the combination to project and name it. To vary the Plans or
           Assumptions themselves, clone or add one on the <a href="{% url 'scenarios_home' %}">Scenarios
           page</a> first.</p>
-        <form method="post" action="{% url 'scenario_new' %}" class="mt-3">
+        <form method="post" action="{% url 'scenario_compose' %}" class="mt-3">
           {% csrf_token %}
           {% if form.non_field_errors %}
           <div class="alert alert-warning">{{ form.non_field_errors }}</div>

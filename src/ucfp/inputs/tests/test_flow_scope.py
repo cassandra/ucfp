@@ -1,6 +1,6 @@
 """Entering a standalone flow clears a stale scenario-build scope.
 
-The scenario build (ScenarioResumeView) sets session `scenario_building` so the Plans flow chains into
+The scenario build (ScenarioEditView) sets session `scenario_building` so the Plans flow chains into
 Assumptions; it is cleared on build completion. An abandoned build leaves it set, which would make a
 later standalone Plans edit wrongly chain into Assumptions. FlowEntryView -- the standalone entry, which
 the scenario build never routes through -- clears it on entry.

@@ -176,14 +176,15 @@ class ScenarioCombineForm( forms.Form ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class ScenarioNewView( View ):
-    """`/inputs/scenarios/new/` -- create a new Future Scenario, the normal (repeatable) way: *combine* an
-    existing Plans with an existing Assumptions. It routes by what the organization has: not enough
-    complete components to pair (the Default scenario is still being set up) -> the Scenarios page, to
-    finish it; complete components but every pairing already used -> a hint to make a new Plans/Assumptions
-    first; otherwise the combine form. A completed Profile is the prerequisite."""
+class ScenarioComposeView( View ):
+    """`/inputs/scenarios/compose/` -- compose a Future Scenario (the Compose operation): *pair* an
+    existing Plans with an existing Assumptions -- pure selection, no interview -- reached only from the
+    Scenarios page's "New Future Scenario". It routes by what the organization has: not enough complete
+    components to pair (the Default scenario is still being set up) -> the Scenarios page, to finish it;
+    complete components but every pairing already used -> a hint to make a new Plans/Assumptions first;
+    otherwise the combine form. A completed Profile is the prerequisite."""
 
-    _FORM_TEMPLATE = 'inputs/scenario_new.html'
+    _FORM_TEMPLATE = 'inputs/scenario_compose.html'
     _HINT_TEMPLATE = 'inputs/panes/scenario_combinations_exhausted.html'
 
     def get( self, request ):
@@ -233,12 +234,12 @@ class ScenarioNewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class ScenarioResumeView( View ):
-    """`/inputs/scenarios/<uuid>/resume/` -- enter a scenario's build flow: make its Plans and
-    Assumptions the editing target, mark the build in progress, and (re-)enter the two-part flow at the
-    first Plans section (the stepper shows what is already done). Serves both resuming a half-built
-    scenario and starting the untouched Default from a feature's scenario gate. POST, since it changes
-    editing state."""
+class ScenarioEditView( View ):
+    """`/inputs/scenarios/<uuid>/edit/` -- enter a scenario's build flow (the Edit-scenario operation):
+    make its Plans and Assumptions the editing target, mark the build in progress, and (re-)enter the
+    two-part flow at the first Plans section (the stepper shows what is already done). One operation
+    behind three labels -- build the untouched Default, resume a half-built scenario, or edit a complete
+    one. POST, since it changes editing state."""
 
     def post( self, request, uuid ):
         organization = request.organization
@@ -296,7 +297,7 @@ class FlowEntryView( View ):
         # A standalone flow is not a scenario build. Clear any build scope left over from an abandoned
         # build, so a lone Plans edit does not wrongly chain into Assumptions (nor show the build
         # breadcrumb, nor finish on the Scenarios page). The scenario build enters through
-        # `ScenarioResumeView`, which sets the scope -- never through here.
+        # `ScenarioEditView`, which sets the scope -- never through here.
         request.session_state.scenario_building = None
         request.session_state.to_session( request )
         if self.flow == 'profile':
