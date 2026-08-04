@@ -8,10 +8,10 @@ from the view (stepper_target / section_target).
 {% load icons %}
 <ol id="{{ stepper_target }}" class="list-group">
   {% for section in sections %}
-  <li class="list-group-item d-flex justify-content-between align-items-center{% if section.key == current_section.key %} active{% endif %}">
+  <li class="list-group-item d-flex justify-content-between align-items-center{% if section.key == current_section.key %} active{% elif section.form %} stepper-clickable{% endif %}">
     <span>
       {% if section.form and section.key != current_section.key %}
-      <a data-async="#{{ section_target }}"
+      <a class="stretched-link" data-async="#{{ section_target }}"
          href="{% url 'interview_section' section=section.key %}">{{ section.title }}</a>
       {% else %}
       {{ section.title }}

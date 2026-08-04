@@ -189,6 +189,15 @@ a:hover, a:focus {
     color: inherit;
 }
 
+/* A live, non-current step links to its section across the whole block (the anchor's stretched-link),
+   so show the block as clickable with a hover cue -- the affordance is not limited to the label text. */
+.list-group-item.stepper-clickable {
+    cursor: pointer;
+}
+.list-group-item.stepper-clickable:hover {
+    background-color: var(--muted-bg-light);
+}
+
 /* Interview advance bar: keep Next / Finish reachable without scrolling to the bottom of
    a long section -- it sticks to the bottom of the viewport as a thin action bar. */
 .interview-advance {
