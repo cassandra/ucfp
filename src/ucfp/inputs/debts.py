@@ -15,7 +15,7 @@ from dataclasses import replace
 
 from django import forms
 
-from common.forms import MoneyField
+from common.forms import CHOOSE_PLACEHOLDER, MoneyField
 
 from ucfp.inputs.compatibility import plans_without_debts
 from ucfp.inputs.profile.enums import DebtKind
@@ -41,7 +41,7 @@ class DebtsForm( forms.Form ):
     ignored. `apply` rebuilds the whole debt list from the rows, each row preserving the debt's stable
     handle and any property it is secured against."""
 
-    _KIND_CHOICES = ( ( '', 'Type...' ), ) + tuple( ( kind.name, kind.label ) for kind in DebtKind )
+    _KIND_CHOICES = ( ( '', CHOOSE_PLACEHOLDER ), ) + tuple( ( kind.name, kind.label ) for kind in DebtKind )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
@@ -59,9 +59,11 @@ class DebtsForm( forms.Form ):
             initial = debt.secured_asset if debt else None )
         self.fields[ f'kind_{index}' ]    = forms.ChoiceField(
             required = False, choices = self._KIND_CHOICES,
-            initial = debt.kind.name if debt else None )
+            initial = debt.kind.name if debt else None,
+            widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
         self.fields[ f'name_{index}' ]    = forms.CharField(
-            required = False, max_length = 100, initial = debt.name if debt else None )
+            required = False, max_length = 100, initial = debt.name if debt else None,
+            widget = forms.TextInput( attrs = { 'class' : 'form-control' } ) )
         self.fields[ f'balance_{index}' ] = MoneyField(
             required = False, min_value = 0, initial = debt.balance if debt else None )
         if debt is not None:
