@@ -11,22 +11,20 @@ not previewed here. Reads `vehicle_costs_form`.
     <table class="table table-sm w-auto align-middle">
       <thead>
         <tr>
-          <th scope="col">Running cost</th>
-          <th scope="col" class="text-right small">Per car</th>
-          <th scope="col" class="small">Cadence</th>
+          <th scope="col">Cost Type</th>
+          <th scope="col">Every</th>
+          <th scope="col" class="text-right">Per car</th>
         </tr>
       </thead>
       <tbody>
         {% for row in vehicle_costs_form.rows %}
         <tr>
           <th scope="row" class="font-weight-normal text-left">{{ row.name }}</th>
+          <td class="text-nowrap">{% include 'inputs/components/_cadence.html' with cadence=row.cadence hide_every=True %}</td>
           <td class="text-right">{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
-          <td>{% include 'inputs/components/_cadence.html' with cadence=row.cadence %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    <p class="text-muted small">Enter each cost per car; it applies to every car while you own it.
-      Changes save automatically.</p>
   </form>
 </div>
