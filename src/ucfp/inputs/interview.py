@@ -772,16 +772,17 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    # Real Estate precedes Income: declaring a rental creates its rent line on the Income step, so the
-    # properties must exist before the user works through Income or a rental's rent goes unnoticed.
+    # The asset sections are grouped -- Accounts, then Real Estate, then Possessions -- before Income.
+    # Real Estate precedes Income for a hard reason: declaring a rental creates its rent line on the
+    # Income step, so the properties must exist before the user works through Income or a rental's rent
+    # goes unnoticed. Possessions (non-real-estate tangibles: precious metals, collectibles, vehicles,
+    # boats) carry no income, so they sit here beside Real Estate purely to keep the assets together.
     Section( 'real-estate' , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
-    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
-             outer_template = 'inputs/interview/sections/income.html' ),
-    # Non-real-estate tangibles (precious metals, collectibles, vehicles, boats). After Income -- they
-    # carry no income, so they need not precede it like the rentals do.
     Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
              outer_template = 'inputs/interview/sections/possessions_section.html' ),
+    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
+             outer_template = 'inputs/interview/sections/income.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
     # adjustable on its property. Facts only; the repayment plan per debt is the Debt plan step below,
     # which opens the Plans flow.
