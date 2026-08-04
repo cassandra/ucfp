@@ -3,7 +3,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.staticfiles.storage import staticfiles_storage
 from django.urls import include, path, re_path
-from django.views.generic.base import RedirectView
+from django.views.generic.base import RedirectView, TemplateView
 
 from . import views
 
@@ -26,6 +26,12 @@ urlpatterns = [
     path( '', views.HomeView.as_view(), name = 'home' ),
     path( 'index.html', views.HomeView.as_view(), name = 'home_index' ),
     path( 'health', views.HealthView.as_view(), name = 'health' ),
+
+    # Public content pages (login-free; linked from the shared footer).
+    path( 'about', TemplateView.as_view( template_name = 'pages/about.html' ), name = 'about' ),
+    path( 'contact', TemplateView.as_view( template_name = 'pages/contact.html' ), name = 'contact' ),
+    path( 'privacy', TemplateView.as_view( template_name = 'pages/privacy.html' ), name = 'privacy' ),
+    path( 'terms', TemplateView.as_view( template_name = 'pages/terms.html' ), name = 'terms' ),
 
     path( f'{settings.SECRET_URL_PREFIX}env/', include( 'ucfp.environment.urls' )),
 
