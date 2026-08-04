@@ -961,10 +961,11 @@ class AccountsView( SelfSavingPaneView ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class SubjectsView( View ):
     """`/inputs/interview/subjects/edit/` -- the Subjects pane of the Profile flow. POST auto-saves a
-    single edit in the background: it persists the household (and the derived filing status) and
-    refreshes the read-only filing-status readout beside the form, re-rendering the pane itself only on
-    a genuine field error (a half-entered partner). Validation is non-blocking -- an incomplete person
-    is simply not held; the forecast readiness check is the completeness gate."""
+    single edit in the background: it persists the household (and the derived filing status), prunes any
+    plan references orphaned when a partner is dropped, and refreshes the read-only filing-status readout
+    beside the form, re-rendering the pane itself only on a genuine field error (a half-entered partner).
+    Validation is non-blocking -- an incomplete person is simply not held; the forecast readiness check
+    is the completeness gate."""
 
     _TEMPLATE        = 'inputs/interview/sections/subjects_pane.html'
     _ERRORS_TEMPLATE = 'inputs/interview/sections/subjects_errors.html'
@@ -976,13 +977,14 @@ class SubjectsView( View ):
         return self._response( request, SubjectsForm( profile = profile ) )
 
     def post( self, request ):
-        organization = request.organization
-        profile, _plans = _current_profile_and_plans( request )
+        profile, plans = _current_profile_and_plans( request )
         form = SubjectsForm( request.POST, profile = profile )
         if not form.is_valid():
             return self._swap( request, form )                 # a half-entered partner
-        profile, _plans = form.apply( profile, None )
-        save_profile( organization, profile )
+        # Dropping a partner removes their synced retirement/taxable accounts, so `apply` prunes the
+        # plan references into them; profile and plans must then commit together (the paired-save seam).
+        profile, plans = form.apply( profile, plans )
+        _save_profile_and_plans( request, profile, plans )
         # A clean save clears any stale half-entered-partner warning (the fields are left untouched, so
         # focus is undisturbed) and refreshes the filing-status readout, which a partner change alters.
         label = SubjectsForm( profile = profile ).filing_status_label
