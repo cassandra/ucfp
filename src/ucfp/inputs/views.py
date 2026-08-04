@@ -872,7 +872,7 @@ def _current_assumptions( request ):
 
 
 class ResidenceView( SelfSavingPaneView ):
-    """`/inputs/interview/properties/residence/` -- the residence sub-form of the Property pane. It
+    """`/inputs/interview/real-estate/residence/` -- the residence sub-form of the Real Estate pane. It
     persists just the residence (its asset, mortgage, and rent). Own/rent and mortgage visibility are
     client-side (`inputs.js`); an incomplete residence simply does not materialize."""
 
@@ -1003,7 +1003,7 @@ class SubjectsView( View ):
 
 
 class PossessionsView( SelfSavingPaneView ):
-    """`/inputs/interview/properties/possessions/` -- the list behind the Possessions section (tangible
+    """`/inputs/interview/possessions/edit/` -- the list behind the Possessions section (tangible
     non-real-estate holdings). Its item set can change, so a save that adds or removes a row re-renders
     the pane; an incomplete row simply does not materialize."""
 
@@ -1216,7 +1216,7 @@ class _PropertyView( View ):
 
 
 class _PropertyFormView( _PropertyView ):
-    """The add/edit form for one mortgaged property in the Property pane. Add and edit converge:
+    """The add/edit form for one mortgaged property in the Real Estate pane. Add and edit converge:
     GET-add mints a fresh handle and opens the editor for it, so the form always edits a known handle
     and a new property has a stable identity from the first keystroke. POST auto-saves in the
     background -- non-blocking, so an incomplete (or never-filled) property writes nothing -- and just
@@ -1266,25 +1266,25 @@ class _PropertyDeleteView( _PropertyView ):
 
 
 class RentalFormView( _PropertyFormView ):
-    """`/inputs/interview/properties/rentals/add/` and `.../<handle>/`."""
+    """`/inputs/interview/real-estate/rentals/add/` and `.../<handle>/`."""
 
     _PANE = RENTAL_PANE
 
 
 class RentalDeleteView( _PropertyDeleteView ):
-    """`/inputs/interview/properties/rentals/<handle>/delete/`."""
+    """`/inputs/interview/real-estate/rentals/<handle>/delete/`."""
 
     _PANE = RENTAL_PANE
 
 
 class SecondHomeFormView( _PropertyFormView ):
-    """`/inputs/interview/properties/second-homes/add/` and `.../<handle>/`."""
+    """`/inputs/interview/real-estate/second-homes/add/` and `.../<handle>/`."""
 
     _PANE = SECOND_HOME_PANE
 
 
 class SecondHomeDeleteView( _PropertyDeleteView ):
-    """`/inputs/interview/properties/second-homes/<handle>/delete/`."""
+    """`/inputs/interview/real-estate/second-homes/<handle>/delete/`."""
 
     _PANE = SECOND_HOME_PANE
 

@@ -774,7 +774,7 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/accounts.html' ),
     # Real Estate precedes Income: declaring a rental creates its rent line on the Income step, so the
     # properties must exist before the user works through Income or a rental's rent goes unnoticed.
-    Section( 'properties'  , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
+    Section( 'real-estate' , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
     Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
