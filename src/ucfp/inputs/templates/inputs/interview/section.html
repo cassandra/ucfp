@@ -7,10 +7,12 @@ last step (`is_last`), else "Next".
 <div id="{{ section_target }}">
   <h2 class="h4 mb-3">{{ current_section.title }}</h2>
   {% if current_section.outer_template %}{% include current_section.outer_template %}{% endif %}
-  <form method="post"
-        action="{% url 'interview_section' section=current_section.key %}"
-        data-async="#{{ section_target }}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary mt-3">{% if is_last %}Finish{% else %}Next{% endif %}</button>
-  </form>
+  <div class="interview-advance">
+    <form method="post"
+          action="{% url 'interview_section' section=current_section.key %}"
+          data-async="#{{ section_target }}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">{% if is_last %}Finish{% else %}Next{% endif %}</button>
+    </form>
+  </div>
 </div>

@@ -177,6 +177,24 @@ a:hover, a:focus {
     box-shadow: inset 0 -3px 0 rgba(255, 255, 255, 0.9);
 }
 
+/* Interview stepper: the active step on the brand blue, not Bootstrap's list-group blue. */
+.list-group-item.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Interview advance bar: keep Next / Finish reachable without scrolling to the bottom of
+   a long section -- it sticks to the bottom of the viewport as a thin action bar. */
+.interview-advance {
+    position: sticky;
+    bottom: 0;
+    background-color: #ffffff;
+    border-top: 1px solid var(--line-color);
+    padding: 0.75rem 0;
+    margin-top: 1rem;
+    z-index: 100;
+}
+
 /* Map Bootstrap contextual backgrounds + buttons to the theme palette. */
 .bg-primary, .btn-primary {
     color: var(--on-primary-color) !important;

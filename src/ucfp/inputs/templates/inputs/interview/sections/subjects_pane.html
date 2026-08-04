@@ -16,15 +16,15 @@ user may override. Nothing is required -- an incomplete person is simply not hel
     <div class="row">
       <div class="col-md-7">
         {% include 'inputs/interview/sections/subjects_errors.html' %}
-        {% include 'inputs/interview/_field.html' with field=subjects_form.subject_name %}
-        {% include 'inputs/interview/_field.html' with field=subjects_form.subject_birthdate %}
+        {{ subjects_form.subject_name.as_field_group }}
+        {{ subjects_form.subject_birthdate.as_field_group }}
 
         <div class="{{ AppConst.OPTIONAL_CLASS }} mt-3">
-          <button type="button" class="{{ AppConst.OPTIONAL_ADD_CLASS }} btn btn-sm btn-outline-secondary" hidden>Add a partner</button>
+          <button type="button" class="{{ AppConst.OPTIONAL_ADD_CLASS }} btn btn-sm btn-outline-primary" hidden>Add a partner</button>
           <div class="{{ AppConst.OPTIONAL_BODY_CLASS }}">
             <p class="text-muted mb-1">Partner</p>
-            {% include 'inputs/interview/_field.html' with field=subjects_form.partner_name %}
-            {% include 'inputs/interview/_field.html' with field=subjects_form.partner_birthdate %}
+            {{ subjects_form.partner_name.as_field_group }}
+            {{ subjects_form.partner_birthdate.as_field_group }}
             <button type="button" class="{{ AppConst.OPTIONAL_REMOVE_CLASS }} btn btn-sm btn-link text-muted px-0" hidden>Remove partner</button>
           </div>
         </div>
@@ -42,7 +42,7 @@ user may override. Nothing is required -- an incomplete person is simply not hel
               <div class="text-muted small">Filing status</div>
               <div id="filing-status">{{ subjects_form.filing_status_label }}</div>
             </div>
-            <div class="text-muted small mb-1">State Tax rate (%)</div>
+            <div class="text-muted small mb-1">State Tax rate</div>
             <div class="d-flex align-items-center">
               {{ subjects_form.us_state }}
               {{ subjects_form.state_income_tax_rate }}
