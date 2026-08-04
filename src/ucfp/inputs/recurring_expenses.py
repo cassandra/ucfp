@@ -76,6 +76,7 @@ class RecurringExpensesForm( forms.Form ):
         for si, until in enumerate( self._spans ):
             field = forms.IntegerField( required = False, min_value = 0 )
             field.initial = until
+            field.widget.attrs[ 'class' ] = 'form-control form-control-sm input-count'   # at most 3 digits
             self.fields[ self._until_key( si ) ] = field
         for ei, expense in enumerate( self._expenses ):
             add_cadence_fields( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
@@ -116,7 +117,8 @@ class RecurringExpensesForm( forms.Form ):
         for si, until in enumerate( self._spans ):
             year = ( self._birthdate.year + until
                      if until is not None and self._birthdate is not None else None )
-            headers.append( { 'field': self[ self._until_key( si ) ], 'year': year } )
+            headers.append( { 'field': self[ self._until_key( si ) ], 'year': year,
+                              'open': until is None } )
         return headers
 
     @property

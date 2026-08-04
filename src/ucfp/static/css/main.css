@@ -240,6 +240,7 @@ a:hover, a:focus {
 /* Money inputs are sized for the largest value allowed (8 digits + 2 commas) and no wider, with the
    number right-aligned as currency reads -- so amounts line up as a number column. */
 .form-control.js-money {
+    min-width: 4rem;
     max-width: 8rem;
     text-align: right;
 }
@@ -248,8 +249,19 @@ a:hover, a:focus {
    calculator line) and right-aligns in a number cell, rather than stretching to fill the width. */
 .input-group:has( .form-control.js-money ) {
     display: inline-flex;
+    flex-wrap: nowrap;   /* keep the $ affix on the input's line, not wrapped above it */
     width: auto;
     vertical-align: middle;
+}
+
+/* The interview's stepper is a fixed-width sidebar (md and up) with the section pane filling the rest,
+   so the rail stays as wide as its labels need -- never proportionally too wide on large screens, nor so
+   narrow the labels wrap. Below md the flex row collapses to stacked full-width blocks. */
+@media (min-width: 768px) {
+    .interview-stepper {
+        flex: 0 0 auto;
+        width: 13rem;
+    }
 }
 
 /* Narrow integer inputs (a cadence count, a calculator's item count / replacement years) and the unit
@@ -261,7 +273,7 @@ a:hover, a:focus {
     vertical-align: middle;
 }
 .input-count {
-    width: 3.5rem;
+    width: 4rem;
 }
 .cadence-unit {
     width: auto;

@@ -1,5 +1,7 @@
 {% extends "pages/app_base.html" %}
 
+{% block main_container_class %}container-fluid{% endblock %}
+
 {% block app_content %}
 <h1 class="mb-1">{{ flow_heading }}</h1>
 {% comment %}
@@ -30,11 +32,11 @@ name can be changed right here -- handy straight after a create or clone that ga
 </div>
 {% endif %}
 {% endif %}
-<div class="row">
-  <div class="col-md-3 mb-4">
+<div class="d-md-flex">
+  <div class="interview-stepper mb-4 mr-md-4">
     {% include "inputs/interview/stepper.html" %}
   </div>
-  <div class="col-md-9">
+  <div class="flex-fill">
     {% include "inputs/interview/section.html" %}
   </div>
 </div>

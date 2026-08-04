@@ -20,7 +20,7 @@ an age to split it, clear a span's age to delete it. Ages are the primary person
             <button type="button" class="{{ AppConst.RECURRING_DELETE_CLASS }} btn btn-sm btn-link text-danger p-0 ml-1"
                     data-span="{{ forloop.counter0 }}" aria-label="Delete this span" title="Delete this span">&times;</button>
             {% endif %}
-            {% if header.year %}<span class="text-muted d-block">reaches {{ header.year }}</span>{% endif %}</th>
+            <span class="text-muted d-block">{% if header.open %}for life{% elif header.year %}reaches {{ header.year }}{% endif %}</span></th>
           {% endfor %}
         </tr>
       </thead>
