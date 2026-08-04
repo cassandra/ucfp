@@ -5,14 +5,16 @@ area (id from `form_id`). It auto-saves in the background (js-autosave) and alwa
 property appears in the list once its fields are complete. "Done" closes the form; it is already saved.
 Empty when no form is open. The pane's `form_id`, `edit_url`, and `add_url` come from its `PropertyPane`.
 {% endcomment %}
-<div id="{{ form_id }}">
+<div id="{{ form_id }}" class="property-editor">
   {% if property_form %}
   <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }}"
         action="{% url edit_url handle=handle %}">
     {% csrf_token %}
-    {% for field in property_form.primary_fields %}{% include 'inputs/interview/_field.html' with field=field %}{% endfor %}
-    <a class="btn btn-sm btn-link px-0" data-async="#{{ form_id }}"
-       href="{% url add_url %}?collapse=1">Done</a>
+    {% for field in property_form.primary_fields %}{% include 'inputs/interview/_field_row.html' with field=field %}{% endfor %}
+    <div class="mt-2">
+      <a class="btn btn-sm btn-outline-primary" data-async="#{{ form_id }}"
+         href="{% url add_url %}?collapse=1">Done</a>
+    </div>
   </form>
   {% endif %}
 </div>

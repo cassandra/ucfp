@@ -198,6 +198,13 @@ a:hover, a:focus {
     background-color: var(--muted-bg-light);
 }
 
+/* While a property (rental / second home) add or edit form is open in its editor slot, hide that
+   list's "Add ..." button, so the affordance and the open form are not shown at once. Progressive:
+   where :has is unsupported the button simply stays visible. */
+.property-pane:has(.property-editor form) .property-add {
+    display: none;
+}
+
 /* Interview advance bar: keep Next / Finish reachable without scrolling to the bottom of
    a long section -- it sticks to the bottom of the viewport as a thin action bar. */
 .interview-advance {

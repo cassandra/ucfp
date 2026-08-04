@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 
 from django import forms
 
-from common.forms import MoneyField
+from common.forms import MoneyField, StyledFormMixin
 
 from ucfp.accounts.enums import AssetClass, RealPropertyType
 from ucfp.environment.constants import AppConst
@@ -62,7 +62,7 @@ def delete_property( profile, plans, property_handle : str ):
     return profile, plans
 
 
-class _PropertyForm( forms.Form ):
+class _PropertyForm( StyledFormMixin, forms.Form ):
     """The shared skeleton for a mortgaged, handle-minted property (a rental, a second home): the
     mortgage-balance field and the `apply` that writes the holding and its secured mortgage debt under
     one property handle, leaving other properties intact. The mortgage is the same `Debt` the Debts
@@ -166,15 +166,14 @@ class RentalForm( _PropertyForm ):
     name             = forms.CharField( label = 'Name', max_length = 100, required = False )
     value            = MoneyField( label = 'Current value', min_value = 0, required = False )
     building_basis   = MoneyField(
-        label = 'Building value at purchase, excludes land (for depreciation)',
-        min_value = 0, required = False )
+        label = 'Building value at purchase, excludes land', min_value = 0, required = False )
     purchase_price   = MoneyField( label = 'Purchase price', min_value = 0, required = False )
     acquisition_date = forms.DateField(
         label = 'Purchase date', required = False,
         widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
     property_type    = forms.ChoiceField(
-        label = 'Type', required = False,
-        choices = [ ( '', 'Type...' ) ] + [ ( k.name, k.label ) for k in RealPropertyType ] )
+        label = 'Property type', required = False,
+        choices = [ ( '', '-- Choose --' ) ] + [ ( k.name, k.label ) for k in RealPropertyType ] )
 
     @staticmethod
     def _asset_initial( asset ) -> dict:

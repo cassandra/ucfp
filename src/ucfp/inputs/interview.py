@@ -254,7 +254,8 @@ class HomeForm( forms.Form ):
 
     tenure           = forms.ChoiceField(
         label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, required = False,
-        widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
+        widget = forms.RadioSelect(
+            attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     home_value       = MoneyField( label = 'Current value', required = False, min_value = 0 )
     purchase_price   = MoneyField( label = 'Purchase price', required = False, min_value = 0 )
     mortgage_balance = MoneyField(

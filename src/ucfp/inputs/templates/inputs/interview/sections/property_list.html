@@ -25,6 +25,6 @@ to the delete view. The pane's DOM ids, URL names, and wording come from its `Pr
   {% else %}
   <p class="text-muted mb-2">{{ empty_text }}</p>
   {% endif %}
-  <a class="btn btn-sm btn-outline-secondary" data-async="#{{ form_id }}"
+  <a class="property-add btn btn-sm btn-outline-primary" data-async="#{{ form_id }}"
      href="{% url add_url %}">{{ add_text }}</a>
 </div>
