@@ -7,10 +7,11 @@ running costs are a sibling pane (`vehicle_expenses.py`). Non-blocking: a vehicl
 once its required fields are set, so a just-opened blank that is abandoned never appears.
 """
 from dataclasses import replace
+from decimal import Decimal
 
 from django import forms
 
-from common.forms import MoneyField
+from common.forms import MoneyField, StyledFormMixin
 
 from ucfp.inputs.plans.schemas import Vehicle, VehiclePlan
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
@@ -62,7 +63,7 @@ def delete_vehicle( plans, handle : str ):
     return replace( plans, vehicle_plan = kept if plan_has_content( kept ) else None )
 
 
-class VehicleForm( forms.Form ):
+class VehicleForm( StyledFormMixin, forms.Form ):
     """The add/edit form for one vehicle. Add and edit converge on a known handle (add mints one), so a
     new vehicle has a stable identity from the first keystroke. Fields are individually optional and the
     form background-saves; the vehicle materializes onto the plan only once all of `_REQUIRED` are set
@@ -78,11 +79,10 @@ class VehicleForm( forms.Form ):
     recurrence_years = forms.IntegerField(
         label = 'Replace every (years)', min_value = 1, required = False )
     end_date         = forms.DateField(
-        label = 'Owned until (optional)', required = False, widget = IsoDateInput() )
-    down_payment     = MoneyField(
-        label = 'Down payment (if financed)', min_value = 0, required = False )
-    monthly_payment  = MoneyField(
-        label = 'Monthly payment (if financed)', min_value = 0, required = False )
+        label = 'Stop replacing by', required = False, widget = IsoDateInput(),
+        help_text = 'Blank to keep replacing indefinitely.' )
+    down_payment     = MoneyField( label = 'Down payment', min_value = 0, required = False )
+    monthly_payment  = MoneyField( label = 'Monthly payment', min_value = 0, required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( plans, handle ) if handle else None )
@@ -102,16 +102,20 @@ class VehicleForm( forms.Form ):
     def _initial( cls, plans, handle : str ) -> dict:
         vehicle = next( ( v for v in _vehicles( plans ) if v.handle == handle ), None )
         if vehicle is None:
-            return dict()
+            return cls._defaults( handle )
         return { 'name': vehicle.name, 'purchase_date': vehicle.purchase_date,
                  'purchase_price': vehicle.purchase_price, 'recurrence_years': vehicle.recurrence_years,
                  'end_date': vehicle.end_date, 'down_payment': vehicle.down_payment,
                  'monthly_payment': vehicle.monthly_payment }
 
-    @property
-    def primary_fields( self ):
-        """The fields in declaration order, for the template to render."""
-        return [ self[ name ] for name in self.fields ]
+    @staticmethod
+    def _defaults( handle : str ) -> dict:
+        """A fresh vehicle's seeded typicals -- a slot-numbered name plus a typical price and replacement
+        interval -- with the next-purchase date left blank. The date is the one genuinely personal input,
+        and its absence keeps a defaulted-but-untouched vehicle from materializing until the user sets it."""
+        number = handle.rsplit( '-', 1 )[ -1 ]
+        return { 'name': f'Vehicle {number}', 'purchase_price': Decimal( '35000' ),
+                 'recurrence_years': 7 }
 
     def _complete( self ) -> bool:
         """All the fields a vehicle needs to materialize are present. No hard validation -- a partial

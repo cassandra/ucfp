@@ -10,12 +10,26 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
   <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }}"
         action="{% url 'vehicle_edit' handle=handle %}">
     {% csrf_token %}
-    {% for field in vehicle_form.primary_fields %}{% include 'inputs/interview/_field.html' with field=field %}{% endfor %}
-    <p class="text-muted small">If you finance, enter either the down payment or the monthly payment (we
-      work out the rest); leave both blank to buy for cash. Leave "Owned until" blank for a car you keep
-      replacing. Changes save automatically.</p>
-    <a class="btn btn-sm btn-link px-0" data-async="#vehicles-form"
-       href="{% url 'vehicle_add' %}?collapse=1">Done</a>
+    <div class="form-row">
+      <div class="col-sm-6">{{ vehicle_form.name.as_field_group }}</div>
+      <div class="col-sm-6">{{ vehicle_form.purchase_price.as_field_group }}</div>
+    </div>
+    <div class="form-row">
+      <div class="col-sm-4">{{ vehicle_form.purchase_date.as_field_group }}</div>
+      <div class="col-sm-4">{{ vehicle_form.recurrence_years.as_field_group }}</div>
+      <div class="col-sm-4">{{ vehicle_form.end_date.as_field_group }}</div>
+    </div>
+    <p class="small text-muted mb-1 mt-3"><strong>Financing or leasing</strong> (optional)</p>
+    <div class="form-row">
+      <div class="col-sm-6">{{ vehicle_form.down_payment.as_field_group }}</div>
+      <div class="col-sm-6">{{ vehicle_form.monthly_payment.as_field_group }}</div>
+    </div>
+    <p class="text-muted small">If you finance or lease, enter the down (or first) payment and the monthly
+      payment; leave both blank to buy with cash.</p>
+    <div class="mt-2">
+      <a class="btn btn-sm btn-outline-primary" data-async="#vehicles-form"
+         href="{% url 'vehicle_add' %}?collapse=1">Done</a>
+    </div>
   </form>
   {% endif %}
 </div>
