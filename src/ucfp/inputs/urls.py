@@ -18,11 +18,11 @@ urlpatterns = [
     # The three input flows, each editable on its own (a scenario build chains Plans then Assumptions).
     path( 'profile/', views.FlowEntryView.as_view( flow = 'profile' ), name = 'flow_profile' ),
     path( 'plans/', views.FlowEntryView.as_view( flow = 'plans' ), name = 'flow_plans' ),
-    path( 'plans/new/', views.PlansNewView.as_view(), name = 'plan_new' ),
-    path( 'plans/<uuid:uuid>/clone/', views.PlansCloneView.as_view(), name = 'plan_clone' ),
-    path( 'plans/<uuid:uuid>/rename/', views.PlansRenameView.as_view(), name = 'plan_rename' ),
-    path( 'plans/<uuid:uuid>/delete/', views.PlansDeleteView.as_view(), name = 'plan_delete' ),
-    path( 'plans/<uuid:uuid>/', views.PlansSelectView.as_view(), name = 'plan_select' ),
+    path( 'plans/new/', views.PlansNewView.as_view(), name = 'plans_new' ),
+    path( 'plans/<uuid:uuid>/clone/', views.PlansCloneView.as_view(), name = 'plans_clone' ),
+    path( 'plans/<uuid:uuid>/rename/', views.PlansRenameView.as_view(), name = 'plans_rename' ),
+    path( 'plans/<uuid:uuid>/delete/', views.PlansDeleteView.as_view(), name = 'plans_delete' ),
+    path( 'plans/<uuid:uuid>/edit/', views.PlansEditView.as_view(), name = 'plans_edit' ),
     path( 'assumptions/', views.FlowEntryView.as_view( flow = 'assumptions' ),
           name = 'flow_assumptions' ),
     path( 'assumptions/new/', views.AssumptionsNewView.as_view(), name = 'assumptions_new' ),
@@ -32,8 +32,8 @@ urlpatterns = [
           name = 'assumptions_rename' ),
     path( 'assumptions/<uuid:uuid>/delete/', views.AssumptionsDeleteView.as_view(),
           name = 'assumptions_delete' ),
-    path( 'assumptions/<uuid:uuid>/', views.AssumptionsSelectView.as_view(),
-          name = 'assumptions_select' ),
+    path( 'assumptions/<uuid:uuid>/edit/', views.AssumptionsEditView.as_view(),
+          name = 'assumptions_edit' ),
 
     # The section-driven interview (entered per flow above) + the per-section editors.
     path( 'interview/<str:section>/', views.InterviewView.as_view(), name = 'interview_section' ),

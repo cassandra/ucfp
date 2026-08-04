@@ -336,9 +336,9 @@ class PlansNewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class PlansSelectView( View ):
-    """`/inputs/plans/<uuid>/` -- make an existing Plans set the current editing target and open the
-    plans flow on it."""
+class PlansEditView( View ):
+    """`/inputs/plans/<uuid>/edit/` -- edit an existing Plans component (Edit-component): make it the
+    current editing target and open the standalone Plans flow on it."""
 
     def get( self, request, uuid ):
         record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
@@ -357,9 +357,9 @@ class AssumptionsNewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class AssumptionsSelectView( View ):
-    """`/inputs/assumptions/<uuid>/` -- make an existing Assumptions set the current editing target
-    and open the assumptions flow on it."""
+class AssumptionsEditView( View ):
+    """`/inputs/assumptions/<uuid>/edit/` -- edit an existing Assumptions component (Edit-component):
+    make it the current editing target and open the standalone Assumptions flow on it."""
 
     def get( self, request, uuid ):
         record = get_object_or_404(
@@ -661,7 +661,7 @@ class InterviewView( View ):
         """The Plans/Assumptions record this flow edits, as inline-rename fields for the header (kind, uuid,
         label, and its rename endpoint). None for the single-record Profile, which is not named."""
         if flow == 'plans':
-            record, kind, route = current_plans_record( request ), 'plan', 'plan_rename'
+            record, kind, route = current_plans_record( request ), 'plan', 'plans_rename'
         elif flow == 'assumptions':
             record, kind, route = current_assumptions_record( request ), 'assumptions', 'assumptions_rename'
         else:
