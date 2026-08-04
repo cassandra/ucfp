@@ -5,12 +5,14 @@ into this area; the area is restored to this menu after a save or a Cancel.
 <div id="events-add" class="border-top pt-2">
   <span class="text-muted small">Add an event</span>
   {% for group in menu %}
-  <div class="mt-2">
-    <span class="text-muted small">{{ group.group }}:</span>
-    {% for type in group.types %}
-    <a class="btn btn-sm btn-outline-secondary" data-async="#events-add"
-       href="{% url 'event_add' kind=type.kind %}">{{ type.label }}</a>
-    {% endfor %}
+  <div class="d-flex align-items-baseline mt-2">
+    <span class="text-muted small text-right flex-shrink-0 mr-2" style="width: 5.5rem">{{ group.group }}</span>
+    <div>
+      {% for type in group.types %}
+      <a class="btn btn-sm btn-outline-primary mr-1 mb-1" data-async="#events-add"
+         href="{% url 'event_add' kind=type.kind %}">{{ type.label }}</a>
+      {% endfor %}
+    </div>
   </div>
   {% endfor %}
 </div>
