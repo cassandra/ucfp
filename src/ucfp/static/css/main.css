@@ -245,6 +245,15 @@ a:hover, a:focus {
     max-width: 5rem;
 }
 
+/* A switch case that should hold its place when inactive (rather than collapsing and letting its
+   neighbours reflow): visually hidden but still laid out. Used for the credit-card mode fields so the
+   visible input stays in a fixed slot as the mode changes -- overrides the `hidden` attribute's
+   display:none for these elements only. */
+.keep-in-flow[hidden] {
+    display: block !important;   /* beat Bootstrap reboot's `[hidden] { display: none !important }` */
+    visibility: hidden;
+}
+
 /* Money inputs are sized for the largest value allowed (8 digits + 2 commas) and no wider, with the
    number right-aligned as currency reads -- so amounts line up as a number column. */
 .form-control.js-money {
