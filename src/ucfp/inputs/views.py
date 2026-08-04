@@ -293,6 +293,12 @@ class FlowEntryView( View ):
     flow = None
 
     def get( self, request ):
+        # A standalone flow is not a scenario build. Clear any build scope left over from an abandoned
+        # build, so a lone Plans edit does not wrongly chain into Assumptions (nor show the build
+        # breadcrumb, nor finish on the Scenarios page). The scenario build enters through
+        # `ScenarioResumeView`, which sets the scope -- never through here.
+        request.session_state.scenario_building = None
+        request.session_state.to_session( request )
         if self.flow == 'profile':
             default = ensure_default_scenario( request.organization )
             _select( request, 'current_plans_uuid', default.plans )
