@@ -137,10 +137,11 @@ class PropertyExpensesForm( forms.Form ):
             default = MoneyField( required = False, min_value = 0 )
             default.initial = self._collapsed_value( expense ) if self._collapsed else expense.default_amount
             default.widget.attrs[ 'placeholder' ] = '0'
-            default.widget.attrs[ 'class' ] = self._default_class( expense )
+            default.widget.attrs[ 'class' ] += ' ' + self._default_class( expense )   # keep money styling
             default.widget.attrs[ 'aria-label' ] = self._cell_label( expense, self._default_column_label() )
             if expense.count is not None:                  # a durable's amount is filled by the calculator
                 default.widget.attrs[ 'readonly' ] = True
+                default.widget.attrs[ f'data-{AppConst.CALC_DATA_ATTR}' ] = str( ri )
                 add_calculator_fields( self, ri, expense.count, expense.cost_each, expense.lifespan )
             self.fields[ self._default_key( ri ) ] = default
             add_cadence_fields( self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain )
@@ -247,6 +248,7 @@ class PropertyExpensesForm( forms.Form ):
                        for hi in range( len( self._handles ) ) ]
         return {
             'name'        : expense.name,
+            'calc_id'     : ri,
             'cadence'     : cadence_cells(
                 self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain ),
             'count_entry' : durable,

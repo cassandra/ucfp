@@ -88,7 +88,8 @@ class RecurringExpensesForm( forms.Form ):
                     expense.amounts[ -1 ] if expense.amounts else None )
                 if durable:
                     cell.widget.attrs[ 'readonly' ] = True
-                    cell.widget.attrs[ 'class' ] = AppConst.CALC_TARGET_CLASS
+                    cell.widget.attrs[ 'class' ] += f' {AppConst.CALC_TARGET_CLASS}'   # keep money styling
+                    cell.widget.attrs[ f'data-{AppConst.CALC_DATA_ATTR}' ] = str( ei )
                 self.fields[ self._amount_key( ei, si ) ] = cell
 
     @staticmethod
@@ -132,6 +133,7 @@ class RecurringExpensesForm( forms.Form ):
         durable = expense.count is not None
         return {
             'name'        : expense.name,
+            'calc_id'     : ei,
             'cadence'     : cadence_cells(
                 self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ),
             'count_entry' : durable,

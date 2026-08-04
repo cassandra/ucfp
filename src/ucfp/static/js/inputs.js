@@ -485,16 +485,23 @@ window.App.Inputs = (function () {
         return parseAmount( $panel.find( selector ).val() ) || 0;
     }
 
-    function updateCalculator( $calc ) {
-        const $panel   = $calc.find( classSelector( C.CALC_PANEL_CLASS ) );
+    // A calculator's parts (toggle, panel, target[s]) are linked by a shared data-calc id, so its panel
+    // may live anywhere -- a full-width detail row, or inline beside the amount -- not only within a
+    // common ancestor. `calcById` selects a part by class + that id.
+    function calcById( id, selector ) {
+        return $( selector + '[' + dataAttr( C.CALC_DATA_ATTR ) + '="' + id + '"]' );
+    }
+
+    function updateCalculator( id ) {
+        const $panel   = calcById( id, classSelector( C.CALC_PANEL_CLASS ) );
         const count    = calcNumber( $panel, '[name^="count_"]' );
         const cost     = calcNumber( $panel, '[name^="cost_"]' );
         const lifespan = calcNumber( $panel, '[name^="lifespan_"]' ) || 1;
         const annual   = Math.round( ( count * cost ) / lifespan );
-        // The readout mirrors the amount target, both thousands-grouped like every money value once the
-        // page has enhanced -- so the live preview reads the same as a saved-and-reloaded amount.
-        $calc.find( classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? groupedThousands( annual ) : '' );
-        $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( groupedThousands( annual ) );
+        // The readout (inside the panel) mirrors the amount target, both thousands-grouped like every
+        // money value once enhanced -- so the live preview reads the same as a saved-and-reloaded amount.
+        calcById( id, classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? groupedThousands( annual ) : '' );
+        $panel.find( classSelector( C.CALC_READOUT_CLASS ) ).text( groupedThousands( annual ) );
     }
 
     $( function () {
@@ -600,16 +607,17 @@ window.App.Inputs = (function () {
             saveForm( $form );
         } );
 
-        // Reveal/hide a durable's item calculator panel.
+        // Reveal/hide a durable's calculator panel, matched to the toggle by its data-calc id.
         $( 'body' ).on( 'click', classSelector( C.CALC_TOGGLE_CLASS ), function () {
-            const $panel = $( this ).closest( classSelector( C.CALC_CLASS ) )
-                .find( classSelector( C.CALC_PANEL_CLASS ) );
+            const $panel = calcById( $( this ).attr( dataAttr( C.CALC_DATA_ATTR ) ),
+                                     classSelector( C.CALC_PANEL_CLASS ) );
             $panel.prop( 'hidden', ! $panel.prop( 'hidden' ) );
         } );
 
         // Recompute a calculator's total + per-year and fill its amount target(s) as its inputs change.
         $( 'body' ).on( 'input change', classSelector( C.CALC_PANEL_CLASS ) + ' :input', function () {
-            updateCalculator( $( this ).closest( classSelector( C.CALC_CLASS ) ) );
+            updateCalculator( $( this ).closest( classSelector( C.CALC_PANEL_CLASS ) )
+                .attr( dataAttr( C.CALC_DATA_ATTR ) ) );
         } );
 
         // Mirror a property-expense row's Default into its blank per-property cells' placeholders as it

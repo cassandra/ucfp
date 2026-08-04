@@ -231,11 +231,48 @@ a:hover, a:focus {
     z-index: 1030;
 }
 
-/* Date, number, and money inputs read better at a natural width than the full column. */
+/* Date and number inputs read better at a natural width than the full column. */
 .form-control.js-date,
-.form-control[type="number"],
-.form-control.js-money {
+.form-control[type="number"] {
     max-width: 12rem;
+}
+
+/* Money inputs are sized for the largest value allowed (8 digits + 2 commas) and no wider, with the
+   number right-aligned as currency reads -- so amounts line up as a number column. */
+.form-control.js-money {
+    max-width: 8rem;
+    text-align: right;
+}
+
+/* The money affix group sizes to its content (not its container), so a money field flows inline (in a
+   calculator line) and right-aligns in a number cell, rather than stretching to fill the width. */
+.input-group:has( .form-control.js-money ) {
+    display: inline-flex;
+    width: auto;
+    vertical-align: middle;
+}
+
+/* Narrow integer inputs (a cadence count, a calculator's item count / replacement years) and the unit
+   select stay inline and compact -- a couple of digits wide -- rather than stacking full-width and
+   inflating the row height. */
+.input-count,
+.cadence-unit {
+    display: inline-block;
+    vertical-align: middle;
+}
+.input-count {
+    width: 3.5rem;
+}
+.cadence-unit {
+    width: auto;
+}
+
+/* A durable's calculator opens as a full-width detail row directly under its expense row; drop the
+   border between the pair so they read as one visual row. The border above the expense row and below
+   the detail row still separate the group from its neighbours. */
+.calc-detail > td {
+    border-top: 0;
+    padding-top: 0;
 }
 
 /* Percent inputs carry a % affix (always an input-group), so their up/down spinners are noise --
