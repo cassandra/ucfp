@@ -16,7 +16,7 @@ from dataclasses import replace
 
 from django import forms
 
-from common.forms import MoneyField
+from common.forms import CHOOSE_PLACEHOLDER, MoneyField
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
@@ -68,8 +68,11 @@ class IncomeTableForm( forms.Form ):
 
     def _add_general_fields( self, i : int, flow ):
         self.fields[ self._key( 'g', i, 'name' ) ] = forms.CharField(
-            required = False, max_length = 100, initial = flow.name if flow is not None else None )
-        subject = forms.ChoiceField( required = False, choices = self._subject_choices() )
+            required = False, max_length = 100, initial = flow.name if flow is not None else None,
+            widget = forms.TextInput( attrs = { 'class' : 'form-control' } ) )
+        subject = forms.ChoiceField(
+            required = False, choices = self._subject_choices(),
+            widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
         if flow is not None:
             subject.initial = flow.subject_handle if flow.subject_handle is not None else self._HOUSEHOLD
             self.fields[ self._key( 'g', i, 'remove' ) ] = forms.BooleanField( required = False )
@@ -104,7 +107,7 @@ class IncomeTableForm( forms.Form ):
         household  = [ ( self._HOUSEHOLD, 'Household' ) ]
         if len( candidates ) == 1:
             return candidates + household
-        return [ ( '', 'Choose...' ) ] + candidates + household
+        return [ ( '', CHOOSE_PLACEHOLDER ) ] + candidates + household
 
     def _default_subject( self, subject : str ) -> str:
         """The chosen subject, or the sole subject when there is only one; None when several and none
@@ -128,10 +131,6 @@ class IncomeTableForm( forms.Form ):
                 'handle'  : self[ self._key( 'g', i, 'handle' ) ] if existing else None,
                 'cadence' : 'year',
                 'remove'  : self[ self._key( 'g', i, 'remove' ) ] if existing else None } )
-        for k, rental in enumerate( self._rentals ):
-            rows.append( {
-                'kind'         : 'rental', 'name' : rental.name, 'subject_name' : 'Household',
-                'amount'       : self[ self._key( 'r', k, 'amount' ) ], 'cadence' : 'month' } )
         for m, subject in enumerate( self._subjects ):
             rows.append( { 'kind' : 'entitlement', 'subject_name' : subject.name, 'name' : 'Social Security',
                            'amount' : self[ self._key( 's', m, 'ssamt' ) ], 'cadence' : 'month',
@@ -139,6 +138,12 @@ class IncomeTableForm( forms.Form ):
             rows.append( { 'kind' : 'entitlement', 'subject_name' : subject.name, 'name' : 'Pension',
                            'amount' : self[ self._key( 's', m, 'penamt' ) ], 'cadence' : 'year',
                            'note' : 'base benefit' } )
+        # Rentals last -- after the general lines and each person's entitlements -- since they are a
+        # household-level, per-property source rather than an individual's income.
+        for k, rental in enumerate( self._rentals ):
+            rows.append( {
+                'kind'         : 'rental', 'name' : rental.name, 'subject_name' : 'Rental',
+                'amount'       : self[ self._key( 'r', k, 'amount' ) ], 'cadence' : 'month' } )
         return rows
 
     # --- apply -------------------------------------------------------------

@@ -11,6 +11,11 @@ from django.forms.widgets import Input
 from common.widgets import MoneyInput, PercentInput
 
 
+# The one standard label for a select's blank "nothing chosen yet" option, so every dropdown's
+# placeholder reads the same. Change it here to restyle the placeholder everywhere at once.
+CHOOSE_PLACEHOLDER = '-- Choose --'
+
+
 class _AffixField( forms.DecimalField ):
     """A DecimalField whose default widget renders a currency / percent affix.
 

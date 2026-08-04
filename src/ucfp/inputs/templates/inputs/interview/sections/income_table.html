@@ -11,7 +11,7 @@ background; only a genuine input error (a negative amount) re-renders here.
     {% csrf_token %}
     <table class="table table-sm w-auto">
       <thead>
-        <tr><th>Subject</th><th>Income</th><th>Amount</th><th>Per</th><th></th></tr>
+        <tr><th>Attribution</th><th>Income Source</th><th>Amount</th><th>Per</th><th></th></tr>
       </thead>
       <tbody>
         {% for row in income_form.income_rows %}
@@ -28,7 +28,6 @@ background; only a genuine input error (a negative amount) re-renders here.
         {% endfor %}
       </tbody>
     </table>
-    <p class="text-muted small">Fill the blank row to add an income line. When each income runs is set
-      in the Retirement step. Changes save automatically.</p>
+    <p class="text-muted small">Fill the blank row to add an income line.</p>
   </form>
 </div>

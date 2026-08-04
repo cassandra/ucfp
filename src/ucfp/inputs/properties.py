@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 
 from django import forms
 
-from common.forms import MoneyField, StyledFormMixin
+from common.forms import CHOOSE_PLACEHOLDER, MoneyField, StyledFormMixin
 
 from ucfp.accounts.enums import AssetClass, RealPropertyType
 from ucfp.environment.constants import AppConst
@@ -173,7 +173,7 @@ class RentalForm( _PropertyForm ):
         widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
     property_type    = forms.ChoiceField(
         label = 'Property type', required = False,
-        choices = [ ( '', '-- Choose --' ) ] + [ ( k.name, k.label ) for k in RealPropertyType ] )
+        choices = [ ( '', CHOOSE_PLACEHOLDER ) ] + [ ( k.name, k.label ) for k in RealPropertyType ] )
 
     @staticmethod
     def _asset_initial( asset ) -> dict:
