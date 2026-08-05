@@ -1,19 +1,30 @@
 {% extends "pages/app_base.html" %}
 
 {% block app_content %}
-<h1 class="mb-3">Organization settings</h1>
+<h1 class="mb-1">Organization settings</h1>
+<p class="text-muted">Settings that apply across your whole organization.</p>
 
-<form method="post" action="{% url 'organization_settings' %}">
+<form method="post" action="{% url 'organization_settings' %}" style="max-width: 40rem">
   {% csrf_token %}
-  <div class="form-group">
-    <label for="{{ form.currency.id_for_label }}">Currency</label>
-    {{ form.currency }}
-    {% if form.currency.errors %}
-    <div class="text-danger small">{{ form.currency.errors|join:" " }}</div>
-    {% endif %}
-    <small class="form-text text-muted">Used to display all monetary values. All planning uses this
-      single currency.</small>
+
+  {# One section card per group of related settings; further groups arrive as their own cards below. #}
+  <div class="card mb-3">
+    <div class="card-header py-2"><h2 class="h6 mb-0">Display</h2></div>
+    <div class="card-body">
+      <div class="form-group mb-0">
+        <label for="{{ form.currency.id_for_label }}">Display currency</label>
+        {{ form.currency }}
+        {% if form.currency.errors %}
+        <div class="text-danger small">{{ form.currency.errors|join:" " }}</div>
+        {% endif %}
+        <small class="form-text text-muted">Sets how amounts are shown &mdash; the currency symbol and
+          decimal convention (e.g. $1,000.00, or &yen;1,000 with no decimals). Display only: the app never
+          converts values or reinterprets the underlying numbers.</small>
+      </div>
+    </div>
   </div>
-  <button type="submit" class="btn btn-primary">Save</button>
+
+  {# One Save for the whole form; new section cards slot in above it. #}
+  <button type="submit" class="btn btn-primary">Save settings</button>
 </form>
 {% endblock %}
