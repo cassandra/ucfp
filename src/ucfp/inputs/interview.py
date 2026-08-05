@@ -70,6 +70,7 @@ class Section:
     aggregates: tuple = ( Aggregate.PROFILE, )
     form: Optional[ type ] = None
     outer_template: Optional[ str ] = None   # the section's self-saving pane, rendered above Next
+    rail_title: Optional[ str ] = None       # the stepper's label when it should read shorter than the title
 
 
 # The People section's state income-tax picker. The blank choice is the "no named state" case
@@ -822,10 +823,11 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/events.html' ),
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
-             outer_template = 'inputs/interview/sections/external_factors.html' ),
+             outer_template = 'inputs/interview/sections/external_factors.html',
+             rail_title = 'Assumptions' ),   # the flow heading already says "Assumptions"
     # Selling costs (realtor fee + fixed costs) applied when a property is sold -- an assumption, but
     # distinct from the economic outlook, so its own step after it.
-    Section( 'transaction-costs', 'Selling Costs', ( Aggregate.ASSUMPTIONS, ),
+    Section( 'transaction-costs', 'Sales', ( Aggregate.ASSUMPTIONS, ),
              TransactionCostsSectionForm,
              outer_template = 'inputs/interview/sections/transaction_costs.html' ),
 ]
