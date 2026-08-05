@@ -72,11 +72,8 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
                            {% if row.selected %}checked{% endif %}>{{ row.label }}
                     <span class="text-muted small">{{ row.cadence }}</span></td>
                   {% for cell in row.cells %}
-                  <td class="text-right" style="width:7rem">
-                    <div class="input-group input-group-sm">
-                      <div class="input-group-prepend"><span class="input-group-text">$</span></div>{{ cell }}
-                    </div>
-                  </td>
+                  {# MoneyField renders its own $-prefixed input-group; inputs.js groups the thousands. #}
+                  <td class="text-right" style="width:8.5rem">{{ cell }}</td>
                   {% endfor %}
                 </tr>
                 {% endfor %}
@@ -139,7 +136,8 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
                 <input type="checkbox" class="curate-check d-none mr-1" data-key="{{ row.handle }}"
                        {% if row.selected %}checked{% endif %}>
                 <label class="mb-0 mr-auto font-weight-normal">{{ row.label }}</label>
-                <div style="width:6rem">{{ row.field }}</div>
+                {# PercentField renders its own %-suffixed input-group. #}
+                <div class="text-nowrap" style="width:7.5rem">{{ row.field }}</div>
               </div>
             </div>
             {% endfor %}
@@ -167,85 +165,37 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
 </div>
 
 {% comment %}
-SCENARIO controls: one Save button (below) commits the working copy per each card's "when you save" toggle
--- every component set to update writes to this scenario; any set to a new copy branches a new one (named).
-The drift drill-down shows what an update would change.
+RESULTS: the run toolbar (re-project the auto-saved edits, browse recent transient runs, keep a run's
+output) sits directly above the selected run's table -- the run→see half of the tweak→run→see loop, kept
+together. Keeping a run saves only that output; the scenario is unaffected.
 {% endcomment %}
-<div class="card mb-3">
-  <div class="card-body d-flex flex-wrap align-items-center">
-    <div class="mr-auto my-1">
-      {% if drift %}
-      <div class="small">Differs from <strong>{{ source.label }}</strong> — {{ drift_summary }}.</div>
-      <details class="mt-1">
-        <summary class="small text-primary" style="cursor:pointer">Show all changes</summary>
-        <ul class="small mb-0 mt-1">
-          {% for change in drift %}<li>{{ change }}</li>{% endfor %}
-        </ul>
-      </details>
-      {% else %}
-      <div class="small text-muted">No changes from <strong>{{ source.label }}</strong>.</div>
-      {% endif %}
-    </div>
-
-    {% comment %}
-    One Save. The per-card radios post with this form (form= association); the name shows and the label
-    flips to "Save as new" when any card is "copy" (see the script below).
-    {% endcomment %}
-    <form method="post" action="{% url 'explore_save' %}" id="explore-save-form" class="my-1 mr-3">
-      {% csrf_token %}
-      <div class="form-inline">
-        <input type="text" name="name" id="explore-save-name" class="form-control form-control-sm mr-2 d-none"
-               placeholder="New scenario name" aria-label="New scenario name">
-        <button type="submit" id="explore-save-button" class="btn btn-success btn-sm"
-                data-update-label="Update &ldquo;{{ source.label }}&rdquo;" data-new-label="Save as new">Save</button>
-      </div>
-      <div class="small text-muted mt-1">Your edits are held in a working copy — nothing is kept until you save.</div>
-    </form>
-
-    {% comment %}
-    Discard the sandbox and its run history and start over from the anchor -- the explicit hard restart
-    (re-entering the same scenario from the hub resumes instead).
-    {% endcomment %}
-    <form method="post" action="{% url 'explore_reset' %}" class="my-1">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-outline-danger btn-sm"
-              title="Discard your changes and run history, starting over from the saved scenario">
-        Reset to &ldquo;{{ source.label }}&rdquo;</button>
-    </form>
-  </div>
-</div>
-
-{% comment %}
-RE-RUN controls (second): re-project the auto-saved edits, browse recent transient runs, or keep one's
-output. Keeping a run saves only that output; the scenario is unaffected.
-{% endcomment %}
-<div class="card mb-3">
-  <div class="card-body py-2 d-flex flex-wrap align-items-center">
-    <form method="post" action="{% url 'explore' %}" class="my-1 mr-3">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-primary">&#8635; Re-run</button>
-    </form>
-    <div class="d-flex align-items-center flex-wrap my-1 mr-auto">
-      <span class="text-muted small mr-2">Recent runs</span>
-      {% for result in transient_runs %}
-      <a href="{% url 'explore' %}?run={{ result.run.uuid }}"
-         class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}">
-        {{ result.label }}</a>
-      {% endfor %}
-    </div>
-    <form method="post" action="{% url 'explore_keep_run' %}" class="my-1">
-      {% csrf_token %}
-      <input type="hidden" name="run" value="{{ selected.run.uuid }}">
-      <button type="submit" class="btn btn-outline-success btn-sm"
-              title="Save this run's output; the scenario is unaffected">Keep this run</button>
-    </form>
-  </div>
-</div>
-
-{# BOTTOM: selected run's results #}
 <div class="card mb-4">
   <div class="card-body">
-    <div class="d-flex align-items-baseline justify-content-between mb-2">
+    <div class="d-flex flex-wrap align-items-center mb-3">
+      <form method="post" action="{% url 'explore' %}" class="my-1 mr-3">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary">{% icon 'rotate' size='sm' css_class='mr-1' %}Re-run</button>
+      </form>
+      <div class="d-flex align-items-center flex-wrap my-1 mr-auto">
+        <span class="text-muted small mr-2">Run history</span>
+        {% for result in transient_runs %}
+        <a href="{% url 'explore' %}?run={{ result.run.uuid }}"
+           class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}"
+           title="View this run's output">{{ result.label }}</a>
+        {% endfor %}
+        {% if transient_runs|length == 1 %}
+        {# Only the baseline exists yet, so the history can't compare anything -- point the way to a second run. #}
+        <span class="text-muted small font-italic">Re-run after a tweak to compare.</span>
+        {% endif %}
+      </div>
+      <form method="post" action="{% url 'explore_keep_run' %}" class="my-1">
+        {% csrf_token %}
+        <input type="hidden" name="run" value="{{ selected.run.uuid }}">
+        <button type="submit" class="btn btn-outline-success btn-sm"
+                title="Save this run's output; the scenario is unaffected">Keep this run</button>
+      </form>
+    </div>
+    <div class="d-flex align-items-baseline justify-content-between mb-2 border-top pt-2">
       <h2 class="h5 mb-0">Results <span class="text-muted small">— {{ selected.label }}</span></h2>
       {% if stopped_early %}
         <span class="text-danger font-weight-bold small">Money ran out before the horizon.</span>
@@ -256,6 +206,47 @@ output. Keeping a run saves only that output; the scenario is unaffected.
     {% include "planning/pages/run_books_table.html" %}
   </div>
 </div>
+
+{% comment %}
+CONCLUDE (sticky): the working copy is transient until saved here, so this bar appears only when it differs
+from the anchor. One Save commits per each input card's "when you save" toggle -- components set to update
+write to this scenario, any set to a new copy branch a new one (named); the drill-down shows what an update
+would change. Reset discards the sandbox and its run history. As the page's last flow element it docks at
+the end and floats above the long table until then, staying reachable without interrupting tweak→run→see.
+{% endcomment %}
+{% if drift %}
+<div class="explore-conclude-bar border-top shadow-sm bg-white py-2 px-3">
+  <div class="d-flex flex-wrap align-items-center">
+    <div class="mr-auto my-1 small">
+      Differs from <strong>{{ source.label }}</strong> — {{ drift_summary }}.
+      <details class="d-inline-block align-middle ml-1">
+        <summary class="text-primary" style="cursor:pointer">Show all changes</summary>
+        <ul class="mb-0 mt-1">
+          {% for change in drift %}<li>{{ change }}</li>{% endfor %}
+        </ul>
+      </details>
+    </div>
+    {% comment %}
+    One Save. The per-card radios post with this form (form= association); the name field shows and the
+    label flips to "Save as new" when any card is "copy" (see the script below).
+    {% endcomment %}
+    <form method="post" action="{% url 'explore_save' %}" id="explore-save-form" class="form-inline my-1 mr-3">
+      {% csrf_token %}
+      <input type="text" name="name" id="explore-save-name" class="form-control form-control-sm mr-2 d-none"
+             placeholder="New scenario name" aria-label="New scenario name">
+      <button type="submit" id="explore-save-button" class="btn btn-success btn-sm"
+              data-update-label="Update &ldquo;{{ source.label }}&rdquo;" data-new-label="Save as new">Save</button>
+    </form>
+    <form method="post" action="{% url 'explore_reset' %}" class="my-1">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-danger btn-sm"
+              title="Discard your changes and run history, starting over from the saved scenario">
+        Reset to &ldquo;{{ source.label }}&rdquo;</button>
+    </form>
+  </div>
+  <div class="small text-muted mt-1">Your edits are held in a working copy — nothing is kept until you save.</div>
+</div>
+{% endif %}
 
 {% comment %}
 Curate a section's visible inputs. The gear reveals every input and its checkbox; "Done" collapses back

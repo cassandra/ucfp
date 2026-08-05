@@ -269,6 +269,16 @@ a:hover, a:focus {
 .notice-item--info    { border-left-color: var(--info-color);    background-color: var(--info-bg-light);    }
 .notice-item--warning { border-left-color: var(--warning-color); background-color: var(--warning-bg-light); }
 
+/* The Explore conclude bar: the working copy's save/reset controls. As the page's last flow element it
+   sticks to the bottom of the viewport -- floating above the long results table so it stays reachable
+   during tweak→run→see -- then docks at the page end. It spans the content column (not fixed to the
+   viewport), so it aligns with the page rather than overhanging it. */
+.explore-conclude-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1020;
+}
+
 /* An Assumptions input list (economic factors, selling costs) is a fixed, readable width, so each row's
    help wraps under its label and value rather than stretching across the page, and the value right-aligns
    in a consistent column. The percent inputs hold only a few digits, so keep them narrow. */
@@ -519,6 +529,24 @@ a:hover, a:focus {
 }
 .btn-outline-danger:focus {
     box-shadow: 0 0 0 0.2rem var(--error-highlight-color) !important;
+}
+
+/* Success outline mirrors the solid .btn-success theming (Bootstrap's default variant is a different
+   green); no --success-highlight token exists, so the base colour carries hover/border and an rgba of it
+   the focus ring. */
+.btn-outline-success {
+    color: var(--success-color) !important;
+    border-color: var(--success-color) !important;
+    background-color: transparent !important;
+}
+.btn-outline-success:hover, .btn-outline-success:focus,
+.btn-outline-success:active, .btn-outline-success.active {
+    color: var(--on-success-color) !important;
+    background-color: var(--success-color) !important;
+    border-color: var(--success-color) !important;
+}
+.btn-outline-success:focus {
+    box-shadow: 0 0 0 0.2rem rgba(23, 114, 25, 0.40) !important;
 }
 
 /* Pagination themed to the palette (pairs with the {% pagination_url %} tag). */
