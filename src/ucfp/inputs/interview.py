@@ -824,7 +824,7 @@ SECTIONS = [
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html',
-             rail_title = 'Assumptions' ),   # the flow heading already says "Assumptions"
+             rail_title = 'Economics' ),   # the flow heading already says "Assumptions"
     # Selling costs (realtor fee + fixed costs) applied when a property is sold -- an assumption, but
     # distinct from the economic outlook, so its own step after it.
     Section( 'transaction-costs', 'Sales', ( Aggregate.ASSUMPTIONS, ),
