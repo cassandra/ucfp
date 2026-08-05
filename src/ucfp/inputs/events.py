@@ -124,9 +124,10 @@ class EventType:
     """One kind of plan event. The common case is a single dated amount feeding one engine input;
     a subclass overrides only the references it needs, its summary, and how it contributes."""
 
-    kind       : EventKind
-    group      : str
-    has_amount : bool = True
+    kind        : EventKind
+    group       : str
+    has_amount  : bool = True
+    description : str  = ''   # a one-line "what this is", shown under the add form's title
 
     @property
     def label( self ) -> str:
@@ -177,8 +178,9 @@ class EventType:
 
 
 class TransferEvent( EventType ):
-    kind  = EventKind.TRANSFER
-    group = _ACCOUNTS_GROUP
+    kind        = EventKind.TRANSFER
+    group       = _ACCOUNTS_GROUP
+    description = 'Move money between two of your accounts.'
 
     def references( self, profile ) -> list:
         return [ ReferenceSpec( SOURCE_ROLE, 'From account', _accounts ),
@@ -224,9 +226,10 @@ class TransferEvent( EventType ):
 
 
 class SellPropertyEvent( EventType ):
-    kind       = EventKind.SELL_PROPERTY
-    group      = _PROPERTY_GROUP
-    has_amount = False   # the sale price is the projected value, not a user figure
+    kind        = EventKind.SELL_PROPERTY
+    group       = _PROPERTY_GROUP
+    has_amount  = False   # the sale price is the projected value, not a user figure
+    description = 'Sell a property at its projected value; any mortgage is paid from the proceeds.'
 
     def references( self, profile ) -> list:
         return [ ReferenceSpec( PROPERTY_ROLE, 'Property', _properties ) ]
@@ -317,8 +320,9 @@ class CardPayoffEvent( EventType ):
 
 
 class TaxableReceiptEvent( EventType ):
-    kind  = EventKind.TAXABLE_RECEIPT
-    group = _MONEY_IN_GROUP
+    kind        = EventKind.TAXABLE_RECEIPT
+    group       = _MONEY_IN_GROUP
+    description = 'A one-off taxable amount someone receives (taxed as ordinary income).'
 
     def references( self, profile ) -> list:
         return [ ReferenceSpec( RECIPIENT_ROLE, 'Recipient', _subjects ) ]
@@ -336,8 +340,9 @@ class TaxableReceiptEvent( EventType ):
 
 
 class TaxFreeReceiptEvent( EventType ):
-    kind  = EventKind.TAX_FREE_RECEIPT
-    group = _MONEY_IN_GROUP
+    kind        = EventKind.TAX_FREE_RECEIPT
+    group       = _MONEY_IN_GROUP
+    description = 'A one-off tax-free amount received -- a gift, inheritance, or payout.'
 
     def summary( self, event : PlanEvent, profile ) -> str:
         return f'Tax-free receipt of {_money( event.amount )}'
@@ -348,8 +353,9 @@ class TaxFreeReceiptEvent( EventType ):
 
 
 class GeneralPaymentEvent( EventType ):
-    kind  = EventKind.GENERAL_PAYMENT
-    group = _MONEY_OUT_GROUP
+    kind        = EventKind.GENERAL_PAYMENT
+    group       = _MONEY_OUT_GROUP
+    description = 'A one-off payment out of the plan.'
 
     def summary( self, event : PlanEvent, profile ) -> str:
         return f'Payment of {_money( event.amount )}'
@@ -378,21 +384,24 @@ class _DeductiblePaymentEvent( EventType ):
 
 
 class CharitablePaymentEvent( _DeductiblePaymentEvent ):
-    kind      = EventKind.CHARITABLE_PAYMENT
-    tax_class = ExpenseTaxClass.CHARITABLE
-    noun      = 'Charitable gift'
+    kind        = EventKind.CHARITABLE_PAYMENT
+    tax_class   = ExpenseTaxClass.CHARITABLE
+    noun        = 'Charitable gift'
+    description = 'A one-off charitable gift (tax-deductible).'
 
 
 class MedicalPaymentEvent( _DeductiblePaymentEvent ):
-    kind      = EventKind.MEDICAL_PAYMENT
-    tax_class = ExpenseTaxClass.MEDICAL
-    noun      = 'Medical expense'
+    kind        = EventKind.MEDICAL_PAYMENT
+    tax_class   = ExpenseTaxClass.MEDICAL
+    noun        = 'Medical expense'
+    description = 'A one-off medical expense (tax-deductible).'
 
 
 class DeathEvent( EventType ):
-    kind       = EventKind.DEATH
-    group      = _HOUSEHOLD_GROUP
-    has_amount = False
+    kind        = EventKind.DEATH
+    group       = _HOUSEHOLD_GROUP
+    has_amount  = False
+    description = "Project a household member's death to model its financial impact."
 
     def references( self, profile ) -> list:
         return [ ReferenceSpec( SUBJECT_ROLE, 'Subject', _subjects ) ]
@@ -479,6 +488,18 @@ class EventForm( forms.Form ):
         if event_type.has_amount:
             self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
         self.fields[ 'date' ] = forms.DateField( label = 'Date', widget = IsoDateInput() )
+
+    @property
+    def reference_fields( self ):
+        """The reference pickers as bound fields, in order -- rendered as their own row, so the amount
+        and date stay paired below them regardless of how many references a kind has."""
+        return [ self[ self._role_field( spec.role ) ]
+                 for spec in self._event_type.references( self._profile ) ]
+
+    @property
+    def amount_field( self ):
+        """The bound amount field, or None for a kind that carries none."""
+        return self[ 'amount' ] if 'amount' in self.fields else None
 
     @staticmethod
     def _role_field( role : str ) -> str:

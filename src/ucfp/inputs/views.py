@@ -1350,7 +1350,8 @@ class EventAddView( View ):
         event_type = self._event_type( kind )
         return render_to_string(
             self._FORM_TEMPLATE,
-            { 'form': form, 'kind': kind, 'group': event_type.group, 'title': event_type.label },
+            { 'form': form, 'kind': kind, 'group': event_type.group, 'title': event_type.label,
+              'description': event_type.description },
             request = request )
 
     def _list( self, request, profile, plans ):
