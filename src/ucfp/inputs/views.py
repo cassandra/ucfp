@@ -1347,8 +1347,11 @@ class EventAddView( View ):
             self._MENU_TEMPLATE, { 'menu': menu_context( profile ) }, request = request )
 
     def _form( self, request, kind, form ):
+        event_type = self._event_type( kind )
         return render_to_string(
-            self._FORM_TEMPLATE, { 'form': form, 'kind': kind }, request = request )
+            self._FORM_TEMPLATE,
+            { 'form': form, 'kind': kind, 'group': event_type.group, 'title': event_type.label },
+            request = request )
 
     def _list( self, request, profile, plans ):
         return render_to_string(

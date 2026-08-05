@@ -462,22 +462,23 @@ def events_context( profile, plans ) -> list:
 # --- Forms ----------------------------------------------------------------
 
 class EventForm( forms.Form ):
-    """The add form for one event kind, built from its `EventType`: a date, an amount (when the
-    kind carries one), and a picker per reference. A single candidate is shown pre-selected, so the
-    user sees and confirms what the event acts on; more than one prepends a placeholder, so the user
-    must choose (no silent default). `build_event` returns the `PlanEvent` to append."""
-
-    date = forms.DateField( label = 'Date', widget = IsoDateInput() )
+    """The add form for one event kind, built from its `EventType`: a picker per reference, an amount
+    (when the kind carries one), and a date -- in that reading order. A single candidate is shown
+    pre-selected, so the user sees and confirms what the event acts on; more than one prepends a
+    placeholder, so the user must choose (no silent default). `build_event` returns the `PlanEvent`."""
 
     def __init__( self, data = None, *, event_type = None, profile = None ):
         super().__init__( data )
         self._event_type = event_type
         self._profile    = profile
-        if event_type.has_amount:
-            self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
+        # Order the form the way one describes an event: what it acts on, then how much, then when.
         for spec in event_type.references( profile ):
             self.fields[ self._role_field( spec.role ) ] = forms.ChoiceField(
-                label = spec.label, choices = self._choices( spec.choices( profile ) ) )
+                label = spec.label, choices = self._choices( spec.choices( profile ) ),
+                widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
+        if event_type.has_amount:
+            self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
+        self.fields[ 'date' ] = forms.DateField( label = 'Date', widget = IsoDateInput() )
 
     @staticmethod
     def _role_field( role : str ) -> str:
