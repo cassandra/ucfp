@@ -9,20 +9,20 @@ one more control. Reads `factors_form`.
   <form method="post" action="{% url 'external_factors' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <h6>Economic factors <span class="text-muted font-weight-normal small">(percent per year)</span></h6>
-    <table class="table table-sm w-auto mt-2 align-middle">
-      <tbody>
-        {% for group in factors_form.factor_groups %}
-        <tr class="table-light"><th colspan="2">{{ group.label }}</th></tr>
-        {% for factor in group.factors %}
-        <tr>
-          <th scope="row" class="font-weight-normal text-left">{{ factor.field.label_tag }}
-            <span class="text-muted d-block small">{{ factor.help }}</span></th>
-          <td class="text-right">{{ factor.field }}{% if factor.field.errors %}<span class="text-danger small d-block">{{ factor.field.errors|join:" " }}</span>{% endif %}</td>
-        </tr>
-        {% endfor %}
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="factor-list mt-2">
+      {% for group in factors_form.factor_groups %}
+      <div class="font-weight-bold border-bottom pb-1 mt-3 mb-2">{{ group.label }}</div>
+      {% for factor in group.factors %}
+      <div class="mb-2">
+        <div class="d-flex justify-content-between align-items-center">
+          {{ factor.field.label_tag }}
+          <div class="text-nowrap">{{ factor.field }}{% if factor.field.errors %}<span class="text-danger small d-block">{{ factor.field.errors|join:" " }}</span>{% endif %}</div>
+        </div>
+        <div class="text-muted small pl-3">{{ factor.help }}</div>
+      </div>
+      {% endfor %}
+      {% endfor %}
+    </div>
     <div class="mt-3">
       {{ factors_form.forecast_type.label_tag }} {{ factors_form.forecast_type }}
       {% if factors_form.forecast_type.errors %}<span class="text-danger small d-block">{{ factors_form.forecast_type.errors|join:" " }}</span>{% endif %}
