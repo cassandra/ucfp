@@ -147,6 +147,7 @@ class FinancialForecastView( InputGatedMixin, View ):
         started_scenario = next( ( s for s in in_progress if scenario_started( s ) ), None )
         return {
             'has_profile'  : profile_record is not None,   # a *complete* profile
+            'effective_date' : profile_record.effective_date if profile_record else None,
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
             'build_scenario'         : started_scenario or ( in_progress[ 0 ] if in_progress else None ),
             'build_scenario_started' : started_scenario is not None,

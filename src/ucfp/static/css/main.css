@@ -245,6 +245,11 @@ a:hover, a:focus {
     max-width: 5rem;
 }
 
+/* The forecast frame's duration is a small year count, so keep its input narrow. */
+.forecast-setup .form-control[type="number"] {
+    max-width: 5rem;
+}
+
 /* An Assumptions input list (economic factors, selling costs) is a fixed, readable width, so each row's
    help wraps under its label and value rather than stretching across the page, and the value right-aligns
    in a consistent column. The percent inputs hold only a few digits, so keep them narrow. */
