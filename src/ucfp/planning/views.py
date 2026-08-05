@@ -194,15 +194,33 @@ class RunResultsView( View ):
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run = from_json_data( ProjectionRun, record.data )
         books = BooksOfAccountRepository().load( record.books )
+        dated_notices = [ ( step.end_date.year, notice )
+                          for step in run.result.steps for notice in step.notices ]
+        worst_severity = max( ( notice.severity for _, notice in dated_notices ),
+                              default = None, key = lambda severity : severity.value )
         context = {
-            'record'        : record,
-            'stopped_early' : run.result.stopped_early,
-            'notices'       : [ ( step.end_date.year, notice.kind.label,
-                                  notice.severity.label, notice.amount, notice.detail )
-                                for step in run.result.steps for notice in step.notices ],
+            'record'           : record,
+            'stopped_early'    : run.result.stopped_early,
+            'notices'          : [ self._notice_row( year, notice )
+                                   for year, notice in dated_notices ],
+            # The worst severity present tints the collapsed toggle, previewing what is inside.
+            'notices_severity' : str( worst_severity ) if worst_severity else None,
         }
         context.update( run_books_table_context( request, run, books ) )
         return render( request, _RESULTS_TEMPLATE, context )
+
+    @staticmethod
+    def _notice_row( year, notice ):
+        """A notice flattened for display. `severity` is the lowercase token ('info'/'warning')
+        that drives the row's colour classes; `severity_label` is its human title."""
+        return {
+            'year'           : year,
+            'kind'           : notice.kind.label,
+            'severity'       : str( notice.severity ),
+            'severity_label' : notice.severity.label,
+            'amount'         : notice.amount,
+            'detail'         : notice.detail,
+        }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

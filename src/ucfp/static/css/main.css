@@ -250,6 +250,25 @@ a:hover, a:focus {
     max-width: 5rem;
 }
 
+/* Run notices. The collapsed toggle is tinted by the worst severity present, so its colour previews
+   what is inside before it is expanded; each expanded line carries its own severity accent (a leading
+   icon, a left border, and a light background). Styled from our semantic tokens rather than Bootstrap's
+   outline-* variants, which are not themed to our palette. */
+.notices-toggle {
+    border: 1px solid currentColor;
+}
+.notices-toggle--info    { color: var(--info-color);    }
+.notices-toggle--warning { color: var(--warning-color); }
+.notices-toggle--info:hover,    .notices-toggle--info:focus    { background-color: var(--info-bg-light);    }
+.notices-toggle--warning:hover, .notices-toggle--warning:focus { background-color: var(--warning-bg-light); }
+
+.notice-item {
+    border-left: 3px solid transparent;
+    border-radius: 2px;
+}
+.notice-item--info    { border-left-color: var(--info-color);    background-color: var(--info-bg-light);    }
+.notice-item--warning { border-left-color: var(--warning-color); background-color: var(--warning-bg-light); }
+
 /* An Assumptions input list (economic factors, selling costs) is a fixed, readable width, so each row's
    help wraps under its label and value rather than stretching across the page, and the value right-aligns
    in a consistent column. The percent inputs hold only a few digits, so keep them narrow. */

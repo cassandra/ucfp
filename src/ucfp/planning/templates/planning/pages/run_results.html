@@ -1,5 +1,5 @@
 {% extends "pages/app_base.html" %}
-{% load common_tags %}
+{% load common_tags icons %}
 
 {% block app_content %}
 <nav aria-label="breadcrumb">
@@ -20,15 +20,24 @@
 
 {% if notices %}
 <p class="mb-2">
-  <button class="btn btn-sm btn-outline-secondary" type="button" data-toggle="collapse"
-          data-target="#run-notices" aria-expanded="false" aria-controls="run-notices">
-    Notices ({{ notices|length }})
+  <button class="btn btn-sm notices-toggle notices-toggle--{{ notices_severity }}" type="button"
+          data-toggle="collapse" data-target="#run-notices"
+          aria-expanded="false" aria-controls="run-notices">
+    {% if notices_severity == 'warning' %}{% icon 'warning' size='sm' css_class='mr-1' %}{% else %}{% icon 'info-circle' size='sm' css_class='mr-1' %}{% endif %}Notices ({{ notices|length }})
   </button>
 </p>
 <div class="collapse mb-3" id="run-notices">
-  <ul class="mb-0">
-    {% for year, kind, severity, amount, detail in notices %}
-    <li>{{ year }}: {{ kind }} ({{ severity }}){% if amount %} &mdash; {{ amount|money:currency }}{% if detail %} {{ detail }}{% endif %}{% endif %}</li>
+  <ul class="list-unstyled mb-0">
+    {% for notice in notices %}
+    <li class="notice-item notice-item--{{ notice.severity }} d-flex align-items-start px-2 py-1 mb-1">
+      <span class="text-{{ notice.severity }} mr-2 flex-shrink-0" title="{{ notice.severity_label }}">
+        {% if notice.severity == 'warning' %}{% icon 'warning' size='sm' %}{% else %}{% icon 'info-circle' size='sm' %}{% endif %}
+      </span>
+      <span>
+        <span class="text-muted small mr-1">{{ notice.year }}</span>
+        <span class="font-weight-bold">{{ notice.kind }}</span>{% if notice.amount %} &mdash; {{ notice.amount|money:currency }}{% if notice.detail %} {{ notice.detail }}{% endif %}{% endif %}
+      </span>
+    </li>
     {% endfor %}
   </ul>
 </div>
