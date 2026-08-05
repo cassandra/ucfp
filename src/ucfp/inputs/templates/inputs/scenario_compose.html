@@ -7,16 +7,16 @@ Scenarios page. The choosers list only complete components, so the combined scen
 {% endcomment %}
 
 {% block app_content %}
-<h1 class="mb-1">New Future Scenario</h1>
+<h1 class="mb-1">New scenario</h1>
 <p class="text-muted mb-4">Scenarios</p>
 
 <div class="row">
   <div class="col-lg-7">
     <div class="card">
       <div class="card-body">
-        <p>A <strong>Future Scenario</strong> pairs a set of <strong>Plans</strong> with a set of
-          <strong>Assumptions</strong>. Pick the combination to project and name it. To vary the Plans or
-          Assumptions themselves, clone or add one on the <a href="{% url 'scenarios_home' %}">Scenarios
+        <p>A <strong>scenario</strong> pairs a set of <strong>Plans</strong> with a set of
+          <strong>Assumptions</strong>. Pick which to pair and name it. To vary the Plans or
+          Assumptions themselves, add or clone one on the <a href="{% url 'scenarios_home' %}">Scenarios
           page</a> first.</p>
         <form method="post" action="{% url 'scenario_compose' %}" class="mt-3">
           {% csrf_token %}

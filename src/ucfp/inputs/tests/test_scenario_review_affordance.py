@@ -1,9 +1,11 @@
-"""The Scenarios home exposes the full-scenario walk on complete scenarios, not only in-progress ones.
+"""The Scenarios home as a scenario review hub.
 
-`ScenarioEditView` is the single op behind the walk (Plans -> Assumptions) and has never guarded on
-completeness, but the home template used to render its trigger only `{% if not row.complete %}` -- so a
+`ScenarioEditView` is the single op behind the full walk (Plans -> Assumptions) and has never guarded on
+completeness, but the home template used to render its trigger only for in-progress scenarios -- so a
 finished scenario offered no way back into the whole flow. The home now renders that trigger for every
-scenario, labelled by state: "Finish setup" while in progress, "Review scenario" once complete.
+scenario, labelled by state ("Finish setup" / "Review scenario"), and frames each scenario as a hero card
+whose Plans and Assumptions are nested parts (each with a quiet Edit), with the component library demoted
+behind a "Manage components" toggle.
 """
 from datetime import date
 
@@ -35,7 +37,7 @@ def _acknowledge_flow( record, profile, flow ):
     record.save( update_fields = [ 'acknowledged_sections' ] )
 
 
-class ScenarioReviewAffordanceTests( TestCase ):
+class _ScenariosHomeTestBase( TestCase ):
 
     def setUp( self ):
         self.organization = Organization.objects.create( name = 'Org' )
@@ -60,16 +62,22 @@ class ScenarioReviewAffordanceTests( TestCase ):
             _acknowledge_flow( assumptions, self.profile, 'assumptions' )
         return create_scenario( self.organization, plans, assumptions, label = label )
 
-    def _home_request( self ):
+    def _home_content( self ):
         request = self.factory.get( '/inputs/scenarios/' )
         request.organization  = self.organization
         request.session_state = SessionState()
         request.session       = dict()
-        return request
+        return ScenariosHomeView().get( request ).content.decode()
+
+
+class ScenarioReviewAffordanceTests( _ScenariosHomeTestBase ):
 
     def test_scenario_edit_enters_the_full_flow_for_a_complete_scenario( self ):
         scenario = self._scenario( complete = True, label = 'Done' )
-        request  = self._home_request()
+        request  = self.factory.get( '/inputs/scenarios/' )
+        request.organization  = self.organization
+        request.session_state = SessionState()
+        request.session       = dict()
 
         response = ScenarioEditView().post( request, uuid = scenario.uuid )
 
@@ -83,7 +91,7 @@ class ScenarioReviewAffordanceTests( TestCase ):
         done = self._scenario( complete = True, label = 'Done' )
         half = self._scenario( complete = False, label = 'Half-built' )
 
-        content = ScenariosHomeView().get( self._home_request() ).content.decode()
+        content = self._home_content()
 
         self.assertIn( 'Review scenario', content )                 # the complete one is now re-enterable
         self.assertIn( 'Finish setup', content )                    # the in-progress one keeps its label
@@ -94,7 +102,58 @@ class ScenarioReviewAffordanceTests( TestCase ):
     def test_home_omits_review_when_no_scenario_is_complete( self ):
         self._scenario( complete = False, label = 'Half-built' )
 
-        content = ScenariosHomeView().get( self._home_request() ).content.decode()
+        content = self._home_content()
 
         self.assertNotIn( 'Review scenario', content )
         self.assertIn( 'Finish setup', content )
+
+
+class ScenarioHeroLayoutTests( _ScenariosHomeTestBase ):
+
+    def test_scenario_shows_its_parts_with_edit_links_and_inline_rename( self ):
+        scenario = self._scenario( complete = True, label = 'Done' )
+
+        content = self._home_content()
+
+        # The scenario's own Plans and Assumptions are nested parts, each reachable via its edit flow.
+        self.assertIn( reverse( 'plans_edit', args = [ scenario.plans.uuid ] ), content )
+        self.assertIn( reverse( 'assumptions_edit', args = [ scenario.assumptions.uuid ] ), content )
+        # The scenario name is inline-renamable (the parts are not).
+        self.assertIn( reverse( 'scenario_rename', args = [ scenario.uuid ] ), content )
+
+    def test_component_library_is_tucked_behind_the_manage_collapse( self ):
+        self._scenario( complete = True, label = 'Done' )
+
+        content = self._home_content()
+
+        # The library still exists, but only inside the collapsed "manage" region, named for the user
+        # (not the internal "components").
+        self.assertIn( 'Manage individual Plans and Assumptions', content )
+        self.assertIn( 'id="manage-components"', content )
+        self.assertIn( 'class="collapse"', content )
+        self.assertIn( '+ New plan', content )
+
+    def test_new_scenario_creation_is_present_but_demoted( self ):
+        self._scenario( complete = True, label = 'Done' )
+
+        content = self._home_content()
+
+        self.assertIn( '+ New scenario', content )
+        self.assertIn( reverse( 'scenario_compose' ), content )
+
+    def test_the_only_scenario_offers_no_delete( self ):
+        scenario = self._scenario( complete = True, label = 'Only' )
+
+        content = self._home_content()
+
+        # A household keeps at least one scenario, so the sole scenario's delete control is suppressed.
+        self.assertNotIn( 'Delete scenario', content )
+        self.assertNotIn( reverse( 'scenario_delete', args = [ scenario.uuid ] ), content )
+
+    def test_delete_appears_once_a_second_scenario_exists( self ):
+        self._scenario( complete = True, label = 'One' )
+        self._scenario( complete = True, label = 'Two' )
+
+        content = self._home_content()
+
+        self.assertIn( 'Delete scenario', content )

@@ -1,17 +1,19 @@
 {% extends "pages/app_base.html" %}
 
 {% comment %}
-The Scenarios landing. Lists the organization's saved scenarios -- each with an inline rename, a delete,
-and (while in progress) a "Finish setup" -- and manages the Plans and Assumptions components a scenario
-combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links to no single feature.
+The Scenarios landing, framed as a review hub: the scenario is the hero, its Plans and Assumptions are its
+nested parts (each with a quiet Edit into that part's flow), and the prominent action re-enters the whole
+Plans->Assumptions walk. Creating scenarios and managing the component library (rename / clone / delete /
+new) are demoted -- a quiet "new scenario" link and a "Manage components" toggle -- so the common
+single-scenario case stays uncluttered. Feature-agnostic: it links to no single feature.
 {% endcomment %}
 
 {% block app_content %}
 <h1 class="mb-2">Scenarios</h1>
 <p class="text-muted">
   A <strong>Scenario</strong> pairs a set of <strong>Plans</strong> (the future you're contemplating)
-  with a set of <strong>Assumptions</strong> (the economy and tax outlook to project under). Build and
-  manage scenarios here.
+  with a set of <strong>Assumptions</strong> (the economy and tax outlook to project under). Review and
+  refine your scenarios here.
 </p>
 
 {% if not profile_complete %}
@@ -19,126 +21,118 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
 {% include 'inputs/panes/profile_required.html' %}
 {% else %}
 
-<div class="card mb-4">
-  <div class="card-header bg-white d-flex align-items-center">
-    <strong>Your scenarios</strong>
-    <span class="ml-auto small text-muted">a plan + an outlook, named</span>
-  </div>
-  <ul class="list-group list-group-flush">
-    {% for row in scenarios %}
-    <li class="list-group-item d-flex align-items-center py-2">
-      {% url 'scenario_rename' row.scenario.uuid as rename_url %}
-      {% include 'inputs/panes/inline_rename.html' with kind='scenario' uuid=row.scenario.uuid rename_url=rename_url label=row.scenario.label aria='Scenario name' bold=True %}
-      <span class="d-flex align-items-center flex-shrink-0">
-        <span class="small text-muted mr-3">
-          {{ row.scenario.plans.label }} + {{ row.scenario.assumptions.label }}
-          {% if not row.complete %}<span class="badge badge-secondary ml-1">in progress</span>{% endif %}
-        </span>
-        {% comment %}One op (scenario_edit) behind a state-aware label: resume a half-built scenario, or
-        re-enter a complete one to review it -- the full Plans->Assumptions walk, now reachable on complete
-        scenarios too.{% endcomment %}
-        <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0 mr-3">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-sm btn-link p-0">{% if row.complete %}Review scenario{% else %}Finish setup{% endif %} &rarr;</button>
-        </form>
-        <form method="post" action="{% url 'scenario_delete' row.scenario.uuid %}" class="m-0"
-              data-confirm="Delete &quot;{{ row.scenario.label }}&quot;? Its Plans and Assumptions are kept. This cannot be undone.">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
-        </form>
-      </span>
-    </li>
-    {% empty %}
-    <li class="list-group-item text-muted small">No scenarios yet.</li>
-    {% endfor %}
-  </ul>
-  <div class="card-footer bg-white border-0">
-    <a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary btn-sm">+ New Future Scenario</a>
-  </div>
+{% for row in scenarios %}
+{% include 'inputs/panes/scenario_card.html' %}
+{% empty %}
+<div class="card mb-3">
+  <div class="card-body text-muted">No scenarios yet &mdash; create one to begin.</div>
+</div>
+{% endfor %}
+
+{% comment %}
+Creation and component management are demoted for the common single-scenario case: a quiet "new scenario"
+link and a "Manage components" toggle that reveals the component library only when asked.
+{% endcomment %}
+<div class="d-flex flex-wrap align-items-center mt-2 mb-3">
+  <a href="{% url 'scenario_compose' %}" class="btn btn-link btn-sm p-0 mr-4">+ New scenario</a>
+  <button class="btn btn-link btn-sm p-0 text-muted" type="button" data-toggle="collapse"
+          data-target="#manage-components" aria-expanded="false" aria-controls="manage-components">
+    Manage individual Plans and Assumptions
+  </button>
 </div>
 
-<h2 class="h5 mb-3">Components</h2>
-<div class="row">
-  <div class="col-lg-6 mb-4">
-    <div class="card h-100">
-      <div class="card-header bg-white d-flex align-items-center">
-        <strong>Plans</strong>
-        <span class="ml-auto small text-muted">strategies to compare</span>
-      </div>
-      <ul class="list-group list-group-flush">
-        {% for row in plans %}
-        <li class="list-group-item d-flex align-items-center py-2">
-          {% url 'plans_rename' row.record.uuid as rename_url %}
-          {% include 'inputs/panes/inline_rename.html' with kind='plan' uuid=row.record.uuid rename_url=rename_url label=row.record.label aria='Plan name' %}
-          <span class="d-flex align-items-center flex-shrink-0">
-            {% if row.complete %}
-            <a href="{% url 'plans_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
-            <form method="post" action="{% url 'plans_clone' row.record.uuid %}" class="m-0 mr-3">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
-            </form>
-            {% else %}
-            <span class="badge badge-secondary mr-2">needs setup</span>
-            <a href="{% url 'plans_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
-            {% endif %}
-            <form method="post" action="{% url 'plans_delete' row.record.uuid %}" class="m-0"
-                  data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
-            </form>
-          </span>
-        </li>
-        {% empty %}
-        <li class="list-group-item text-muted small">No plans yet.</li>
-        {% endfor %}
-      </ul>
-      <div class="card-footer bg-white border-0">
-        <form method="post" action="{% url 'plans_new' %}" class="m-0">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New plan</button>
-        </form>
+{% comment %}
+The component library: the Plans and Assumptions sets a scenario combines, with inline rename, edit, clone,
+delete, and new. Collapsed by default -- it is the varying-and-comparing machinery, which only matters once
+you keep more than one set around.
+{% endcomment %}
+<div class="collapse" id="manage-components">
+  <div class="row">
+    <div class="col-lg-6 mb-4">
+      <div class="card h-100">
+        <div class="card-header bg-white d-flex align-items-center">
+          <strong>Plans</strong>
+          <span class="ml-auto small text-muted">strategies to compare</span>
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for row in plans %}
+          <li class="list-group-item d-flex align-items-center py-2">
+            {% url 'plans_rename' row.record.uuid as rename_url %}
+            {% include 'inputs/panes/inline_rename.html' with kind='plan' uuid=row.record.uuid rename_url=rename_url label=row.record.label aria='Plan name' %}
+            <span class="d-flex align-items-center flex-shrink-0">
+              {% if row.complete %}
+              <a href="{% url 'plans_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+              <form method="post" action="{% url 'plans_clone' row.record.uuid %}" class="m-0 mr-3">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+              </form>
+              {% else %}
+              <span class="badge badge-secondary mr-2">needs setup</span>
+              <a href="{% url 'plans_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
+              {% endif %}
+              {% if plans|length > 1 %}
+              <form method="post" action="{% url 'plans_delete' row.record.uuid %}" class="m-0"
+                    data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
+              </form>
+              {% endif %}
+            </span>
+          </li>
+          {% empty %}
+          <li class="list-group-item text-muted small">No plans yet.</li>
+          {% endfor %}
+        </ul>
+        <div class="card-footer bg-white border-0">
+          <form method="post" action="{% url 'plans_new' %}" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New plan</button>
+          </form>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="col-lg-6 mb-4">
-    <div class="card h-100">
-      <div class="card-header bg-white d-flex align-items-center">
-        <strong>Assumptions</strong>
-        <span class="ml-auto small text-muted">outlook to vary</span>
-      </div>
-      <ul class="list-group list-group-flush">
-        {% for row in assumptions %}
-        <li class="list-group-item d-flex align-items-center py-2">
-          {% url 'assumptions_rename' row.record.uuid as rename_url %}
-          {% include 'inputs/panes/inline_rename.html' with kind='assumptions' uuid=row.record.uuid rename_url=rename_url label=row.record.label aria='Assumptions name' %}
-          <span class="d-flex align-items-center flex-shrink-0">
-            {% if row.complete %}
-            <a href="{% url 'assumptions_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
-            <form method="post" action="{% url 'assumptions_clone' row.record.uuid %}" class="m-0 mr-3">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
-            </form>
-            {% else %}
-            <span class="badge badge-secondary mr-2">needs setup</span>
-            <a href="{% url 'assumptions_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
-            {% endif %}
-            <form method="post" action="{% url 'assumptions_delete' row.record.uuid %}" class="m-0"
-                  data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
-            </form>
-          </span>
-        </li>
-        {% empty %}
-        <li class="list-group-item text-muted small">No assumptions yet.</li>
-        {% endfor %}
-      </ul>
-      <div class="card-footer bg-white border-0">
-        <form method="post" action="{% url 'assumptions_new' %}" class="m-0">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New assumptions</button>
-        </form>
+    <div class="col-lg-6 mb-4">
+      <div class="card h-100">
+        <div class="card-header bg-white d-flex align-items-center">
+          <strong>Assumptions</strong>
+          <span class="ml-auto small text-muted">outlook to vary</span>
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for row in assumptions %}
+          <li class="list-group-item d-flex align-items-center py-2">
+            {% url 'assumptions_rename' row.record.uuid as rename_url %}
+            {% include 'inputs/panes/inline_rename.html' with kind='assumptions' uuid=row.record.uuid rename_url=rename_url label=row.record.label aria='Assumptions name' %}
+            <span class="d-flex align-items-center flex-shrink-0">
+              {% if row.complete %}
+              <a href="{% url 'assumptions_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+              <form method="post" action="{% url 'assumptions_clone' row.record.uuid %}" class="m-0 mr-3">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
+              </form>
+              {% else %}
+              <span class="badge badge-secondary mr-2">needs setup</span>
+              <a href="{% url 'assumptions_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
+              {% endif %}
+              {% if assumptions|length > 1 %}
+              <form method="post" action="{% url 'assumptions_delete' row.record.uuid %}" class="m-0"
+                    data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
+              </form>
+              {% endif %}
+            </span>
+          </li>
+          {% empty %}
+          <li class="list-group-item text-muted small">No assumptions yet.</li>
+          {% endfor %}
+        </ul>
+        <div class="card-footer bg-white border-0">
+          <form method="post" action="{% url 'assumptions_new' %}" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New assumptions</button>
+          </form>
+        </div>
       </div>
     </div>
   </div>

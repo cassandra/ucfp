@@ -82,13 +82,17 @@ class ScenariosHomeView( View ):
         assumptions = self._component_rows( assumptions_for( organization ), profile, 'assumptions' )
         complete_ids = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
                          { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
+        scenario_rows = self._scenario_rows( organization, *complete_ids )
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
             'profile_complete' : profile_record is not None,
-            'scenarios'        : self._scenario_rows( organization, *complete_ids ),
+            'scenarios'        : scenario_rows,
             'plans'            : plans,
             'assumptions'      : assumptions,
+            # The last scenario / component is not deletable -- a household keeps at least one of each, so
+            # the page suppresses its delete control (the collection would otherwise strand the empty state).
+            'can_delete_scenario' : len( scenario_rows ) > 1,
         } )
 
     @staticmethod
