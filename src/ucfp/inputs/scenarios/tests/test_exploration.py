@@ -164,6 +164,7 @@ class ScenarioExplorationTest( TestCase ):
 
     def test_deleting_the_anchor_cascades_and_tears_down_the_owned_working_copy( self ):
         source      = self._saved( _rich_scenario(), 'Base' )
+        self._saved( _rich_scenario(), 'Other' )       # a second saved scenario so deleting the anchor is allowed
         exploration = enter_exploration( self.organization, source )
         working_id, plans_id, assumptions_id = (
             exploration.working_id, exploration.working.plans_id, exploration.working.assumptions_id )
