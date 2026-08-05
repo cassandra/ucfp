@@ -19,11 +19,11 @@ scenario is the editing context; its parts are reached from it. Reads `row` -- a
     <div class="row">
       <div class="col-md-6 mb-2 mb-md-0">
         {% url 'plans_edit' row.scenario.plans.uuid as plans_edit_url %}
-        {% include 'inputs/panes/scenario_part.html' with kind='Plans' description="the future you're contemplating" record=row.scenario.plans edit_url=plans_edit_url %}
+        {% include 'inputs/panes/scenario_part.html' with kind='Plans' description="the future you're contemplating" record=row.scenario.plans edit_url=plans_edit_url uses=row.plans_uses %}
       </div>
       <div class="col-md-6">
         {% url 'assumptions_edit' row.scenario.assumptions.uuid as assumptions_edit_url %}
-        {% include 'inputs/panes/scenario_part.html' with kind='Assumptions' description="the economy and tax outlook" record=row.scenario.assumptions edit_url=assumptions_edit_url %}
+        {% include 'inputs/panes/scenario_part.html' with kind='Assumptions' description="the economy and tax outlook" record=row.scenario.assumptions edit_url=assumptions_edit_url uses=row.assumptions_uses %}
       </div>
     </div>
   </div>

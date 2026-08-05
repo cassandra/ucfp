@@ -169,3 +169,44 @@ class ScenarioHeroLayoutTests( _ScenariosHomeTestBase ):
         content = self._home_content()
 
         self.assertIn( 'Delete scenario', content )
+
+
+class ScenarioMultiplicityTests( _ScenariosHomeTestBase ):
+    """With more than one scenario, a component backing several shows a "shared" indicator, and the
+    component library is surfaced (shown) rather than tucked behind the toggle."""
+
+    def _component( self, model, label ):
+        record = model( organization = self.organization, label = label )
+        ( save_plans if model is PlansRecord else save_assumptions )(
+            record, Plans() if model is PlansRecord else Assumptions() )
+        return record
+
+    def test_a_component_backing_several_scenarios_shows_a_shared_indicator( self ):
+        shared_plans = self._component( PlansRecord, 'Shared Plans' )
+        create_scenario( self.organization, shared_plans, self._component( AssumptionsRecord, 'A1' ), 'S1' )
+        create_scenario( self.organization, shared_plans, self._component( AssumptionsRecord, 'A2' ), 'S2' )
+
+        content = self._home_content()
+
+        self.assertIn( '>Shared</span>', content )
+
+    def test_a_singly_used_component_shows_no_shared_indicator( self ):
+        self._scenario( complete = True, label = 'Solo' )       # its own Plans and Assumptions, used once
+
+        content = self._home_content()
+
+        self.assertNotIn( '>Shared</span>', content )
+
+    def test_library_is_surfaced_open_with_multiple_scenarios( self ):
+        self._scenario( complete = True, label = 'One' )
+        self._scenario( complete = True, label = 'Two' )
+
+        self.assertIn( 'class="collapse show"', self._home_content() )
+
+    def test_library_stays_collapsed_with_a_single_scenario( self ):
+        self._scenario( complete = True, label = 'Only' )
+
+        content = self._home_content()
+
+        self.assertIn( 'id="manage-components"', content )
+        self.assertNotIn( 'class="collapse show"', content )

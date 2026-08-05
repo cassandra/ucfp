@@ -7,6 +7,7 @@ flow and `InterviewView` drives one section at a time over the typed aggregates.
 standalone first setup; the Plans/Assumptions flows compose into a scenario (the build flow chains them).
 The remaining views are the sub-editors each section pane drills into.
 """
+from collections import Counter
 from dataclasses import replace
 
 from django import forms
@@ -115,12 +116,18 @@ class ScenariosHomeView( View ):
 
     @staticmethod
     def _scenario_rows( organization, plans_ids, assumptions_ids ):
-        """Each saved scenario as a `{scenario, complete}` row -- complete when both its components' flows
-        are walked -- so an in-progress one (e.g. the freshly-created Default) can offer to resume setup."""
+        """Each saved scenario as a row -- `complete` (both components' flows walked, so an in-progress one
+        can offer to resume setup) plus how many scenarios share each of its components (`plans_uses` /
+        `assumptions_uses`), which drives the "shared" indicator when the same set backs several scenarios."""
+        scenarios   = list( scenarios_for( organization ).select_related( 'plans', 'assumptions' ) )
+        plans_uses       = Counter( scenario.plans_id for scenario in scenarios )
+        assumptions_uses = Counter( scenario.assumptions_id for scenario in scenarios )
         rows = list()
-        for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' ):
+        for scenario in scenarios:
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
-            rows.append( { 'scenario': scenario, 'complete': complete } )
+            rows.append( { 'scenario': scenario, 'complete': complete,
+                           'plans_uses': plans_uses[ scenario.plans_id ],
+                           'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
         return rows
 
 

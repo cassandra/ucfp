@@ -30,23 +30,25 @@ single-scenario case stays uncluttered. Feature-agnostic: it links to no single 
 {% endfor %}
 
 {% comment %}
-Creation and component management are demoted for the common single-scenario case: a quiet "new scenario"
-link and a "Manage components" toggle that reveals the component library only when asked.
+Creation and component management are demoted for the common single-scenario case -- a quiet "new scenario"
+link and a "Manage individual Plans and Assumptions" toggle -- but once more than one scenario exists the
+user is comparing, so the library is surfaced open by default (still collapsible).
 {% endcomment %}
 <div class="d-flex flex-wrap align-items-center mt-2 mb-3">
   <a href="{% url 'scenario_compose' %}" class="btn btn-link btn-sm p-0 mr-4">+ New scenario</a>
   <button class="btn btn-link btn-sm p-0 text-muted" type="button" data-toggle="collapse"
-          data-target="#manage-components" aria-expanded="false" aria-controls="manage-components">
+          data-target="#manage-components" aria-expanded="{% if scenarios|length > 1 %}true{% else %}false{% endif %}"
+          aria-controls="manage-components">
     Manage individual Plans and Assumptions
   </button>
 </div>
 
 {% comment %}
 The component library: the Plans and Assumptions sets a scenario combines, with inline rename, edit, clone,
-delete, and new. Collapsed by default -- it is the varying-and-comparing machinery, which only matters once
-you keep more than one set around.
+delete, and new. It is the varying-and-comparing machinery -- collapsed while there is a single scenario,
+surfaced (shown) once there is more than one and comparison is the point.
 {% endcomment %}
-<div class="collapse" id="manage-components">
+<div class="collapse{% if scenarios|length > 1 %} show{% endif %}" id="manage-components">
   <div class="row">
     <div class="col-lg-6 mb-4">
       <div class="card h-100">
