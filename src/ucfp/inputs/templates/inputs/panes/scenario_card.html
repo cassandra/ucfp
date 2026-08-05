@@ -1,7 +1,8 @@
 {% comment %}
 One scenario as a hero card: its name (inline-renamable) with the prominent Review/Finish action, and its
 Plans and Assumptions shown as nested parts (label + description + a quiet Edit into that part's flow). The
-scenario is the editing context; its parts are reached from it. Reads `row` -- a {scenario, complete}.
+scenario is the editing context; its parts are reached from it. Reads `row` (a scenario with its `complete`
+flag and per-component `plans_uses`/`assumptions_uses` share counts) and `can_delete_scenario` from context.
 {% endcomment %}
 <div class="card mb-3">
   <div class="card-body">

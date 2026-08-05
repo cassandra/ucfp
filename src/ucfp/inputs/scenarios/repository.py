@@ -98,7 +98,11 @@ def delete_scenario( record: ScenarioRecord ) -> None:
     """Delete a scenario -- only the pairing; its Plans and Assumptions live on for other scenarios. If the
     scenario anchors an in-progress exploration, that exploration cascades away with it (see
     `ScenarioExploration`). Much of the app assumes a scenario exists, so the last one cannot be deleted:
-    the UI hides the control, and a request that still arrives is malformed (BadRequest -> 400)."""
+    the UI hides the control, and a request that still arrives is malformed (BadRequest -> 400).
+
+    The count-then-delete is deliberately not row-locked: a per-org scenario set is effectively
+    single-writer in practice, so the check-to-act race is not worth serializing here (revisit with a
+    `select_for_update` on the organization, as `ensure_default_scenario` does, if that ceases to hold)."""
     if scenarios_for( record.organization ).count() <= 1:
         raise BadRequest( 'Cannot delete the last scenario.' )
     record.delete()

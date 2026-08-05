@@ -188,7 +188,11 @@ class ScenarioMultiplicityTests( _ScenariosHomeTestBase ):
 
         content = self._home_content()
 
-        self.assertIn( '>Shared</span>', content )
+        # The badge is attributed to the shared Plans, not the distinct Assumptions -- catches the
+        # plans_uses / assumptions_uses counters being swapped (both cases would leave a bare "Shared" in
+        # the page, so a plain substring check would not).
+        self.assertRegex( content, r'Shared Plans\s*<span[^>]*>Shared</span>' )
+        self.assertNotRegex( content, r'>A[12]\s*<span[^>]*>Shared</span>' )
 
     def test_a_singly_used_component_shows_no_shared_indicator( self ):
         self._scenario( complete = True, label = 'Solo' )       # its own Plans and Assumptions, used once

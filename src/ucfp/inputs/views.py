@@ -11,8 +11,9 @@ from collections import Counter
 from dataclasses import replace
 
 from django import forms
-from django.db import transaction
 from django.core.exceptions import BadRequest
+from django.db import transaction
+from django.db.models import Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -78,21 +79,19 @@ class ScenariosHomeView( View ):
         organization   = request.organization
         profile_record = completed_profile( organization )
         profile        = load_profile( profile_record ) if profile_record is not None else None
-        # Fetch each component set once (prefetching each set's scenarios for the delete-cascade warning),
-        # then compute completeness on those rows -- `flow_reviewed` reads their JSON only, no extra query.
-        plans       = self._component_rows( plans_for( organization ), profile, 'plans' )
-        assumptions = self._component_rows( assumptions_for( organization ), profile, 'assumptions' )
-        complete_ids = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
-                         { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
-        scenario_rows = self._scenario_rows( organization, *complete_ids )
-        # A component is deletable only when it is not the last of its kind and its cascade would not
-        # strand the organization with no scenario -- the same two invariants the delete guards enforce.
-        for row in plans:
-            row[ 'deletable' ] = len( plans ) > 1 and not would_orphan_all_scenarios(
-                organization, plans = row[ 'record' ] )
-        for row in assumptions:
-            row[ 'deletable' ] = len( assumptions ) > 1 and not would_orphan_all_scenarios(
-                organization, assumptions = row[ 'record' ] )
+        # One pass over the saved scenarios drives both the scenario cards and the component rows: the
+        # per-component usage counts feed the "shared" indicator and, against the scenario total, the
+        # `deletable` flag -- so the page needs no per-row query to decide either.
+        scenarios        = list( scenarios_for( organization ).select_related( 'plans', 'assumptions' ) )
+        plans_uses       = Counter( scenario.plans_id for scenario in scenarios )
+        assumptions_uses = Counter( scenario.assumptions_id for scenario in scenarios )
+        plans       = self._component_rows(
+            plans_for( organization ), profile, 'plans', plans_uses, len( scenarios ) )
+        assumptions = self._component_rows(
+            assumptions_for( organization ), profile, 'assumptions', assumptions_uses, len( scenarios ) )
+        complete_ids  = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
+                          { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
+        scenario_rows = self._scenario_rows( scenarios, plans_uses, assumptions_uses, *complete_ids )
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
@@ -100,28 +99,37 @@ class ScenariosHomeView( View ):
             'scenarios'        : scenario_rows,
             'plans'            : plans,
             'assumptions'      : assumptions,
-            # The last scenario / component is not deletable -- a household keeps at least one of each, so
-            # the page suppresses its delete control (the collection would otherwise strand the empty state).
-            'can_delete_scenario' : len( scenario_rows ) > 1,
+            # A household keeps at least one scenario, so its sole scenario's delete control is suppressed.
+            'can_delete_scenario' : len( scenarios ) > 1,
         } )
 
     @staticmethod
-    def _component_rows( records, profile, flow ):
-        """Each component as a `{record, complete}` row -- complete when its flow is fully walked, so the
-        list can flag the ones still needing setup (an incomplete component is absent from scenario
-        building until finished). None profile means no completeness (the profile gate shows instead)."""
-        return [ { 'record': record,
-                   'complete': profile is not None and flow_reviewed( profile, record, flow ) }
-                 for record in records.prefetch_related( 'scenarios' ) ]
+    def _component_rows( records, profile, flow, uses, scenario_count ):
+        """Each component as a `{record, complete, deletable}` row. `complete` when its flow is fully walked
+        (an incomplete component is absent from scenario building; None profile means no completeness -- the
+        profile gate shows instead). `deletable` mirrors the delete guards in the UI: false for the last of
+        its kind, and false for a set every scenario pairs (whose deletion would cascade the org's last
+        scenario away) -- i.e. when its use-count equals `scenario_count`. `uses` maps a component's id to
+        how many scenarios pair it. The prefetch is scoped to SAVED scenarios so the delete-cascade warning
+        counts the same scenarios the guard does."""
+        saved    = Prefetch(
+            'scenarios', queryset = ScenarioRecord.objects.filter( usage_role = UsageRole.SAVED ) )
+        records  = list( records.prefetch_related( saved ) )
+        multiple = len( records ) > 1
+        rows = list()
+        for record in records:
+            paired_by_every_scenario = scenario_count > 0 and uses[ record.id ] == scenario_count
+            rows.append( { 'record': record,
+                           'complete': profile is not None and flow_reviewed( profile, record, flow ),
+                           'deletable': multiple and not paired_by_every_scenario } )
+        return rows
 
     @staticmethod
-    def _scenario_rows( organization, plans_ids, assumptions_ids ):
+    def _scenario_rows( scenarios, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
         """Each saved scenario as a row -- `complete` (both components' flows walked, so an in-progress one
         can offer to resume setup) plus how many scenarios share each of its components (`plans_uses` /
-        `assumptions_uses`), which drives the "shared" indicator when the same set backs several scenarios."""
-        scenarios   = list( scenarios_for( organization ).select_related( 'plans', 'assumptions' ) )
-        plans_uses       = Counter( scenario.plans_id for scenario in scenarios )
-        assumptions_uses = Counter( scenario.assumptions_id for scenario in scenarios )
+        `assumptions_uses`), which drives the "shared" indicator. `scenarios` and the usage counters are
+        prepared once by the caller so the page makes a single scenarios query."""
         rows = list()
         for scenario in scenarios:
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids

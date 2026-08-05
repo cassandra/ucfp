@@ -16,7 +16,7 @@ from ucfp.inputs.plans.repository import delete_plans, plans_for, save_plans
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.scenarios.repository import (
     create_scenario, delete_scenario, scenarios_for, would_orphan_all_scenarios )
-from ucfp.inputs.views import PlansDeleteView
+from ucfp.inputs.views import AssumptionsDeleteView, PlansDeleteView
 from ucfp.session_state import SessionState
 
 
@@ -114,6 +114,16 @@ class ComponentCascadeGuardTests( TestCase ):
         create_scenario( self.organization, used, self._assumptions( 'A' ), 'S' )
         self.assertFalse( would_orphan_all_scenarios( self.organization, plans = unused ) )
 
+    def test_a_component_every_scenario_shares_would_orphan( self ):
+        shared = self._plans( 'Shared' )                   # both scenarios pair the same Plans set
+        create_scenario( self.organization, shared, self._assumptions( 'A1' ), 'S1' )
+        create_scenario( self.organization, shared, self._assumptions( 'A2' ), 'S2' )
+        self.assertTrue( would_orphan_all_scenarios( self.organization, plans = shared ) )
+
+    def test_a_component_in_a_scenarioless_org_never_orphans( self ):
+        plans = self._plans( 'P' )                          # a Plans set exists, but no scenario pairs it
+        self.assertFalse( would_orphan_all_scenarios( self.organization, plans = plans ) )
+
     def test_plans_delete_view_refuses_a_cascade_that_would_orphan_scenarios( self ):
         plans = self._plans( 'P' )
         self._plans( 'Spare' )                                  # a second set, so the per-kind guard passes
@@ -126,3 +136,16 @@ class ComponentCascadeGuardTests( TestCase ):
         with self.assertRaises( BadRequest ):
             PlansDeleteView().post( request, uuid = plans.uuid )
         self.assertTrue( PlansRecord.objects.filter( pk = plans.pk ).exists() )   # not deleted
+
+    def test_assumptions_delete_view_refuses_a_cascade_that_would_orphan_scenarios( self ):
+        assumptions = self._assumptions( 'A' )
+        self._assumptions( 'Spare' )                        # a second set, so the per-kind guard passes
+        create_scenario( self.organization, self._plans( 'P' ), assumptions, 'S' )
+        request = RequestFactory().post( f'/inputs/assumptions/{assumptions.uuid}/delete/' )
+        request.organization  = self.organization
+        request.session_state = SessionState()
+        request.session       = dict()
+
+        with self.assertRaises( BadRequest ):
+            AssumptionsDeleteView().post( request, uuid = assumptions.uuid )
+        self.assertTrue( AssumptionsRecord.objects.filter( pk = assumptions.pk ).exists() )   # not deleted
