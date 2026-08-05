@@ -5,10 +5,9 @@ the section's Next form; both read the retirement accounts from the Profile and 
 Distinct from the tax *Assumptions* (the tax environment, e.g. current-law vs sunset): this section is
 where the user schedules the tax *moves*.
 {% endcomment %}
-<p class="text-muted">Advanced and optional: deliberate tax moves. Basic retirement funding is already
-  automatic -- Cash management draws from your accounts to cover shortfalls -- so use this section only
-  for tax strategy: Roth conversions and scheduled withdrawals (bracket-filling, RMDs, pre-conversion
-  draws).</p>
+<p class="text-muted">Optional tax strategy -- routine funding is already automatic (see Cash management).
+  Use this only for deliberate moves: Roth conversions and scheduled pre-tax withdrawals (bracket-filling,
+  RMDs).</p>
 <div class="row">
   {% comment %}
   Two equal columns -- pre-tax withdrawals on the left, Roth conversions on the right -- that stack on
@@ -22,3 +21,6 @@ where the user schedules the tax *moves*.
     {% include 'inputs/interview/sections/conversions_pane.html' with conversions_form=form.conversions_form %}
   </div>
 </div>
+<p class="text-muted small">Each draw or conversion is capped by the account's balance, so a schedule can
+  run indefinitely -- it simply stops once the account is depleted. No need to track how long the funds
+  last.</p>

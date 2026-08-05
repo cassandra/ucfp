@@ -71,3 +71,28 @@
     z-index: 1;
     background-color: var( --white );
 }
+
+
+/* Per-column actions menu. Beneath each header label sits a slim control band -- a full-width,
+   centred cog that is the menu toggle. Only the band is clickable (the label above is not), and its
+   fixed footing keeps the cog in one place regardless of how the label wraps, reading as a distinct
+   control row. It opens a menu of labelled actions, replacing the old cluster of tiny inline glyphs.
+   `data-boundary="viewport"` keeps the menu from being positioned against the scroll pane. */
+.bt-col-menu-toggle {
+    display: block;
+    width: 100%;
+    margin-top: 0.15rem;
+    padding: 0.1rem 0;
+    border: 0;
+    border-top: 1px solid rgba( 0, 0, 0, 0.08 );   /* delineates the control band from the label */
+    background: transparent;
+    color: var( --muted-color );
+    line-height: 1;
+    text-align: center;
+    cursor: pointer;
+}
+.bt-col-menu-toggle:hover,
+.bt-col-menu-toggle:focus {
+    color: var( --primary-color );
+    background-color: rgba( 0, 0, 0, 0.05 );
+}

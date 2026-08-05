@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from django import forms
 
+from common.forms import MoneyField, PercentField
 from common.rate import Rate
 from common.recurrence import TimeUnit
 
@@ -71,9 +72,8 @@ class LivingExpensesExploreForm( forms.Form ):
             cells = list()
             for band in range( len( self._bands ) ):
                 name          = self._field_name( expense.handle, band )
-                field         = forms.DecimalField( required = False, min_value = 0, label = expense.name )
+                field         = MoneyField( required = False, min_value = 0, label = expense.name )
                 field.initial = self._amount( expense, band )
-                field.widget.attrs[ 'class' ] = 'form-control form-control-sm'
                 self.fields[ name ] = field
                 cells.append( self[ name ] )
             self._rows.append( { 'handle' : expense.handle, 'label' : expense.name, 'cells' : cells,
@@ -127,9 +127,8 @@ class EconomicAssumptionsExploreForm( forms.Form ):
         chosen      = set( selected ) if selected is not None else set( _DEFAULT_RATE_FIELDS )
         self._rows  = list()
         for factor in ECONOMIC_FACTORS:
-            field         = forms.DecimalField( required = False, label = factor.label )
+            field         = PercentField( required = False, label = factor.label )
             field.initial = ( getattr( economics, factor.field ).fraction * 100 ) if economics is not None else None
-            field.widget.attrs.update( { 'class' : 'form-control form-control-sm', 'step' : '0.1' } )
             self.fields[ factor.field ] = field
             self._rows.append( { 'handle' : factor.field, 'label' : factor.label, 'field' : self[ factor.field ],
                                  'selected' : factor.field in chosen } )

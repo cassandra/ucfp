@@ -12,11 +12,19 @@ makes relevant.
   <form method="post" action="{% url 'residence' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <div class="{{ AppConst.SWITCH_CLASS }}">
-      {% include 'inputs/interview/_field.html' with field=residence_form.tenure %}
+      <div class="form-group">
+        <label class="text-muted small mb-1 d-block">{{ residence_form.tenure.label }}</label>
+        {% for radio in residence_form.tenure %}
+        <div class="form-check form-check-inline">
+          {{ radio.tag }}
+          <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+        </div>
+        {% endfor %}
+      </div>
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="own">
-        {% include 'inputs/interview/_field.html' with field=residence_form.home_value %}
-        {% include 'inputs/interview/_field.html' with field=residence_form.purchase_price %}
-        {% include 'inputs/interview/_field.html' with field=residence_form.mortgage_balance %}
+        {% include 'inputs/interview/_field_row.html' with field=residence_form.home_value %}
+        {% include 'inputs/interview/_field_row.html' with field=residence_form.purchase_price %}
+        {% include 'inputs/interview/_field_row.html' with field=residence_form.mortgage_balance %}
       </div>
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="rent">
         <p class="text-muted small">Your monthly rent is set with your other housing costs in Spending.</p>

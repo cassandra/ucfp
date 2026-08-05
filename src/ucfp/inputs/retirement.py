@@ -106,11 +106,13 @@ class RetirementForm( forms.Form ):
         """Tag a date/age pair so `inputs.js` keeps them in sync from the subject's fixed birthdate. The
         shared hooks come from `AppConst` so the client and this markup cannot drift."""
         shared = { f'data-{AppConst.BIRTHDATE_DATA_ATTR}' : birthdate.isoformat() }
+        # The date already carries `form-control js-date` from IsoDateInput, so only add the sync
+        # attributes here -- setting `class` would drop the control styling. The age is a plain
+        # NumberInput, so it gets both the control class and its sync class.
         self.fields[ date_key ].widget.attrs.update(
-            { 'class' : AppConst.DATE_FIELD_CLASS,
-              f'data-{AppConst.AGE_FIELD_DATA_ATTR}' : f'id_{age_key}', **shared } )
+            { f'data-{AppConst.AGE_FIELD_DATA_ATTR}' : f'id_{age_key}', **shared } )
         self.fields[ age_key ].widget.attrs.update(
-            { 'class' : AppConst.AGE_FIELD_CLASS,
+            { 'class' : f'form-control {AppConst.AGE_FIELD_CLASS}',
               f'data-{AppConst.DATE_FIELD_DATA_ATTR}' : f'id_{date_key}', **shared } )
 
     def _birthdate( self, handle : Optional[ str ] ) -> Optional[ date ]:

@@ -124,6 +124,25 @@
     border-color: #d6d8db;
 }
 
+/* Base link color: Bootstrap's default is its own blue (#007bff); use Trust Blue.
+   More-specific rules (navbar-dark links, .text-white, .text-reset) still win where
+   a link sits on a colored surface. */
+a {
+    color: var(--primary-color);
+}
+a:hover, a:focus {
+    color: var(--primary-highlight-color);
+}
+
+/* Link-styled buttons (.btn-link) carry Bootstrap's own link hue, overriding the base `a` rule, so
+   theme them too. A contextual override (e.g. .text-danger on a Remove button) still wins. */
+.btn-link {
+    color: var(--primary-color);
+}
+.btn-link:hover, .btn-link:focus {
+    color: var(--primary-highlight-color);
+}
+
 /* Map Bootstrap contextual text colors to the theme palette -- its .text-* utilities
    otherwise use Bootstrap's own hues (e.g. .text-primary would be #007bff, not Trust
    Blue). !important to match Bootstrap's own .text-* utilities. The paired .text-on-*
@@ -165,6 +184,204 @@
     color: #ffffff;
     font-weight: 600;
     box-shadow: inset 0 -3px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* Interview stepper: the active step on the brand blue, not Bootstrap's list-group blue. */
+.list-group-item.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* On the active (slate-blue) step, the reviewed / not-reviewed marker inherits the row's white
+   text so it contrasts, instead of a low-contrast green or muted grey on the blue. */
+.list-group-item.active .icon {
+    color: inherit;
+}
+
+/* A live, non-current step links to its section across the whole block (the anchor's stretched-link),
+   so show the block as clickable with a hover cue -- the affordance is not limited to the label text. */
+.list-group-item.stepper-clickable {
+    cursor: pointer;
+}
+.list-group-item.stepper-clickable:hover {
+    background-color: var(--muted-bg-light);
+}
+
+/* While a property (rental / second home) add or edit form is open in its editor slot, hide that
+   list's "Add ..." button, so the affordance and the open form are not shown at once. Progressive:
+   where :has is unsupported the button simply stays visible. */
+.property-pane:has(.property-editor form) .property-add {
+    display: none;
+}
+
+/* Interview advance bar: keep Next / Finish reachable without scrolling to the bottom of
+   a long section -- it sticks to the bottom of the viewport as a thin action bar. */
+.interview-advance {
+    position: sticky;
+    bottom: 0;
+    background-color: #ffffff;
+    border-top: 1px solid var(--line-color);
+    padding: 0.75rem 0;
+    margin-top: 1rem;
+    z-index: 2;                       /* above content, below pop-ups like the datepicker */
+}
+
+/* The datepicker pop-up must clear the sticky advance bar. */
+.datepicker {
+    z-index: 1030;
+}
+
+/* Date and number inputs read better at a natural width than the full column. */
+.form-control.js-date {
+    max-width: 8.5rem;   /* an ISO yyyy-mm-dd needs no more, so a date input does not sprawl */
+}
+.form-control[type="number"] {
+    max-width: 12rem;
+}
+
+/* The Debt-plan loan card's rate and remaining-term hold only a few digits, so keep those number inputs
+   narrow rather than letting them fill the column (the affixed rate/extra fields are already compact). */
+#debt-plan .form-control[type="number"] {
+    max-width: 5rem;
+}
+
+/* The forecast frame's duration is a small year count, so keep its input narrow. */
+.forecast-setup .form-control[type="number"] {
+    max-width: 5rem;
+}
+
+/* Run notices. The collapsed toggle is tinted by the worst severity present, so its colour previews
+   what is inside before it is expanded; each expanded line carries its own severity accent (a leading
+   icon, a left border, and a light background). Styled from our semantic tokens rather than Bootstrap's
+   outline-* variants, which are not themed to our palette. */
+.notices-toggle {
+    border: 1px solid currentColor;
+}
+.notices-toggle--info    { color: var(--info-color);    }
+.notices-toggle--warning { color: var(--warning-color); }
+.notices-toggle--info:hover,    .notices-toggle--info:focus    { background-color: var(--info-bg-light);    }
+.notices-toggle--warning:hover, .notices-toggle--warning:focus { background-color: var(--warning-bg-light); }
+
+.notice-item {
+    border-left: 3px solid transparent;
+    border-radius: 2px;
+}
+.notice-item--info    { border-left-color: var(--info-color);    background-color: var(--info-bg-light);    }
+.notice-item--warning { border-left-color: var(--warning-color); background-color: var(--warning-bg-light); }
+
+/* The Explore conclude bar: the working copy's save/reset controls. As the page's last flow element it
+   sticks to the bottom of the viewport -- floating above the long results table so it stays reachable
+   during tweak→run→see -- then docks at the page end. It spans the content column (not fixed to the
+   viewport), so it aligns with the page rather than overhanging it. */
+.explore-conclude-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1020;
+}
+
+/* An Assumptions input list (economic factors, selling costs) is a fixed, readable width, so each row's
+   help wraps under its label and value rather than stretching across the page, and the value right-aligns
+   in a consistent column. The percent inputs hold only a few digits, so keep them narrow. */
+.assumption-list {
+    max-width: 30rem;
+}
+.assumption-list .form-control[type="number"] {
+    max-width: 6rem;
+}
+
+/* A switch case that should hold its place when inactive (rather than collapsing and letting its
+   neighbours reflow): visually hidden but still laid out. Used for the credit-card mode fields so the
+   visible input stays in a fixed slot as the mode changes -- overrides the `hidden` attribute's
+   display:none for these elements only. */
+.keep-in-flow[hidden] {
+    display: block !important;   /* beat Bootstrap reboot's `[hidden] { display: none !important }` */
+    visibility: hidden;
+}
+
+/* Money inputs are sized for the largest value allowed (8 digits + 2 commas) and no wider, with the
+   number right-aligned as currency reads -- so amounts line up as a number column. */
+.form-control.js-money {
+    min-width: 4rem;
+    max-width: 8rem;
+    text-align: right;
+}
+
+/* The money affix group sizes to its content (not its container), so a money field flows inline (in a
+   calculator line) and right-aligns in a number cell, rather than stretching to fill the width. */
+.input-group:has( .form-control.js-money ) {
+    display: inline-flex;
+    flex-wrap: nowrap;   /* keep the $ affix on the input's line, not wrapped above it */
+    width: auto;
+    vertical-align: middle;
+}
+
+/* The interview's stepper is a fixed-width sidebar (md and up) with the section pane filling the rest,
+   so the rail stays as wide as its labels need -- never proportionally too wide on large screens, nor so
+   narrow the labels wrap. Below md the flex row collapses to stacked full-width blocks. */
+@media (min-width: 768px) {
+    .interview-stepper {
+        flex: 0 0 auto;
+        width: 13rem;
+    }
+}
+
+/* Narrow integer inputs (a cadence count, a calculator's item count / replacement years) and the unit
+   select stay inline and compact -- a couple of digits wide -- rather than stacking full-width and
+   inflating the row height. */
+.input-count,
+.input-age,
+.cadence-unit {
+    display: inline-block;
+    vertical-align: middle;
+}
+.input-count {
+    width: 4rem;
+}
+/* An age is a standard-height control (more padding than the -sm counts) plus a number spinner, so it
+   needs a touch more room -- matching the timing pane's age inputs. */
+.input-age {
+    width: 4.5rem;
+}
+.cadence-unit {
+    width: auto;
+}
+
+/* A durable's calculator opens as a full-width detail row directly under its expense row; drop the
+   border between the pair so they read as one visual row. The border above the expense row and below
+   the detail row still separate the group from its neighbours. */
+.calc-detail > td {
+    border-top: 0;
+    padding-top: 0;
+}
+
+/* Flag an amount that steps up or down from the previous age span, so a reader can scan which expenses
+   change with age. The whole money control (the $ addon and the field) is tinted so it stands out from
+   the unchanged white inputs, and a direction arrow sits to the right of the number -- where the eye
+   already is for right-aligned figures -- as a second, colour-independent cue. An unchanged cell still
+   renders the arrow, only hidden (.invisible), so every cell reserves the exact same width and the
+   numbers stay aligned in their column (once there is more than one span). */
+.span-changed .input-group-text,
+.span-changed .form-control.js-money {
+    background-color: var(--secondary-highlight-color);
+}
+.span-trend {
+    margin-left: 0.3rem;
+    color: var(--tertiary-highlight-color);
+    font-size: 0.8em;
+    vertical-align: middle;
+}
+
+/* Percent inputs carry a % affix (always an input-group), so their up/down spinners are noise --
+   nobody nudges a rate a unit at a time. Suppress the spinners on affixed number inputs. (Money is a
+   text input, so it has no spinners to begin with.) */
+.input-group input[type="number"]::-webkit-inner-spin-button,
+.input-group input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.input-group input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 /* Map Bootstrap contextual backgrounds + buttons to the theme palette. */
@@ -314,6 +531,24 @@
     box-shadow: 0 0 0 0.2rem var(--error-highlight-color) !important;
 }
 
+/* Success outline mirrors the solid .btn-success theming (Bootstrap's default variant is a different
+   green); no --success-highlight token exists, so the base colour carries hover/border and an rgba of it
+   the focus ring. */
+.btn-outline-success {
+    color: var(--success-color) !important;
+    border-color: var(--success-color) !important;
+    background-color: transparent !important;
+}
+.btn-outline-success:hover, .btn-outline-success:focus,
+.btn-outline-success:active, .btn-outline-success.active {
+    color: var(--on-success-color) !important;
+    background-color: var(--success-color) !important;
+    border-color: var(--success-color) !important;
+}
+.btn-outline-success:focus {
+    box-shadow: 0 0 0 0.2rem rgba(23, 114, 25, 0.40) !important;
+}
+
 /* Pagination themed to the palette (pairs with the {% pagination_url %} tag). */
 .pagination-lg .page-link {
     color: var(--primary-color) !important;
@@ -387,7 +622,7 @@
    contributions pane), rather than a wide table that overflows.
    ========================================================================= */
 .retirement-timing .js-date       { width: 8.5rem; }
-.retirement-timing .js-age        { width: 3.25rem; }
+.retirement-timing .js-age        { width: 4.5rem; }   /* fits form-control padding + the number spinner */
 .retirement-timing .timing-label  { width: 3rem; }   /* From / Until / Claim, so the dates align */
 
 

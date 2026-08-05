@@ -39,7 +39,7 @@ from .explore import run_working_scenario, start_fresh_exploration, transient_ru
 from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
-from .gating import partition_scenarios
+from .gating import partition_scenarios, scenario_started
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture
@@ -141,10 +141,16 @@ class FinancialForecastView( InputGatedMixin, View ):
         profile_record = completed_profile( organization )   # completeness, not mere existence
         complete, in_progress = self._scenarios( organization, profile_record )
         exploration    = scenario_exploration( organization )
+        # The one in-progress scenario the gate leads into -- a started one to resume, else the untouched
+        # Default to build. Either way the CTA enters *its* build flow (the Scenarios page is the only
+        # place that composes an entirely new scenario); `started` only drives the resume-vs-build wording.
+        started_scenario = next( ( s for s in in_progress if scenario_started( s ) ), None )
         return {
             'has_profile'  : profile_record is not None,   # a *complete* profile
+            'effective_date' : profile_record.effective_date if profile_record else None,
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
-            'in_progress'  : in_progress,                  # half-built scenarios to resume
+            'build_scenario'         : started_scenario or ( in_progress[ 0 ] if in_progress else None ),
+            'build_scenario_started' : started_scenario is not None,
             'resume'       : self._resume( exploration ) if exploration is not None else None,
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),
@@ -188,15 +194,33 @@ class RunResultsView( View ):
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run = from_json_data( ProjectionRun, record.data )
         books = BooksOfAccountRepository().load( record.books )
+        dated_notices = [ ( step.end_date.year, notice )
+                          for step in run.result.steps for notice in step.notices ]
+        worst_severity = max( ( notice.severity for _, notice in dated_notices ),
+                              default = None, key = lambda severity : severity.value )
         context = {
-            'record'        : record,
-            'stopped_early' : run.result.stopped_early,
-            'notices'       : [ ( step.end_date.year, notice.kind.label,
-                                  notice.severity.label, notice.amount, notice.detail )
-                                for step in run.result.steps for notice in step.notices ],
+            'record'           : record,
+            'stopped_early'    : run.result.stopped_early,
+            'notices'          : [ self._notice_row( year, notice )
+                                   for year, notice in dated_notices ],
+            # The worst severity present tints the collapsed toggle, previewing what is inside.
+            'notices_severity' : str( worst_severity ) if worst_severity else None,
         }
         context.update( run_books_table_context( request, run, books ) )
         return render( request, _RESULTS_TEMPLATE, context )
+
+    @staticmethod
+    def _notice_row( year, notice ):
+        """A notice flattened for display. `severity` is the lowercase token ('info'/'warning')
+        that drives the row's colour classes; `severity_label` is its human title."""
+        return {
+            'year'           : year,
+            'kind'           : notice.kind.label,
+            'severity'       : str( notice.severity ),
+            'severity_label' : notice.severity.label,
+            'amount'         : notice.amount,
+            'detail'         : notice.detail,
+        }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

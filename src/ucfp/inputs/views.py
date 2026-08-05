@@ -176,14 +176,15 @@ class ScenarioCombineForm( forms.Form ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class ScenarioNewView( View ):
-    """`/inputs/scenarios/new/` -- create a new Future Scenario, the normal (repeatable) way: *combine* an
-    existing Plans with an existing Assumptions. It routes by what the organization has: not enough
-    complete components to pair (the Default scenario is still being set up) -> the Scenarios page, to
-    finish it; complete components but every pairing already used -> a hint to make a new Plans/Assumptions
-    first; otherwise the combine form. A completed Profile is the prerequisite."""
+class ScenarioComposeView( View ):
+    """`/inputs/scenarios/compose/` -- compose a Future Scenario (the Compose operation): *pair* an
+    existing Plans with an existing Assumptions -- pure selection, no interview -- reached only from the
+    Scenarios page's "New Future Scenario". It routes by what the organization has: not enough complete
+    components to pair (the Default scenario is still being set up) -> the Scenarios page, to finish it;
+    complete components but every pairing already used -> a hint to make a new Plans/Assumptions first;
+    otherwise the combine form. A completed Profile is the prerequisite."""
 
-    _FORM_TEMPLATE = 'inputs/scenario_new.html'
+    _FORM_TEMPLATE = 'inputs/scenario_compose.html'
     _HINT_TEMPLATE = 'inputs/panes/scenario_combinations_exhausted.html'
 
     def get( self, request ):
@@ -233,10 +234,12 @@ class ScenarioNewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class ScenarioResumeView( View ):
-    """`/inputs/scenarios/<uuid>/resume/` -- resume building a half-built scenario: make its Plans and
-    Assumptions the editing target, mark the build in progress, and re-enter the two-part flow at the
-    first Plans section (the stepper shows what is already done). POST, since it changes editing state."""
+class ScenarioEditView( View ):
+    """`/inputs/scenarios/<uuid>/edit/` -- enter a scenario's build flow (the Edit-scenario operation):
+    make its Plans and Assumptions the editing target, mark the build in progress, and (re-)enter the
+    two-part flow at the first Plans section (the stepper shows what is already done). One operation
+    behind three labels -- build the untouched Default, resume a half-built scenario, or edit a complete
+    one. POST, since it changes editing state."""
 
     def post( self, request, uuid ):
         organization = request.organization
@@ -244,7 +247,7 @@ class ScenarioResumeView( View ):
             ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
         _select( request, 'current_plans_uuid', scenario.plans )
         _select( request, 'current_assumptions_uuid', scenario.assumptions )
-        request.session_state.scenario_building = str( scenario.uuid )
+        request.session_state.editing_scenario = str( scenario.uuid )
         request.session_state.to_session( request )
         return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
 
@@ -291,6 +294,12 @@ class FlowEntryView( View ):
     flow = None
 
     def get( self, request ):
+        # A standalone flow is not a scenario build. Clear any build scope left over from an abandoned
+        # build, so a lone Plans edit does not wrongly chain into Assumptions (nor show the build
+        # breadcrumb, nor finish on the Scenarios page). The scenario build enters through
+        # `ScenarioEditView`, which sets the scope -- never through here.
+        request.session_state.editing_scenario = None
+        request.session_state.to_session( request )
         if self.flow == 'profile':
             default = ensure_default_scenario( request.organization )
             _select( request, 'current_plans_uuid', default.plans )
@@ -327,9 +336,9 @@ class PlansNewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class PlansSelectView( View ):
-    """`/inputs/plans/<uuid>/` -- make an existing Plans set the current editing target and open the
-    plans flow on it."""
+class PlansEditView( View ):
+    """`/inputs/plans/<uuid>/edit/` -- edit an existing Plans component (Edit-component): make it the
+    current editing target and open the standalone Plans flow on it."""
 
     def get( self, request, uuid ):
         record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
@@ -348,9 +357,9 @@ class AssumptionsNewView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class AssumptionsSelectView( View ):
-    """`/inputs/assumptions/<uuid>/` -- make an existing Assumptions set the current editing target
-    and open the assumptions flow on it."""
+class AssumptionsEditView( View ):
+    """`/inputs/assumptions/<uuid>/edit/` -- edit an existing Assumptions component (Edit-component):
+    make it the current editing target and open the standalone Assumptions flow on it."""
 
     def get( self, request, uuid ):
         record = get_object_or_404(
@@ -502,7 +511,7 @@ class InterviewView( View ):
             return self._swap( request, self._flow_sections( profile, flow ), current, form )
         profile   = self._store( request, current, form, profile, other )
         following = next_section_after( self._flow_sections( profile, flow ), current.key )
-        building  = request.session_state.scenario_building
+        building  = request.session_state.editing_scenario
         if following is None and building and flow == 'plans':
             following = first_section_of_flow( 'assumptions' )  # scenario build: chain Plans -> Assumptions
         if following is None:                                   # nothing more to present -- this flow ends
@@ -521,7 +530,7 @@ class InterviewView( View ):
         component edit likewise ends on the Scenarios page. Features are reached from the nav, so no flow
         threads a return destination."""
         if building:                                           # end of the two-part build (Assumptions done)
-            request.session_state.scenario_building = None
+            request.session_state.editing_scenario = None
             request.session_state.to_session( request )
             return reverse( 'scenarios_home' )
         if flow == 'profile':
@@ -530,10 +539,10 @@ class InterviewView( View ):
         return reverse( 'scenarios_home' )
 
     @staticmethod
-    def _building_scenario_name( request ):
+    def _editing_scenario_name( request ):
         """The label of the scenario currently being built, or None when no build is in progress -- the
         breadcrumb context for the two-part build flow."""
-        uuid = request.session_state.scenario_building
+        uuid = request.session_state.editing_scenario
         if uuid is None:
             return None
         record = ScenarioRecord.objects.filter(
@@ -614,7 +623,7 @@ class InterviewView( View ):
             'flow_title'           : flow_title( flow ),
             'flow_heading'         : flow_title( flow ),   # the record's own name is the inline rename below
             # The scenario being built (its name), so the component flows breadcrumb it during a build.
-            'building_scenario'    : self._building_scenario_name( request ),
+            'editing_scenario_name'    : self._editing_scenario_name( request ),
             # The component being edited, as an inline rename in the header, so its name can be changed
             # here (e.g. straight after a create or clone) rather than only on the Scenarios page.
             'component_rename'     : self._component_rename( request, flow ),
@@ -633,7 +642,7 @@ class InterviewView( View ):
         which chains into Assumptions rather than finishing."""
         if next_section_after( sections, section.key ) is not None:
             return False
-        return not ( request.session_state.scenario_building and flow == 'plans' )
+        return not ( request.session_state.editing_scenario and flow == 'plans' )
 
     @staticmethod
     def _profile_status( request, flow ) -> dict:
@@ -652,7 +661,7 @@ class InterviewView( View ):
         """The Plans/Assumptions record this flow edits, as inline-rename fields for the header (kind, uuid,
         label, and its rename endpoint). None for the single-record Profile, which is not named."""
         if flow == 'plans':
-            record, kind, route = current_plans_record( request ), 'plan', 'plan_rename'
+            record, kind, route = current_plans_record( request ), 'plan', 'plans_rename'
         elif flow == 'assumptions':
             record, kind, route = current_assumptions_record( request ), 'assumptions', 'assumptions_rename'
         else:
@@ -872,7 +881,7 @@ def _current_assumptions( request ):
 
 
 class ResidenceView( SelfSavingPaneView ):
-    """`/inputs/interview/properties/residence/` -- the residence sub-form of the Property pane. It
+    """`/inputs/interview/real-estate/residence/` -- the residence sub-form of the Real Estate pane. It
     persists just the residence (its asset, mortgage, and rent). Own/rent and mortgage visibility are
     client-side (`inputs.js`); an incomplete residence simply does not materialize."""
 
@@ -961,10 +970,11 @@ class AccountsView( SelfSavingPaneView ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class SubjectsView( View ):
     """`/inputs/interview/subjects/edit/` -- the Subjects pane of the Profile flow. POST auto-saves a
-    single edit in the background: it persists the household (and the derived filing status) and
-    refreshes the read-only filing-status readout beside the form, re-rendering the pane itself only on
-    a genuine field error (a half-entered partner). Validation is non-blocking -- an incomplete person
-    is simply not held; the forecast readiness check is the completeness gate."""
+    single edit in the background: it persists the household (and the derived filing status), prunes any
+    plan references orphaned when a partner is dropped, and refreshes the read-only filing-status readout
+    beside the form, re-rendering the pane itself only on a genuine field error (a half-entered partner).
+    Validation is non-blocking -- an incomplete person is simply not held; the forecast readiness check
+    is the completeness gate."""
 
     _TEMPLATE        = 'inputs/interview/sections/subjects_pane.html'
     _ERRORS_TEMPLATE = 'inputs/interview/sections/subjects_errors.html'
@@ -976,13 +986,14 @@ class SubjectsView( View ):
         return self._response( request, SubjectsForm( profile = profile ) )
 
     def post( self, request ):
-        organization = request.organization
-        profile, _plans = _current_profile_and_plans( request )
+        profile, plans = _current_profile_and_plans( request )
         form = SubjectsForm( request.POST, profile = profile )
         if not form.is_valid():
             return self._swap( request, form )                 # a half-entered partner
-        profile, _plans = form.apply( profile, None )
-        save_profile( organization, profile )
+        # Dropping a partner removes their synced retirement/taxable accounts, so `apply` prunes the
+        # plan references into them; profile and plans must then commit together (the paired-save seam).
+        profile, plans = form.apply( profile, plans )
+        _save_profile_and_plans( request, profile, plans )
         # A clean save clears any stale half-entered-partner warning (the fields are left untouched, so
         # focus is undisturbed) and refreshes the filing-status readout, which a partner change alters.
         label = SubjectsForm( profile = profile ).filing_status_label
@@ -1001,9 +1012,9 @@ class SubjectsView( View ):
 
 
 class PossessionsView( SelfSavingPaneView ):
-    """`/inputs/interview/properties/possessions/` -- the Other Possessions list of the Property pane.
-    Its item set can change, so a save that adds or removes a row re-renders the pane; an incomplete
-    row simply does not materialize."""
+    """`/inputs/interview/possessions/edit/` -- the list behind the Possessions section (tangible
+    non-real-estate holdings). Its item set can change, so a save that adds or removes a row re-renders
+    the pane; an incomplete row simply does not materialize."""
 
     template     = 'inputs/interview/sections/possessions.html'
     target       = 'possessions'
@@ -1214,7 +1225,7 @@ class _PropertyView( View ):
 
 
 class _PropertyFormView( _PropertyView ):
-    """The add/edit form for one mortgaged property in the Property pane. Add and edit converge:
+    """The add/edit form for one mortgaged property in the Real Estate pane. Add and edit converge:
     GET-add mints a fresh handle and opens the editor for it, so the form always edits a known handle
     and a new property has a stable identity from the first keystroke. POST auto-saves in the
     background -- non-blocking, so an incomplete (or never-filled) property writes nothing -- and just
@@ -1264,25 +1275,25 @@ class _PropertyDeleteView( _PropertyView ):
 
 
 class RentalFormView( _PropertyFormView ):
-    """`/inputs/interview/properties/rentals/add/` and `.../<handle>/`."""
+    """`/inputs/interview/real-estate/rentals/add/` and `.../<handle>/`."""
 
     _PANE = RENTAL_PANE
 
 
 class RentalDeleteView( _PropertyDeleteView ):
-    """`/inputs/interview/properties/rentals/<handle>/delete/`."""
+    """`/inputs/interview/real-estate/rentals/<handle>/delete/`."""
 
     _PANE = RENTAL_PANE
 
 
 class SecondHomeFormView( _PropertyFormView ):
-    """`/inputs/interview/properties/second-homes/add/` and `.../<handle>/`."""
+    """`/inputs/interview/real-estate/second-homes/add/` and `.../<handle>/`."""
 
     _PANE = SECOND_HOME_PANE
 
 
 class SecondHomeDeleteView( _PropertyDeleteView ):
-    """`/inputs/interview/properties/second-homes/<handle>/delete/`."""
+    """`/inputs/interview/real-estate/second-homes/<handle>/delete/`."""
 
     _PANE = SECOND_HOME_PANE
 
@@ -1336,8 +1347,12 @@ class EventAddView( View ):
             self._MENU_TEMPLATE, { 'menu': menu_context( profile ) }, request = request )
 
     def _form( self, request, kind, form ):
+        event_type = self._event_type( kind )
         return render_to_string(
-            self._FORM_TEMPLATE, { 'form': form, 'kind': kind }, request = request )
+            self._FORM_TEMPLATE,
+            { 'form': form, 'kind': kind, 'group': event_type.group, 'title': event_type.label,
+              'description': event_type.description },
+            request = request )
 
     def _list( self, request, profile, plans ):
         return render_to_string(

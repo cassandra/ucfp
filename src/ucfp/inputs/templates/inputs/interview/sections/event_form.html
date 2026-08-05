@@ -2,12 +2,28 @@
 One event kind's add form, swapped into the add area (id=events-add). Add posts to event_add, which
 appends the event and restores the menu; Cancel restores the menu without adding.
 {% endcomment %}
-<div id="events-add" class="border-top pt-2">
+<div id="events-add">
+  <div class="mb-1"><span class="text-muted small">{{ group }} &rsaquo;</span>
+    <span class="font-weight-bold">{{ title }}</span></div>
+  {% if description %}<p class="text-muted small mb-2">{{ description }}</p>{% endif %}
   <form method="post" action="{% url 'event_add' kind=kind %}" data-async="#events-add">
     {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit" class="btn btn-sm btn-primary">Add</button>
-    <a class="btn btn-sm btn-link" data-async="#events-add"
-       href="{% url 'event_add' kind=kind %}?collapse=1">Cancel</a>
+    {% if form.non_field_errors %}<div class="text-danger small mb-2">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+    {% if form.reference_fields %}
+    <div class="form-row">
+      {% for field in form.reference_fields %}
+      <div class="col-sm mb-2">{{ field.as_field_group }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="form-row">
+      {% if form.amount_field %}<div class="col-sm mb-2">{{ form.amount_field.as_field_group }}</div>{% endif %}
+      <div class="col-sm mb-2">{{ form.date.as_field_group }}</div>
+    </div>
+    <div class="mt-2">
+      <button type="submit" class="btn btn-sm btn-primary">Add</button>
+      <a class="btn btn-sm btn-link" data-async="#events-add"
+         href="{% url 'event_add' kind=kind %}?collapse=1">Cancel</a>
+    </div>
   </form>
 </div>

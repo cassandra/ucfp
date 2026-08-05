@@ -1,0 +1,8 @@
+{% comment %}
+A durable expense's calculator content: "Buy N at $X each, replace every Y yr -> ~ $Z/yr", with a live
+per-year readout. The enclosing element carries js-calc-panel + a matching data-calc (its wrapper is an
+inline div or a full-width detail-row cell). Include with `calc` = the row's calculator dict (count,
+cost, lifespan, per_year).
+{% endcomment %}
+Buy {{ calc.count }} at {{ calc.cost }} each, replace every {{ calc.lifespan }} yr
+&rarr; &asymp; $<span class="{{ AppConst.CALC_READOUT_CLASS }}">{{ calc.per_year }}</span>/yr

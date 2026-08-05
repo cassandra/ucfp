@@ -38,6 +38,7 @@ class AppConst:
     AUTOSAVE_CLASS = 'js-autosave'  # marks a <form> whose edits auto-save
     DATE_FIELD_CLASS = 'js-date'    # a date input: enhanced with a date picker
     AGE_FIELD_CLASS  = 'js-age'     # the age input beside a date in a date/age pair
+    MONEY_INPUT_CLASS = 'js-money'  # a money input: grouped with thousands separators as it is typed
 
     # A date input's planning context, which tunes where its picker opens and
     # how far it ranges (dates here are routinely decades from today, so the
@@ -62,6 +63,12 @@ class AppConst:
     OPTIONAL_ADD_CLASS    = 'js-optional-add'     # reveals the body
     OPTIONAL_BODY_CLASS   = 'js-optional-body'    # the optional fields
     OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # clears + collapses the body
+
+    # A group of fields entered together -- both filled or both empty (e.g. a person's name and
+    # birthdate). While exactly one side is filled the person is mid-entry, so the autosave defers:
+    # it skips the background save (and the incomplete-pair validation and pane re-render that would
+    # steal focus from the field being filled) until the group is coherent. Driven by inputs.js.
+    PAIR_CLASS = 'js-pair'  # fields that must be entered together (both-or-neither)
 
     # A switch: a control (radio group / select) whose value reveals one of several sibling case
     # blocks and hides the rest (e.g. own vs rent showing different fields). All blocks render
@@ -99,6 +106,17 @@ class AppConst:
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.
     RECURRING_DELETE_CLASS  = 'js-recurring-delete'  # the per-column x control (carries data-span)
 
+    # The recurring-expenses table flags an amount that differs from the previous age span -- a tinted
+    # cell plus an up/down arrow -- so a reader can scan what changes with age. The server flags it on
+    # render; JS recomputes a row live as an amount is typed, since the pane saves silently and does not
+    # re-render. Template and JS share these tokens so the two sides cannot drift.
+    SPAN_AMOUNT_CLASS  = 'js-span-amount'   # a recurring amount input, scanned per row for changes
+    SPAN_CHANGED_CLASS = 'span-changed'     # a cell whose amount differs from the previous span (tinted)
+    SPAN_TREND_CLASS   = 'span-trend'       # the direction arrow beside a changed amount
+    SPAN_TREND_UP      = '↑'           # the arrow shown when the amount rose from the previous span
+    SPAN_TREND_DOWN    = '↓'           # the arrow shown when the amount fell from the previous span
+    SPAN_CHANGED_TITLE = 'Differs from the previous age span'  # the changed cell's tooltip
+
     # The property-expenses matrix's live default->placeholder mirror. A per-property cell shows the
     # row's shared Default as its placeholder (what a blank cell falls back to); editing the Default
     # updates those placeholders client-side, since the pane saves silently and never re-renders them.
@@ -122,11 +140,13 @@ class AppConst:
     # reveals a panel of count/cost/cadence inputs; as they change, the client fills the amount
     # target(s) with count x cost and writes a live "per year" readout. The amount stays authoritative
     # (server-computed on save), so the calculator is a convenience, not a separate source of truth.
-    CALC_CLASS         = 'js-calc'          # the wrapper (cell/row) holding a calculator + its target(s)
     CALC_TOGGLE_CLASS  = 'js-calc-toggle'   # the button that reveals/hides the panel
     CALC_PANEL_CLASS   = 'js-calc-panel'    # the collapsible panel of count/cost/cadence inputs
     CALC_TARGET_CLASS  = 'js-calc-target'   # an amount input the computed count x cost fills
     CALC_READOUT_CLASS = 'js-calc-readout'  # where the advisory "per year" figure is written
+    # Links a calculator's parts (toggle, panel, target[s], readout) by a shared id, so the panel can
+    # live anywhere -- e.g. a full-width detail row -- rather than only inside the target's own cell.
+    CALC_DATA_ATTR     = 'calc'             # data-calc="<id>" on each part; the id ties them together
 
     @classmethod
     def to_json_dict_str( cls ):

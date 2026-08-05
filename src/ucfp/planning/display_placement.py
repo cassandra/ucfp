@@ -87,7 +87,7 @@ _ASSET_PANES = [
     _Grouping( 'financial', 'Financial Accounts',
                ( AssetClass.CASH, AssetClass.STOCKS, AssetClass.DIVIDEND_STOCKS, AssetClass.BONDS,
                  AssetClass.CDS, AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) ),
-    _Grouping( 'properties', 'Properties',
+    _Grouping( 'real-estate', 'Real Estate',
                ( AssetClass.REAL_ESTATE_RESIDENCE, AssetClass.REAL_ESTATE_SECOND_HOME,
                  AssetClass.REAL_ESTATE_RENTAL ) ),
     _Grouping( 'possessions', 'Possessions',

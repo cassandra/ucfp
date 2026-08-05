@@ -71,10 +71,12 @@ def add_cadence_fields( form, prefix, interval, domain ) -> None:
     magnitude = forms.IntegerField( required = False, min_value = 1, max_value = _MAX_MAGNITUDE )
     magnitude.initial = interval.count if interval is not None else 1
     magnitude.widget.attrs[ 'aria-label' ] = 'Cadence magnitude'
+    magnitude.widget.attrs[ 'class' ]      = 'form-control form-control-sm input-count'
     form.fields[ _count_key( prefix ) ] = magnitude
     unit = forms.ChoiceField( required = False, choices = [ ( u.name, u.label ) for u in units ] )
     unit.initial = interval.unit.name if interval is not None else units[ 0 ].name
     unit.widget.attrs[ 'aria-label' ] = 'Cadence unit'
+    unit.widget.attrs[ 'class' ]      = 'custom-select custom-select-sm cadence-unit'
     form.fields[ _unit_key( prefix ) ] = unit
 
 
@@ -108,10 +110,12 @@ def add_optional_cadence_fields( form, prefix, interval, domain ) -> None:
     magnitude = forms.IntegerField( required = False, min_value = 1, max_value = _MAX_MAGNITUDE )
     magnitude.initial = interval.count if interval is not None else None      # blank -> one-time
     magnitude.widget.attrs[ 'aria-label' ] = 'Cadence magnitude'
+    magnitude.widget.attrs[ 'class' ]      = 'form-control form-control-sm input-count'
     form.fields[ _count_key( prefix ) ] = magnitude
     unit = forms.ChoiceField( required = False, choices = [ ( u.name, u.label ) for u in units ] )
     unit.initial = interval.unit.name if interval is not None else units[ -1 ].name
     unit.widget.attrs[ 'aria-label' ] = 'Cadence unit'
+    unit.widget.attrs[ 'class' ]      = 'custom-select custom-select-sm cadence-unit'
     form.fields[ _unit_key( prefix ) ] = unit
 
 
@@ -142,6 +146,7 @@ def add_calculator_fields( form, prefix, count : Optional[ int ], cost_each : Op
     count_field = forms.IntegerField( required = False, min_value = 1 )
     count_field.initial = count
     count_field.widget.attrs[ 'aria-label' ] = 'Item count'
+    count_field.widget.attrs[ 'class' ]      = 'form-control form-control-sm input-count'
     form.fields[ _calc_count_key( prefix ) ] = count_field
     cost_field = MoneyField( required = False, min_value = 0 )
     cost_field.initial = cost_each
@@ -150,6 +155,7 @@ def add_calculator_fields( form, prefix, count : Optional[ int ], cost_each : Op
     lifespan_field = forms.IntegerField( required = False, min_value = 1, max_value = 100 )
     lifespan_field.initial = lifespan
     lifespan_field.widget.attrs[ 'aria-label' ] = 'Replacement lifespan (years)'
+    lifespan_field.widget.attrs[ 'class' ]      = 'form-control form-control-sm input-count'
     form.fields[ _calc_lifespan_key( prefix ) ] = lifespan_field
 
 

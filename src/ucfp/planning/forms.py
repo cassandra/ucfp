@@ -9,6 +9,7 @@ from datetime import date, timedelta
 
 from django import forms
 
+from common.forms import StyledFormMixin
 from common.recurrence import Duration, TimeUnit
 
 from .materialization import ForecastFrame
@@ -58,16 +59,13 @@ def resolve_frame(
         start_date = start, end_date = date( naive_end.year, 12, 31 ), granularity = granularity )
 
 
-class FrameForm( forms.Form ):
+class FrameForm( StyledFormMixin, forms.Form ):
     """The run frame's when-controls, shared by the hub forms: where the run starts relative to the
     profile's effective date, how many years it spans, and its granularity."""
 
     start_from     = forms.ChoiceField(
         label = 'Start from', choices = _START_CHOICES, initial = _START_EFFECTIVE,
-        help_text = (
-            "Runs from the profile's effective date by default. Starting from the beginning of this "
-            "or next year instead projects the same facts from that date, so the run is approximate "
-            "unless the profile's balances already match that start." ) )
+        help_text = "Defaults to your profile's date; a year-aligned start is approximate." )
     duration_years = forms.IntegerField( label = 'Duration (years)', min_value = 1, initial = 40 )
     interval       = forms.ChoiceField(
         label = 'Interval', choices = _INTERVAL_CHOICES, initial = 'year' )

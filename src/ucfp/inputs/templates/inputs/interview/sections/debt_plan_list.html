@@ -13,18 +13,18 @@ its rate and term are set; the js-loan calculator then writes a live, advisory m
     {% for row in debt_plan_form.rows %}
     <div class="{{ AppConst.LOAN_CLASS }} border rounded p-2 mb-2"
          data-{{ AppConst.LOAN_BALANCE_DATA_ATTR }}="{{ row.balance }}">
-      <div class="fw-semibold">{{ row.name }}
-        <span class="text-muted small">{{ row.kind }} &middot; balance {{ row.balance }}</span></div>
-      <div class="row">
-        <div class="col-sm-6 col-lg-3">{% include 'inputs/interview/_field.html' with field=row.rate %}</div>
-        <div class="col-sm-6 col-lg-3">{% include 'inputs/interview/_field.html' with field=row.term %}</div>
-        <div class="col-sm-6 col-lg-3">{% include 'inputs/interview/_field.html' with field=row.extra %}</div>
-        <div class="col-sm-6 col-lg-3">{% include 'inputs/interview/_field.html' with field=row.payoff %}</div>
+      <div class="mb-2"><span class="font-weight-bold">{{ row.name }}</span>
+        <span class="text-muted small">{{ row.kind }} &middot; balance {{ row.balance_display }}</span></div>
+      <div class="form-row">
+        <div class="col-auto">{{ row.rate.as_field_group }}</div>
+        <div class="col-auto">{{ row.term.as_field_group }}</div>
+        <div class="col-auto">{{ row.extra.as_field_group }}</div>
+        <div class="col-auto">{{ row.payoff.as_field_group }}</div>
       </div>
       <p class="{{ AppConst.LOAN_READOUT_CLASS }} text-info small mb-0"></p>
     </div>
     {% endfor %}
-    <p class="text-muted small">A loan starts amortizing once its rate and months remaining are both
-      set; extra principal and a full-payoff date are optional. Changes save automatically.</p>
+    <p class="text-muted small">A loan starts amortizing once its rate and months are both set; extra
+      principal and a payoff date are optional.</p>
   </form>
 </div>

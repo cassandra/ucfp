@@ -9,7 +9,7 @@ group into one thin sliver. A removed column keeps its place as a sliver with a 
 Each header is tinted by its top-level group and drill depth (see css/books_table.css). Reads
 `books_table`.
 {% endcomment %}
-{% load common_tags %}
+{% load common_tags icons %}
 <div id="books-table" class="bt-scroll">
   <table class="table table-sm w-auto">
     <thead>
@@ -29,47 +29,56 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
         </th>
         {% else %}
         <th class="bt-head bt-group-{{ col.group }} bt-depth-{{ col.depth }} text-right">
-          <div>
+          <div class="bt-col-heading">
             {% if col.breadcrumb %}
             <div class="text-muted small text-truncate" title="{{ col.breadcrumb|join:' › ' }}">{{ col.breadcrumb|join:' › ' }} &rsaquo;</div>
             {% endif %}
             {{ col.column.label }}
-            {% if col.column.account_uuid %}
-            <a href="{% url 'books_journal' run_uuid=record.uuid account_uuid=col.column.account_uuid %}"
-               data-async="modal" class="small text-decoration-none"
-               title="Transaction history" aria-label="Transaction history">&#8801;</a>
-            {% endif %}
           </div>
-          <div class="d-inline-flex">
-            {% if col.can_expand %}
-            <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
-                  data-async="#books-table" class="d-inline">
-              {% csrf_token %}
-              <input type="hidden" name="op" value="expand">
-              <input type="hidden" name="column" value="{{ col.expand_key.token }}">
-              <button type="submit" class="btn btn-link btn-sm p-0 mx-1"
-                      title="Expand" aria-label="Expand">+</button>
-            </form>
-            {% endif %}
-            <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
-                  data-async="#books-table" class="d-inline-flex">
-              {% csrf_token %}
-              <input type="hidden" name="column" value="{{ col.op_key.token }}">
-              {% if col.can_move_left %}
-              <button type="submit" name="op" value="move_left" class="btn btn-link btn-sm p-0 mx-1"
-                      title="Move left" aria-label="Move left">&lsaquo;</button>
+          <div class="dropdown bt-col-menu">
+            <button type="button" class="bt-col-menu-toggle" data-toggle="dropdown"
+                    data-boundary="viewport" aria-haspopup="true" aria-expanded="false"
+                    title="Column actions" aria-label="Actions for {{ col.column.label }}">
+              {% icon 'gear' size='sm' %}
+            </button>
+            <div class="dropdown-menu dropdown-menu-right">
+              {% if col.can_expand %}
+              <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+                    data-async="#books-table">
+                {% csrf_token %}
+                <input type="hidden" name="op" value="expand">
+                <input type="hidden" name="column" value="{{ col.expand_key.token }}">
+                <button type="submit" class="dropdown-item">Expand</button>
+              </form>
               {% endif %}
-              {% if col.can_collapse %}
-              <button type="submit" name="op" value="collapse" class="btn btn-link btn-sm p-0 mx-1"
-                      title="Collapse" aria-label="Collapse">&minus;</button>
+              {% if col.can_collapse or col.can_move_left or col.can_move_right %}
+              <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+                    data-async="#books-table">
+                {% csrf_token %}
+                <input type="hidden" name="column" value="{{ col.op_key.token }}">
+                {% if col.can_collapse %}
+                <button type="submit" name="op" value="collapse" class="dropdown-item">Collapse</button>
+                {% endif %}
+                {% if col.can_move_left %}
+                <button type="submit" name="op" value="move_left" class="dropdown-item">Move left</button>
+                {% endif %}
+                {% if col.can_move_right %}
+                <button type="submit" name="op" value="move_right" class="dropdown-item">Move right</button>
+                {% endif %}
+              </form>
               {% endif %}
-              <button type="submit" name="op" value="remove" class="btn btn-link btn-sm p-0 mx-1"
-                      title="Remove" aria-label="Remove">&times;</button>
-              {% if col.can_move_right %}
-              <button type="submit" name="op" value="move_right" class="btn btn-link btn-sm p-0 mx-1"
-                      title="Move right" aria-label="Move right">&rsaquo;</button>
+              {% if col.column.account_uuid %}
+              <a href="{% url 'books_journal' run_uuid=record.uuid account_uuid=col.column.account_uuid %}"
+                 data-async="modal" class="dropdown-item">Transaction history</a>
               {% endif %}
-            </form>
+              <div class="dropdown-divider"></div>
+              <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+                    data-async="#books-table">
+                {% csrf_token %}
+                <input type="hidden" name="column" value="{{ col.op_key.token }}">
+                <button type="submit" name="op" value="remove" class="dropdown-item text-danger">Hide</button>
+              </form>
+            </div>
           </div>
         </th>
         {% endif %}

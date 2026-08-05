@@ -5,10 +5,12 @@ list and its (initially empty) add/edit form area come from the section wrapper 
 managed by `VehicleFormView` / `VehicleDeleteView`); the running-costs table is `form.vehicle_costs_form`
 (`VehicleExpensesView`). Each running cost is entered once per car and applies to every car while owned.
 {% endcomment %}
-<p class="text-muted">Your household's cars -- add each one with when you buy it, its price, how often
-  you replace it, and (optionally) when you stop owning it. The per-car running costs below apply to
-  each car while you own it. Changes save automatically; Next moves on when you're done.</p>
+<h6>Replacement plan</h6>
+<p class="text-muted">Plan your recurring vehicle purchases -- for each car, when you next buy it, its
+  price, and how often you replace it. (A car you already own lives in Assets and Debts; here you plan
+  the future purchases.)</p>
 {% include 'inputs/interview/sections/vehicle_list.html' with vehicles=form.vehicles %}
 <div id="vehicles-form"></div>
 <h6 class="mt-4">Running costs (per car)</h6>
+<p class="text-muted small">Entered once per car; each applies to every car while you own it, at its cadence.</p>
 {% include 'inputs/interview/sections/_vehicle_expenses.html' with vehicle_costs_form=form.vehicle_costs_form %}

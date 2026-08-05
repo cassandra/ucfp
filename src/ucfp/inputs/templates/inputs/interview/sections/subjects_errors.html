@@ -3,8 +3,16 @@ The Subjects form's form-level (non-field) validation messages, in their own reg
 so a successful save can clear a stale one -- left over from a half-entered partner -- without
 re-rendering the fields (which would disturb focus). Reads `subjects_form`.
 {% endcomment %}
+{% load icons %}
 <div id="subjects-errors">
   {% if subjects_form.non_field_errors %}
-  <div class="alert alert-warning">{{ subjects_form.non_field_errors }}</div>
+  <div class="alert alert-warning d-flex align-items-start mb-3" role="alert">
+    {% icon 'exclamation-circle' css_class='mr-2 mt-1 flex-shrink-0' aria_label='Warning' %}
+    <div>
+      {% for error in subjects_form.non_field_errors %}
+      <div>{{ error }}</div>
+      {% endfor %}
+    </div>
+  </div>
   {% endif %}
 </div>

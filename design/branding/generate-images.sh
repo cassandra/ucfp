@@ -30,6 +30,7 @@ ICON_BASE="$SOURCE/ucfp-icon.png"
 ICON_INVERSE_BASE="$SOURCE/ucfp-icon-inverse.png"
 LOGO_BASE="$SOURCE/ucfp-logo.png"
 LOGO_TAGLINE_BASE="$SOURCE/ucfp-logo-w-tagline.png"
+LOGO_INVERSE_BASE="$SOURCE/ucfp-logo-inverse.png"
 
 DRY_RUN=false
 if [[ "$1" == "-n" || "$1" == "--dry-run" ]]; then
@@ -84,6 +85,11 @@ echo "=== Wordmark logos (from ${LOGO_BASE##*/}) ==="
 resize "$LOGO_BASE" "x300" "$DEST/img/app-logo-h300.png"
 resize "$LOGO_BASE" "x200" "$DEST/img/app-logo-h200.png"
 resize "$LOGO_BASE" "x64"  "$DEST/img/app-logo-h64.png"
+
+echo "=== Inverse wordmark logos (from ${LOGO_INVERSE_BASE##*/}) ==="
+resize "$LOGO_INVERSE_BASE" "x300" "$DEST/img/app-logo-inverse-h300.png"
+resize "$LOGO_INVERSE_BASE" "x200" "$DEST/img/app-logo-inverse-h200.png"
+resize "$LOGO_INVERSE_BASE" "x64"  "$DEST/img/app-logo-inverse-h64.png"
 
 echo "=== Wordmark + tagline (from ${LOGO_TAGLINE_BASE##*/}) ==="
 resize "$LOGO_TAGLINE_BASE" "x200" "$DEST/img/app-logo-w-tagline-h200.png"

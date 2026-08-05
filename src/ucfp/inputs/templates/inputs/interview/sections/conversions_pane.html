@@ -8,15 +8,15 @@ picker.
 <div id="conversions">
   <h3 class="h6">Roth conversions</h3>
   {% if conversions_form.has_accounts %}
-  <p class="text-muted small">Move pre-tax retirement money into your Roth -- once, or as a multi-year
-    ladder. Each conversion is taxed as ordinary income in its year.</p>
+  <p class="text-muted small">Move pre-tax money into your Roth, once or as a multi-year ladder. Each
+    conversion is taxed as ordinary income that year.</p>
   <form method="post" action="{% url 'conversions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     {% for row in conversions_form.plan_rows %}
     {% include 'inputs/components/_realization_plan_row.html' with row=row %}
     {% endfor %}
     <p class="text-muted small">Fill the blank block to add a conversion; leave the cadence blank for a
-      one-time conversion at the From age. Changes save automatically.</p>
+      one-time conversion at the From age.</p>
   </form>
   {% else %}
   <p class="text-muted">Set up your accounts first (the Accounts step); each person's pre-tax retirement

@@ -172,9 +172,10 @@ class Profile:
     # People
     subjects: list[ SubjectProfile ] = field( default_factory = list )
     filing_status: Optional[ FilingStatus ] = None
-    # How the household holds its home. Owning is also carried by the residence asset; renting and the
-    # rent-free case have no asset, so this fact carries them (and gates the rented-home housing costs).
-    home_tenure: HousingTenure = HousingTenure.OWN
+    # How the household holds its home, or None until the housing question is answered (the unselected
+    # start that solicits an explicit choice). Owning is also carried by the residence asset; renting
+    # and the rent-free 'Neither' carry no asset, so this fact carries them (and gates rented-home costs).
+    home_tenure: Optional[ HousingTenure ] = None
     # The household's tax jurisdiction -- a fact these facts are all expressed under (account tax
     # classes, entitlements, filing status). US federal is the only one modeled today.
     jurisdiction_type: JurisdictionType = JurisdictionType.US_FEDERAL

@@ -89,6 +89,71 @@ window.App.Inputs = (function () {
         AN.post( $form.attr( 'action' ), $form.serialize(), { suppressLoader: true } );
     }
 
+    // Whether the changed field sits in a both-or-neither group (PAIR_CLASS) that is still half-filled
+    // -- a person mid-entry (a name typed, its birthdate not yet). While so, the autosave holds off, so
+    // the incomplete-pair error (and the pane re-render that would steal focus from the field being
+    // filled) never fires until the pair is whole. Fields in no such group -- and a group wholly filled
+    // or wholly empty -- return false and save normally.
+    function pairMidEntry( $field ) {
+        const $pair = $field.closest( classSelector( C.PAIR_CLASS ) );
+        if ( ! $pair.length ) { return false; }
+        const values = $pair.find( ':input' ).map( function () { return ( $( this ).val() || '' ).trim(); } ).get();
+        const filled = values.filter( Boolean ).length;
+        return filled > 0 && filled < values.length;
+    }
+
+    // ----- Money inputs: thousands grouping -----
+    //
+    // Money fields are plain text inputs (not number) so their value can carry thousands separators.
+    // Grouping runs as the user types (keeping the caret at the same digit) and once on the server-
+    // rendered initial values (enhanceMoneyInputs, on load and after each antinode render). The value
+    // stays a bare number to the server -- the MoneyField strips the separators on the way in -- and
+    // any client-side reader of a money value parses it through `parseAmount`, which tolerates them.
+
+    function groupedThousands( value ) {
+        const cleaned = String( value ).replace( /[^\d.]/g, '' );        // keep only digits and the point
+        if ( cleaned === '' ) { return ''; }
+        const dot   = cleaned.indexOf( '.' );
+        const whole = dot === -1 ? cleaned : cleaned.slice( 0, dot );
+        const frac  = dot === -1 ? '' : '.' + cleaned.slice( dot + 1 ).replace( /\./g, '' );
+        return whole.replace( /\B(?=(\d{3})+(?!\d))/g, ',' ) + frac;
+    }
+
+    // parseFloat, tolerant of the thousands separators money inputs carry (a no-op on comma-less values).
+    function parseAmount( value ) {
+        return parseFloat( String( value == null ? '' : value ).replace( /,/g, '' ) );
+    }
+
+    function digitsBefore( value, caret ) {
+        return ( value.slice( 0, caret ).match( /\d/g ) || [] ).length;
+    }
+
+    function caretPastDigits( value, digits ) {
+        if ( digits <= 0 ) { return 0; }
+        let seen = 0;
+        for ( let i = 0; i < value.length; i++ ) {
+            if ( /\d/.test( value[ i ] ) && ++seen === digits ) { return i + 1; }
+        }
+        return value.length;
+    }
+
+    // Regroup a money input in place, keeping the caret at the same digit so typing is undisturbed.
+    function groupMoneyInput( input ) {
+        const wanted    = digitsBefore( input.value, input.selectionStart );
+        const formatted = groupedThousands( input.value );
+        if ( formatted === input.value ) { return; }
+        input.value = formatted;
+        const caret = caretPastDigits( formatted, wanted );
+        input.setSelectionRange( caret, caret );
+    }
+
+    function enhanceMoneyInputs( $scope ) {
+        const sel = classSelector( C.MONEY_INPUT_CLASS );
+        ( $scope || $( document.body ) ).find( sel ).addBack( sel ).each( function () {
+            this.value = groupedThousands( this.value );
+        } );
+    }
+
     // ----- DatePicker: enhance date inputs, tuned to their planning context -----
     //
     // Dates here routinely sit decades from today (birthdates back, planning dates ahead), so a
@@ -247,7 +312,9 @@ window.App.Inputs = (function () {
         const retirement = $option.attr( dataAttr( C.STATE_RETIREMENT_STATUS_DATA_ATTR ) ) || '';
         const $readout   = $select.closest( 'form' ).find( classSelector( C.STATE_EXEMPTIONS_CLASS ) );
         if ( ss || retirement ) {
-            $readout.text( 'Social Security: ' + ss + '  ·  Pensions & retirement: ' + retirement );
+            $readout.empty()
+                .append( $( '<div>' ).text( 'Social Security: ' + ss ) )
+                .append( $( '<div>' ).text( 'Pensions & retirement: ' + retirement ) );
         } else {
             $readout.empty();
         }
@@ -323,7 +390,7 @@ window.App.Inputs = (function () {
         const rate = cardMonthlyRate( $card );
         const mode = cardMode( $card );
         const monthly = function () {
-            return parseFloat( $card.find( classSelector( C.CREDIT_CARD_MONTHLY_CLASS ) ).val() );
+            return parseAmount( $card.find( classSelector( C.CREDIT_CARD_MONTHLY_CLASS ) ).val() );
         };
         const targetMonths = function () {
             return monthsUntil( $card.find( classSelector( C.CREDIT_CARD_DATE_CLASS ) ).val() );
@@ -369,7 +436,7 @@ window.App.Inputs = (function () {
     // its readout, reusing the amortization mirrors above. Materialization is authoritative.
 
     function loanField( $loan, cls ) {
-        return parseFloat( $loan.find( classSelector( cls ) ).val() );
+        return parseAmount( $loan.find( classSelector( cls ) ).val() );
     }
 
     // A whole-month term as "29 yr 11 mo" (either part dropped when zero, but never both).
@@ -415,19 +482,55 @@ window.App.Inputs = (function () {
     // (count_/cost_/lifespan_), so the panel's inputs are found by name. The amount stays authoritative
     // (server recomputes on save); this fill is a live preview.
     function calcNumber( $panel, selector ) {
-        return parseFloat( $panel.find( selector ).val() ) || 0;
+        return parseAmount( $panel.find( selector ).val() ) || 0;
     }
 
-    function updateCalculator( $calc ) {
-        const $panel   = $calc.find( classSelector( C.CALC_PANEL_CLASS ) );
+    // A calculator's parts (toggle, panel, target[s]) are linked by a shared data-calc id, so its panel
+    // may live anywhere -- a full-width detail row, or inline beside the amount -- not only within a
+    // common ancestor. `calcById` selects a part by class + that id.
+    function calcById( id, selector ) {
+        return $( selector + '[' + dataAttr( C.CALC_DATA_ATTR ) + '="' + id + '"]' );
+    }
+
+    function updateCalculator( id ) {
+        const $panel   = calcById( id, classSelector( C.CALC_PANEL_CLASS ) );
         const count    = calcNumber( $panel, '[name^="count_"]' );
         const cost     = calcNumber( $panel, '[name^="cost_"]' );
         const lifespan = calcNumber( $panel, '[name^="lifespan_"]' ) || 1;
         const annual   = Math.round( ( count * cost ) / lifespan );
-        // The readout mirrors the amount target verbatim (both bare whole dollars), so it matches the
-        // server's initial pre-JS render rather than reformatting on the first edit.
-        $calc.find( classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? annual : '' );
-        $calc.find( classSelector( C.CALC_READOUT_CLASS ) ).text( annual );
+        // The readout (inside the panel) mirrors the amount target, both thousands-grouped like every
+        // money value once enhanced -- so the live preview reads the same as a saved-and-reloaded amount.
+        calcById( id, classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? groupedThousands( annual ) : '' );
+        $panel.find( classSelector( C.CALC_READOUT_CLASS ) ).text( groupedThousands( annual ) );
+    }
+
+    // The recurring-expenses table flags each amount that differs from the previous age span (a tinted
+    // cell plus an up/down arrow), so what changes with age is scannable. The server renders the flags;
+    // this recomputes a row live as one of its amounts is typed, since the pane saves silently and does
+    // not re-render. It mirrors the server exactly: the first span is the baseline, each amount is
+    // compared to the one on its left, and a blank amount reads as 0 (as it saves).
+    function updateSpanTrends( $row ) {
+        let previous = null;
+        $row.find( classSelector( C.SPAN_AMOUNT_CLASS ) ).each( function ( index ) {
+            const amount    = parseAmount( this.value ) || 0;
+            const changed   = index > 0 && amount !== previous;
+            const direction = ! changed ? null : ( amount > previous ? 'up' : 'down' );
+            setSpanTrend( $( this ), changed, direction );
+            previous = amount;
+        } );
+    }
+
+    // Apply (or clear) a cell's changed styling: tint the money control (a class on the cell) and show
+    // the matching arrow -- hidden when unchanged, so every cell keeps the same width and the number
+    // column stays aligned.
+    function setSpanTrend( $input, changed, direction ) {
+        const $cell = $input.closest( 'td' );
+        $cell.toggleClass( C.SPAN_CHANGED_CLASS, changed );
+        if ( changed ) { $cell.attr( 'title', C.SPAN_CHANGED_TITLE ); }
+        else           { $cell.removeAttr( 'title' ); }
+        $cell.find( classSelector( C.SPAN_TREND_CLASS ) )
+            .toggleClass( 'invisible', ! changed )
+            .text( direction === 'up' ? C.SPAN_TREND_UP : C.SPAN_TREND_DOWN );
     }
 
     $( function () {
@@ -437,6 +540,7 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'change', autosaveForm + ' :input', function () {
             const $field = $( this );
             syncField( $field );
+            if ( pairMidEntry( $field ) ) { return; }   // person mid-entry: defer until the pair is whole
             saveForm( $field.closest( 'form' ) );
         } );
         // Enter (or any submit) routes through the same silent save, never a full-page POST.
@@ -510,6 +614,12 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'change', classSelector( C.SWITCH_CLASS ) + ' ' + classSelector( C.SWITCH_CONTROL_CLASS ),
             function () { applySwitch( $( this ).closest( classSelector( C.SWITCH_CLASS ) ) ); } );
 
+        // Group a money input's thousands as it is typed (money fields are text inputs, so a comma is a
+        // valid character); the MoneyField strips it back to a bare number on the server.
+        $( 'body' ).on( 'input', classSelector( C.MONEY_INPUT_CLASS ), function () {
+            groupMoneyInput( this );
+        } );
+
         // Refresh a credit card's advisory readout as its mode or inputs change.
         $( 'body' ).on( 'input change', classSelector( C.CREDIT_CARD_CLASS ) + ' :input',
             function () { updateCard( $( this ).closest( classSelector( C.CREDIT_CARD_CLASS ) ) ); } );
@@ -526,16 +636,23 @@ window.App.Inputs = (function () {
             saveForm( $form );
         } );
 
-        // Reveal/hide a durable's item calculator panel.
+        // Reveal/hide a durable's calculator panel, matched to the toggle by its data-calc id.
         $( 'body' ).on( 'click', classSelector( C.CALC_TOGGLE_CLASS ), function () {
-            const $panel = $( this ).closest( classSelector( C.CALC_CLASS ) )
-                .find( classSelector( C.CALC_PANEL_CLASS ) );
+            const $panel = calcById( $( this ).attr( dataAttr( C.CALC_DATA_ATTR ) ),
+                                     classSelector( C.CALC_PANEL_CLASS ) );
             $panel.prop( 'hidden', ! $panel.prop( 'hidden' ) );
         } );
 
         // Recompute a calculator's total + per-year and fill its amount target(s) as its inputs change.
         $( 'body' ).on( 'input change', classSelector( C.CALC_PANEL_CLASS ) + ' :input', function () {
-            updateCalculator( $( this ).closest( classSelector( C.CALC_CLASS ) ) );
+            updateCalculator( $( this ).closest( classSelector( C.CALC_PANEL_CLASS ) )
+                .attr( dataAttr( C.CALC_DATA_ATTR ) ) );
+        } );
+
+        // Re-flag a recurring row's changed amounts as one of them is typed, so the highlight tracks the
+        // edit without waiting for a re-render (the pane saves silently).
+        $( 'body' ).on( 'input change', classSelector( C.SPAN_AMOUNT_CLASS ), function () {
+            updateSpanTrends( $( this ).closest( 'tr' ) );
         } );
 
         // Mirror a property-expense row's Default into its blank per-property cells' placeholders as it
@@ -559,6 +676,7 @@ window.App.Inputs = (function () {
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
         enhanceStateAutofill( $( document.body ) );
+        enhanceMoneyInputs( $( document.body ) );
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
@@ -567,6 +685,7 @@ window.App.Inputs = (function () {
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
                 enhanceStateAutofill( $( document.body ) );
+                enhanceMoneyInputs( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }

@@ -17,7 +17,7 @@ from typing import Optional
 
 from django import forms
 
-from common.forms import MoneyField, PercentField
+from common.forms import MoneyField, PercentField, StyledFormMixin
 from common.rate import Rate, ZERO_RATE
 from common.widgets import PercentInput
 
@@ -31,7 +31,7 @@ from ucfp.inputs.profile.schemas import (
 from ucfp.inputs.compatibility import plans_without_accounts
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
-from ucfp.jurisdiction.labels import local_label
+from ucfp.jurisdiction.labels import local_term
 from ucfp.jurisdiction.us.subdivision_tax import USState
 
 from .credit_card import CreditCardPlanForm
@@ -70,6 +70,7 @@ class Section:
     aggregates: tuple = ( Aggregate.PROFILE, )
     form: Optional[ type ] = None
     outer_template: Optional[ str ] = None   # the section's self-saving pane, rendered above Next
+    rail_title: Optional[ str ] = None       # the stepper's label when it should read shorter than the title
 
 
 # The People section's state income-tax picker. The blank choice is the "no named state" case
@@ -77,7 +78,7 @@ class Section:
 _STATE_NONE_LABEL = 'Other or not listed'
 
 
-class SubjectsForm( forms.Form ):
+class SubjectsForm( StyledFormMixin, forms.Form ):
     """§1 -- who the plan is for. Collects one subject and optionally a partner, and *infers* the
     filing status (joint when there is a partner) rather than asking it -- the engine supports only
     single vs joint, both fixed by whether a partner exists, so there is nothing to choose. The tax
@@ -102,12 +103,12 @@ class SubjectsForm( forms.Form ):
         label = 'State', required = False,
         choices = [ ( '', _STATE_NONE_LABEL ) ] + USState.choices(),
         widget = StateRateSelect( attrs = {
-            'class' : f'{AppConst.STATE_SELECT_CLASS} custom-select custom-select-sm flex-grow-1 mr-2',
+            'class' : f'{AppConst.STATE_SELECT_CLASS} custom-select flex-grow-1 mr-2',
             'aria-label' : 'State' } ) )
     state_income_tax_rate = PercentField(
         label = 'State Tax rate (%)', required = False, min_value = 0, max_value = 100,
         widget = PercentInput( attrs = {
-            'class' : f'{AppConst.STATE_RATE_CLASS} form-control form-control-sm', 'step' : 'any',
+            'class' : f'{AppConst.STATE_RATE_CLASS} form-control', 'step' : 'any',
             'aria-label' : 'State tax rate (percent)' } ) )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -127,10 +128,11 @@ class SubjectsForm( forms.Form ):
     def filing_status_label( self ) -> str:
         """The filing status the engine will use, read from the saved profile and shown read-only. It
         reflects saved facts, so it updates on save rather than as the partner is edited -- there is
-        nothing to choose while single vs joint is fixed by whether a partner exists. A dash until a
-        primary person is entered (the filing status is unset until then)."""
+        nothing to choose while single vs joint is fixed by whether a partner exists. Defaults to
+        single: a primary person is always required, so single is the baseline until a partner makes
+        it joint."""
         status = self._profile.filing_status if self._profile is not None else None
-        return status.label if status is not None else '—'
+        return status.label if status is not None else FilingStatus.SINGLE.label
 
     @staticmethod
     def _initial( profile : Profile ) -> dict:
@@ -252,9 +254,9 @@ class HomeForm( forms.Form ):
     _MORTGAGE_HANDLE  = RESIDENCE_MORTGAGE_HANDLE
 
     tenure           = forms.ChoiceField(
-        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES,
-        initial = HousingTenure.OWN.name.lower(),
-        widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
+        label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, required = False,
+        widget = forms.RadioSelect(
+            attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     home_value       = MoneyField( label = 'Current value', required = False, min_value = 0 )
     purchase_price   = MoneyField( label = 'Purchase price', required = False, min_value = 0 )
     mortgage_balance = MoneyField(
@@ -266,7 +268,7 @@ class HomeForm( forms.Form ):
 
     @classmethod
     def _initial( cls, profile : Profile ) -> dict:
-        initial   = { 'tenure': profile.home_tenure.name.lower() }
+        initial   = { 'tenure': profile.home_tenure.name.lower() } if profile.home_tenure else dict()
         residence = cls._find( profile.assets, cls._RESIDENCE_HANDLE )
         if residence is not None:
             initial[ 'home_value' ]     = residence.opening_value
@@ -286,8 +288,11 @@ class HomeForm( forms.Form ):
                 profile.debts, self._MORTGAGE_HANDLE, self._mortgage( existing_mortgage ) ) )
         return updated_profile, plans
 
-    def _tenure( self ) -> HousingTenure:
-        return HousingTenure[ self.cleaned_data[ 'tenure' ].upper() ]
+    def _tenure( self ) -> Optional[ HousingTenure ]:
+        """The chosen tenure, or None when the household has not yet answered the housing question --
+        the unselected initial state (distinct from the explicit 'Neither', which means no home)."""
+        choice = self.cleaned_data.get( 'tenure' )
+        return HousingTenure[ choice.upper() ] if choice else None
 
     def _owns( self ) -> bool:
         return self._tenure() is HousingTenure.OWN
@@ -325,11 +330,11 @@ class HomeForm( forms.Form ):
         return next( ( item for item in items if item.handle == handle ), None )
 
 
-class PropertiesForm:
-    """§3 L0 -- the Properties pane. A no-op section form: the residence, the rentals, and the second
+class RealEstateForm:
+    """§3 L0 -- the Real Estate pane. A no-op section form: the residence, the rentals, and the second
     homes are each edited through their own async view, so Next just advances. It exposes the
     residence sub-form and the property lists for the pane (the rentals and second homes manage
-    themselves)."""
+    themselves). Other (non-real-estate) possessions are their own section -- `PossessionsSectionForm`."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile  = profile
@@ -344,7 +349,7 @@ class PropertiesForm:
 
     @property
     def property_panes( self ) -> list:
-        """Each mortgaged-property pane's render context for the Property section -- its heading, its
+        """Each mortgaged-property pane's render context for the Real Estate section -- its heading, its
         holdings, and the template config (ids, URL names, wording) from the shared `PropertyPane`.
         The section loops over these, so a new property kind is one pane, not another hand-wired
         block."""
@@ -352,6 +357,22 @@ class PropertiesForm:
                    'properties': properties_context( self._profile, pane.asset_class ),
                    **pane.template_context() }
                  for pane in PANES ]
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class PossessionsSectionForm:
+    """§ -- the Possessions pane: the household's tangible non-real-estate holdings (precious metals,
+    collectibles, vehicles, boats). A no-op section form: the list is edited through its own async view
+    (`PossessionsView`), so Next just advances. Exposes the possessions sub-form for the pane."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
 
     @property
     def possessions_form( self ):
@@ -402,11 +423,21 @@ class AccountsForm( forms.Form ):
         for subject in self._subjects:
             for prefix, _handle_prefix, _asset_class, concept in self._RETIREMENT:
                 self.fields[ self._retire_field( prefix, subject.handle ) ] = MoneyField(
-                    label = local_label( jurisdiction, concept ), required = False, min_value = 0 )
+                    label = self._retirement_label( jurisdiction, concept ),
+                    required = False, min_value = 0 )
 
     @staticmethod
     def _retire_field( prefix : str, handle : str ) -> str:
         return f'{prefix}_{handle}'
+
+    @staticmethod
+    def _retirement_label( jurisdiction, concept ) -> str:
+        """A retirement account's field label in the grouped Accounts layout -- the tax treatment plus
+        the jurisdiction's local term, e.g. 'Pre-tax (401(k) / IRA)'. The enclosing 'Retirement -- <name>'
+        heading already carries 'retirement', so that redundant word is dropped from the concept label."""
+        treatment = concept.label.removesuffix( ' retirement' )
+        term      = local_term( jurisdiction, concept )
+        return f'{treatment} ({term})' if term else treatment
 
     @property
     def taxable_fields( self ) -> list:
@@ -738,14 +769,19 @@ EXTERNAL_FACTORS_STEP = 'external-factors'
 # The interview's order. A section with a form is live; the rest are declared so the stepper shows
 # the full path ahead.
 SECTIONS = [
-    Section( SUBJECTS_STEP  , 'Who this plan is for', form = SubjectsSectionForm,
+    Section( SUBJECTS_STEP  , 'People', form = SubjectsSectionForm,
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    # Property precedes Income: declaring a rental creates its rent line on the Income step, so the
-    # properties must exist before the user works through Income or a rental's rent goes unnoticed.
-    Section( 'properties'  , 'Property', ( Aggregate.PROFILE, Aggregate.PLANS ), PropertiesForm,
+    # The asset sections are grouped -- Accounts, then Real Estate, then Possessions -- before Income.
+    # Real Estate precedes Income for a hard reason: declaring a rental creates its rent line on the
+    # Income step, so the properties must exist before the user works through Income or a rental's rent
+    # goes unnoticed. Possessions (non-real-estate tangibles: precious metals, collectibles, vehicles,
+    # boats) carry no income, so they sit here beside Real Estate purely to keep the assets together.
+    Section( 'real-estate' , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
+    Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
+             outer_template = 'inputs/interview/sections/possessions_section.html' ),
     Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
@@ -787,10 +823,11 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/events.html' ),
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
-             outer_template = 'inputs/interview/sections/external_factors.html' ),
+             outer_template = 'inputs/interview/sections/external_factors.html',
+             rail_title = 'Economics' ),   # the flow heading already says "Assumptions"
     # Selling costs (realtor fee + fixed costs) applied when a property is sold -- an assumption, but
     # distinct from the economic outlook, so its own step after it.
-    Section( 'transaction-costs', 'Selling Costs', ( Aggregate.ASSUMPTIONS, ),
+    Section( 'transaction-costs', 'Sales', ( Aggregate.ASSUMPTIONS, ),
              TransactionCostsSectionForm,
              outer_template = 'inputs/interview/sections/transaction_costs.html' ),
 ]

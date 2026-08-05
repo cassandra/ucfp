@@ -13,33 +13,40 @@ an age to split it, clear a span's age to delete it. Ages are the primary person
       <thead>
         <tr>
           <th scope="col">Expense</th>
+          <th scope="col">Every</th>
           {% for header in recurring_form.span_headers %}
           <th scope="col" class="text-right small">Until age {{ header.field }}
             {% if recurring_form.span_count > 1 %}
             <button type="button" class="{{ AppConst.RECURRING_DELETE_CLASS }} btn btn-sm btn-link text-danger p-0 ml-1"
                     data-span="{{ forloop.counter0 }}" aria-label="Delete this span" title="Delete this span">&times;</button>
             {% endif %}
-            {% if header.year %}<span class="text-muted d-block">reaches {{ header.year }}</span>{% endif %}</th>
+            <span class="text-muted d-block">{% if header.open %}for life{% elif header.year %}reaches {{ header.year }}{% endif %}</span></th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for section in recurring_form.sections %}
-        <tr class="table-light"><th colspan="{{ recurring_form.span_count|add:1 }}">{{ section.label }}</th></tr>
+        <tr class="table-light"><th colspan="{{ recurring_form.span_count|add:2 }}">{{ section.label }}</th></tr>
         {% for row in section.rows %}
-        <tr{% if row.count_entry %} class="{{ AppConst.CALC_CLASS }}"{% endif %}>
+        <tr>
           <th scope="row" class="font-weight-normal text-left">{{ row.name }}
-            {% include 'inputs/components/_cadence.html' with cadence=row.cadence %}
-            {% if row.count_entry %}{% include 'inputs/components/_calculator.html' with calc=row.calculator %}{% endif %}</th>
+            {% if row.count_entry %}{% include 'inputs/components/_calculator_toggle.html' with calc_id=row.calc_id %}{% endif %}</th>
+          <td class="text-nowrap">{% include 'inputs/components/_cadence.html' with cadence=row.cadence hide_every=True %}</td>
           {% for cell in row.cells %}
-          <td class="text-right">{{ cell }}{% if cell.errors %}<span class="text-danger small d-block">{{ cell.errors|join:" " }}</span>{% endif %}</td>
+          <td class="text-right{% if cell.changed %} {{ AppConst.SPAN_CHANGED_CLASS }}{% endif %}"{% if cell.changed %} title="{{ AppConst.SPAN_CHANGED_TITLE }}"{% endif %}>{{ cell.field }}{% if recurring_form.span_count > 1 %}<span class="{{ AppConst.SPAN_TREND_CLASS }}{% if not cell.direction %} invisible{% endif %}" aria-hidden="true">{% if cell.direction == 'up' %}{{ AppConst.SPAN_TREND_UP }}{% else %}{{ AppConst.SPAN_TREND_DOWN }}{% endif %}</span>{% endif %}{% if cell.field.errors %}<span class="text-danger small d-block">{{ cell.field.errors|join:" " }}</span>{% endif %}</td>
           {% endfor %}
         </tr>
+        {% if row.count_entry %}
+        <tr class="{{ AppConst.CALC_PANEL_CLASS }} calc-detail" data-{{ AppConst.CALC_DATA_ATTR }}="{{ row.calc_id }}" hidden>
+          <td colspan="{{ recurring_form.span_count|add:2 }}" class="small text-muted">
+            {% include 'inputs/components/_calculator_panel.html' with calc=row.calculator %}</td>
+        </tr>
+        {% endif %}
         {% endfor %}
         {% endfor %}
       </tbody>
     </table>
-    <p class="text-muted small">An amount per age span, at each expense's cadence. Set an "Until age" to
-      split a span; clear it to remove that span. Ages are the primary person's. Changes save automatically.</p>
+    <p class="text-muted small">Set an "Until age" to split a span; clear it to remove one. Ages are the
+      primary person's.</p>
   </form>
 </div>

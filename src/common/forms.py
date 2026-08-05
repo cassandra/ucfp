@@ -1,13 +1,19 @@
-"""Semantic form fields that pair a value's type with its display shape.
+"""Shared form building blocks.
 
-MoneyField / PercentField are DecimalField subclasses that default to the
-currency / percent input widgets (common.widgets), so a form expresses intent --
-"this is money", "this is a percent" -- and the $ / % affix follows
-automatically, rather than each template hand-building an input-group.
+MoneyField / PercentField are DecimalField subclasses that default to the currency / percent input
+widgets (common.widgets), so a form expresses intent -- "this is money", "this is a percent" -- and the
+$ / % affix follows automatically. StyledFormMixin applies Bootstrap control classes to a form's widgets
+so its inputs render polished without each field naming the class by hand.
 """
 from django import forms
+from django.forms.widgets import Input
 
 from common.widgets import MoneyInput, PercentInput
+
+
+# The one standard label for a select's blank "nothing chosen yet" option, so every dropdown's
+# placeholder reads the same. Change it here to restyle the placeholder everywhere at once.
+CHOOSE_PLACEHOLDER = '-- Choose --'
 
 
 class _AffixField( forms.DecimalField ):
@@ -24,10 +30,51 @@ class _AffixField( forms.DecimalField ):
 
 
 class MoneyField( _AffixField ):
-    """A DecimalField shown as a currency input (leading $)."""
+    """A DecimalField shown as a currency input (leading $). Its input is plain text carrying thousands
+    separators as typed, so those separators (and surrounding whitespace) are stripped before the
+    decimal parse -- '122,000' becomes Decimal('122000')."""
     widget = MoneyInput
+
+    def to_python( self, value ):
+        if isinstance( value, str ):
+            value = value.replace( ',', '' ).strip()
+        return super().to_python( value )
 
 
 class PercentField( _AffixField ):
     """A DecimalField shown as a percent input (trailing %)."""
     widget = PercentInput
+
+
+class StyledFormMixin:
+    """Applies Bootstrap control classes to each field's widget, so a form renders as polished inputs
+    without every field naming the class by hand: text / number / date / file inputs get `form-control`,
+    selects get `custom-select`, single checkboxes get `form-check-input`. Hidden inputs, multi-option
+    choice widgets (radios and checkbox lists, styled per option), and widgets already carrying a control
+    class are left alone. Mix in before `forms.Form` / `forms.ModelForm`."""
+
+    def __init__( self, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
+        for field in self.fields.values():
+            _apply_control_class( field.widget )
+
+
+def _apply_control_class( widget ) -> None:
+    if isinstance( widget, forms.HiddenInput ):
+        return
+    if isinstance( widget, ( forms.RadioSelect, forms.CheckboxSelectMultiple ) ):
+        return                                       # rendered per option, not a single control
+    if isinstance( widget, forms.CheckboxInput ):
+        control = 'form-check-input'
+    elif isinstance( widget, forms.FileInput ):
+        control = 'form-control-file'
+    elif isinstance( widget, forms.Select ):
+        control = 'custom-select'
+    elif isinstance( widget, ( Input, forms.Textarea ) ):
+        control = 'form-control'
+    else:
+        return
+    classes = widget.attrs.get( 'class', '' ).split()
+    if control not in classes:
+        classes.append( control )
+        widget.attrs[ 'class' ] = ' '.join( classes )

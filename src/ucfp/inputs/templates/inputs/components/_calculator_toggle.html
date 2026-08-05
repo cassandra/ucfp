@@ -1,0 +1,9 @@
+{% comment %}
+The toggle for a durable expense's calculator -- reveals/hides its panel. `calc_id` ties this toggle to
+its panel and amount target(s) via data-calc (so the panel can live anywhere -- a detail row, or inline
+beside the amount). Include with `calc_id` = the row's calc id.
+{% endcomment %}
+{% load icons %}
+<button type="button" class="{{ AppConst.CALC_TOGGLE_CLASS }} btn btn-sm btn-link p-0 ml-1"
+        data-{{ AppConst.CALC_DATA_ATTR }}="{{ calc_id }}"
+        aria-label="Enter as a count of items">{% icon "calculator" size="sm" %}</button>

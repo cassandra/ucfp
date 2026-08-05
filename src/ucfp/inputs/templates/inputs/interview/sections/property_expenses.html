@@ -12,6 +12,7 @@ property. With a single property the Default column collapses into one value col
       <thead>
         <tr>
           <th scope="col">Expense</th>
+          <th scope="col">Every</th>
           {% for column in property_form.columns %}
           <th scope="col" class="text-right small">{{ column.label }}</th>
           {% endfor %}
@@ -19,29 +20,32 @@ property. With a single property the Default column collapses into one value col
       </thead>
       <tbody>
         {% for section in property_form.sections %}
-        <tr class="table-light"><th colspan="{{ property_form.columns|length|add:1 }}">{{ section.label }}</th></tr>
+        <tr class="table-light"><th colspan="{{ property_form.columns|length|add:2 }}">{{ section.label }}</th></tr>
         {% for row in section.rows %}
         <tr>
           <th scope="row" class="font-weight-normal text-left">{{ row.name }}
-            {% include 'inputs/components/_cadence.html' with cadence=row.cadence %}</th>
+            {% if row.count_entry %}{% include 'inputs/components/_calculator_toggle.html' with calc_id=row.calc_id %}{% endif %}</th>
+          <td class="text-nowrap">{% include 'inputs/components/_cadence.html' with cadence=row.cadence hide_every=True %}</td>
           {% for cell in row.cells %}
-          {% if forloop.first and row.count_entry %}
-          <td class="text-right {{ AppConst.CALC_CLASS }}">{{ cell }}
-            {% include 'inputs/components/_calculator.html' with calc=row.calculator %}</td>
-          {% elif cell %}
+          {% if cell %}
           <td class="text-right">{{ cell }}{% if cell.errors %}<span class="text-danger small d-block">{{ cell.errors|join:" " }}</span>{% endif %}</td>
           {% else %}
           <td class="text-right text-muted">&mdash;</td>
           {% endif %}
           {% endfor %}
         </tr>
+        {% if row.count_entry %}
+        <tr class="{{ AppConst.CALC_PANEL_CLASS }} calc-detail" data-{{ AppConst.CALC_DATA_ATTR }}="{{ row.calc_id }}" hidden>
+          <td colspan="{{ property_form.columns|length|add:2 }}" class="small text-muted">
+            {% include 'inputs/components/_calculator_panel.html' with calc=row.calculator %}</td>
+        </tr>
+        {% endif %}
         {% endfor %}
         {% endfor %}
       </tbody>
     </table>
-    <p class="text-muted small">One amount per property, at each expense's cadence.
-      {% if not property_form.collapsed %}The Default applies to every property; fill a property's cell to
-      override it. {% endif %}Leave {% if property_form.collapsed %}an amount{% else %}both{% endif %} blank
-      to skip an expense. Changes save automatically.</p>
+    <p class="text-muted small">{% if not property_form.collapsed %}A blank property cell uses the Default
+      (shown as its placeholder). {% endif %}Leave {% if property_form.collapsed %}the amount{% else %}both{% endif %}
+      blank to skip an expense.</p>
   </form>
 </div>

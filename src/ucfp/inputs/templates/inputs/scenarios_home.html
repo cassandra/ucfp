@@ -35,7 +35,7 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
           {% if not row.complete %}<span class="badge badge-secondary ml-1">in progress</span>{% endif %}
         </span>
         {% if not row.complete %}
-        <form method="post" action="{% url 'scenario_resume' row.scenario.uuid %}" class="m-0 mr-3">
+        <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0 mr-3">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm btn-link p-0">Finish setup &rarr;</button>
         </form>
@@ -52,7 +52,7 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
     {% endfor %}
   </ul>
   <div class="card-footer bg-white border-0">
-    <a href="{% url 'scenario_new' %}" class="btn btn-outline-primary btn-sm">+ New Future Scenario</a>
+    <a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary btn-sm">+ New Future Scenario</a>
   </div>
 </div>
 
@@ -67,20 +67,20 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
       <ul class="list-group list-group-flush">
         {% for row in plans %}
         <li class="list-group-item d-flex align-items-center py-2">
-          {% url 'plan_rename' row.record.uuid as rename_url %}
+          {% url 'plans_rename' row.record.uuid as rename_url %}
           {% include 'inputs/panes/inline_rename.html' with kind='plan' uuid=row.record.uuid rename_url=rename_url label=row.record.label aria='Plan name' %}
           <span class="d-flex align-items-center flex-shrink-0">
             {% if row.complete %}
-            <a href="{% url 'plan_select' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
-            <form method="post" action="{% url 'plan_clone' row.record.uuid %}" class="m-0 mr-3">
+            <a href="{% url 'plans_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <form method="post" action="{% url 'plans_clone' row.record.uuid %}" class="m-0 mr-3">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
             </form>
             {% else %}
             <span class="badge badge-secondary mr-2">needs setup</span>
-            <a href="{% url 'plan_select' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
+            <a href="{% url 'plans_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
             {% endif %}
-            <form method="post" action="{% url 'plan_delete' row.record.uuid %}" class="m-0"
+            <form method="post" action="{% url 'plans_delete' row.record.uuid %}" class="m-0"
                   data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
@@ -92,7 +92,7 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
         {% endfor %}
       </ul>
       <div class="card-footer bg-white border-0">
-        <form method="post" action="{% url 'plan_new' %}" class="m-0">
+        <form method="post" action="{% url 'plans_new' %}" class="m-0">
           {% csrf_token %}
           <button type="submit" class="btn btn-outline-primary btn-sm btn-block">+ New plan</button>
         </form>
@@ -113,14 +113,14 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
           {% include 'inputs/panes/inline_rename.html' with kind='assumptions' uuid=row.record.uuid rename_url=rename_url label=row.record.label aria='Assumptions name' %}
           <span class="d-flex align-items-center flex-shrink-0">
             {% if row.complete %}
-            <a href="{% url 'assumptions_select' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
+            <a href="{% url 'assumptions_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Edit</a>
             <form method="post" action="{% url 'assumptions_clone' row.record.uuid %}" class="m-0 mr-3">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-link p-0">Clone</button>
             </form>
             {% else %}
             <span class="badge badge-secondary mr-2">needs setup</span>
-            <a href="{% url 'assumptions_select' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
+            <a href="{% url 'assumptions_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
             {% endif %}
             <form method="post" action="{% url 'assumptions_delete' row.record.uuid %}" class="m-0"
                   data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">

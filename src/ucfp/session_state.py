@@ -64,7 +64,7 @@ class SessionState:
     # The scenario currently being built, by uuid -- set while the Plans->Assumptions build flow runs, so
     # the interview chains the two component flows and finalizes on completion. Cleared when the build
     # finishes; None means no build is in progress.
-    scenario_building : Optional[ str ] = None
+    editing_scenario : Optional[ str ] = None
 
     # Which inputs each Explore section keeps visible when collapsed (the curated subset) -- a per-section
     # list of handles. A visual convenience only; None means "not yet curated", so the section falls back
@@ -92,7 +92,7 @@ class SessionState:
         request.session[ 'current_plans_uuid' ] = self.current_plans_uuid
         request.session[ 'current_assumptions_uuid' ] = self.current_assumptions_uuid
         request.session[ 'current_scenario_uuid' ] = self.current_scenario_uuid
-        request.session[ 'scenario_building' ] = self.scenario_building
+        request.session[ 'editing_scenario' ] = self.editing_scenario
         request.session[ 'explore_curated_expenses' ] = self.explore_curated_expenses
         request.session[ 'explore_curated_rates' ] = self.explore_curated_rates
         request.session[ 'books_table_definition' ] = (
@@ -112,7 +112,7 @@ class SessionState:
             current_plans_uuid = request.session.get( 'current_plans_uuid' ),
             current_assumptions_uuid = request.session.get( 'current_assumptions_uuid' ),
             current_scenario_uuid = request.session.get( 'current_scenario_uuid' ),
-            scenario_building = request.session.get( 'scenario_building' ),
+            editing_scenario = request.session.get( 'editing_scenario' ),
             explore_curated_expenses = request.session.get( 'explore_curated_expenses' ),
             explore_curated_rates = request.session.get( 'explore_curated_rates' ),
             books_table_definition = BooksTableDefinition.from_storage(

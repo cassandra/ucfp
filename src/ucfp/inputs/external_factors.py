@@ -96,7 +96,8 @@ class ExternalFactorsForm( forms.Form ):
 
     forecast_type = forms.ChoiceField(
         label = 'Future tax brackets', choices = StatuteForecastType.choices(),
-        initial = DEFAULT_TAX_FORECAST_TYPE.name.lower() )
+        initial = DEFAULT_TAX_FORECAST_TYPE.name.lower(),
+        widget = forms.Select( attrs = { 'class' : 'custom-select w-auto' } ) )
 
     def __init__( self, data = None, *, profile = None, assumptions = None ):
         super().__init__( data, initial = self._initial( assumptions ) )
