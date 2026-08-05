@@ -9,6 +9,7 @@ door in `exploration.py`.
 """
 from typing import Optional
 
+from django.core.exceptions import BadRequest
 from django.db import transaction
 from django.db.models import QuerySet
 
@@ -96,8 +97,30 @@ def rename_scenario( record: ScenarioRecord, label: str ) -> ScenarioRecord:
 def delete_scenario( record: ScenarioRecord ) -> None:
     """Delete a scenario -- only the pairing; its Plans and Assumptions live on for other scenarios. If the
     scenario anchors an in-progress exploration, that exploration cascades away with it (see
-    `ScenarioExploration`)."""
+    `ScenarioExploration`). Much of the app assumes a scenario exists, so the last one cannot be deleted:
+    the UI hides the control, and a request that still arrives is malformed (BadRequest -> 400).
+
+    The count-then-delete is deliberately not row-locked: a per-org scenario set is effectively
+    single-writer in practice, so the check-to-act race is not worth serializing here (revisit with a
+    `select_for_update` on the organization, as `ensure_default_scenario` does, if that ceases to hold)."""
+    if scenarios_for( record.organization ).count() <= 1:
+        raise BadRequest( 'Cannot delete the last scenario.' )
     record.delete()
+
+
+def would_orphan_all_scenarios( organization: Organization, *,
+                                plans: Optional[ PlansRecord ] = None,
+                                assumptions: Optional[ AssumptionsRecord ] = None ) -> bool:
+    """Whether deleting the given component would cascade away every saved scenario -- because all of them
+    pair it -- leaving the organization with none. The scenario delete guards deleting a scenario
+    directly; this guards the indirect path, where deleting a Plans or Assumptions set cascades its
+    scenarios away. Exactly one of `plans` / `assumptions` names the component being deleted."""
+    scenarios = scenarios_for( organization )
+    if not scenarios.exists():
+        return False
+    remaining = ( scenarios.exclude( plans = plans ) if plans is not None
+                  else scenarios.exclude( assumptions = assumptions ) )
+    return not remaining.exists()
 
 
 def scenario_labels( organization: Organization ) -> list:

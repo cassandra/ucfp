@@ -46,6 +46,14 @@ class ExplorationTeardownTest( TestCase ):
 
     def test_deleting_the_anchor_clears_the_exploration_and_its_transient_runs( self ):
         anchor = self._anchor_with_a_running_exploration()
+        # A second saved scenario so deleting the anchor is allowed (the last scenario cannot be deleted).
+        create_scenario(
+            self.organization,
+            save_plans( PlansRecord( organization = self.organization, label = 'Other Plans' ), Plans() ),
+            save_assumptions(
+                AssumptionsRecord( organization = self.organization, label = 'Other Assumptions' ),
+                expected_assumptions() ),
+            'Other' )
         self.assertEqual(
             PlanningResultRecord.objects.filter( usage_role = UsageRole.WORKING ).count(), 1 )
         self.assertTrue( BooksOfAccountRecord.objects.exists() )          # the run really produced books

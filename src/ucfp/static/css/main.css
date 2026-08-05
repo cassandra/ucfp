@@ -631,3 +631,28 @@ a:hover, a:focus {
    The rate is a fixed narrow box; the state select flexes to fill the rest.
    ========================================================================= */
 .js-state-rate                    { width: 5rem; flex: 0 0 auto; }
+
+/* An inline-rename field styled as its card's heading: large and bold, with a faint always-visible
+   baseline underline (the box's other sides stay chromeless) so it reads as a title yet still signals
+   it is editable. On hover or focus the underline darkens to the primary colour and the field turns
+   white -- staying an underline, never a boxed input. Used for the scenario name on the Scenarios hub. */
+.js-rename-title {
+    width: auto;                       /* size to the name (via the input's `size`), not the whole row, */
+    min-width: 20rem;                  /* but never so cramped a short name has no room to type into, */
+    max-width: 100%;                   /* nor wider than the card. The underline hugs the title between. */
+    height: auto;                      /* let the type size the box (clear form-control-sm's min-height, */
+    min-height: 0;                     /* so the field aligns on the CTA row rather than a taller sm box) */
+    font-size: 1.25rem;
+    font-weight: 600;
+    padding: 0.15rem 0.4rem;
+    border-color: transparent;
+    border-bottom-color: #ced4da;
+    background-color: transparent;
+}
+.js-rename-title:hover,
+.js-rename-title:focus {
+    border-color: transparent;
+    border-bottom-color: var(--primary-color);
+    background-color: #fff;
+    box-shadow: none;
+}

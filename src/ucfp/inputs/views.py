@@ -7,10 +7,13 @@ flow and `InterviewView` drives one section at a time over the typed aggregates.
 standalone first setup; the Plans/Assumptions flows compose into a scenario (the build flow chains them).
 The remaining views are the sub-editors each section pane drills into.
 """
+from collections import Counter
 from dataclasses import replace
 
 from django import forms
+from django.core.exceptions import BadRequest
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -33,7 +36,7 @@ from ucfp.inputs.assumptions.repository import (
     load_assumptions, rename_assumptions, save_assumptions )
 from ucfp.inputs.scenarios.repository import (
     create_scenario, delete_scenario, ensure_default_scenario, existing_pairings, rename_scenario,
-    scenarios_for )
+    scenarios_for, would_orphan_all_scenarios )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -76,38 +79,63 @@ class ScenariosHomeView( View ):
         organization   = request.organization
         profile_record = completed_profile( organization )
         profile        = load_profile( profile_record ) if profile_record is not None else None
-        # Fetch each component set once (prefetching each set's scenarios for the delete-cascade warning),
-        # then compute completeness on those rows -- `flow_reviewed` reads their JSON only, no extra query.
-        plans       = self._component_rows( plans_for( organization ), profile, 'plans' )
-        assumptions = self._component_rows( assumptions_for( organization ), profile, 'assumptions' )
-        complete_ids = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
-                         { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
+        # One pass over the saved scenarios drives both the scenario cards and the component rows: the
+        # per-component usage counts feed the "shared" indicator and, against the scenario total, the
+        # `deletable` flag -- so the page needs no per-row query to decide either.
+        scenarios        = list( scenarios_for( organization ).select_related( 'plans', 'assumptions' ) )
+        plans_uses       = Counter( scenario.plans_id for scenario in scenarios )
+        assumptions_uses = Counter( scenario.assumptions_id for scenario in scenarios )
+        plans       = self._component_rows(
+            plans_for( organization ), profile, 'plans', plans_uses, len( scenarios ) )
+        assumptions = self._component_rows(
+            assumptions_for( organization ), profile, 'assumptions', assumptions_uses, len( scenarios ) )
+        complete_ids  = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
+                          { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
+        scenario_rows = self._scenario_rows( scenarios, plans_uses, assumptions_uses, *complete_ids )
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
             'profile_complete' : profile_record is not None,
-            'scenarios'        : self._scenario_rows( organization, *complete_ids ),
+            'scenarios'        : scenario_rows,
             'plans'            : plans,
             'assumptions'      : assumptions,
+            # A household keeps at least one scenario, so its sole scenario's delete control is suppressed.
+            'can_delete_scenario' : len( scenarios ) > 1,
         } )
 
     @staticmethod
-    def _component_rows( records, profile, flow ):
-        """Each component as a `{record, complete}` row -- complete when its flow is fully walked, so the
-        list can flag the ones still needing setup (an incomplete component is absent from scenario
-        building until finished). None profile means no completeness (the profile gate shows instead)."""
-        return [ { 'record': record,
-                   'complete': profile is not None and flow_reviewed( profile, record, flow ) }
-                 for record in records.prefetch_related( 'scenarios' ) ]
+    def _component_rows( records, profile, flow, uses, scenario_count ):
+        """Each component as a `{record, complete, deletable}` row. `complete` when its flow is fully walked
+        (an incomplete component is absent from scenario building; None profile means no completeness -- the
+        profile gate shows instead). `deletable` mirrors the delete guards in the UI: false for the last of
+        its kind, and false for a set every scenario pairs (whose deletion would cascade the org's last
+        scenario away) -- i.e. when its use-count equals `scenario_count`. `uses` maps a component's id to
+        how many scenarios pair it. The prefetch is scoped to SAVED scenarios so the delete-cascade warning
+        counts the same scenarios the guard does."""
+        saved    = Prefetch(
+            'scenarios', queryset = ScenarioRecord.objects.filter( usage_role = UsageRole.SAVED ) )
+        records  = list( records.prefetch_related( saved ) )
+        multiple = len( records ) > 1
+        rows = list()
+        for record in records:
+            paired_by_every_scenario = scenario_count > 0 and uses[ record.id ] == scenario_count
+            rows.append( { 'record': record,
+                           'complete': profile is not None and flow_reviewed( profile, record, flow ),
+                           'deletable': multiple and not paired_by_every_scenario } )
+        return rows
 
     @staticmethod
-    def _scenario_rows( organization, plans_ids, assumptions_ids ):
-        """Each saved scenario as a `{scenario, complete}` row -- complete when both its components' flows
-        are walked -- so an in-progress one (e.g. the freshly-created Default) can offer to resume setup."""
+    def _scenario_rows( scenarios, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
+        """Each saved scenario as a row -- `complete` (both components' flows walked, so an in-progress one
+        can offer to resume setup) plus how many scenarios share each of its components (`plans_uses` /
+        `assumptions_uses`), which drives the "shared" indicator. `scenarios` and the usage counters are
+        prepared once by the caller so the page makes a single scenarios query."""
         rows = list()
-        for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' ):
+        for scenario in scenarios:
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
-            rows.append( { 'scenario': scenario, 'complete': complete } )
+            rows.append( { 'scenario': scenario, 'complete': complete,
+                           'plans_uses': plans_uses[ scenario.plans_id ],
+                           'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
         return rows
 
 
@@ -429,6 +457,9 @@ class PlansDeleteView( View ):
 
     def post( self, request, uuid ):
         record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+        # Deleting cascades away the scenarios that pair this set; refuse if that would leave none.
+        if would_orphan_all_scenarios( request.organization, plans = record ):
+            raise BadRequest( 'Deleting this Plans set would remove your last scenario.' )
         _forget_if_current( request, 'current_plans_uuid', record )
         delete_plans( record )
         return redirect( 'scenarios_home' )
@@ -443,6 +474,9 @@ class AssumptionsDeleteView( View ):
     def post( self, request, uuid ):
         record = get_object_or_404(
             AssumptionsRecord, uuid = uuid, organization = request.organization )
+        # Deleting cascades away the scenarios that pair this set; refuse if that would leave none.
+        if would_orphan_all_scenarios( request.organization, assumptions = record ):
+            raise BadRequest( 'Deleting this Assumptions set would remove your last scenario.' )
         _forget_if_current( request, 'current_assumptions_uuid', record )
         delete_assumptions( record )
         return redirect( 'scenarios_home' )
