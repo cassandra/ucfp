@@ -11,6 +11,7 @@ from dataclasses import replace
 
 from django import forms
 from django.db import transaction
+from django.core.exceptions import BadRequest
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -33,7 +34,7 @@ from ucfp.inputs.assumptions.repository import (
     load_assumptions, rename_assumptions, save_assumptions )
 from ucfp.inputs.scenarios.repository import (
     create_scenario, delete_scenario, ensure_default_scenario, existing_pairings, rename_scenario,
-    scenarios_for )
+    scenarios_for, would_orphan_all_scenarios )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -83,6 +84,14 @@ class ScenariosHomeView( View ):
         complete_ids = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
                          { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
         scenario_rows = self._scenario_rows( organization, *complete_ids )
+        # A component is deletable only when it is not the last of its kind and its cascade would not
+        # strand the organization with no scenario -- the same two invariants the delete guards enforce.
+        for row in plans:
+            row[ 'deletable' ] = len( plans ) > 1 and not would_orphan_all_scenarios(
+                organization, plans = row[ 'record' ] )
+        for row in assumptions:
+            row[ 'deletable' ] = len( assumptions ) > 1 and not would_orphan_all_scenarios(
+                organization, assumptions = row[ 'record' ] )
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
@@ -433,6 +442,9 @@ class PlansDeleteView( View ):
 
     def post( self, request, uuid ):
         record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+        # Deleting cascades away the scenarios that pair this set; refuse if that would leave none.
+        if would_orphan_all_scenarios( request.organization, plans = record ):
+            raise BadRequest( 'Deleting this Plans set would remove your last scenario.' )
         _forget_if_current( request, 'current_plans_uuid', record )
         delete_plans( record )
         return redirect( 'scenarios_home' )
@@ -447,6 +459,9 @@ class AssumptionsDeleteView( View ):
     def post( self, request, uuid ):
         record = get_object_or_404(
             AssumptionsRecord, uuid = uuid, organization = request.organization )
+        # Deleting cascades away the scenarios that pair this set; refuse if that would leave none.
+        if would_orphan_all_scenarios( request.organization, assumptions = record ):
+            raise BadRequest( 'Deleting this Assumptions set would remove your last scenario.' )
         _forget_if_current( request, 'current_assumptions_uuid', record )
         delete_assumptions( record )
         return redirect( 'scenarios_home' )

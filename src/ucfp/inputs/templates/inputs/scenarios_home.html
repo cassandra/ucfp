@@ -70,7 +70,7 @@ you keep more than one set around.
               <span class="badge badge-secondary mr-2">needs setup</span>
               <a href="{% url 'plans_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
               {% endif %}
-              {% if plans|length > 1 %}
+              {% if row.deletable %}
               <form method="post" action="{% url 'plans_delete' row.record.uuid %}" class="m-0"
                     data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
                 {% csrf_token %}
@@ -114,7 +114,7 @@ you keep more than one set around.
               <span class="badge badge-secondary mr-2">needs setup</span>
               <a href="{% url 'assumptions_edit' row.record.uuid %}" class="btn btn-sm btn-link p-0 mr-3">Complete setup</a>
               {% endif %}
-              {% if assumptions|length > 1 %}
+              {% if row.deletable %}
               <form method="post" action="{% url 'assumptions_delete' row.record.uuid %}" class="m-0"
                     data-confirm="Delete &quot;{{ row.record.label }}&quot;?{% if row.record.scenarios.all %} This also deletes the scenarios that use it: {% for scenario in row.record.scenarios.all %}{{ scenario.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %} This cannot be undone.">
                 {% csrf_token %}

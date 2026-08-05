@@ -141,6 +141,18 @@ class ScenarioHeroLayoutTests( _ScenariosHomeTestBase ):
         self.assertIn( '+ New scenario', content )
         self.assertIn( reverse( 'scenario_compose' ), content )
 
+    def test_delete_hidden_for_a_component_whose_removal_would_orphan_scenarios( self ):
+        scenario = self._scenario( complete = True, label = 'Only' )
+        spare    = PlansRecord( organization = self.organization, label = 'Spare Plans' )
+        save_plans( spare, Plans() )                            # a second set: the per-kind guard alone allows delete
+
+        content = self._home_content()
+
+        # The scenario's own Plans still can't be deleted (its cascade would leave no scenario)...
+        self.assertNotIn( reverse( 'plans_delete', args = [ scenario.plans.uuid ] ), content )
+        # ...but the unused spare can.
+        self.assertIn( reverse( 'plans_delete', args = [ spare.uuid ] ), content )
+
     def test_the_only_scenario_offers_no_delete( self ):
         scenario = self._scenario( complete = True, label = 'Only' )
 
