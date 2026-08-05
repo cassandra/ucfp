@@ -34,12 +34,13 @@ combines (inline rename, edit, clone, delete, new). Feature-agnostic: it links t
           {{ row.scenario.plans.label }} + {{ row.scenario.assumptions.label }}
           {% if not row.complete %}<span class="badge badge-secondary ml-1">in progress</span>{% endif %}
         </span>
-        {% if not row.complete %}
+        {% comment %}One op (scenario_edit) behind a state-aware label: resume a half-built scenario, or
+        re-enter a complete one to review it -- the full Plans->Assumptions walk, now reachable on complete
+        scenarios too.{% endcomment %}
         <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0 mr-3">
           {% csrf_token %}
-          <button type="submit" class="btn btn-sm btn-link p-0">Finish setup &rarr;</button>
+          <button type="submit" class="btn btn-sm btn-link p-0">{% if row.complete %}Review scenario{% else %}Finish setup{% endif %} &rarr;</button>
         </form>
-        {% endif %}
         <form method="post" action="{% url 'scenario_delete' row.scenario.uuid %}" class="m-0"
               data-confirm="Delete &quot;{{ row.scenario.label }}&quot;? Its Plans and Assumptions are kept. This cannot be undone.">
           {% csrf_token %}
