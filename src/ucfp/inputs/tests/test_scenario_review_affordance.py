@@ -121,37 +121,13 @@ class ScenarioHeroLayoutTests( _ScenariosHomeTestBase ):
         # The scenario name is inline-renamable (the parts are not).
         self.assertIn( reverse( 'scenario_rename', args = [ scenario.uuid ] ), content )
 
-    def test_component_library_is_tucked_behind_the_manage_collapse( self ):
-        self._scenario( complete = True, label = 'Done' )
-
-        content = self._home_content()
-
-        # The library still exists, but only inside the collapsed "manage" region, named for the user
-        # (not the internal "components").
-        self.assertIn( 'Manage individual Plans and Assumptions', content )
-        self.assertIn( 'id="manage-components"', content )
-        self.assertIn( 'class="collapse"', content )
-        self.assertIn( '+ New plan', content )
-
-    def test_new_scenario_creation_is_present_but_demoted( self ):
+    def test_new_scenario_creation_is_present( self ):
         self._scenario( complete = True, label = 'Done' )
 
         content = self._home_content()
 
         self.assertIn( '+ New scenario', content )
         self.assertIn( reverse( 'scenario_compose' ), content )
-
-    def test_delete_hidden_for_a_component_whose_removal_would_orphan_scenarios( self ):
-        scenario = self._scenario( complete = True, label = 'Only' )
-        spare    = PlansRecord( organization = self.organization, label = 'Spare Plans' )
-        save_plans( spare, Plans() )                            # a second set: the per-kind guard alone allows delete
-
-        content = self._home_content()
-
-        # The scenario's own Plans still can't be deleted (its cascade would leave no scenario)...
-        self.assertNotIn( reverse( 'plans_delete', args = [ scenario.plans.uuid ] ), content )
-        # ...but the unused spare can.
-        self.assertIn( reverse( 'plans_delete', args = [ spare.uuid ] ), content )
 
     def test_the_only_scenario_offers_no_delete( self ):
         scenario = self._scenario( complete = True, label = 'Only' )
@@ -200,17 +176,3 @@ class ScenarioMultiplicityTests( _ScenariosHomeTestBase ):
         content = self._home_content()
 
         self.assertNotIn( '>Shared</span>', content )
-
-    def test_library_is_surfaced_open_with_multiple_scenarios( self ):
-        self._scenario( complete = True, label = 'One' )
-        self._scenario( complete = True, label = 'Two' )
-
-        self.assertIn( 'class="collapse show"', self._home_content() )
-
-    def test_library_stays_collapsed_with_a_single_scenario( self ):
-        self._scenario( complete = True, label = 'Only' )
-
-        content = self._home_content()
-
-        self.assertIn( 'id="manage-components"', content )
-        self.assertNotIn( 'class="collapse show"', content )

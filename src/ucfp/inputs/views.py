@@ -13,7 +13,6 @@ from dataclasses import replace
 from django import forms
 from django.core.exceptions import BadRequest
 from django.db import transaction
-from django.db.models import Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -29,14 +28,13 @@ from common.request_utils import is_ajax
 from ucfp.inputs.profile.repository import (
     create_profile, latest_profile, load_profile, save_profile )
 from ucfp.inputs.plans.repository import (
-    clone_plans, create_plans, delete_plans, latest_plans, load_plans, plans_for, rename_plans,
-    save_plans )
+    create_plans, latest_plans, load_plans, plans_for, rename_plans, save_plans )
 from ucfp.inputs.assumptions.repository import (
-    assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
-    load_assumptions, rename_assumptions, save_assumptions )
+    assumptions_for, create_assumptions, latest_assumptions, load_assumptions, rename_assumptions,
+    save_assumptions )
 from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
-    existing_pairings, rename_scenario, scenarios_for, would_orphan_all_scenarios )
+    existing_pairings, rename_scenario, scenarios_for )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -45,7 +43,7 @@ from .interview import (
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .state import (
-    completed_assumptions, completed_plans, completed_profile, flow_reviewed, profile_is_complete )
+    completed_assumptions, completed_plans, completed_profile, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
 from .credit_card import CreditCardPlanForm
@@ -78,51 +76,30 @@ class ScenariosHomeView( View ):
     def get( self, request ):
         organization   = request.organization
         profile_record = completed_profile( organization )
-        profile        = load_profile( profile_record ) if profile_record is not None else None
-        # One pass over the saved scenarios drives both the scenario cards and the component rows: the
-        # per-component usage counts feed the "shared" indicator and, against the scenario total, the
-        # `deletable` flag -- so the page needs no per-row query to decide either.
+        # One pass over the saved scenarios drives the cards: per-component usage counts feed the "shared"
+        # indicator, and the complete-component ids mark each scenario complete-vs-in-progress.
         scenarios        = list( scenarios_for( organization ).select_related( 'plans', 'assumptions' ) )
         plans_uses       = Counter( scenario.plans_id for scenario in scenarios )
         assumptions_uses = Counter( scenario.assumptions_id for scenario in scenarios )
-        plans       = self._component_rows(
-            plans_for( organization ), profile, 'plans', plans_uses, len( scenarios ) )
-        assumptions = self._component_rows(
-            assumptions_for( organization ), profile, 'assumptions', assumptions_uses, len( scenarios ) )
-        complete_ids  = ( { row[ 'record' ].id for row in plans if row[ 'complete' ] },
-                          { row[ 'record' ].id for row in assumptions if row[ 'complete' ] } )
-        scenario_rows = self._scenario_rows( scenarios, plans_uses, assumptions_uses, *complete_ids )
+        complete_ids     = self._complete_component_ids( organization, profile_record )
+        scenario_rows    = self._scenario_rows( scenarios, plans_uses, assumptions_uses, *complete_ids )
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
             'profile_complete' : profile_record is not None,
             'scenarios'        : scenario_rows,
-            'plans'            : plans,
-            'assumptions'      : assumptions,
             # A household keeps at least one scenario, so its sole scenario's delete control is suppressed.
             'can_delete_scenario' : len( scenarios ) > 1,
         } )
 
     @staticmethod
-    def _component_rows( records, profile, flow, uses, scenario_count ):
-        """Each component as a `{record, complete, deletable}` row. `complete` when its flow is fully walked
-        (an incomplete component is absent from scenario building; None profile means no completeness -- the
-        profile gate shows instead). `deletable` mirrors the delete guards in the UI: false for the last of
-        its kind, and false for a set every scenario pairs (whose deletion would cascade the org's last
-        scenario away) -- i.e. when its use-count equals `scenario_count`. `uses` maps a component's id to
-        how many scenarios pair it. The prefetch is scoped to SAVED scenarios so the delete-cascade warning
-        counts the same scenarios the guard does."""
-        saved    = Prefetch(
-            'scenarios', queryset = ScenarioRecord.objects.filter( usage_role = UsageRole.SAVED ) )
-        records  = list( records.prefetch_related( saved ) )
-        multiple = len( records ) > 1
-        rows = list()
-        for record in records:
-            paired_by_every_scenario = scenario_count > 0 and uses[ record.id ] == scenario_count
-            rows.append( { 'record': record,
-                           'complete': profile is not None and flow_reviewed( profile, record, flow ),
-                           'deletable': multiple and not paired_by_every_scenario } )
-        return rows
+    def _complete_component_ids( organization, profile_record ):
+        """The ids of the org's complete Plans and Assumptions, so a scenario counts complete when both of
+        its components' flows are walked. No profile means nothing is complete (the profile gate shows)."""
+        if profile_record is None:
+            return ( set(), set() )
+        return ( { record.id for record in completed_plans( profile_record, organization ) },
+                 { record.id for record in completed_assumptions( profile_record, organization ) } )
 
     @staticmethod
     def _scenario_rows( scenarios, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
@@ -470,16 +447,6 @@ def _forget_if_current( request, field, record ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class PlansNewView( View ):
-    """`/inputs/plans/new/` -- mint a new Plans set, make it the current editing target, and open the
-    plans flow on it. POST, since it creates a record."""
-
-    def post( self, request ):
-        _select( request, 'current_plans_uuid', create_plans( request.organization ) )
-        return redirect( 'flow_plans' )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
 class PlansEditView( View ):
     """`/inputs/plans/<uuid>/edit/` -- edit an existing Plans component (Edit-component): make it the
     current editing target and open the standalone Plans flow on it."""
@@ -488,16 +455,6 @@ class PlansEditView( View ):
         record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
         _select( request, 'current_plans_uuid', record )
         return redirect( 'flow_plans' )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class AssumptionsNewView( View ):
-    """`/inputs/assumptions/new/` -- mint a new Assumptions set, make it the current editing target,
-    and open the assumptions flow on it. POST, since it creates a record."""
-
-    def post( self, request ):
-        _select( request, 'current_assumptions_uuid', create_assumptions( request.organization ) )
-        return redirect( 'flow_assumptions' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -536,66 +493,6 @@ class AssumptionsRenameView( View ):
         return _rename_or_conflict(
             request, record, siblings = assumptions_for( organization ), kind = 'assumptions',
             aria = 'Assumptions name', bold = False, rename = rename_assumptions )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class PlansCloneView( View ):
-    """`/inputs/plans/<uuid>/clone/` -- duplicate a Plans set (its contents plus a "copy" name), make the
-    copy the current editing target, and open it for review. POST, since it creates a record. The copy
-    starts unreviewed (`reviewed = False`): its values seed the new set, but the user walks each section to
-    confirm them before it counts as complete."""
-
-    def post( self, request, uuid ):
-        source = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
-        _select( request, 'current_plans_uuid', clone_plans( source, reviewed = False ) )
-        return redirect( 'flow_plans' )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class AssumptionsCloneView( View ):
-    """`/inputs/assumptions/<uuid>/clone/` -- duplicate an Assumptions set (its contents plus a "copy"
-    name), make the copy the current editing target, and open it for review. POST, since it creates a
-    record. The copy starts unreviewed (`reviewed = False`): its values seed the new set, but the user
-    walks each section to confirm them before it counts as complete."""
-
-    def post( self, request, uuid ):
-        source = get_object_or_404(
-            AssumptionsRecord, uuid = uuid, organization = request.organization )
-        _select( request, 'current_assumptions_uuid', clone_assumptions( source, reviewed = False ) )
-        return redirect( 'flow_assumptions' )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class PlansDeleteView( View ):
-    """`/inputs/plans/<uuid>/delete/` -- delete a Plans set (destructive; the hub asks first). If it
-    was the current editing target, the selection is cleared so the next visit falls back to the
-    latest (or a fresh) set."""
-
-    def post( self, request, uuid ):
-        record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
-        # Deleting cascades away the scenarios that pair this set; refuse if that would leave none.
-        if would_orphan_all_scenarios( request.organization, plans = record ):
-            raise BadRequest( 'Deleting this Plans set would remove your last scenario.' )
-        _forget_if_current( request, 'current_plans_uuid', record )
-        delete_plans( record )
-        return redirect( 'scenarios_home' )
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class AssumptionsDeleteView( View ):
-    """`/inputs/assumptions/<uuid>/delete/` -- delete an assumptions set (destructive; the hub asks
-    first). If it was the current editing target, the selection is cleared so the next visit falls
-    back to the latest (or a fresh) set."""
-
-    def post( self, request, uuid ):
-        record = get_object_or_404(
-            AssumptionsRecord, uuid = uuid, organization = request.organization )
-        # Deleting cascades away the scenarios that pair this set; refuse if that would leave none.
-        if would_orphan_all_scenarios( request.organization, assumptions = record ):
-            raise BadRequest( 'Deleting this Assumptions set would remove your last scenario.' )
-        _forget_if_current( request, 'current_assumptions_uuid', record )
-        delete_assumptions( record )
-        return redirect( 'scenarios_home' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

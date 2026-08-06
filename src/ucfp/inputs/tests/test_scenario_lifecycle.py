@@ -5,6 +5,7 @@ other -- the model behind the New scenario page's "Copy" path. Deleting a scenar
 Plans/Assumptions it leaves paired to no scenario, since a component exists only to serve scenarios.
 Components are built directly from empty schemas (not the minting helpers, which pull seeded defaults).
 """
+from django.core.exceptions import BadRequest
 from django.test import TestCase
 
 from organization.models import Organization
@@ -14,7 +15,8 @@ from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
-from ucfp.inputs.scenarios.repository import clone_scenario, create_scenario, delete_scenario
+from ucfp.inputs.scenarios.repository import (
+    clone_scenario, create_scenario, delete_scenario, scenarios_for )
 
 
 class _ScenarioFixture( TestCase ):
@@ -90,3 +92,9 @@ class OrphanCleanupTests( _ScenarioFixture ):
         self.assertTrue( PlansRecord.objects.filter( pk = shared.pk ).exists() )        # still used by s2
         self.assertFalse( AssumptionsRecord.objects.filter( pk = s1_assumptions_pk ).exists() )  # orphaned
         self.assertTrue( AssumptionsRecord.objects.filter( pk = s2.assumptions_id ).exists() )
+
+    def test_the_last_scenario_cannot_be_deleted( self ):
+        only = self._scenario( 'Only' )
+        with self.assertRaises( BadRequest ):
+            delete_scenario( only )
+        self.assertEqual( scenarios_for( self.organization ).count(), 1 )

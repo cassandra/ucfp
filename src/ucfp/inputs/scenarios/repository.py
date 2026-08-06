@@ -145,21 +145,6 @@ def _delete_if_orphaned( component, of_its_kind: QuerySet, users: QuerySet ) -> 
         component.delete()
 
 
-def would_orphan_all_scenarios( organization: Organization, *,
-                                plans: Optional[ PlansRecord ] = None,
-                                assumptions: Optional[ AssumptionsRecord ] = None ) -> bool:
-    """Whether deleting the given component would cascade away every saved scenario -- because all of them
-    pair it -- leaving the organization with none. The scenario delete guards deleting a scenario
-    directly; this guards the indirect path, where deleting a Plans or Assumptions set cascades its
-    scenarios away. Exactly one of `plans` / `assumptions` names the component being deleted."""
-    scenarios = scenarios_for( organization )
-    if not scenarios.exists():
-        return False
-    remaining = ( scenarios.exclude( plans = plans ) if plans is not None
-                  else scenarios.exclude( assumptions = assumptions ) )
-    return not remaining.exists()
-
-
 def scenario_labels( organization: Organization ) -> list:
     """The labels of the organization's SAVED scenarios -- the taken names an auto-generated name avoids."""
     return [ record.label for record in scenarios_for( organization ) ]
