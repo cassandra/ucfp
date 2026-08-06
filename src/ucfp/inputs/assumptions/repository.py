@@ -8,7 +8,6 @@ save overwrites the specific set being edited.
 """
 from typing import Optional
 
-from django.core.exceptions import BadRequest
 from django.db.models import QuerySet
 
 from common.dataclass_json import from_json_data, to_json_data
@@ -56,16 +55,6 @@ def create_assumptions( organization: Organization ) -> AssumptionsRecord:
     record = AssumptionsRecord(
         organization = organization, label = _default_label( organization ) )
     return save_assumptions( record, _initial_assumptions() )
-
-
-def delete_assumptions( record: AssumptionsRecord ) -> None:
-    """Delete an assumptions set. Captured runs snapshot their inputs, so nothing downstream depends
-    on it. An organization always keeps at least one Assumptions set (a scenario needs one to pair), so
-    the last cannot be deleted: the UI hides the control, and a request that still arrives is malformed
-    (BadRequest -> 400)."""
-    if assumptions_for( record.organization ).count() <= 1:
-        raise BadRequest( 'Cannot delete the last Assumptions set.' )
-    record.delete()
 
 
 def rename_assumptions( record: AssumptionsRecord, label: str ) -> AssumptionsRecord:

@@ -477,6 +477,61 @@ window.App.Inputs = (function () {
             .each( function () { updateLoan( $( this ) ); } );
     }
 
+    // ----- New scenario, Copy card: reflect the chosen source's component names -----
+    // The "copy from" select carries each source scenario's Plans/Assumptions labels per option; show the
+    // chosen source's in two spans so the user sees what is being copied/reused. Display-only.
+
+    function reflectCopySource( $select ) {
+        const $option = $select.find( 'option:selected' );
+        const $form   = $select.closest( 'form' );
+        $form.find( classSelector( C.COPY_PLANS_LABEL_CLASS ) )
+            .text( $option.attr( dataAttr( C.COPY_SOURCE_PLANS_DATA_ATTR ) ) || '' );
+        $form.find( classSelector( C.COPY_ASSUMPTIONS_LABEL_CLASS ) )
+            .text( $option.attr( dataAttr( C.COPY_SOURCE_ASSUMPTIONS_DATA_ATTR ) ) || '' );
+    }
+
+    function enhanceCopySource( $scope ) {
+        ( $scope || $( document.body ) ).find( classSelector( C.COPY_SOURCE_CLASS ) )
+            .off( 'change.copySource' )
+            .on( 'change.copySource', function () { reflectCopySource( $( this ) ); } )
+            .each( function () { reflectCopySource( $( this ) ); } );   // reflect on load
+    }
+
+    // ----- New scenario, Pair card: filter Assumptions to a not-yet-used combination -----
+    // Each Plans option carries the Assumptions uuids it may still pair with (a comma-separated data
+    // attribute); show only those in the Assumptions select. The select is rebuilt to just the allowed
+    // options (rather than toggling `hidden`, which Safari ignores for `<option>`), keeping the current
+    // choice when it survives. Display-only -- the server re-validates every pairing.
+
+    function filterPairAssumptions( $select ) {
+        const allowed = ( $select.find( 'option:selected' ).attr( dataAttr( C.PAIR_AVAILABLE_DATA_ATTR ) ) || '' )
+            .split( ',' ).filter( Boolean );
+        const assumptions = $select.closest( 'form' ).find( classSelector( C.PAIR_ASSUMPTIONS_CLASS ) )[ 0 ];
+        if ( !assumptions ) { return; }
+        if ( !assumptions._allOptions ) {                  // cache the full set once, to rebuild from
+            assumptions._allOptions = Array.prototype.map.call(
+                assumptions.options, function ( option ) {
+                    return { value: option.value, label: option.textContent }; } );
+        }
+        const selected = assumptions.value;
+        assumptions.innerHTML = '';
+        assumptions._allOptions.forEach( function ( option ) {
+            if ( allowed.indexOf( option.value ) === -1 ) { return; }
+            const element   = document.createElement( 'option' );
+            element.value   = option.value;
+            element.text    = option.label;
+            element.selected = ( option.value === selected );
+            assumptions.appendChild( element );
+        } );
+    }
+
+    function enhancePairCombine( $scope ) {
+        ( $scope || $( document.body ) ).find( classSelector( C.PAIR_PLANS_CLASS ) )
+            .off( 'change.pairCombine' )
+            .on( 'change.pairCombine', function () { filterPairAssumptions( $( this ) ); } )
+            .each( function () { filterPairAssumptions( $( this ) ); } );   // filter on load
+    }
+
     // A durable expense's item calculator: count x cost-each / lifespan-years is the annualized amount,
     // which fills both the amount target(s) and the "per year" readout. Field names are stable
     // (count_/cost_/lifespan_), so the panel's inputs are found by name. The amount stays authoritative
@@ -676,6 +731,8 @@ window.App.Inputs = (function () {
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
         enhanceStateAutofill( $( document.body ) );
+        enhanceCopySource( $( document.body ) );
+        enhancePairCombine( $( document.body ) );
         enhanceMoneyInputs( $( document.body ) );
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
@@ -685,6 +742,8 @@ window.App.Inputs = (function () {
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
                 enhanceStateAutofill( $( document.body ) );
+                enhanceCopySource( $( document.body ) );
+                enhancePairCombine( $( document.body ) );
                 enhanceMoneyInputs( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );

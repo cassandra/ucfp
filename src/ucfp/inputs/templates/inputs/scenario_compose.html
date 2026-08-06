@@ -1,45 +1,175 @@
 {% extends "pages/app_base.html" %}
 
 {% comment %}
-New Future Scenario, the normal way: combine an existing Plans with an existing Assumptions and name
-the pairing. Creating variations of the components themselves is separate -- the Clone/New actions on the
-Scenarios page. The choosers list only complete components, so the combined scenario is runnable at once.
+New scenario: two common ways up top -- Copy an existing scenario (per side, copy or reuse) and Start fresh
+(new default Plans + Assumptions, then the interview) -- with the rarer Pair (combine existing complete
+components into a new combination) as a single card below, shown only when a free pairing exists. Until a
+first scenario is complete, the page steers the user to finish that one instead.
+
+The Copy source select and the Pair selects are rendered by hand so each option can carry the data the
+page's client-side helpers read (inputs.js): the source's component labels (reflected into two spans as the
+source changes) and, per Plans option, the Assumptions it may still pair with (to filter the Assumptions
+select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete_scenarios`, `can_pair`,
+`copy_form` / `copy_sources`, and `pair_form` / `pair_plans` / `pair_assumptions`.
 {% endcomment %}
 
 {% block app_content %}
-<h1 class="mb-1">New scenario</h1>
-<p class="text-muted mb-4">Scenarios</p>
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb bg-white border">
+    <li class="breadcrumb-item"><a href="{% url 'scenarios_home' %}">Scenarios</a></li>
+    <li class="breadcrumb-item active">New scenario</li>
+  </ol>
+</nav>
+
+<h1 class="mb-2">New scenario</h1>
+<p class="text-muted">A scenario pairs a set of <strong>Plans</strong> with a set of
+  <strong>Assumptions</strong>. Copy an existing scenario or start a fresh one &mdash; or pair sets you
+  already have into a new combination.</p>
+
+{% if not has_complete_scenario %}
+{# No finished scenario yet: finishing the one in progress comes before creating another. #}
+<div class="alert alert-info" style="max-width: 40rem">
+  <h2 class="h6 mb-2">Finish your current scenario first</h2>
+  <p class="mb-2">You have a scenario still being set up. Finish it before creating another one.</p>
+  <a href="{% url 'scenarios_home' %}" class="btn btn-primary btn-sm">Go to Scenarios</a>
+</div>
+{% else %}
+
+{% if incomplete_scenarios %}
+<div class="alert alert-info small" style="max-width: 52rem">
+  <div class="mb-1">These scenarios are still being set up, so their Plans and Assumptions can't be paired
+    yet. Finish one:</div>
+  {% for scenario in incomplete_scenarios %}
+  {# Each links straight into its build flow (resume setup), so the user needn't go hunting. #}
+  <form method="post" action="{% url 'scenario_edit' scenario.uuid %}" class="d-inline">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-link btn-sm p-0 mr-3">{{ scenario.label }} &rarr;</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="row">
-  <div class="col-lg-7">
-    <div class="card">
+  {# Copy -- the common case: most new scenarios are a variation of an existing one. #}
+  <div class="col-md-6 mb-3">
+    <div class="card h-100">
       <div class="card-body">
-        <p>A <strong>scenario</strong> pairs a set of <strong>Plans</strong> with a set of
-          <strong>Assumptions</strong>. Pick which to pair and name it. To vary the Plans or
-          Assumptions themselves, add or clone one on the <a href="{% url 'scenarios_home' %}">Scenarios
-          page</a> first.</p>
-        <form method="post" action="{% url 'scenario_compose' %}" class="mt-3">
+        <h2 class="h6">Copy a scenario</h2>
+        <p class="text-muted small">Start from an existing scenario. For each side, <em>copy</em> it to
+          edit an independent version, or <em>reuse</em> it so both scenarios share (and edit) the same
+          set.</p>
+        <form method="post" action="{% url 'scenario_compose' %}">
           {% csrf_token %}
-          {% if form.non_field_errors %}
-          <div class="alert alert-warning">{{ form.non_field_errors }}</div>
-          {% endif %}
+          <input type="hidden" name="action" value="copy">
+          {% if copy_form.non_field_errors %}<div class="alert alert-warning py-1 px-2 small">{{ copy_form.non_field_errors }}</div>{% endif %}
           <div class="form-group">
-            <label for="{{ form.plans.id_for_label }}">Plans</label>
-            {{ form.plans }}
+            <label for="{{ copy_form.source.id_for_label }}">Copy from</label>
+            <select name="{{ copy_form.source.html_name }}" id="{{ copy_form.source.id_for_label }}"
+                    class="custom-select {{ AppConst.COPY_SOURCE_CLASS }}">
+              {% for source in copy_sources %}
+              <option value="{{ source.uuid }}"
+                      data-{{ AppConst.COPY_SOURCE_PLANS_DATA_ATTR }}="{{ source.plans }}"
+                      data-{{ AppConst.COPY_SOURCE_ASSUMPTIONS_DATA_ATTR }}="{{ source.assumptions }}"
+                      {% if copy_form.source.value == source.uuid %}selected{% endif %}>{{ source.label }}</option>
+              {% endfor %}
+            </select>
           </div>
+          <fieldset class="form-group mb-2">
+            <legend class="col-form-label p-0 small mb-1"><strong>Plans</strong> &middot;
+              <span class="text-muted {{ AppConst.COPY_PLANS_LABEL_CLASS }}"></span></legend>
+            {% for radio in copy_form.plans_mode %}
+            <div class="form-check form-check-inline">
+              {{ radio.tag }}
+              <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+            </div>
+            {% endfor %}
+          </fieldset>
+          <fieldset class="form-group">
+            <legend class="col-form-label p-0 small mb-1"><strong>Assumptions</strong> &middot;
+              <span class="text-muted {{ AppConst.COPY_ASSUMPTIONS_LABEL_CLASS }}"></span></legend>
+            {% for radio in copy_form.assumptions_mode %}
+            <div class="form-check form-check-inline">
+              {{ radio.tag }}
+              <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+            </div>
+            {% endfor %}
+          </fieldset>
           <div class="form-group">
-            <label for="{{ form.assumptions.id_for_label }}">Assumptions</label>
-            {{ form.assumptions }}
-          </div>
-          <div class="form-group">
-            <label for="{{ form.name.id_for_label }}">Scenario name</label>
-            {{ form.name }}
-            {% for error in form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            <label for="{{ copy_form.name.id_for_label }}">Scenario name</label>
+            {{ copy_form.name }}
+            {% for error in copy_form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
           </div>
           <button type="submit" class="btn btn-primary">Create scenario</button>
         </form>
       </div>
     </div>
   </div>
+
+  {# Start fresh -- a brand-new scenario built from scratch in the interview. #}
+  <div class="col-md-6 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h6">Start fresh</h2>
+        <p class="text-muted small">Begin with a blank Plans and Assumptions and set them up in the
+          interview.</p>
+        <form method="post" action="{% url 'scenario_compose' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="start_fresh">
+          <div class="form-group">
+            <label for="{{ fresh_form.name.id_for_label }}">Scenario name
+              <span class="text-muted">(optional)</span></label>
+            {{ fresh_form.name }}
+            {% for error in fresh_form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <button type="submit" class="btn btn-outline-primary">Start fresh &rarr;</button>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
+
+{% if can_pair %}
+{# Pair -- the rarer path: reuse two existing complete sets in a combination you have not used. #}
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h6">Pair existing components</h2>
+    <p class="text-muted small">Less common: combine a Plans set with an Assumptions set you already have,
+      in a combination you have not used yet.</p>
+    <form method="post" action="{% url 'scenario_compose' %}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="pair">
+      {% if pair_form.non_field_errors %}<div class="alert alert-warning py-1 px-2 small">{{ pair_form.non_field_errors }}</div>{% endif %}
+      <div class="form-row">
+        <div class="form-group col-md-4">
+          <label for="{{ pair_form.plans.id_for_label }}">Plans</label>
+          <select name="{{ pair_form.plans.html_name }}" id="{{ pair_form.plans.id_for_label }}"
+                  class="custom-select {{ AppConst.PAIR_PLANS_CLASS }}">
+            {% for plan in pair_plans %}
+            <option value="{{ plan.uuid }}" data-{{ AppConst.PAIR_AVAILABLE_DATA_ATTR }}="{{ plan.available }}"
+                    {% if pair_form.plans.value == plan.uuid %}selected{% endif %}>{{ plan.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group col-md-4">
+          <label for="{{ pair_form.assumptions.id_for_label }}">Assumptions</label>
+          <select name="{{ pair_form.assumptions.html_name }}" id="{{ pair_form.assumptions.id_for_label }}"
+                  class="custom-select {{ AppConst.PAIR_ASSUMPTIONS_CLASS }}">
+            {% for item in pair_assumptions %}
+            <option value="{{ item.uuid }}"
+                    {% if pair_form.assumptions.value == item.uuid %}selected{% endif %}>{{ item.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group col-md-4">
+          <label for="{{ pair_form.name.id_for_label }}">Scenario name</label>
+          {{ pair_form.name }}
+          {% for error in pair_form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+        </div>
+      </div>
+      <button type="submit" class="btn btn-outline-primary">Create scenario</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endif %}
 {% endblock %}
