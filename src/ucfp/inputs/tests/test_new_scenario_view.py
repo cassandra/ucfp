@@ -139,22 +139,68 @@ class NewScenarioCopyTests( _NewScenarioBase ):
         self.assertEqual( response.status_code, 200 )                      # re-renders with the error
         self.assertFalse( scenarios_for( self.organization ).filter( label = 'Dup' ).exists() )
 
+    def test_copy_rejects_a_duplicate_name( self ):
+        source = self._scenario( 'Base' )                                  # 'Base' is now a taken name
+
+        response = self._copy( source = str( source.uuid ), plans_mode = 'copy',
+                               assumptions_mode = 'copy', name = 'Base' )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertEqual( scenarios_for( self.organization ).filter( label = 'Base' ).count(), 1 )
+
+    def test_copy_from_an_incomplete_scenario_is_rejected( self ):
+        self._scenario( 'Complete' )                                       # so the page is past state 0
+        draft = self._scenario( 'Draft', complete = False )                # not a valid copy source
+
+        response = self._copy( source = str( draft.uuid ), plans_mode = 'copy',
+                               assumptions_mode = 'copy', name = 'FromDraft' )
+
+        self.assertEqual( response.status_code, 200 )                      # source not in the choices
+        self.assertFalse( scenarios_for( self.organization ).filter( label = 'FromDraft' ).exists() )
+
 
 class NewScenarioPairTests( _NewScenarioBase ):
+
+    def _pair( self, **fields ):
+        data = { 'action': 'pair' }
+        data.update( { f'pair-{key}': value for key, value in fields.items() } )
+        return ScenarioComposeView().post( self._request( 'post', data ) )
 
     def test_pair_creates_the_chosen_new_combination( self ):
         plans, assumptions = self._plans( 'P1' ), self._assumptions( 'A1' )
         self._scenario( 'S1', plans = plans, assumptions = assumptions )
         spare = self._plans( 'P2' )
 
-        response = ScenarioComposeView().post( self._request( 'post', {
-            'action': 'pair', 'pair-plans': str( spare.uuid ),
-            'pair-assumptions': str( assumptions.uuid ), 'pair-name': 'Paired' } ) )
+        response = self._pair( plans = str( spare.uuid ),
+                               assumptions = str( assumptions.uuid ), name = 'Paired' )
 
         self.assertEqual( response.status_code, 302 )
         paired = scenarios_for( self.organization ).get( label = 'Paired' )
         self.assertEqual( paired.plans_id, spare.id )
         self.assertEqual( paired.assumptions_id, assumptions.id )
+
+    def test_pair_rejects_an_already_used_combination( self ):
+        plans, assumptions = self._plans( 'P1' ), self._assumptions( 'A1' )
+        self._scenario( 'S1', plans = plans, assumptions = assumptions )   # (P1, A1) is taken
+        self._plans( 'P2' )                                                # keeps the page in the pair state
+
+        before   = scenarios_for( self.organization ).count()
+        response = self._pair( plans = str( plans.uuid ),
+                               assumptions = str( assumptions.uuid ), name = 'Dup combo' )
+
+        self.assertEqual( response.status_code, 200 )                      # server re-checks the pairing
+        self.assertEqual( scenarios_for( self.organization ).count(), before )
+
+    def test_pair_rejects_a_duplicate_name( self ):
+        plans, assumptions = self._plans( 'P1' ), self._assumptions( 'A1' )
+        self._scenario( 'S1', plans = plans, assumptions = assumptions )
+        spare = self._plans( 'P2' )
+
+        response = self._pair( plans = str( spare.uuid ),
+                               assumptions = str( assumptions.uuid ), name = 'S1' )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertEqual( scenarios_for( self.organization ).filter( label = 'S1' ).count(), 1 )
 
 
 class NewScenarioStartFreshTests( _NewScenarioBase ):
@@ -166,7 +212,7 @@ class NewScenarioStartFreshTests( _NewScenarioBase ):
     def test_start_fresh_mints_a_scenario_and_enters_its_own_build_flow( self ):
         base    = self._scenario( 'Base' )
         before  = scenarios_for( self.organization ).count()
-        request = self._request( 'post', { 'action': 'start_fresh', 'name': 'Fresh' } )
+        request = self._request( 'post', { 'action': 'start_fresh', 'fresh-name': 'Fresh' } )
         # Simulate having just edited another scenario, so a stale selection would show the wrong Plans.
         request.session_state.current_plans_uuid       = str( base.plans.uuid )
         request.session_state.current_assumptions_uuid = str( base.assumptions.uuid )
@@ -187,3 +233,22 @@ class NewScenarioStartFreshTests( _NewScenarioBase ):
             response,
             reverse( 'interview_section', kwargs = { 'section': first_section_of_flow( 'plans' ).key } ),
             fetch_redirect_response = False )
+
+    def test_start_fresh_with_a_blank_name_uses_a_default( self ):
+        self._scenario( 'Base' )
+        before = scenarios_for( self.organization ).count()
+
+        response = ScenarioComposeView().post( self._request( 'post', { 'action': 'start_fresh' } ) )
+
+        self.assertEqual( response.status_code, 302 )                      # a default name is minted
+        self.assertEqual( scenarios_for( self.organization ).count(), before + 1 )
+
+    def test_start_fresh_rejects_a_duplicate_name( self ):
+        self._scenario( 'Base' )                                           # 'Base' is taken
+        before = scenarios_for( self.organization ).count()
+
+        response = ScenarioComposeView().post(
+            self._request( 'post', { 'action': 'start_fresh', 'fresh-name': 'Base' } ) )
+
+        self.assertEqual( response.status_code, 200 )                      # same validation as Copy/Pair
+        self.assertEqual( scenarios_for( self.organization ).count(), before )

@@ -499,21 +499,30 @@ window.App.Inputs = (function () {
 
     // ----- New scenario, Pair card: filter Assumptions to a not-yet-used combination -----
     // Each Plans option carries the Assumptions uuids it may still pair with (a comma-separated data
-    // attribute); show only those in the Assumptions select. Display-only -- the server re-validates.
+    // attribute); show only those in the Assumptions select. The select is rebuilt to just the allowed
+    // options (rather than toggling `hidden`, which Safari ignores for `<option>`), keeping the current
+    // choice when it survives. Display-only -- the server re-validates every pairing.
 
     function filterPairAssumptions( $select ) {
         const allowed = ( $select.find( 'option:selected' ).attr( dataAttr( C.PAIR_AVAILABLE_DATA_ATTR ) ) || '' )
             .split( ',' ).filter( Boolean );
         const assumptions = $select.closest( 'form' ).find( classSelector( C.PAIR_ASSUMPTIONS_CLASS ) )[ 0 ];
         if ( !assumptions ) { return; }
-        let first = null;
-        Array.prototype.forEach.call( assumptions.options, function ( option ) {
-            const ok = allowed.indexOf( option.value ) !== -1;
-            option.hidden   = !ok;
-            option.disabled = !ok;
-            if ( ok && first === null ) { first = option.value; }
+        if ( !assumptions._allOptions ) {                  // cache the full set once, to rebuild from
+            assumptions._allOptions = Array.prototype.map.call(
+                assumptions.options, function ( option ) {
+                    return { value: option.value, label: option.textContent }; } );
+        }
+        const selected = assumptions.value;
+        assumptions.innerHTML = '';
+        assumptions._allOptions.forEach( function ( option ) {
+            if ( allowed.indexOf( option.value ) === -1 ) { return; }
+            const element   = document.createElement( 'option' );
+            element.value   = option.value;
+            element.text    = option.label;
+            element.selected = ( option.value === selected );
+            assumptions.appendChild( element );
         } );
-        if ( allowed.indexOf( assumptions.value ) === -1 && first !== null ) { assumptions.value = first; }
     }
 
     function enhancePairCombine( $scope ) {

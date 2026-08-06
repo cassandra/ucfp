@@ -137,7 +137,8 @@ def delete_scenario( record: ScenarioRecord ) -> None:
                          scenarios_for( organization ).filter( assumptions = assumptions ) )
 
 
-def _delete_if_orphaned( component, of_its_kind: QuerySet, users: QuerySet ) -> None:
+def _delete_if_orphaned( component: 'PlansRecord | AssumptionsRecord',
+                         of_its_kind: QuerySet, users: QuerySet ) -> None:
     """Delete `component` when no scenario `users` it any longer -- unless it is the last `of_its_kind`,
     which the app always keeps. (When a scenario remains, an orphaned component is never the last of its
     kind, but the guard is kept explicit.)"""

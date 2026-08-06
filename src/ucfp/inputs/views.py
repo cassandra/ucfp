@@ -67,11 +67,11 @@ _SCENARIOS_TEMPLATE = 'inputs/scenarios_home.html'
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ScenariosHomeView( View ):
-    """`/inputs/scenarios/` -- the Scenarios landing: the organization's saved scenarios, plus the Plans
-    and Assumptions management (a scenario is a combination of those, so its components are managed here).
-    A placeholder for now -- scenario building and per-scenario management arrive later; this only lists
-    them and keeps the component editors reachable. Perspective-agnostic: it links to the component
-    editors but to no planning perspective (forecast, retirement, ...) -- the main nav reaches those."""
+    """`/inputs/scenarios/` -- "Manage Scenarios", the review/edit landing: the organization's saved
+    scenarios as hero cards (each re-enters the whole Plans->Assumptions walk, with its components editable
+    in place), plus one action to create another. Components have no standalone management -- they are born,
+    edited, and retired through the scenarios that use them. Perspective-agnostic: it links to no planning
+    perspective (forecast, retirement, ...) -- the main nav reaches those."""
 
     def get( self, request ):
         organization   = request.organization
@@ -196,9 +196,11 @@ class CopyScenarioForm( _NamedScenarioForm ):
 
     source           = forms.ChoiceField( label = 'Copy from' )
     plans_mode       = forms.ChoiceField(
-        label = 'Plans', choices = _MODE_CHOICES, initial = 'copy', widget = forms.RadioSelect )
+        label = 'Plans', choices = _MODE_CHOICES, initial = 'copy',
+        widget = forms.RadioSelect( attrs = { 'class': 'form-check-input' } ) )
     assumptions_mode = forms.ChoiceField(
-        label = 'Assumptions', choices = _MODE_CHOICES, initial = 'copy', widget = forms.RadioSelect )
+        label = 'Assumptions', choices = _MODE_CHOICES, initial = 'copy',
+        widget = forms.RadioSelect( attrs = { 'class': 'form-check-input' } ) )
 
     def __init__( self, *args, scenarios = None, **kwargs ):
         super().__init__( *args, **kwargs )
@@ -217,6 +219,16 @@ class CopyScenarioForm( _NamedScenarioForm ):
     @property
     def source_scenario( self ):
         return self._by_uuid[ self.cleaned_data[ 'source' ] ]
+
+
+class StartFreshForm( _NamedScenarioForm ):
+    """Start a brand-new scenario from scratch. The name is optional -- blank takes the auto-numbered
+    default -- but if given it goes through the same strip / length / duplicate checks as the other
+    creation paths, so all three share one name-validation authority."""
+
+    def __init__( self, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
+        self.fields[ 'name' ].required = False
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -246,7 +258,13 @@ class ScenarioComposeView( View ):
         return handler( request, profile_record )
 
     def _start_fresh( self, request, profile_record ):
-        scenario = create_fresh_scenario( request.organization, request.POST.get( 'name' ) or None )
+        form = StartFreshForm(
+            request.POST, prefix = 'fresh', taken_names = self._taken_names( request.organization ) )
+        if not form.is_valid():
+            return render(
+                request, self._TEMPLATE,
+                self._context( request.organization, profile_record, fresh_form = form ) )
+        scenario = create_fresh_scenario( request.organization, form.cleaned_data[ 'name' ] or None )
         return _enter_scenario_build( request, scenario )
 
     def _copy( self, request, profile_record ):
@@ -281,22 +299,26 @@ class ScenarioComposeView( View ):
             by_assumptions[ form.cleaned_data[ 'assumptions' ] ], form.cleaned_data[ 'name' ] )
         return redirect( 'scenarios_home' )
 
-    def _context( self, organization, profile_record, copy_form = None, pair_form = None ):
+    def _context( self, organization, profile_record,
+                  copy_form = None, pair_form = None, fresh_form = None ):
+        # Compute the completeness sets once and split the scenarios in a single pass (the completeness
+        # scan is the page's heaviest work, so the paths below all derive from these rather than re-scan).
         plans, assumptions = self._complete_components( organization, profile_record )
-        complete_scenarios = self._complete_scenarios( organization, profile_record )
+        complete_scenarios, incomplete_scenarios = self._split_scenarios( organization, plans, assumptions )
         available          = self._available_assumptions( organization, plans, assumptions )
         taken_names        = self._taken_names( organization )
         pairable_plans     = [ record for record in plans if available[ str( record.uuid ) ] ]
         return {
             'active_nav'            : 'scenarios',
             'has_complete_scenario' : bool( complete_scenarios ),
-            'incomplete_scenarios'  : self._incomplete_scenarios( organization, profile_record ),
+            'incomplete_scenarios'  : incomplete_scenarios,
             'can_pair'              : bool( pairable_plans ),
             'pair_form'             : pair_form or PairScenarioForm(
                 prefix = 'pair', plans = pairable_plans, assumptions = assumptions,
                 taken = existing_pairings( organization ), taken_names = taken_names ),
             'copy_form'             : copy_form or CopyScenarioForm(
                 prefix = 'copy', scenarios = complete_scenarios, taken_names = taken_names ),
+            'fresh_form'            : fresh_form or StartFreshForm( prefix = 'fresh', taken_names = taken_names ),
             # Option rows for the manually-rendered selects: the source scenarios (with the component labels
             # the Copy card reflects), the pairable Plans (each carrying the free Assumptions to filter to),
             # and the Assumptions choices. Data rides on the options, read by inputs.js.
@@ -317,20 +339,24 @@ class ScenarioComposeView( View ):
         return ( completed_plans( profile_record, organization ),
                  completed_assumptions( profile_record, organization ) )
 
-    def _complete_scenarios( self, organization, profile_record ):
-        """The organization's saved scenarios whose Plans and Assumptions are both complete -- the ones a
-        Copy can start from."""
-        plans, assumptions = self._complete_components( organization, profile_record )
-        plan_ids           = { record.id for record in plans }
-        assumption_ids     = { record.id for record in assumptions }
-        return [ scenario for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' )
-                 if scenario.plans_id in plan_ids and scenario.assumptions_id in assumption_ids ]
+    @staticmethod
+    def _split_scenarios( organization, complete_plans_records, complete_assumptions_records ):
+        """The organization's saved scenarios partitioned into (complete, in-progress): a scenario is
+        complete when both its components' flows are walked. Complete ones a Copy can start from;
+        in-progress ones are surfaced so the user sees why their components are not available to pair."""
+        plan_ids       = { record.id for record in complete_plans_records }
+        assumption_ids = { record.id for record in complete_assumptions_records }
+        complete, in_progress = list(), list()
+        for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' ):
+            bucket = ( complete if scenario.plans_id in plan_ids and scenario.assumptions_id in assumption_ids
+                       else in_progress )
+            bucket.append( scenario )
+        return ( complete, in_progress )
 
-    def _incomplete_scenarios( self, organization, profile_record ):
-        """Saved scenarios not yet fully set up -- surfaced so the user knows why their in-progress
-        components are not available to pair."""
-        complete = { scenario.id for scenario in self._complete_scenarios( organization, profile_record ) }
-        return [ scenario for scenario in scenarios_for( organization ) if scenario.id not in complete ]
+    def _complete_scenarios( self, organization, profile_record ):
+        """The saved scenarios a Copy can start from -- both components complete."""
+        plans, assumptions = self._complete_components( organization, profile_record )
+        return self._split_scenarios( organization, plans, assumptions )[ 0 ]
 
     @staticmethod
     def _available_assumptions( organization, plans, assumptions ):

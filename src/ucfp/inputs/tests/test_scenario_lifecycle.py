@@ -12,9 +12,10 @@ from organization.models import Organization
 
 from ucfp.inputs.assumptions.repository import save_assumptions
 from ucfp.inputs.assumptions.schemas import Assumptions
-from ucfp.inputs.models import AssumptionsRecord, PlansRecord
+from ucfp.inputs.models import AssumptionsRecord, PlansRecord, ScenarioExploration
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.scenarios.exploration import enter_exploration
 from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_scenario, delete_scenario, scenarios_for )
 
@@ -92,6 +93,28 @@ class OrphanCleanupTests( _ScenarioFixture ):
         self.assertTrue( PlansRecord.objects.filter( pk = shared.pk ).exists() )        # still used by s2
         self.assertFalse( AssumptionsRecord.objects.filter( pk = s1_assumptions_pk ).exists() )  # orphaned
         self.assertTrue( AssumptionsRecord.objects.filter( pk = s2.assumptions_id ).exists() )
+
+    def test_a_scenario_whose_components_are_all_shared_orphans_nothing( self ):
+        plans, assumptions = self._plans( 'P' ), self._assumptions( 'A' )
+        target = self._scenario( 'Target', plans = plans, assumptions = assumptions )
+        self._scenario( 'SharesPlans', plans = plans )                # shares the Plans
+        self._scenario( 'SharesAssumptions', assumptions = assumptions )  # shares the Assumptions
+
+        delete_scenario( target )
+
+        self.assertTrue( PlansRecord.objects.filter( pk = plans.pk ).exists() )
+        self.assertTrue( AssumptionsRecord.objects.filter( pk = assumptions.pk ).exists() )
+
+    def test_deleting_an_exploration_anchor_tears_it_down_and_orphans_its_components( self ):
+        self._scenario( 'Keep' )                                     # a second scenario, so delete is allowed
+        anchor          = self._scenario( 'Anchor' )
+        anchor_plans_pk = anchor.plans_id
+        enter_exploration( self.organization, anchor )               # anchor now backs a working sandbox
+
+        delete_scenario( anchor )
+
+        self.assertEqual( ScenarioExploration.objects.count(), 0 )   # exploration cascaded away
+        self.assertFalse( PlansRecord.objects.filter( pk = anchor_plans_pk ).exists() )   # SAVED plans orphaned
 
     def test_the_last_scenario_cannot_be_deleted( self ):
         only = self._scenario( 'Only' )
