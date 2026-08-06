@@ -15,11 +15,12 @@ from django.db.models import QuerySet
 
 from organization.models import Organization
 
-from ..assumptions.repository import create_assumptions, load_assumptions, rename_assumptions
+from ..assumptions.repository import (
+    assumptions_for, clone_assumptions, create_assumptions, load_assumptions, rename_assumptions )
 from ..enums import UsageRole
 from ..models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from ..naming import numbered_label
-from ..plans.repository import create_plans, load_plans, rename_plans
+from ..plans.repository import clone_plans, create_plans, load_plans, plans_for, rename_plans
 from .schemas import Scenario
 
 
@@ -61,6 +62,19 @@ def create_scenario( organization: Organization, plans: PlansRecord, assumptions
         plans = plans, assumptions = assumptions, usage_role = UsageRole.SAVED )
 
 
+def clone_scenario( scenario: ScenarioRecord, *, copy_plans: bool, copy_assumptions: bool,
+                    label: Optional[ str ] = None ) -> ScenarioRecord:
+    """A new scenario built from `scenario`, copying the chosen side(s) and reusing (sharing) the other.
+    A copied component is a full, independent clone that starts reviewed, so the new scenario is runnable
+    at once -- the copy is a starting point the user may tweak, not a blank to re-walk. At least one side
+    must be copied: reusing both would just be `scenario`'s own (already-taken) pairing."""
+    if not ( copy_plans or copy_assumptions ):
+        raise ValueError( 'clone_scenario must copy at least one of Plans or Assumptions.' )
+    plans       = clone_plans( scenario.plans ) if copy_plans else scenario.plans
+    assumptions = clone_assumptions( scenario.assumptions ) if copy_assumptions else scenario.assumptions
+    return create_scenario( scenario.organization, plans, assumptions, label )
+
+
 def default_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]:
     """The organization's base scenario -- the oldest saved one, which the profile flow's shared data
     (the straddle sections' rental income) binds to. Oldest is a stable identity for the Default: there is
@@ -95,17 +109,33 @@ def rename_scenario( record: ScenarioRecord, label: str ) -> ScenarioRecord:
 
 
 def delete_scenario( record: ScenarioRecord ) -> None:
-    """Delete a scenario -- only the pairing; its Plans and Assumptions live on for other scenarios. If the
-    scenario anchors an in-progress exploration, that exploration cascades away with it (see
-    `ScenarioExploration`). Much of the app assumes a scenario exists, so the last one cannot be deleted:
-    the UI hides the control, and a request that still arrives is malformed (BadRequest -> 400).
+    """Delete a scenario -- the pairing, plus any Plans or Assumptions the deletion leaves orphaned. A
+    component exists only to serve scenarios, so once no scenario pairs it, it is removed too (a component
+    shared with another scenario lives on; the last of its kind is always kept). If the scenario anchors an
+    in-progress exploration, that exploration cascades away with it (see `ScenarioExploration`). Much of the
+    app assumes a scenario exists, so the last one cannot be deleted: the UI hides the control, and a
+    request that still arrives is malformed (BadRequest -> 400).
 
     The count-then-delete is deliberately not row-locked: a per-org scenario set is effectively
     single-writer in practice, so the check-to-act race is not worth serializing here (revisit with a
     `select_for_update` on the organization, as `ensure_default_scenario` does, if that ceases to hold)."""
-    if scenarios_for( record.organization ).count() <= 1:
+    organization = record.organization
+    if scenarios_for( organization ).count() <= 1:
         raise BadRequest( 'Cannot delete the last scenario.' )
+    plans, assumptions = record.plans, record.assumptions
     record.delete()
+    _delete_if_orphaned( plans, plans_for( organization ),
+                         scenarios_for( organization ).filter( plans = plans ) )
+    _delete_if_orphaned( assumptions, assumptions_for( organization ),
+                         scenarios_for( organization ).filter( assumptions = assumptions ) )
+
+
+def _delete_if_orphaned( component, of_its_kind: QuerySet, users: QuerySet ) -> None:
+    """Delete `component` when no scenario `users` it any longer -- unless it is the last `of_its_kind`,
+    which the app always keeps. (When a scenario remains, an orphaned component is never the last of its
+    kind, but the guard is kept explicit.)"""
+    if not users.exists() and of_its_kind.count() > 1:
+        component.delete()
 
 
 def would_orphan_all_scenarios( organization: Organization, *,
