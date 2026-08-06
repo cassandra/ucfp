@@ -62,6 +62,13 @@ def create_scenario( organization: Organization, plans: PlansRecord, assumptions
         plans = plans, assumptions = assumptions, usage_role = UsageRole.SAVED )
 
 
+def create_fresh_scenario( organization: Organization, label: Optional[ str ] = None ) -> ScenarioRecord:
+    """A new scenario over fresh default Plans and Assumptions -- both incomplete, to be walked in the
+    interview (the "start fresh" path). The caller enters the scenario's edit flow to set them up."""
+    return create_scenario(
+        organization, create_plans( organization ), create_assumptions( organization ), label )
+
+
 def clone_scenario( scenario: ScenarioRecord, *, copy_plans: bool, copy_assumptions: bool,
                     label: Optional[ str ] = None ) -> ScenarioRecord:
     """A new scenario built from `scenario`, copying the chosen side(s) and reusing (sharing) the other.

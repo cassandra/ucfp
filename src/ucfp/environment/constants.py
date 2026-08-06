@@ -70,6 +70,20 @@ class AppConst:
     # steal focus from the field being filled) until the group is coherent. Driven by inputs.js.
     PAIR_CLASS = 'js-pair'  # fields that must be entered together (both-or-neither)
 
+    # The New scenario page (static/js/inputs.js). Two selects drive dependent DOM for presentation only
+    # (the server re-validates every choice). The Copy card's source select carries each source scenario's
+    # component labels, reflected into two spans so the user sees what is being copied/reused. The Pair
+    # card's Plans select carries, per option, the Assumptions it may still pair with, to filter the
+    # Assumptions select down to not-yet-used combinations.
+    COPY_SOURCE_CLASS                 = 'js-copy-source'            # the Copy card's "copy from" select
+    COPY_SOURCE_PLANS_DATA_ATTR       = 'source-plans'             # the source's Plans label, per option
+    COPY_SOURCE_ASSUMPTIONS_DATA_ATTR = 'source-assumptions'       # the source's Assumptions label
+    COPY_PLANS_LABEL_CLASS            = 'js-copy-plans-label'       # span showing the source's Plans label
+    COPY_ASSUMPTIONS_LABEL_CLASS      = 'js-copy-assumptions-label'
+    PAIR_PLANS_CLASS                  = 'js-pair-plans'             # the Pair card's Plans select
+    PAIR_ASSUMPTIONS_CLASS            = 'js-pair-assumptions'       # the Pair card's Assumptions select
+    PAIR_AVAILABLE_DATA_ATTR          = 'pair-available'            # per Plans option: free Assumptions uuids
+
     # A switch: a control (radio group / select) whose value reveals one of several sibling case
     # blocks and hides the rest (e.g. own vs rent showing different fields). All blocks render
     # visible without JS -- the server reads only the fields the chosen case makes relevant. Driven

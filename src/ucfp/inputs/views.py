@@ -35,8 +35,8 @@ from ucfp.inputs.assumptions.repository import (
     assumptions_for, clone_assumptions, create_assumptions, delete_assumptions, latest_assumptions,
     load_assumptions, rename_assumptions, save_assumptions )
 from ucfp.inputs.scenarios.repository import (
-    create_scenario, delete_scenario, ensure_default_scenario, existing_pairings, rename_scenario,
-    scenarios_for, would_orphan_all_scenarios )
+    clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
+    existing_pairings, rename_scenario, scenarios_for, would_orphan_all_scenarios )
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -166,33 +166,40 @@ def _redirect_to_profile_setup( request ):
     return redirect( 'flow_profile' )
 
 
-class ScenarioCombineForm( forms.Form ):
-    """Combine an existing Plans with an existing Assumptions into a new named scenario. The choices are the
-    organization's *complete* components (injected by the view); a pairing already covered by a scenario is
-    rejected, since a scenario is exactly a distinct combination."""
+class _NamedScenarioForm( forms.Form ):
+    """Shared name field + duplicate-name check for the scenario-creation forms."""
 
-    name        = forms.CharField( label = 'Scenario name', max_length = 255 )
-    plans       = forms.ChoiceField( label = 'Plans' )
-    assumptions = forms.ChoiceField( label = 'Assumptions' )
+    name = forms.CharField( label = 'Scenario name', max_length = 255 )
 
-    def __init__( self, *args, plans = None, assumptions = None, taken = frozenset(),
-                  taken_names = frozenset(), **kwargs ):
+    def __init__( self, *args, taken_names = frozenset(), **kwargs ):
         super().__init__( *args, **kwargs )
-        self._taken       = taken
         self._taken_names = taken_names
-        self.fields[ 'plans' ].choices = [
-            ( str( record.uuid ), record.label ) for record in ( plans or [] ) ]
-        self.fields[ 'assumptions' ].choices = [
-            ( str( record.uuid ), record.label ) for record in ( assumptions or [] ) ]
         self.fields[ 'name' ].widget.attrs[ 'class' ] = 'form-control'
-        for field in ( 'plans', 'assumptions' ):
-            self.fields[ field ].widget.attrs[ 'class' ] = 'custom-select'
 
     def clean_name( self ):
         name = self.cleaned_data[ 'name' ].strip()
         if name.lower() in self._taken_names:
             raise forms.ValidationError( 'A scenario with that name already exists -- pick another.' )
         return name
+
+
+class PairScenarioForm( _NamedScenarioForm ):
+    """Pair an existing complete Plans with an existing complete Assumptions into a new named scenario. The
+    choosers (injected by the view) are the complete components; the cascading UI keeps the pick to a
+    not-yet-used combination, and this re-checks server-side."""
+
+    plans       = forms.ChoiceField( label = 'Plans' )
+    assumptions = forms.ChoiceField( label = 'Assumptions' )
+
+    def __init__( self, *args, plans = None, assumptions = None, taken = frozenset(), **kwargs ):
+        super().__init__( *args, **kwargs )
+        self._taken = taken
+        self.fields[ 'plans' ].choices = [
+            ( str( record.uuid ), record.label ) for record in ( plans or [] ) ]
+        self.fields[ 'assumptions' ].choices = [
+            ( str( record.uuid ), record.label ) for record in ( assumptions or [] ) ]
+        for field in ( 'plans', 'assumptions' ):
+            self.fields[ field ].widget.attrs[ 'class' ] = 'custom-select'
 
     def clean( self ):
         cleaned = super().clean()
@@ -203,62 +210,163 @@ class ScenarioCombineForm( forms.Form ):
         return cleaned
 
 
+class CopyScenarioForm( _NamedScenarioForm ):
+    """Copy an existing scenario into a new one, choosing per side whether to Copy (clone, then editable) or
+    Reuse (share) its Plans and its Assumptions. At least one side must be copied -- reusing both would just
+    re-create the source's own pairing."""
+
+    _MODE_CHOICES = [ ( 'copy', 'Copy to edit' ), ( 'reuse', 'Reuse (shared)' ) ]
+
+    source           = forms.ChoiceField( label = 'Copy from' )
+    plans_mode       = forms.ChoiceField(
+        label = 'Plans', choices = _MODE_CHOICES, initial = 'copy', widget = forms.RadioSelect )
+    assumptions_mode = forms.ChoiceField(
+        label = 'Assumptions', choices = _MODE_CHOICES, initial = 'copy', widget = forms.RadioSelect )
+
+    def __init__( self, *args, scenarios = None, **kwargs ):
+        super().__init__( *args, **kwargs )
+        self._by_uuid = { str( record.uuid ): record for record in ( scenarios or [] ) }
+        self.fields[ 'source' ].choices = [
+            ( uuid, record.label ) for uuid, record in self._by_uuid.items() ]
+        self.fields[ 'source' ].widget.attrs[ 'class' ] = 'custom-select'
+
+    def clean( self ):
+        cleaned = super().clean()
+        if cleaned.get( 'plans_mode' ) == 'reuse' and cleaned.get( 'assumptions_mode' ) == 'reuse':
+            raise forms.ValidationError(
+                'Copy at least one of Plans or Assumptions -- reusing both would re-create this scenario.' )
+        return cleaned
+
+    @property
+    def source_scenario( self ):
+        return self._by_uuid[ self.cleaned_data[ 'source' ] ]
+
+
 @method_decorator( ensure_organization, name = 'dispatch' )
 class ScenarioComposeView( View ):
-    """`/inputs/scenarios/compose/` -- compose a Future Scenario (the Compose operation): *pair* an
-    existing Plans with an existing Assumptions -- pure selection, no interview -- reached only from the
-    Scenarios page's "New Future Scenario". It routes by what the organization has: not enough complete
-    components to pair (the Default scenario is still being set up) -> the Scenarios page, to finish it;
-    complete components but every pairing already used -> a hint to make a new Plans/Assumptions first;
-    otherwise the combine form. A completed Profile is the prerequisite."""
+    """`/inputs/scenarios/compose/` -- New scenario. Three ways to create one: **Pair** existing complete
+    components into a not-yet-used combination (when free pairings exist), **Copy** an existing scenario
+    (per side, copy or reuse), or **Start fresh** (new default Plans + Assumptions, then the interview).
+    A completed Profile is the prerequisite; until a first scenario is complete the page steers the user to
+    finish that one rather than pile up more."""
 
-    _FORM_TEMPLATE = 'inputs/scenario_compose.html'
-    _HINT_TEMPLATE = 'inputs/panes/scenario_combinations_exhausted.html'
+    _TEMPLATE = 'inputs/scenario_compose.html'
 
     def get( self, request ):
         profile_record = completed_profile( request.organization )
         if profile_record is None:
             return _redirect_to_profile_setup( request )
-        plans, assumptions = self._components( profile_record, request.organization )
-        if not plans or not assumptions:                   # nothing complete to pair yet -> finish setup
-            return redirect( 'scenarios_home' )
-        if not self._has_available_pairing( request.organization, plans, assumptions ):
-            return render( request, self._HINT_TEMPLATE, {} )
-        return render(
-            request, self._FORM_TEMPLATE, { 'form': self._form( request.organization, plans, assumptions ) } )
+        return render( request, self._TEMPLATE, self._context( request.organization, profile_record ) )
 
     def post( self, request ):
-        organization   = request.organization
-        profile_record = completed_profile( organization )
+        profile_record = completed_profile( request.organization )
         if profile_record is None:
             return _redirect_to_profile_setup( request )
-        plans, assumptions = self._components( profile_record, organization )
-        form = self._form( organization, plans, assumptions, request.POST )
+        handler = { 'start_fresh': self._start_fresh, 'copy': self._copy, 'pair': self._pair }.get(
+            request.POST.get( 'action' ) )
+        if handler is None:
+            raise BadRequest( 'Unknown scenario-creation action.' )
+        return handler( request, profile_record )
+
+    def _start_fresh( self, request, profile_record ):
+        scenario = create_fresh_scenario( request.organization, request.POST.get( 'name' ) or None )
+        return _enter_scenario_build( request, scenario )
+
+    def _copy( self, request, profile_record ):
+        form = CopyScenarioForm(
+            request.POST, prefix = 'copy',
+            scenarios = self._complete_scenarios( request.organization, profile_record ),
+            taken_names = self._taken_names( request.organization ) )
         if not form.is_valid():
-            return render( request, self._FORM_TEMPLATE, { 'form': form } )
-        by_uuid_plans       = { str( record.uuid ): record for record in plans }
-        by_uuid_assumptions = { str( record.uuid ): record for record in assumptions }
-        create_scenario(
-            organization, by_uuid_plans[ form.cleaned_data[ 'plans' ] ],
-            by_uuid_assumptions[ form.cleaned_data[ 'assumptions' ] ], form.cleaned_data[ 'name' ] )
+            return render(
+                request, self._TEMPLATE,
+                self._context( request.organization, profile_record, copy_form = form ) )
+        clone_scenario(
+            form.source_scenario, copy_plans = form.cleaned_data[ 'plans_mode' ] == 'copy',
+            copy_assumptions = form.cleaned_data[ 'assumptions_mode' ] == 'copy',
+            label = form.cleaned_data[ 'name' ] )
         return redirect( 'scenarios_home' )
 
+    def _pair( self, request, profile_record ):
+        plans, assumptions = self._complete_components( request.organization, profile_record )
+        form = PairScenarioForm(
+            request.POST, prefix = 'pair', plans = plans, assumptions = assumptions,
+            taken = existing_pairings( request.organization ),
+            taken_names = self._taken_names( request.organization ) )
+        if not form.is_valid():
+            return render(
+                request, self._TEMPLATE,
+                self._context( request.organization, profile_record, pair_form = form ) )
+        by_plans       = { str( record.uuid ): record for record in plans }
+        by_assumptions = { str( record.uuid ): record for record in assumptions }
+        create_scenario(
+            request.organization, by_plans[ form.cleaned_data[ 'plans' ] ],
+            by_assumptions[ form.cleaned_data[ 'assumptions' ] ], form.cleaned_data[ 'name' ] )
+        return redirect( 'scenarios_home' )
+
+    def _context( self, organization, profile_record, copy_form = None, pair_form = None ):
+        plans, assumptions = self._complete_components( organization, profile_record )
+        complete_scenarios = self._complete_scenarios( organization, profile_record )
+        available          = self._available_assumptions( organization, plans, assumptions )
+        taken_names        = self._taken_names( organization )
+        pairable_plans     = [ record for record in plans if available[ str( record.uuid ) ] ]
+        return {
+            'active_nav'            : 'scenarios',
+            'has_complete_scenario' : bool( complete_scenarios ),
+            'incomplete_scenarios'  : self._incomplete_scenarios( organization, profile_record ),
+            'can_pair'              : bool( pairable_plans ),
+            'pair_form'             : pair_form or PairScenarioForm(
+                prefix = 'pair', plans = pairable_plans, assumptions = assumptions,
+                taken = existing_pairings( organization ), taken_names = taken_names ),
+            'copy_form'             : copy_form or CopyScenarioForm(
+                prefix = 'copy', scenarios = complete_scenarios, taken_names = taken_names ),
+            # Option rows for the manually-rendered selects: the source scenarios (with the component labels
+            # the Copy card reflects), the pairable Plans (each carrying the free Assumptions to filter to),
+            # and the Assumptions choices. Data rides on the options, read by inputs.js.
+            'copy_sources'          : [
+                { 'uuid': str( scenario.uuid ), 'label': scenario.label,
+                  'plans': scenario.plans.label, 'assumptions': scenario.assumptions.label }
+                for scenario in complete_scenarios ],
+            'pair_plans'            : [
+                { 'uuid': str( record.uuid ), 'label': record.label,
+                  'available': ','.join( available[ str( record.uuid ) ] ) }
+                for record in pairable_plans ],
+            'pair_assumptions'      : [
+                { 'uuid': str( record.uuid ), 'label': record.label } for record in assumptions ],
+        }
+
     @staticmethod
-    def _components( profile_record, organization ):
+    def _complete_components( organization, profile_record ):
         return ( completed_plans( profile_record, organization ),
                  completed_assumptions( profile_record, organization ) )
 
-    @staticmethod
-    def _has_available_pairing( organization, plans, assumptions ) -> bool:
-        taken = existing_pairings( organization )
-        return any( ( str( p.uuid ), str( a.uuid ) ) not in taken for p in plans for a in assumptions )
+    def _complete_scenarios( self, organization, profile_record ):
+        """The organization's saved scenarios whose Plans and Assumptions are both complete -- the ones a
+        Copy can start from."""
+        plans, assumptions = self._complete_components( organization, profile_record )
+        plan_ids           = { record.id for record in plans }
+        assumption_ids     = { record.id for record in assumptions }
+        return [ scenario for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' )
+                 if scenario.plans_id in plan_ids and scenario.assumptions_id in assumption_ids ]
+
+    def _incomplete_scenarios( self, organization, profile_record ):
+        """Saved scenarios not yet fully set up -- surfaced so the user knows why their in-progress
+        components are not available to pair."""
+        complete = { scenario.id for scenario in self._complete_scenarios( organization, profile_record ) }
+        return [ scenario for scenario in scenarios_for( organization ) if scenario.id not in complete ]
 
     @staticmethod
-    def _form( organization, plans, assumptions, data = None ):
-        taken_names = { record.label.lower() for record in scenarios_for( organization ) }
-        return ScenarioCombineForm(
-            data, plans = plans, assumptions = assumptions, taken = existing_pairings( organization ),
-            taken_names = taken_names )
+    def _available_assumptions( organization, plans, assumptions ):
+        """Map each complete Plans's uuid -> the complete Assumptions uuids not yet paired with it, so the
+        Pair UI can offer only new combinations."""
+        taken = existing_pairings( organization )
+        return { str( plan.uuid ): [ str( item.uuid ) for item in assumptions
+                                     if ( str( plan.uuid ), str( item.uuid ) ) not in taken ]
+                 for plan in plans }
+
+    @staticmethod
+    def _taken_names( organization ):
+        return { record.label.lower() for record in scenarios_for( organization ) }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -273,11 +381,7 @@ class ScenarioEditView( View ):
         organization = request.organization
         scenario = get_object_or_404(
             ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
-        _select( request, 'current_plans_uuid', scenario.plans )
-        _select( request, 'current_assumptions_uuid', scenario.assumptions )
-        request.session_state.editing_scenario = str( scenario.uuid )
-        request.session_state.to_session( request )
-        return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
+        return _enter_scenario_build( request, scenario )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -343,6 +447,18 @@ def _select( request, field, record ):
     edits it. The single place a plans/assumptions selection is recorded."""
     setattr( request.session_state, field, str( record.uuid ) )
     request.session_state.to_session( request )
+
+
+def _enter_scenario_build( request, scenario ):
+    """Make `scenario` the interview's editing target -- its Plans and Assumptions selected and the build
+    marked in progress -- and enter the two-part flow at the first Plans section. Shared by the
+    edit-a-scenario and start-fresh entries, so both point the flow at that scenario's components rather
+    than whatever was selected before."""
+    _select( request, 'current_plans_uuid', scenario.plans )
+    _select( request, 'current_assumptions_uuid', scenario.assumptions )
+    request.session_state.editing_scenario = str( scenario.uuid )
+    request.session_state.to_session( request )
+    return redirect( 'interview_section', section = first_section_of_flow( 'plans' ).key )
 
 
 def _forget_if_current( request, field, record ):
