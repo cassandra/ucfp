@@ -37,9 +37,15 @@ select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete
 
 {% if incomplete_scenarios %}
 <div class="alert alert-info small" style="max-width: 52rem">
-  Still being set up (their Plans and Assumptions can't be paired until finished):
-  {% for scenario in incomplete_scenarios %}<strong>{{ scenario.label }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}.
-  <a href="{% url 'scenarios_home' %}">Finish them</a>.
+  <div class="mb-1">These scenarios are still being set up, so their Plans and Assumptions can't be paired
+    yet. Finish one:</div>
+  {% for scenario in incomplete_scenarios %}
+  {# Each links straight into its build flow (resume setup), so the user needn't go hunting. #}
+  <form method="post" action="{% url 'scenario_edit' scenario.uuid %}" class="d-inline">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-link btn-sm p-0 mr-3">{{ scenario.label }} &rarr;</button>
+  </form>
+  {% endfor %}
 </div>
 {% endif %}
 
