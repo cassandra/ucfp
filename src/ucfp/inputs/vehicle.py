@@ -79,7 +79,8 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         label = 'Next purchase date', required = False, widget = IsoDateInput() )
     purchase_price   = MoneyField( label = 'Price per car', min_value = 0, required = False )
     recurrence_years = forms.IntegerField(
-        label = 'Replace every (years)', min_value = 1, required = False )
+        label = 'Replace every (years)', min_value = 1, required = False,
+        widget = forms.NumberInput( attrs = { 'class' : 'input-count' } ) )   # a year count, a digit or two
     end_date         = forms.DateField(
         label = 'Stop replacing by', required = False, widget = IsoDateInput(),
         help_text = 'Blank to keep replacing indefinitely.' )
@@ -90,7 +91,8 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         label = 'Paying by', required = False,
         choices = [ ( method.name, method.label ) for method in PaymentMethod ],
         initial = PaymentMethod.CASH.name,
-        widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
+        widget = forms.RadioSelect(
+            attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     down_payment      = MoneyField( label = 'Down / first payment', min_value = 0, required = False )
     monthly_payment   = MoneyField( label = 'Monthly payment', min_value = 0, required = False )
     lease_end_payment = MoneyField( label = 'Lease-end payment', min_value = 0, required = False )
