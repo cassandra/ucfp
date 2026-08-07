@@ -1,5 +1,5 @@
-"""A loan that originates mid-forecast (issue #136): dormant until its date, then borrowed and
-amortized from there -- the recurring-financing counterpart of a t0 loan.
+"""A loan that originates mid-forecast: dormant until its date, then borrowed and amortized from
+there -- the recurring-financing counterpart of a t0 loan.
 
 An originated loan's accounts exist from the start but carry nothing until `origination_date`, when
 its principal is credited to the liability and the proceeds land in cash (a balanced borrow, no
@@ -16,16 +16,19 @@ from decimal import Decimal
 
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
+from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters,
     ForecastParameters,
+    IncomeStream,
     LoanParameters,
     ScheduledLoanPayoff,
     ScheduledPurchase,
     Subject,
+    WindowedAmount,
 )
 from ucfp.forecast.tests.granularity_harness import ANNUAL, MONTHLY, run_at
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
@@ -131,7 +134,8 @@ class OriginatedLoanGranularityTests( unittest.TestCase ):
 
 class OriginatedLoanCompositionTests( unittest.TestCase ):
     """Origination composes with the other money-movement primitives into the financed-purchase and
-    replacement-cycle shapes #130 builds on -- proven here at the engine level so #130 can rely on it."""
+    replacement-cycle shapes a financed vehicle plan builds on -- proven at the engine level here so
+    that planning layer can rely on it."""
 
     def _financed_purchase_parameters( self, end_date, *, price, down ):
         # A car holding opening at zero to buy into, a purchase for the full price, and a loan for the
@@ -202,9 +206,11 @@ class OriginatedLoanEdgeTests( unittest.TestCase ):
         self.assertEqual(
             reader.ledger.natural_balance( _account( reader, 'car-interest' ) ), Decimal( '0' ) )
 
-    def test_origination_then_immediate_payoff_is_net_neutral( self ):
-        # Borrow, then pay it right back off a month later: the liability ends at zero, only a sliver
-        # of interest was spent, and the books balance.
+    def test_origination_then_immediate_payoff_clears_the_balance( self ):
+        # Borrow, then pay it right back off two months later: the liability ends at zero and the books
+        # balance. Interest is deliberately not asserted -- a payoff in the span it originates inherits
+        # the engine's payoff phase-ordering, so that one span's interest split is granularity-sensitive
+        # (see LoanOrigination); only the cleared balance is invariant.
         parameters = replace(
             _parameters( date( 2031, 12, 31 ) ),
             events = [ ScheduledLoanPayoff( date( 2030, 8, 1 ), 'car' ) ] )
@@ -212,20 +218,92 @@ class OriginatedLoanEdgeTests( unittest.TestCase ):
         reader.assert_balanced()
         self.assertEqual( reader.ledger.natural_balance( _account( reader, 'car' ) ), Decimal( '0' ) )
 
-    def test_origination_after_the_horizon_never_fires( self ):
-        # A loan whose origination date is past the run's end simply never becomes a debt: no balance,
-        # no interest, books balanced -- the mirror of a payoff dated after the term.
+    def test_origination_beyond_the_run_horizon_never_fires( self ):
+        # The run spans eight years but the loan originates the year after it ends: the past-horizon
+        # branch (origination > the final span's end) is exercised, and the loan never becomes a debt --
+        # no balance, no interest, books balanced. The mirror of a payoff dated after the term.
         reader = Bookkeeper(
-            Forecast( _parameters( date( 2029, 12, 31 ), origination_date = date( 2035, 6, 1 ) ) )
+            Forecast( _parameters( date( 2034, 12, 31 ), origination_date = date( 2035, 6, 1 ) ) )
             .run().books )
         reader.assert_balanced()
         self.assertEqual( reader.ledger.natural_balance( _account( reader, 'car' ) ), Decimal( '0' ) )
+        self.assertEqual(
+            reader.ledger.natural_balance( _account( reader, 'car-interest' ) ), Decimal( '0' ) )
 
     def test_origination_before_the_start_is_rejected( self ):
         # An originated loan dated before the forecast start would never fire (it falls in no period),
         # silently mismodelling; reject it so the planner sets it as a t0 loan instead.
         with self.assertRaises( ValueError ):
             _parameters( date( 2030, 12, 31 ), origination_date = date( 2025, 6, 1 ) )
+
+    def test_two_loans_originating_on_the_same_date( self ):
+        # Two loans borrowed the same day in the same span -- the order-sensitive path where both
+        # originations share a period: each carries its own amortizing balance and the books balance.
+        first  = LoanParameters(
+            'Loan A', Decimal( '20000' ), Rate( Decimal( '0.06' ) ), Duration( 5, TimeUnit.YEAR ),
+            ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST, handle = 'la', interest_handle = 'la-interest',
+            origination_date = _ORIGINATION )
+        second = replace( first, name = 'Loan B', opening_balance = Decimal( '35000' ),
+                          handle = 'lb', interest_handle = 'lb-interest' )
+        parameters = replace(
+            _parameters( date( 2031, 12, 31 ), with_loan = False ), loans = [ first, second ] )
+        reader = Bookkeeper( Forecast( parameters ).run().books )
+        reader.assert_balanced()
+        for handle, principal in ( ( 'la', Decimal( '20000' ) ), ( 'lb', Decimal( '35000' ) ) ):
+            balance = reader.ledger.natural_balance( _account( reader, handle ) )
+            self.assertGreater( balance, Decimal( '0' ) )
+            self.assertLess( balance, principal )
+            continue
+
+    def test_extra_principal_on_an_originated_loan_pays_it_down_faster( self ):
+        # annual_extra_principal flows through the same amortization on the post-origination months:
+        # the loan carrying extra principal ends below the one without it.
+        base  = LoanParameters(
+            'Car', _PRINCIPAL, Rate( Decimal( '0.06' ) ), Duration( 5, TimeUnit.YEAR ),
+            ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST, handle = 'car', interest_handle = 'car-interest',
+            origination_date = _ORIGINATION )
+        extra = replace( base, annual_extra_principal = Decimal( '3000' ) )
+        end   = date( 2032, 12, 31 )
+        plain = Bookkeeper(
+            Forecast( replace( _parameters( end, with_loan = False ), loans = [ base ] ) ).run().books )
+        faster = Bookkeeper(
+            Forecast( replace( _parameters( end, with_loan = False ), loans = [ extra ] ) ).run().books )
+        self.assertLess(
+            faster.ledger.natural_balance( _account( faster, 'car' ) ),
+            plain.ledger.natural_balance( _account( plain, 'car' ) ) )
+
+
+class OriginatedLoanTaxTests( unittest.TestCase ):
+    """An originated loan carries its interest deductibility exactly as a t0 loan does -- the interest
+    account is created from `interest_class` regardless of when the loan originates. So a large
+    originated mortgage lowers tax versus the identical loan booked as non-deductible interest."""
+
+    def _parameters( self, interest_class ):
+        subject = Subject( 'A', date( 1970, 1, 1 ) )
+        return ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2033, 12, 31 ),
+            filing_status = FilingStatus.MARRIED_JOINT,
+            statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+            subjects      = [ subject ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '600000' ), Decimal( '600000' ) ) ],
+            income_streams = [ IncomeStream(
+                subject, IncomeTaxClass.WAGES, Schedule.constant( WindowedAmount( Decimal( '250000' ) ) ) ) ],
+            loans         = [ LoanParameters(
+                'Home', Decimal( '700000' ), Rate( Decimal( '0.07' ) ), Duration( 30, TimeUnit.YEAR ),
+                interest_class, handle = 'home', interest_handle = 'home-interest',
+                origination_date = date( 2030, 6, 1 ) ) ] )
+
+    def test_deductible_interest_lowers_tax_versus_non_deductible( self ):
+        # Identical cash flows either way; only the deductibility differs. The itemizable mortgage
+        # interest (well above the standard deduction) leaves the deductible run wealthier -- proving an
+        # originated loan's interest reaches the tax path.
+        deductible = Bookkeeper(
+            Forecast( self._parameters( ExpenseTaxClass.MORTGAGE_INTEREST ) ).run().books )
+        non_deductible = Bookkeeper(
+            Forecast( self._parameters( ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST ) ).run().books )
+        self.assertGreater( deductible.ledger.net_worth(), non_deductible.ledger.net_worth() )
 
 
 if __name__ == '__main__':

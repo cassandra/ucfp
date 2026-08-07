@@ -41,6 +41,7 @@ from ucfp.accounts.enums import (
     SystemAccountRole,
 )
 from ucfp.accounts.exceptions import MissingAccountError
+from ucfp.accounts.ledger import Ledger
 from ucfp.accounts.money_utils import quantize_money
 from ucfp.period.parameters import (
     ContributionLine,
@@ -553,7 +554,8 @@ class Forecast:
             continue
         return terms
 
-    def _loan_liability_term( self, loan : '_ResolvedLoan', span : DateSpan, ledger ):
+    def _loan_liability_term(
+            self, loan : '_ResolvedLoan', span : DateSpan, ledger : Ledger ) -> Optional[ LiabilityTerm ]:
         """This span's amortization term for one loan, or None when it has no payment this span. A
         t0 loan -- or one originated in an earlier span -- amortizes its running ledger balance over
         the span's months (skipped once nothing is owed). The span a loan *originates* in amortizes
@@ -570,15 +572,10 @@ class Forecast:
             if opening <= 0:
                 return None                               # unseeded-and-future, or fully paid off
             return self._amortize_months( loan, opening, span.months )
-        months_after = span.months - self._month_offset( span, origination ) - 1
+        months_after = span.months - span.month_index_of( origination ) - 1
         if months_after <= 0:
             return None                                   # borrowed this span; payments start next
         return self._amortize_months( loan, loan.parameters.opening_balance, months_after )
-
-    @staticmethod
-    def _month_offset( span : DateSpan, moment : date ) -> int:
-        """The zero-based index of `moment`'s month within `span` (0 = the span's first month)."""
-        return ( moment.year - span.start_date.year ) * 12 + moment.month - span.start_date.month
 
     def _amortize_months(
             self, loan : '_ResolvedLoan', opening : Decimal, months : int ) -> LiabilityTerm:
@@ -760,19 +757,18 @@ class Forecast:
         purchase it finances, so a financed acquisition nets to the down payment in cash. The
         amortization for the origination span is derived from the principal in `_loan_liability_term`,
         independent of this event, so the event's mid-phase timing does not affect the schedule."""
-        events = list()
-        for loan in self._baseline.loans:
-            origination = loan.parameters.origination_date
-            if origination is None or not ( span.start_date <= origination <= span.end_date ):
-                continue
-            cash = chart.cash_account()
-            if cash is None:
-                raise MissingAccountError( 'No cash account to receive loan proceeds.' )
-            events.append( LoanOrigination(
-                event_date = origination, liability_account = loan.account,
-                cash_account = cash, principal = loan.parameters.opening_balance ) )
-            continue
-        return events
+        originating = [ loan for loan in self._baseline.loans
+                        if loan.parameters.origination_date is not None
+                        and span.start_date <= loan.parameters.origination_date <= span.end_date ]
+        if not originating:
+            return list()
+        cash = chart.cash_account()
+        if cash is None:
+            raise MissingAccountError( 'No cash account to receive loan proceeds.' )
+        return [ LoanOrigination(
+            event_date = loan.parameters.origination_date, liability_account = loan.account,
+            cash_account = cash, principal = loan.parameters.opening_balance )
+            for loan in originating ]
 
     def _recurring_realization_events_for(
             self, span : DateSpan, year_fraction : Decimal, chart : Chart ) -> list[ PeriodEvent ]:

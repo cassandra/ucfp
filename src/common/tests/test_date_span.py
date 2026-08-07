@@ -23,5 +23,19 @@ class DateSpanMonthsTest( unittest.TestCase ):
         self.assertEqual( DateSpan( date( 2026, 11, 1 ), date( 2027, 2, 28 ) ).months, 4 )
 
 
+class DateSpanMonthIndexTest( unittest.TestCase ):
+    """`month_index_of` places a date's month within the span, zero-based from the start month."""
+
+    def test_month_index_is_zero_based_from_the_start_month( self ):
+        span = DateSpan( date( 2026, 1, 1 ), date( 2026, 12, 31 ) )
+        self.assertEqual( span.month_index_of( date( 2026, 1, 15 ) ), 0 )    # first month, day ignored
+        self.assertEqual( span.month_index_of( date( 2026, 6, 1 ) ), 5 )     # June is index 5
+        self.assertEqual( span.month_index_of( span.end_date ) + 1, span.months )
+
+    def test_month_index_across_a_year_boundary( self ):
+        span = DateSpan( date( 2026, 11, 1 ), date( 2027, 2, 28 ) )
+        self.assertEqual( span.month_index_of( date( 2027, 1, 1 ) ), 2 )     # Nov=0, Dec=1, Jan=2
+
+
 if __name__ == '__main__':
     unittest.main()

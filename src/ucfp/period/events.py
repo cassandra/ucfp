@@ -118,7 +118,12 @@ class LoanOrigination( PeriodEvent ):
     Forecast amortizes (its level payment was derived from this same principal at build), so a
     recurring purchase can finance each replacement with a fresh loan. The borrow balances on its own
     -- liability up, cash up -- with no equity plug (unlike the t0 opening seed, which is booked
-    against Opening Balances). A non-positive principal posts nothing."""
+    against Opening Balances). A non-positive principal posts nothing.
+
+    A loan paid off in the same span it originates inherits the engine's existing payoff simplification:
+    liabilities are serviced before events, so that span's amortized interest is granularity-sensitive
+    (it reflects payments through the span end, then the payoff clears the balance). The final balance is
+    correct at any granularity; only the interest split within a settle-in-one-span cycle drifts."""
 
     event_date        : date
     liability_account : Account
