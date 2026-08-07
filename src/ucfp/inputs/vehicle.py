@@ -13,6 +13,8 @@ from django import forms
 
 from common.forms import MoneyField, StyledFormMixin
 
+from ucfp.environment.constants import AppConst
+from ucfp.inputs.plans.enums import PaymentMethod
 from ucfp.inputs.plans.schemas import Vehicle, VehiclePlan
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
 from ucfp.inputs.widgets import IsoDateInput
@@ -81,8 +83,17 @@ class VehicleForm( StyledFormMixin, forms.Form ):
     end_date         = forms.DateField(
         label = 'Stop replacing by', required = False, widget = IsoDateInput(),
         help_text = 'Blank to keep replacing indefinitely.' )
-    down_payment     = MoneyField( label = 'Down payment', min_value = 0, required = False )
-    monthly_payment  = MoneyField( label = 'Monthly payment', min_value = 0, required = False )
+    # The payment method drives which cost fields show (via the switch control) and how the forecast
+    # models each purchase. `down_payment` is the down (loan) or first payment (lease); `monthly_payment`
+    # serves both; `lease_end_payment` is the lease's turn-in cost.
+    payment_method   = forms.ChoiceField(
+        label = 'Paying by', required = False,
+        choices = [ ( method.name, method.label ) for method in PaymentMethod ],
+        initial = PaymentMethod.CASH.name,
+        widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
+    down_payment      = MoneyField( label = 'Down / first payment', min_value = 0, required = False )
+    monthly_payment   = MoneyField( label = 'Monthly payment', min_value = 0, required = False )
+    lease_end_payment = MoneyField( label = 'Lease-end payment', min_value = 0, required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( plans, handle ) if handle else None )
@@ -105,17 +116,19 @@ class VehicleForm( StyledFormMixin, forms.Form ):
             return cls._defaults( handle )
         return { 'name': vehicle.name, 'purchase_date': vehicle.purchase_date,
                  'purchase_price': vehicle.purchase_price, 'recurrence_years': vehicle.recurrence_years,
-                 'end_date': vehicle.end_date, 'down_payment': vehicle.down_payment,
-                 'monthly_payment': vehicle.monthly_payment }
+                 'end_date': vehicle.end_date, 'payment_method': vehicle.payment_method.name,
+                 'down_payment': vehicle.down_payment, 'monthly_payment': vehicle.monthly_payment,
+                 'lease_end_payment': vehicle.lease_end_payment }
 
     @staticmethod
     def _defaults( handle : str ) -> dict:
-        """A fresh vehicle's seeded typicals -- a slot-numbered name plus a typical price and replacement
-        interval -- with the next-purchase date left blank. The date is the one genuinely personal input,
-        and its absence keeps a defaulted-but-untouched vehicle from materializing until the user sets it."""
+        """A fresh vehicle's seeded typicals -- a slot-numbered name, a typical price and replacement
+        interval, and a cash purchase -- with the next-purchase date left blank. The date is the one
+        genuinely personal input, and its absence keeps a defaulted-but-untouched vehicle from
+        materializing until the user sets it."""
         number = handle.rsplit( '-', 1 )[ -1 ]
         return { 'name': f'Vehicle {number}', 'purchase_price': Decimal( '35000' ),
-                 'recurrence_years': 7 }
+                 'recurrence_years': 7, 'payment_method': PaymentMethod.CASH.name }
 
     def _complete( self ) -> bool:
         """All the fields a vehicle needs to materialize are present. No hard validation -- a partial
@@ -134,8 +147,10 @@ class VehicleForm( StyledFormMixin, forms.Form ):
             handle = handle, name = cleaned[ 'name' ], purchase_date = cleaned[ 'purchase_date' ],
             end_date = cleaned.get( 'end_date' ), purchase_price = cleaned[ 'purchase_price' ],
             recurrence_years = cleaned[ 'recurrence_years' ],
+            payment_method = PaymentMethod[ cleaned.get( 'payment_method' ) or PaymentMethod.CASH.name ],
             down_payment = cleaned.get( 'down_payment' ),
-            monthly_payment = cleaned.get( 'monthly_payment' ) )
+            monthly_payment = cleaned.get( 'monthly_payment' ),
+            lease_end_payment = cleaned.get( 'lease_end_payment' ) )
         existing = vehicle_plan_of( plans ) or VehiclePlan()
         kept     = [ v for v in existing.vehicles if v.handle != handle ] + [ vehicle ]
         return profile, replace( plans, vehicle_plan = replace( existing, vehicles = kept ) )

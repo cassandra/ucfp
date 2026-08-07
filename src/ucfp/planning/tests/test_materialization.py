@@ -14,13 +14,16 @@ from common.date_window import DateWindow
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.forecast.parameters import ScheduledPurchase, ScheduledRealization
+from ucfp.inputs.plans.enums import PaymentMethod
 from ucfp.inputs.plans.schemas import (
     HealthCoverageAssumption, Plans, PropertyExpense, Vehicle, VehiclePlan, VehicleRunningCost )
 from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
 from ucfp.planning.materialization import (
-    _health_coverage, _property_expenses, _vehicle_expenses, _vehicle_running_costs )
+    _health_coverage, _property_expenses, _vehicle_expenses, _vehicle_holdings,
+    _vehicle_purchase_events, _vehicle_running_costs )
 
 _OWNED    = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
 _OCCUPIED = _OWNED + ( PropertyContext.RENTED_HOME, )
@@ -97,34 +100,73 @@ def _vehicle( handle, purchase_date, end_date = None, **kwargs ) -> Vehicle:
     return Vehicle( handle = handle, purchase_date = purchase_date, end_date = end_date, **kwargs )
 
 
-class VehiclePurchaseTests( unittest.TestCase ):
-    """Each vehicle's purchase materializes within its own ownership window -- so several cars buy in
-    their own years rather than all at once -- sharing the Car purchase / Car payments accounts."""
+_HORIZON = date( 2060, 12, 31 )
+
+
+class CashVehicleTests( unittest.TestCase ):
+    """A CASH vehicle is an owned, depreciating holding, not an expense: it emits no purchase expense
+    item, a zero-opening DEPRECIATING holding, and a realize-then-buy event pair at each replacement
+    (the sale trades the outgoing car in; the first buy has nothing to trade)."""
 
     @staticmethod
     def _plans( *vehicles ):
         return Plans( vehicle_plan = VehiclePlan( vehicles = list( vehicles ) ) )
 
-    def test_each_vehicle_purchases_in_its_own_window( self ):
-        v1 = _vehicle( 'vehicle-1', date( 2026, 1, 1 ),
-                       purchase_price = Decimal( '30000' ), recurrence_years = 5 )
-        v2 = _vehicle( 'vehicle-2', date( 2028, 1, 1 ), end_date = date( 2040, 1, 1 ),
-                       purchase_price = Decimal( '40000' ), recurrence_years = 8 )
-        items = _vehicle_expenses( self._plans( v1, v2 ) )
-        self.assertEqual( [ item.name for item in items ], [ 'Car purchase', 'Car purchase' ] )
-        # the ongoing car is unbounded on the end; the retired one carries its full [purchase, end] window
-        self.assertEqual( items[ 0 ].window, DateWindow( start = date( 2026, 1, 1 ) ) )
-        self.assertEqual( items[ 1 ].window,
-                          DateWindow( start = date( 2028, 1, 1 ), end = date( 2040, 1, 1 ) ) )
-        self.assertEqual( items[ 0 ].amounts.segments[ 0 ].amount, Decimal( '30000' ) )  # cash: full price
+    def test_cash_vehicle_emits_no_purchase_expense( self ):
+        cash = _vehicle( 'vehicle-1', date( 2026, 1, 1 ),
+                         purchase_price = Decimal( '30000' ), recurrence_years = 5 )
+        self.assertEqual( _vehicle_expenses( self._plans( cash ) ), [] )
 
-    def test_incomplete_vehicle_emits_nothing( self ):
-        self.assertEqual( _vehicle_expenses( self._plans( _vehicle( 'vehicle-1', date( 2026, 1, 1 ) ) ) ), [] )
+    def test_cash_vehicle_declares_a_zero_opening_depreciating_holding( self ):
+        cash = _vehicle( 'vehicle-1', date( 2026, 1, 1 ),
+                         purchase_price = Decimal( '30000' ), recurrence_years = 5, name = 'Sedan' )
+        holdings = _vehicle_holdings( self._plans( cash ) )
+        self.assertEqual( len( holdings ), 1 )
+        self.assertEqual( holdings[ 0 ].asset_class, AssetClass.DEPRECIATING )
+        self.assertEqual( holdings[ 0 ].opening_value, Decimal( '0' ) )
+        self.assertEqual( holdings[ 0 ].handle, 'vehicle:vehicle-1' )
+
+    def test_cash_replacement_cycles_realize_then_buy_into_the_holding( self ):
+        cash = _vehicle( 'vehicle-1', date( 2026, 1, 1 ), end_date = date( 2036, 6, 1 ),
+                         purchase_price = Decimal( '30000' ), recurrence_years = 5 )
+        events = _vehicle_purchase_events( self._plans( cash ), _HORIZON )
+        # Buys at 2026, 2031, 2036 (every 5y through the end date), each a realize (trade-in) then a buy.
+        self.assertEqual(
+            [ ( type( e ).__name__, e.event_date ) for e in events ],
+            [ ( 'ScheduledRealization', date( 2026, 1, 1 ) ), ( 'ScheduledPurchase', date( 2026, 1, 1 ) ),
+              ( 'ScheduledRealization', date( 2031, 1, 1 ) ), ( 'ScheduledPurchase', date( 2031, 1, 1 ) ),
+              ( 'ScheduledRealization', date( 2036, 1, 1 ) ), ( 'ScheduledPurchase', date( 2036, 1, 1 ) ) ] )
+        buys = [ e for e in events if isinstance( e, ScheduledPurchase ) ]
+        self.assertTrue( all( e.asset == 'vehicle:vehicle-1' for e in buys ) )
+        self.assertTrue( all( e.amount == Decimal( '30000' ) for e in buys ) )
+        sales = [ e for e in events if isinstance( e, ScheduledRealization ) ]
+        self.assertTrue( all( e.amount is None for e in sales ) )   # sell the whole (depreciated) holding
+
+    def test_ongoing_cash_vehicle_buys_through_the_horizon( self ):
+        cash = _vehicle( 'vehicle-1', date( 2026, 1, 1 ),
+                         purchase_price = Decimal( '30000' ), recurrence_years = 10 )
+        buys = [ e for e in _vehicle_purchase_events( self._plans( cash ), _HORIZON )
+                 if isinstance( e, ScheduledPurchase ) ]
+        self.assertEqual( [ e.event_date.year for e in buys ], [ 2026, 2036, 2046, 2056 ] )
+
+    def test_incomplete_cash_vehicle_emits_no_holding_or_events( self ):
+        bare = self._plans( _vehicle( 'vehicle-1', date( 2026, 1, 1 ) ) )
+        self.assertEqual( _vehicle_holdings( bare ), [] )
+        self.assertEqual( _vehicle_purchase_events( bare, _HORIZON ), [] )
+
+
+class FinancedVehicleTests( unittest.TestCase ):
+    """A LOAN vehicle keeps the interim smoothed expense approximation (down lump + financed stream),
+    and no owned holding -- pending the real recurring-loan model."""
+
+    @staticmethod
+    def _plans( *vehicles ):
+        return Plans( vehicle_plan = VehiclePlan( vehicles = list( vehicles ) ) )
 
     def test_financed_vehicle_splits_into_down_and_payments( self ):
         vehicle = _vehicle( 'vehicle-1', date( 2026, 1, 1 ), end_date = date( 2038, 1, 1 ),
                             purchase_price = Decimal( '30000' ), recurrence_years = 5,
-                            down_payment = Decimal( '5000' ) )
+                            payment_method = PaymentMethod.LOAN, down_payment = Decimal( '5000' ) )
         items = _vehicle_expenses( self._plans( vehicle ) )
         self.assertEqual( { item.name for item in items }, { 'Car purchase', 'Car payments' } )
         purchase = next( item for item in items if item.name == 'Car purchase' )
@@ -133,6 +175,42 @@ class VehiclePurchaseTests( unittest.TestCase ):
         window = DateWindow( start = date( 2026, 1, 1 ), end = date( 2038, 1, 1 ) )
         self.assertEqual( purchase.window, window )     # both items carry the vehicle's ownership window
         self.assertEqual( payments.window, window )
+
+    def test_financed_vehicle_has_no_owned_holding( self ):
+        vehicle = _vehicle( 'vehicle-1', date( 2026, 1, 1 ),
+                            purchase_price = Decimal( '30000' ), recurrence_years = 5,
+                            payment_method = PaymentMethod.LOAN, down_payment = Decimal( '5000' ) )
+        self.assertEqual( _vehicle_holdings( self._plans( vehicle ) ), [] )
+
+
+class LeasedVehicleTests( unittest.TestCase ):
+    """A LEASE vehicle is pure expense -- down, monthly, and lease-end payments -- with no owned
+    holding and no trade-in."""
+
+    @staticmethod
+    def _plans( *vehicles ):
+        return Plans( vehicle_plan = VehiclePlan( vehicles = list( vehicles ) ) )
+
+    def test_lease_emits_down_monthly_and_lease_end( self ):
+        lease = _vehicle( 'vehicle-1', date( 2026, 1, 1 ), end_date = date( 2040, 1, 1 ),
+                          purchase_price = Decimal( '30000' ), recurrence_years = 3,
+                          payment_method = PaymentMethod.LEASE, down_payment = Decimal( '3000' ),
+                          monthly_payment = Decimal( '400' ), lease_end_payment = Decimal( '500' ) )
+        items = _vehicle_expenses( self._plans( lease ) )
+        self.assertEqual( [ item.name for item in items ], [ 'Car lease', 'Car payments', 'Car lease' ] )
+        monthly = next( item for item in items if item.name == 'Car payments' )
+        self.assertEqual( monthly.amounts.segments[ 0 ].amount, Decimal( '400' ) )
+        # the lease-end lump starts one lease term in (the end of the first term), not at purchase
+        lease_end = items[ 2 ]
+        self.assertEqual( lease_end.window.start, date( 2029, 1, 1 ) )
+        self.assertEqual( lease_end.amounts.segments[ 0 ].amount, Decimal( '500' ) )
+
+    def test_lease_has_no_owned_holding( self ):
+        lease = _vehicle( 'vehicle-1', date( 2026, 1, 1 ),
+                          purchase_price = Decimal( '30000' ), recurrence_years = 3,
+                          payment_method = PaymentMethod.LEASE, down_payment = Decimal( '3000' ),
+                          monthly_payment = Decimal( '400' ) )
+        self.assertEqual( _vehicle_holdings( self._plans( lease ) ), [] )
 
 
 class VehicleRunningCostTests( unittest.TestCase ):

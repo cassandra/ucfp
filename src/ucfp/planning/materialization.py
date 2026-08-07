@@ -29,7 +29,8 @@ from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
     ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
     RecurringRealization, RetirementContribution, ScheduledExternalDisbursement,
-    ScheduledRealization, Subject, SubsidizedHealthCoverage, TransactionCosts, WindowedAmount )
+    ScheduledPurchase, ScheduledRealization, Subject, SubsidizedHealthCoverage, TransactionCosts,
+    WindowedAmount )
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
@@ -47,7 +48,7 @@ from ucfp.inputs.plans.defaults import default_drawdown
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
     AssetProfile, Debt, Profile, RENTED_HOME_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX )
-from ucfp.inputs.plans.enums import CreditCardPlanMode
+from ucfp.inputs.plans.enums import CreditCardPlanMode, PaymentMethod
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanRepayment, Plans, RetirementTiming, Vehicle )
 from ucfp.inputs.assumptions.defaults import default_transaction_costs
@@ -91,6 +92,9 @@ def materialize(
     vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
     conversion_events, conversion_recurring = _roth_conversions( profile, plans )
     withdrawal_events, withdrawal_recurring = _withdrawals( profile, plans )
+    scheduled_events = (
+        events.scheduled_events + card_events + conversion_events + withdrawal_events
+        + _vehicle_purchase_events( plans, frame.end_date ) )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -98,7 +102,7 @@ def materialize(
         statute          = statute,
         granularity      = frame.granularity,
         subjects         = subjects,
-        assets           = _assets( profile ),
+        assets           = _assets( profile ) + _vehicle_holdings( plans ),
         economic_outlook = _economic_outlook( assumptions ),
         income_streams   = _entitlement_income(
             profile, plans, subjects_by_handle, government_pension ) + flow_streams,
@@ -110,7 +114,7 @@ def materialize(
         loans            = _loans( profile, plans ),
         contributions    = _contributions( profile, plans ),
         recurring_realizations = conversion_recurring + withdrawal_recurring,
-        events           = events.scheduled_events + card_events + conversion_events + withdrawal_events,
+        events           = scheduled_events,
         cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
@@ -295,26 +299,96 @@ _AUTO_LOAN_APR         = BUILTIN_ASSUMPTIONS.auto_loan_apr
 _AUTO_LOAN_TERM_MONTHS = BUILTIN_ASSUMPTIONS.auto_loan_term_years * 12
 
 
+def _vehicle_ready( vehicle : Vehicle ) -> bool:
+    """Whether a vehicle has the fields it needs to materialize -- its purchase date, price, and
+    replacement interval. Until then it contributes nothing (a partial, still-being-entered vehicle)."""
+    return bool( vehicle.purchase_date and vehicle.purchase_price and vehicle.recurrence_years )
+
+
+def _vehicle_holding_handle( vehicle_handle : str ) -> str:
+    """The account handle of a cash vehicle's owned holding -- scoped to the vehicle so each car is its
+    own depreciating asset."""
+    return f'vehicle:{vehicle_handle}'
+
+
+def _vehicle_holding( vehicle : Vehicle ) -> AssetParameters:
+    """A cash vehicle's owned holding -- a DEPRECIATING asset opening at zero, filled by its purchases
+    and depreciating at the class rate between them."""
+    return AssetParameters(
+        name = vehicle.name or 'Vehicle', asset_class = AssetClass.DEPRECIATING,
+        opening_value = Decimal( '0' ), cost_basis = Decimal( '0' ),
+        handle = _vehicle_holding_handle( vehicle.handle ) )
+
+
+def _vehicle_holdings( plans : Plans ) -> list[ AssetParameters ]:
+    """A depreciating holding for each CASH vehicle -- the owned car as a real asset (see
+    `_vehicle_purchase_events`). LOAN and LEASE vehicles have no holding here: a loan is (for now) an
+    expense stream, a lease is not owned."""
+    plan = plans.vehicle_plan
+    if plan is None:
+        return list()
+    return [ _vehicle_holding( vehicle ) for vehicle in plan.vehicles
+             if vehicle.payment_method is PaymentMethod.CASH and _vehicle_ready( vehicle ) ]
+
+
+def _vehicle_purchase_events( plans : Plans, horizon : date ) -> list:
+    """A CASH vehicle as a balance-sheet swap: at each replacement date, sell the outgoing car (its
+    depreciated value, TAX_FREE, to cash) then buy the next (cash into the holding). The realize-then-buy
+    order matters -- the sale must read the outgoing value before the new price lands; the first buy has
+    nothing to trade in (the holding opens at zero). The car's cost is thus its depreciation over time,
+    not a purchase expense."""
+    plan = plans.vehicle_plan
+    if plan is None:
+        return list()
+    events = list()
+    for vehicle in plan.vehicles:
+        if vehicle.payment_method is not PaymentMethod.CASH or not _vehicle_ready( vehicle ):
+            continue
+        holding = _vehicle_holding_handle( vehicle.handle )
+        for cycle_date in _replacement_dates( vehicle, horizon ):
+            events.append( ScheduledRealization(
+                event_date = cycle_date, holding = holding, amount = None ) )
+            events.append( ScheduledPurchase(
+                event_date = cycle_date, asset = holding, amount = vehicle.purchase_price ) )
+    return events
+
+
+def _replacement_dates( vehicle : Vehicle, horizon : date ) -> list:
+    """The purchase dates over a vehicle's window: the first at `purchase_date`, then every
+    `recurrence_years`, through the earlier of its end date and the forecast horizon."""
+    last   = min( vehicle.end_date, horizon ) if vehicle.end_date is not None else horizon
+    step   = Duration( vehicle.recurrence_years, TimeUnit.YEAR )
+    dates  = list()
+    cursor = vehicle.purchase_date
+    while cursor <= last:
+        dates.append( cursor )
+        cursor = step.add_to( cursor )
+    return dates
+
+
 def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
-    """Each vehicle's purchase costs, smoothed within its ownership window: a lump every recurrence (the
-    full price unfinanced, or the down payment financed) plus, when financed, a constant stream of the
-    financed lifetime cost spread over the recurrence period. All vehicles share one Car purchase / Car
-    payments account (aggregated by name), each item windowed to its vehicle's [purchase, end] range."""
+    """The vehicle purchase costs that are modeled as expenses (not a holding): a LOAN's down payment
+    and financed stream (an interim smoothed approximation -- a real recurring loan follows), and a
+    LEASE's down, monthly, and lease-end payments. CASH vehicles emit nothing here -- they are owned,
+    depreciating holdings (`_vehicle_holdings` / `_vehicle_purchase_events`)."""
     plan = plans.vehicle_plan
     if plan is None:
         return list()
     items = list()
     for vehicle in plan.vehicles:
-        items.extend( _vehicle_purchase_items( vehicle ) )
+        if not _vehicle_ready( vehicle ):
+            continue
+        if vehicle.payment_method is PaymentMethod.LOAN:
+            items.extend( _loan_vehicle_items( vehicle ) )
+        elif vehicle.payment_method is PaymentMethod.LEASE:
+            items.extend( _lease_vehicle_items( vehicle ) )
     return items
 
 
-def _vehicle_purchase_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
-    """One vehicle's purchase items -- empty until its purchase date, price, and recurrence are all set.
-    The item's window bounds the recurrence to the vehicle's ownership range (its first buy at the
-    purchase date, replaced every recurrence, stopping at the end date)."""
-    if not vehicle.purchase_date or not vehicle.purchase_price or not vehicle.recurrence_years:
-        return list()
+def _loan_vehicle_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
+    """A financed vehicle's cost as an interim expense approximation (pending the real recurring-loan
+    model): the down payment as a lump every recurrence, plus the financed lifetime cost spread evenly
+    over the recurrence period as a constant monthly stream."""
     window = DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
     lump, financed_lifetime = _vehicle_costs( vehicle )
     items = list()
@@ -334,11 +408,40 @@ def _vehicle_purchase_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
     return items
 
 
+def _lease_vehicle_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
+    """A leased vehicle as pure expense -- no ownership, no trade-in: the down/first payment as a lump
+    each cycle, the monthly lease payment over the window, and the lease-end payment at the end of each
+    lease term (one recurrence in). Blank amounts are skipped."""
+    window     = DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
+    recurrence = Recurrence( Duration( vehicle.recurrence_years, TimeUnit.YEAR ) )
+    items = list()
+    if vehicle.down_payment:
+        items.append( ExpenseItem(
+            name = 'Car lease', expense_tax_class = ExpenseTaxClass.LIVING,
+            amounts = Schedule.constant( WindowedAmount( vehicle.down_payment ) ),
+            cadence = recurrence, window = window, handle = CAR_PURCHASE_HANDLE ) )
+    if vehicle.monthly_payment:
+        items.append( ExpenseItem(
+            name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
+            amounts = Schedule.constant( WindowedAmount( vehicle.monthly_payment ) ),
+            cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ), window = window,
+            handle = CAR_PAYMENTS_HANDLE ) )
+    if vehicle.lease_end_payment:
+        term_end = DateWindow(
+            start = Duration( vehicle.recurrence_years, TimeUnit.YEAR ).add_to( vehicle.purchase_date ),
+            end = vehicle.end_date )
+        items.append( ExpenseItem(
+            name = 'Car lease', expense_tax_class = ExpenseTaxClass.LIVING,
+            amounts = Schedule.constant( WindowedAmount( vehicle.lease_end_payment ) ),
+            cadence = recurrence, window = term_end, handle = CAR_PURCHASE_HANDLE ) )
+    return items
+
+
 def _vehicle_costs( vehicle : Vehicle ) -> tuple[ Decimal, Decimal ]:
-    """The (lump, financed lifetime cost) of one vehicle. Unfinanced: the lump is the full price,
-    nothing financed. Financed: the lump is the down payment and the financed lifetime cost is the total
-    of the loan's payments (principal plus interest). The user gives the down payment or the monthly
-    payment; the other is derived at the assumed rate and term."""
+    """The (lump, financed lifetime cost) of a financed vehicle. The lump is the down payment and the
+    financed lifetime cost is the total of the loan's payments (principal plus interest). The user gives
+    the down payment or the monthly payment; the other is derived at the assumed rate and term. With
+    neither given, the whole price is the lump."""
     rate  = _AUTO_LOAN_APR.fraction / 12
     term  = _AUTO_LOAN_TERM_MONTHS
     price = vehicle.purchase_price
@@ -349,7 +452,7 @@ def _vehicle_costs( vehicle : Vehicle ) -> tuple[ Decimal, Decimal ]:
     if vehicle.monthly_payment is not None:
         financed = present_value( vehicle.monthly_payment, rate, term )
         return max( price - financed, Decimal( '0' ) ), vehicle.monthly_payment * term
-    return price, Decimal( '0' )   # unfinanced: the whole price is the lump
+    return price, Decimal( '0' )   # neither given: the whole price is the lump
 
 
 def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:

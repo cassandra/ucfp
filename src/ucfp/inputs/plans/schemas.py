@@ -24,7 +24,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource
 from ucfp.parameter_sets.enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
 
-from .enums import CreditCardPlanMode, EventKind
+from .enums import CreditCardPlanMode, EventKind, PaymentMethod
 
 
 # ===== Personal choices (the levers a user turns) =====
@@ -220,23 +220,31 @@ class VehicleRunningCost:
 
 @dataclass( frozen = True )
 class Vehicle:
-    """One car the household plans to own over a window: bought at `purchase_price` on `purchase_date`
-    and replaced every `recurrence_years` thereafter, up to `end_date` (blank = ongoing). Unfinanced (no
-    down or monthly payment given), the whole price lands as a lump each cycle; financed, the down payment
-    is the lump and the financed remainder -- principal plus interest at an assumed auto-loan rate/term --
-    is spread evenly over the recurrence period as one constant expense. The user gives either the
-    `monthly_payment` or the `down_payment`; materialization derives the other. `handle` is a stable
-    per-vehicle identity (minted `vehicle-N`); every other field is optional so a just-added vehicle
-    persists while it is filled -- materialization emits its purchases only once `purchase_date`,
-    `purchase_price`, and `recurrence_years` are all set, and its running costs while it is owned."""
+    """One car (or boat) the household plans to buy over a window: bought at `purchase_price` on
+    `purchase_date` and replaced every `recurrence_years` thereafter, up to `end_date` (blank =
+    ongoing). `payment_method` sets how each purchase is modeled and which payment fields apply:
+
+    - CASH: no payment fields -- the whole price buys an owned, depreciating asset each cycle.
+    - LOAN: `down_payment` is paid up front and the remainder is financed; `monthly_payment` is
+      optional (materialization derives it from price, down, and the assumed auto rate/term, or the
+      down from the monthly, whichever the user gave).
+    - LEASE: `down_payment` is the first payment, `monthly_payment` the recurring lease payment, and
+      `lease_end_payment` the disposition/turn-in cost -- no ownership, no trade-in.
+
+    `handle` is a stable per-vehicle identity (minted `vehicle-N`); every other field is optional so a
+    just-added vehicle persists while it is filled -- materialization emits its purchases only once
+    `purchase_date`, `purchase_price`, and `recurrence_years` are all set, and its running costs while
+    it is owned."""
     handle: str
     name: str = ''
     purchase_date: Optional[ date ] = None
     end_date: Optional[ date ] = None
     purchase_price: Optional[ Decimal ] = None
     recurrence_years: Optional[ int ] = None
+    payment_method: PaymentMethod = PaymentMethod.CASH
     down_payment: Optional[ Decimal ] = None
     monthly_payment: Optional[ Decimal ] = None
+    lease_end_payment: Optional[ Decimal ] = None
 
 
 @dataclass( frozen = True )
