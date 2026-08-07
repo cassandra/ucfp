@@ -30,5 +30,9 @@ class DateSpan:
         """The whole calendar months the span covers, inclusive -- a calendar year is 12, a single
         calendar month is 1. Assumes month-aligned bounds (a first-of-month start and a month-end
         end), as the forecast's period spans are."""
-        return ( ( self.end_date.year - self.start_date.year ) * 12
-                 + self.end_date.month - self.start_date.month + 1 )
+        return self.month_index_of( self.end_date ) + 1
+
+    def month_index_of( self, moment : date ) -> int:
+        """The zero-based index of `moment`'s month within the span (0 = the span's first month), so
+        `months == month_index_of( end_date ) + 1`. Month-aligned like `months`; the day is ignored."""
+        return ( moment.year - self.start_date.year ) * 12 + moment.month - self.start_date.month
