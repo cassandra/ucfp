@@ -128,6 +128,9 @@ class AppConst:
     VEHICLE_MONTHLY_CLASS   = 'js-vehicle-monthly'   # the monthly-payment input
     VEHICLE_APR_DATA_ATTR   = 'vehicle-apr'          # the assumed auto-loan APR (percent), on the form
     VEHICLE_TERM_DATA_ATTR  = 'vehicle-term'         # the assumed auto-loan term (months), on the form
+    # Marks the method radio that finances (the loan), set by the form from PaymentMethod; the calculator
+    # fills the monthly only when the checked method carries it -- so the JS never names the method.
+    VEHICLE_FINANCES_DATA_ATTR = 'vehicle-finances'
 
     # The recurring-expenses table's per-column delete: the x stamps its span index into the form's
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.

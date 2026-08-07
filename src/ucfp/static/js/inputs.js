@@ -491,8 +491,11 @@ window.App.Inputs = (function () {
         return payment * ( 1 - Math.pow( 1 + rate, -months ) ) / rate;
     }
 
-    function financeMethod( $form ) {
-        return $form.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).filter( ':checked' ).val();
+    // Whether the checked method carries the form's finances marker (the loan option) -- so the JS gates
+    // the amortization on financing without naming the method.
+    function financesSelected( $form ) {
+        return $form.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).filter( ':checked' )
+            .closest( '[' + dataAttr( C.VEHICLE_FINANCES_DATA_ATTR ) + ']' ).length > 0;
     }
 
     function financeRate( $form ) {
@@ -510,7 +513,7 @@ window.App.Inputs = (function () {
 
     // Editing the price or the down fills the monthly: amortize (price - down) over the assumed term.
     function fillVehicleMonthly( $form ) {
-        if ( financeMethod( $form ) !== 'LOAN' ) { return; }
+        if ( !financesSelected( $form ) ) { return; }
         const term  = financeTerm( $form );
         const price = parseAmount( $form.find( classSelector( C.VEHICLE_PRICE_CLASS ) ).val() );
         if ( !( price > 0 ) || !( term > 0 ) ) { return; }
@@ -523,7 +526,7 @@ window.App.Inputs = (function () {
     // Editing the monthly fills the down: the price less what that payment finances, clamped to
     // [0, price] (a payment too big to be a loan on this car pins the down at zero or the whole price).
     function fillVehicleDown( $form ) {
-        if ( financeMethod( $form ) !== 'LOAN' ) { return; }
+        if ( !financesSelected( $form ) ) { return; }
         const term    = financeTerm( $form );
         const price   = parseAmount( $form.find( classSelector( C.VEHICLE_PRICE_CLASS ) ).val() );
         const monthly = parseAmount( $form.find( classSelector( C.VEHICLE_MONTHLY_CLASS ) ).val() );

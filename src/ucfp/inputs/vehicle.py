@@ -151,6 +151,25 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         """The assumed auto-loan term in months -- the unit the client amortization mirror works in."""
         return BUILTIN_ASSUMPTIONS.auto_loan_term_months
 
+    # The switch's case values, derived from PaymentMethod so the template need not spell the member
+    # names (which are the radio values too). The domain vocabulary stays here; the switch/JS read it
+    # through the rendered `data-switch-case` and the finances marker, never as a literal.
+    @property
+    def payment_field_methods( self ) -> str:
+        """The methods whose down/monthly fields show -- a loan or a lease (cash pays none)."""
+        return f'{PaymentMethod.LOAN.name} {PaymentMethod.LEASE.name}'
+
+    @property
+    def lease_only_method( self ) -> str:
+        """The method whose lease-end field shows -- a lease only."""
+        return PaymentMethod.LEASE.name
+
+    @property
+    def financing_method_value( self ) -> str:
+        """The method that finances -- a loan. The template marks its radio so the calculator can fill
+        the monthly for it without the JS naming the method, and shows the loan note for it."""
+        return PaymentMethod.LOAN.name
+
     @classmethod
     def _initial( cls, plans, handle : str ) -> dict:
         vehicle = next( ( v for v in _vehicles( plans ) if v.handle == handle ), None )
