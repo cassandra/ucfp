@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 
 from common.date_window import DateWindow
-from common.recurrence import Duration, TimeUnit
+from common.recurrence import Duration, Recurrence, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledPurchase, ScheduledRealization
@@ -205,6 +205,15 @@ class FinancedVehicleTests( unittest.TestCase ):
         self.assertGreater( loans[ 0 ].opening_balance, Decimal( '0' ) )
         self.assertLess( loans[ 0 ].opening_balance, Decimal( '30000' ) )   # not the whole price
 
+    def test_a_fully_down_loan_finances_nothing( self ):
+        # down >= price: nothing to finance, so no loan originates and no prior-loan payoff -- it behaves
+        # like a cash purchase, but still owns and cycles the holding.
+        plans = self._plans( self._financed( down_payment = Decimal( '30000' ) ) )
+        self.assertEqual( _vehicle_loans( plans, _HORIZON ), [] )
+        events = _vehicle_purchase_events( plans, _HORIZON )
+        self.assertFalse( any( isinstance( e, ScheduledLoanPayoff ) for e in events ) )
+        self.assertEqual( len( _vehicle_holdings( plans ) ), 1 )
+
 
 class LeasedVehicleTests( unittest.TestCase ):
     """A LEASE vehicle is pure expense -- down, monthly, and lease-end payments -- with no owned
@@ -223,9 +232,11 @@ class LeasedVehicleTests( unittest.TestCase ):
         self.assertEqual( [ item.name for item in items ], [ 'Car lease', 'Car payments', 'Car lease' ] )
         monthly = next( item for item in items if item.name == 'Car payments' )
         self.assertEqual( monthly.amounts.segments[ 0 ].amount, Decimal( '400' ) )
-        # the lease-end lump starts one lease term in (the end of the first term), not at purchase
+        # the lease-end lump starts one lease term in (the end of the first term), not at purchase, and
+        # recurs each term (not a one-shot)
         lease_end = items[ 2 ]
         self.assertEqual( lease_end.window.start, date( 2029, 1, 1 ) )
+        self.assertEqual( lease_end.cadence, Recurrence( Duration( 3, TimeUnit.YEAR ) ) )
         self.assertEqual( lease_end.amounts.segments[ 0 ].amount, Decimal( '500' ) )
 
     def test_lease_has_no_owned_holding( self ):
@@ -234,6 +245,32 @@ class LeasedVehicleTests( unittest.TestCase ):
                           payment_method = PaymentMethod.LEASE, down_payment = Decimal( '3000' ),
                           monthly_payment = Decimal( '400' ) )
         self.assertEqual( _vehicle_holdings( self._plans( lease ) ), [] )
+
+
+class MixedFleetTests( unittest.TestCase ):
+    """A plan mixing cash, loan, and lease vehicles keeps each car's accounts distinct (handle-scoped) and
+    applies the right model to each: cash and loan own holdings, only loan originates loans, only lease
+    emits expense items."""
+
+    def test_each_method_contributes_only_its_own_artifacts( self ):
+        cash  = _vehicle( 'vehicle-1', date( 2027, 1, 1 ), purchase_price = Decimal( '30000' ),
+                          recurrence_years = 7, payment_method = PaymentMethod.CASH )
+        loan  = _vehicle( 'vehicle-2', date( 2027, 1, 1 ), purchase_price = Decimal( '40000' ),
+                          recurrence_years = 7, payment_method = PaymentMethod.LOAN,
+                          down_payment = Decimal( '8000' ) )
+        lease = _vehicle( 'vehicle-3', date( 2027, 1, 1 ), purchase_price = Decimal( '25000' ),
+                          recurrence_years = 3, payment_method = PaymentMethod.LEASE,
+                          monthly_payment = Decimal( '350' ) )
+        plans = Plans( vehicle_plan = VehiclePlan( vehicles = [ cash, loan, lease ] ) )
+        # Cash and loan own holdings (distinct handles); the lease does not.
+        self.assertEqual( { holding.handle for holding in _vehicle_holdings( plans ) },
+                          { 'vehicle:vehicle-1', 'vehicle:vehicle-2' } )
+        # Only the loan originates loans, all scoped to its handle.
+        loans = _vehicle_loans( plans, _HORIZON )
+        self.assertGreater( len( loans ), 0 )
+        self.assertTrue( all( car_loan.handle.startswith( 'vehicle-loan:vehicle-2:' ) for car_loan in loans ) )
+        # Only the lease emits purchase-cost expense items.
+        self.assertTrue( _vehicle_expenses( plans ) )
 
 
 class VehicleRunningCostTests( unittest.TestCase ):

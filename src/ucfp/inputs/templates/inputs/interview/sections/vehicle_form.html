@@ -30,15 +30,15 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
 
     <p class="small text-muted mb-1 mt-3"><strong>Payment</strong></p>
     <div class="{{ AppConst.SWITCH_CLASS }}">
-      <div class="form-group mb-2">
-        <label class="d-block mb-1 small">Paying by</label>
+      <fieldset class="form-group mb-2">
+        <legend class="col-form-label d-block mb-1 pt-0 small">Paying by</legend>
         {% for radio in vehicle_form.payment_method %}
         <div class="form-check form-check-inline">
           {{ radio.tag }}
           <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
         </div>
         {% endfor %}
-      </div>
+      </fieldset>
       {% comment %}
       Down/monthly apply to a loan or a lease; the lease-end payment only to a lease (its own nested
       case, so a lease shows all three across one row and a loan just the first two). Cash shows none.

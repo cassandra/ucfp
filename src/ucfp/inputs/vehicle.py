@@ -149,7 +149,7 @@ class VehicleForm( StyledFormMixin, forms.Form ):
     @property
     def auto_loan_term_months( self ) -> int:
         """The assumed auto-loan term in months -- the unit the client amortization mirror works in."""
-        return BUILTIN_ASSUMPTIONS.auto_loan_term_years * 12
+        return BUILTIN_ASSUMPTIONS.auto_loan_term_months
 
     @classmethod
     def _initial( cls, plans, handle : str ) -> dict:

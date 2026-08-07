@@ -297,7 +297,7 @@ def _months_after( start : date, months : int ) -> date:
 
 _AUTO_LOAN_APR         = BUILTIN_ASSUMPTIONS.auto_loan_apr
 _AUTO_LOAN_TERM        = Duration( BUILTIN_ASSUMPTIONS.auto_loan_term_years, TimeUnit.YEAR )
-_AUTO_LOAN_TERM_MONTHS = BUILTIN_ASSUMPTIONS.auto_loan_term_years * 12
+_AUTO_LOAN_TERM_MONTHS = BUILTIN_ASSUMPTIONS.auto_loan_term_months
 
 
 def _vehicle_ready( vehicle : Vehicle ) -> bool:
@@ -341,6 +341,13 @@ def _vehicle_financed_principal( vehicle : Vehicle ) -> Decimal:
     return price
 
 
+def _is_financed( vehicle : Vehicle ) -> bool:
+    """A LOAN vehicle that actually borrows -- the price exceeds the down, so there is a loan to originate
+    each cycle and pay off at the next trade-in. A fully-down 'loan' finances nothing and behaves like a
+    cash purchase (no loan, no payoff)."""
+    return vehicle.payment_method is PaymentMethod.LOAN and _vehicle_financed_principal( vehicle ) > 0
+
+
 def _vehicle_holding( vehicle : Vehicle ) -> AssetParameters:
     """An owned vehicle's holding -- a DEPRECIATING asset opening at zero, filled by its purchases and
     depreciating at the class rate between them."""
@@ -370,10 +377,10 @@ def _vehicle_purchase_events( plans : Plans, horizon : date ) -> list:
     -- so the purchase and origination net to the down payment. The car's cost is thus its depreciation
     (plus, financed, its interest), not a purchase expense.
 
-    Interim: the purchase price and the financed principal are flat, today's-dollar amounts, so they do
-    not inflate over the horizon. A recurring, inflation-indexed holding replacement (an engine capability)
-    will let the engine own the inflation, as it does for streams and recurring realizations; do not
-    re-implement the inflation convention here."""
+    The purchase price and the financed principal are flat, today's-dollar amounts here, so they do not
+    inflate over the horizon -- an interim limitation. Do not re-implement the inflation convention in
+    materialization: the engine owns inflation for its stream and recurring inputs, and an inflation-indexed
+    holding replacement belongs there too."""
     plan = plans.vehicle_plan
     if plan is None:
         return list()
@@ -382,8 +389,7 @@ def _vehicle_purchase_events( plans : Plans, horizon : date ) -> list:
         if not ( _is_owned( vehicle ) and _vehicle_ready( vehicle ) ):
             continue
         holding  = _vehicle_holding_handle( vehicle.handle )
-        financed = ( vehicle.payment_method is PaymentMethod.LOAN
-                     and _vehicle_financed_principal( vehicle ) > 0 )
+        financed = _is_financed( vehicle )
         for cycle, cycle_date in enumerate( _replacement_dates( vehicle, horizon ) ):
             events.append( ScheduledRealization(
                 event_date = cycle_date, holding = holding, amount = None ) )
@@ -405,11 +411,9 @@ def _vehicle_loans( plans : Plans, horizon : date ) -> list[ LoanParameters ]:
         return list()
     loans = list()
     for vehicle in plan.vehicles:
-        if vehicle.payment_method is not PaymentMethod.LOAN or not _vehicle_ready( vehicle ):
+        if not ( _vehicle_ready( vehicle ) and _is_financed( vehicle ) ):
             continue
         principal = _vehicle_financed_principal( vehicle )
-        if principal <= 0:
-            continue
         for cycle, cycle_date in enumerate( _replacement_dates( vehicle, horizon ) ):
             loans.append( LoanParameters(
                 name = f'{vehicle.name or "Vehicle"} loan', opening_balance = principal,
@@ -421,7 +425,7 @@ def _vehicle_loans( plans : Plans, horizon : date ) -> list[ LoanParameters ]:
     return loans
 
 
-def _replacement_dates( vehicle : Vehicle, horizon : date ) -> list:
+def _replacement_dates( vehicle : Vehicle, horizon : date ) -> list[ date ]:
     """The purchase dates over a vehicle's window: the first at `purchase_date`, then every
     `recurrence_years`, through the earlier of its end date and the forecast horizon."""
     last   = min( vehicle.end_date, horizon ) if vehicle.end_date is not None else horizon
@@ -451,7 +455,10 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
 def _lease_vehicle_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
     """A leased vehicle as pure expense -- no ownership, no trade-in: the down/first payment as a lump
     each cycle, the monthly lease payment over the window, and the lease-end payment at the end of each
-    lease term (one recurrence in). Blank amounts are skipped."""
+    lease term (one recurrence in). Blank amounts are skipped. The monthly runs continuously across the
+    window, so the replacement interval is taken as the lease term (back-to-back leases); a replacement
+    interval longer than the real lease term would over-charge the monthly across the gap -- the UI has one
+    'replace every' field, not a separate lease term."""
     window     = DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
     recurrence = Recurrence( Duration( vehicle.recurrence_years, TimeUnit.YEAR ) )
     items = list()
@@ -477,7 +484,7 @@ def _lease_vehicle_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
     return items
 
 
-def _vehicle_running_costs( plans : Plans ) -> tuple[ list, list ]:
+def _vehicle_running_costs( plans : Plans ) -> tuple[ list[ ExpenseStream ], list[ ExpenseItem ] ]:
     """The shared per-car running costs applied to each owned vehicle as (streams, items): each cost's
     per-car amount is emitted once per vehicle, gated to that vehicle's ownership window, so the total
     ramps with the number of cars owned over time. A SMOOTH cost enters as an annualized stream, a

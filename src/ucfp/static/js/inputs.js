@@ -504,6 +504,7 @@ window.App.Inputs = (function () {
     }
 
     function setMoneyField( $field, amount ) {
+        if ( !( amount >= 0 ) ) { return; }              // guard a null/NaN from a degenerate amortization
         $field.val( groupedThousands( String( Math.round( amount ) ) ) );
     }
 
@@ -533,6 +534,8 @@ window.App.Inputs = (function () {
     }
 
     function enhanceVehicleFinance( $scope ) {
+        // Bound on `input` (not `change` like the sibling enhancers) so the mirror fills live as the user
+        // types; the `change`-driven autosave then serializes the already-filled field.
         ( $scope || $( document.body ) ).find( classSelector( C.VEHICLE_FINANCE_CLASS ) ).each( function () {
             const $form       = $( this );
             const priceOrDown = classSelector( C.VEHICLE_PRICE_CLASS ) + ',' + classSelector( C.VEHICLE_DOWN_CLASS );

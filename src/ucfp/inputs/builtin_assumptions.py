@@ -24,6 +24,12 @@ class BuiltinAssumptions:
     auto_loan_apr        : Rate
     auto_loan_term_years : int
 
+    @property
+    def auto_loan_term_months( self ) -> int:
+        """The auto-loan term in months -- the unit amortization works in. Derived here once so the
+        engine and the vehicle form's client calculator share it rather than each doing `years * 12`."""
+        return self.auto_loan_term_years * 12
+
 
 BUILTIN_ASSUMPTIONS = BuiltinAssumptions(
     credit_card_apr      = Rate.percent( Decimal( 21 ) ),
