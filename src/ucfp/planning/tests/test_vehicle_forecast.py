@@ -1,9 +1,11 @@
-"""End-to-end: a CASH vehicle materializes and runs as a real depreciating holding.
+"""End-to-end: owned vehicles (cash and financed) materialize and run as real depreciating holdings.
 
 Unlike the shape tests in `test_materialization`, these run a full forecast (materialize -> engine) to
-confirm the cash-vehicle model behaves: the car is an owned holding that depreciates between purchases,
-each replacement trades the old one in and buys the next (its value jumps back up), and buying it is a
-cash -> asset swap -- so it does not drop net worth by the sticker price the way expensing it would.
+confirm the vehicle model behaves. A CASH car is an owned holding that depreciates between purchases, each
+replacement trades the old one in and buys the next, and buying it is a cash -> asset swap (not a
+sticker-price expense). A LOAN car is the same owned, depreciating holding financed by a real recurring
+loan: each cycle originates an auto-loan that amortizes on the books, and the outgoing car's loan is paid
+off at trade-in.
 """
 from datetime import date
 from decimal import Decimal
@@ -29,47 +31,50 @@ from ucfp.planning.materialization import ForecastFrame, materialize
 _HOLDING = 'vehicle:vehicle-1'
 
 
+def _profile() -> Profile:
+    # Cash funds the car; Stocks/Bonds are the default drawdown's sweep homes (present in both the with-
+    # and without-car runs, so their growth cancels in the net-worth comparison).
+    return Profile(
+        subjects = [ SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
+        filing_status = FilingStatus.SINGLE,
+        assets = [
+            AssetProfile( handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
+                          opening_value = Decimal( '200000' ), cost_basis = Decimal( '200000' ) ),
+            AssetProfile( handle = 'stocks', name = 'Brokerage', asset_class = AssetClass.STOCKS,
+                          opening_value = Decimal( '200000' ), cost_basis = Decimal( '200000' ) ),
+            AssetProfile( handle = 'bonds', name = 'Bonds', asset_class = AssetClass.BONDS,
+                          opening_value = Decimal( '100000' ), cost_basis = Decimal( '100000' ) ) ] )
+
+
+def _assumptions() -> Assumptions:
+    return Assumptions(
+        economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
+        tax_projection = TaxProjection( forecast_type = StatuteForecastType.CURRENT_LAW ) )
+
+
+def _run( plans : Plans ) -> Bookkeeper:
+    frame = ForecastFrame(
+        start_date = date( 2026, 1, 1 ), end_date = date( 2034, 12, 31 ),
+        granularity = Duration( 1, TimeUnit.YEAR ) )
+    books = Forecast( materialize(
+        profile = _profile(), plans = plans, assumptions = _assumptions(), frame = frame ) ).run().books
+    return Bookkeeper( books )
+
+
+def _vehicle_plans( method : PaymentMethod, **fields ) -> Plans:
+    car = Vehicle(
+        handle = 'vehicle-1', name = 'Car', purchase_date = date( 2027, 1, 1 ),
+        purchase_price = Decimal( '30000' ), recurrence_years = 5, payment_method = method, **fields )
+    return Plans( vehicle_plan = VehiclePlan( vehicles = [ car ] ) )
+
+
 class CashVehicleForecastTest( TestCase ):
 
     def setUp( self ):
         call_command( 'seed_parameter_sets' )        # the EXPECTED outlook (18% depreciation) is seeded
 
-    def _profile( self ) -> Profile:
-        # Cash funds the car; Stocks/Bonds are the default drawdown's sweep homes (present in both the
-        # with- and without-car runs, so their growth cancels in the net-worth comparison).
-        return Profile(
-            subjects = [ SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
-            filing_status = FilingStatus.SINGLE,
-            assets = [
-                AssetProfile( handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,
-                              opening_value = Decimal( '200000' ), cost_basis = Decimal( '200000' ) ),
-                AssetProfile( handle = 'stocks', name = 'Brokerage', asset_class = AssetClass.STOCKS,
-                              opening_value = Decimal( '200000' ), cost_basis = Decimal( '200000' ) ),
-                AssetProfile( handle = 'bonds', name = 'Bonds', asset_class = AssetClass.BONDS,
-                              opening_value = Decimal( '100000' ), cost_basis = Decimal( '100000' ) ) ] )
-
-    def _assumptions( self ) -> Assumptions:
-        return Assumptions(
-            economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
-            tax_projection = TaxProjection( forecast_type = StatuteForecastType.CURRENT_LAW ) )
-
-    def _plans( self, *, with_vehicle : bool ) -> Plans:
-        if not with_vehicle:
-            return Plans()
-        car = Vehicle(
-            handle = 'vehicle-1', name = 'Car', purchase_date = date( 2027, 1, 1 ),
-            purchase_price = Decimal( '30000' ), recurrence_years = 5,
-            payment_method = PaymentMethod.CASH )
-        return Plans( vehicle_plan = VehiclePlan( vehicles = [ car ] ) )
-
     def _reader( self, *, with_vehicle : bool ) -> Bookkeeper:
-        frame = ForecastFrame(
-            start_date = date( 2026, 1, 1 ), end_date = date( 2034, 12, 31 ),
-            granularity = Duration( 1, TimeUnit.YEAR ) )
-        books = Forecast( materialize(
-            profile = self._profile(), plans = self._plans( with_vehicle = with_vehicle ),
-            assumptions = self._assumptions(), frame = frame ) ).run().books
-        return Bookkeeper( books )
+        return _run( _vehicle_plans( PaymentMethod.CASH ) if with_vehicle else Plans() )
 
     def test_cash_vehicle_is_an_owned_holding_that_depreciates( self ):
         # Depreciation applies at each year's start on the opening value, so the car sits at its full
@@ -98,3 +103,44 @@ class CashVehicleForecastTest( TestCase ):
         with_car    = self._reader( with_vehicle = True ).ledger.net_worth( through = date( 2027, 12, 31 ) )
         without_car = self._reader( with_vehicle = False ).ledger.net_worth( through = date( 2027, 12, 31 ) )
         self.assertAlmostEqual( with_car, without_car, delta = Decimal( '1000' ) )
+
+
+class FinancedVehicleForecastTest( TestCase ):
+    """A LOAN car is the same owned, depreciating holding, financed by a real recurring loan that
+    amortizes on the books; each replacement pays off the outgoing loan and originates the next."""
+
+    def setUp( self ):
+        call_command( 'seed_parameter_sets' )
+
+    def _reader( self ) -> Bookkeeper:
+        # $30k car, $5k down -> a $25k auto-loan each cycle, replaced every 5 years from 2027.
+        return _run( _vehicle_plans( PaymentMethod.LOAN, down_payment = Decimal( '5000' ) ) )
+
+    def test_financing_creates_a_real_amortizing_loan_with_interest( self ):
+        reader = self._reader()
+        reader.assert_balanced()
+        loan     = reader.chart.account( 'vehicle-loan:vehicle-1:0' )        # originated at the 2027 buy
+        interest = reader.chart.account( 'vehicle-loan-interest:vehicle-1:0' )
+        balance  = reader.ledger.natural_balance( loan, through = date( 2028, 12, 31 ) )
+        self.assertGreater( balance, Decimal( '0' ) )                        # a real liability...
+        self.assertLess( balance, Decimal( '25000' ) )                       # ...amortizing down from $25k
+        self.assertGreater( reader.ledger.natural_balance( interest ), Decimal( '0' ) )   # interest charged
+
+    def test_financed_car_is_a_depreciating_holding_like_cash( self ):
+        reader  = self._reader()
+        holding = reader.chart.account( _HOLDING )
+        self.assertEqual( holding.asset_class, AssetClass.DEPRECIATING )
+        self.assertEqual( reader.ledger.market_value( holding, through = date( 2027, 12, 31 ) ),
+                          Decimal( '30000' ) )                               # bought at full price
+        self.assertLess( reader.ledger.market_value( holding, through = date( 2031, 12, 31 ) ),
+                         Decimal( '25000' ) )                                # then depreciates
+
+    def test_replacement_reoriginates_a_fresh_loan( self ):
+        reader = self._reader()
+        # The 2027 loan (5-yr term) is retired by the 2032 replacement, which originates the next cycle's.
+        self.assertEqual(
+            reader.ledger.natural_balance( reader.chart.account( 'vehicle-loan:vehicle-1:0' ),
+                                           through = date( 2033, 12, 31 ) ), Decimal( '0' ) )
+        self.assertGreater(
+            reader.ledger.natural_balance( reader.chart.account( 'vehicle-loan:vehicle-1:1' ),
+                                           through = date( 2033, 12, 31 ) ), Decimal( '0' ) )
