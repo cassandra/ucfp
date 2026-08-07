@@ -21,6 +21,13 @@ from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
 from ucfp.inputs.widgets import IsoDateInput
 
 
+# A fresh vehicle's seeded typicals -- the values a new row starts from, which the user then adjusts.
+# These are UI seeds (what the form suggests); the auto-loan APR and term are engine assumptions read
+# from BUILTIN_ASSUMPTIONS instead (see the `auto_loan_*` properties and materialization).
+_TYPICAL_PRICE             = Decimal( '35000' )   # a mid-market new car
+_TYPICAL_REPLACEMENT_YEARS = 7
+
+
 def _vehicles( plans ) -> list:
     """The plan's vehicles, or an empty list when there is no plan yet."""
     plan = vehicle_plan_of( plans )
@@ -151,8 +158,9 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         genuinely personal input, and its absence keeps a defaulted-but-untouched vehicle from
         materializing until the user sets it."""
         number = handle.rsplit( '-', 1 )[ -1 ]
-        return { 'name': f'Vehicle {number}', 'purchase_price': Decimal( '35000' ),
-                 'recurrence_years': 7, 'payment_method': PaymentMethod.CASH.name }
+        return { 'name': f'Vehicle {number}', 'purchase_price': _TYPICAL_PRICE,
+                 'recurrence_years': _TYPICAL_REPLACEMENT_YEARS,
+                 'payment_method': PaymentMethod.CASH.name }
 
     def _complete( self ) -> bool:
         """All the fields a vehicle needs to materialize are present. No hard validation -- a partial
