@@ -336,7 +336,12 @@ def _vehicle_purchase_events( plans : Plans, horizon : date ) -> list:
     depreciated value, TAX_FREE, to cash) then buy the next (cash into the holding). The realize-then-buy
     order matters -- the sale must read the outgoing value before the new price lands; the first buy has
     nothing to trade in (the holding opens at zero). The car's cost is thus its depreciation over time,
-    not a purchase expense."""
+    not a purchase expense.
+
+    Interim: these are one-time events at a flat, today's-dollar price, so the purchase does not inflate
+    over the horizon. A recurring, inflation-indexed holding replacement (an engine capability) will let
+    the engine own the inflation, as it does for streams and recurring realizations; do not re-implement
+    the inflation convention here."""
     plan = plans.vehicle_plan
     if plan is None:
         return list()
