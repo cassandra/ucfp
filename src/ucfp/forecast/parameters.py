@@ -222,8 +222,14 @@ class LoanParameters:
     payment is principal (debt reduction) plus interest (the only expense), never a single
     'expense'. A loan creates two accounts -- the liability and an interest expense -- so it
     carries two planner handles (`handle`, `interest_handle`) to associate each with the
-    planner's loan artifact when presenting results; both optional. Models loans present from
-    t0 (with an opening balance)."""
+    planner's loan artifact when presenting results; both optional.
+
+    A loan is present from t0 with its `opening_balance` seeded into the books, unless
+    `origination_date` is set: then it originates mid-forecast, its `opening_balance` (the
+    principal borrowed) credited to the liability with the proceeds landing in cash on that date,
+    and amortization beginning from there -- the recurring-financing counterpart of the t0 loan.
+    The level payment is derived from the principal and term either way (the term length, not the
+    start date, sets it), so an originated loan amortizes over its term from origination."""
 
     name                  : str
     opening_balance       : Decimal
@@ -233,6 +239,7 @@ class LoanParameters:
     annual_extra_principal : Decimal         = Decimal( '0' )
     handle                : Optional[ Handle ] = None
     interest_handle       : Optional[ Handle ] = None
+    origination_date      : Optional[ date ]   = None
 
 
 class ContributionSource( LabeledEnum ):

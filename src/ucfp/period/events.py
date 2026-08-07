@@ -112,6 +112,30 @@ class LoanPayoff( PeriodEvent ):
 
 
 @dataclass( frozen = True )
+class LoanOrigination( PeriodEvent ):
+    """Originate a loan mid-forecast: credit its `principal` to the liability and land the proceeds
+    in cash, the balance-sheet mirror of `LoanPayoff`. From here the loan carries a real balance the
+    Forecast amortizes (its level payment was derived from this same principal at build), so a
+    recurring purchase can finance each replacement with a fresh loan. The borrow balances on its own
+    -- liability up, cash up -- with no equity plug (unlike the t0 opening seed, which is booked
+    against Opening Balances). A non-positive principal posts nothing."""
+
+    event_date        : date
+    liability_account : Account
+    cash_account      : Account
+    principal         : Decimal
+
+    def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
+        if self.principal <= 0:
+            return None
+        return bookkeeper.record(
+            self.event_date,
+            [ ( self.liability_account, self.principal ), ( self.cash_account, -self.principal ) ],
+            description = description,
+        )
+
+
+@dataclass( frozen = True )
 class Purchase( PeriodEvent ):
     """Acquire an asset at cost, funded from a cash account: the asset account
     gains the cost (its basis); the funding account is drawn down."""
