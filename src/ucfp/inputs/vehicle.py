@@ -44,23 +44,34 @@ def _minted_vehicle_handle( plans ) -> str:
 
 
 def vehicles_context( plans ) -> list:
-    """Each vehicle for the list template: its handle, name, and a short plan summary."""
-    return [ { 'handle': vehicle.handle, 'name': vehicle.name or 'Car', 'summary': _summary( vehicle ) }
+    """Each vehicle for the list template: its handle, name, and a two-line summary. The headline (price
+    and replacement interval) is the plan's shape; the detail (ownership span and -- least prominent --
+    the payment method) sits muted below."""
+    return [ { 'handle': vehicle.handle, 'name': vehicle.name or 'Car',
+               'headline': _headline_summary( vehicle ), 'detail': _detail_summary( vehicle ) }
              for vehicle in _vehicles( plans ) ]
 
 
-def _summary( vehicle ) -> str:
-    """A one-line description of a vehicle's plan -- price, replacement interval, and ownership span."""
+def _headline_summary( vehicle ) -> str:
+    """The headline facts shown beside the name -- price and replacement interval."""
     parts = list()
     if vehicle.purchase_price is not None:
         parts.append( f'${vehicle.purchase_price:,.0f}' )
     if vehicle.recurrence_years:
         parts.append( f'every {vehicle.recurrence_years} yr' )
+    return ' · '.join( parts )
+
+
+def _detail_summary( vehicle ) -> str:
+    """The secondary facts, muted below the headline -- the ownership span and the payment method (a
+    minor attribute, so it trails here rather than leading)."""
+    parts = list()
     if vehicle.purchase_date is not None:
-        span = f'from {vehicle.purchase_date.year}'
         if vehicle.end_date is not None:
-            span += f' to {vehicle.end_date.year}'
-        parts.append( span )
+            parts.append( f'{vehicle.purchase_date.year}–{vehicle.end_date.year}' )   # en dash range
+        else:
+            parts.append( f'from {vehicle.purchase_date.year}' )
+    parts.append( vehicle.payment_method.label )
     return ' · '.join( parts )
 
 

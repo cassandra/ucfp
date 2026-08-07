@@ -1,22 +1,31 @@
 {% comment %}
-The household's vehicles (id=vehicles-list), refreshed on add/edit/delete: each car with its plan
-summary, Edit, and Remove, plus the Add affordance. Edit/Add open the form in the pane's form area
-(#vehicles-form); Remove posts to the delete view. `vehicles` is the list of {handle, name, summary}.
+The household's vehicles (id=vehicles-list), refreshed on add/edit/delete: each car as a two-line summary
+-- the name and headline facts (price, interval) with Edit/Remove anchored on the right, and the muted
+detail (ownership span, payment method) below -- plus the Add affordance. Anchoring the actions keeps them
+from trailing (and wrapping raggedly after) a long headline. Edit/Add open the form in the pane's form
+area (#vehicles-form); Remove posts to the delete view. `vehicles` is the list of
+{handle, name, headline, detail}.
 {% endcomment %}
 <div id="vehicles-list">
   {% if vehicles %}
   <ul class="list-unstyled mb-2">
     {% for vehicle in vehicles %}
-    <li class="mb-1">
-      {{ vehicle.name }}{% if vehicle.summary %} &mdash; <span class="text-muted">{{ vehicle.summary }}</span>{% endif %}
-      <a class="ml-2" data-async="#vehicles-form"
-         href="{% url 'vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>
-      <form method="post" action="{% url 'vehicle_delete' handle=vehicle.handle %}"
-            data-async="#vehicles-list" class="d-inline">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
-                aria-label="Remove {{ vehicle.name }}">Remove</button>
-      </form>
+    <li class="mb-2">
+      <div class="d-flex justify-content-between align-items-baseline">
+        <span>{{ vehicle.name }}{% if vehicle.headline %} &mdash;
+          <span class="text-muted">{{ vehicle.headline }}</span>{% endif %}</span>
+        <span class="text-nowrap ml-3">
+          <a data-async="#vehicles-form"
+             href="{% url 'vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>
+          <form method="post" action="{% url 'vehicle_delete' handle=vehicle.handle %}"
+                data-async="#vehicles-list" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
+                    aria-label="Remove {{ vehicle.name }}">Remove</button>
+          </form>
+        </span>
+      </div>
+      {% if vehicle.detail %}<div class="text-muted small">{{ vehicle.detail }}</div>{% endif %}
     </li>
     {% endfor %}
   </ul>
