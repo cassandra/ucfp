@@ -477,6 +477,77 @@ window.App.Inputs = (function () {
             .each( function () { updateLoan( $( this ) ); } );
     }
 
+    // ----- VehicleFinanceCalculator: keep a loan's price / down / monthly consistent -----
+    // For a LOAN, price, down, and monthly are locked by amortization at the assumed auto-loan rate/term
+    // (carried on the form). Editing the price or the down fills the monthly; editing the monthly fills
+    // the down (price is the anchor). Cash and lease do nothing here (a lease's payments are not
+    // amortization-linked). Bound directly on the fields, so the filled value is set before the form's
+    // (change-driven) autosave serializes; setting `.val()` fires no event, so the pair does not loop.
+
+    // The principal a `payment`/month amortizes over `months` at monthly `rate` (mirror of present_value).
+    function presentValue( payment, months, rate ) {
+        if ( months <= 0 ) { return 0; }
+        if ( rate === 0 ) { return payment * months; }
+        return payment * ( 1 - Math.pow( 1 + rate, -months ) ) / rate;
+    }
+
+    function financeMethod( $form ) {
+        return $form.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).filter( ':checked' ).val();
+    }
+
+    function financeRate( $form ) {
+        return ( parseFloat( $form.attr( dataAttr( C.VEHICLE_APR_DATA_ATTR ) ) ) || 0 ) / 100 / 12;
+    }
+
+    function financeTerm( $form ) {
+        return parseInt( $form.attr( dataAttr( C.VEHICLE_TERM_DATA_ATTR ) ), 10 ) || 0;
+    }
+
+    function setMoneyField( $field, amount ) {
+        if ( !( amount >= 0 ) ) { return; }              // guard a null/NaN from a degenerate amortization
+        $field.val( groupedThousands( String( Math.round( amount ) ) ) );
+    }
+
+    // Editing the price or the down fills the monthly: amortize (price - down) over the assumed term.
+    function fillVehicleMonthly( $form ) {
+        if ( financeMethod( $form ) !== 'LOAN' ) { return; }
+        const term  = financeTerm( $form );
+        const price = parseAmount( $form.find( classSelector( C.VEHICLE_PRICE_CLASS ) ).val() );
+        if ( !( price > 0 ) || !( term > 0 ) ) { return; }
+        const down     = parseAmount( $form.find( classSelector( C.VEHICLE_DOWN_CLASS ) ).val() ) || 0;
+        const financed = Math.max( price - down, 0 );
+        setMoneyField( $form.find( classSelector( C.VEHICLE_MONTHLY_CLASS ) ),
+                       paymentForMonths( financed, term, financeRate( $form ) ) );
+    }
+
+    // Editing the monthly fills the down: the price less what that payment finances, clamped to
+    // [0, price] (a payment too big to be a loan on this car pins the down at zero or the whole price).
+    function fillVehicleDown( $form ) {
+        if ( financeMethod( $form ) !== 'LOAN' ) { return; }
+        const term    = financeTerm( $form );
+        const price   = parseAmount( $form.find( classSelector( C.VEHICLE_PRICE_CLASS ) ).val() );
+        const monthly = parseAmount( $form.find( classSelector( C.VEHICLE_MONTHLY_CLASS ) ).val() );
+        if ( !( price > 0 ) || !( term > 0 ) || !( monthly > 0 ) ) { return; }
+        const financed = presentValue( monthly, term, financeRate( $form ) );
+        const down     = Math.min( Math.max( price - financed, 0 ), price );
+        setMoneyField( $form.find( classSelector( C.VEHICLE_DOWN_CLASS ) ), down );
+    }
+
+    function enhanceVehicleFinance( $scope ) {
+        // Bound on `input` (not `change` like the sibling enhancers) so the mirror fills live as the user
+        // types; the `change`-driven autosave then serializes the already-filled field.
+        ( $scope || $( document.body ) ).find( classSelector( C.VEHICLE_FINANCE_CLASS ) ).each( function () {
+            const $form       = $( this );
+            const priceOrDown = classSelector( C.VEHICLE_PRICE_CLASS ) + ',' + classSelector( C.VEHICLE_DOWN_CLASS );
+            $form.find( priceOrDown ).off( 'input.vehicleFinance' )
+                .on( 'input.vehicleFinance', function () { fillVehicleMonthly( $form ); } );
+            $form.find( classSelector( C.VEHICLE_MONTHLY_CLASS ) ).off( 'input.vehicleFinance' )
+                .on( 'input.vehicleFinance', function () { fillVehicleDown( $form ); } );
+            $form.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).off( 'change.vehicleFinance' )
+                .on( 'change.vehicleFinance', function () { fillVehicleMonthly( $form ); } );
+        } );
+    }
+
     // ----- New scenario, Copy card: reflect the chosen source's component names -----
     // The "copy from" select carries each source scenario's Plans/Assumptions labels per option; show the
     // chosen source's in two spans so the user sees what is being copied/reused. Display-only.
@@ -730,6 +801,7 @@ window.App.Inputs = (function () {
         enhanceSwitches( $( document.body ) );
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
+        enhanceVehicleFinance( $( document.body ) );
         enhanceStateAutofill( $( document.body ) );
         enhanceCopySource( $( document.body ) );
         enhancePairCombine( $( document.body ) );
@@ -741,6 +813,7 @@ window.App.Inputs = (function () {
                 enhanceSwitches( $( document.body ) );
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
+                enhanceVehicleFinance( $( document.body ) );
                 enhanceStateAutofill( $( document.body ) );
                 enhanceCopySource( $( document.body ) );
                 enhancePairCombine( $( document.body ) );

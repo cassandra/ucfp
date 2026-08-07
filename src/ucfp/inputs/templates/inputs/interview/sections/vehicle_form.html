@@ -1,15 +1,23 @@
 {% comment %}
-The add/edit form for one vehicle (id=vehicles-form), rendered into the pane's form area. It auto-saves
-in the background (js-autosave) and always edits a known handle (add mints one), so a new vehicle has a
-stable identity from the first keystroke. Non-blocking: the vehicle appears in the list once its
+The add/edit form for one vehicle (id=vehicles-form), rendered into the pane's form area beneath the
+vehicle list in the left column. It auto-saves in the background (js-autosave) and always edits a known
+handle (add mints one), so a new vehicle has a stable identity from the first keystroke. Two groups: the
+replacement plan
+(what the car is, when, how often, and its price) and payment (how it is paid). The payment-method radio
+drives a switch (inputs.js) that shows the fields the chosen method needs -- cash shows none, a loan its
+down/monthly, a lease its down/monthly/lease-end. Non-blocking: the vehicle appears in the list once its
 required fields (name, next purchase date, price, replacement interval) are set. "Done" closes the form;
 it is already saved. Empty when no form is open. Reads `vehicle_form` and `handle`.
 {% endcomment %}
 <div id="vehicles-form">
   {% if vehicle_form %}
-  <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }}"
+  <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }} {{ AppConst.VEHICLE_FINANCE_CLASS }}"
+        data-{{ AppConst.VEHICLE_APR_DATA_ATTR }}="{{ vehicle_form.auto_loan_apr_percent }}"
+        data-{{ AppConst.VEHICLE_TERM_DATA_ATTR }}="{{ vehicle_form.auto_loan_term_months }}"
         action="{% url 'vehicle_edit' handle=handle %}">
     {% csrf_token %}
+
+    <p class="small text-muted mb-1"><strong>Replacement plan</strong></p>
     <div class="form-row">
       <div class="col-sm-6">{{ vehicle_form.name.as_field_group }}</div>
       <div class="col-sm-6">{{ vehicle_form.purchase_price.as_field_group }}</div>
@@ -19,13 +27,34 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
       <div class="col-sm-4">{{ vehicle_form.recurrence_years.as_field_group }}</div>
       <div class="col-sm-4">{{ vehicle_form.end_date.as_field_group }}</div>
     </div>
-    <p class="small text-muted mb-1 mt-3"><strong>Financing or leasing</strong> (optional)</p>
-    <div class="form-row">
-      <div class="col-sm-6">{{ vehicle_form.down_payment.as_field_group }}</div>
-      <div class="col-sm-6">{{ vehicle_form.monthly_payment.as_field_group }}</div>
+
+    <p class="small text-muted mb-1 mt-3"><strong>Payment</strong></p>
+    <div class="{{ AppConst.SWITCH_CLASS }}">
+      <fieldset class="form-group mb-2">
+        <legend class="col-form-label d-block mb-1 pt-0 small">Paying by</legend>
+        {% for radio in vehicle_form.payment_method %}
+        <div class="form-check form-check-inline">
+          {{ radio.tag }}
+          <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+        </div>
+        {% endfor %}
+      </fieldset>
+      {% comment %}
+      Down/monthly apply to a loan or a lease; the lease-end payment only to a lease (its own nested
+      case, so a lease shows all three across one row and a loan just the first two). Cash shows none.
+      {% endcomment %}
+      <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="LOAN LEASE">
+        <div class="col-sm-4">{{ vehicle_form.down_payment.as_field_group }}</div>
+        <div class="col-sm-4">{{ vehicle_form.monthly_payment.as_field_group }}</div>
+        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="LEASE">{{ vehicle_form.lease_end_payment.as_field_group }}</div>
+      </div>
+      {# Loan only: the down and monthly are amortization-linked, so the calculator (inputs.js) keeps them in step. #}
+      <p class="text-muted small mb-0" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="LOAN">
+        Estimated at about {{ vehicle_form.auto_loan_apr_percent }}% over
+        {{ vehicle_form.auto_loan_term_years }} years -- set the down payment or the monthly payment and
+        the other updates.</p>
     </div>
-    <p class="text-muted small">If you finance or lease, enter the down (or first) payment and the monthly
-      payment; leave both blank to buy with cash.</p>
+
     <div class="mt-2">
       <a class="btn btn-sm btn-outline-primary" data-async="#vehicles-form"
          href="{% url 'vehicle_add' %}?collapse=1">Done</a>

@@ -116,6 +116,19 @@ class AppConst:
     LOAN_READOUT_CLASS      = 'js-loan-readout'  # where the live estimate is written
     LOAN_BALANCE_DATA_ATTR  = 'loan-balance'     # the loan's current balance, on the wrapper
 
+    # The vehicle finance calculator (the add/edit vehicle form). For a LOAN, price, down, and monthly
+    # are locked by amortization at the assumed auto-loan rate/term, so the calculator keeps them
+    # consistent: editing price or down fills the monthly, editing the monthly fills the down (price is
+    # the anchor). Only for the loan case -- cash has no financing, and a lease's payments are not
+    # amortization-linked. Materialization is authoritative; the assumed APR/term (from
+    # inputs.builtin_assumptions) ride on the form so client and engine cannot drift.
+    VEHICLE_FINANCE_CLASS   = 'js-vehicle-finance'   # the vehicle form wrapper (carries the APR/term)
+    VEHICLE_PRICE_CLASS     = 'js-vehicle-price'     # the price-per-car input
+    VEHICLE_DOWN_CLASS      = 'js-vehicle-down'      # the down / first-payment input
+    VEHICLE_MONTHLY_CLASS   = 'js-vehicle-monthly'   # the monthly-payment input
+    VEHICLE_APR_DATA_ATTR   = 'vehicle-apr'          # the assumed auto-loan APR (percent), on the form
+    VEHICLE_TERM_DATA_ATTR  = 'vehicle-term'         # the assumed auto-loan term (months), on the form
+
     # The recurring-expenses table's per-column delete: the x stamps its span index into the form's
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.
     RECURRING_DELETE_CLASS  = 'js-recurring-delete'  # the per-column x control (carries data-span)

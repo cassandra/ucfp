@@ -88,7 +88,7 @@ class LoadPathTest( TestCase ):
         # The niche asset rates seed non-zero (they previously fell through to a 0 default).
         self.assertEqual( segment.precious_metals_appreciation.fraction, Decimal( '0.03' ) )
         self.assertEqual( segment.collectibles_appreciation.fraction, Decimal( '0.02' ) )
-        self.assertEqual( segment.depreciation_rate.fraction, Decimal( '0.10' ) )
+        self.assertEqual( segment.depreciation_rate.fraction, Decimal( '0.18' ) )
 
     def test_load_returns_the_expense_catalog( self ):
         call_command( 'seed_parameter_sets' )

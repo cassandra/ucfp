@@ -13,9 +13,19 @@ from django import forms
 
 from common.forms import MoneyField, StyledFormMixin
 
+from ucfp.environment.constants import AppConst
+from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
+from ucfp.inputs.plans.enums import PaymentMethod
 from ucfp.inputs.plans.schemas import Vehicle, VehiclePlan
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
 from ucfp.inputs.widgets import IsoDateInput
+
+
+# A fresh vehicle's seeded typicals -- the values a new row starts from, which the user then adjusts.
+# These are UI seeds (what the form suggests); the auto-loan APR and term are engine assumptions read
+# from BUILTIN_ASSUMPTIONS instead (see the `auto_loan_*` properties and materialization).
+_TYPICAL_PRICE             = Decimal( '35000' )   # a mid-market new car
+_TYPICAL_REPLACEMENT_YEARS = 7
 
 
 def _vehicles( plans ) -> list:
@@ -34,23 +44,34 @@ def _minted_vehicle_handle( plans ) -> str:
 
 
 def vehicles_context( plans ) -> list:
-    """Each vehicle for the list template: its handle, name, and a short plan summary."""
-    return [ { 'handle': vehicle.handle, 'name': vehicle.name or 'Car', 'summary': _summary( vehicle ) }
+    """Each vehicle for the list template: its handle, name, and a two-line summary. The headline (price
+    and replacement interval) is the plan's shape; the detail (ownership span and -- least prominent --
+    the payment method) sits muted below."""
+    return [ { 'handle': vehicle.handle, 'name': vehicle.name or 'Car',
+               'headline': _headline_summary( vehicle ), 'detail': _detail_summary( vehicle ) }
              for vehicle in _vehicles( plans ) ]
 
 
-def _summary( vehicle ) -> str:
-    """A one-line description of a vehicle's plan -- price, replacement interval, and ownership span."""
+def _headline_summary( vehicle ) -> str:
+    """The headline facts shown beside the name -- price and replacement interval."""
     parts = list()
     if vehicle.purchase_price is not None:
         parts.append( f'${vehicle.purchase_price:,.0f}' )
     if vehicle.recurrence_years:
         parts.append( f'every {vehicle.recurrence_years} yr' )
+    return ' · '.join( parts )
+
+
+def _detail_summary( vehicle ) -> str:
+    """The secondary facts, muted below the headline -- the ownership span and the payment method (a
+    minor attribute, so it trails here rather than leading)."""
+    parts = list()
     if vehicle.purchase_date is not None:
-        span = f'from {vehicle.purchase_date.year}'
         if vehicle.end_date is not None:
-            span += f' to {vehicle.end_date.year}'
-        parts.append( span )
+            parts.append( f'{vehicle.purchase_date.year}–{vehicle.end_date.year}' )   # en dash range
+        else:
+            parts.append( f'from {vehicle.purchase_date.year}' )
+    parts.append( vehicle.payment_method.label )
     return ' · '.join( parts )
 
 
@@ -75,14 +96,30 @@ class VehicleForm( StyledFormMixin, forms.Form ):
     name             = forms.CharField( label = 'Name', max_length = 100, required = False )
     purchase_date    = forms.DateField(
         label = 'Next purchase date', required = False, widget = IsoDateInput() )
-    purchase_price   = MoneyField( label = 'Price per car', min_value = 0, required = False )
+    purchase_price   = MoneyField(
+        label = 'Price per car', min_value = 0, required = False, css_class = AppConst.VEHICLE_PRICE_CLASS )
     recurrence_years = forms.IntegerField(
-        label = 'Replace every (years)', min_value = 1, required = False )
+        label = 'Replace every (years)', min_value = 1, required = False,
+        widget = forms.NumberInput( attrs = { 'class' : 'input-count' } ) )   # a year count, a digit or two
     end_date         = forms.DateField(
         label = 'Stop replacing by', required = False, widget = IsoDateInput(),
         help_text = 'Blank to keep replacing indefinitely.' )
-    down_payment     = MoneyField( label = 'Down payment', min_value = 0, required = False )
-    monthly_payment  = MoneyField( label = 'Monthly payment', min_value = 0, required = False )
+    # The payment method drives which cost fields show (via the switch control) and how the forecast
+    # models each purchase. `down_payment` is the down (loan) or first payment (lease); `monthly_payment`
+    # serves both; `lease_end_payment` is the lease's turn-in cost.
+    payment_method   = forms.ChoiceField(
+        label = 'Paying by', required = False,
+        choices = [ ( method.name, method.label ) for method in PaymentMethod ],
+        initial = PaymentMethod.CASH.name,
+        widget = forms.RadioSelect(
+            attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
+    down_payment      = MoneyField(
+        label = 'Down / first payment', min_value = 0, required = False,
+        css_class = AppConst.VEHICLE_DOWN_CLASS )
+    monthly_payment   = MoneyField(
+        label = 'Monthly payment', min_value = 0, required = False,
+        css_class = AppConst.VEHICLE_MONTHLY_CLASS )
+    lease_end_payment = MoneyField( label = 'Lease-end payment', min_value = 0, required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( plans, handle ) if handle else None )
@@ -98,6 +135,22 @@ class VehicleForm( StyledFormMixin, forms.Form ):
             self.add_error( 'end_date', 'Owned-until date must be on or after the purchase date.' )
         return cleaned
 
+    @property
+    def auto_loan_apr_percent( self ) -> float:
+        """The assumed auto-loan APR as a percent -- shown in the loan note and carried to the client
+        calculator on the form, from the same `BUILTIN_ASSUMPTIONS` value materialization resolves at, so
+        the estimate and the forecast agree."""
+        return float( BUILTIN_ASSUMPTIONS.auto_loan_apr.fraction * 100 )
+
+    @property
+    def auto_loan_term_years( self ) -> int:
+        return BUILTIN_ASSUMPTIONS.auto_loan_term_years
+
+    @property
+    def auto_loan_term_months( self ) -> int:
+        """The assumed auto-loan term in months -- the unit the client amortization mirror works in."""
+        return BUILTIN_ASSUMPTIONS.auto_loan_term_months
+
     @classmethod
     def _initial( cls, plans, handle : str ) -> dict:
         vehicle = next( ( v for v in _vehicles( plans ) if v.handle == handle ), None )
@@ -105,17 +158,20 @@ class VehicleForm( StyledFormMixin, forms.Form ):
             return cls._defaults( handle )
         return { 'name': vehicle.name, 'purchase_date': vehicle.purchase_date,
                  'purchase_price': vehicle.purchase_price, 'recurrence_years': vehicle.recurrence_years,
-                 'end_date': vehicle.end_date, 'down_payment': vehicle.down_payment,
-                 'monthly_payment': vehicle.monthly_payment }
+                 'end_date': vehicle.end_date, 'payment_method': vehicle.payment_method.name,
+                 'down_payment': vehicle.down_payment, 'monthly_payment': vehicle.monthly_payment,
+                 'lease_end_payment': vehicle.lease_end_payment }
 
     @staticmethod
     def _defaults( handle : str ) -> dict:
-        """A fresh vehicle's seeded typicals -- a slot-numbered name plus a typical price and replacement
-        interval -- with the next-purchase date left blank. The date is the one genuinely personal input,
-        and its absence keeps a defaulted-but-untouched vehicle from materializing until the user sets it."""
+        """A fresh vehicle's seeded typicals -- a slot-numbered name, a typical price and replacement
+        interval, and a cash purchase -- with the next-purchase date left blank. The date is the one
+        genuinely personal input, and its absence keeps a defaulted-but-untouched vehicle from
+        materializing until the user sets it."""
         number = handle.rsplit( '-', 1 )[ -1 ]
-        return { 'name': f'Vehicle {number}', 'purchase_price': Decimal( '35000' ),
-                 'recurrence_years': 7 }
+        return { 'name': f'Vehicle {number}', 'purchase_price': _TYPICAL_PRICE,
+                 'recurrence_years': _TYPICAL_REPLACEMENT_YEARS,
+                 'payment_method': PaymentMethod.CASH.name }
 
     def _complete( self ) -> bool:
         """All the fields a vehicle needs to materialize are present. No hard validation -- a partial
@@ -134,8 +190,10 @@ class VehicleForm( StyledFormMixin, forms.Form ):
             handle = handle, name = cleaned[ 'name' ], purchase_date = cleaned[ 'purchase_date' ],
             end_date = cleaned.get( 'end_date' ), purchase_price = cleaned[ 'purchase_price' ],
             recurrence_years = cleaned[ 'recurrence_years' ],
+            payment_method = PaymentMethod[ cleaned.get( 'payment_method' ) or PaymentMethod.CASH.name ],
             down_payment = cleaned.get( 'down_payment' ),
-            monthly_payment = cleaned.get( 'monthly_payment' ) )
+            monthly_payment = cleaned.get( 'monthly_payment' ),
+            lease_end_payment = cleaned.get( 'lease_end_payment' ) )
         existing = vehicle_plan_of( plans ) or VehiclePlan()
         kept     = [ v for v in existing.vehicles if v.handle != handle ] + [ vehicle ]
         return profile, replace( plans, vehicle_plan = replace( existing, vehicles = kept ) )

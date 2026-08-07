@@ -19,6 +19,18 @@ class EventKind( LabeledEnum ):
     CARD_PAYOFF        = ( 'Card payoff'     , 'Pay off a credit-card balance in full on a date.' )
 
 
+class PaymentMethod( LabeledEnum ):
+    """How a vehicle purchase is paid for -- the discriminator that selects how the forecast models
+    each replacement cycle. CASH buys outright, so the car is an owned, depreciating asset with no
+    debt. LOAN finances the price less the down payment as a real loan originated afresh each
+    replacement. LEASE pays to use the car -- a down/first payment, a monthly payment, and a
+    lease-end payment -- with no ownership and no trade-in."""
+
+    CASH  = ( 'Cash', 'Buy outright -- the car is an owned, depreciating asset.' )
+    LOAN  = ( 'Loan', 'Finance the price less a down payment; a new loan each replacement.' )
+    LEASE = ( 'Lease', 'Pay to use the car -- down, monthly, and lease-end payments; not owned.' )
+
+
 class CreditCardPlanMode( LabeledEnum ):
     """How the user plans to pay down a credit-card balance -- the strategy the debt-plan calculator
     resolves into expenses. MONTHLY pays a fixed amount each month until the card clears; BY_DATE
