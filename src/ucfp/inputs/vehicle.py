@@ -14,6 +14,7 @@ from django import forms
 from common.forms import MoneyField, StyledFormMixin
 
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.plans.enums import PaymentMethod
 from ucfp.inputs.plans.schemas import Vehicle, VehiclePlan
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
@@ -77,7 +78,8 @@ class VehicleForm( StyledFormMixin, forms.Form ):
     name             = forms.CharField( label = 'Name', max_length = 100, required = False )
     purchase_date    = forms.DateField(
         label = 'Next purchase date', required = False, widget = IsoDateInput() )
-    purchase_price   = MoneyField( label = 'Price per car', min_value = 0, required = False )
+    purchase_price   = MoneyField(
+        label = 'Price per car', min_value = 0, required = False, css_class = AppConst.VEHICLE_PRICE_CLASS )
     recurrence_years = forms.IntegerField(
         label = 'Replace every (years)', min_value = 1, required = False,
         widget = forms.NumberInput( attrs = { 'class' : 'input-count' } ) )   # a year count, a digit or two
@@ -93,8 +95,12 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         initial = PaymentMethod.CASH.name,
         widget = forms.RadioSelect(
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
-    down_payment      = MoneyField( label = 'Down / first payment', min_value = 0, required = False )
-    monthly_payment   = MoneyField( label = 'Monthly payment', min_value = 0, required = False )
+    down_payment      = MoneyField(
+        label = 'Down / first payment', min_value = 0, required = False,
+        css_class = AppConst.VEHICLE_DOWN_CLASS )
+    monthly_payment   = MoneyField(
+        label = 'Monthly payment', min_value = 0, required = False,
+        css_class = AppConst.VEHICLE_MONTHLY_CLASS )
     lease_end_payment = MoneyField( label = 'Lease-end payment', min_value = 0, required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
@@ -110,6 +116,22 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         if ( purchase is not None ) and ( end is not None ) and ( end < purchase ):
             self.add_error( 'end_date', 'Owned-until date must be on or after the purchase date.' )
         return cleaned
+
+    @property
+    def auto_loan_apr_percent( self ) -> float:
+        """The assumed auto-loan APR as a percent -- shown in the loan note and carried to the client
+        calculator on the form, from the same `BUILTIN_ASSUMPTIONS` value materialization resolves at, so
+        the estimate and the forecast agree."""
+        return float( BUILTIN_ASSUMPTIONS.auto_loan_apr.fraction * 100 )
+
+    @property
+    def auto_loan_term_years( self ) -> int:
+        return BUILTIN_ASSUMPTIONS.auto_loan_term_years
+
+    @property
+    def auto_loan_term_months( self ) -> int:
+        """The assumed auto-loan term in months -- the unit the client amortization mirror works in."""
+        return BUILTIN_ASSUMPTIONS.auto_loan_term_years * 12
 
     @classmethod
     def _initial( cls, plans, handle : str ) -> dict:
