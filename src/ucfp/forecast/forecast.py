@@ -749,7 +749,9 @@ class Forecast:
         scheduled = [
             event.to_period_event( self._baseline.holding_by_handle, chart )
             for event in self._parameters.events if event.in_span( span ) ]
-        return ( scheduled + self._loan_origination_events_for( span, chart )
+        # Originations first, so the proceeds are on the books before any same-span event that reads a
+        # balance (e.g. a settle-and-re-originate cycle whose payoff must see the freshly borrowed loan).
+        return ( self._loan_origination_events_for( span, chart ) + scheduled
                  + self._recurring_realization_events_for( span, year_fraction, chart ) )
 
     def _loan_origination_events_for( self, span : DateSpan, chart : Chart ) -> list[ PeriodEvent ]:

@@ -10,6 +10,7 @@ extended to originated ones). Covers dormancy, the borrow landing in cash net wo
 amortization by origination + term, granularity invariance, and books that stay balanced.
 """
 import unittest
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -22,6 +23,8 @@ from ucfp.forecast.parameters import (
     AssetParameters,
     ForecastParameters,
     LoanParameters,
+    ScheduledLoanPayoff,
+    ScheduledPurchase,
     Subject,
 )
 from ucfp.forecast.tests.granularity_harness import ANNUAL, MONTHLY, run_at
@@ -124,6 +127,105 @@ class OriginatedLoanGranularityTests( unittest.TestCase ):
                 annual_nw, monthly_nw, delta = Decimal( '1' ),
                 msg = f'{year}: net worth {annual_nw} (annual) vs {monthly_nw} (monthly)' )
             continue
+
+
+class OriginatedLoanCompositionTests( unittest.TestCase ):
+    """Origination composes with the other money-movement primitives into the financed-purchase and
+    replacement-cycle shapes #130 builds on -- proven here at the engine level so #130 can rely on it."""
+
+    def _financed_purchase_parameters( self, end_date, *, price, down ):
+        # A car holding opening at zero to buy into, a purchase for the full price, and a loan for the
+        # financed remainder -- all on the same date. The classic financed acquisition.
+        return replace(
+            _parameters( end_date, principal = price - down ),
+            assets = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '500000' ), Decimal( '500000' ) ),
+                AssetParameters( 'Car', AssetClass.DEPRECIATING, Decimal( '0' ), Decimal( '0' ),
+                                 handle = 'car-asset' ) ],
+            events = [ ScheduledPurchase( _ORIGINATION, 'car-asset', price ) ] )
+
+    def test_financed_purchase_nets_cash_to_the_down_payment( self ):
+        # Borrow (price - down) to cash, spend price on the car: the net cash outlay is exactly the
+        # down payment, and the acquisition is net worth-neutral (asset gained, liability + cash spent).
+        price, down = Decimal( '30000' ), Decimal( '6000' )
+        before = Bookkeeper(
+            Forecast( self._financed_purchase_parameters( date( 2029, 12, 31 ), price = price, down = down ) )
+            .run().books )
+        after = Bookkeeper(
+            Forecast( self._financed_purchase_parameters( date( 2030, 12, 31 ), price = price, down = down ) )
+            .run().books )
+        after.assert_balanced()
+        cash_drop = ( before.ledger.natural_balance( before.chart.cash_account() )
+                      - after.ledger.natural_balance( after.chart.cash_account() ) )
+        # Cash falls by the down payment plus the part-year loan payments since June (interest + a
+        # little principal); isolate the down payment by netting the loan balance and interest back.
+        loan_balance = after.ledger.natural_balance( _account( after, 'car' ) )
+        interest     = after.ledger.natural_balance( _account( after, 'car-interest' ) )
+        principal_paid = ( price - down ) - loan_balance
+        self.assertAlmostEqual(
+            cash_drop - principal_paid - interest, down, delta = Decimal( '1' ) )
+
+    def test_settle_and_reoriginate_cycle( self ):
+        # The replacement shape: pay off the outgoing loan and originate the next on the same date.
+        # After the cycle date the first loan is gone and the second is a fresh, amortizing balance.
+        first  = LoanParameters(
+            'Car 1', Decimal( '24000' ), Rate( Decimal( '0.06' ) ), Duration( 5, TimeUnit.YEAR ),
+            ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST, handle = 'car1', interest_handle = 'car1-interest',
+            origination_date = date( 2030, 6, 1 ) )
+        second = LoanParameters(
+            'Car 2', Decimal( '28000' ), Rate( Decimal( '0.06' ) ), Duration( 5, TimeUnit.YEAR ),
+            ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST, handle = 'car2', interest_handle = 'car2-interest',
+            origination_date = date( 2035, 6, 1 ) )
+        parameters = replace(
+            _parameters( date( 2036, 12, 31 ), with_loan = False ),
+            loans  = [ first, second ],
+            events = [ ScheduledLoanPayoff( date( 2035, 6, 1 ), 'car1' ) ] )
+        reader = Bookkeeper( Forecast( parameters ).run().books )
+        reader.assert_balanced()
+        self.assertEqual( reader.ledger.natural_balance( _account( reader, 'car1' ) ), Decimal( '0' ) )
+        second_balance = reader.ledger.natural_balance( _account( reader, 'car2' ) )
+        self.assertGreater( second_balance, Decimal( '0' ) )
+        self.assertLess( second_balance, Decimal( '28000' ) )
+
+
+class OriginatedLoanEdgeTests( unittest.TestCase ):
+
+    def test_origination_in_the_final_period_borrows_but_defers_payment( self ):
+        # Origination in the last month of the horizon: the balance is credited (near the full
+        # principal, no payment yet) and the books balance -- payments would start the next period.
+        reader = Bookkeeper(
+            Forecast( _parameters( date( 2030, 12, 31 ), origination_date = date( 2030, 12, 1 ) ) )
+            .run().books )
+        reader.assert_balanced()
+        self.assertEqual(
+            reader.ledger.natural_balance( _account( reader, 'car' ) ), _PRINCIPAL )
+        self.assertEqual(
+            reader.ledger.natural_balance( _account( reader, 'car-interest' ) ), Decimal( '0' ) )
+
+    def test_origination_then_immediate_payoff_is_net_neutral( self ):
+        # Borrow, then pay it right back off a month later: the liability ends at zero, only a sliver
+        # of interest was spent, and the books balance.
+        parameters = replace(
+            _parameters( date( 2031, 12, 31 ) ),
+            events = [ ScheduledLoanPayoff( date( 2030, 8, 1 ), 'car' ) ] )
+        reader = Bookkeeper( Forecast( parameters ).run().books )
+        reader.assert_balanced()
+        self.assertEqual( reader.ledger.natural_balance( _account( reader, 'car' ) ), Decimal( '0' ) )
+
+    def test_origination_after_the_horizon_never_fires( self ):
+        # A loan whose origination date is past the run's end simply never becomes a debt: no balance,
+        # no interest, books balanced -- the mirror of a payoff dated after the term.
+        reader = Bookkeeper(
+            Forecast( _parameters( date( 2029, 12, 31 ), origination_date = date( 2035, 6, 1 ) ) )
+            .run().books )
+        reader.assert_balanced()
+        self.assertEqual( reader.ledger.natural_balance( _account( reader, 'car' ) ), Decimal( '0' ) )
+
+    def test_origination_before_the_start_is_rejected( self ):
+        # An originated loan dated before the forecast start would never fire (it falls in no period),
+        # silently mismodelling; reject it so the planner sets it as a t0 loan instead.
+        with self.assertRaises( ValueError ):
+            _parameters( date( 2030, 12, 31 ), origination_date = date( 2025, 6, 1 ) )
 
 
 if __name__ == '__main__':

@@ -566,6 +566,12 @@ class ForecastParameters:
         if self.start_date.day != 1:
             raise ValueError(
                 f'A forecast must start on the first of a month; got {self.start_date}.' )
+        for loan in self.loans:
+            if loan.origination_date is not None and loan.origination_date < self.start_date:
+                raise ValueError(
+                    f'An originated loan cannot originate before the forecast start; '
+                    f'{loan.name} originates {loan.origination_date}, before {self.start_date}. '
+                    f'For a loan present at t0, leave origination_date unset.' )
         return
 
     def earliest_removal_year( self ) -> Optional[ int ]:
