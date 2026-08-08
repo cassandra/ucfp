@@ -146,6 +146,48 @@ class RecurringHoldingPurchaseTests( unittest.TestCase ):
                               msg = f'{year}: cash annual vs monthly' )
             continue
 
+    def test_occurrences_stop_at_the_window_end( self ):
+        # A mid-2036 window end admits the 2036 (Jan-1) occurrence but not the 2041 cycle, so exactly three
+        # acquisitions land (2026, 2031, 2036) over a longer horizon. No trade-in/growth, so they add up.
+        window = DateWindow( start = date( 2026, 1, 1 ), end = date( 2036, 6, 1 ) )
+        params = _params(
+            end       = date( 2045, 12, 31 ),
+            economics = EconomicParameters(),
+            purchases = [ _one( price = Decimal( '10000' ),
+                                interval = Duration( 5, TimeUnit.YEAR ), window = window ) ] )
+        reader  = Bookkeeper( Forecast( params ).run().books )
+        holding = reader.chart.account( 'holding' )
+        # 3 x 10,000 (2026, 2031, 2036), not 4 or 5
+        self.assertEqual( reader.ledger.market_value( holding, through = date( 2045, 12, 31 ) ),
+                          Decimal( '30000' ) )
+
+    def test_several_occurrences_can_fall_in_one_span( self ):
+        # A sub-annual cadence at annual granularity puts multiple occurrences in one span; occurrences_in
+        # returns them all, so every buy lands. Six-month interval over two years = four buys.
+        window = DateWindow( start = date( 2026, 1, 1 ), end = date( 2027, 7, 1 ) )
+        params = _params(
+            end       = date( 2027, 12, 31 ),
+            economics = EconomicParameters(),
+            purchases = [ _one( price = Decimal( '5000' ),
+                                interval = Duration( 6, TimeUnit.MONTH ), window = window ) ] )
+        reader  = Bookkeeper( Forecast( params ).run().books )
+        holding = reader.chart.account( 'holding' )
+        # 2026-01/07 + 2027-01/07 = 4 x 5,000
+        self.assertEqual( reader.ledger.market_value( holding, through = date( 2027, 12, 31 ) ),
+                          Decimal( '20000' ) )
+
+    def test_a_window_without_a_start_is_rejected( self ):
+        with self.assertRaises( ValueError ):
+            RecurringHoldingPurchase( holding = 'holding', price = Decimal( '10000' ),
+                                      interval = Duration( 1, TimeUnit.YEAR ),
+                                      window = DateWindow( end = date( 2030, 1, 1 ) ) )
+
+    def test_a_non_positive_interval_is_rejected( self ):
+        with self.assertRaises( ValueError ):
+            RecurringHoldingPurchase( holding = 'holding', price = Decimal( '10000' ),
+                                      interval = Duration( 0, TimeUnit.YEAR ),
+                                      window = DateWindow( start = date( 2026, 1, 1 ) ) )
+
 
 if __name__ == '__main__':
     unittest.main()

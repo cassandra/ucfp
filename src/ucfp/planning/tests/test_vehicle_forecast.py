@@ -167,3 +167,13 @@ class FinancedVehicleForecastTest( TestCase ):
                                                 through = date( 2032, 1, 1 ) )
         self.assertEqual( first, Decimal( '25625' ) )      # (30,000 - 5,000) x 1.025
         self.assertGreater( second, first )                # x 1.025^6, a larger principal
+
+    def test_a_financed_purchase_costs_cash_only_the_down_payment( self ):
+        # The borrow offsets the purchase in the same span, so the 2027 buy costs cash only its down
+        # payment -- (30,000 - 25,000) inflated -- not the full 30,750 price; the asset+debt pairing nets.
+        through     = date( 2027, 1, 1 )
+        with_car    = self._reader()
+        without_car = _run( Plans() )
+        spent = ( without_car.ledger.market_value( without_car.chart.account( 'cash' ), through = through )
+                  - with_car.ledger.market_value( with_car.chart.account( 'cash' ), through = through ) )
+        self.assertEqual( spent, Decimal( '5125' ) )       # down = (30,000 - 25,000) x 1.025, not 30,750

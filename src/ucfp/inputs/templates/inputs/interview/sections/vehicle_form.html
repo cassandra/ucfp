@@ -57,10 +57,8 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
           so `[hidden]` can hide the inactive one. The case values come from the form (method names stay
           out of template and JS).
           {% endcomment %}
-          <label class="text-muted small mb-0 d-block" for="{{ vehicle_form.down_payment.id_for_label }}">
-            <span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.financing_method }}">Down payment</span>
-            <span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.lease_only_method }}">Due at signing</span>
-          </label>
+          {% comment %} The two spans are adjacent (no whitespace between) so only the active label's text ever shows. {% endcomment %}
+          <label class="text-muted small mb-0 d-block" for="{{ vehicle_form.down_payment.id_for_label }}"><span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.financing_method }}">Down payment</span><span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.lease_only_method }}">Due at signing</span></label>
           {{ vehicle_form.down_payment.as_field_group }}
         </div>
         <div class="col-sm-4">{{ vehicle_form.monthly_payment.as_field_group }}</div>

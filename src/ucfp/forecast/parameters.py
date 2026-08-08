@@ -334,6 +334,8 @@ class RecurringHoldingPurchase:
         if self.window.start is None:
             raise ValueError(
                 'A recurring holding purchase needs a window start to anchor its occurrences.' )
+        if self.interval.count < 1:
+            raise ValueError( 'A recurring holding purchase needs a positive interval to advance.' )
         return
 
     def occurrences_in( self, span : DateSpan ) -> list[ date ]:
@@ -359,9 +361,9 @@ class RecurringLoanOrigination:
     unchanged; materialization declares only the recurring intent. Occurrences anchor at `window.start`
     (the first origination, required) and repeat every `interval`, bounded by `window.end`.
 
-    The rollover settles the prior loan in the same span its new origination lands, so that span's interest
-    on the outgoing loan carries the same-span-payoff simplification noted on `LoanParameters` -- a small,
-    granularity-sensitive interest cost, immaterial for a nearly-amortized car loan."""
+    The rollover settles the prior loan in the same span its replacement originates; that span's interest
+    on the outgoing loan is charged across the whole span rather than only up to the payoff date -- a
+    small, granularity-sensitive cost, immaterial for a nearly-amortized car loan."""
 
     name            : str
     principal       : Decimal
@@ -378,6 +380,8 @@ class RecurringLoanOrigination:
         if self.window.start is None:
             raise ValueError(
                 'A recurring loan origination needs a window start to anchor its occurrences.' )
+        if self.interval.count < 1:
+            raise ValueError( 'A recurring loan origination needs a positive interval to advance.' )
         return
 
     def occurrences_through( self, horizon : date ) -> list[ date ]:

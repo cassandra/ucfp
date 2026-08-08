@@ -108,6 +108,28 @@ class RecurringLoanOriginationTests( unittest.TestCase ):
                 continue
             continue
 
+    def test_occurrences_before_the_run_start_are_skipped( self ):
+        # A vehicle whose next purchase predates the run start must not originate a pre-start loan (the
+        # parameters reject that) -- the engine clips to occurrences on or after the start, like the
+        # holding path, so construction does not raise and only the in-range cycles originate.
+        params = _params(
+            end          = date( 2040, 12, 31 ),
+            economics    = EconomicParameters(),
+            originations = [ _loan( window = DateWindow( start = date( 2024, 1, 1 ) ) ) ] )   # start = 2026
+        forecast = Forecast( params )                                      # must not raise
+        self.assertEqual(                                                  # 2024 dropped; 2029/2034/2039 kept
+            [ loan.origination_date for loan in forecast._parameters.loans ],
+            [ date( 2029, 1, 1 ), date( 2034, 1, 1 ), date( 2039, 1, 1 ) ] )
+
+    def test_a_window_without_a_start_is_rejected( self ):
+        with self.assertRaises( ValueError ):
+            _loan( window = DateWindow( end = date( 2035, 1, 1 ) ) )
+
+    def test_a_non_positive_interval_is_rejected( self ):
+        with self.assertRaises( ValueError ):
+            _loan( interval = Duration( 0, TimeUnit.YEAR ),
+                   window = DateWindow( start = date( 2027, 1, 1 ) ) )
+
 
 if __name__ == '__main__':
     unittest.main()

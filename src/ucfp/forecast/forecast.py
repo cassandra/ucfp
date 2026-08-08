@@ -519,34 +519,43 @@ class Forecast:
         self._parameters = replace(
             self._parameters,
             loans  = self._parameters.loans + extra_loans,
-            events = self._parameters.events + rollover_payoffs )
+            events = self._parameters.events + rollover_payoffs,
+            recurring_loan_originations = list() )   # consumed here; cleared so a reuse cannot double them
 
     def _expanded_recurring_loans( self ) -> tuple[ list[ LoanParameters ], list[ ScheduledLoanPayoff ] ]:
-        """Expand each recurring loan origination into its per-cycle loans and rollover payoffs: over the
-        window at the cadence, each occurrence originates a fresh loan (principal inflated to that year, a
-        distinct per-cycle handle) and pays off the prior cycle's loan at the same date (the outgoing car's
-        loan, settled at trade-in). Done once at construction, so the loans get their accounts and the
-        existing origination and amortization machinery drive them unchanged."""
+        """Expand each recurring loan origination into its per-cycle loans and rollover payoffs: each
+        occurrence from the forecast start on originates a fresh loan (principal inflated to its year, a
+        distinct per-cycle handle) and pays off the prior cycle's loan on the same date (the traded-in
+        car's loan). Done at construction, so the loans get their accounts and the existing origination and
+        amortization machinery drive them unchanged."""
         loans   = list()
         payoffs = list()
         horizon = self._parameters.end_date
+        start   = self._parameters.start_date
         for recurring in self._parameters.recurring_loan_originations:
             prior_handle = None
-            for cycle, occurrence in enumerate( recurring.occurrences_through( horizon ) ):
-                handle = f'{recurring.handle}:{cycle}'
+            # Skip any occurrence before the run start (as the holding path does): a vehicle whose next
+            # purchase predates the chosen start neither originates a pre-start loan (which the parameters
+            # reject) nor diverges from its holding.
+            occurrences = [ on for on in recurring.occurrences_through( horizon ) if on >= start ]
+            for cycle, occurrence in enumerate( occurrences ):
+                handle    = f'{recurring.handle}:{cycle}'
+                principal = recurring.principal * self._inflation_factor( occurrence.year )
                 loans.append( LoanParameters(
-                    name            = recurring.name,
-                    opening_balance = recurring.principal * self._inflation_factor( occurrence.year ),
-                    interest_rate   = recurring.interest_rate, term = recurring.term,
-                    interest_class  = recurring.interest_class,
+                    name                   = recurring.name,
+                    opening_balance        = principal,
+                    interest_rate          = recurring.interest_rate,
+                    term                   = recurring.term,
+                    interest_class         = recurring.interest_class,
                     annual_extra_principal = recurring.annual_extra_principal,
-                    handle          = handle,
-                    interest_handle = f'{recurring.interest_handle}:{cycle}',
-                    origination_date = occurrence ) )
+                    handle                 = handle,
+                    interest_handle        = f'{recurring.interest_handle}:{cycle}',
+                    origination_date       = occurrence ) )
                 if prior_handle is not None:
                     payoffs.append( ScheduledLoanPayoff( event_date = occurrence, loan = prior_handle ) )
                 prior_handle = handle
                 continue
+            continue
         return loans, payoffs
 
     def run( self ) -> ForecastResult:
