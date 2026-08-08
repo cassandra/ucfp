@@ -9,7 +9,9 @@ from datetime import date
 from decimal import Decimal
 
 from django.http import QueryDict
+from django.template.loader import render_to_string
 
+from ucfp.environment.constants import AppConst
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.plans.enums import PaymentMethod
 from ucfp.inputs.plans.schemas import Plans, Vehicle, VehiclePlan
@@ -77,6 +79,48 @@ class VehicleFinanceAssumptionTests( unittest.TestCase ):
                           float( BUILTIN_ASSUMPTIONS.auto_loan_apr.fraction * 100 ) )
         self.assertEqual( form.auto_loan_term_months, BUILTIN_ASSUMPTIONS.auto_loan_term_months )
         self.assertEqual( form.auto_loan_term_years, BUILTIN_ASSUMPTIONS.auto_loan_term_years )
+
+
+class VehicleSwitchTokenTests( unittest.TestCase ):
+    """The switch's method vocabulary comes from PaymentMethod through the form -- the case strings and
+    the finances marker -- so `inputs.js` and the template carry no member-name literals, and a rename
+    stays consistent (the radio values are the same names)."""
+
+    @staticmethod
+    def _rendered():
+        return render_to_string(
+            'inputs/interview/sections/vehicle_form.html',
+            { 'vehicle_form': VehicleForm( handle = 'vehicle-1' ), 'handle': 'vehicle-1',
+              'AppConst': AppConst } )
+
+    def test_case_strings_derive_from_the_payment_method_members( self ):
+        form = VehicleForm( handle = 'vehicle-1' )
+        self.assertEqual( form.payment_field_methods,
+                          f'{PaymentMethod.LOAN.name} {PaymentMethod.LEASE.name}' )
+        self.assertEqual( form.lease_only_method, PaymentMethod.LEASE.name )
+        self.assertEqual( form.financing_method, PaymentMethod.LOAN.name )
+
+    def test_the_radio_values_are_the_member_names( self ):
+        # The radios and the case strings both use the member names, so a field shows for exactly the
+        # methods that name it -- the invariant that keeps the switch working across a rename.
+        values = [ choice[ 0 ] for choice in VehicleForm( handle = 'v' ).fields[ 'payment_method' ].choices ]
+        self.assertEqual( set( values ), { method.name for method in PaymentMethod } )
+
+    def test_only_the_loan_option_carries_the_finances_marker( self ):
+        html = self._rendered()
+        flag = f'data-{AppConst.VEHICLE_FINANCES_DATA_ATTR}'
+        self.assertEqual( html.count( flag ), 1 )                       # exactly one option flagged
+        after_flag = html[ html.find( flag ) : ]
+        self.assertIn( f'value="{PaymentMethod.LOAN.name}"', after_flag[ :200 ] )   # ...the loan radio
+
+    def test_the_rendered_switch_cases_come_from_the_form_properties( self ):
+        # The case values in the HTML are the form's derived strings, not hardcoded member names -- the
+        # one server-side contract a JS screenshot cannot cover.
+        form = VehicleForm( handle = 'vehicle-1' )
+        html = self._rendered()
+        attr = f'data-{AppConst.SWITCH_CASE_DATA_ATTR}'
+        self.assertIn( f'{attr}="{form.payment_field_methods}"', html )
+        self.assertIn( f'{attr}="{form.lease_only_method}"', html )
 
 
 if __name__ == '__main__':

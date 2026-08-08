@@ -17,10 +17,24 @@ re-rendering only to surface a bad value.
       <div class="mb-2"><span class="font-weight-bold">{{ row.name }}</span>
         <span class="text-muted small">balance {{ row.balance_display }}</span></div>
       <div class="form-row">
-        <div class="col-12 col-md-auto">{{ row.mode }}</div>
+        {% comment %}
+        The mode radios are rendered here (not via the widget) so each carries its readout kind, mapped
+        from CreditCardPlanMode by the form; inputs.js branches on the kind, not the member name. The
+        case values below likewise come from the form, so the mode names live only in the enum.
+        {% endcomment %}
+        <div class="col-12 col-md-auto">
+          {% for option in row.mode_options %}
+          <div class="form-check">
+            <input type="radio" class="{{ AppConst.SWITCH_CONTROL_CLASS }} form-check-input"
+                   name="{{ option.name }}" value="{{ option.value }}" id="{{ option.input_id }}"
+                   data-{{ AppConst.CARD_MODE_KIND_DATA_ATTR }}="{{ option.kind }}"{% if option.checked %} checked{% endif %}>
+            <label class="form-check-label" for="{{ option.input_id }}">{{ option.label }}</label>
+          </div>
+          {% endfor %}
+        </div>
         <div class="col-12 col-md">
-          <div class="keep-in-flow" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="MONTHLY COMBO">{{ row.monthly.as_field_group }}</div>
-          <div class="keep-in-flow" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="BY_DATE COMBO LUMP">{{ row.date.as_field_group }}</div>
+          <div class="keep-in-flow" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ credit_card_form.monthly_field_modes }}">{{ row.monthly.as_field_group }}</div>
+          <div class="keep-in-flow" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ credit_card_form.date_field_modes }}">{{ row.date.as_field_group }}</div>
         </div>
       </div>
       <p class="{{ AppConst.CREDIT_CARD_READOUT_CLASS }} text-info small mb-0 mt-2"></p>

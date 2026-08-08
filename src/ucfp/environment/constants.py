@@ -87,7 +87,14 @@ class AppConst:
     # A switch: a control (radio group / select) whose value reveals one of several sibling case
     # blocks and hides the rest (e.g. own vs rent showing different fields). All blocks render
     # visible without JS -- the server reads only the fields the chosen case makes relevant. Driven
-    # by inputs.js.
+    # by inputs.js. The case values are the control's option values (usually enum member names), so the
+    # domain-aware form supplies them; they are not spelled as literals here or in JS.
+    #
+    # When the JS needs case-specific behavior beyond show/hide, the form carries it as a data attribute
+    # rather than the JS naming a member: a single boolean concern as a presence flag (see
+    # VEHICLE_FINANCES_DATA_ATTR), a multi-way presentation choice as a "kind" token (see
+    # CARD_MODE_KIND_DATA_ATTR / CARD_READOUT_*). Enum names stay in the domain; only such presentation
+    # kinds are shared constants here.
     SWITCH_CLASS         = 'js-switch'          # the wrapper (control + cases)
     SWITCH_CONTROL_CLASS = 'js-switch-control'  # the control whose value selects the case
     SWITCH_CASE_DATA_ATTR = 'switch-case'       # a case block's value(s), space-separated
@@ -105,6 +112,14 @@ class AppConst:
     # The assumed card APR (from inputs.builtin_assumptions) rides here as a percent so the client
     # calculator reads the same value the engine uses; the server renders it onto the wrapper.
     CREDIT_CARD_APR_DATA_ATTR     = 'card-apr'                # the assumed APR (percent), on the wrapper
+    # The readout's advisory "kind" -- a presentation vocabulary the form maps each mode to (on its radio
+    # option) and inputs.js branches on, so the JS need not know the CreditCardPlanMode member names. The
+    # domain names stay in the enum; only the kinds (a client/server presentation vocabulary) live here.
+    CARD_MODE_KIND_DATA_ATTR       = 'card-mode-kind'        # the readout kind, on each mode radio option
+    CARD_READOUT_INTEREST_ONLY     = 'interest-only'         # carry / lump -- only interest each month
+    CARD_READOUT_CLEARS_BY_PAYMENT = 'clears-by-payment'     # a monthly payment -- how long to clear
+    CARD_READOUT_PAYMENT_FOR_DATE  = 'payment-for-date'      # a target date -- the monthly it needs
+    CARD_READOUT_BALANCE_AT_DATE   = 'balance-at-date'       # monthly + date -- what remains at the date
 
     # The loan payment calculator (one per amortizing debt, in the debt-plan step). The wrapper carries
     # the current balance (a Profile fact); these mark the rate/term/extra inputs the calculator reads
@@ -128,6 +143,9 @@ class AppConst:
     VEHICLE_MONTHLY_CLASS   = 'js-vehicle-monthly'   # the monthly-payment input
     VEHICLE_APR_DATA_ATTR   = 'vehicle-apr'          # the assumed auto-loan APR (percent), on the form
     VEHICLE_TERM_DATA_ATTR  = 'vehicle-term'         # the assumed auto-loan term (months), on the form
+    # Marks the method radio that finances (the loan), set by the form from PaymentMethod; the calculator
+    # fills the monthly only when the checked method carries it -- so the JS never names the method.
+    VEHICLE_FINANCES_DATA_ATTR = 'vehicle-finances'
 
     # The recurring-expenses table's per-column delete: the x stamps its span index into the form's
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.

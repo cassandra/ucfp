@@ -36,6 +36,18 @@ _CARD_MONTHLY_RATE = BUILTIN_ASSUMPTIONS.credit_card_apr.fraction / Decimal( '12
 _CARRY = 'carry'
 
 
+# Each mode's readout kind (a presentation vocabulary owned by AppConst): inputs.js branches on the kind
+# the form marks on each option, so the JS need not know the mode member names. Carrying (the no-plan
+# default) and a lump payoff cost only interest; the rest key off the payment or date their mode reveals.
+_MODE_READOUT_KIND = {
+    _CARRY                          : AppConst.CARD_READOUT_INTEREST_ONLY,
+    CreditCardPlanMode.LUMP.name    : AppConst.CARD_READOUT_INTEREST_ONLY,
+    CreditCardPlanMode.MONTHLY.name : AppConst.CARD_READOUT_CLEARS_BY_PAYMENT,
+    CreditCardPlanMode.BY_DATE.name : AppConst.CARD_READOUT_PAYMENT_FOR_DATE,
+    CreditCardPlanMode.COMBO.name   : AppConst.CARD_READOUT_BALANCE_AT_DATE,
+}
+
+
 class CreditCardPlanForm( forms.Form ):
     """A paydown strategy per credit-card debt, as one auto-saving pane. Each card has a mode switch
     (carry / monthly / by-date / lump) and the inputs its active mode needs -- a monthly amount, or a
@@ -53,10 +65,13 @@ class CreditCardPlanForm( forms.Form ):
             self._build_fields( card, self._existing.get( card.handle ) )
 
     def _build_fields( self, card, plan ):
+        # The mode radios are rendered by hand in the template (so each option can carry its readout
+        # kind), which applies the switch-control class -- so this widget carries none; RadioSelect only
+        # makes it a radio choice field. `_mode_options` reads the bound field, not the widget's markup.
         self.fields[ self._mode_field( card.handle ) ] = forms.ChoiceField(
             required = False, choices = self._mode_choices(),
             initial = plan.mode.name if plan is not None else _CARRY,
-            widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
+            widget = forms.RadioSelect() )
         self.fields[ self._monthly_field( card.handle ) ] = MoneyField(
             label = 'Monthly payment', required = False, min_value = 0,
             initial = plan.monthly_payment if plan is not None else None,
@@ -94,16 +109,40 @@ class CreditCardPlanForm( forms.Form ):
         so the estimate and the forecast agree."""
         return int( BUILTIN_ASSUMPTIONS.credit_card_apr.fraction * 100 )
 
+    # The switch's case values, derived from CreditCardPlanMode so the template need not spell the member
+    # names (which are the radio values too) -- the domain vocabulary stays here.
+    @property
+    def monthly_field_modes( self ) -> str:
+        """The modes whose monthly-payment field shows -- pay monthly, or the combo."""
+        return f'{CreditCardPlanMode.MONTHLY.name} {CreditCardPlanMode.COMBO.name}'
+
+    @property
+    def date_field_modes( self ) -> str:
+        """The modes whose target/payoff-date field shows -- by a date, the combo, or a lump."""
+        return ( f'{CreditCardPlanMode.BY_DATE.name} {CreditCardPlanMode.COMBO.name} '
+                 f'{CreditCardPlanMode.LUMP.name}' )
+
     @property
     def rows( self ) -> list:
         return [ { 'name'            : card.name,
                    'balance'         : card.balance,
                    'balance_display' : f'${card.balance:,.0f}' if card.balance is not None else '',
-                   'mode'            : self[ self._mode_field( card.handle ) ],
+                   'mode_options'    : self._mode_options( card ),
                    'monthly'         : self[ self._monthly_field( card.handle ) ],
                    'date'            : self[ self._date_field( card.handle ) ],
                    'hint'            : self._payment_hint( card ) }
                  for card in self._cards ]
+
+    def _mode_options( self, card ) -> list[ dict ]:
+        """The mode radios for one card as render-ready dicts -- value, label, id, checked state, and the
+        readout kind on each -- so the template renders them manually and carries the kind per option (the
+        switch reads the value; the readout reads the kind), rather than a member-name literal."""
+        field    = self[ self._mode_field( card.handle ) ]
+        selected = str( field.value() )
+        return [ { 'value'    : value, 'label' : label, 'kind' : _MODE_READOUT_KIND[ value ],
+                   'input_id' : f'{field.auto_id}_{index}', 'name' : field.html_name,
+                   'checked'  : str( value ) == selected }
+                 for index, ( value, label ) in enumerate( self._mode_choices() ) ]
 
     def _payment_hint( self, card ) -> str:
         """A non-blocking warning when a saved monthly payment does not cover the card's interest, so
