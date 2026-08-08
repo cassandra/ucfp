@@ -220,7 +220,7 @@ class VehicleRunningCost:
 
 @dataclass( frozen = True )
 class Vehicle:
-    """One car (or boat) the household plans to buy over a window: bought at `purchase_price` on
+    """One vehicle the household plans to buy over a window: bought at `purchase_price` on
     `purchase_date` and replaced every `recurrence_years` thereafter, up to `end_date` (blank =
     ongoing). `payment_method` sets how each purchase is modeled and which payment fields apply:
 

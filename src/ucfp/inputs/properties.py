@@ -269,12 +269,27 @@ SECOND_HOME_PANE = PropertyPane(
 PANES = ( RENTAL_PANE, SECOND_HOME_PANE )
 
 
+_POSSESSION_PREFIX = 'possession-'
+
+
+def _minted_possession_handle( taken : set ) -> str:
+    """The lowest `possession-N` handle free among `taken` -- a stable identity a new possession keeps
+    across edits, since Plans reference possessions by handle (mirrors the debts form's scheme). Unlike
+    `_minted_handle`, it accumulates across a batch via `taken` (possessions are saved as a list)."""
+    index = 1
+    while f'{_POSSESSION_PREFIX}{index}' in taken:
+        index += 1
+    return f'{_POSSESSION_PREFIX}{index}'
+
+
 class PossessionsForm( forms.Form ):
     """Other Possessions -- a background-saved list of tangible holdings the engine treats by class:
-    precious metals, collectibles, and depreciating assets (vehicles, boats). Each row is a named item
-    with a value and a type; a trailing blank row adds another, and an existing row's Remove box drops
-    it. Non-blocking: a row materializes only once its name, value, and type are all set, so a
-    half-filled row is simply ignored. `apply` replaces these holdings, leaving other assets intact.
+    precious metals, collectibles, and vehicles (whatever the household treats as a vehicle counts as
+    one). Each row is a named item with a value and a type; a trailing blank row adds another, and an
+    existing row's Remove box drops it. Non-blocking: a row materializes only once its name, value, and
+    type are all set, so a half-filled row is simply ignored. `apply` replaces these holdings, leaving
+    other assets intact. Each row carries the item's stable `handle` in a hidden field -- Plans
+    reference possessions by it, so identity must survive edits rather than being reindexed.
     """
 
     _CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES, AssetClass.DEPRECIATING )
@@ -282,9 +297,8 @@ class PossessionsForm( forms.Form ):
         ( '', CHOOSE_PLACEHOLDER ),
         ( AssetClass.PRECIOUS_METALS.name, 'Precious metals' ),
         ( AssetClass.COLLECTIBLES.name, 'Collectibles' ),
-        ( AssetClass.DEPRECIATING.name, 'Vehicle or boat' ),
+        ( AssetClass.DEPRECIATING.name, 'Vehicle' ),
     )
-    _HANDLE_PREFIX = 'possession-'
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
@@ -298,6 +312,8 @@ class PossessionsForm( forms.Form ):
 
     def _build_row( self, index : int ):
         item = self._items[ index ] if index < len( self._items ) else None
+        self.fields[ f'handle_{index}' ] = forms.CharField(
+            required = False, widget = forms.HiddenInput, initial = item.handle if item else None )
         self.fields[ f'name_{index}' ]  = forms.CharField(
             required = False, max_length = 100, initial = item.name if item else None,
             widget = forms.TextInput( attrs = { 'class' : 'form-control' } ) )
@@ -316,6 +332,7 @@ class PossessionsForm( forms.Form ):
         for index in range( len( self._items ) + 1 ):
             remove = f'remove_{index}'
             rows.append( {
+                'handle' : self[ f'handle_{index}' ],
                 'name'   : self[ f'name_{index}' ],
                 'type'   : self[ f'type_{index}' ],
                 'value'  : self[ f'value_{index}' ],
@@ -328,6 +345,9 @@ class PossessionsForm( forms.Form ):
         return replace( profile, assets = kept + self._possessions() ), plans
 
     def _possessions( self ) -> list:
+        # Existing rows keep the handle their hidden field carries; new rows mint one free among every
+        # possession in play, so both survive an edit (Plans reference possessions by handle).
+        taken = { item.handle for item in self._items }
         possessions = []
         for index in range( len( self._items ) + 1 ):
             if self.cleaned_data.get( f'remove_{index}' ):
@@ -337,7 +357,8 @@ class PossessionsForm( forms.Form ):
             kind  = self.cleaned_data.get( f'type_{index}' )
             if not name or value is None or not kind:
                 continue                                     # incomplete row -- not materialized
+            handle = self.cleaned_data.get( f'handle_{index}' ) or _minted_possession_handle( taken )
+            taken.add( handle )
             possessions.append( AssetProfile(
-                handle = f'{self._HANDLE_PREFIX}{len( possessions )}', name = name,
-                asset_class = AssetClass[ kind ], opening_value = value ) )
+                handle = handle, name = name, asset_class = AssetClass[ kind ], opening_value = value ) )
         return possessions

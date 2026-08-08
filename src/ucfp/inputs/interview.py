@@ -364,7 +364,7 @@ class RealEstateForm:
 
 class PossessionsSectionForm:
     """§ -- the Possessions pane: the household's tangible non-real-estate holdings (precious metals,
-    collectibles, vehicles, boats). A no-op section form: the list is edited through its own async view
+    collectibles, vehicles). A no-op section form: the list is edited through its own async view
     (`PossessionsView`), so Next just advances. Exposes the possessions sub-form for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -776,8 +776,8 @@ SECTIONS = [
     # The asset sections are grouped -- Accounts, then Real Estate, then Possessions -- before Income.
     # Real Estate precedes Income for a hard reason: declaring a rental creates its rent line on the
     # Income step, so the properties must exist before the user works through Income or a rental's rent
-    # goes unnoticed. Possessions (non-real-estate tangibles: precious metals, collectibles, vehicles,
-    # boats) carry no income, so they sit here beside Real Estate purely to keep the assets together.
+    # goes unnoticed. Possessions (non-real-estate tangibles: precious metals, collectibles, vehicles)
+    # carry no income, so they sit here beside Real Estate purely to keep the assets together.
     Section( 'real-estate' , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
     Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
