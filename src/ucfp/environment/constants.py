@@ -87,7 +87,14 @@ class AppConst:
     # A switch: a control (radio group / select) whose value reveals one of several sibling case
     # blocks and hides the rest (e.g. own vs rent showing different fields). All blocks render
     # visible without JS -- the server reads only the fields the chosen case makes relevant. Driven
-    # by inputs.js.
+    # by inputs.js. The case values are the control's option values (usually enum member names), so the
+    # domain-aware form supplies them; they are not spelled as literals here or in JS.
+    #
+    # When the JS needs case-specific behavior beyond show/hide, the form carries it as a data attribute
+    # rather than the JS naming a member: a single boolean concern as a presence flag (see
+    # VEHICLE_FINANCES_DATA_ATTR), a multi-way presentation choice as a "kind" token (see
+    # CARD_MODE_KIND_DATA_ATTR / CARD_READOUT_*). Enum names stay in the domain; only such presentation
+    # kinds are shared constants here.
     SWITCH_CLASS         = 'js-switch'          # the wrapper (control + cases)
     SWITCH_CONTROL_CLASS = 'js-switch-control'  # the control whose value selects the case
     SWITCH_CASE_DATA_ATTR = 'switch-case'       # a case block's value(s), space-separated

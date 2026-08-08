@@ -65,10 +65,13 @@ class CreditCardPlanForm( forms.Form ):
             self._build_fields( card, self._existing.get( card.handle ) )
 
     def _build_fields( self, card, plan ):
+        # The mode radios are rendered by hand in the template (so each option can carry its readout
+        # kind), which applies the switch-control class -- so this widget carries none; RadioSelect only
+        # makes it a radio choice field. `_mode_options` reads the bound field, not the widget's markup.
         self.fields[ self._mode_field( card.handle ) ] = forms.ChoiceField(
             required = False, choices = self._mode_choices(),
             initial = plan.mode.name if plan is not None else _CARRY,
-            widget = forms.RadioSelect( attrs = { 'class' : AppConst.SWITCH_CONTROL_CLASS } ) )
+            widget = forms.RadioSelect() )
         self.fields[ self._monthly_field( card.handle ) ] = MoneyField(
             label = 'Monthly payment', required = False, min_value = 0,
             initial = plan.monthly_payment if plan is not None else None,
@@ -130,7 +133,7 @@ class CreditCardPlanForm( forms.Form ):
                    'hint'            : self._payment_hint( card ) }
                  for card in self._cards ]
 
-    def _mode_options( self, card ) -> list:
+    def _mode_options( self, card ) -> list[ dict ]:
         """The mode radios for one card as render-ready dicts -- value, label, id, checked state, and the
         readout kind on each -- so the template renders them manually and carries the kind per option (the
         switch reads the value; the readout reads the kind), rather than a member-name literal."""

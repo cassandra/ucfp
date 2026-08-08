@@ -10,15 +10,11 @@ from django.http import QueryDict
 from django.template.loader import render_to_string
 
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.credit_card import CreditCardPlanForm, _CARRY
+from ucfp.inputs.credit_card import CreditCardPlanForm, _CARRY, _MODE_READOUT_KIND
 from ucfp.inputs.plans.enums import CreditCardPlanMode
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import Debt, Profile
-
-_KINDS = {
-    AppConst.CARD_READOUT_INTEREST_ONLY, AppConst.CARD_READOUT_CLEARS_BY_PAYMENT,
-    AppConst.CARD_READOUT_PAYMENT_FOR_DATE, AppConst.CARD_READOUT_BALANCE_AT_DATE }
 
 
 def _form() -> CreditCardPlanForm:
@@ -44,14 +40,22 @@ class CreditCardSwitchTokenTests( unittest.TestCase ):
         values = { option[ 'value' ] for option in _form().rows[ 0 ][ 'mode_options' ] }
         self.assertEqual( values, { _CARRY } | { mode.name for mode in CreditCardPlanMode } )
 
-    def test_every_option_carries_a_known_readout_kind( self ):
+    def test_the_kind_map_covers_carry_and_every_mode( self ):
+        # Building the options looks up each mode's kind, so a new mode without one raises -- pin that
+        # the map is complete rather than trusting the fixture to enumerate every mode.
+        self.assertEqual( set( _MODE_READOUT_KIND ),
+                          { _CARRY } | { mode.name for mode in CreditCardPlanMode } )
+
+    def test_every_option_maps_to_its_readout_kind( self ):
         by_value = { option[ 'value' ] : option[ 'kind' ]
                      for option in _form().rows[ 0 ][ 'mode_options' ] }
-        self.assertEqual( set( by_value.values() ), _KINDS )                 # only the known kinds
-        self.assertEqual( by_value[ _CARRY ], AppConst.CARD_READOUT_INTEREST_ONLY )
-        self.assertEqual( by_value[ CreditCardPlanMode.LUMP.name ], AppConst.CARD_READOUT_INTEREST_ONLY )
-        self.assertEqual( by_value[ CreditCardPlanMode.MONTHLY.name ], AppConst.CARD_READOUT_CLEARS_BY_PAYMENT )
-        self.assertEqual( by_value[ CreditCardPlanMode.COMBO.name ], AppConst.CARD_READOUT_BALANCE_AT_DATE )
+        interest = AppConst.CARD_READOUT_INTEREST_ONLY
+        self.assertEqual( by_value, {
+            _CARRY                          : interest,                       # carrying costs only interest
+            CreditCardPlanMode.LUMP.name    : interest,                       # ...as does a lump payoff
+            CreditCardPlanMode.MONTHLY.name : AppConst.CARD_READOUT_CLEARS_BY_PAYMENT,
+            CreditCardPlanMode.BY_DATE.name : AppConst.CARD_READOUT_PAYMENT_FOR_DATE,
+            CreditCardPlanMode.COMBO.name   : AppConst.CARD_READOUT_BALANCE_AT_DATE } )
 
     def test_a_fresh_card_defaults_to_carry_checked( self ):
         checked = [ option for option in _form().rows[ 0 ][ 'mode_options' ] if option[ 'checked' ] ]

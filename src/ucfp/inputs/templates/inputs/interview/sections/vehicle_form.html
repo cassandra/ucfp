@@ -37,7 +37,7 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
         the calculator fills the monthly for it without inputs.js naming the method.
         {% endcomment %}
         {% for radio in vehicle_form.payment_method %}
-        <div class="form-check form-check-inline"{% if radio.data.value == vehicle_form.financing_method_value %} data-{{ AppConst.VEHICLE_FINANCES_DATA_ATTR }}="1"{% endif %}>
+        <div class="form-check form-check-inline"{% if radio.data.value == vehicle_form.financing_method %} data-{{ AppConst.VEHICLE_FINANCES_DATA_ATTR }}="1"{% endif %}>
           {{ radio.tag }}
           <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
         </div>
@@ -54,7 +54,7 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
         <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.lease_only_method }}">{{ vehicle_form.lease_end_payment.as_field_group }}</div>
       </div>
       {# Loan only: the down and monthly are amortization-linked, so the calculator (inputs.js) keeps them in step. #}
-      <p class="text-muted small mb-0" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.financing_method_value }}">
+      <p class="text-muted small mb-0" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.financing_method }}">
         Estimated at about {{ vehicle_form.auto_loan_apr_percent }}% over
         {{ vehicle_form.auto_loan_term_years }} years -- set the down payment or the monthly payment and
         the other updates.</p>

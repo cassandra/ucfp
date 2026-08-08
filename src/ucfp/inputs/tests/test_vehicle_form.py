@@ -98,7 +98,7 @@ class VehicleSwitchTokenTests( unittest.TestCase ):
         self.assertEqual( form.payment_field_methods,
                           f'{PaymentMethod.LOAN.name} {PaymentMethod.LEASE.name}' )
         self.assertEqual( form.lease_only_method, PaymentMethod.LEASE.name )
-        self.assertEqual( form.financing_method_value, PaymentMethod.LOAN.name )
+        self.assertEqual( form.financing_method, PaymentMethod.LOAN.name )
 
     def test_the_radio_values_are_the_member_names( self ):
         # The radios and the case strings both use the member names, so a field shows for exactly the
@@ -112,6 +112,15 @@ class VehicleSwitchTokenTests( unittest.TestCase ):
         self.assertEqual( html.count( flag ), 1 )                       # exactly one option flagged
         after_flag = html[ html.find( flag ) : ]
         self.assertIn( f'value="{PaymentMethod.LOAN.name}"', after_flag[ :200 ] )   # ...the loan radio
+
+    def test_the_rendered_switch_cases_come_from_the_form_properties( self ):
+        # The case values in the HTML are the form's derived strings, not hardcoded member names -- the
+        # one server-side contract a JS screenshot cannot cover.
+        form = VehicleForm( handle = 'vehicle-1' )
+        html = self._rendered()
+        attr = f'data-{AppConst.SWITCH_CASE_DATA_ATTR}'
+        self.assertIn( f'{attr}="{form.payment_field_methods}"', html )
+        self.assertIn( f'{attr}="{form.lease_only_method}"', html )
 
 
 if __name__ == '__main__':

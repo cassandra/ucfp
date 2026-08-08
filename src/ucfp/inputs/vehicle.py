@@ -165,9 +165,10 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         return PaymentMethod.LEASE.name
 
     @property
-    def financing_method_value( self ) -> str:
-        """The method that finances -- a loan. The template marks its radio so the calculator can fill
-        the monthly for it without the JS naming the method, and shows the loan note for it."""
+    def financing_method( self ) -> str:
+        """The one method that finances -- a loan -- used two ways in the template (both keeping the
+        method name out of the JS): its radio is marked so the calculator fills the monthly for it, and
+        the loan note is shown for it (its switch-case value)."""
         return PaymentMethod.LOAN.name
 
     @classmethod
