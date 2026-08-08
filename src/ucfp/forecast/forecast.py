@@ -21,7 +21,7 @@ tax knob.
 """
 import calendar
 from collections import namedtuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Callable, Optional
@@ -68,6 +68,9 @@ from .parameters import (
     ExpenseItem,
     ExpenseStream,
     ForecastParameters,
+    LoanParameters,
+    ScheduledLoanPayoff,
+    ScheduledPurchase,
     ScheduledRealization,
     Subject,
     resolve_household_size,
@@ -512,6 +515,39 @@ class Forecast:
         self._parameters = parameters
         self._tax_law    = Statute( parameters.statute )
         self._baseline   = None         # the ResolvedBaseline, materialized once at the start of run()
+        extra_loans, rollover_payoffs = self._expanded_recurring_loans()
+        self._parameters = replace(
+            self._parameters,
+            loans  = self._parameters.loans + extra_loans,
+            events = self._parameters.events + rollover_payoffs )
+
+    def _expanded_recurring_loans( self ) -> tuple[ list[ LoanParameters ], list[ ScheduledLoanPayoff ] ]:
+        """Expand each recurring loan origination into its per-cycle loans and rollover payoffs: over the
+        window at the cadence, each occurrence originates a fresh loan (principal inflated to that year, a
+        distinct per-cycle handle) and pays off the prior cycle's loan at the same date (the outgoing car's
+        loan, settled at trade-in). Done once at construction, so the loans get their accounts and the
+        existing origination and amortization machinery drive them unchanged."""
+        loans   = list()
+        payoffs = list()
+        horizon = self._parameters.end_date
+        for recurring in self._parameters.recurring_loan_originations:
+            prior_handle = None
+            for cycle, occurrence in enumerate( recurring.occurrences_through( horizon ) ):
+                handle = f'{recurring.handle}:{cycle}'
+                loans.append( LoanParameters(
+                    name            = recurring.name,
+                    opening_balance = recurring.principal * self._inflation_factor( occurrence.year ),
+                    interest_rate   = recurring.interest_rate, term = recurring.term,
+                    interest_class  = recurring.interest_class,
+                    annual_extra_principal = recurring.annual_extra_principal,
+                    handle          = handle,
+                    interest_handle = f'{recurring.interest_handle}:{cycle}',
+                    origination_date = occurrence ) )
+                if prior_handle is not None:
+                    payoffs.append( ScheduledLoanPayoff( event_date = occurrence, loan = prior_handle ) )
+                prior_handle = handle
+                continue
+        return loans, payoffs
 
     def run( self ) -> ForecastResult:
         """Build the opening books from the parameters, then walk the frame running a
@@ -749,6 +785,7 @@ class Forecast:
         # Originations first, so the proceeds are on the books before any same-span event that reads a
         # balance (e.g. a settle-and-re-originate cycle whose payoff must see the freshly borrowed loan).
         return ( self._loan_origination_events_for( span, chart ) + scheduled
+                 + self._recurring_holding_purchase_events_for( span, chart )
                  + self._recurring_realization_events_for( span, year_fraction, chart ) )
 
     def _loan_origination_events_for( self, span : DateSpan, chart : Chart ) -> list[ PeriodEvent ]:
@@ -792,6 +829,28 @@ class Forecast:
                 event_date = span.start_date, holding = recurring.holding,
                 amount = amount, destination = recurring.destination )
             events.append( realization.to_period_event( self._baseline.holding_by_handle, chart ) )
+            continue
+        return events
+
+    def _recurring_holding_purchase_events_for( self, span : DateSpan, chart : Chart ) -> list[ PeriodEvent ]:
+        """Expand the recurring holding purchases into events for this interval: at each occurrence
+        date, acquire the price inflated from the forecast start to that year, funded from cash --
+        first realizing the WHOLE existing holding (the trade-in) when the purchase asks for one, its
+        tax following the holding's class. A discrete lump on the occurrence's own date (a car
+        replacement), unlike the annualized recurring realization; the inflation indexing lives here,
+        in the engine, rather than being baked flat into the materialized inputs."""
+        events = list()
+        for purchase in self._parameters.recurring_holding_purchases:
+            for occurrence in purchase.occurrences_in( span ):
+                factor = self._inflation_factor( occurrence.year )
+                if purchase.trade_in:
+                    trade_in = ScheduledRealization(
+                        event_date = occurrence, holding = purchase.holding, amount = None )
+                    events.append( trade_in.to_period_event( self._baseline.holding_by_handle, chart ) )
+                acquisition = ScheduledPurchase(
+                    event_date = occurrence, asset = purchase.holding, amount = purchase.price * factor )
+                events.append( acquisition.to_period_event( self._baseline.holding_by_handle, chart ) )
+                continue
             continue
         return events
 

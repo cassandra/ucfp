@@ -28,8 +28,8 @@ from ucfp.forecast.economic_outlook import EconomicOutlook
 from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
     ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
-    RecurringRealization, RetirementContribution, ScheduledExternalDisbursement,
-    ScheduledLoanPayoff, ScheduledPurchase, ScheduledRealization, Subject, SubsidizedHealthCoverage,
+    RecurringHoldingPurchase, RecurringLoanOrigination, RecurringRealization, RetirementContribution,
+    ScheduledExternalDisbursement, ScheduledRealization, Subject, SubsidizedHealthCoverage,
     TransactionCosts, WindowedAmount )
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
@@ -93,8 +93,7 @@ def materialize(
     conversion_events, conversion_recurring = _roth_conversions( profile, plans )
     withdrawal_events, withdrawal_recurring = _withdrawals( profile, plans )
     scheduled_events = (
-        events.scheduled_events + card_events + conversion_events + withdrawal_events
-        + _vehicle_purchase_events( plans, frame.end_date ) )
+        events.scheduled_events + card_events + conversion_events + withdrawal_events )
     return ForecastParameters(
         start_date       = frame.start_date,
         end_date         = frame.end_date,
@@ -111,9 +110,11 @@ def materialize(
             recurring_items + expense_items
             + events.expense_items + card_items + _vehicle_expenses( plans ) + vehicle_items ),
         expense_streams  = recurring_streams + expense_streams + vehicle_streams,
-        loans            = _loans( profile, plans ) + _vehicle_loans( plans, frame.end_date ),
+        loans            = _loans( profile, plans ),
         contributions    = _contributions( profile, plans ),
         recurring_realizations = conversion_recurring + withdrawal_recurring,
+        recurring_holding_purchases = _vehicle_holding_purchases( plans ),
+        recurring_loan_originations = _vehicle_loan_originations( plans ),
         events           = scheduled_events,
         cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
@@ -318,14 +319,14 @@ def _vehicle_holding_handle( vehicle_handle : str ) -> str:
     return f'vehicle:{vehicle_handle}'
 
 
-def _vehicle_loan_handle( vehicle_handle : str, cycle : int ) -> str:
-    """The liability handle of the loan financing one replacement cycle of a vehicle -- scoped to the
-    vehicle and the cycle, since each replacement originates its own loan."""
-    return f'vehicle-loan:{vehicle_handle}:{cycle}'
+def _vehicle_loan_handle( vehicle_handle : str ) -> str:
+    """The base liability handle for a financed vehicle's loans -- the engine appends the replacement
+    cycle (each replacement originates its own loan), so the first cycle's account is `vehicle-loan:<h>:0`."""
+    return f'vehicle-loan:{vehicle_handle}'
 
 
-def _vehicle_loan_interest_handle( vehicle_handle : str, cycle : int ) -> str:
-    return f'vehicle-loan-interest:{vehicle_handle}:{cycle}'
+def _vehicle_loan_interest_handle( vehicle_handle : str ) -> str:
+    return f'vehicle-loan-interest:{vehicle_handle}'
 
 
 def _vehicle_financed_principal( vehicle : Vehicle ) -> Decimal:
@@ -358,8 +359,9 @@ def _vehicle_holding( vehicle : Vehicle ) -> AssetParameters:
 
 
 def _vehicle_holdings( plans : Plans ) -> list[ AssetParameters ]:
-    """A depreciating holding for each owned (cash or financed) vehicle -- the owned car as a real asset
-    (see `_vehicle_purchase_events`). A leased vehicle has no holding: it is not owned."""
+    """A depreciating holding for each owned (cash or financed) vehicle -- the owned car as a real asset,
+    filled by its recurring purchases (`_vehicle_holding_purchases`). A leased vehicle has no holding: it
+    is not owned."""
     plan = plans.vehicle_plan
     if plan is None:
         return list()
@@ -367,75 +369,57 @@ def _vehicle_holdings( plans : Plans ) -> list[ AssetParameters ]:
              if _is_owned( vehicle ) and _vehicle_ready( vehicle ) ]
 
 
-def _vehicle_purchase_events( plans : Plans, horizon : date ) -> list:
-    """An owned vehicle (cash or financed) as a balance-sheet swap: at each replacement date, sell the
-    outgoing car (its depreciated value, TAX_FREE, to cash) then buy the next (cash into the holding). The
-    realize-then-buy order matters -- the sale reads the outgoing value before the new price lands; the
-    first buy has nothing to trade in (the holding opens at zero). A financed vehicle additionally pays
-    off the outgoing car's loan at trade-in, the proceeds funding it through the cash hub; each cycle's new
-    loan is originated as a `LoanParameters` (see `_vehicle_loans`), whose borrow the engine posts to cash
-    -- so the purchase and origination net to the down payment. The car's cost is thus its depreciation
-    (plus, financed, its interest), not a purchase expense.
+def _vehicle_holding_purchase( vehicle : Vehicle ) -> RecurringHoldingPurchase:
+    """One owned vehicle as a recurring, inflation-indexed replacement: every `recurrence_years` over its
+    window the engine trades the outgoing car in (its whole depreciated value, TAX_FREE, to cash) and
+    rebuys at the price inflated to that year -- so a car bought later in the horizon costs more. Cash and
+    financed cars acquire the same holding this way; a financed one adds `_vehicle_loan_originations` to
+    fund it."""
+    return RecurringHoldingPurchase(
+        holding  = _vehicle_holding_handle( vehicle.handle ),
+        price    = vehicle.purchase_price,
+        interval = Duration( vehicle.recurrence_years, TimeUnit.YEAR ),
+        window   = DateWindow( start = vehicle.purchase_date, end = vehicle.end_date ),
+        trade_in = True )
 
-    The purchase price and the financed principal are flat, today's-dollar amounts here, so they do not
-    inflate over the horizon -- an interim limitation. Do not re-implement the inflation convention in
-    materialization: the engine owns inflation for its stream and recurring inputs, and an inflation-indexed
-    holding replacement belongs there too."""
+
+def _vehicle_holding_purchases( plans : Plans ) -> list[ RecurringHoldingPurchase ]:
+    """The recurring replacement for each owned vehicle (cash or financed) -- materialization declares only
+    the today's-dollars intent, and the engine owns the expansion and the inflation (it knows the horizon
+    and the outlook)."""
     plan = plans.vehicle_plan
     if plan is None:
         return list()
-    events = list()
-    for vehicle in plan.vehicles:
-        if not ( _is_owned( vehicle ) and _vehicle_ready( vehicle ) ):
-            continue
-        holding  = _vehicle_holding_handle( vehicle.handle )
-        financed = _is_financed( vehicle )
-        for cycle, cycle_date in enumerate( _replacement_dates( vehicle, horizon ) ):
-            events.append( ScheduledRealization(
-                event_date = cycle_date, holding = holding, amount = None ) )
-            if financed and cycle > 0:                    # settle the traded-in car's loan
-                events.append( ScheduledLoanPayoff(
-                    event_date = cycle_date, loan = _vehicle_loan_handle( vehicle.handle, cycle - 1 ) ) )
-            events.append( ScheduledPurchase(
-                event_date = cycle_date, asset = holding, amount = vehicle.purchase_price ) )
-    return events
+    return [ _vehicle_holding_purchase( vehicle ) for vehicle in plan.vehicles
+             if _is_owned( vehicle ) and _vehicle_ready( vehicle ) ]
 
 
-def _vehicle_loans( plans : Plans, horizon : date ) -> list[ LoanParameters ]:
-    """One auto-loan per replacement cycle of each financed vehicle -- originated at that cycle's purchase
-    date for the amount financed (price less down), amortized over the assumed auto-loan term at its rate.
-    The engine posts each borrow to cash (offsetting the purchase, so the cycle nets to the down payment);
-    the prior cycle's loan is paid off at the next replacement (`_vehicle_purchase_events`)."""
+def _vehicle_loan_origination( vehicle : Vehicle ) -> RecurringLoanOrigination:
+    """One financed vehicle's recurring auto-loan: each replacement cycle originates a loan for the amount
+    financed (price less down) at the assumed auto-loan terms, and rolls over (pays off) the outgoing car's
+    loan at trade-in. The engine expands it over the horizon, inflating the principal to each cycle's year
+    and appending the cycle to the handle, so the borrow offsets that cycle's (inflated) purchase and the
+    two net to the down payment."""
+    return RecurringLoanOrigination(
+        name            = f'{vehicle.name or "Vehicle"} loan',
+        principal       = _vehicle_financed_principal( vehicle ),
+        interest_rate   = _AUTO_LOAN_APR,
+        term            = _AUTO_LOAN_TERM,
+        interval        = Duration( vehicle.recurrence_years, TimeUnit.YEAR ),
+        window          = DateWindow( start = vehicle.purchase_date, end = vehicle.end_date ),
+        handle          = _vehicle_loan_handle( vehicle.handle ),
+        interest_handle = _vehicle_loan_interest_handle( vehicle.handle ) )
+
+
+def _vehicle_loan_originations( plans : Plans ) -> list[ RecurringLoanOrigination ]:
+    """The recurring financing for each financed vehicle -- the debt half of the owned car, paired with its
+    `_vehicle_holding_purchase`. Materialization declares the recurring intent; the engine owns the cadence,
+    the inflation, the per-cycle accounts, and the rollover payoff."""
     plan = plans.vehicle_plan
     if plan is None:
         return list()
-    loans = list()
-    for vehicle in plan.vehicles:
-        if not ( _vehicle_ready( vehicle ) and _is_financed( vehicle ) ):
-            continue
-        principal = _vehicle_financed_principal( vehicle )
-        for cycle, cycle_date in enumerate( _replacement_dates( vehicle, horizon ) ):
-            loans.append( LoanParameters(
-                name = f'{vehicle.name or "Vehicle"} loan', opening_balance = principal,
-                interest_rate = _AUTO_LOAN_APR, term = _AUTO_LOAN_TERM,
-                interest_class = ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST,
-                handle = _vehicle_loan_handle( vehicle.handle, cycle ),
-                interest_handle = _vehicle_loan_interest_handle( vehicle.handle, cycle ),
-                origination_date = cycle_date ) )
-    return loans
-
-
-def _replacement_dates( vehicle : Vehicle, horizon : date ) -> list[ date ]:
-    """The purchase dates over a vehicle's window: the first at `purchase_date`, then every
-    `recurrence_years`, through the earlier of its end date and the forecast horizon."""
-    last   = min( vehicle.end_date, horizon ) if vehicle.end_date is not None else horizon
-    step   = Duration( vehicle.recurrence_years, TimeUnit.YEAR )
-    dates  = list()
-    cursor = vehicle.purchase_date
-    while cursor <= last:
-        dates.append( cursor )
-        cursor = step.add_to( cursor )
-    return dates
+    return [ _vehicle_loan_origination( vehicle ) for vehicle in plan.vehicles
+             if _is_financed( vehicle ) and _vehicle_ready( vehicle ) ]
 
 
 def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
