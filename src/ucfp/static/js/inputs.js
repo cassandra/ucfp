@@ -333,8 +333,11 @@ window.App.Inputs = (function () {
         return parseFloat( $card.attr( dataAttr( C.CREDIT_CARD_BALANCE_DATA_ATTR ) ) ) || 0;
     }
 
-    function cardMode( $card ) {
-        return $card.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).filter( ':checked' ).val();
+    // The readout "kind" the form marked on the checked mode option -- the JS branches on this
+    // presentation vocabulary, not the CreditCardPlanMode member names.
+    function cardModeKind( $card ) {
+        return $card.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).filter( ':checked' )
+            .attr( dataAttr( C.CARD_MODE_KIND_DATA_ATTR ) );
     }
 
     // Months of `payment` to clear `balance` at the card rate, or null when it never does (the
@@ -388,7 +391,7 @@ window.App.Inputs = (function () {
     function cardReadout( $card ) {
         const balance = cardBalance( $card );
         const rate = cardMonthlyRate( $card );
-        const mode = cardMode( $card );
+        const kind = cardModeKind( $card );
         const monthly = function () {
             return parseAmount( $card.find( classSelector( C.CREDIT_CARD_MONTHLY_CLASS ) ).val() );
         };
@@ -396,10 +399,10 @@ window.App.Inputs = (function () {
             return monthsUntil( $card.find( classSelector( C.CREDIT_CARD_DATE_CLASS ) ).val() );
         };
         // Carrying it (the default) and a lump payoff both cost only the interest each month.
-        if ( mode === 'carry' || mode === 'LUMP' || !mode ) {
+        if ( kind === C.CARD_READOUT_INTEREST_ONLY || !kind ) {
             return 'Carrying it costs about ' + money( balance * rate ) + '/month in interest.';
         }
-        if ( mode === 'MONTHLY' ) {
+        if ( kind === C.CARD_READOUT_CLEARS_BY_PAYMENT ) {
             const payment = monthly();
             if ( !( payment > 0 ) ) { return ''; }
             const months = monthsToClear( balance, payment, rate );
@@ -407,12 +410,12 @@ window.App.Inputs = (function () {
                 ? 'That won\'t cover the interest, so the balance never clears.'
                 : 'Clears in ' + describeMonths( months ) + '.';
         }
-        if ( mode === 'BY_DATE' ) {
+        if ( kind === C.CARD_READOUT_PAYMENT_FOR_DATE ) {
             const months = targetMonths();
             if ( !months || months <= 0 ) { return ''; }
             return 'That needs about ' + money( paymentForMonths( balance, months, rate ) ) + '/month.';
         }
-        if ( mode === 'COMBO' ) {
+        if ( kind === C.CARD_READOUT_BALANCE_AT_DATE ) {
             const payment = monthly(), months = targetMonths();
             if ( !( payment > 0 ) || !months || months <= 0 ) { return ''; }
             const cleared = monthsToClear( balance, payment, rate );

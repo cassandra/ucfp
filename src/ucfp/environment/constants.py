@@ -105,6 +105,14 @@ class AppConst:
     # The assumed card APR (from inputs.builtin_assumptions) rides here as a percent so the client
     # calculator reads the same value the engine uses; the server renders it onto the wrapper.
     CREDIT_CARD_APR_DATA_ATTR     = 'card-apr'                # the assumed APR (percent), on the wrapper
+    # The readout's advisory "kind" -- a presentation vocabulary the form maps each mode to (on its radio
+    # option) and inputs.js branches on, so the JS need not know the CreditCardPlanMode member names. The
+    # domain names stay in the enum; only the kinds (a client/server presentation vocabulary) live here.
+    CARD_MODE_KIND_DATA_ATTR       = 'card-mode-kind'        # the readout kind, on each mode radio option
+    CARD_READOUT_INTEREST_ONLY     = 'interest-only'         # carry / lump -- only interest each month
+    CARD_READOUT_CLEARS_BY_PAYMENT = 'clears-by-payment'     # a monthly payment -- how long to clear
+    CARD_READOUT_PAYMENT_FOR_DATE  = 'payment-for-date'      # a target date -- the monthly it needs
+    CARD_READOUT_BALANCE_AT_DATE   = 'balance-at-date'       # monthly + date -- what remains at the date
 
     # The loan payment calculator (one per amortizing debt, in the debt-plan step). The wrapper carries
     # the current balance (a Profile fact); these mark the rate/term/extra inputs the calculator reads
