@@ -89,7 +89,8 @@ def materialize(
     flow_streams, flow_items = _income_flows(
         profile, plans, subjects_by_handle, events.property_sales )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
-    vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
+    vehicle_streams, vehicle_items = _vehicle_running_costs(
+        profile, plans, events.possession_sales, frame.start_date )
     conversion_events, conversion_recurring = _roth_conversions( profile, plans )
     withdrawal_events, withdrawal_recurring = _withdrawals( profile, plans )
     scheduled_events = (
@@ -468,18 +469,42 @@ def _lease_vehicle_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
     return items
 
 
-def _vehicle_running_costs( plans : Plans ) -> tuple[ list[ ExpenseStream ], list[ ExpenseItem ] ]:
-    """The shared per-car running costs applied to each owned vehicle as (streams, items): each cost's
-    per-car amount is emitted once per vehicle, gated to that vehicle's ownership window, so the total
-    ramps with the number of cars owned over time. A SMOOTH cost enters as an annualized stream, a
-    DISCRETE one as an item placed at its cadence. Empty when there is no plan or the cost is blank."""
-    plan = plans.vehicle_plan
-    if plan is None:
-        return list(), list()
-    windows = [ DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
-                for vehicle in plan.vehicles if vehicle.purchase_date is not None ]
+def _operated_until( possession : AssetProfile, sale_dates : dict ) -> Optional[ date ]:
+    """The last date a current vehicle is operated: the day before its sale (so its running-cost window
+    ends right where its plan replacement's begins -- both windows are inclusive and gate on the span
+    start, so a shared boundary date would double-count), or None (kept -- run to the horizon)."""
+    sale = sale_dates.get( possession.handle )
+    return sale - timedelta( days = 1 ) if sale is not None else None
+
+
+def _vehicle_windows( profile : Profile, plans : Plans, sale_dates : dict,
+                      start_date : date ) -> list[ DateWindow ]:
+    """The operating window of every vehicle the household runs: the current vehicle possessions (owned
+    from the start, each ending when a sale clips it) and the planned vehicles (owned or leased, over
+    their replacement window). Running costs apply per window, so the total tracks the fleet operated at
+    any time -- a replaced current car's window ends where its plan replacement's begins, so the two
+    chain with no gap and no double-count, and the near-term fleet is no longer undercounted."""
+    plan    = plans.vehicle_plan
+    planned = ( [ DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
+                  for vehicle in plan.vehicles if vehicle.purchase_date is not None ]
+                if plan is not None else list() )
+    current = [ DateWindow( start = start_date, end = _operated_until( possession, sale_dates ) )
+                for possession in profile.assets if possession.asset_class is AssetClass.DEPRECIATING ]
+    return planned + current
+
+
+def _vehicle_running_costs( profile : Profile, plans : Plans, sale_dates : dict,
+                            start_date : date ) -> tuple[ list[ ExpenseStream ], list[ ExpenseItem ] ]:
+    """The shared per-car running costs applied to each vehicle the household operates as (streams,
+    items): each cost's per-car amount is emitted once per vehicle window (see `_vehicle_windows` -- the
+    current possessions and the planned vehicles), so the total tracks the fleet operated over time. A
+    SMOOTH cost enters as an annualized stream, a DISCRETE one as an item placed at its cadence. Empty
+    when there is no running cost (or it is blank)."""
+    plan          = plans.vehicle_plan
+    running_costs = plan.running_costs if plan is not None else list()
+    windows = _vehicle_windows( profile, plans, sale_dates, start_date )
     streams, items = list(), list()
-    for cost in plan.running_costs:
+    for cost in running_costs:
         if cost.amount is None:
             continue
         amounts = Schedule.constant( WindowedAmount( cost.amount ) )

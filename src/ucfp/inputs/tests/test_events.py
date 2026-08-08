@@ -112,6 +112,14 @@ class SellPossessionTests( unittest.TestCase ):
         self.assertIsInstance( events[ 1 ], ScheduledLoanPayoff )
         self.assertEqual( events[ 1 ].loan, 'debt-1' )
 
+    def test_a_sale_records_its_date_for_running_cost_clipping( self ):
+        # The sale date is recorded so materialization ends the possession's running costs at it (a sold
+        # car stops incurring insurance/fuel), mirroring a property sale's operating-cost clip.
+        profile = _sale_profile( [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ] )
+        into    = EventContributions()
+        SellPossessionEvent().contribute( _sell( 'possession-1' ), profile, {}, into )
+        self.assertEqual( into.possession_sales, { 'possession-1' : date( 2030, 6, 1 ) } )
+
     def test_an_unsecured_possession_emits_only_the_realization( self ):
         profile = _sale_profile(
             [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ],

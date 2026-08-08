@@ -126,6 +126,7 @@ class EventContributions:
         self.expense_items    = list()
         self.subject_removals = list()
         self.property_sales   = dict()   # property handle -> sale date, for clipping its operating costs
+        self.possession_sales = dict()   # possession handle -> sale date, for clipping its running costs
 
 
 # --- The handler base + the kinds -----------------------------------------
@@ -283,7 +284,10 @@ class SellPossessionEvent( EventType ):
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
         # No amount: realize the whole possession at its projected value -- tax follows its asset class
         # (a vehicle is TAX_FREE, a collectible is taxed as one) -- then pay off any loan secured by it.
+        # Recording the sale date lets materialization end the possession's running costs at it (a car
+        # sold on its replacement date stops incurring insurance/fuel), mirroring a property sale.
         possession_handle = event.selections[ POSSESSION_ROLE ]
+        into.possession_sales[ possession_handle ] = event.date
         into.scheduled_events.append( ScheduledRealization(
             event_date = event.date, holding = possession_handle ) )
         for loan_handle in _secured_loans( profile, possession_handle ):

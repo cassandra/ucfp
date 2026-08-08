@@ -253,13 +253,18 @@ class MixedFleetTests( unittest.TestCase ):
 
 
 class VehicleRunningCostTests( unittest.TestCase ):
-    """A running cost is a per-car amount emitted once per owned vehicle, gated to that vehicle's window
-    -- so the total ramps with the fleet. SMOOTH annualizes into a stream, DISCRETE places an item."""
+    """A running cost is a per-car amount emitted once per *operated* vehicle window -- the current
+    vehicle possessions (from the start) and the planned vehicles -- so the total tracks the fleet.
+    SMOOTH annualizes into a stream, DISCRETE places an item; a sold possession's window ends at the sale."""
 
     @staticmethod
     def _plans( vehicles, *costs ):
         return Plans( vehicle_plan = VehiclePlan(
             vehicles = list( vehicles ), running_costs = list( costs ) ) )
+
+    @classmethod
+    def _run( cls, plans, profile = None, sale_dates = None, start = date( 2026, 1, 1 ) ):
+        return _vehicle_running_costs( profile or Profile(), plans, sale_dates or dict(), start )
 
     @staticmethod
     def _cost( realization, interval, amount = Decimal( '20' ) ):
@@ -267,11 +272,16 @@ class VehicleRunningCostTests( unittest.TestCase ):
             name = 'Gasoline', handle = 'gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
             interval = interval, amount = amount, realization = realization )
 
+    @staticmethod
+    def _vehicle_possession( handle ):
+        return AssetProfile( handle = handle, name = 'Car', asset_class = AssetClass.DEPRECIATING,
+                             opening_value = Decimal( '20000' ) )
+
     def test_smooth_cost_is_one_annualized_stream_per_vehicle( self ):
         # $20/car/week annualized x 52 = $1,040/yr, one stream per vehicle, each in its own window.
         v1 = _vehicle( 'vehicle-1', date( 2026, 1, 1 ) )
         v2 = _vehicle( 'vehicle-2', date( 2028, 1, 1 ), end_date = date( 2035, 1, 1 ) )
-        streams, items = _vehicle_running_costs(
+        streams, items = self._run(
             self._plans( [ v1, v2 ], self._cost( Realization.SMOOTH, Duration( 1, TimeUnit.WEEK ) ) ) )
         self.assertEqual( items, [] )
         self.assertEqual( len( streams ), 2 )
@@ -282,20 +292,44 @@ class VehicleRunningCostTests( unittest.TestCase ):
     def test_discrete_cost_is_an_item_per_vehicle_at_its_cadence( self ):
         semiannual = Duration( 6, TimeUnit.MONTH )
         vehicle = _vehicle( 'vehicle-1', date( 2026, 1, 1 ) )
-        streams, items = _vehicle_running_costs(
+        streams, items = self._run(
             self._plans( [ vehicle ], self._cost( Realization.DISCRETE, semiannual, Decimal( '750' ) ) ) )
         self.assertEqual( streams, [] )
         self.assertEqual( items[ 0 ].cadence.interval, semiannual )
         self.assertEqual( items[ 0 ].amounts.segments[ 0 ].amount, Decimal( '750' ) )   # per car
 
+    def test_a_current_vehicle_possession_is_run_from_the_start( self ):
+        # The fix: a car owned today (a DEPRECIATING possession) incurs running costs from the forecast
+        # start over an open window -- previously it counted for nothing until a planned purchase. A
+        # non-vehicle possession (a collectible) is not a car and is excluded.
+        profile = Profile( assets = [
+            self._vehicle_possession( 'possession-1' ),
+            AssetProfile( handle = 'possession-2', name = 'Ring', asset_class = AssetClass.COLLECTIBLES,
+                          opening_value = Decimal( '5000' ) ) ] )
+        streams, _items = self._run(
+            self._plans( [], self._cost( Realization.SMOOTH, Duration( 1, TimeUnit.WEEK ) ) ),
+            profile = profile )
+        self.assertEqual( len( streams ), 1 )              # only the vehicle, not the collectible
+        self.assertEqual( streams[ 0 ].window, DateWindow( start = date( 2026, 1, 1 ) ) )
+
+    def test_a_sold_possession_stops_the_day_before_its_sale( self ):
+        # A current car replaced/sold stops incurring running costs at the sale -- its window ends the day
+        # before, so it does not double-count with the replacement that begins on the sale date.
+        streams, _items = self._run(
+            self._plans( [], self._cost( Realization.SMOOTH, Duration( 1, TimeUnit.WEEK ) ) ),
+            profile = Profile( assets = [ self._vehicle_possession( 'possession-1' ) ] ),
+            sale_dates = { 'possession-1' : date( 2030, 1, 1 ) } )
+        self.assertEqual( streams[ 0 ].window,
+                          DateWindow( start = date( 2026, 1, 1 ), end = date( 2029, 12, 31 ) ) )
+
     def test_blank_amount_or_no_vehicle_yields_nothing( self ):
         weekly  = Duration( 1, TimeUnit.WEEK )
         vehicle = _vehicle( 'vehicle-1', date( 2026, 1, 1 ) )
         self.assertEqual(                                  # a blank per-car amount is not charged
-            _vehicle_running_costs( self._plans( [ vehicle ], self._cost( Realization.SMOOTH, weekly, None ) ) ),
+            self._run( self._plans( [ vehicle ], self._cost( Realization.SMOOTH, weekly, None ) ) ),
             ( [], [] ) )
-        self.assertEqual(                                  # no vehicles -> nothing to apply
-            _vehicle_running_costs( self._plans( [], self._cost( Realization.SMOOTH, weekly ) ) ),
+        self.assertEqual(                                  # no vehicles at all -> nothing to apply
+            self._run( self._plans( [], self._cost( Realization.SMOOTH, weekly ) ) ),
             ( [], [] ) )
 
 
