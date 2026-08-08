@@ -105,8 +105,10 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         label = 'Stop replacing by', required = False, widget = IsoDateInput(),
         help_text = 'Blank to keep replacing indefinitely.' )
     # The payment method drives which cost fields show (via the switch control) and how the forecast
-    # models each purchase. `down_payment` is the down (loan) or first payment (lease); `monthly_payment`
-    # serves both; `lease_end_payment` is the lease's turn-in cost.
+    # models each purchase. `monthly_payment` serves loan and lease; `lease_end_payment` is the lease's
+    # turn-in cost. `down_payment` serves both too, but its label differs by method (a loan's "Down
+    # payment" vs a lease's "Due at signing"), so it carries no baked-in label -- the template renders the
+    # two conditionally by the same switch (see vehicle_form.html).
     payment_method   = forms.ChoiceField(
         label = 'Paying by', required = False,
         choices = [ ( method.name, method.label ) for method in PaymentMethod ],
@@ -114,7 +116,7 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         widget = forms.RadioSelect(
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     down_payment      = MoneyField(
-        label = 'Down / first payment', min_value = 0, required = False,
+        label = '', min_value = 0, required = False,           # labelled conditionally in the template
         css_class = AppConst.VEHICLE_DOWN_CLASS )
     monthly_payment   = MoneyField(
         label = 'Monthly payment', min_value = 0, required = False,
@@ -161,14 +163,16 @@ class VehicleForm( StyledFormMixin, forms.Form ):
 
     @property
     def lease_only_method( self ) -> str:
-        """The method whose lease-end field shows -- a lease only."""
+        """The lease-only case -- a lease -- used for the lease-end field and the lease's "Due at signing"
+        label (its switch-case value)."""
         return PaymentMethod.LEASE.name
 
     @property
     def financing_method( self ) -> str:
-        """The one method that finances -- a loan -- used two ways in the template (both keeping the
-        method name out of the JS): its radio is marked so the calculator fills the monthly for it, and
-        the loan note is shown for it (its switch-case value)."""
+        """The one method that finances -- a loan -- singled out in the template wherever the loan case is
+        (keeping the method name out of the JS): its radio is marked so the calculator fills the monthly,
+        the loan note shows for it, and the down field is labelled "Down payment" for it (its switch-case
+        value)."""
         return PaymentMethod.LOAN.name
 
     @classmethod

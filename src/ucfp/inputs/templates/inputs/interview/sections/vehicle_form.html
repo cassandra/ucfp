@@ -49,7 +49,20 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
       case values come from the form (derived from PaymentMethod), so the member names live in one place.
       {% endcomment %}
       <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.payment_field_methods }}">
-        <div class="col-sm-4">{{ vehicle_form.down_payment.as_field_group }}</div>
+        <div class="col-sm-4">
+          {% comment %}
+          One down field, two labels: a loan takes a "Down payment", a lease its "Due at signing" (fees
+          plus first month). The field's own label is blank; one always-visible label holds two inline
+          spans that show conditionally by the same switch the fields do -- inline (no display !important),
+          so `[hidden]` can hide the inactive one. The case values come from the form (method names stay
+          out of template and JS).
+          {% endcomment %}
+          <label class="text-muted small mb-0 d-block" for="{{ vehicle_form.down_payment.id_for_label }}">
+            <span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.financing_method }}">Down payment</span>
+            <span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.lease_only_method }}">Due at signing</span>
+          </label>
+          {{ vehicle_form.down_payment.as_field_group }}
+        </div>
         <div class="col-sm-4">{{ vehicle_form.monthly_payment.as_field_group }}</div>
         <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.lease_only_method }}">{{ vehicle_form.lease_end_payment.as_field_group }}</div>
       </div>
