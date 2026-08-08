@@ -13,8 +13,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from ucfp.accounts.enums import AssetClass
-from ucfp.forecast.parameters import ScheduledRealization, ScheduledTransfer
-from ucfp.inputs.events import EventContributions, SOURCE_ROLE, TARGET_ROLE, TransferEvent
+from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer
+from ucfp.inputs.events import (
+    EventContributions, POSSESSION_ROLE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent, TransferEvent )
 from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import PlanEvent
 
@@ -65,6 +66,71 @@ class TransferMaterializationTests( unittest.TestCase ):
         self.assertIsInstance( transfer, ScheduledTransfer )
         self.assertEqual( ( transfer.source, transfer.target, transfer.amount ),
                           ( 'cd', 'stk', Decimal( '50000' ) ) )
+
+
+def _sale_profile( possessions, debts = () ):
+    """A stand-in profile for a possession sale: possessions as (handle, class, name) and any securing
+    debts as (handle, secured_asset, name)."""
+    return SimpleNamespace(
+        assets   = [ SimpleNamespace( handle = h, asset_class = k, name = n ) for h, k, n in possessions ],
+        debts    = [ SimpleNamespace( handle = h, secured_asset = s, name = n ) for h, s, n in debts ],
+        subjects = [] )
+
+
+def _sell( possession_handle ):
+    return PlanEvent( kind = EventKind.SELL_POSSESSION, date = date( 2030, 6, 1 ),
+                      selections = { POSSESSION_ROLE: possession_handle } )
+
+
+def _sale_events( profile, event ):
+    into = EventContributions()
+    SellPossessionEvent().contribute( event, profile, {}, into )
+    return into.scheduled_events
+
+
+class SellPossessionTests( unittest.TestCase ):
+    """A possession sale mirrors a property sale: realize the whole holding at its projected value, and
+    pay off any loan secured against it. The routing (whole-holding realization + secured-loan payoff) is
+    what regresses silently, so it earns a test here; the gain/tax math is the engine's."""
+
+    def test_a_sale_realizes_the_whole_possession( self ):
+        profile     = _sale_profile( [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ] )
+        events      = _sale_events( profile, _sell( 'possession-1' ) )
+        self.assertEqual( len( events ), 1 )
+        realization = events[ 0 ]
+        self.assertIsInstance( realization, ScheduledRealization )
+        self.assertEqual( realization.holding, 'possession-1' )
+        self.assertIsNone( realization.amount )   # None -> the whole holding at its projected value
+
+    def test_a_secured_possession_also_pays_off_its_loan( self ):
+        profile = _sale_profile(
+            [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ],
+            [ ( 'debt-1', 'possession-1', 'Car loan' ) ] )      # secured against the car
+        events  = _sale_events( profile, _sell( 'possession-1' ) )
+        self.assertEqual( [ type( e ).__name__ for e in events ],
+                          [ 'ScheduledRealization', 'ScheduledLoanPayoff' ] )
+        self.assertIsInstance( events[ 1 ], ScheduledLoanPayoff )
+        self.assertEqual( events[ 1 ].loan, 'debt-1' )
+
+    def test_an_unsecured_possession_emits_only_the_realization( self ):
+        profile = _sale_profile(
+            [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ],
+            [ ( 'debt-1', None, 'Credit card' ) ] )             # a debt not secured against the car
+        events  = _sale_events( profile, _sell( 'possession-1' ) )
+        self.assertEqual( [ type( e ).__name__ for e in events ], [ 'ScheduledRealization' ] )
+
+    def test_the_summary_names_the_item_and_flags_a_payoff( self ):
+        profile = _sale_profile(
+            [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ],
+            [ ( 'debt-1', 'possession-1', 'Car loan' ) ] )
+        summary = SellPossessionEvent().summary( _sell( 'possession-1' ), profile )
+        self.assertIn( 'Sell Car in 2030', summary )
+        self.assertIn( 'loan paid off', summary )
+
+    def test_offerable_only_when_a_possession_exists( self ):
+        self.assertFalse( SellPossessionEvent().offerable( _sale_profile( [] ) ) )
+        self.assertTrue( SellPossessionEvent().offerable(
+            _sale_profile( [ ( 'possession-1', AssetClass.COLLECTIBLES, 'Ring' ) ] ) ) )
 
 
 if __name__ == '__main__':

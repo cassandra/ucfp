@@ -15,6 +15,7 @@ class EventKind( LabeledEnum ):
     MEDICAL_PAYMENT    = ( 'Medical expense' , 'A one-time deductible medical expense.' )
     DEATH              = ( 'Death'           , "A subject's passing -- the survivor transition." )
     SELL_PROPERTY      = ( 'Sell property'   , 'Sell a home or rental property.' )
+    SELL_POSSESSION    = ( 'Sell possession' , 'Sell a vehicle, collectible, or other possession.' )
     LOAN_PAYOFF        = ( 'Loan payoff'     , 'Pay off an amortizing loan in full on a date.' )
     CARD_PAYOFF        = ( 'Card payoff'     , 'Pay off a credit-card balance in full on a date.' )
 

@@ -37,9 +37,10 @@ SUBJECT_ROLE   = 'subject'
 RECIPIENT_ROLE = 'recipient'
 SOURCE_ROLE    = 'source'
 TARGET_ROLE    = 'target'
-PROPERTY_ROLE  = 'property'
-LOAN_ROLE      = 'loan'
-CARD_ROLE      = 'card'
+PROPERTY_ROLE   = 'property'
+POSSESSION_ROLE = 'possession'
+LOAN_ROLE       = 'loan'
+CARD_ROLE       = 'card'
 
 # Menu groups, in display order.
 _ACCOUNTS_GROUP  = 'Accounts'
@@ -80,10 +81,19 @@ def _properties( profile ) -> list:
              if asset.asset_class.is_real_estate ]
 
 
-def _mortgages( profile, property_handle : str ) -> list:
-    """The handles of the debts secured by `property_handle` -- the mortgages a sale pays off. A
-    property may carry more than one (e.g. a first and a second), so this is a list, not a flag."""
-    return [ debt.handle for debt in profile.debts if debt.secured_asset == property_handle ]
+_POSSESSION_CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES, AssetClass.DEPRECIATING )
+
+
+def _possessions( profile ) -> list:
+    """The tangible possessions a sale can sell -- precious metals, collectibles, vehicles."""
+    return [ ( asset.handle, asset.name ) for asset in profile.assets
+             if asset.asset_class in _POSSESSION_CLASSES ]
+
+
+def _secured_loans( profile, asset_handle : str ) -> list:
+    """The handles of the debts secured by `asset_handle` -- the loans a sale of that asset pays off (a
+    property's mortgage, a vehicle's auto loan). An asset may carry more than one, so this is a list."""
+    return [ debt.handle for debt in profile.debts if debt.secured_asset == asset_handle ]
 
 
 def _names( profile ) -> dict:
@@ -237,7 +247,7 @@ class SellPropertyEvent( EventType ):
     def summary( self, event : PlanEvent, profile ) -> str:
         name   = _names( profile ).get( event.selections.get( PROPERTY_ROLE ) )
         notice = ( ' (mortgage paid off)'
-                   if _mortgages( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
+                   if _secured_loans( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
         return f'Sell {name} in {event.date.year}{notice}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
@@ -247,12 +257,38 @@ class SellPropertyEvent( EventType ):
         into.property_sales[ property_handle ] = event.date
         into.scheduled_events.append( ScheduledRealization(
             event_date = event.date, holding = property_handle ) )
-        for loan_handle in _mortgages( profile, property_handle ):
+        for loan_handle in _secured_loans( profile, property_handle ):
             into.scheduled_events.append( ScheduledLoanPayoff(
                 event_date = event.date, loan = loan_handle ) )
         # A sale needs no income cascade: rental rent is clipped to the sale date at materialize
         # (`_clipped_to_sale`, from this event's `property_sales`), as are the property's operating
         # expenses. Only the mortgage payoff above is contributed here.
+
+
+class SellPossessionEvent( EventType ):
+    kind        = EventKind.SELL_POSSESSION
+    group       = _PROPERTY_GROUP
+    has_amount  = False   # a full sale at the possession's projected value, not a user figure
+    description = 'Sell a possession at its projected value; any loan secured by it is paid off.'
+
+    def references( self, profile ) -> list:
+        return [ ReferenceSpec( POSSESSION_ROLE, 'Possession', _possessions ) ]
+
+    def summary( self, event : PlanEvent, profile ) -> str:
+        name   = _names( profile ).get( event.selections.get( POSSESSION_ROLE ) )
+        notice = ( ' (loan paid off)'
+                   if _secured_loans( profile, event.selections.get( POSSESSION_ROLE ) ) else '' )
+        return f'Sell {name} in {event.date.year}{notice}'
+
+    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        # No amount: realize the whole possession at its projected value -- tax follows its asset class
+        # (a vehicle is TAX_FREE, a collectible is taxed as one) -- then pay off any loan secured by it.
+        possession_handle = event.selections[ POSSESSION_ROLE ]
+        into.scheduled_events.append( ScheduledRealization(
+            event_date = event.date, holding = possession_handle ) )
+        for loan_handle in _secured_loans( profile, possession_handle ):
+            into.scheduled_events.append( ScheduledLoanPayoff(
+                event_date = event.date, loan = loan_handle ) )
 
 
 class LoanPayoffEvent( EventType ):
@@ -418,7 +454,7 @@ class DeathEvent( EventType ):
 # --- Registry -------------------------------------------------------------
 
 _EVENT_TYPES = (
-    TransferEvent(), SellPropertyEvent(), LoanPayoffEvent(),
+    TransferEvent(), SellPropertyEvent(), SellPossessionEvent(), LoanPayoffEvent(),
     CardPayoffEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(), GeneralPaymentEvent(),
     CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
 
