@@ -293,6 +293,104 @@ class RecurringRealization:
     destination : Optional[ Handle ] = None
 
 
+def _occurrence_dates( *, window : DateWindow, interval : Duration, lo : date, hi : date ) -> list[ date ]:
+    """The occurrence dates in `[lo, hi]` (inclusive) for a recurrence anchored at `window.start` and
+    repeating every `interval`, kept within `window`. Shared by the recurring holding purchase (which
+    expands per interval) and the recurring loan origination (which expands over the whole horizon)."""
+    dates      = list()
+    occurrence = window.start
+    while occurrence <= hi:
+        if occurrence >= lo and window.covers( occurrence ):
+            dates.append( occurrence )
+        occurrence = interval.add_to( occurrence )
+        continue
+    return dates
+
+
+@dataclass( frozen = True )
+class RecurringHoldingPurchase:
+    """A recurring, inflation-indexed acquisition of a holding over a window at a cadence -- the
+    asset-side analog of a recurring loan origination. At each occurrence the engine acquires
+    `price` (today's dollars, inflated to that year's nominal from the forecast start) into the
+    holding, funded from cash. When `trade_in` is set it first realizes the WHOLE existing holding
+    to cash -- the depreciating-replacement pattern (a car cycled every N years, its depreciated
+    value traded in); tax follows the holding's own class, so a personal DEPRECIATING asset trades
+    in TAX_FREE with no asset-class special-casing here. Without `trade_in` it is a plain recurring
+    investment, which serves an appreciating holding just as well.
+
+    Unlike `RecurringRealization` (a continuous flow annualized across the year), a replacement is a
+    discrete lump on a specific day: `occurrences_in` places each on its exact date so the
+    whole-holding trade-in reads the right depreciated value and the run stays granularity-invariant.
+    Occurrences anchor at `window.start` (the first purchase, required) and repeat every `interval`,
+    bounded by `window.end`."""
+
+    holding  : Handle
+    price    : Decimal
+    interval : Duration
+    window   : DateWindow
+    trade_in : bool = False
+
+    def __post_init__( self ) -> None:
+        if self.window.start is None:
+            raise ValueError(
+                'A recurring holding purchase needs a window start to anchor its occurrences.' )
+        if self.interval.count < 1:
+            raise ValueError( 'A recurring holding purchase needs a positive interval to advance.' )
+        return
+
+    def occurrences_in( self, span : DateSpan ) -> list[ date ]:
+        """The occurrence dates falling in `span` -- the first at `window.start`, each `interval`
+        later, bounded by the window. The engine owns the horizon, so it (not materialization)
+        expands the compact intent into the concrete dates each interval sees."""
+        return _occurrence_dates( window = self.window, interval = self.interval,
+                                  lo = span.start_date, hi = span.end_date )
+
+
+@dataclass( frozen = True )
+class RecurringLoanOrigination:
+    """A recurring loan origination over a window at a cadence -- the financing analog of a recurring
+    holding purchase (a car refinanced at each replacement). At each occurrence the engine originates a
+    fresh loan for `principal` (today's dollars, inflated to that year's nominal from the forecast start),
+    scoped to its own per-cycle liability and interest accounts (`handle`/`interest_handle`, the cycle
+    appended), and -- intrinsically -- pays off the prior cycle's loan at that date (the outgoing car's
+    loan, cleared at trade-in). The loan terms (rate, term, interest class, extra principal) are the same
+    each cycle, as for a t0 loan.
+
+    The engine owns the horizon and the inflation, expanding this once at setup into the per-cycle
+    `LoanParameters` and rollover payoffs so the existing origination/amortization machinery drives them
+    unchanged; materialization declares only the recurring intent. Occurrences anchor at `window.start`
+    (the first origination, required) and repeat every `interval`, bounded by `window.end`.
+
+    The rollover settles the prior loan in the same span its replacement originates; that span's interest
+    on the outgoing loan is charged across the whole span rather than only up to the payoff date -- a
+    small, granularity-sensitive cost, immaterial for a nearly-amortized car loan."""
+
+    name            : str
+    principal       : Decimal
+    interest_rate   : Rate
+    term            : Duration
+    interval        : Duration
+    window          : DateWindow
+    handle          : Handle
+    interest_handle : Handle
+    interest_class         : ExpenseTaxClass = ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST
+    annual_extra_principal : Decimal         = Decimal( '0' )
+
+    def __post_init__( self ) -> None:
+        if self.window.start is None:
+            raise ValueError(
+                'A recurring loan origination needs a window start to anchor its occurrences.' )
+        if self.interval.count < 1:
+            raise ValueError( 'A recurring loan origination needs a positive interval to advance.' )
+        return
+
+    def occurrences_through( self, horizon : date ) -> list[ date ]:
+        """The origination dates from `window.start` through `horizon` -- each `interval` apart, within
+        the window. Expanded once at engine setup, since the loans need their accounts up front."""
+        return _occurrence_dates( window = self.window, interval = self.interval,
+                                  lo = self.window.start, hi = horizon )
+
+
 class ScheduledEvent:
     """Base for a user-scheduled money-movement event: it references the holdings it touches by
     their planner-minted `Handle`, and the date it occurs, and resolves to a `PeriodEvent`
@@ -537,6 +635,8 @@ class ForecastParameters:
     loans             : list[ LoanParameters ]               = field( default_factory = list )
     contributions     : list[ RetirementContribution ]       = field( default_factory = list )
     recurring_realizations : list[ RecurringRealization ]    = field( default_factory = list )
+    recurring_holding_purchases : list[ RecurringHoldingPurchase ] = field( default_factory = list )
+    recurring_loan_originations : list[ RecurringLoanOrigination ] = field( default_factory = list )
     events            : list[ ScheduledEvent ]               = field( default_factory = list )
     cash_account      : CashAccountParameters                = field(
         default_factory = CashAccountParameters )

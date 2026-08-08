@@ -77,15 +77,15 @@ class CashVehicleForecastTest( TestCase ):
         return _run( _vehicle_plans( PaymentMethod.CASH ) if with_vehicle else Plans() )
 
     def test_cash_vehicle_is_an_owned_holding_that_depreciates( self ):
-        # Depreciation applies at each year's start on the opening value, so the car sits at its full
-        # price the year it is bought (2027) and erodes from the next year on.
+        # Depreciation applies at each year's start on the opening value, so the car sits at its (inflation-
+        # indexed) purchase price the year it is bought (2027) and erodes from the next year on.
         reader  = self._reader( with_vehicle = True )
         holding = reader.chart.account( _HOLDING )
         self.assertEqual( holding.asset_class, AssetClass.DEPRECIATING )
         reader.assert_balanced()
         bought = reader.ledger.market_value( holding, through = date( 2027, 12, 31 ) )
         later  = reader.ledger.market_value( holding, through = date( 2031, 12, 31 ) )
-        self.assertEqual( bought, Decimal( '30000' ) )     # bought this year; not yet depreciated
+        self.assertEqual( bought, Decimal( '30750' ) )     # 30,000 x 1.025 (a year's inflation); not yet down
         self.assertLess( later, Decimal( '25000' ) )       # several years of ~18%/yr decline
         self.assertGreater( later, Decimal( '0' ) )
 
@@ -95,7 +95,18 @@ class CashVehicleForecastTest( TestCase ):
         before  = reader.ledger.market_value( holding, through = date( 2031, 12, 31 ) )   # 4-yr-old car
         after   = reader.ledger.market_value( holding, through = date( 2032, 12, 31 ) )   # replaced in 2032
         self.assertLess( before, Decimal( '20000' ) )      # well depreciated before the swap
-        self.assertEqual( after, Decimal( '30000' ) )      # the new car's value, fresh again
+        self.assertGreater( after, before )                # fresh again after the trade-in...
+        self.assertGreater( after, Decimal( '30750' ) )    # ...and dearer than the 2027 car (more inflation)
+
+    def test_replacements_track_inflation_over_the_horizon( self ):
+        # The point of routing replacements through the engine: a later car costs more. The 2027 buy is one
+        # year of inflation above sticker; the 2032 replacement, several more -- no flat price over the run.
+        reader     = self._reader( with_vehicle = True )
+        holding    = reader.chart.account( _HOLDING )
+        fresh_2027 = reader.ledger.market_value( holding, through = date( 2027, 12, 31 ) )   # just bought
+        fresh_2032 = reader.ledger.market_value( holding, through = date( 2032, 12, 31 ) )   # just replaced
+        self.assertEqual( fresh_2027, Decimal( '30750' ) )                 # 30,000 x 1.025
+        self.assertGreater( fresh_2032, fresh_2027 )                       # 30,000 x 1.025^6, dearer
 
     def test_buying_for_cash_is_a_swap_not_a_sticker_expense( self ):
         # In the purchase year, buying the car just moves cash into an asset -- net worth is unchanged
@@ -131,7 +142,7 @@ class FinancedVehicleForecastTest( TestCase ):
         holding = reader.chart.account( _HOLDING )
         self.assertEqual( holding.asset_class, AssetClass.DEPRECIATING )
         self.assertEqual( reader.ledger.market_value( holding, through = date( 2027, 12, 31 ) ),
-                          Decimal( '30000' ) )                               # bought at full price
+                          Decimal( '30750' ) )                               # bought at the inflated price
         self.assertLess( reader.ledger.market_value( holding, through = date( 2031, 12, 31 ) ),
                          Decimal( '25000' ) )                                # then depreciates
 
@@ -144,3 +155,25 @@ class FinancedVehicleForecastTest( TestCase ):
         self.assertGreater(
             reader.ledger.natural_balance( reader.chart.account( 'vehicle-loan:vehicle-1:1' ),
                                            through = date( 2033, 12, 31 ) ), Decimal( '0' ) )
+
+    def test_each_cycles_loan_principal_inflates_with_the_price( self ):
+        # The financed principal tracks the inflated price, so a later cycle's loan is larger -- the debt
+        # half moves with the asset half instead of staying flat. Read each loan's balance just after its
+        # origination (before amortization), which is its principal.
+        reader = self._reader()
+        first  = reader.ledger.natural_balance( reader.chart.account( 'vehicle-loan:vehicle-1:0' ),
+                                                through = date( 2027, 1, 1 ) )
+        second = reader.ledger.natural_balance( reader.chart.account( 'vehicle-loan:vehicle-1:1' ),
+                                                through = date( 2032, 1, 1 ) )
+        self.assertEqual( first, Decimal( '25625' ) )      # (30,000 - 5,000) x 1.025
+        self.assertGreater( second, first )                # x 1.025^6, a larger principal
+
+    def test_a_financed_purchase_costs_cash_only_the_down_payment( self ):
+        # The borrow offsets the purchase in the same span, so the 2027 buy costs cash only its down
+        # payment -- (30,000 - 25,000) inflated -- not the full 30,750 price; the asset+debt pairing nets.
+        through     = date( 2027, 1, 1 )
+        with_car    = self._reader()
+        without_car = _run( Plans() )
+        spent = ( without_car.ledger.market_value( without_car.chart.account( 'cash' ), through = through )
+                  - with_car.ledger.market_value( with_car.chart.account( 'cash' ), through = through ) )
+        self.assertEqual( spent, Decimal( '5125' ) )       # down = (30,000 - 25,000) x 1.025, not 30,750

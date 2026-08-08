@@ -122,6 +122,14 @@ class VehicleSwitchTokenTests( unittest.TestCase ):
         self.assertIn( f'{attr}="{form.payment_field_methods}"', html )
         self.assertIn( f'{attr}="{form.lease_only_method}"', html )
 
+    def test_the_down_field_is_labelled_conditionally_by_method( self ):
+        # One down field, two switch-cased labels -- "Down payment" for a loan, "Due at signing" for a
+        # lease -- their case values from the form, so the method names stay out of the template.
+        html = self._rendered()
+        attr = f'data-{AppConst.SWITCH_CASE_DATA_ATTR}'
+        self.assertIn( f'{attr}="{PaymentMethod.LOAN.name}">Down payment', html )
+        self.assertIn( f'{attr}="{PaymentMethod.LEASE.name}">Due at signing', html )
+
 
 if __name__ == '__main__':
     unittest.main()
