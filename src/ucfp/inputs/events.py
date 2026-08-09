@@ -495,18 +495,19 @@ def event_contributions( profile, plans, subjects : dict ) -> EventContributions
 
 
 def vehicle_transition_contributions( profile, plans, into : EventContributions ):
-    """The derived transitions: a plan vehicle's `replaces_possession` sells that current possession (and
+    """The derived transitions: a plan vehicle's `replaces_vehicle` sells that current vehicle (and
     pays off its loan, and ends its running costs) on the vehicle's purchase date -- the automated twin of
     a hand-added sell-possession event, from the stored link rather than a written event. A link to a
-    possession the Profile no longer has is skipped, so a Profile edit degrades gracefully."""
+    vehicle the Profile no longer has is skipped, so a Profile edit degrades gracefully. (A current
+    vehicle is a `DEPRECIATING` holding, so the same possession-sale helper realizes it.)"""
     plan = plans.vehicle_plan
     if plan is None:
         return
-    possessions = { asset.handle for asset in profile.assets }
+    asset_handles = { asset.handle for asset in profile.assets }
     for vehicle in plan.vehicles:
-        target = vehicle.replaces_possession
-        if ( target is None ) or ( vehicle.purchase_date is None ) or ( target not in possessions ):
-            continue                                     # no link, incomplete, or a dropped possession
+        target = vehicle.replaces_vehicle
+        if ( target is None ) or ( vehicle.purchase_date is None ) or ( target not in asset_handles ):
+            continue                                     # no link, incomplete, or a dropped vehicle
         _contribute_possession_sale( profile, target, vehicle.purchase_date, into )
 
 

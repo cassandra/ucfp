@@ -84,7 +84,7 @@ def materialize(
         plans, _primary_birthdate( profile ), frame )
     assets_by_handle = { asset.handle : asset for asset in profile.assets }
     events = event_contributions( profile, plans, subjects_by_handle )
-    vehicle_transition_contributions( profile, plans, events )   # derive each replaces_possession sale
+    vehicle_transition_contributions( profile, plans, events )   # derive each replaces_vehicle sale
     expense_streams, expense_items = _property_expenses(
         profile, plans, assets_by_handle, events.property_sales )
     flow_streams, flow_items = _income_flows(

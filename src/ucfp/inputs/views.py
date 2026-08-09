@@ -46,6 +46,7 @@ from .state import (
     completed_assumptions, completed_plans, completed_profile, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_expenses import VehicleExpensesForm
+from .vehicle_profile import VEHICLE_PANE
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .external_factors import ExternalFactorsForm
@@ -1369,6 +1370,20 @@ class SecondHomeDeleteView( _PropertyDeleteView ):
     """`/inputs/interview/real-estate/second-homes/<handle>/delete/`."""
 
     _PANE = SECOND_HOME_PANE
+
+
+class VehicleHoldingFormView( _PropertyFormView ):
+    """`/inputs/interview/vehicles/add/` and `.../<handle>/`. An owned vehicle rides the same
+    handle-minted, pane-driven holding editor as a mortgaged property (its pane names the auto loan
+    where a property's names the mortgage)."""
+
+    _PANE = VEHICLE_PANE
+
+
+class VehicleHoldingDeleteView( _PropertyDeleteView ):
+    """`/inputs/interview/vehicles/<handle>/delete/` -- removes the holding and its secured auto loan."""
+
+    _PANE = VEHICLE_PANE
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

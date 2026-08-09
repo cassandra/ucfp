@@ -143,7 +143,7 @@ class SellPossessionTests( unittest.TestCase ):
 
 
 class VehicleTransitionTests( unittest.TestCase ):
-    """A plan vehicle's `replaces_possession` derives a sale of that current possession on the vehicle's
+    """A plan vehicle's `replaces_vehicle` derives a sale of that current possession on the vehicle's
     purchase date -- the automated transition, from the stored link (no written event). A link to a
     missing possession is skipped, so a Profile edit degrades gracefully."""
 
@@ -157,7 +157,7 @@ class VehicleTransitionTests( unittest.TestCase ):
 
     @staticmethod
     def _plans( replaces = None, purchase = date( 2030, 1, 1 ) ):
-        car = Vehicle( handle = 'vehicle-1', purchase_date = purchase, replaces_possession = replaces )
+        car = Vehicle( handle = 'vehicle-1', purchase_date = purchase, replaces_vehicle = replaces )
         return Plans( vehicle_plan = VehiclePlan( vehicles = [ car ] ) )
 
     def _derive( self, profile, plans ):

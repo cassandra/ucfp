@@ -33,7 +33,7 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
     {% endcomment %}
     {% if vehicle_form.replaceable_vehicles %}
     <div class="form-row">
-      <div class="col-sm-6">{{ vehicle_form.replaces_possession.as_field_group }}</div>
+      <div class="col-sm-6">{{ vehicle_form.replaces_vehicle.as_field_group }}</div>
     </div>
     {% endif %}
 

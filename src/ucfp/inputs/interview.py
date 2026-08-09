@@ -44,6 +44,7 @@ from .cash_plan import CashPlanSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
+from .vehicle_profile import VEHICLE_PANES
 from .retirement import RetirementForm
 from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
@@ -362,9 +363,36 @@ class RealEstateForm:
         return profile, plans
 
 
+class VehiclesForm:
+    """§ -- the Vehicles pane. A no-op section form mirroring `RealEstateForm`: each vehicle is edited
+    through its own async view, so Next just advances. It exposes the vehicle lists for the pane. An
+    owned vehicle is a `DEPRECIATING` holding plus an optional auto loan (see `vehicle_profile`); a
+    leased vehicle is not modeled here yet -- it arrives with the vehicle plan's dispositions."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def vehicle_panes( self ) -> list:
+        """Each vehicle pane's render context -- its heading, its holdings, and the template config (ids,
+        URL names, wording) from the shared `PropertyPane`, reused for vehicles. The section loops over
+        these, so a new vehicle kind is one pane, not another hand-wired block."""
+        return [ { 'heading': pane.heading,
+                   'properties': properties_context( self._profile, pane.asset_class ),
+                   **pane.template_context() }
+                 for pane in VEHICLE_PANES ]
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
 class PossessionsSectionForm:
     """§ -- the Possessions pane: the household's tangible non-real-estate holdings (precious metals,
-    collectibles, vehicles). A no-op section form: the list is edited through its own async view
+    collectibles). A no-op section form: the list is edited through its own async view
     (`PossessionsView`), so Next just advances. Exposes the possessions sub-form for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -773,15 +801,17 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    # The asset sections are grouped -- Accounts, then Real Estate, then Possessions -- before Income.
+    # The big-asset sections come first -- Accounts, then Real Estate, then Vehicles -- before Income.
     # Real Estate precedes Income for a hard reason: declaring a rental creates its rent line on the
     # Income step, so the properties must exist before the user works through Income or a rental's rent
-    # goes unnoticed. Possessions (non-real-estate tangibles: precious metals, collectibles, vehicles)
-    # carry no income, so they sit here beside Real Estate purely to keep the assets together.
+    # goes unnoticed. Vehicles sit beside Real Estate (an owned vehicle is a holding + an optional auto
+    # loan, mirroring a property + mortgage); they carry no income, so they need not precede Income, but
+    # they stay grouped with the other holdings. Possessions (the minor tangibles: precious metals,
+    # collectibles) are demoted below Debts.
     Section( 'real-estate' , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
-    Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
-             outer_template = 'inputs/interview/sections/possessions_section.html' ),
+    Section( 'vehicles'    , 'Vehicles', ( Aggregate.PROFILE, Aggregate.PLANS ), VehiclesForm,
+             outer_template = 'inputs/interview/sections/vehicles.html' ),
     Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
@@ -789,6 +819,11 @@ SECTIONS = [
     # which opens the Plans flow.
     Section( 'debt'        , 'Debts', form = DebtsSectionForm,
              outer_template = 'inputs/interview/sections/debts.html' ),
+    # The minor tangible holdings (precious metals, collectibles): assets that carry no income and no
+    # dedicated section, kept here after Debts so the prominent holdings lead. Edited through their own
+    # async view, so Next just advances.
+    Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
+             outer_template = 'inputs/interview/sections/possessions_section.html' ),
     # The Plans flow opens with spending, then the debt repayment plan (another recurring outflow),
     # then retirement income timing, then the cash orchestration, then one-off events. Living Expenses
     # opens the flow; Home Expenses shows only when the household has a dwelling with operating costs

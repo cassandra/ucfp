@@ -284,20 +284,20 @@ def _minted_possession_handle( taken : set ) -> str:
 
 class PossessionsForm( forms.Form ):
     """Other Possessions -- a background-saved list of tangible holdings the engine treats by class:
-    precious metals, collectibles, and vehicles (whatever the household treats as a vehicle counts as
-    one). Each row is a named item with a value and a type; a trailing blank row adds another, and an
-    existing row's Remove box drops it. Non-blocking: a row materializes only once its name, value, and
-    type are all set, so a half-filled row is simply ignored. `apply` replaces these holdings, leaving
-    other assets intact. Each row carries the item's stable `handle` in a hidden field -- Plans
-    reference possessions by it, so identity must survive edits rather than being reindexed.
+    precious metals and collectibles. (Vehicles were once a type here; they are now their own Profile
+    section -- see `vehicle_profile`.) Each row is a named item with a value and a type; a trailing
+    blank row adds another, and an existing row's Remove box drops it. Non-blocking: a row materializes
+    only once its name, value, and type are all set, so a half-filled row is simply ignored. `apply`
+    replaces these holdings, leaving other assets intact. Each row carries the item's stable `handle` in
+    a hidden field -- Plans reference possessions by it, so identity must survive edits rather than
+    being reindexed.
     """
 
-    _CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES, AssetClass.DEPRECIATING )
+    _CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES )
     _TYPE_CHOICES = (
         ( '', CHOOSE_PLACEHOLDER ),
         ( AssetClass.PRECIOUS_METALS.name, 'Precious metals' ),
         ( AssetClass.COLLECTIBLES.name, 'Collectibles' ),
-        ( AssetClass.DEPRECIATING.name, 'Vehicle' ),
     )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
