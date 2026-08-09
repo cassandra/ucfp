@@ -24,7 +24,7 @@ from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
 from ucfp.planning.materialization import (
-    _health_coverage, _leased_current_expenses, _property_expenses, _vehicle_expenses,
+    _assets, _health_coverage, _leased_current_expenses, _property_expenses, _vehicle_expenses,
     _vehicle_holding_purchases, _vehicle_holdings, _vehicle_loan_originations, _vehicle_running_costs )
 
 _OWNED    = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
@@ -238,6 +238,18 @@ class LeasedVehicleTests( unittest.TestCase ):
         self.assertEqual( [ item.name for item in items ], [ 'Car payments' ] )
         self.assertEqual( items[ 0 ].amounts.segments[ 0 ].amount, Decimal( '400' ) )
 
+    def test_the_monthly_runs_continuously_across_back_to_back_terms( self ):
+        # The monthly is one continuous stream to end_date (leases signed back-to-back), not restarted each
+        # term; only the lease-end lump recurs per term. A recurrence longer than the real term would over-
+        # charge the monthly across the gap -- the UI has one 'replace every', taken as the lease term.
+        lease = _vehicle( 'vehicle-1', date( 2026, 1, 1 ), end_date = date( 2038, 1, 1 ),
+                          recurrence_years = 3, payment_method = PaymentMethod.LEASE,
+                          monthly_payment = Decimal( '400' ), lease_end_payment = Decimal( '500' ) )
+        monthly = next( i for i in _vehicle_expenses( self._plans( lease ) ) if i.name == 'Car payments' )
+        self.assertEqual( ( monthly.window.start, monthly.window.end ),
+                          ( date( 2026, 1, 1 ), date( 2038, 1, 1 ) ) )       # one window across all terms
+        self.assertEqual( monthly.cadence, Recurrence( Duration( 1, TimeUnit.MONTH ) ) )
+
 
 class MixedFleetTests( unittest.TestCase ):
     """A plan mixing cash, loan, and lease vehicles keeps each car's accounts distinct (handle-scoped) and
@@ -263,6 +275,23 @@ class MixedFleetTests( unittest.TestCase ):
                           [ 'vehicle-loan:vehicle-2' ] )
         # Only the lease emits purchase-cost expense items.
         self.assertTrue( _vehicle_expenses( plans ) )
+
+    def test_a_net_new_and_current_vehicle_sharing_a_handle_do_not_collide( self ):
+        # The net-new (plan) and current (profile) `vehicle-N` mint spaces overlap as strings, but reach
+        # the engine under disjoint prefixes -- a current owned vehicle keeps its bare handle, a net-new
+        # becomes `vehicle:<handle>` -- so a shared `vehicle-1` yields two distinct holdings, never one
+        # account twice.
+        profile = Profile( assets = [ AssetProfile(
+            handle = 'vehicle-1', name = 'Current', asset_class = AssetClass.DEPRECIATING,
+            opening_value = Decimal( '20000' ) ) ] )
+        net_new = _vehicle( 'vehicle-1', date( 2027, 1, 1 ),
+                            purchase_price = Decimal( '30000' ), recurrence_years = 5 )
+        plans   = Plans( vehicle_plan = VehiclePlan( vehicles = [ net_new ] ) )
+        current = { asset.handle for asset in _assets( profile ) }
+        planned = { holding.handle for holding in _vehicle_holdings( plans ) }
+        self.assertEqual( planned, { 'vehicle:vehicle-1' } )
+        self.assertIn( 'vehicle-1', current )
+        self.assertEqual( current & planned, set() )              # disjoint despite the shared vehicle-1 stem
 
 
 class DispositionMaterializationTests( unittest.TestCase ):
@@ -386,6 +415,12 @@ class LeasedDispositionMaterializationTests( unittest.TestCase ):
         self.assertEqual( [ item.amounts.segments[ 0 ].amount for item in charged ], [ Decimal( '400' ) ] )
         self.assertEqual( _vehicle_expenses( plans ), [] )                          # the successor waits
 
+    def test_an_elapsed_lease_charges_nothing( self ):
+        # A lease whose end is already past (a stale plan, or the start advanced beyond it) is no longer
+        # operative -- it emits no monthly (the running-cost window gates on the same operative check).
+        plans = self._plans( LeaseDispositionKind.RETURN, lease_end = date( 2025, 1, 1 ) )   # before _START
+        self.assertEqual( _leased_current_expenses( plans, self._START ), [] )
+
 
 class VehicleRunningCostTests( unittest.TestCase ):
     """A running cost is a per-car amount emitted once per *operated* vehicle window -- the current
@@ -489,6 +524,15 @@ class VehicleRunningCostTests( unittest.TestCase ):
             sale_dates = { 'possession-1' : date( 2030, 1, 1 ) } )
         self.assertEqual( streams[ 0 ].window,
                           DateWindow( start = date( 2026, 1, 1 ), end = date( 2029, 12, 31 ) ) )
+
+    def test_a_possession_sold_on_the_start_date_accrues_nothing( self ):
+        # A car sold exactly on the forecast start is operated for zero days: its window ends the day
+        # before it begins (inverted), which covers no date, so the engine draws nothing from it.
+        streams, _items = self._run(
+            self._plans( [], self._cost( Realization.SMOOTH, Duration( 1, TimeUnit.WEEK ) ) ),
+            profile = Profile( assets = [ self._vehicle_possession( 'possession-1' ) ] ),
+            sale_dates = { 'possession-1' : date( 2026, 1, 1 ) } )        # sold on the run's start
+        self.assertFalse( streams[ 0 ].window.covers( date( 2026, 1, 1 ) ) )   # covers nothing -> zero cost
 
     def test_blank_amount_or_no_vehicle_yields_nothing( self ):
         weekly  = Duration( 1, TimeUnit.WEEK )

@@ -154,10 +154,25 @@ class DispositionListTests( unittest.TestCase ):
             LeasedVehicle( handle = 'vehicle-2', name = 'Configured' ) ] )
         configured = LeasedVehicleDisposition(
             vehicle_handle = 'vehicle-2', monthly = Decimal( '400' ), lease_end = date( 2030, 1, 1 ),
-            kind = LeaseDispositionKind.RETURN )                                        # complete current lease
+            kind = LeaseDispositionKind.RETURN )                              # complete current lease
         plans = Plans( vehicle_plan = VehiclePlan( leased_dispositions = [ configured ] ) )
         flags = { r[ 'name' ] : r[ 'incomplete' ] for r in leased_dispositions_context( profile, plans ) }
         self.assertEqual( flags, { 'Unset' : True, 'Configured' : False } )
+
+    def test_the_incomplete_flag_survives_the_combined_list( self ):
+        # all_dispositions_context merges owned then leased -- the one list the view renders -- so each
+        # row's incomplete flag must carry through the merge (an incomplete owned Replace and an
+        # unconfigured leased vehicle both flag).
+        profile = Profile(
+            assets = [ AssetProfile( handle = 'vehicle-1', name = 'Sedan',
+                                     asset_class = AssetClass.DEPRECIATING,
+                                     opening_value = Decimal( '20000' ) ) ],
+            leased_vehicles = [ LeasedVehicle( handle = 'vehicle-2', name = 'Lease' ) ] )
+        plans = Plans( vehicle_plan = VehiclePlan( dispositions = [
+            VehicleDisposition( vehicle_handle = 'vehicle-1', kind = VehicleDispositionKind.REPLACE,
+                                sale_date = date( 2032, 1, 1 ) ) ] ) )          # no replacement terms
+        flags = { r[ 'name' ] : r[ 'incomplete' ] for r in all_dispositions_context( profile, plans ) }
+        self.assertEqual( flags, { 'Sedan' : True, 'Lease' : True } )
 
 
 def _leased_profile( *vehicles ) -> Profile:

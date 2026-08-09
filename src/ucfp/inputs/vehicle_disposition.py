@@ -18,7 +18,7 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
-    LeasedVehicleDisposition, Vehicle, VehicleDisposition, VehiclePlan )
+    LeasedVehicleDisposition, Plans, Vehicle, VehicleDisposition, VehiclePlan )
 from ucfp.inputs.vehicle import VehiclePurchaseForm
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
 from ucfp.inputs.widgets import IsoDateInput
@@ -64,6 +64,19 @@ def _summary( disposition ) -> str:
     if disposition.sale_date is None:
         return disposition.kind.label
     return f'{disposition.kind.label} in {disposition.sale_date.year}'
+
+
+def _apply_disposition( plans, handle : str, list_field : str, disposition ) -> Plans:
+    """Upsert one keyed disposition into the vehicle plan's `list_field` (its owned `dispositions` or
+    `leased_dispositions`): replace any disposition for `handle` with `disposition`, or drop it when
+    `disposition` is None (the default is stored as absence), then collapse an emptied plan back to None.
+    The shared write behind both disposition forms' `apply` -- they differ only in which list and how the
+    disposition is built."""
+    plan   = vehicle_plan_of( plans ) or VehiclePlan()
+    others = [ d for d in getattr( plan, list_field ) if d.vehicle_handle != handle ]
+    kept   = others + ( [ disposition ] if disposition is not None else [] )
+    plan   = replace( plan, **{ list_field : kept } )
+    return replace( plans, vehicle_plan = plan if plan_has_content( plan ) else None )
 
 
 class VehicleDispositionForm( VehiclePurchaseForm ):
@@ -116,14 +129,9 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
         return VehicleDispositionKind.REPLACE.name
 
     def apply( self, profile, plans ):
-        cleaned     = self.cleaned_data
-        kind        = VehicleDispositionKind[ cleaned.get( 'kind' ) or VehicleDispositionKind.KEEP.name ]
-        plan        = vehicle_plan_of( plans ) or VehiclePlan()
-        others      = [ d for d in plan.dispositions if d.vehicle_handle != self._handle ]
-        disposition = self._disposition( kind, cleaned )
-        kept        = others + ( [ disposition ] if disposition is not None else [] )
-        plan        = replace( plan, dispositions = kept )
-        return profile, replace( plans, vehicle_plan = plan if plan_has_content( plan ) else None )
+        kind = VehicleDispositionKind[ self.cleaned_data.get( 'kind' ) or VehicleDispositionKind.KEEP.name ]
+        disposition = self._disposition( kind, self.cleaned_data )
+        return profile, _apply_disposition( plans, self._handle, 'dispositions', disposition )
 
     def _disposition( self, kind, cleaned ):
         # Retain is the default, so it is stored as the absence of a disposition (nothing to persist).
@@ -271,14 +279,9 @@ class LeasedVehicleDispositionForm( VehiclePurchaseForm ):
         return LeaseDispositionKind.BUY_LOAN.name
 
     def apply( self, profile, plans ):
-        cleaned     = self.cleaned_data
-        kind        = LeaseDispositionKind[ cleaned.get( 'kind' ) or LeaseDispositionKind.RETURN.name ]
-        plan        = vehicle_plan_of( plans ) or VehiclePlan()
-        others      = [ d for d in plan.leased_dispositions if d.vehicle_handle != self._handle ]
-        disposition = self._disposition( kind, cleaned )
-        kept        = others + ( [ disposition ] if disposition is not None else [] )
-        plan        = replace( plan, leased_dispositions = kept )
-        return profile, replace( plans, vehicle_plan = plan if plan_has_content( plan ) else None )
+        kind = LeaseDispositionKind[ self.cleaned_data.get( 'kind' ) or LeaseDispositionKind.RETURN.name ]
+        disposition = self._disposition( kind, self.cleaned_data )
+        return profile, _apply_disposition( plans, self._handle, 'leased_dispositions', disposition )
 
     def _disposition( self, kind, cleaned ):
         # A bare Return (the default, no terms entered) stores nothing; any chosen kind or entered lease

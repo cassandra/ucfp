@@ -847,15 +847,18 @@ class VehicleDeleteView( _VehicleListView ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class VehicleDispositionView( View ):
-    """`/inputs/interview/vehicle-expenses/current/<handle>/` -- the disposition editor for one current
-    vehicle (Retain/Sell/Replace). GET opens the editor for the handle (or, with `?collapse`, empties the
-    editor area); POST background-saves the disposition (non-blocking) and refreshes the disposition list.
-    Mirrors `VehicleFormView`, but edit-only: the rows are the current vehicles, so there is no add or
-    delete -- Retain is the reset."""
+class _VehicleDispositionView( View ):
+    """The disposition editor for one current vehicle, opened into the single shared list + form area.
+    GET opens the editor for the handle (or, with `?collapse`, empties the editor area); POST background-
+    saves the disposition (non-blocking) and refreshes the one current-vehicles list. Edit-only: the rows
+    are the current vehicles, so there is no add or delete. Subclasses supply the form class, its editor
+    template, and the template's context key for the form -- the owned (Retain/Sell/Replace) and leased
+    (Return/Renew/Buy) editors are otherwise identical."""
 
-    _LIST_TEMPLATE = 'inputs/interview/sections/vehicle_disposition_list.html'
-    _FORM_TEMPLATE = 'inputs/interview/sections/vehicle_disposition_form.html'
+    _LIST_TEMPLATE    = 'inputs/interview/sections/vehicle_disposition_list.html'
+    _FORM_TEMPLATE    = None    # subclass: its editor template
+    _form_class       = None    # subclass: its disposition form
+    _form_context_key = None    # subclass: the template's key for the form
 
     def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
@@ -863,14 +866,14 @@ class VehicleDispositionView( View ):
             return antinode.response(
                 main_content = self._form( request, None, None, profile ),
                 replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
-        form = VehicleDispositionForm( profile = profile, plans = plans, handle = handle )
+        form = self._form_class( profile = profile, plans = plans, handle = handle )
         return antinode.response(
             main_content = self._form( request, handle, form, profile ),
             replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
 
     def post( self, request, handle ):
         profile, plans = _current_profile_and_plans( request )
-        form = VehicleDispositionForm( request.POST, profile = profile, plans = plans, handle = handle )
+        form = self._form_class( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
                 replace_map = { 'vehicle-disposition-form': self._form( request, handle, form, profile ) } )
@@ -888,54 +891,27 @@ class VehicleDispositionView( View ):
     def _form( self, request, handle, form, profile ):
         return render_to_string(
             self._FORM_TEMPLATE,
-            { 'disposition_form': form, 'handle': handle, 'heading': vehicle_heading( profile, handle ) },
+            { self._form_context_key: form, 'handle': handle,
+              'heading': vehicle_heading( profile, handle ) },
             request = request )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class LeasedVehicleDispositionView( View ):
-    """`/inputs/interview/vehicle-expenses/leased/<handle>/` -- the end-of-term editor for one current
-    leased vehicle (Return/Renew/Buy) plus its current lease terms. The leased twin of
-    `VehicleDispositionView`, sharing its one list and form area: GET opens the editor into
-    `#vehicle-disposition-form` (or, with `?collapse`, empties it); POST background-saves and refreshes the
-    one current-vehicles list."""
+class VehicleDispositionView( _VehicleDispositionView ):
+    """`/inputs/interview/vehicle-expenses/current/<handle>/` -- the owned-vehicle disposition editor
+    (Retain/Sell/Replace)."""
 
-    _LIST_TEMPLATE = 'inputs/interview/sections/vehicle_disposition_list.html'
-    _FORM_TEMPLATE = 'inputs/interview/sections/leased_disposition_form.html'
+    _FORM_TEMPLATE    = 'inputs/interview/sections/vehicle_disposition_form.html'
+    _form_class       = VehicleDispositionForm
+    _form_context_key = 'disposition_form'
 
-    def get( self, request, handle = None ):
-        profile, plans = _current_profile_and_plans( request )
-        if request.GET.get( 'collapse' ):
-            return antinode.response(
-                main_content = self._form( request, None, None, profile ),
-                replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
-        form = LeasedVehicleDispositionForm( profile = profile, plans = plans, handle = handle )
-        return antinode.response(
-            main_content = self._form( request, handle, form, profile ),
-            replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
 
-    def post( self, request, handle ):
-        profile, plans = _current_profile_and_plans( request )
-        form = LeasedVehicleDispositionForm( request.POST, profile = profile, plans = plans, handle = handle )
-        if not form.is_valid():
-            return antinode.response(                          # surface a genuine field error
-                replace_map = { 'vehicle-disposition-form': self._form( request, handle, form, profile ) } )
-        _profile, plans = form.apply( profile, plans )
-        save_plans( current_plans_record( request ), plans )
-        return antinode.response(
-            replace_map = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
+class LeasedVehicleDispositionView( _VehicleDispositionView ):
+    """`/inputs/interview/vehicle-expenses/leased/<handle>/` -- the leased twin: the end-of-term editor
+    (Return/Renew/Buy) plus its current lease terms, sharing the one list and form area."""
 
-    def _list( self, request, profile, plans, active = None ):
-        return render_to_string(
-            self._LIST_TEMPLATE,
-            { 'dispositions': all_dispositions_context( profile, plans ), 'active': active },
-            request = request )
-
-    def _form( self, request, handle, form, profile ):
-        return render_to_string(
-            self._FORM_TEMPLATE,
-            { 'leased_form': form, 'handle': handle, 'heading': vehicle_heading( profile, handle ) },
-            request = request )
+    _FORM_TEMPLATE    = 'inputs/interview/sections/leased_disposition_form.html'
+    _form_class       = LeasedVehicleDispositionForm
+    _form_context_key = 'leased_form'
 
 
 class RecurringExpensesView( SelfSavingPaneView ):
