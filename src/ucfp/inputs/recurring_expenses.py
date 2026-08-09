@@ -3,7 +3,7 @@
 The step presents the `LIVING`-class catalog expenses, grouped by category, as a table over a shared
 age-span timeline, so a level can rise or fall with age. This module seeds those expenses from the
 catalog (preserving amounts already set) and drives the self-saving table. Vehicle running costs are a
-separate, per-car model in the Vehicle Expenses step.
+separate, per-car model in the Vehicle plan step.
 """
 from dataclasses import replace
 from decimal import Decimal

@@ -1,13 +1,12 @@
 {% comment %}
-The add/edit form for one vehicle (id=vehicles-form), rendered into the pane's form area beneath the
-vehicle list in the left column. It auto-saves in the background (js-autosave) and always edits a known
-handle (add mints one), so a new vehicle has a stable identity from the first keystroke. Two groups: the
-replacement plan
-(what the car is, when, how often, and its price) and payment (how it is paid). The payment-method radio
-drives a switch (inputs.js) that shows the fields the chosen method needs -- cash shows none, a loan its
-down/monthly, a lease its down/monthly/lease-end. Non-blocking: the vehicle appears in the list once its
-required fields (name, next purchase date, price, replacement interval) are set. "Done" closes the form;
-it is already saved. Empty when no form is open. Reads `vehicle_form` and `handle`.
+The add/edit form for one net-new future vehicle (id=vehicles-form), rendered into the pane's form area
+beneath the additional-vehicles list. It auto-saves in the background (js-autosave) and always edits a
+known handle (add mints one), so a new vehicle has a stable identity from the first keystroke. Two groups:
+the vehicle (what it is, when, how often, and its price) and payment (how it is paid). The payment-method
+radio drives a switch (inputs.js) that shows the fields the chosen method needs -- cash shows none, a loan
+its down/monthly, a lease its down/monthly/lease-end. Non-blocking: the vehicle appears in the list once
+its required fields (name, next purchase date, price, replacement interval) are set. "Done" closes the
+form; it is already saved. Empty when no form is open. Reads `vehicle_form` and `handle`.
 {% endcomment %}
 <div id="vehicles-form">
   {% if vehicle_form %}
@@ -17,7 +16,7 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
         action="{% url 'vehicle_edit' handle=handle %}">
     {% csrf_token %}
 
-    <p class="small text-muted mb-1"><strong>Replacement plan</strong></p>
+    <p class="small text-muted mb-1"><strong>Vehicle</strong></p>
     <div class="form-row">
       <div class="col-sm-6">{{ vehicle_form.name.as_field_group }}</div>
       <div class="col-sm-6">{{ vehicle_form.purchase_price.as_field_group }}</div>

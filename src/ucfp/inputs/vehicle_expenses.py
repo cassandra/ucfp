@@ -1,4 +1,4 @@
-"""The per-car vehicle running costs of the Vehicle Expenses step.
+"""The per-car vehicle running costs of the Vehicle plan step.
 
 The household's car running costs (fuel, insurance, maintenance, repair) are entered once *per car* and
 applied to each owned vehicle over its window at materialization. They are seeded from the curated
@@ -57,7 +57,7 @@ def merged_vehicle_costs( plans ) -> list:
 
 
 class VehicleExpensesForm( forms.Form ):
-    """The per-car running-costs table of the Vehicle Expenses step: one row per running cost, each a
+    """The per-car running-costs table of the Vehicle plan step: one row per running cost, each a
     per-car amount at its own cadence. Auto-saves each edit onto the vehicle plan's `running_costs`; the
     row set is fixed (the catalog's vehicle costs), so it never restructures. `apply` writes the running
     costs onto the plan, creating one if the household has not begun a vehicle plan yet. The amount is a

@@ -1,10 +1,12 @@
-"""§ Vehicle Expenses -- the household's cars as a per-vehicle list.
+"""The Vehicle plan step's net-new future vehicles -- the cars the household adds that are not tied to
+one it owns or leases today (those are the per-current-vehicle dispositions in `vehicle_disposition.py`).
 
-Each car is a `Vehicle` on the `VehiclePlan`, entered as a unit (name, next purchase date, price,
-replacement interval, an optional owned-until date, and optional financing) -- the vehicle mirror of a
-mortgaged property. This module owns minting, editing, and removing a vehicle; the shared per-car
-running costs are a sibling pane (`vehicle_expenses.py`). Non-blocking: a vehicle materializes only
-once its required fields are set, so a just-opened blank that is abandoned never appears.
+Each is a `Vehicle` on the `VehiclePlan`, entered as a unit (name, next purchase date, price, replacement
+interval, an optional owned-until date, and optional financing) -- the vehicle mirror of a mortgaged
+property, sharing its purchase fields with a disposition's replacement via `VehiclePurchaseForm`. This
+module owns minting, editing, and removing such a vehicle; the shared per-car running costs are a sibling
+pane (`vehicle_expenses.py`). Non-blocking: a vehicle materializes only once its required fields are set,
+so a just-opened blank that is abandoned never appears.
 """
 from dataclasses import replace
 from decimal import Decimal

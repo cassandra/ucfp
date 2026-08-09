@@ -733,12 +733,14 @@ class HomeExpensesSectionForm:
 
 
 class VehicleExpensesSectionForm:
-    """Vehicle Expenses -- the household's car costs: the per-vehicle list and the shared per-car
-    running-costs table. The vehicles are managed by `VehicleFormView` / `VehicleDeleteView` and the
-    running costs by `VehicleExpensesView`, each saving on its own. `apply` seeds the running costs from
-    the catalog on Next once a vehicle plan exists, so a household that added a vehicle and accepts the
-    default running costs still records them; with no plan (no car), Next just advances. `apply` ignores
-    form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
+    """The Vehicle plan -- Profile-driven like the Debt plan: per current owned vehicle a disposition
+    (retain/sell/replace), per current leased vehicle its end-of-term plan (return/renew/buy), any net-new
+    future vehicles, and the shared per-car running costs. The dispositions are managed by
+    `VehicleDispositionView` / `LeasedVehicleDispositionView`, the net-new list by `VehicleFormView` /
+    `VehicleDeleteView`, and the running costs by `VehicleExpensesView`, each saving on its own. `apply`
+    seeds the running costs from the catalog on Next once a vehicle plan exists, so a household that began
+    a plan and accepts the default running costs still records them; with no plan, Next just advances.
+    `apply` ignores form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
     `seeds_on_render`."""
 
     seeds_on_render = True
@@ -851,7 +853,7 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
              outer_template = 'inputs/interview/sections/home_expenses.html' ),
-    Section( 'vehicle-expenses', 'Vehicle Expenses', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
+    Section( 'vehicle-expenses', 'Vehicle plan', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
              outer_template = 'inputs/interview/sections/vehicle_expenses.html' ),
     # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal),
     # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.

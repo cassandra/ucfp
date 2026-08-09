@@ -1,4 +1,4 @@
-"""The per-current-vehicle disposition editor of the Vehicle Expenses step.
+"""The per-current-vehicle disposition editor of the Vehicle plan step.
 
 The vehicle plan is Profile-driven, mirroring the Debt plan: it solicits, for each current vehicle the
 household owns (the DEPRECIATING holdings the Vehicles section entered), what to do with it -- Retain it

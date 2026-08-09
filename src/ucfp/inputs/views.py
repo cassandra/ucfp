@@ -792,7 +792,7 @@ class SelfSavingPaneView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class _VehicleListView( View ):
-    """Shared, org-scoped base for the vehicle list of the Vehicle Expenses step: it renders the plan's
+    """Shared, org-scoped base for the vehicle list of the Vehicle plan step: it renders the plan's
     vehicles. The per-vehicle add/edit/delete swaps refresh this list; the per-car running costs are the
     sibling `VehicleExpensesView` pane."""
 
@@ -966,7 +966,7 @@ class PropertyExpensesView( SelfSavingPaneView ):
 
 class VehicleExpensesView( SelfSavingPaneView ):
     """`/inputs/interview/vehicle-expenses/costs/edit/` -- the per-car running-costs table of the
-    Vehicle Expenses step. Auto-saves each edit onto the vehicle plan's running costs; the row set is
+    Vehicle plan step. Auto-saves each edit onto the vehicle plan's running costs; the row set is
     fixed (the catalog's vehicle costs), so it saves silently and never restructures."""
 
     template     = 'inputs/interview/sections/_vehicle_expenses.html'
