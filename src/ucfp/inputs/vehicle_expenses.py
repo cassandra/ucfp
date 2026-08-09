@@ -1,4 +1,4 @@
-"""The per-car vehicle running costs of the Vehicle Expenses step.
+"""The per-car vehicle running costs of the Vehicle plan step.
 
 The household's car running costs (fuel, insurance, maintenance, repair) are entered once *per car* and
 applied to each owned vehicle over its window at materialization. They are seeded from the curated
@@ -25,12 +25,13 @@ def vehicle_plan_of( plans ):
 
 
 def plan_has_content( plan ) -> bool:
-    """Whether a vehicle plan carries anything worth persisting -- any vehicle, or a running cost with an
-    amount. An all-blank plan (no vehicles, every running-cost amount cleared) is empty, so both panes
-    collapse it back to None rather than leaving a spurious plan that reads as "started"."""
+    """Whether a vehicle plan carries anything worth persisting -- any owned- or leased-vehicle
+    disposition, any net-new vehicle, or a running cost with an amount. An all-blank plan (nothing set)
+    is empty, so every pane collapses it back to None rather than leaving a spurious plan that reads as
+    "started"."""
     if plan is None:
         return False
-    return ( bool( plan.vehicles )
+    return ( bool( plan.dispositions ) or bool( plan.leased_dispositions ) or bool( plan.vehicles )
              or any( cost.amount is not None for cost in plan.running_costs ) )
 
 
@@ -56,7 +57,7 @@ def merged_vehicle_costs( plans ) -> list:
 
 
 class VehicleExpensesForm( forms.Form ):
-    """The per-car running-costs table of the Vehicle Expenses step: one row per running cost, each a
+    """The per-car running-costs table of the Vehicle plan step: one row per running cost, each a
     per-car amount at its own cadence. Auto-saves each edit onto the vehicle plan's `running_costs`; the
     row set is fixed (the catalog's vehicle costs), so it never restructures. `apply` writes the running
     costs onto the plan, creating one if the household has not begun a vehicle plan yet. The amount is a
@@ -69,7 +70,7 @@ class VehicleExpensesForm( forms.Form ):
         for ci, cost in enumerate( self._costs ):
             amount = MoneyField( required = False, min_value = 0 )
             amount.initial = cost.amount
-            amount.widget.attrs[ 'aria-label' ] = f'{cost.name} — per car'
+            amount.widget.attrs[ 'aria-label' ] = f'{cost.name} — per vehicle'
             self.fields[ self._amount_key( ci ) ] = amount
             add_cadence_fields( self, self._cad_prefix( ci ), cost.interval, cost.cadence_domain )
 

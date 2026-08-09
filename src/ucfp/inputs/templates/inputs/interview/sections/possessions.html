@@ -1,7 +1,8 @@
 {% comment %}
 The Possessions list (id=possessions), auto-saved. Each row is a tangible non-real-estate holding: a
-name, a type (precious metals / collectibles / vehicle or boat -- classes the engine treats
-differently), and a value. Fill the blank row to add one; the Remove box drops one. Edits save in the
+name, a type (precious metals / collectibles / vehicle -- classes the engine treats differently), and
+a value. Each row's hidden handle keeps the item's identity stable across edits (Plans reference
+possessions by handle). Fill the blank row to add one; the Remove box drops one. Edits save in the
 background; only a row added/removed or a bad value re-renders here. The section heading names it.
 {% endcomment %}
 <div id="possessions">
@@ -14,7 +15,7 @@ background; only a row added/removed or a bad value re-renders here. The section
       <tbody>
         {% for row in possessions_form.rows %}
         <tr>
-          <td>{{ row.name }}</td>
+          <td>{{ row.handle }}{{ row.name }}</td>
           <td>{{ row.type }}</td>
           <td>{{ row.value }}{% if row.value.errors %}<span class="text-danger small d-block">{{ row.value.errors|join:" " }}</span>{% endif %}</td>
           <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>

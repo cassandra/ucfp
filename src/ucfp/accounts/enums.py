@@ -133,7 +133,7 @@ class AssetClass( LabeledEnum ):
     ROTH                    = ( 'Roth Retirement'           , 'Qualified withdrawals tax-free; no RMDs.' )
     PRECIOUS_METALS         = ( 'Precious Metals'           , 'Gold, silver; taxed as collectibles.' )
     COLLECTIBLES            = ( 'Collectibles'              , 'Art, jewelry and similar collectibles.' )
-    DEPRECIATING            = ( 'Depreciating Assets'       , 'Vehicles, boats; depreciate over time.' )
+    DEPRECIATING            = ( 'Depreciating Assets'       , 'Vehicles; depreciate over time.' )
 
     @property
     def accrues_unrealized_gains( self ) -> bool:

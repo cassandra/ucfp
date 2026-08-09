@@ -44,11 +44,13 @@ from .cash_plan import CashPlanSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
+from .vehicle_profile import current_vehicles_context
 from .retirement import RetirementForm
 from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
+from .vehicle_disposition import all_dispositions_context
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
 from .widgets import IsoDateInput, StateRateSelect, percent_str
 
@@ -362,9 +364,32 @@ class RealEstateForm:
         return profile, plans
 
 
+class VehiclesForm:
+    """§ -- the Vehicles pane. A no-op section form mirroring `RealEstateForm`: each vehicle is edited
+    through its own async view, so Next just advances. It exposes the household's current vehicles as one
+    list -- owned and leased together -- managed by `CurrentVehicleFormView` / `CurrentVehicleDeleteView`.
+    Owned and leased are stored differently (a holding + loan vs. a lease fact); the list unifies them."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def vehicles( self ) -> list:
+        """The household's current vehicles for the section's one list -- owned holdings and leased facts
+        together, each with its ownership."""
+        return current_vehicles_context( self._profile )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
 class PossessionsSectionForm:
     """§ -- the Possessions pane: the household's tangible non-real-estate holdings (precious metals,
-    collectibles, vehicles, boats). A no-op section form: the list is edited through its own async view
+    collectibles). A no-op section form: the list is edited through its own async view
     (`PossessionsView`), so Next just advances. Exposes the possessions sub-form for the pane."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -698,12 +723,14 @@ class HomeExpensesSectionForm:
 
 
 class VehicleExpensesSectionForm:
-    """Vehicle Expenses -- the household's car costs: the per-vehicle list and the shared per-car
-    running-costs table. The vehicles are managed by `VehicleFormView` / `VehicleDeleteView` and the
-    running costs by `VehicleExpensesView`, each saving on its own. `apply` seeds the running costs from
-    the catalog on Next once a vehicle plan exists, so a household that added a vehicle and accepts the
-    default running costs still records them; with no plan (no car), Next just advances. `apply` ignores
-    form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
+    """The Vehicle plan -- Profile-driven like the Debt plan: per current owned vehicle a disposition
+    (retain/sell/replace), per current leased vehicle its end-of-term plan (return/renew/buy), any net-new
+    future vehicles, and the shared per-car running costs. The dispositions are managed by
+    `VehicleDispositionView` / `LeasedVehicleDispositionView`, the net-new list by `VehicleFormView` /
+    `VehicleDeleteView`, and the running costs by `VehicleExpensesView`, each saving on its own. `apply`
+    seeds the running costs from the catalog on Next once a vehicle plan exists, so a household that began
+    a plan and accepts the default running costs still records them; with no plan, Next just advances.
+    `apply` ignores form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
     `seeds_on_render`."""
 
     seeds_on_render = True
@@ -716,9 +743,16 @@ class VehicleExpensesSectionForm:
         return True
 
     @property
+    def dispositions( self ):
+        """One row per current vehicle (from the Vehicles/Profile section) with its plan disposition --
+        owned and leased together, each Edit opening its editor into the shared form area. Managed by
+        `VehicleDispositionView` / `LeasedVehicleDispositionView`, mirroring the Debt plan's per-debt rows."""
+        return all_dispositions_context( self._profile, self._plans )
+
+    @property
     def vehicles( self ):
-        """The plan's vehicles for the section's list template -- the per-vehicle add/edit/delete panes
-        manage them through `VehicleFormView` / `VehicleDeleteView`."""
+        """The plan's net-new future vehicles for the section's list template -- the per-vehicle
+        add/edit/delete panes manage them through `VehicleFormView` / `VehicleDeleteView`."""
         return vehicles_context( self._plans )
 
     @property
@@ -773,15 +807,17 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    # The asset sections are grouped -- Accounts, then Real Estate, then Possessions -- before Income.
+    # The big-asset sections come first -- Accounts, then Real Estate, then Vehicles -- before Income.
     # Real Estate precedes Income for a hard reason: declaring a rental creates its rent line on the
     # Income step, so the properties must exist before the user works through Income or a rental's rent
-    # goes unnoticed. Possessions (non-real-estate tangibles: precious metals, collectibles, vehicles,
-    # boats) carry no income, so they sit here beside Real Estate purely to keep the assets together.
+    # goes unnoticed. Vehicles sit beside Real Estate (an owned vehicle is a holding + an optional auto
+    # loan, mirroring a property + mortgage); they carry no income, so they need not precede Income, but
+    # they stay grouped with the other holdings. Possessions (the minor tangibles: precious metals,
+    # collectibles) are demoted below Debts.
     Section( 'real-estate' , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
-    Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
-             outer_template = 'inputs/interview/sections/possessions_section.html' ),
+    Section( 'vehicles'    , 'Vehicles', ( Aggregate.PROFILE, Aggregate.PLANS ), VehiclesForm,
+             outer_template = 'inputs/interview/sections/vehicles.html' ),
     Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
@@ -789,6 +825,11 @@ SECTIONS = [
     # which opens the Plans flow.
     Section( 'debt'        , 'Debts', form = DebtsSectionForm,
              outer_template = 'inputs/interview/sections/debts.html' ),
+    # The minor tangible holdings (precious metals, collectibles): assets that carry no income and no
+    # dedicated section, kept here after Debts so the prominent holdings lead. Edited through their own
+    # async view, so Next just advances.
+    Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
+             outer_template = 'inputs/interview/sections/possessions_section.html' ),
     # The Plans flow opens with spending, then the debt repayment plan (another recurring outflow),
     # then retirement income timing, then the cash orchestration, then one-off events. Living Expenses
     # opens the flow; Home Expenses shows only when the household has a dwelling with operating costs
@@ -797,7 +838,7 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
              outer_template = 'inputs/interview/sections/home_expenses.html' ),
-    Section( 'vehicle-expenses', 'Vehicle Expenses', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
+    Section( 'vehicle-expenses', 'Vehicle plan', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
              outer_template = 'inputs/interview/sections/vehicle_expenses.html' ),
     # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal),
     # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.

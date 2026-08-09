@@ -3,8 +3,8 @@ The household's vehicles (id=vehicles-list), refreshed on add/edit/delete: each 
 -- the name and headline facts (price, interval) with Edit/Remove anchored on the right, and the muted
 detail (ownership span, payment method) below -- plus the Add affordance. Anchoring the actions keeps them
 from trailing (and wrapping raggedly after) a long headline. Edit/Add open the form in the pane's form
-area (#vehicles-form); Remove posts to the delete view. `vehicles` is the list of
-{handle, name, headline, detail}.
+area (#vehicles-form); Remove posts to the delete view. An incomplete car (not yet materializable) shows a
+"Needs details" flag. `vehicles` is the list of {handle, name, headline, detail, incomplete}.
 {% endcomment %}
 <div id="vehicles-list">
   {% if vehicles %}
@@ -13,7 +13,8 @@ area (#vehicles-form); Remove posts to the delete view. `vehicles` is the list o
     <li class="mb-2">
       <div class="d-flex justify-content-between align-items-baseline">
         <span>{{ vehicle.name }}{% if vehicle.headline %} &mdash;
-          <span class="text-muted">{{ vehicle.headline }}</span>{% endif %}</span>
+          <span class="text-muted">{{ vehicle.headline }}</span>{% endif %}
+          {% if vehicle.incomplete %}<span class="badge badge-warning ml-1">Needs details</span>{% endif %}</span>
         <span class="text-nowrap ml-3">
           <a data-async="#vehicles-form"
              href="{% url 'vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>

@@ -24,7 +24,8 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource
 from ucfp.parameter_sets.enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
 
-from .enums import CreditCardPlanMode, EventKind, PaymentMethod
+from .enums import (
+    CreditCardPlanMode, EventKind, LeaseDispositionKind, PaymentMethod, VehicleDispositionKind )
 
 
 # ===== Personal choices (the levers a user turns) =====
@@ -220,9 +221,11 @@ class VehicleRunningCost:
 
 @dataclass( frozen = True )
 class Vehicle:
-    """One car (or boat) the household plans to buy over a window: bought at `purchase_price` on
-    `purchase_date` and replaced every `recurrence_years` thereafter, up to `end_date` (blank =
-    ongoing). `payment_method` sets how each purchase is modeled and which payment fields apply:
+    """A recurring vehicle purchase over a window: bought at `purchase_price` on `purchase_date` and
+    replaced every `recurrence_years` thereafter, up to `end_date` (blank = ongoing). It is used two
+    ways -- as a **net-new** future vehicle the household adds, and as the **replacement** a `Replace`
+    disposition buys when a current vehicle is retired (see `VehicleDisposition`). `payment_method` sets
+    how each purchase is modeled and which payment fields apply:
 
     - CASH: no payment fields -- the whole price buys an owned, depreciating asset each cycle.
     - LOAN: `down_payment` is paid up front and the remainder is financed; `monthly_payment` is
@@ -231,10 +234,10 @@ class Vehicle:
     - LEASE: `down_payment` is the first payment, `monthly_payment` the recurring lease payment, and
       `lease_end_payment` the disposition/turn-in cost -- no ownership, no trade-in.
 
-    `handle` is a stable per-vehicle identity (minted `vehicle-N`); every other field is optional so a
-    just-added vehicle persists while it is filled -- materialization emits its purchases only once
-    `purchase_date`, `purchase_price`, and `recurrence_years` are all set, and its running costs while
-    it is owned."""
+    `handle` is a stable per-vehicle identity (a net-new mints `vehicle-N`; a replacement's is derived
+    from the current vehicle it succeeds); every other field is optional so a just-added vehicle persists
+    while it is filled -- materialization emits its purchases only once `purchase_date`, `purchase_price`,
+    and `recurrence_years` are all set, and its running costs while it is owned."""
     handle: str
     name: str = ''
     purchase_date: Optional[ date ] = None
@@ -246,15 +249,103 @@ class Vehicle:
     monthly_payment: Optional[ Decimal ] = None
     lease_end_payment: Optional[ Decimal ] = None
 
+    @property
+    def has_structural_terms( self ) -> bool:
+        """Whether the user-entered *structure* of the purchase is set -- the fields a purchase needs
+        besides its date (a net-new vehicle sets the date directly; a disposition supplies it from its
+        handover). A cash or financed purchase needs a price and a replacement interval. A lease is not
+        bought, so it needs no price; instead its `monthly_payment` -- its defining cost -- is required,
+        alongside the interval. Other amounts (a down/first payment, a lease-end payment) stay optional --
+        a blank is a legitimate zero, not a missing field."""
+        if self.payment_method is PaymentMethod.LEASE:
+            return self.recurrence_years is not None and self.monthly_payment is not None
+        return self.purchase_price is not None and self.recurrence_years is not None
+
+    @property
+    def is_materializable( self ) -> bool:
+        """Whether this vehicle has all it needs to emit its purchases -- its structural terms plus a
+        purchase date. Until then it contributes nothing (a partial, still-being-entered vehicle)."""
+        return self.purchase_date is not None and self.has_structural_terms
+
+
+@dataclass( frozen = True )
+class VehicleDisposition:
+    """What the household plans to do with one **current** vehicle, keyed to its Profile handle by
+    `vehicle_handle` -- the vehicle plan's per-vehicle input, mirroring a debt's `LoanRepayment`. `kind`
+    selects the fate; the absence of a stored disposition means KEEP (the vehicle depreciates in place,
+    running to the horizon), so only a non-default choice is recorded. `sale_date` is the sale/handover
+    date, used by SELL and REPLACE. `replacement` is the successor a REPLACE buys -- a fully-formed
+    `Vehicle` whose `purchase_date` is this `sale_date`, so it materializes exactly as a net-new vehicle
+    does; it is None for KEEP and SELL. (Not named `date`: a dataclass field named the same as its type,
+    with a default, shadows the type when annotations are resolved, so it would not deserialize.)"""
+    vehicle_handle: str
+    kind: VehicleDispositionKind
+    sale_date: Optional[ date ] = None
+    replacement: Optional[ Vehicle ] = None
+
+    @property
+    def is_complete( self ) -> bool:
+        """Whether this disposition has the structural fields it needs to fully materialize -- so an
+        incomplete one is a safe no-op (the vehicle stays retained), never a partial, misleading
+        projection. KEEP needs nothing; SELL needs its handover date; REPLACE needs that date and a
+        replacement carrying its structural terms (the date becomes the replacement's purchase date).
+        Amounts stay optional."""
+        if self.kind is VehicleDispositionKind.KEEP:
+            return True
+        if self.kind is VehicleDispositionKind.SELL:
+            return self.sale_date is not None
+        return ( self.sale_date is not None
+                 and self.replacement is not None and self.replacement.has_structural_terms )
+
+
+@dataclass( frozen = True )
+class LeasedVehicleDisposition:
+    """The current lease terms and end-of-term plan for one **leased** vehicle, keyed to its Profile
+    `LeasedVehicle` by `vehicle_handle` -- the leased twin of `VehicleDisposition`. `monthly` and
+    `lease_end` are the current lease's cost and end (its terms live here, mirroring a loan's rate/term in
+    the Debt plan), so the lease materializes only once they are set. `kind` is what happens at term end:
+    RETURN ends the monthly there (no successor); RENEW, BUY_CASH, and BUY_LOAN each hand over at
+    `lease_end` to a `successor` -- a fully-formed `Vehicle` beginning then, materialized as any plan
+    vehicle is, whose payment method the kind fixes (a recurring lease for RENEW, a recurring cash or
+    financed purchase for a buy). `successor` is set for every kind but RETURN."""
+    vehicle_handle: str
+    monthly: Optional[ Decimal ] = None
+    lease_end: Optional[ date ] = None
+    kind: LeaseDispositionKind = LeaseDispositionKind.RETURN
+    successor: Optional[ Vehicle ] = None
+
+    @property
+    def successor_ready( self ) -> bool:
+        """Whether the end-of-term successor has what it needs to materialize -- its own structural terms
+        plus the `lease_end` it begins at -- *independent* of the current lease's cost. A successor
+        materializes on this alone, so an unpriced-yet current lease never suppresses a fully-entered
+        renewal or purchase; a Return, which has no successor, is never ready."""
+        return ( self.kind is not LeaseDispositionKind.RETURN and self.lease_end is not None
+                 and self.successor is not None and self.successor.has_structural_terms )
+
+    @property
+    def is_complete( self ) -> bool:
+        """Whether this leased disposition has the structural fields it needs to fully materialize -- an
+        incomplete one is a safe no-op (the lease does not enter the projection yet). The current lease's
+        `monthly` (its defining cost) and `lease_end` (where every kind hands over or ends) are always
+        required; a successor kind (RENEW, BUY_CASH, BUY_LOAN) also needs its successor ready."""
+        if self.lease_end is None or self.monthly is None:
+            return False
+        return self.kind is LeaseDispositionKind.RETURN or self.successor_ready
+
 
 @dataclass( frozen = True )
 class VehiclePlan:
-    """The household's car-ownership plan: the `vehicles` it buys over time (each with its own
-    purchase/replacement schedule, ownership window, and optional financing) and the shared per-car
-    `running_costs` applied to each vehicle while it is owned. Purchases are smoothed within each
+    """The household's car-ownership plan: per-current-vehicle `dispositions` (what happens to each car
+    the household owns today), per-current-*leased*-vehicle `leased_dispositions` (each lease's terms and
+    what happens at term end), the net-new `vehicles` it adds over time (each with its own
+    purchase/replacement schedule, ownership window, and optional financing), and the shared per-car
+    `running_costs` applied to each vehicle while it is operated. Purchases are smoothed within each
     vehicle's window (a lump every recurrence, plus a constant financed-cost stream when financed); the
-    running costs track the fleet as vehicles are added and retired. Both lists are optional so the plan
+    running costs track the fleet as vehicles are added and retired. Every list is optional so the plan
     persists whichever aspect the user has begun, and materialization emits only the complete parts."""
+    dispositions: list[ VehicleDisposition ] = field( default_factory = list )
+    leased_dispositions: list[ LeasedVehicleDisposition ] = field( default_factory = list )
     vehicles: list[ Vehicle ] = field( default_factory = list )
     running_costs: list[ VehicleRunningCost ] = field( default_factory = list )
 

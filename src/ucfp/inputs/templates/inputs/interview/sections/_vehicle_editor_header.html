@@ -1,0 +1,14 @@
+{% comment %}
+The card header shared by the vehicle editors -- it names the vehicle being edited (ownership badge +
+name), so which one is clear once the form detaches from its list row, and offers a close that acts as
+Done. Reads `heading` ({name, ownership}, or None for a just-added vehicle not yet named), `collapse_route`
+(the editor's edit URL name, which honours ?collapse to empty the form), `handle`, and `target` (the
+form-area id the close swaps empty).
+{% endcomment %}
+<div class="card-header py-2 d-flex justify-content-between align-items-center">
+  <span class="font-weight-bold">
+    {% if heading %}<span class="badge badge-{% if heading.ownership == 'Owned' %}info{% else %}secondary{% endif %} mr-1 align-middle">{{ heading.ownership }}</span>{{ heading.name }}{% else %}New vehicle{% endif %}
+  </span>
+  <a class="close ml-3" style="font-size: 1.4rem; line-height: 1;" aria-label="Done"
+     data-async="#{{ target }}" href="{% url collapse_route handle=handle %}?collapse=1">&times;</a>
+</div>

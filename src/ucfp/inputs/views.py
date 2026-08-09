@@ -45,7 +45,12 @@ from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .state import (
     completed_assumptions, completed_plans, completed_profile, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
+from .vehicle_disposition import (
+    LeasedVehicleDispositionForm, VehicleDispositionForm, all_dispositions_context )
 from .vehicle_expenses import VehicleExpensesForm
+from .vehicle_profile import (
+    CurrentVehicleForm, _minted_current_vehicle_handle, current_vehicles_context,
+    delete_current_vehicle, vehicle_heading )
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .external_factors import ExternalFactorsForm
@@ -788,7 +793,7 @@ class SelfSavingPaneView( View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class _VehicleListView( View ):
-    """Shared, org-scoped base for the vehicle list of the Vehicle Expenses step: it renders the plan's
+    """Shared, org-scoped base for the vehicle list of the Vehicle plan step: it renders the plan's
     vehicles. The per-vehicle add/edit/delete swaps refresh this list; the per-car running costs are the
     sibling `VehicleExpensesView` pane."""
 
@@ -841,6 +846,74 @@ class VehicleDeleteView( _VehicleListView ):
         return antinode.response( replace_map = { 'vehicles-list': self._list( request, plans ) } )
 
 
+@method_decorator( ensure_organization, name = 'dispatch' )
+class _VehicleDispositionView( View ):
+    """The disposition editor for one current vehicle, opened into the single shared list + form area.
+    GET opens the editor for the handle (or, with `?collapse`, empties the editor area); POST background-
+    saves the disposition (non-blocking) and refreshes the one current-vehicles list. Edit-only: the rows
+    are the current vehicles, so there is no add or delete. Subclasses supply the form class, its editor
+    template, and the template's context key for the form -- the owned (Retain/Sell/Replace) and leased
+    (Return/Renew/Buy) editors are otherwise identical."""
+
+    _LIST_TEMPLATE    = 'inputs/interview/sections/vehicle_disposition_list.html'
+    _FORM_TEMPLATE    = None    # subclass: its editor template
+    _form_class       = None    # subclass: its disposition form
+    _form_context_key = None    # subclass: the template's key for the form
+
+    def get( self, request, handle = None ):
+        profile, plans = _current_profile_and_plans( request )
+        if request.GET.get( 'collapse' ):
+            return antinode.response(
+                main_content = self._form( request, None, None, profile ),
+                replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
+        form = self._form_class( profile = profile, plans = plans, handle = handle )
+        return antinode.response(
+            main_content = self._form( request, handle, form, profile ),
+            replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
+
+    def post( self, request, handle ):
+        profile, plans = _current_profile_and_plans( request )
+        form = self._form_class( request.POST, profile = profile, plans = plans, handle = handle )
+        if not form.is_valid():
+            return antinode.response(                          # surface a genuine field error
+                replace_map = { 'vehicle-disposition-form': self._form( request, handle, form, profile ) } )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return antinode.response(
+            replace_map = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
+
+    def _list( self, request, profile, plans, active = None ):
+        return render_to_string(
+            self._LIST_TEMPLATE,
+            { 'dispositions': all_dispositions_context( profile, plans ), 'active': active },
+            request = request )
+
+    def _form( self, request, handle, form, profile ):
+        return render_to_string(
+            self._FORM_TEMPLATE,
+            { self._form_context_key: form, 'handle': handle,
+              'heading': vehicle_heading( profile, handle ) },
+            request = request )
+
+
+class VehicleDispositionView( _VehicleDispositionView ):
+    """`/inputs/interview/vehicle-expenses/current/<handle>/` -- the owned-vehicle disposition editor
+    (Retain/Sell/Replace)."""
+
+    _FORM_TEMPLATE    = 'inputs/interview/sections/vehicle_disposition_form.html'
+    _form_class       = VehicleDispositionForm
+    _form_context_key = 'disposition_form'
+
+
+class LeasedVehicleDispositionView( _VehicleDispositionView ):
+    """`/inputs/interview/vehicle-expenses/leased/<handle>/` -- the leased twin: the end-of-term editor
+    (Return/Renew/Buy) plus its current lease terms, sharing the one list and form area."""
+
+    _FORM_TEMPLATE    = 'inputs/interview/sections/leased_disposition_form.html'
+    _form_class       = LeasedVehicleDispositionForm
+    _form_context_key = 'leased_form'
+
+
 class RecurringExpensesView( SelfSavingPaneView ):
     """`/inputs/interview/living-expenses/edit/` -- the recurring-expenses table of the Living Expenses
     step: the `LIVING`-class expenses over the shared age-span timeline. Auto-saves each edit; a
@@ -885,7 +958,7 @@ class PropertyExpensesView( SelfSavingPaneView ):
 
 class VehicleExpensesView( SelfSavingPaneView ):
     """`/inputs/interview/vehicle-expenses/costs/edit/` -- the per-car running-costs table of the
-    Vehicle Expenses step. Auto-saves each edit onto the vehicle plan's running costs; the row set is
+    Vehicle plan step. Auto-saves each edit onto the vehicle plan's running costs; the row set is
     fixed (the catalog's vehicle costs), so it saves silently and never restructures."""
 
     template     = 'inputs/interview/sections/_vehicle_expenses.html'
@@ -1107,6 +1180,73 @@ class PossessionsView( SelfSavingPaneView ):
     @staticmethod
     def _count( profile ) -> int:
         return sum( 1 for asset in profile.assets if asset.asset_class in PossessionsForm._CLASSES )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class _CurrentVehicleListView( View ):
+    """Shared, org-scoped base for the Vehicles (Profile) section's one list -- the household's current
+    vehicles, owned and leased together. The per-vehicle add/edit/delete swaps refresh this list."""
+
+    _LIST_TEMPLATE = 'inputs/interview/sections/current_vehicle_list.html'
+
+    def _list( self, request, profile, active = None ):
+        # `active` is the handle whose editor is open, so the list can mark that row (the form detaches
+        # from its row, so the highlight ties them back together).
+        return render_to_string(
+            self._LIST_TEMPLATE, { 'vehicles': current_vehicles_context( profile ), 'active': active },
+            request = request )
+
+
+class CurrentVehicleFormView( _CurrentVehicleListView ):
+    """`/inputs/interview/vehicles/add/` and `.../<handle>/` -- the add/edit form for one current vehicle
+    (owned or leased), opened as a card headed by the vehicle's name. Add and edit converge on a minted
+    handle. Opening or saving marks the edited row in the list; POST background-saves (non-blocking)."""
+
+    _FORM_TEMPLATE = 'inputs/interview/sections/current_vehicle_form.html'
+
+    def get( self, request, handle = None ):
+        profile, plans = _current_profile_and_plans( request )
+        if request.GET.get( 'collapse' ):                  # close: empty the editor, clear the row mark
+            return antinode.response(
+                main_content = self._form( request, None, None, profile ),
+                replace_map  = { 'current-vehicles-list': self._list( request, profile ) } )
+        if handle is None:                             # add: mint a fresh handle, open its editor
+            handle = _minted_current_vehicle_handle( profile )
+        form = CurrentVehicleForm( profile = profile, plans = plans, handle = handle )
+        return antinode.response(
+            main_content = self._form( request, handle, form, profile ),
+            replace_map  = { 'current-vehicles-list': self._list( request, profile, active = handle ) } )
+
+    def post( self, request, handle = None ):
+        profile, plans = _current_profile_and_plans( request )
+        form = CurrentVehicleForm( request.POST, profile = profile, plans = plans, handle = handle )
+        if not form.is_valid():
+            return antinode.response(                          # surface a genuine field error
+                replace_map = { 'current-vehicle-form': self._form( request, handle, form, profile ) } )
+        # A vehicle write is a paired edit: it may reap a stale disposition when ownership flips, so
+        # profile and plans commit together (the paired-save seam).
+        profile, plans = form.apply( profile, plans )
+        _save_profile_and_plans( request, profile, plans )
+        return antinode.response(
+            replace_map = { 'current-vehicles-list': self._list( request, profile, active = handle ) } )
+
+    def _form( self, request, handle, form, profile ):
+        return render_to_string(
+            self._FORM_TEMPLATE,
+            { 'vehicle_form': form, 'handle': handle,
+              'heading': vehicle_heading( profile, handle ) if handle else None },
+            request = request )
+
+
+class CurrentVehicleDeleteView( _CurrentVehicleListView ):
+    """`/inputs/interview/vehicles/<handle>/delete/` -- remove a current vehicle (its holding and secured
+    loan, or its lease fact) and its vehicle-plan disposition, then refresh the list."""
+
+    def post( self, request, handle ):
+        profile, plans = _current_profile_and_plans( request )
+        profile, plans = delete_current_vehicle( profile, plans, handle )
+        _save_profile_and_plans( request, profile, plans )
+        return antinode.response( replace_map = { 'current-vehicles-list': self._list( request, profile ) } )
 
 
 class DebtsView( SelfSavingPaneView ):
@@ -1335,11 +1475,14 @@ class _PropertyFormView( _PropertyView ):
 
 
 class _PropertyDeleteView( _PropertyView ):
-    """Remove a mortgaged property as a unit, then refresh its list in place."""
+    """Remove a mortgaged property as a unit, then refresh its list in place. `_delete` is the unit
+    removal (`delete_property`), a class attribute so a subclass can substitute its own remover."""
+
+    _delete = staticmethod( delete_property )
 
     def post( self, request, handle ):
         profile, plans = _current_profile_and_plans( request )
-        profile, plans = delete_property( profile, plans, handle )
+        profile, plans = self._delete( profile, plans, handle )
         _save_profile_and_plans( request, profile, plans )
         # Refresh the list by id (replace, not insert) so the re-rendered `<div id=list_id>` swaps the
         # existing one rather than nesting inside it.

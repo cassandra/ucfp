@@ -1,0 +1,16 @@
+{% comment %}
+The Vehicles pane: one list of the household's current vehicles -- owned and leased together, each with an
+ownership badge -- edited through its own async view outside the section's Next form (a nested form would
+be invalid HTML). Adding or editing a vehicle opens the form beneath the list (#current-vehicle-form),
+where the owned/leased choice drives which fields apply. `form.vehicles` is the combined list, managed by
+`CurrentVehicleFormView` / `CurrentVehicleDeleteView`.
+{% endcomment %}
+<p class="text-muted">The cars in your driveway, owned or leased -- one list. An owned vehicle with a loan
+  still owed adds that loan to Debts; a leased one is just a name here (its terms are set in the Vehicle
+  plan).</p>
+<div class="row">
+  <div class="col-md-6">
+    {% include 'inputs/interview/sections/current_vehicle_list.html' with vehicles=form.vehicles %}
+    <div id="current-vehicle-form" class="mt-2"></div>
+  </div>
+</div>

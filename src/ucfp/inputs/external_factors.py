@@ -70,8 +70,8 @@ _FACTOR_GROUPS = (
                  'Annual value growth of gold, silver, and similar.' ),
         _Factor( 'collectibles_appreciation', 'Collectibles appreciation',
                  'Annual value growth of art, jewelry, and similar collectibles.' ),
-        _Factor( 'depreciation_rate', 'Vehicle & boat depreciation',
-                 'Annual value lost by depreciating personal property -- cars, boats.' ) ) ),
+        _Factor( 'depreciation_rate', 'Vehicle depreciation',
+                 'Annual value lost by depreciating personal property -- vehicles.' ) ) ),
 )
 
 # The flat factor list in display order, and a fail-fast guard that the curated spec covers exactly the

@@ -13,10 +13,12 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from ucfp.accounts.enums import AssetClass
-from ucfp.forecast.parameters import ScheduledRealization, ScheduledTransfer
-from ucfp.inputs.events import EventContributions, SOURCE_ROLE, TARGET_ROLE, TransferEvent
-from ucfp.inputs.plans.enums import EventKind
-from ucfp.inputs.plans.schemas import PlanEvent
+from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer
+from ucfp.inputs.events import (
+    EventContributions, POSSESSION_ROLE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent, TransferEvent,
+    vehicle_disposition_contributions )
+from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
+from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
 
 
 def _profile( *holdings ):
@@ -65,6 +67,158 @@ class TransferMaterializationTests( unittest.TestCase ):
         self.assertIsInstance( transfer, ScheduledTransfer )
         self.assertEqual( ( transfer.source, transfer.target, transfer.amount ),
                           ( 'cd', 'stk', Decimal( '50000' ) ) )
+
+
+def _sale_profile( possessions, debts = () ):
+    """A stand-in profile for a possession sale: possessions as (handle, class, name) and any securing
+    debts as (handle, secured_asset, name)."""
+    return SimpleNamespace(
+        assets   = [ SimpleNamespace( handle = h, asset_class = k, name = n ) for h, k, n in possessions ],
+        debts    = [ SimpleNamespace( handle = h, secured_asset = s, name = n ) for h, s, n in debts ],
+        subjects = [] )
+
+
+def _sell( possession_handle ):
+    return PlanEvent( kind = EventKind.SELL_POSSESSION, date = date( 2030, 6, 1 ),
+                      selections = { POSSESSION_ROLE: possession_handle } )
+
+
+def _sale_events( profile, event ):
+    into = EventContributions()
+    SellPossessionEvent().contribute( event, profile, {}, into )
+    return into.scheduled_events
+
+
+class SellPossessionTests( unittest.TestCase ):
+    """A possession sale mirrors a property sale: realize the whole holding at its projected value, and
+    pay off any loan secured against it. The routing (whole-holding realization + secured-loan payoff) is
+    what regresses silently, so it earns a test here; the gain/tax math is the engine's."""
+
+    def test_a_sale_realizes_the_whole_possession( self ):
+        profile     = _sale_profile( [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ] )
+        events      = _sale_events( profile, _sell( 'possession-1' ) )
+        self.assertEqual( len( events ), 1 )
+        realization = events[ 0 ]
+        self.assertIsInstance( realization, ScheduledRealization )
+        self.assertEqual( realization.holding, 'possession-1' )
+        self.assertIsNone( realization.amount )   # None -> the whole holding at its projected value
+
+    def test_a_secured_possession_also_pays_off_its_loan( self ):
+        profile = _sale_profile(
+            [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ],
+            [ ( 'debt-1', 'possession-1', 'Car loan' ) ] )      # secured against the car
+        events  = _sale_events( profile, _sell( 'possession-1' ) )
+        self.assertEqual( [ type( e ).__name__ for e in events ],
+                          [ 'ScheduledRealization', 'ScheduledLoanPayoff' ] )
+        self.assertIsInstance( events[ 1 ], ScheduledLoanPayoff )
+        self.assertEqual( events[ 1 ].loan, 'debt-1' )
+
+    def test_a_sale_records_its_date_for_running_cost_clipping( self ):
+        # The sale date is recorded so materialization ends the possession's running costs at it (a sold
+        # car stops incurring insurance/fuel), mirroring a property sale's operating-cost clip.
+        profile = _sale_profile( [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ] )
+        into    = EventContributions()
+        SellPossessionEvent().contribute( _sell( 'possession-1' ), profile, {}, into )
+        self.assertEqual( into.possession_sales, { 'possession-1' : date( 2030, 6, 1 ) } )
+
+    def test_an_unsecured_possession_emits_only_the_realization( self ):
+        profile = _sale_profile(
+            [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ],
+            [ ( 'debt-1', None, 'Credit card' ) ] )             # a debt not secured against the car
+        events  = _sale_events( profile, _sell( 'possession-1' ) )
+        self.assertEqual( [ type( e ).__name__ for e in events ], [ 'ScheduledRealization' ] )
+
+    def test_the_summary_names_the_item_and_flags_a_payoff( self ):
+        profile = _sale_profile(
+            [ ( 'possession-1', AssetClass.DEPRECIATING, 'Car' ) ],
+            [ ( 'debt-1', 'possession-1', 'Car loan' ) ] )
+        summary = SellPossessionEvent().summary( _sell( 'possession-1' ), profile )
+        self.assertIn( 'Sell Car in 2030', summary )
+        self.assertIn( 'loan paid off', summary )
+
+    def test_offerable_only_when_a_possession_exists( self ):
+        self.assertFalse( SellPossessionEvent().offerable( _sale_profile( [] ) ) )
+        self.assertTrue( SellPossessionEvent().offerable(
+            _sale_profile( [ ( 'possession-1', AssetClass.COLLECTIBLES, 'Ring' ) ] ) ) )
+
+    def test_a_vehicle_is_not_offerable_here( self ):
+        # A vehicle (DEPRECIATING) is sold through its vehicle-plan disposition, not this manual sale, so
+        # a household with only a vehicle has nothing to sell here.
+        self.assertFalse( SellPossessionEvent().offerable(
+            _sale_profile( [ ( 'vehicle-1', AssetClass.DEPRECIATING, 'Car' ) ] ) ) )
+
+
+class VehicleDispositionTests( unittest.TestCase ):
+    """A Sell or Replace disposition derives a sale of that current vehicle on the disposition date -- the
+    automated transition, from the stored disposition (no written event). Retain sells nothing, and a
+    disposition for a missing vehicle is skipped, so a Profile edit degrades gracefully."""
+
+    @staticmethod
+    def _profile( vehicles = (), debts = () ):
+        return SimpleNamespace(
+            assets   = [ SimpleNamespace( handle = h, asset_class = AssetClass.DEPRECIATING, name = n )
+                         for h, n in vehicles ],
+            debts    = [ SimpleNamespace( handle = h, secured_asset = s, name = n ) for h, s, n in debts ],
+            subjects = [] )
+
+    # A REPLACE sells the outgoing vehicle only once it is *complete* (its replacement carries structural
+    # terms), so the helper attaches a materializable replacement by default; pass replacement=None for
+    # the incomplete case (a chosen Replace still being filled in), which must sell nothing.
+    _REPLACEMENT = Vehicle( handle = '', purchase_price = Decimal( '30000' ), recurrence_years = 5 )
+
+    @classmethod
+    def _plans( cls, kind = None, when = date( 2030, 1, 1 ), handle = 'vehicle-1',
+                replacement = _REPLACEMENT ):
+        dispositions = ( [ VehicleDisposition( vehicle_handle = handle, kind = kind, sale_date = when,
+                                               replacement = replacement ) ]
+                         if kind is not None else [] )
+        return Plans( vehicle_plan = VehiclePlan( dispositions = dispositions ) )
+
+    def _derive( self, profile, plans ):
+        into = EventContributions()
+        vehicle_disposition_contributions( profile, plans, into )
+        return into
+
+    def test_a_sell_disposition_sells_its_vehicle_on_the_date( self ):
+        into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
+                             self._plans( kind = VehicleDispositionKind.SELL ) )
+        self.assertEqual( into.possession_sales, { 'vehicle-1' : date( 2030, 1, 1 ) } )
+        self.assertEqual( [ type( e ).__name__ for e in into.scheduled_events ], [ 'ScheduledRealization' ] )
+        self.assertEqual( into.scheduled_events[ 0 ].holding, 'vehicle-1' )
+
+    def test_a_replace_disposition_also_sells_the_outgoing_vehicle( self ):
+        into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
+                             self._plans( kind = VehicleDispositionKind.REPLACE ) )
+        self.assertEqual( into.possession_sales, { 'vehicle-1' : date( 2030, 1, 1 ) } )
+
+    def test_an_incomplete_replace_sells_nothing( self ):
+        # A Replace with a date but no filled-in replacement is incomplete: it must not strand the
+        # vehicle (sold with nothing replacing it). It stays retained until the replacement is entered.
+        into = self._derive(
+            self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
+            self._plans( kind = VehicleDispositionKind.REPLACE, replacement = None ) )
+        self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
+
+    def test_a_secured_vehicles_loan_is_paid_off_too( self ):
+        into = self._derive(
+            self._profile( [ ( 'vehicle-1', 'Old car' ) ], [ ( 'debt-1', 'vehicle-1', 'Loan' ) ] ),
+            self._plans( kind = VehicleDispositionKind.SELL ) )
+        self.assertEqual( [ type( e ).__name__ for e in into.scheduled_events ],
+                          [ 'ScheduledRealization', 'ScheduledLoanPayoff' ] )
+
+    def test_retain_derives_nothing( self ):
+        into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
+                             self._plans( kind = VehicleDispositionKind.KEEP ) )
+        self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
+
+    def test_no_disposition_derives_nothing( self ):
+        into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ), self._plans( kind = None ) )
+        self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
+
+    def test_a_disposition_for_a_removed_vehicle_is_skipped( self ):
+        # Profile-change robustness: the vehicle is gone, so the disposition derives nothing (no crash).
+        into = self._derive( self._profile( [] ), self._plans( kind = VehicleDispositionKind.SELL ) )
+        self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
 
 
 if __name__ == '__main__':

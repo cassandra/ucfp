@@ -1,10 +1,12 @@
-"""§ Vehicle Expenses -- the household's cars as a per-vehicle list.
+"""The Vehicle plan step's net-new future vehicles -- the cars the household adds that are not tied to
+one it owns or leases today (those are the per-current-vehicle dispositions in `vehicle_disposition.py`).
 
-Each car is a `Vehicle` on the `VehiclePlan`, entered as a unit (name, next purchase date, price,
-replacement interval, an optional owned-until date, and optional financing) -- the vehicle mirror of a
-mortgaged property. This module owns minting, editing, and removing a vehicle; the shared per-car
-running costs are a sibling pane (`vehicle_expenses.py`). Non-blocking: a vehicle materializes only
-once its required fields are set, so a just-opened blank that is abandoned never appears.
+Each is a `Vehicle` on the `VehiclePlan`, entered as a unit (name, next purchase date, price, replacement
+interval, an optional owned-until date, and optional financing) -- the vehicle mirror of a mortgaged
+property, sharing its purchase fields with a disposition's replacement via `VehiclePurchaseForm`. This
+module owns minting, editing, and removing such a vehicle; the shared per-car running costs are a sibling
+pane (`vehicle_expenses.py`). Non-blocking: a vehicle materializes only once its required fields are set,
+so a just-opened blank that is abandoned never appears.
 """
 from dataclasses import replace
 from decimal import Decimal
@@ -44,11 +46,13 @@ def _minted_vehicle_handle( plans ) -> str:
 
 
 def vehicles_context( plans ) -> list:
-    """Each vehicle for the list template: its handle, name, and a two-line summary. The headline (price
-    and replacement interval) is the plan's shape; the detail (ownership span and -- least prominent --
-    the payment method) sits muted below."""
+    """Each vehicle for the list template: its handle, name, a two-line summary, and whether it is
+    incomplete (still missing the fields it needs to materialize, so it does not yet affect the
+    projection). The headline (price and replacement interval) is the plan's shape; the detail (ownership
+    span and -- least prominent -- the payment method) sits muted below."""
     return [ { 'handle': vehicle.handle, 'name': vehicle.name or 'Car',
-               'headline': _headline_summary( vehicle ), 'detail': _detail_summary( vehicle ) }
+               'headline': _headline_summary( vehicle ), 'detail': _detail_summary( vehicle ),
+               'incomplete': not vehicle.is_materializable }
              for vehicle in _vehicles( plans ) ]
 
 
@@ -84,31 +88,26 @@ def delete_vehicle( plans, handle : str ):
     return replace( plans, vehicle_plan = kept if plan_has_content( kept ) else None )
 
 
-class VehicleForm( StyledFormMixin, forms.Form ):
-    """The add/edit form for one vehicle. Add and edit converge on a known handle (add mints one), so a
-    new vehicle has a stable identity from the first keystroke. Fields are individually optional and the
-    form background-saves; the vehicle materializes onto the plan only once all of `_REQUIRED` are set
-    (`_complete`), so a partial or abandoned entry writes nothing. `apply` upserts the vehicle by handle,
-    carrying the plan's shared running costs and other vehicles."""
+class VehiclePurchaseForm( StyledFormMixin, forms.Form ):
+    """The shared fields and behavior of a recurring vehicle purchase: its price, replacement interval,
+    ownership end, and payment method with its per-method fields -- the part a net-new vehicle and a
+    Replace disposition's successor (`VehicleDispositionForm`) have in common. A subclass supplies when
+    and how the purchase happens: a net-new vehicle its own next-purchase date and name, a disposition
+    those from the current vehicle it replaces. The payment method drives which cost fields show (via the
+    switch control) and how the forecast models each purchase."""
 
-    _REQUIRED = ( 'name', 'purchase_date', 'purchase_price', 'recurrence_years' )
-
-    name             = forms.CharField( label = 'Name', max_length = 100, required = False )
-    purchase_date    = forms.DateField(
-        label = 'Next purchase date', required = False, widget = IsoDateInput() )
     purchase_price   = MoneyField(
-        label = 'Price per car', min_value = 0, required = False, css_class = AppConst.VEHICLE_PRICE_CLASS )
+        label = 'Price per vehicle', min_value = 0, required = False, css_class = AppConst.VEHICLE_PRICE_CLASS )
     recurrence_years = forms.IntegerField(
         label = 'Replace every (years)', min_value = 1, required = False,
         widget = forms.NumberInput( attrs = { 'class' : 'input-count' } ) )   # a year count, a digit or two
     end_date         = forms.DateField(
         label = 'Stop replacing by', required = False, widget = IsoDateInput(),
-        help_text = 'Blank to keep replacing indefinitely.' )
-    # The payment method drives which cost fields show (via the switch control) and how the forecast
-    # models each purchase. `monthly_payment` serves loan and lease; `lease_end_payment` is the lease's
-    # turn-in cost. `down_payment` serves both too, but its label differs by method (a loan's "Down
-    # payment" vs a lease's "Due at signing"), so it carries no baked-in label -- the template renders the
-    # two conditionally by the same switch (see vehicle_form.html).
+        help_text = 'Blank = no end.' )
+    # `monthly_payment` serves loan and lease; `lease_end_payment` is the lease's turn-in cost.
+    # `down_payment` serves both too, but its label differs by method (a loan's "Down payment" vs a
+    # lease's "Due at signing"), so it carries no baked-in label -- the template renders the two
+    # conditionally by the same switch (see `_vehicle_payment_fields.html`).
     payment_method   = forms.ChoiceField(
         label = 'Paying by', required = False,
         choices = [ ( method.name, method.label ) for method in PaymentMethod ],
@@ -121,21 +120,7 @@ class VehicleForm( StyledFormMixin, forms.Form ):
     monthly_payment   = MoneyField(
         label = 'Monthly payment', min_value = 0, required = False,
         css_class = AppConst.VEHICLE_MONTHLY_CLASS )
-    lease_end_payment = MoneyField( label = 'Lease-end payment', min_value = 0, required = False )
-
-    def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
-        super().__init__( data, initial = self._initial( plans, handle ) if handle else None )
-        self._handle = handle
-
-    def clean( self ):
-        # An owned-until date before the purchase date is an inverted ownership window: materialization
-        # would silently emit nothing for the car, so surface it as a field error rather than a no-op.
-        cleaned  = super().clean()
-        purchase = cleaned.get( 'purchase_date' )
-        end      = cleaned.get( 'end_date' )
-        if ( purchase is not None ) and ( end is not None ) and ( end < purchase ):
-            self.add_error( 'end_date', 'Owned-until date must be on or after the purchase date.' )
-        return cleaned
+    lease_end_payment = MoneyField( label = 'Due at end', min_value = 0, required = False )
 
     @property
     def auto_loan_apr_percent( self ) -> float:
@@ -157,6 +142,12 @@ class VehicleForm( StyledFormMixin, forms.Form ):
     # names (which are the radio values too). The domain vocabulary stays here; the switch/JS read it
     # through the rendered `data-switch-case` and the finances marker, never as a literal.
     @property
+    def purchase_methods( self ) -> str:
+        """The methods that buy the car at a price -- cash or loan (a lease has no purchase price, so its
+        price field is hidden)."""
+        return f'{PaymentMethod.CASH.name} {PaymentMethod.LOAN.name}'
+
+    @property
     def payment_field_methods( self ) -> str:
         """The methods whose down/monthly fields show -- a loan or a lease (cash pays none)."""
         return f'{PaymentMethod.LOAN.name} {PaymentMethod.LEASE.name}'
@@ -174,6 +165,48 @@ class VehicleForm( StyledFormMixin, forms.Form ):
         the loan note shows for it, and the down field is labelled "Down payment" for it (its switch-case
         value)."""
         return PaymentMethod.LOAN.name
+
+    def _purchase_spec( self, cleaned ) -> dict:
+        """The shared `Vehicle` purchase fields read from this form -- identity, next-purchase date, and
+        name are the subclass's to supply around these."""
+        method = cleaned.get( 'payment_method' ) or PaymentMethod.CASH.name
+        return { 'purchase_price'    : cleaned.get( 'purchase_price' ),
+                 'recurrence_years'  : cleaned.get( 'recurrence_years' ),
+                 'end_date'          : cleaned.get( 'end_date' ),
+                 'payment_method'    : PaymentMethod[ method ],
+                 'down_payment'      : cleaned.get( 'down_payment' ),
+                 'monthly_payment'   : cleaned.get( 'monthly_payment' ),
+                 'lease_end_payment' : cleaned.get( 'lease_end_payment' ) }
+
+
+class VehicleForm( VehiclePurchaseForm ):
+    """The add/edit form for one net-new vehicle. Add and edit converge on a known handle (add mints one),
+    so a new vehicle has a stable identity from the first keystroke. Fields are individually optional and
+    the form background-saves; the vehicle materializes onto the plan only once all of `_REQUIRED` are set
+    (`_complete`), so a partial or abandoned entry writes nothing. `apply` upserts the vehicle by handle,
+    carrying the plan's shared running costs and other vehicles."""
+
+    _REQUIRED = ( 'name', 'purchase_date', 'purchase_price', 'recurrence_years' )
+
+    name          = forms.CharField( label = 'Name', max_length = 100, required = False )
+    purchase_date = forms.DateField(
+        label = 'Next purchase date', required = False, widget = IsoDateInput() )
+
+    def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
+        # `profile` is unused here (a net-new vehicle has no link to a current one -- that is the
+        # per-vehicle disposition's job); it is accepted so every plan-vehicle form shares one signature.
+        super().__init__( data, initial = self._initial( plans, handle ) if handle else None )
+        self._handle = handle
+
+    def clean( self ):
+        # An owned-until date before the purchase date is an inverted ownership window: materialization
+        # would silently emit nothing for the car, so surface it as a field error rather than a no-op.
+        cleaned  = super().clean()
+        purchase = cleaned.get( 'purchase_date' )
+        end      = cleaned.get( 'end_date' )
+        if ( purchase is not None ) and ( end is not None ) and ( end < purchase ):
+            self.add_error( 'end_date', 'Owned-until date must be on or after the purchase date.' )
+        return cleaned
 
     @classmethod
     def _initial( cls, plans, handle : str ) -> dict:
@@ -210,14 +243,8 @@ class VehicleForm( StyledFormMixin, forms.Form ):
             return profile, plans
         handle   = self._handle or _minted_vehicle_handle( plans )
         cleaned  = self.cleaned_data
-        vehicle  = Vehicle(
-            handle = handle, name = cleaned[ 'name' ], purchase_date = cleaned[ 'purchase_date' ],
-            end_date = cleaned.get( 'end_date' ), purchase_price = cleaned[ 'purchase_price' ],
-            recurrence_years = cleaned[ 'recurrence_years' ],
-            payment_method = PaymentMethod[ cleaned.get( 'payment_method' ) or PaymentMethod.CASH.name ],
-            down_payment = cleaned.get( 'down_payment' ),
-            monthly_payment = cleaned.get( 'monthly_payment' ),
-            lease_end_payment = cleaned.get( 'lease_end_payment' ) )
+        vehicle  = Vehicle( handle = handle, name = cleaned[ 'name' ],
+                            purchase_date = cleaned[ 'purchase_date' ], **self._purchase_spec( cleaned ) )
         existing = vehicle_plan_of( plans ) or VehiclePlan()
         kept     = [ v for v in existing.vehicles if v.handle != handle ] + [ vehicle ]
         return profile, replace( plans, vehicle_plan = replace( existing, vehicles = kept ) )

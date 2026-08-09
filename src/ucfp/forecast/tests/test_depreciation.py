@@ -1,4 +1,4 @@
-"""Test that a depreciating asset (car, boat) loses value over the forecast."""
+"""Test that a depreciating asset (a vehicle) loses value over the forecast."""
 import unittest
 from datetime import date
 from decimal import Decimal

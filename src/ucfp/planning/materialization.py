@@ -13,7 +13,7 @@ general rule). Lifestyle expenses materialize per the engine's 2x2 -- smoothed c
 expense streams, cadenced ones to placed items -- each stepping as the scheduled level changes.
 """
 from calendar import monthrange
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -48,14 +48,15 @@ from ucfp.inputs.plans.defaults import default_drawdown
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
     AssetProfile, Debt, Profile, RENTED_HOME_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX )
-from ucfp.inputs.plans.enums import CreditCardPlanMode, PaymentMethod
+from ucfp.inputs.plans.enums import (
+    CreditCardPlanMode, PaymentMethod, VehicleDispositionKind )
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanRepayment, Plans, RetirementTiming, Vehicle )
 from ucfp.inputs.assumptions.defaults import default_transaction_costs
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 
-from ucfp.inputs.events import event_contributions
+from ucfp.inputs.events import event_contributions, vehicle_disposition_contributions
 
 
 @dataclass( frozen = True )
@@ -84,12 +85,14 @@ def materialize(
         plans, _primary_birthdate( profile ), frame )
     assets_by_handle = { asset.handle : asset for asset in profile.assets }
     events = event_contributions( profile, plans, subjects_by_handle )
+    vehicle_disposition_contributions( profile, plans, events )   # derive each disposition's sale
     expense_streams, expense_items = _property_expenses(
         profile, plans, assets_by_handle, events.property_sales )
     flow_streams, flow_items = _income_flows(
         profile, plans, subjects_by_handle, events.property_sales )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
-    vehicle_streams, vehicle_items = _vehicle_running_costs( plans )
+    vehicle_streams, vehicle_items = _vehicle_running_costs(
+        profile, plans, events.possession_sales, frame.start_date )
     conversion_events, conversion_recurring = _roth_conversions( profile, plans )
     withdrawal_events, withdrawal_recurring = _withdrawals( profile, plans )
     scheduled_events = (
@@ -107,8 +110,9 @@ def materialize(
             profile, plans, subjects_by_handle, government_pension ) + flow_streams,
         income_items     = flow_items + events.income_items,
         expense_items    = (
-            recurring_items + expense_items
-            + events.expense_items + card_items + _vehicle_expenses( plans ) + vehicle_items ),
+            recurring_items + expense_items + events.expense_items + card_items
+            + _vehicle_expenses( plans ) + _leased_current_expenses( plans, frame.start_date )
+            + vehicle_items ),
         expense_streams  = recurring_streams + expense_streams + vehicle_streams,
         loans            = _loans( profile, plans ),
         contributions    = _contributions( profile, plans ),
@@ -301,16 +305,59 @@ _AUTO_LOAN_TERM        = Duration( BUILTIN_ASSUMPTIONS.auto_loan_term_years, Tim
 _AUTO_LOAN_TERM_MONTHS = BUILTIN_ASSUMPTIONS.auto_loan_term_months
 
 
-def _vehicle_ready( vehicle : Vehicle ) -> bool:
-    """Whether a vehicle has the fields it needs to materialize -- its purchase date, price, and
-    replacement interval. Until then it contributes nothing (a partial, still-being-entered vehicle)."""
-    return bool( vehicle.purchase_date and vehicle.purchase_price and vehicle.recurrence_years )
-
-
 def _is_owned( vehicle : Vehicle ) -> bool:
     """A cash or financed vehicle is owned -- a real depreciating holding that cycles on replacement. A
     leased vehicle is not owned (pure expense, no trade-in)."""
     return vehicle.payment_method in ( PaymentMethod.CASH, PaymentMethod.LOAN )
+
+
+def _replacement_handle( vehicle_handle : str ) -> str:
+    """The holding identity of the successor a Replace disposition buys -- derived from the current
+    vehicle's handle, so it is stable and distinct from any net-new vehicle's `vehicle-N`."""
+    return f'{vehicle_handle}-replacement'
+
+
+def _replacement_vehicle( disposition ) -> Vehicle:
+    """The successor a Replace disposition buys, as a materializable `Vehicle`: the stored replacement
+    spec with its identity and first-purchase date supplied by the disposition -- the handle derived from
+    the current vehicle, the purchase date the handover date -- so it materializes exactly as a net-new
+    vehicle does."""
+    return replace( disposition.replacement,
+                    handle = _replacement_handle( disposition.vehicle_handle ),
+                    purchase_date = disposition.sale_date )
+
+
+def _leased_successor_handle( vehicle_handle : str ) -> str:
+    """The identity of the successor a Renew or Buy disposition starts at lease end -- derived from the
+    leased vehicle's handle, so it is stable and distinct from any other vehicle."""
+    return f'{vehicle_handle}-successor'
+
+
+def _leased_successor( disposition ) -> Vehicle:
+    """The vehicle a Buy disposition purchases at lease end, as a materializable `Vehicle`: the stored
+    successor spec with its identity and first date supplied by the disposition -- the handle derived from
+    the leased vehicle, the purchase date the lease end -- so it materializes exactly as a net-new vehicle
+    does (an owned holding that cycles on replacement)."""
+    return replace( disposition.successor,
+                    handle = _leased_successor_handle( disposition.vehicle_handle ),
+                    purchase_date = disposition.lease_end )
+
+
+def _plan_vehicles( plan ) -> list[ Vehicle ]:
+    """Every vehicle the plan materializes into purchases: the net-new vehicles the household adds, each
+    Replace disposition's successor, and each non-Return leased disposition's successor (the lease or
+    purchase that begins at lease end -- its payment method fixed by the kind). Retain/Sell/Return add
+    none -- they keep or end a current vehicle without a successor (their sale/lease expense is handled
+    elsewhere). An owned Replace contributes its successor only once the whole disposition is complete --
+    the successor and the sale it pairs with go together, so a half-entered Replace never sells the car
+    with nothing to succeed it. A leased successor gates on its *own* readiness instead (its structural
+    terms plus the lease-end it begins at); the current lease it follows is independent and materialized
+    elsewhere, so an unfinished successor never suppresses the lease the household is already paying."""
+    replacements = [ _replacement_vehicle( disposition ) for disposition in plan.dispositions
+                     if disposition.kind is VehicleDispositionKind.REPLACE and disposition.is_complete ]
+    successors   = [ _leased_successor( disposition ) for disposition in plan.leased_dispositions
+                     if disposition.successor_ready ]
+    return list( plan.vehicles ) + replacements + successors
 
 
 def _vehicle_holding_handle( vehicle_handle : str ) -> str:
@@ -365,8 +412,8 @@ def _vehicle_holdings( plans : Plans ) -> list[ AssetParameters ]:
     plan = plans.vehicle_plan
     if plan is None:
         return list()
-    return [ _vehicle_holding( vehicle ) for vehicle in plan.vehicles
-             if _is_owned( vehicle ) and _vehicle_ready( vehicle ) ]
+    return [ _vehicle_holding( vehicle ) for vehicle in _plan_vehicles( plan )
+             if _is_owned( vehicle ) and vehicle.is_materializable ]
 
 
 def _vehicle_holding_purchase( vehicle : Vehicle ) -> RecurringHoldingPurchase:
@@ -390,8 +437,8 @@ def _vehicle_holding_purchases( plans : Plans ) -> list[ RecurringHoldingPurchas
     plan = plans.vehicle_plan
     if plan is None:
         return list()
-    return [ _vehicle_holding_purchase( vehicle ) for vehicle in plan.vehicles
-             if _is_owned( vehicle ) and _vehicle_ready( vehicle ) ]
+    return [ _vehicle_holding_purchase( vehicle ) for vehicle in _plan_vehicles( plan )
+             if _is_owned( vehicle ) and vehicle.is_materializable ]
 
 
 def _vehicle_loan_origination( vehicle : Vehicle ) -> RecurringLoanOrigination:
@@ -418,8 +465,8 @@ def _vehicle_loan_originations( plans : Plans ) -> list[ RecurringLoanOriginatio
     plan = plans.vehicle_plan
     if plan is None:
         return list()
-    return [ _vehicle_loan_origination( vehicle ) for vehicle in plan.vehicles
-             if _is_financed( vehicle ) and _vehicle_ready( vehicle ) ]
+    return [ _vehicle_loan_origination( vehicle ) for vehicle in _plan_vehicles( plan )
+             if _is_financed( vehicle ) and vehicle.is_materializable ]
 
 
 def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
@@ -430,8 +477,8 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
     if plan is None:
         return list()
     items = list()
-    for vehicle in plan.vehicles:
-        if _vehicle_ready( vehicle ) and vehicle.payment_method is PaymentMethod.LEASE:
+    for vehicle in _plan_vehicles( plan ):
+        if vehicle.is_materializable and vehicle.payment_method is PaymentMethod.LEASE:
             items.extend( _lease_vehicle_items( vehicle ) )
     return items
 
@@ -468,18 +515,87 @@ def _lease_vehicle_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
     return items
 
 
-def _vehicle_running_costs( plans : Plans ) -> tuple[ list[ ExpenseStream ], list[ ExpenseItem ] ]:
-    """The shared per-car running costs applied to each owned vehicle as (streams, items): each cost's
-    per-car amount is emitted once per vehicle, gated to that vehicle's ownership window, so the total
-    ramps with the number of cars owned over time. A SMOOTH cost enters as an annualized stream, a
-    DISCRETE one as an item placed at its cadence. Empty when there is no plan or the cost is blank."""
+def _lease_operates_until( disposition ) -> Optional[ date ]:
+    """When a current lease stops being operated: the day before its end -- where its successor (a renewed
+    lease or a purchase) begins, or where a Return simply stops -- so the two chain without a double-
+    counted boundary. None (incomplete) when the end is unset."""
+    if disposition.lease_end is None:
+        return None
+    return disposition.lease_end - timedelta( days = 1 )
+
+
+def _leased_operative( disposition, start_date : date ) -> bool:
+    """Whether a leased disposition's current lease materializes -- once its end is set and still ahead
+    (every kind hands over or ends at that date)."""
+    return disposition.lease_end is not None and disposition.lease_end > start_date
+
+
+def _lease_window( disposition, start_date : date ) -> DateWindow:
+    """A current lease's operating window -- from now to when it stops being operated (the horizon for a
+    Renew, else the day before its end)."""
+    return DateWindow( start = start_date, end = _lease_operates_until( disposition ) )
+
+
+def _leased_current_expenses( plans : Plans, start_date : date ) -> list[ ExpenseItem ]:
+    """The monthly cost of each current lease -- the leased twin of an owned car's holding: a leased
+    vehicle is pure expense, so its current lease is a monthly item over its window (to the day before
+    term end for every kind -- a Renew's continued lease and a Buy's purchase begin then, each
+    materialized separately as a plan vehicle). Emitted once the current lease's monthly is set and it is
+    still operative -- independent of the end-of-term plan, since the household pays the lease it holds now
+    regardless of what it has decided to do at term end."""
     plan = plans.vehicle_plan
     if plan is None:
-        return list(), list()
-    windows = [ DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
-                for vehicle in plan.vehicles if vehicle.purchase_date is not None ]
+        return list()
+    items = list()
+    for disposition in plan.leased_dispositions:
+        if disposition.monthly and _leased_operative( disposition, start_date ):
+            items.append( ExpenseItem(
+                name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
+                amounts = Schedule.constant( WindowedAmount( disposition.monthly ) ),
+                cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ),
+                window = _lease_window( disposition, start_date ), handle = CAR_PAYMENTS_HANDLE ) )
+    return items
+
+
+def _operated_until( possession : AssetProfile, sale_dates : dict ) -> Optional[ date ]:
+    """The last date a current vehicle is operated: the day before its sale (so its running-cost window
+    ends right where its plan replacement's begins -- both windows are inclusive and gate on the span
+    start, so a shared boundary date would double-count), or None (kept -- run to the horizon)."""
+    sale = sale_dates.get( possession.handle )
+    return sale - timedelta( days = 1 ) if sale is not None else None
+
+
+def _vehicle_windows( profile : Profile, plans : Plans, sale_dates : dict,
+                      start_date : date ) -> list[ DateWindow ]:
+    """The operating window of every vehicle the household runs: the current vehicle possessions (owned
+    from the start, each ending when a sale clips it) and the planned vehicles (owned or leased, over
+    their replacement window). Running costs apply per window, so the total tracks the fleet operated at
+    any time -- a replaced current car's window ends where its plan replacement's begins, so the two
+    chain with no gap and no double-count, and the near-term fleet is no longer undercounted."""
+    plan    = plans.vehicle_plan
+    planned = ( [ DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
+                  for vehicle in _plan_vehicles( plan ) if vehicle.is_materializable ]
+                if plan is not None else list() )
+    current = [ DateWindow( start = start_date, end = _operated_until( possession, sale_dates ) )
+                for possession in profile.assets if possession.asset_class is AssetClass.DEPRECIATING ]
+    leased  = [ _lease_window( disposition, start_date )
+                for disposition in ( plan.leased_dispositions if plan is not None else list() )
+                if disposition.monthly and _leased_operative( disposition, start_date ) ]
+    return planned + current + leased
+
+
+def _vehicle_running_costs( profile : Profile, plans : Plans, sale_dates : dict,
+                            start_date : date ) -> tuple[ list[ ExpenseStream ], list[ ExpenseItem ] ]:
+    """The shared per-car running costs applied to each vehicle the household operates as (streams,
+    items): each cost's per-car amount is emitted once per vehicle window (see `_vehicle_windows` -- the
+    current possessions and the planned vehicles), so the total tracks the fleet operated over time. A
+    SMOOTH cost enters as an annualized stream, a DISCRETE one as an item placed at its cadence. Empty
+    when there is no running cost (or it is blank)."""
+    plan          = plans.vehicle_plan
+    running_costs = plan.running_costs if plan is not None else list()
+    windows = _vehicle_windows( profile, plans, sale_dates, start_date )
     streams, items = list(), list()
-    for cost in plan.running_costs:
+    for cost in running_costs:
         if cost.amount is None:
             continue
         amounts = Schedule.constant( WindowedAmount( cost.amount ) )

@@ -26,7 +26,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
     ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
-from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
+from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.widgets import IsoDateInput
 
@@ -37,9 +37,10 @@ SUBJECT_ROLE   = 'subject'
 RECIPIENT_ROLE = 'recipient'
 SOURCE_ROLE    = 'source'
 TARGET_ROLE    = 'target'
-PROPERTY_ROLE  = 'property'
-LOAN_ROLE      = 'loan'
-CARD_ROLE      = 'card'
+PROPERTY_ROLE   = 'property'
+POSSESSION_ROLE = 'possession'
+LOAN_ROLE       = 'loan'
+CARD_ROLE       = 'card'
 
 # Menu groups, in display order.
 _ACCOUNTS_GROUP  = 'Accounts'
@@ -80,10 +81,22 @@ def _properties( profile ) -> list:
              if asset.asset_class.is_real_estate ]
 
 
-def _mortgages( profile, property_handle : str ) -> list:
-    """The handles of the debts secured by `property_handle` -- the mortgages a sale pays off. A
-    property may carry more than one (e.g. a first and a second), so this is a list, not a flag."""
-    return [ debt.handle for debt in profile.debts if debt.secured_asset == property_handle ]
+# Vehicles (DEPRECIATING) are deliberately excluded: a current vehicle's sale lives in its vehicle-plan
+# disposition (Sell/Replace), so it has one home. This manual sale covers the other tangibles.
+_POSSESSION_CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES )
+
+
+def _possessions( profile ) -> list:
+    """The tangible possessions a manual sale can sell -- precious metals and collectibles. A vehicle is
+    sold through its vehicle-plan disposition instead, not here."""
+    return [ ( asset.handle, asset.name ) for asset in profile.assets
+             if asset.asset_class in _POSSESSION_CLASSES ]
+
+
+def _secured_loans( profile, asset_handle : str ) -> list:
+    """The handles of the debts secured by `asset_handle` -- the loans a sale of that asset pays off (a
+    property's mortgage, a vehicle's auto loan). An asset may carry more than one, so this is a list."""
+    return [ debt.handle for debt in profile.debts if debt.secured_asset == asset_handle ]
 
 
 def _names( profile ) -> dict:
@@ -116,6 +129,7 @@ class EventContributions:
         self.expense_items    = list()
         self.subject_removals = list()
         self.property_sales   = dict()   # property handle -> sale date, for clipping its operating costs
+        self.possession_sales = dict()   # possession handle -> sale date, for clipping its running costs
 
 
 # --- The handler base + the kinds -----------------------------------------
@@ -237,7 +251,7 @@ class SellPropertyEvent( EventType ):
     def summary( self, event : PlanEvent, profile ) -> str:
         name   = _names( profile ).get( event.selections.get( PROPERTY_ROLE ) )
         notice = ( ' (mortgage paid off)'
-                   if _mortgages( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
+                   if _secured_loans( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
         return f'Sell {name} in {event.date.year}{notice}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
@@ -247,12 +261,44 @@ class SellPropertyEvent( EventType ):
         into.property_sales[ property_handle ] = event.date
         into.scheduled_events.append( ScheduledRealization(
             event_date = event.date, holding = property_handle ) )
-        for loan_handle in _mortgages( profile, property_handle ):
+        for loan_handle in _secured_loans( profile, property_handle ):
             into.scheduled_events.append( ScheduledLoanPayoff(
                 event_date = event.date, loan = loan_handle ) )
         # A sale needs no income cascade: rental rent is clipped to the sale date at materialize
         # (`_clipped_to_sale`, from this event's `property_sales`), as are the property's operating
         # expenses. Only the mortgage payoff above is contributed here.
+
+
+def _contribute_possession_sale( profile, possession_handle : str, sale_date, into : EventContributions ):
+    """Sell a possession into `into`: realize the whole holding at its projected value (tax follows its
+    asset class -- a vehicle is TAX_FREE, a collectible taxed as one), pay off any loan secured by it, and
+    record the sale date so materialization ends its running costs at it (mirroring a property sale).
+    Shared by the manual sell-possession event and the derived vehicle transition."""
+    into.possession_sales[ possession_handle ] = sale_date
+    into.scheduled_events.append( ScheduledRealization(
+        event_date = sale_date, holding = possession_handle ) )
+    for loan_handle in _secured_loans( profile, possession_handle ):
+        into.scheduled_events.append( ScheduledLoanPayoff(
+            event_date = sale_date, loan = loan_handle ) )
+
+
+class SellPossessionEvent( EventType ):
+    kind        = EventKind.SELL_POSSESSION
+    group       = _PROPERTY_GROUP
+    has_amount  = False   # a full sale at the possession's projected value, not a user figure
+    description = 'Sell a possession at its projected value; any loan secured by it is paid off.'
+
+    def references( self, profile ) -> list:
+        return [ ReferenceSpec( POSSESSION_ROLE, 'Possession', _possessions ) ]
+
+    def summary( self, event : PlanEvent, profile ) -> str:
+        name   = _names( profile ).get( event.selections.get( POSSESSION_ROLE ) )
+        notice = ( ' (loan paid off)'
+                   if _secured_loans( profile, event.selections.get( POSSESSION_ROLE ) ) else '' )
+        return f'Sell {name} in {event.date.year}{notice}'
+
+    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        _contribute_possession_sale( profile, event.selections[ POSSESSION_ROLE ], event.date, into )
 
 
 class LoanPayoffEvent( EventType ):
@@ -418,7 +464,7 @@ class DeathEvent( EventType ):
 # --- Registry -------------------------------------------------------------
 
 _EVENT_TYPES = (
-    TransferEvent(), SellPropertyEvent(), LoanPayoffEvent(),
+    TransferEvent(), SellPropertyEvent(), SellPossessionEvent(), LoanPayoffEvent(),
     CardPayoffEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(), GeneralPaymentEvent(),
     CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
 
@@ -449,6 +495,27 @@ def event_contributions( profile, plans, subjects : dict ) -> EventContributions
         if handler.is_materializable( event, profile, plans ):
             handler.contribute( event, profile, subjects, into )
     return into
+
+
+def vehicle_disposition_contributions( profile, plans, into : EventContributions ):
+    """The sales a vehicle plan's dispositions imply: a complete SELL or REPLACE disposition sells that
+    current vehicle (and pays off its loan, and ends its running costs) on the disposition date -- the
+    automated twin of a hand-added sell-possession event, from the stored disposition rather than a
+    written event. Only a complete disposition sells, so a half-entered REPLACE never strands the vehicle
+    (sold with no replacement yet) -- it stays retained until finished. A REPLACE's successor purchase is
+    materialized separately (as a plan vehicle); RETAIN sells nothing. A disposition for a vehicle the
+    Profile no longer has is skipped, so a Profile edit degrades gracefully. (A current vehicle is a
+    `DEPRECIATING` holding, so the same possession-sale helper realizes it.)"""
+    plan = plans.vehicle_plan
+    if plan is None:
+        return
+    asset_handles = { asset.handle for asset in profile.assets }
+    for disposition in plan.dispositions:
+        if disposition.kind is VehicleDispositionKind.KEEP or not disposition.is_complete:
+            continue                                     # retained, or not yet fully entered
+        if disposition.vehicle_handle not in asset_handles:
+            continue                                     # a dropped vehicle
+        _contribute_possession_sale( profile, disposition.vehicle_handle, disposition.sale_date, into )
 
 
 # --- View/template context -------------------------------------------------
