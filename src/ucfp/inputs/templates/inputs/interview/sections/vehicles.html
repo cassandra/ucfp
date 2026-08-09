@@ -6,14 +6,19 @@ are driven entirely by the pane -- the same holding editor Real Estate uses, its
 loan where a property's names the mortgage -- so a new kind adds a pane, not markup here.
 {% endcomment %}
 <p class="text-muted">Your household's current vehicles. An owned vehicle with a loan still owed adds
-  that loan to Debts.</p>
+  that loan to Debts; a leased one is just a name here (its terms are set in the Vehicle plan).</p>
 <div class="row">
   <div class="col-md-6">
+    <h3 class="h6">Owned</h3>
     {% for pane in form.vehicle_panes %}
     <div class="property-pane {% if not forloop.first %}mt-4{% endif %}">
       {% include 'inputs/interview/sections/property_list.html' with properties=pane.properties list_id=pane.list_id form_id=pane.form_id add_url=pane.add_url edit_url=pane.edit_url delete_url=pane.delete_url add_text=pane.add_text empty_text=pane.empty_text %}
       <div id="{{ pane.form_id }}" class="property-editor"></div>
     </div>
     {% endfor %}
+  </div>
+  <div class="col-md-6">
+    <h3 class="h6">Leased</h3>
+    {% include 'inputs/interview/sections/leased_vehicles.html' with leased_form=form.leased_form %}
   </div>
 </div>

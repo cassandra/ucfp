@@ -1,0 +1,27 @@
+{% comment %}
+The household's current leased vehicles (id=leased-dispositions-list), each with its end-of-term plan
+(Return by default) and an Edit that opens the leased-disposition editor in the pane's form area
+(#leased-disposition-form). Refreshed after one is saved. `leased_dispositions` is the list of
+{handle, name, summary}. The rows are the leased vehicles (entered in the Vehicles section); Return is the
+reset.
+{% endcomment %}
+<div id="leased-dispositions-list">
+  {% if leased_dispositions %}
+  <ul class="list-unstyled mb-2">
+    {% for vehicle in leased_dispositions %}
+    <li class="mb-2">
+      <div class="d-flex justify-content-between align-items-baseline">
+        <span>{{ vehicle.name }} &mdash; <span class="text-muted">{{ vehicle.summary }}</span></span>
+        <span class="text-nowrap ml-3">
+          <a data-async="#leased-disposition-form"
+             href="{% url 'leased_disposition_edit' handle=vehicle.handle %}"
+             aria-label="Plan for {{ vehicle.name }}">Edit</a>
+        </span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted mb-2">No leased vehicles &mdash; add them in the Vehicles section.</p>
+  {% endif %}
+</div>

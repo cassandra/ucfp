@@ -46,6 +46,19 @@ class VehicleDispositionKind( LabeledEnum ):
     SELL    = ( 'Sell'   , 'Sell it on a date, with no replacement.' )
 
 
+class LeaseDispositionKind( LabeledEnum ):
+    """What the household plans to do with one current *leased* vehicle at the end of its term -- the
+    discriminator the vehicle plan solicits per leased vehicle, materialization dispatches. RETURN lets
+    the lease expire (the current monthly runs to term end, then nothing) and is the default. RENEW keeps
+    leasing (the current monthly continues past term end, to the horizon) -- a same-cost approximation, no
+    separate successor. BUY purchases a vehicle at term end (the successor), recurring thereafter. (Owned
+    vehicles use the sibling `VehicleDispositionKind`.)"""
+
+    RETURN = ( 'Return', 'Let the lease expire at term end.' )
+    RENEW  = ( 'Renew' , 'Keep leasing -- the monthly continues past the current term.' )
+    BUY    = ( 'Buy'   , 'Buy a vehicle at term end, recurring thereafter.' )
+
+
 class CreditCardPlanMode( LabeledEnum ):
     """How the user plans to pay down a credit-card balance -- the strategy the debt-plan calculator
     resolves into expenses. MONTHLY pays a fixed amount each month until the card clears; BY_DATE

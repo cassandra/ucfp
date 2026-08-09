@@ -162,6 +162,16 @@ class GovernmentPensionEntitlement:
     monthly_at_normal_age: Decimal
 
 
+@dataclass( frozen = True )
+class LeasedVehicle:
+    """A vehicle the household currently leases -- a fact that a lease exists, not an owned asset. It is
+    deliberately thin: the lease's terms (monthly payment, end date) and what happens at term end are the
+    vehicle plan's, keyed to this `handle` (mirroring a debt, whose balance is the fact here but whose
+    repayment terms live in the Debt plan). `handle` is a stable identity (`lease-N`)."""
+    handle: str
+    name: str
+
+
 # --- Aggregate ------------------------------------------------------------
 
 @dataclass( frozen = True )
@@ -188,6 +198,9 @@ class Profile:
     assets: list[ AssetProfile ] = field( default_factory = list )
     # What you owe
     debts: list[ Debt ] = field( default_factory = list )
+    # Vehicles you lease (owned vehicles are DEPRECIATING assets above; a lease confers no ownership, so
+    # it is its own fact). The lease terms and disposition are the vehicle plan's, keyed by handle.
+    leased_vehicles: list[ LeasedVehicle ] = field( default_factory = list )
     # Income flows
     income_flows: list[ IncomeFlow ] = field( default_factory = list )
     # Retirement entitlements

@@ -1,0 +1,26 @@
+{% comment %}
+The leased-vehicles list (id=leased-vehicles), auto-saved. Each row is a vehicle the household leases --
+just a name (a lease is not an owned asset; its terms and end-of-term plan live in the vehicle plan). Each
+row's hidden handle keeps the lease's identity stable across edits (the plan references a lease by handle).
+Fill the blank row to add one; the Remove box drops one. Edits save in the background; only a row
+added/removed re-renders here.
+{% endcomment %}
+<div id="leased-vehicles">
+  <form method="post" action="{% url 'leased_vehicles' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <table class="table table-sm w-auto">
+      <thead>
+        <tr><th>Name</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in leased_form.rows %}
+        <tr>
+          <td>{{ row.handle }}{{ row.name }}</td>
+          <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small">Fill the blank row to add a leased vehicle.</p>
+  </form>
+</div>

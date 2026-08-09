@@ -48,7 +48,8 @@ from ucfp.inputs.plans.defaults import default_drawdown
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
     AssetProfile, Debt, Profile, RENTED_HOME_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX )
-from ucfp.inputs.plans.enums import CreditCardPlanMode, PaymentMethod, VehicleDispositionKind
+from ucfp.inputs.plans.enums import (
+    CreditCardPlanMode, LeaseDispositionKind, PaymentMethod, VehicleDispositionKind )
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanRepayment, Plans, RetirementTiming, Vehicle )
 from ucfp.inputs.assumptions.defaults import default_transaction_costs
@@ -109,8 +110,9 @@ def materialize(
             profile, plans, subjects_by_handle, government_pension ) + flow_streams,
         income_items     = flow_items + events.income_items,
         expense_items    = (
-            recurring_items + expense_items
-            + events.expense_items + card_items + _vehicle_expenses( plans ) + vehicle_items ),
+            recurring_items + expense_items + events.expense_items + card_items
+            + _vehicle_expenses( plans ) + _leased_current_expenses( plans, frame.start_date )
+            + vehicle_items ),
         expense_streams  = recurring_streams + expense_streams + vehicle_streams,
         loans            = _loans( profile, plans ),
         contributions    = _contributions( profile, plans ),
@@ -331,14 +333,34 @@ def _replacement_vehicle( disposition ) -> Vehicle:
                     purchase_date = disposition.sale_date )
 
 
+def _leased_successor_handle( vehicle_handle : str ) -> str:
+    """The identity of the successor a Renew or Buy disposition starts at lease end -- derived from the
+    leased vehicle's handle, so it is stable and distinct from any other vehicle."""
+    return f'{vehicle_handle}-successor'
+
+
+def _leased_successor( disposition ) -> Vehicle:
+    """The vehicle a Buy disposition purchases at lease end, as a materializable `Vehicle`: the stored
+    successor spec with its identity and first date supplied by the disposition -- the handle derived from
+    the leased vehicle, the purchase date the lease end -- so it materializes exactly as a net-new vehicle
+    does (an owned holding that cycles on replacement)."""
+    return replace( disposition.successor,
+                    handle = _leased_successor_handle( disposition.vehicle_handle ),
+                    purchase_date = disposition.lease_end )
+
+
 def _plan_vehicles( plan ) -> list[ Vehicle ]:
-    """Every vehicle the plan materializes into purchases: the net-new vehicles the household adds and
-    each Replace disposition's successor. Retain and Sell dispositions add none -- Retain keeps the
-    current holding running to the horizon, Sell just ends it (see `vehicle_disposition_contributions`)."""
+    """Every vehicle the plan materializes into purchases: the net-new vehicles the household adds, each
+    Replace disposition's successor, and each Buy leased disposition's successor (the purchase that begins
+    at lease end). Retain/Sell/Return/Renew add none -- they keep, end, or continue a current vehicle
+    without a bought successor (their sale/lease expense is handled elsewhere)."""
     replacements = [ _replacement_vehicle( disposition ) for disposition in plan.dispositions
                      if disposition.kind is VehicleDispositionKind.REPLACE
                      and disposition.replacement is not None and disposition.sale_date is not None ]
-    return list( plan.vehicles ) + replacements
+    successors   = [ _leased_successor( disposition ) for disposition in plan.leased_dispositions
+                     if disposition.kind is LeaseDispositionKind.BUY
+                     and disposition.successor is not None and disposition.lease_end is not None ]
+    return list( plan.vehicles ) + replacements + successors
 
 
 def _vehicle_holding_handle( vehicle_handle : str ) -> str:
@@ -496,6 +518,50 @@ def _lease_vehicle_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
     return items
 
 
+def _lease_operates_until( disposition ) -> Optional[ date ]:
+    """When a current lease stops being operated: never (the horizon) for a Renew -- the household keeps
+    leasing at the same monthly -- else the day before its end, so a Buy's purchase chains without a
+    double-counted boundary and a Return simply stops there. None (incomplete) when the end is unset."""
+    if disposition.kind is LeaseDispositionKind.RENEW:
+        return None
+    if disposition.lease_end is None:
+        return None
+    return disposition.lease_end - timedelta( days = 1 )
+
+
+def _leased_operative( disposition, start_date : date ) -> bool:
+    """Whether a leased disposition materializes -- a Renew always does (it just continues at the current
+    monthly), a Return or Buy once its lease end is set and still ahead."""
+    if disposition.kind is LeaseDispositionKind.RENEW:
+        return True
+    return disposition.lease_end is not None and disposition.lease_end > start_date
+
+
+def _lease_window( disposition, start_date : date ) -> DateWindow:
+    """A current lease's operating window -- from now to when it stops being operated (the horizon for a
+    Renew, else the day before its end)."""
+    return DateWindow( start = start_date, end = _lease_operates_until( disposition ) )
+
+
+def _leased_current_expenses( plans : Plans, start_date : date ) -> list[ ExpenseItem ]:
+    """The monthly cost of each current lease -- the leased twin of an owned car's holding: a leased
+    vehicle is pure expense, so its current lease is a monthly item over its window (to the horizon for a
+    Renew, to term end for a Return or Buy). A Buy's successor purchase is materialized separately (as a
+    plan vehicle). Emitted only once the lease's monthly is set and the disposition is operative."""
+    plan = plans.vehicle_plan
+    if plan is None:
+        return list()
+    items = list()
+    for disposition in plan.leased_dispositions:
+        if disposition.monthly and _leased_operative( disposition, start_date ):
+            items.append( ExpenseItem(
+                name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
+                amounts = Schedule.constant( WindowedAmount( disposition.monthly ) ),
+                cadence = Recurrence( Duration( 1, TimeUnit.MONTH ) ),
+                window = _lease_window( disposition, start_date ), handle = CAR_PAYMENTS_HANDLE ) )
+    return items
+
+
 def _operated_until( possession : AssetProfile, sale_dates : dict ) -> Optional[ date ]:
     """The last date a current vehicle is operated: the day before its sale (so its running-cost window
     ends right where its plan replacement's begins -- both windows are inclusive and gate on the span
@@ -517,7 +583,10 @@ def _vehicle_windows( profile : Profile, plans : Plans, sale_dates : dict,
                 if plan is not None else list() )
     current = [ DateWindow( start = start_date, end = _operated_until( possession, sale_dates ) )
                 for possession in profile.assets if possession.asset_class is AssetClass.DEPRECIATING ]
-    return planned + current
+    leased  = [ _lease_window( disposition, start_date )
+                for disposition in ( plan.leased_dispositions if plan is not None else list() )
+                if _leased_operative( disposition, start_date ) ]
+    return planned + current + leased
 
 
 def _vehicle_running_costs( profile : Profile, plans : Plans, sale_dates : dict,

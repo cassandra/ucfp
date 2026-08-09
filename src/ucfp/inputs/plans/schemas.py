@@ -24,7 +24,8 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource
 from ucfp.parameter_sets.enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
 
-from .enums import CreditCardPlanMode, EventKind, PaymentMethod, VehicleDispositionKind
+from .enums import (
+    CreditCardPlanMode, EventKind, LeaseDispositionKind, PaymentMethod, VehicleDispositionKind )
 
 
 # ===== Personal choices (the levers a user turns) =====
@@ -266,15 +267,34 @@ class VehicleDisposition:
 
 
 @dataclass( frozen = True )
+class LeasedVehicleDisposition:
+    """The current lease terms and end-of-term plan for one **leased** vehicle, keyed to its Profile
+    `LeasedVehicle` by `vehicle_handle` -- the leased twin of `VehicleDisposition`. `monthly` and
+    `lease_end` are the current lease's cost and end (its terms live here, mirroring a loan's rate/term in
+    the Debt plan), so the lease materializes only once they are set. `kind` is what happens at term end:
+    RETURN ends the monthly there; RENEW keeps the monthly running to the horizon (no successor -- a same-
+    cost approximation); BUY hands over at `lease_end` to a `successor` -- a fully-formed `Vehicle` (a
+    recurring purchase) beginning then, materialized as any plan vehicle is. `successor` is set only for
+    BUY."""
+    vehicle_handle: str
+    monthly: Optional[ Decimal ] = None
+    lease_end: Optional[ date ] = None
+    kind: LeaseDispositionKind = LeaseDispositionKind.RETURN
+    successor: Optional[ Vehicle ] = None
+
+
+@dataclass( frozen = True )
 class VehiclePlan:
     """The household's car-ownership plan: per-current-vehicle `dispositions` (what happens to each car
-    the household owns today), the net-new `vehicles` it adds over time (each with its own
+    the household owns today), per-current-*leased*-vehicle `leased_dispositions` (each lease's terms and
+    what happens at term end), the net-new `vehicles` it adds over time (each with its own
     purchase/replacement schedule, ownership window, and optional financing), and the shared per-car
-    `running_costs` applied to each vehicle while it is owned. Purchases are smoothed within each
+    `running_costs` applied to each vehicle while it is operated. Purchases are smoothed within each
     vehicle's window (a lump every recurrence, plus a constant financed-cost stream when financed); the
     running costs track the fleet as vehicles are added and retired. Every list is optional so the plan
     persists whichever aspect the user has begun, and materialization emits only the complete parts."""
     dispositions: list[ VehicleDisposition ] = field( default_factory = list )
+    leased_dispositions: list[ LeasedVehicleDisposition ] = field( default_factory = list )
     vehicles: list[ Vehicle ] = field( default_factory = list )
     running_costs: list[ VehicleRunningCost ] = field( default_factory = list )
 

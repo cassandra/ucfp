@@ -44,13 +44,13 @@ from .cash_plan import CashPlanSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
-from .vehicle_profile import VEHICLE_PANES
+from .vehicle_profile import VEHICLE_PANES, LeasedVehiclesForm
 from .retirement import RetirementForm
 from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
-from .vehicle_disposition import dispositions_context
+from .vehicle_disposition import dispositions_context, leased_dispositions_context
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
 from .widgets import IsoDateInput, StateRateSelect, percent_str
 
@@ -379,13 +379,19 @@ class VehiclesForm:
 
     @property
     def vehicle_panes( self ) -> list:
-        """Each vehicle pane's render context -- its heading, its holdings, and the template config (ids,
-        URL names, wording) from the shared `PropertyPane`, reused for vehicles. The section loops over
-        these, so a new vehicle kind is one pane, not another hand-wired block."""
+        """Each owned-vehicle pane's render context -- its heading, its holdings, and the template config
+        (ids, URL names, wording) from the shared `PropertyPane`, reused for vehicles. The section loops
+        over these, so a new vehicle kind is one pane, not another hand-wired block."""
         return [ { 'heading': pane.heading,
                    'properties': properties_context( self._profile, pane.asset_class ),
                    **pane.template_context() }
                  for pane in VEHICLE_PANES ]
+
+    @property
+    def leased_form( self ):
+        """The leased-vehicles list -- the household's current leases as facts (no ownership); their terms
+        and end-of-term plan are the vehicle plan's. Managed by `LeasedVehiclesView`."""
+        return LeasedVehiclesForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
         return profile, plans
@@ -746,9 +752,15 @@ class VehicleExpensesSectionForm:
 
     @property
     def dispositions( self ):
-        """One row per current vehicle (from the Vehicles/Profile section) with its plan disposition --
-        managed by `VehicleDispositionView`, mirroring the Debt plan's per-debt rows."""
+        """One row per current owned vehicle (from the Vehicles/Profile section) with its plan disposition
+        -- managed by `VehicleDispositionView`, mirroring the Debt plan's per-debt rows."""
         return dispositions_context( self._profile, self._plans )
+
+    @property
+    def leased_dispositions( self ):
+        """One row per current leased vehicle with its end-of-term plan -- managed by
+        `LeasedVehicleDispositionView`."""
+        return leased_dispositions_context( self._profile, self._plans )
 
     @property
     def vehicles( self ):

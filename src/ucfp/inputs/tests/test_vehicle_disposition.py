@@ -17,10 +17,13 @@ from common.dataclass_json import from_json_data, to_json_data
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.plans.enums import PaymentMethod, VehicleDispositionKind
-from ucfp.inputs.plans.schemas import Plans, Vehicle, VehicleDisposition, VehiclePlan
-from ucfp.inputs.profile.schemas import AssetProfile, Profile
-from ucfp.inputs.vehicle_disposition import VehicleDispositionForm, dispositions_context
+from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
+from ucfp.inputs.plans.schemas import (
+    LeasedVehicleDisposition, Plans, Vehicle, VehicleDisposition, VehiclePlan )
+from ucfp.inputs.profile.schemas import AssetProfile, LeasedVehicle, Profile
+from ucfp.inputs.vehicle_disposition import (
+    LeasedVehicleDispositionForm, VehicleDispositionForm, dispositions_context,
+    leased_dispositions_context )
 
 
 def _profile( *vehicles ) -> Profile:
@@ -117,6 +120,77 @@ class DispositionListTests( unittest.TestCase ):
         self.assertEqual( [ r[ 'name' ] for r in rows ], [ 'Sedan', 'Truck' ] )
         self.assertEqual( rows[ 0 ][ 'summary' ], 'Sell in 2032' )
         self.assertEqual( rows[ 1 ][ 'summary' ], 'Retain' )      # no stored disposition -> the default
+
+
+def _leased_profile( *vehicles ) -> Profile:
+    return Profile( leased_vehicles = [ LeasedVehicle( handle = h, name = n ) for h, n in vehicles ] )
+
+
+def _leased_apply( profile, plans, handle, **fields ):
+    data = QueryDict( mutable = True )
+    data.update( fields )
+    form = LeasedVehicleDispositionForm( data, profile = profile, plans = plans, handle = handle )
+    assert form.is_valid(), form.errors
+    _profile, plans = form.apply( profile, plans )
+    return plans
+
+
+def _leased_dispositions( plans ) -> list:
+    return plans.vehicle_plan.leased_dispositions if plans.vehicle_plan is not None else []
+
+
+class LeasedDispositionFormTests( unittest.TestCase ):
+
+    def test_a_fresh_lease_defaults_to_return( self ):
+        form = LeasedVehicleDispositionForm( profile = _leased_profile( ( 'lease-1', 'Sedan' ) ),
+                                             plans = Plans(), handle = 'lease-1' )
+        self.assertEqual( form.initial[ 'kind' ], LeaseDispositionKind.RETURN.name )
+
+    def test_a_bare_return_stores_nothing( self ):
+        # Return with no terms is the default -- stored as absence, so the plan stays empty.
+        plans = _leased_apply( _leased_profile( ( 'lease-1', 'Sedan' ) ), Plans(), 'lease-1',
+                               kind = 'RETURN' )
+        self.assertEqual( _leased_dispositions( plans ), [] )
+
+    def test_a_return_with_terms_records_the_current_lease( self ):
+        plans = _leased_apply( _leased_profile( ( 'lease-1', 'Sedan' ) ), Plans(), 'lease-1',
+                               kind = 'RETURN', monthly = '400', lease_end = '2029-01-01' )
+        disposition = _leased_dispositions( plans )[ 0 ]
+        self.assertIs( disposition.kind, LeaseDispositionKind.RETURN )
+        self.assertEqual( disposition.monthly, Decimal( '400' ) )
+        self.assertEqual( disposition.lease_end, date( 2029, 1, 1 ) )
+        self.assertIsNone( disposition.successor )
+
+    def test_a_buy_records_a_successor_carrying_the_lease_name( self ):
+        plans = _leased_apply( _leased_profile( ( 'lease-1', 'Leased Sedan' ) ), Plans(), 'lease-1',
+                               kind = 'BUY', monthly = '400', lease_end = '2029-01-01',
+                               purchase_price = '30,000', recurrence_years = '7', payment_method = 'CASH' )
+        disposition = _leased_dispositions( plans )[ 0 ]
+        self.assertIs( disposition.kind, LeaseDispositionKind.BUY )
+        self.assertIsNotNone( disposition.successor )
+        self.assertEqual( disposition.successor.name, 'Leased Sedan' )
+        self.assertEqual( disposition.successor.purchase_price, Decimal( '30000' ) )
+        self.assertIsNone( disposition.successor.purchase_date )     # supplied at materialization
+
+    def test_edit_pre_fills_the_current_lease_and_kind( self ):
+        existing = Plans( vehicle_plan = VehiclePlan( leased_dispositions = [
+            LeasedVehicleDisposition(
+                vehicle_handle = 'lease-1', monthly = Decimal( '350' ), lease_end = date( 2028, 6, 1 ),
+                kind = LeaseDispositionKind.RENEW ) ] ) )
+        form = LeasedVehicleDispositionForm( profile = _leased_profile( ( 'lease-1', 'Sedan' ) ),
+                                             plans = existing, handle = 'lease-1' )
+        self.assertEqual( form.initial[ 'kind' ], LeaseDispositionKind.RENEW.name )
+        self.assertEqual( form.initial[ 'monthly' ], Decimal( '350' ) )
+        self.assertEqual( form.initial[ 'lease_end' ], date( 2028, 6, 1 ) )
+
+    def test_the_list_summarizes_each_leased_vehicle( self ):
+        profile = _leased_profile( ( 'lease-1', 'Sedan' ), ( 'lease-2', 'Truck' ) )
+        plans   = Plans( vehicle_plan = VehiclePlan( leased_dispositions = [
+            LeasedVehicleDisposition( vehicle_handle = 'lease-1', kind = LeaseDispositionKind.BUY,
+                                      lease_end = date( 2029, 1, 1 ) ) ] ) )
+        rows = leased_dispositions_context( profile, plans )
+        self.assertEqual( rows[ 0 ][ 'summary' ], 'Buy in 2029' )
+        self.assertEqual( rows[ 1 ][ 'summary' ], 'Return' )        # no stored disposition -> the default
 
 
 class DispositionSerializationTests( unittest.TestCase ):

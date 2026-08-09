@@ -14,11 +14,12 @@ from django.http import QueryDict
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.interview import VehiclesForm
-from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.plans.enums import LeaseDispositionKind
+from ucfp.inputs.plans.schemas import LeasedVehicleDisposition, Plans, VehiclePlan
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile
 from ucfp.inputs.properties import delete_property
-from ucfp.inputs.vehicle_profile import VehicleHoldingForm
+from ucfp.inputs.vehicle_profile import LeasedVehiclesForm, VehicleHoldingForm
 
 
 def _apply( profile : Profile, handle = None, **fields ):
@@ -117,6 +118,38 @@ class VehiclesSectionTests( unittest.TestCase ):
         self.assertEqual( len( panes ), 1 )
         listed = [ ( item[ 'handle' ], item[ 'name' ] ) for item in panes[ 0 ][ 'properties' ] ]
         self.assertEqual( listed, [ ( 'vehicle-1', 'Car' ) ] )
+
+
+class LeasedVehiclesFormTests( unittest.TestCase ):
+    """The leased-vehicles inline list mints stable `lease-N` handles and, on removal, reaps the vehicle
+    plan of the removed lease's disposition -- the delete safety that keeps a plan from dangling."""
+
+    @staticmethod
+    def _apply( profile, plans, **fields ):
+        data = QueryDict( mutable = True )
+        data.update( fields )
+        form = LeasedVehiclesForm( data, profile = profile, plans = plans )
+        assert form.is_valid(), form.errors
+        return form.apply( profile, plans )
+
+    def test_a_new_leased_vehicle_mints_a_stable_handle( self ):
+        profile, _plans = self._apply( Profile(), Plans(), name_0 = 'Leased Sedan' )
+        self.assertEqual( [ ( v.handle, v.name ) for v in profile.leased_vehicles ],
+                          [ ( 'lease-1', 'Leased Sedan' ) ] )
+
+    def test_removing_a_lease_reaps_its_disposition( self ):
+        profile = Profile( leased_vehicles = [ LeasedVehicle( handle = 'lease-1', name = 'Sedan' ) ] )
+        plans   = Plans( vehicle_plan = VehiclePlan( leased_dispositions = [
+            LeasedVehicleDisposition( vehicle_handle = 'lease-1', kind = LeaseDispositionKind.RENEW ) ] ) )
+        profile, plans = self._apply(                          # submit the row with its Remove box ticked
+            profile, plans, handle_0 = 'lease-1', name_0 = 'Sedan', remove_0 = 'on' )
+        self.assertEqual( profile.leased_vehicles, [] )
+        self.assertEqual( plans.vehicle_plan.leased_dispositions, [] )   # the orphaned disposition reaped
+
+    def test_an_existing_lease_keeps_its_handle_across_an_edit( self ):
+        profile = Profile( leased_vehicles = [ LeasedVehicle( handle = 'lease-2', name = 'Sedan' ) ] )
+        profile, _plans = self._apply( profile, Plans(), handle_0 = 'lease-2', name_0 = 'Sedan renamed' )
+        self.assertEqual( profile.leased_vehicles[ 0 ].handle, 'lease-2' )
 
 
 if __name__ == '__main__':

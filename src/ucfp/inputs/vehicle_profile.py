@@ -22,7 +22,7 @@ from common.forms import MoneyField, StyledFormMixin
 from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.compatibility import plans_without_vehicles
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.profile.schemas import AssetProfile, Debt
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle
 from ucfp.inputs.properties import PropertyPane, _minted_handle, delete_property
 
 _VEHICLE_PREFIX = 'vehicle-'
@@ -130,3 +130,71 @@ def delete_vehicle_holding( profile, plans, vehicle_handle : str ):
     and drop any vehicle-plan disposition keyed to it, so a deleted vehicle leaves nothing dangling."""
     profile, plans = delete_property( profile, plans, vehicle_handle )
     return profile, plans_without_vehicles( plans, { vehicle_handle } )
+
+
+_LEASE_PREFIX = 'lease-'
+
+
+def _minted_leased_handle( taken : set ) -> str:
+    """The lowest `lease-N` handle free among `taken` -- a stable identity a leased vehicle keeps across
+    edits, since the vehicle plan references a lease by handle (mirrors the possessions form's scheme)."""
+    index = 1
+    while f'{_LEASE_PREFIX}{index}' in taken:
+        index += 1
+    return f'{_LEASE_PREFIX}{index}'
+
+
+class LeasedVehiclesForm( forms.Form ):
+    """The leased-vehicles list of the Vehicles section -- a background-saved list of the vehicles the
+    household currently leases, each just a name. A lease confers no ownership, so there is no value or
+    loan (unlike an owned `VehicleHoldingForm`); the lease's terms and end-of-term plan are the vehicle
+    plan's, keyed to the leased vehicle's handle. A trailing blank row adds one; an existing row's Remove
+    box drops it. `apply` replaces the leased-vehicle facts and reaps the vehicle plan of any disposition
+    for a removed lease. Each row carries its stable `handle` in a hidden field -- the plan references a
+    lease by it, so identity must survive edits rather than being reindexed by position."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        super().__init__( data )
+        self._items = list( profile.leased_vehicles ) if profile is not None else []
+        for index in range( len( self._items ) + 1 ):   # existing rows, then one blank to add
+            self._build_row( index )
+
+    def _build_row( self, index : int ):
+        item = self._items[ index ] if index < len( self._items ) else None
+        self.fields[ f'handle_{index}' ] = forms.CharField(
+            required = False, widget = forms.HiddenInput, initial = item.handle if item else None )
+        self.fields[ f'name_{index}' ] = forms.CharField(
+            required = False, max_length = 100, initial = item.name if item else None,
+            widget = forms.TextInput( attrs = { 'class' : 'form-control' } ) )
+        if item is not None:
+            self.fields[ f'remove_{index}' ] = forms.BooleanField( required = False )
+
+    @property
+    def rows( self ) -> list:
+        rows = []
+        for index in range( len( self._items ) + 1 ):
+            remove = f'remove_{index}'
+            rows.append( { 'handle' : self[ f'handle_{index}' ], 'name' : self[ f'name_{index}' ],
+                           'remove' : self[ remove ] if remove in self.fields else None } )
+        return rows
+
+    def apply( self, profile, plans ):
+        leased  = self._leased()
+        removed = { item.handle for item in self._items } - { vehicle.handle for vehicle in leased }
+        return replace( profile, leased_vehicles = leased ), plans_without_vehicles( plans, removed )
+
+    def _leased( self ) -> list:
+        # Existing rows keep the handle their hidden field carries; new rows mint one free among every
+        # lease in play, so both survive an edit (the plan references a lease by handle).
+        taken  = { item.handle for item in self._items }
+        leased = []
+        for index in range( len( self._items ) + 1 ):
+            if self.cleaned_data.get( f'remove_{index}' ):
+                continue
+            name = self.cleaned_data.get( f'name_{index}' )
+            if not name:
+                continue                                     # incomplete row -- not materialized
+            handle = self.cleaned_data.get( f'handle_{index}' ) or _minted_leased_handle( taken )
+            taken.add( handle )
+            leased.append( LeasedVehicle( handle = handle, name = name ) )
+        return leased

@@ -45,9 +45,11 @@ from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .state import (
     completed_assumptions, completed_plans, completed_profile, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
-from .vehicle_disposition import VehicleDispositionForm, dispositions_context
+from .vehicle_disposition import (
+    LeasedVehicleDispositionForm, VehicleDispositionForm, dispositions_context,
+    leased_dispositions_context )
 from .vehicle_expenses import VehicleExpensesForm
-from .vehicle_profile import VEHICLE_PANE, delete_vehicle_holding
+from .vehicle_profile import VEHICLE_PANE, LeasedVehiclesForm, delete_vehicle_holding
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .external_factors import ExternalFactorsForm
@@ -882,6 +884,44 @@ class VehicleDispositionView( View ):
             self._FORM_TEMPLATE, { 'disposition_form': form, 'handle': handle }, request = request )
 
 
+@method_decorator( ensure_organization, name = 'dispatch' )
+class LeasedVehicleDispositionView( View ):
+    """`/inputs/interview/vehicle-expenses/leased/<handle>/` -- the end-of-term editor for one current
+    leased vehicle (Return/Renew/Buy) plus its current lease terms. The leased twin of
+    `VehicleDispositionView`: GET opens the editor (or, with `?collapse`, empties it); POST background-saves
+    and refreshes the leased-disposition list."""
+
+    _LIST_TEMPLATE = 'inputs/interview/sections/leased_disposition_list.html'
+    _FORM_TEMPLATE = 'inputs/interview/sections/leased_disposition_form.html'
+
+    def get( self, request, handle = None ):
+        profile, plans = _current_profile_and_plans( request )
+        if request.GET.get( 'collapse' ):
+            return antinode.response( main_content = self._form( request, None, None ) )
+        form = LeasedVehicleDispositionForm( profile = profile, plans = plans, handle = handle )
+        return antinode.response( main_content = self._form( request, handle, form ) )
+
+    def post( self, request, handle ):
+        profile, plans = _current_profile_and_plans( request )
+        form = LeasedVehicleDispositionForm( request.POST, profile = profile, plans = plans, handle = handle )
+        if not form.is_valid():
+            return antinode.response(                          # surface a genuine field error
+                replace_map = { 'leased-disposition-form': self._form( request, handle, form ) } )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return antinode.response(
+            replace_map = { 'leased-dispositions-list': self._list( request, profile, plans ) } )
+
+    def _list( self, request, profile, plans ):
+        return render_to_string(
+            self._LIST_TEMPLATE, { 'leased_dispositions': leased_dispositions_context( profile, plans ) },
+            request = request )
+
+    def _form( self, request, handle, form ):
+        return render_to_string(
+            self._FORM_TEMPLATE, { 'leased_form': form, 'handle': handle }, request = request )
+
+
 class RecurringExpensesView( SelfSavingPaneView ):
     """`/inputs/interview/living-expenses/edit/` -- the recurring-expenses table of the Living Expenses
     step: the `LIVING`-class expenses over the shared age-span timeline. Auto-saves each edit; a
@@ -1148,6 +1188,27 @@ class PossessionsView( SelfSavingPaneView ):
     @staticmethod
     def _count( profile ) -> int:
         return sum( 1 for asset in profile.assets if asset.asset_class in PossessionsForm._CLASSES )
+
+
+class LeasedVehiclesView( SelfSavingPaneView ):
+    """`/inputs/interview/vehicles/leased/edit/` -- the leased-vehicles list of the Vehicles section. Its
+    item set can change, so a save that adds or removes a lease re-renders the pane (and reaps the plan of
+    a removed lease's disposition); an incomplete row simply does not materialize."""
+
+    template     = 'inputs/interview/sections/leased_vehicles.html'
+    target       = 'leased-vehicles'
+    context_name = 'leased_form'
+
+    def build_form( self, request, data = None ):
+        profile, plans = _current_profile_and_plans( request )
+        return LeasedVehiclesForm( data, profile = profile, plans = plans )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        before = len( profile.leased_vehicles )
+        profile, plans = form.apply( profile, plans )
+        _save_profile_and_plans( request, profile, plans )
+        return len( profile.leased_vehicles ) != before         # a lease was added or removed
 
 
 class DebtsView( SelfSavingPaneView ):

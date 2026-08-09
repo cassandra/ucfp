@@ -10,12 +10,14 @@ from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
-    AssetProfile, Debt, Profile, SubjectProfile )
+    AssetProfile, Debt, LeasedVehicle, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
-    CreditCardPlan, LoanPrepayment, LoanRepayment, PlanEvent, Plans, RetirementTiming )
-from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
+    CreditCardPlan, LeasedVehicleDisposition, LoanPrepayment, LoanRepayment, PlanEvent, Plans,
+    RetirementTiming, VehicleDisposition, VehiclePlan )
+from ucfp.inputs.plans.enums import (
+    CreditCardPlanMode, EventKind, LeaseDispositionKind, VehicleDispositionKind )
 from ucfp.inputs.compatibility import (
-    PlansIncompatibleError, assert_compatible, compatibility_issues )
+    PlansIncompatibleError, assert_compatible, compatibility_issues, plans_without_vehicles )
 
 
 def _profile() -> Profile:
@@ -69,3 +71,41 @@ class CompatibilityTest( SimpleTestCase ):
             kind = EventKind.TRANSFER, date = date( 2030, 1, 1 ),
             selections = { 'source': 'nonesuch' } ) ] )
         self.assertEqual( len( compatibility_issues( _profile(), dangling ) ), 1 )
+
+
+class VehicleDriftTest( SimpleTestCase ):
+    """A vehicle-plan disposition (owned or leased) must resolve against the Profile's vehicles, and a
+    deleted vehicle's disposition is reaped -- the vehicle counterpart of the debt drift/reap."""
+
+    def _profile( self ):
+        return Profile(
+            assets = [ AssetProfile( handle = 'vehicle-1', name = 'Car',
+                                     asset_class = AssetClass.DEPRECIATING,
+                                     opening_value = Decimal( '20000' ) ) ],
+            leased_vehicles = [ LeasedVehicle( handle = 'lease-1', name = 'Leased Car' ) ] )
+
+    def _plans( self ):
+        return Plans( vehicle_plan = VehiclePlan(
+            dispositions = [ VehicleDisposition(
+                vehicle_handle = 'vehicle-1', kind = VehicleDispositionKind.SELL,
+                sale_date = date( 2030, 1, 1 ) ) ],
+            leased_dispositions = [ LeasedVehicleDisposition(
+                vehicle_handle = 'lease-1', kind = LeaseDispositionKind.RETURN,
+                lease_end = date( 2029, 1, 1 ) ) ] ) )
+
+    def test_resolving_vehicle_dispositions_are_compatible( self ):
+        self.assertEqual( compatibility_issues( self._profile(), self._plans() ), [] )
+
+    def test_a_disposition_for_a_removed_owned_vehicle_is_flagged( self ):
+        issues = compatibility_issues( Profile( leased_vehicles = self._profile().leased_vehicles ),
+                                       self._plans() )
+        self.assertTrue( any( 'unknown vehicle' in issue for issue in issues ) )
+
+    def test_a_disposition_for_a_removed_leased_vehicle_is_flagged( self ):
+        issues = compatibility_issues( Profile( assets = self._profile().assets ), self._plans() )
+        self.assertTrue( any( 'unknown leased vehicle' in issue for issue in issues ) )
+
+    def test_reaping_a_vehicle_strips_owned_and_leased_dispositions( self ):
+        reaped = plans_without_vehicles( self._plans(), { 'vehicle-1', 'lease-1' } )
+        self.assertEqual( reaped.vehicle_plan.dispositions, [] )
+        self.assertEqual( reaped.vehicle_plan.leased_dispositions, [] )

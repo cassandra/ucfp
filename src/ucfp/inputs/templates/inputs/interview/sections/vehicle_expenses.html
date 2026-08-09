@@ -16,6 +16,14 @@ every car while owned.
     {% include 'inputs/interview/sections/vehicle_disposition_list.html' with dispositions=form.dispositions %}
     <div id="vehicle-disposition-form" class="mt-2"></div>
 
+    {% if form.leased_dispositions %}
+    <h6 class="mt-4">Your leased vehicles</h6>
+    <p class="text-muted small">For each vehicle you lease today, its current payment and, at term end,
+      whether you return it, keep leasing, or buy.</p>
+    {% include 'inputs/interview/sections/leased_disposition_list.html' with leased_dispositions=form.leased_dispositions %}
+    <div id="leased-disposition-form" class="mt-2"></div>
+    {% endif %}
+
     <h6 class="mt-4">Additional future vehicles</h6>
     <p class="text-muted small">Any recurring vehicle purchases not tied to a car you own now -- a new car
       you plan to add, on its own replacement schedule.</p>
