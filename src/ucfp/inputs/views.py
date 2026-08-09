@@ -50,7 +50,7 @@ from .vehicle_disposition import (
 from .vehicle_expenses import VehicleExpensesForm
 from .vehicle_profile import (
     CurrentVehicleForm, _minted_current_vehicle_handle, current_vehicles_context,
-    delete_current_vehicle )
+    delete_current_vehicle, vehicle_heading )
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .external_factors import ExternalFactorsForm
@@ -860,29 +860,36 @@ class VehicleDispositionView( View ):
     def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
         if request.GET.get( 'collapse' ):
-            return antinode.response( main_content = self._form( request, None, None ) )
+            return antinode.response(
+                main_content = self._form( request, None, None, profile ),
+                replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
         form = VehicleDispositionForm( profile = profile, plans = plans, handle = handle )
-        return antinode.response( main_content = self._form( request, handle, form ) )
+        return antinode.response(
+            main_content = self._form( request, handle, form, profile ),
+            replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
 
     def post( self, request, handle ):
         profile, plans = _current_profile_and_plans( request )
         form = VehicleDispositionForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
-                replace_map = { 'vehicle-disposition-form': self._form( request, handle, form ) } )
+                replace_map = { 'vehicle-disposition-form': self._form( request, handle, form, profile ) } )
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
         return antinode.response(
-            replace_map = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
+            replace_map = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
 
-    def _list( self, request, profile, plans ):
+    def _list( self, request, profile, plans, active = None ):
         return render_to_string(
-            self._LIST_TEMPLATE, { 'dispositions': all_dispositions_context( profile, plans ) },
+            self._LIST_TEMPLATE,
+            { 'dispositions': all_dispositions_context( profile, plans ), 'active': active },
             request = request )
 
-    def _form( self, request, handle, form ):
+    def _form( self, request, handle, form, profile ):
         return render_to_string(
-            self._FORM_TEMPLATE, { 'disposition_form': form, 'handle': handle }, request = request )
+            self._FORM_TEMPLATE,
+            { 'disposition_form': form, 'handle': handle, 'heading': vehicle_heading( profile, handle ) },
+            request = request )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -899,29 +906,36 @@ class LeasedVehicleDispositionView( View ):
     def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
         if request.GET.get( 'collapse' ):
-            return antinode.response( main_content = self._form( request, None, None ) )
+            return antinode.response(
+                main_content = self._form( request, None, None, profile ),
+                replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
         form = LeasedVehicleDispositionForm( profile = profile, plans = plans, handle = handle )
-        return antinode.response( main_content = self._form( request, handle, form ) )
+        return antinode.response(
+            main_content = self._form( request, handle, form, profile ),
+            replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
 
     def post( self, request, handle ):
         profile, plans = _current_profile_and_plans( request )
         form = LeasedVehicleDispositionForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
-                replace_map = { 'vehicle-disposition-form': self._form( request, handle, form ) } )
+                replace_map = { 'vehicle-disposition-form': self._form( request, handle, form, profile ) } )
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
         return antinode.response(
-            replace_map = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
+            replace_map = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
 
-    def _list( self, request, profile, plans ):
+    def _list( self, request, profile, plans, active = None ):
         return render_to_string(
-            self._LIST_TEMPLATE, { 'dispositions': all_dispositions_context( profile, plans ) },
+            self._LIST_TEMPLATE,
+            { 'dispositions': all_dispositions_context( profile, plans ), 'active': active },
             request = request )
 
-    def _form( self, request, handle, form ):
+    def _form( self, request, handle, form, profile ):
         return render_to_string(
-            self._FORM_TEMPLATE, { 'leased_form': form, 'handle': handle }, request = request )
+            self._FORM_TEMPLATE,
+            { 'leased_form': form, 'handle': handle, 'heading': vehicle_heading( profile, handle ) },
+            request = request )
 
 
 class RecurringExpensesView( SelfSavingPaneView ):
@@ -1199,42 +1213,53 @@ class _CurrentVehicleListView( View ):
 
     _LIST_TEMPLATE = 'inputs/interview/sections/current_vehicle_list.html'
 
-    def _list( self, request, profile ):
+    def _list( self, request, profile, active = None ):
+        # `active` is the handle whose editor is open, so the list can mark that row (the form detaches
+        # from its row, so the highlight ties them back together).
         return render_to_string(
-            self._LIST_TEMPLATE, { 'vehicles': current_vehicles_context( profile ) }, request = request )
+            self._LIST_TEMPLATE, { 'vehicles': current_vehicles_context( profile ), 'active': active },
+            request = request )
 
 
 class CurrentVehicleFormView( _CurrentVehicleListView ):
     """`/inputs/interview/vehicles/add/` and `.../<handle>/` -- the add/edit form for one current vehicle
-    (owned or leased). Add and edit converge on a minted handle. POST background-saves (non-blocking) and
-    refreshes the list; the open form is left untouched except to surface a genuine field error."""
+    (owned or leased), opened as a card headed by the vehicle's name. Add and edit converge on a minted
+    handle. Opening or saving marks the edited row in the list; POST background-saves (non-blocking)."""
 
     _FORM_TEMPLATE = 'inputs/interview/sections/current_vehicle_form.html'
 
     def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
-        if request.GET.get( 'collapse' ):
-            return antinode.response( main_content = self._form( request, None, None ) )
+        if request.GET.get( 'collapse' ):                  # close: empty the editor, clear the row mark
+            return antinode.response(
+                main_content = self._form( request, None, None, profile ),
+                replace_map  = { 'current-vehicles-list': self._list( request, profile ) } )
         if handle is None:                             # add: mint a fresh handle, open its editor
             handle = _minted_current_vehicle_handle( profile )
         form = CurrentVehicleForm( profile = profile, plans = plans, handle = handle )
-        return antinode.response( main_content = self._form( request, handle, form ) )
+        return antinode.response(
+            main_content = self._form( request, handle, form, profile ),
+            replace_map  = { 'current-vehicles-list': self._list( request, profile, active = handle ) } )
 
     def post( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
         form = CurrentVehicleForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
-                replace_map = { 'current-vehicle-form': self._form( request, handle, form ) } )
+                replace_map = { 'current-vehicle-form': self._form( request, handle, form, profile ) } )
         # A vehicle write is a paired edit: it may reap a stale disposition when ownership flips, so
         # profile and plans commit together (the paired-save seam).
         profile, plans = form.apply( profile, plans )
         _save_profile_and_plans( request, profile, plans )
-        return antinode.response( replace_map = { 'current-vehicles-list': self._list( request, profile ) } )
+        return antinode.response(
+            replace_map = { 'current-vehicles-list': self._list( request, profile, active = handle ) } )
 
-    def _form( self, request, handle, form ):
+    def _form( self, request, handle, form, profile ):
         return render_to_string(
-            self._FORM_TEMPLATE, { 'vehicle_form': form, 'handle': handle }, request = request )
+            self._FORM_TEMPLATE,
+            { 'vehicle_form': form, 'handle': handle,
+              'heading': vehicle_heading( profile, handle ) if handle else None },
+            request = request )
 
 
 class CurrentVehicleDeleteView( _CurrentVehicleListView ):

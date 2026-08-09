@@ -59,6 +59,12 @@ def current_vehicles_context( profile ) -> list:
     return owned + leased
 
 
+def vehicle_heading( profile, handle : str ):
+    """The {handle, name, ownership} of a current vehicle for an editor's card header, or None when the
+    handle names no saved vehicle yet (a just-added one being filled in)."""
+    return next( ( v for v in current_vehicles_context( profile ) if v[ 'handle' ] == handle ), None )
+
+
 def delete_current_vehicle( profile, plans, handle : str ):
     """Remove a current vehicle -- an owned holding (and its secured loan, via `delete_property`) or a
     leased fact -- and drop any vehicle-plan disposition keyed to it (owned or leased)."""

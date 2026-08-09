@@ -9,13 +9,14 @@ combined list of {handle, name, ownership, summary, edit_route}.
   {% if dispositions %}
   <ul class="list-unstyled mb-2">
     {% for vehicle in dispositions %}
-    <li class="mb-2">
+    <li class="mb-2 py-1 {% if vehicle.handle == active %}bg-light border-left border-primary rounded-right pl-2{% endif %}">
       <div class="d-flex justify-content-between align-items-baseline">
         <span>
           <span class="badge badge-{% if vehicle.ownership == 'Owned' %}info{% else %}secondary{% endif %} mr-1">{{ vehicle.ownership }}</span>
           {{ vehicle.name }} <span class="text-muted">&mdash; {{ vehicle.summary }}</span>
         </span>
         <span class="text-nowrap ml-3">
+          {% if vehicle.handle == active %}<span class="text-muted small mr-1">editing</span>{% endif %}
           <a data-async="#vehicle-disposition-form"
              href="{% url vehicle.edit_route handle=vehicle.handle %}"
              aria-label="Plan for {{ vehicle.name }}">Edit</a>
