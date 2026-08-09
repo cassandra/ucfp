@@ -1,12 +1,12 @@
 {% comment %}
 The end-of-term editor for one current leased vehicle (id=vehicle-disposition-form), opened from the one
 current-vehicles list into the shared form area (a leased row's Edit routes here; an owned row's routes to
-`vehicle_disposition_form.html`). Auto-saves in the background. First the current lease terms (monthly,
-end); then the
-`kind` radio drives a switch (inputs.js) revealing what each end-of-term choice needs: Return and Renew
-nothing more, Buy the purchase fields (with the payment method as a nested switch). Non-blocking: the plan
-takes effect once its fields are set. "Done" closes the editor; it is already saved. Empty when none is
-open. Reads `leased_form` and `handle`.
+`vehicle_disposition_form.html`). Auto-saves in the background. First the current lease (monthly, end);
+then the `kind` radio drives a switch (inputs.js) revealing only the fields its choice needs -- Return
+none, Renew a renewed lease's terms, Buy-with-cash a price, Buy-with-loan a price and financing. The kind
+*is* the payment type, so there is no separate payment picker; a field shared across kinds (a monthly, a
+down) carries conditional labels. The loan buy is marked so the auto-loan calculator fills its monthly.
+"Done" closes the editor. Empty when none is open. Reads `leased_form` and `handle`.
 {% endcomment %}
 <div id="vehicle-disposition-form">
   {% if leased_form %}
@@ -24,25 +24,37 @@ open. Reads `leased_form` and `handle`.
       <fieldset class="form-group mb-2 mt-2">
         <legend class="col-form-label d-block mb-1 pt-0 small">At lease end</legend>
         {% for radio in leased_form.kind %}
-        <div class="form-check form-check-inline">
+        <div class="form-check form-check-inline"{% if radio.data.value == leased_form.buy_loan_kind %} data-{{ AppConst.VEHICLE_FINANCES_DATA_ATTR }}="1"{% endif %}>
           {{ radio.tag }}
           <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
         </div>
         {% endfor %}
       </fieldset>
-      {% comment %}
-      Buy only: the purchased vehicle's recurring-purchase fields plus its payment method (a nested switch).
-      Its purchase date is not asked here -- it is the lease end above.
-      {% endcomment %}
-      <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_kind }}">
-        <p class="small text-muted mb-1 mt-2"><strong>Purchase</strong></p>
-        <div class="form-row">
-          <div class="col-sm-4">{{ leased_form.purchase_price.as_field_group }}</div>
-          <div class="col-sm-4">{{ leased_form.recurrence_years.as_field_group }}</div>
-          <div class="col-sm-4">{{ leased_form.end_date.as_field_group }}</div>
-        </div>
-        {% include 'inputs/interview/sections/_vehicle_payment_fields.html' with form=leased_form %}
+      {% comment %} The successor's fields -- each shown for the kinds it applies to (Return shows none),
+      with conditional labels where a field means different things for a renewed lease vs a bought car. {% endcomment %}
+      <div class="form-row">
+        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_kinds }}">{{ leased_form.purchase_price.as_field_group }}</div>
+        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.successor_kinds }}">{{ leased_form.recurrence_years.as_field_group }}</div>
+        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.successor_kinds }}">{{ leased_form.end_date.as_field_group }}</div>
       </div>
+      <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.financed_kinds }}">
+        {% comment %}
+        One down field, two labels -- a renewed lease's "Due at signing" vs a loan buy's "Down payment"
+        (the field's own label is blank, so this holds the only one). The monthly is always "Monthly
+        payment" (its baked-in label), matching how an owned Replace shows a lease, so it needs no override.
+        {% endcomment %}
+        <div class="col-sm-4">
+          <label class="text-muted small mb-0 d-block" for="{{ leased_form.down_payment.id_for_label }}"><span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.renew_kind }}">Due at signing</span><span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_loan_kind }}">Down payment</span></label>
+          {{ leased_form.down_payment.as_field_group }}
+        </div>
+        <div class="col-sm-4">{{ leased_form.monthly_payment.as_field_group }}</div>
+        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.renew_kind }}">{{ leased_form.lease_end_payment.as_field_group }}</div>
+      </div>
+      {# Loan buy only: the down and monthly are amortization-linked, so the calculator keeps them in step. #}
+      <p class="text-muted small mb-0" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_loan_kind }}">
+        Estimated at about {{ leased_form.auto_loan_apr_percent }}% over
+        {{ leased_form.auto_loan_term_years }} years -- set the down payment or the monthly payment and the
+        other updates.</p>
     </div>
     <div class="mt-2">
       <a class="btn btn-sm btn-outline-primary" data-async="#vehicle-disposition-form"

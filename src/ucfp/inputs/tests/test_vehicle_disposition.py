@@ -173,16 +173,26 @@ class LeasedDispositionFormTests( unittest.TestCase ):
         self.assertEqual( disposition.lease_end, date( 2029, 1, 1 ) )
         self.assertIsNone( disposition.successor )
 
-    def test_a_buy_records_a_successor_carrying_the_lease_name( self ):
+    def test_a_buy_with_cash_records_a_cash_successor_carrying_the_lease_name( self ):
+        # The kind fixes the successor's payment method -- no payment field is submitted.
         plans = _leased_apply( _leased_profile( ( 'lease-1', 'Leased Sedan' ) ), Plans(), 'lease-1',
-                               kind = 'BUY', monthly = '400', lease_end = '2029-01-01',
-                               purchase_price = '30,000', recurrence_years = '7', payment_method = 'CASH' )
+                               kind = 'BUY_CASH', monthly = '400', lease_end = '2029-01-01',
+                               purchase_price = '30,000', recurrence_years = '7' )
         disposition = _leased_dispositions( plans )[ 0 ]
-        self.assertIs( disposition.kind, LeaseDispositionKind.BUY )
-        self.assertIsNotNone( disposition.successor )
+        self.assertIs( disposition.kind, LeaseDispositionKind.BUY_CASH )
         self.assertEqual( disposition.successor.name, 'Leased Sedan' )
         self.assertEqual( disposition.successor.purchase_price, Decimal( '30000' ) )
+        self.assertIs( disposition.successor.payment_method, PaymentMethod.CASH )
         self.assertIsNone( disposition.successor.purchase_date )     # supplied at materialization
+
+    def test_a_renew_records_a_lease_successor( self ):
+        # Renew implies the lease payment type -- its successor is a LEASE, from the kind, not a picker.
+        plans = _leased_apply( _leased_profile( ( 'lease-1', 'Sedan' ) ), Plans(), 'lease-1',
+                               kind = 'RENEW', monthly = '400', lease_end = '2029-01-01',
+                               monthly_payment = '450', recurrence_years = '3' )
+        successor = _leased_dispositions( plans )[ 0 ].successor
+        self.assertIs( successor.payment_method, PaymentMethod.LEASE )
+        self.assertEqual( successor.monthly_payment, Decimal( '450' ) )
 
     def test_edit_pre_fills_the_current_lease_and_kind( self ):
         existing = Plans( vehicle_plan = VehiclePlan( leased_dispositions = [
@@ -198,10 +208,10 @@ class LeasedDispositionFormTests( unittest.TestCase ):
     def test_the_list_summarizes_each_leased_vehicle( self ):
         profile = _leased_profile( ( 'lease-1', 'Sedan' ), ( 'lease-2', 'Truck' ) )
         plans   = Plans( vehicle_plan = VehiclePlan( leased_dispositions = [
-            LeasedVehicleDisposition( vehicle_handle = 'lease-1', kind = LeaseDispositionKind.BUY,
+            LeasedVehicleDisposition( vehicle_handle = 'lease-1', kind = LeaseDispositionKind.BUY_CASH,
                                       lease_end = date( 2029, 1, 1 ) ) ] ) )
         rows = leased_dispositions_context( profile, plans )
-        self.assertEqual( rows[ 0 ][ 'summary' ], 'Buy in 2029' )
+        self.assertEqual( rows[ 0 ][ 'summary' ], 'Buy with cash in 2029' )
         self.assertEqual( rows[ 1 ][ 'summary' ], 'Return' )        # no stored disposition -> the default
 
 

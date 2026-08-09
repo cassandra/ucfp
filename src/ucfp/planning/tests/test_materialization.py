@@ -307,9 +307,9 @@ class DispositionMaterializationTests( unittest.TestCase ):
 
 
 class LeasedDispositionMaterializationTests( unittest.TestCase ):
-    """A current lease is pure expense -- a monthly item over its window: to the day before term end for a
-    Return or Buy, to the horizon for a Renew (the household keeps leasing). Only a Buy adds a successor
-    (a bought vehicle beginning at lease end); Return and Renew add none."""
+    """A current lease is pure expense -- a monthly item to the day before term end -- and its successor,
+    fixed by the kind, begins at lease end: a renewed lease as more expense, a cash buy as an owned
+    holding, a loan buy as a financed one. Return adds no successor."""
 
     _START = date( 2026, 1, 1 )
 
@@ -319,28 +319,43 @@ class LeasedDispositionMaterializationTests( unittest.TestCase ):
             successor = successor )
         return Plans( vehicle_plan = VehiclePlan( leased_dispositions = [ disposition ] ) )
 
-    def test_return_charges_the_monthly_to_term_end( self ):
+    @staticmethod
+    def _successor( method, **kwargs ) -> Vehicle:
+        return Vehicle( handle = '', name = 'Next', purchase_price = Decimal( '30000' ),
+                        recurrence_years = 3, payment_method = method, **kwargs )
+
+    def test_the_current_lease_charges_the_monthly_to_the_day_before_term_end( self ):
         items = _leased_current_expenses( self._plans( LeaseDispositionKind.RETURN ), self._START )
         self.assertEqual( len( items ), 1 )
         self.assertEqual( items[ 0 ].amounts.segments[ 0 ].amount, Decimal( '400' ) )
-        self.assertEqual( items[ 0 ].window.start, self._START )
-        self.assertEqual( items[ 0 ].window.end, date( 2028, 12, 31 ) )   # day before the lease ends
-        self.assertEqual( _vehicle_holding_purchases( self._plans( LeaseDispositionKind.RETURN ) ), [] )
+        self.assertEqual( ( items[ 0 ].window.start, items[ 0 ].window.end ),
+                          ( self._START, date( 2028, 12, 31 ) ) )      # day before the lease ends
 
-    def test_renew_charges_the_monthly_to_the_horizon( self ):
-        items = _leased_current_expenses( self._plans( LeaseDispositionKind.RENEW ), self._START )
-        self.assertEqual( len( items ), 1 )
-        self.assertIsNone( items[ 0 ].window.end )                        # no end -- keep leasing
-        self.assertEqual( _vehicle_holding_purchases( self._plans( LeaseDispositionKind.RENEW ) ), [] )
+    def test_return_adds_no_successor( self ):
+        plans = self._plans( LeaseDispositionKind.RETURN )
+        self.assertEqual( _vehicle_holding_purchases( plans ), [] )
+        self.assertEqual( _vehicle_expenses( plans ), [] )
 
-    def test_buy_charges_the_lease_then_adds_a_purchase_successor( self ):
-        successor = Vehicle( handle = '', name = 'Bought', purchase_price = Decimal( '30000' ),
-                             recurrence_years = 7, payment_method = PaymentMethod.CASH )
-        plans     = self._plans( LeaseDispositionKind.BUY, successor = successor )
-        self.assertEqual( len( _leased_current_expenses( plans, self._START ) ), 1 )   # the current lease
-        purchases = _vehicle_holding_purchases( plans )                                # the bought successor
+    def test_renew_adds_a_recurring_lease_successor( self ):
+        plans = self._plans(
+            LeaseDispositionKind.RENEW,
+            successor = self._successor( PaymentMethod.LEASE, monthly_payment = Decimal( '450' ) ) )
+        self.assertEqual( _vehicle_holding_purchases( plans ), [] )     # a lease has no holding
+        self.assertTrue( _vehicle_expenses( plans ) )                  # it materializes as lease expense
+
+    def test_buy_cash_adds_an_owned_recurring_purchase_at_lease_end( self ):
+        plans = self._plans( LeaseDispositionKind.BUY_CASH,
+                             successor = self._successor( PaymentMethod.CASH ) )
+        purchases = _vehicle_holding_purchases( plans )
         self.assertEqual( [ p.holding for p in purchases ], [ 'vehicle:lease-1-successor' ] )
-        self.assertEqual( purchases[ 0 ].window.start, date( 2029, 1, 1 ) )            # begins at lease end
+        self.assertEqual( purchases[ 0 ].window.start, date( 2029, 1, 1 ) )   # begins at lease end
+
+    def test_buy_loan_finances_the_successor( self ):
+        plans = self._plans(
+            LeaseDispositionKind.BUY_LOAN,
+            successor = self._successor( PaymentMethod.LOAN, down_payment = Decimal( '5000' ) ) )
+        self.assertEqual( [ o.handle for o in _vehicle_loan_originations( plans ) ],
+                          [ 'vehicle-loan:lease-1-successor' ] )
 
     def test_a_lease_with_no_monthly_charges_nothing( self ):
         plans = self._plans( LeaseDispositionKind.RETURN, monthly = None )

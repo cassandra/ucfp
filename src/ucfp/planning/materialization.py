@@ -351,14 +351,15 @@ def _leased_successor( disposition ) -> Vehicle:
 
 def _plan_vehicles( plan ) -> list[ Vehicle ]:
     """Every vehicle the plan materializes into purchases: the net-new vehicles the household adds, each
-    Replace disposition's successor, and each Buy leased disposition's successor (the purchase that begins
-    at lease end). Retain/Sell/Return/Renew add none -- they keep, end, or continue a current vehicle
-    without a bought successor (their sale/lease expense is handled elsewhere)."""
+    Replace disposition's successor, and each non-Return leased disposition's successor (the lease or
+    purchase that begins at lease end -- its payment method fixed by the kind). Retain/Sell/Return add
+    none -- they keep or end a current vehicle without a successor (their sale/lease expense is handled
+    elsewhere)."""
     replacements = [ _replacement_vehicle( disposition ) for disposition in plan.dispositions
                      if disposition.kind is VehicleDispositionKind.REPLACE
                      and disposition.replacement is not None and disposition.sale_date is not None ]
     successors   = [ _leased_successor( disposition ) for disposition in plan.leased_dispositions
-                     if disposition.kind is LeaseDispositionKind.BUY
+                     if disposition.kind is not LeaseDispositionKind.RETURN
                      and disposition.successor is not None and disposition.lease_end is not None ]
     return list( plan.vehicles ) + replacements + successors
 
@@ -519,21 +520,17 @@ def _lease_vehicle_items( vehicle : Vehicle ) -> list[ ExpenseItem ]:
 
 
 def _lease_operates_until( disposition ) -> Optional[ date ]:
-    """When a current lease stops being operated: never (the horizon) for a Renew -- the household keeps
-    leasing at the same monthly -- else the day before its end, so a Buy's purchase chains without a
-    double-counted boundary and a Return simply stops there. None (incomplete) when the end is unset."""
-    if disposition.kind is LeaseDispositionKind.RENEW:
-        return None
+    """When a current lease stops being operated: the day before its end -- where its successor (a renewed
+    lease or a purchase) begins, or where a Return simply stops -- so the two chain without a double-
+    counted boundary. None (incomplete) when the end is unset."""
     if disposition.lease_end is None:
         return None
     return disposition.lease_end - timedelta( days = 1 )
 
 
 def _leased_operative( disposition, start_date : date ) -> bool:
-    """Whether a leased disposition materializes -- a Renew always does (it just continues at the current
-    monthly), a Return or Buy once its lease end is set and still ahead."""
-    if disposition.kind is LeaseDispositionKind.RENEW:
-        return True
+    """Whether a leased disposition's current lease materializes -- once its end is set and still ahead
+    (every kind hands over or ends at that date)."""
     return disposition.lease_end is not None and disposition.lease_end > start_date
 
 

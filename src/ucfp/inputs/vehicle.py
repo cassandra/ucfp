@@ -140,6 +140,12 @@ class VehiclePurchaseForm( StyledFormMixin, forms.Form ):
     # names (which are the radio values too). The domain vocabulary stays here; the switch/JS read it
     # through the rendered `data-switch-case` and the finances marker, never as a literal.
     @property
+    def purchase_methods( self ) -> str:
+        """The methods that buy the car at a price -- cash or loan (a lease has no purchase price, so its
+        price field is hidden)."""
+        return f'{PaymentMethod.CASH.name} {PaymentMethod.LOAN.name}'
+
+    @property
     def payment_field_methods( self ) -> str:
         """The methods whose down/monthly fields show -- a loan or a lease (cash pays none)."""
         return f'{PaymentMethod.LOAN.name} {PaymentMethod.LEASE.name}'

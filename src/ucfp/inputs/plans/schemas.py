@@ -272,10 +272,10 @@ class LeasedVehicleDisposition:
     `LeasedVehicle` by `vehicle_handle` -- the leased twin of `VehicleDisposition`. `monthly` and
     `lease_end` are the current lease's cost and end (its terms live here, mirroring a loan's rate/term in
     the Debt plan), so the lease materializes only once they are set. `kind` is what happens at term end:
-    RETURN ends the monthly there; RENEW keeps the monthly running to the horizon (no successor -- a same-
-    cost approximation); BUY hands over at `lease_end` to a `successor` -- a fully-formed `Vehicle` (a
-    recurring purchase) beginning then, materialized as any plan vehicle is. `successor` is set only for
-    BUY."""
+    RETURN ends the monthly there (no successor); RENEW, BUY_CASH, and BUY_LOAN each hand over at
+    `lease_end` to a `successor` -- a fully-formed `Vehicle` beginning then, materialized as any plan
+    vehicle is, whose payment method the kind fixes (a recurring lease for RENEW, a recurring cash or
+    financed purchase for a buy). `successor` is set for every kind but RETURN."""
     vehicle_handle: str
     monthly: Optional[ Decimal ] = None
     lease_end: Optional[ date ] = None

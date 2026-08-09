@@ -48,15 +48,18 @@ class VehicleDispositionKind( LabeledEnum ):
 
 class LeaseDispositionKind( LabeledEnum ):
     """What the household plans to do with one current *leased* vehicle at the end of its term -- the
-    discriminator the vehicle plan solicits per leased vehicle, materialization dispatches. RETURN lets
-    the lease expire (the current monthly runs to term end, then nothing) and is the default. RENEW keeps
-    leasing (the current monthly continues past term end, to the horizon) -- a same-cost approximation, no
-    separate successor. BUY purchases a vehicle at term end (the successor), recurring thereafter. (Owned
-    vehicles use the sibling `VehicleDispositionKind`.)"""
+    discriminator the vehicle plan solicits per leased vehicle, materialization dispatches. For a lease
+    the choice *implies* the payment type of what follows (there is no separate payment picker): RETURN
+    ends it (the current monthly runs to term end, then nothing) and is the default; RENEW signs a new
+    lease and keeps leasing (a recurring lease successor); BUY_CASH and BUY_LOAN buy a vehicle at term end
+    (a recurring owned purchase, paid cash or financed). RENEW/BUY_CASH/BUY_LOAN each carry a `successor`
+    whose payment method is fixed by the kind. (Owned vehicles use the sibling `VehicleDispositionKind`,
+    where Replace instead offers a payment switch.)"""
 
-    RETURN = ( 'Return', 'Let the lease expire at term end.' )
-    RENEW  = ( 'Renew' , 'Keep leasing -- the monthly continues past the current term.' )
-    BUY    = ( 'Buy'   , 'Buy a vehicle at term end, recurring thereafter.' )
+    RETURN   = ( 'Return', 'Let the lease expire at term end.' )
+    RENEW    = ( 'Renew', 'Sign a new lease at term end and keep leasing.' )
+    BUY_CASH = ( 'Buy with cash', 'Buy a vehicle at term end for cash, replacing on a schedule.' )
+    BUY_LOAN = ( 'Buy with loan', 'Buy a vehicle at term end with a loan, replacing on a schedule.' )
 
 
 class CreditCardPlanMode( LabeledEnum ):

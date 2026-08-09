@@ -16,7 +16,7 @@ from common.forms import MoneyField
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.plans.enums import LeaseDispositionKind, VehicleDispositionKind
+from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
     LeasedVehicleDisposition, Vehicle, VehicleDisposition, VehiclePlan )
 from ucfp.inputs.vehicle import VehiclePurchaseForm
@@ -177,14 +177,23 @@ def all_dispositions_context( profile, plans ) -> list:
     return owned + leased
 
 
+# Each end-of-term kind fixes what the successor is paid with -- the lease/purchase choice *is* the kind,
+# so there is no separate payment picker (unlike an owned Replace). Return has no successor.
+_SUCCESSOR_METHOD = {
+    LeaseDispositionKind.RENEW    : PaymentMethod.LEASE,
+    LeaseDispositionKind.BUY_CASH : PaymentMethod.CASH,
+    LeaseDispositionKind.BUY_LOAN : PaymentMethod.LOAN,
+}
+
+
 class LeasedVehicleDispositionForm( VehiclePurchaseForm ):
     """The disposition editor for one current leased vehicle: its current lease terms (monthly, end) and
-    what happens at term end -- Return (let it expire), Renew (keep leasing -- the monthly continues), or
-    Buy (purchase a vehicle then, whose fields are the inherited purchase ones). Keyed to the leased
-    vehicle by `handle`. Non-blocking and background-saved: the choice is recorded immediately (a bare
-    Return stores nothing -- it is the default), and the lease and its successor materialize once their
-    fields are set. The `kind` radio is the outer switch that reveals the Buy successor; the payment
-    method is a nested switch within it."""
+    what happens at term end -- Return (let it expire), Renew (sign a new lease), Buy with cash, or Buy
+    with loan. The kind fixes the successor's payment type, so there is no payment switch (the leased twin
+    of an owned Replace's switch): the `kind` radio reveals only the fields its choice needs -- a renewed
+    lease's terms, or a purchase's price and financing -- reusing the inherited vehicle-purchase fields
+    with conditional labels. Keyed to the leased vehicle by `handle`. Non-blocking and background-saved: a
+    bare Return stores nothing (the default); the lease and its successor materialize once set."""
 
     kind = forms.ChoiceField(
         label = 'At lease end', required = False,
@@ -211,15 +220,37 @@ class LeasedVehicleDispositionForm( VehiclePurchaseForm ):
         if car is not None:
             initial.update( {
                 'purchase_price' : car.purchase_price, 'recurrence_years' : car.recurrence_years,
-                'end_date' : car.end_date, 'payment_method' : car.payment_method.name,
-                'down_payment' : car.down_payment, 'monthly_payment' : car.monthly_payment,
-                'lease_end_payment' : car.lease_end_payment } )
+                'end_date' : car.end_date, 'down_payment' : car.down_payment,
+                'monthly_payment' : car.monthly_payment, 'lease_end_payment' : car.lease_end_payment } )
         return initial
 
+    # The kind-switch case values, so the template carries no member-name literals. A field appears once,
+    # shown for every kind it applies to (with conditional labels where its meaning differs by kind).
     @property
-    def buy_kind( self ) -> str:
-        """The one kind that buys a successor -- its case value reveals the purchase fields."""
-        return LeaseDispositionKind.BUY.name
+    def successor_kinds( self ) -> str:
+        """The kinds that carry a successor -- everything but Return (they show the recurrence and end)."""
+        return ' '.join( k.name for k in _SUCCESSOR_METHOD )
+
+    @property
+    def renew_kind( self ) -> str:
+        """Renew's case value -- reveals the lease-only fields (its lease-end/turn-in payment)."""
+        return LeaseDispositionKind.RENEW.name
+
+    @property
+    def buy_kinds( self ) -> str:
+        """The buy kinds -- they show the purchase price (a renewed lease has none)."""
+        return f'{LeaseDispositionKind.BUY_CASH.name} {LeaseDispositionKind.BUY_LOAN.name}'
+
+    @property
+    def financed_kinds( self ) -> str:
+        """The kinds with a down and monthly -- a renewed lease (due at signing + monthly) and a loan buy
+        (down + monthly). Their labels differ by kind, so the template spans them conditionally."""
+        return f'{LeaseDispositionKind.RENEW.name} {LeaseDispositionKind.BUY_LOAN.name}'
+
+    @property
+    def buy_loan_kind( self ) -> str:
+        """The financed buy -- marked so the auto-loan calculator fills its monthly, and its own labels."""
+        return LeaseDispositionKind.BUY_LOAN.name
 
     def apply( self, profile, plans ):
         cleaned     = self.cleaned_data
@@ -237,16 +268,16 @@ class LeasedVehicleDispositionForm( VehiclePurchaseForm ):
         monthly, lease_end = cleaned.get( 'monthly' ), cleaned.get( 'lease_end' )
         if kind is LeaseDispositionKind.RETURN and monthly is None and lease_end is None:
             return None
-        successor = self._successor( cleaned ) if kind is LeaseDispositionKind.BUY else None
+        successor = self._successor( kind, cleaned ) if kind in _SUCCESSOR_METHOD else None
         return LeasedVehicleDisposition( vehicle_handle = self._handle, monthly = monthly,
                                          lease_end = lease_end, kind = kind, successor = successor )
 
-    def _successor( self, cleaned ) -> Vehicle:
-        # The bought vehicle's identity and first-purchase date are supplied at materialization from the
-        # disposition (handle derived from the lease, purchase date the lease end); the name carries the
-        # leased vehicle's for the run table.
-        return Vehicle( handle = '', name = self._leased_name(), purchase_date = None,
-                        **self._purchase_spec( cleaned ) )
+    def _successor( self, kind, cleaned ) -> Vehicle:
+        # The successor's identity and first-purchase date are supplied at materialization from the
+        # disposition (handle derived from the lease, purchase date the lease end); its payment method is
+        # fixed by the kind (not a picked field); the name carries the leased vehicle's for the run table.
+        spec = { **self._purchase_spec( cleaned ), 'payment_method' : _SUCCESSOR_METHOD[ kind ] }
+        return Vehicle( handle = '', name = self._leased_name(), purchase_date = None, **spec )
 
     def _leased_name( self ) -> str:
         leased = self._profile.leased_vehicles if self._profile is not None else list()
