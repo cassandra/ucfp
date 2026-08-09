@@ -20,9 +20,10 @@ from django import forms
 from common.forms import MoneyField, StyledFormMixin
 
 from ucfp.accounts.enums import AssetClass
+from ucfp.inputs.compatibility import plans_without_vehicles
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt
-from ucfp.inputs.properties import PropertyPane, _minted_handle
+from ucfp.inputs.properties import PropertyPane, _minted_handle, delete_property
 
 _VEHICLE_PREFIX = 'vehicle-'
 
@@ -122,3 +123,10 @@ VEHICLE_PANE = PropertyPane(
 # The vehicle panes in display order, iterated by the Vehicles section and mapped to their
 # add/edit/delete views. One kind today; a tuple to match the property panes' shape.
 VEHICLE_PANES = ( VEHICLE_PANE, )
+
+
+def delete_vehicle_holding( profile, plans, vehicle_handle : str ):
+    """Remove an owned vehicle as a unit -- its holding and any secured auto loan (`delete_property`) --
+    and drop any vehicle-plan disposition keyed to it, so a deleted vehicle leaves nothing dangling."""
+    profile, plans = delete_property( profile, plans, vehicle_handle )
+    return profile, plans_without_vehicles( plans, { vehicle_handle } )

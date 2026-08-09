@@ -15,7 +15,7 @@ class EventKind( LabeledEnum ):
     MEDICAL_PAYMENT    = ( 'Medical expense' , 'A one-time deductible medical expense.' )
     DEATH              = ( 'Death'           , "A subject's passing -- the survivor transition." )
     SELL_PROPERTY      = ( 'Sell property'   , 'Sell a home or rental property.' )
-    SELL_POSSESSION    = ( 'Sell possession' , 'Sell a vehicle, collectible, or other possession.' )
+    SELL_POSSESSION    = ( 'Sell possession' , 'Sell a collectible or other possession (not a vehicle).' )
     LOAN_PAYOFF        = ( 'Loan payoff'     , 'Pay off an amortizing loan in full on a date.' )
     CARD_PAYOFF        = ( 'Card payoff'     , 'Pay off a credit-card balance in full on a date.' )
 
@@ -30,6 +30,20 @@ class PaymentMethod( LabeledEnum ):
     CASH  = ( 'Cash', 'Buy outright -- the car is an owned, depreciating asset.' )
     LOAN  = ( 'Loan', 'Finance the price less a down payment; a new loan each replacement.' )
     LEASE = ( 'Lease', 'Pay to use the car -- down, monthly, and lease-end payments; not owned.' )
+
+
+class VehicleDispositionKind( LabeledEnum ):
+    """What the household plans to do with one current owned vehicle -- the discriminator the vehicle
+    plan solicits per Profile vehicle (like a debt's repayment terms), and which materialization
+    dispatches. KEEP holds the car to the end of its life (it depreciates in place, no replacement) --
+    its user-facing label is 'Retain', and it is the default, so the absence of a stored disposition
+    means KEEP. REPLACE sells it on a date and buys a replacement that recurs thereafter. SELL sells it
+    on a date with no replacement. (Leased dispositions -- renew, return, buy -- arrive with leased
+    current vehicles in a later phase.)"""
+
+    KEEP    = ( 'Retain' , 'Keep driving it to the end of its life -- no replacement.' )
+    REPLACE = ( 'Replace', 'Sell it on a date and buy a replacement, recurring thereafter.' )
+    SELL    = ( 'Sell'   , 'Sell it on a date, with no replacement.' )
 
 
 class CreditCardPlanMode( LabeledEnum ):

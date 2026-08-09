@@ -50,6 +50,7 @@ from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
+from .vehicle_disposition import dispositions_context
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
 from .widgets import IsoDateInput, StateRateSelect, percent_str
 
@@ -744,9 +745,15 @@ class VehicleExpensesSectionForm:
         return True
 
     @property
+    def dispositions( self ):
+        """One row per current vehicle (from the Vehicles/Profile section) with its plan disposition --
+        managed by `VehicleDispositionView`, mirroring the Debt plan's per-debt rows."""
+        return dispositions_context( self._profile, self._plans )
+
+    @property
     def vehicles( self ):
-        """The plan's vehicles for the section's list template -- the per-vehicle add/edit/delete panes
-        manage them through `VehicleFormView` / `VehicleDeleteView`."""
+        """The plan's net-new future vehicles for the section's list template -- the per-vehicle
+        add/edit/delete panes manage them through `VehicleFormView` / `VehicleDeleteView`."""
         return vehicles_context( self._plans )
 
     @property

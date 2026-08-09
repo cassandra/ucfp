@@ -45,8 +45,9 @@ from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .state import (
     completed_assumptions, completed_plans, completed_profile, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
+from .vehicle_disposition import VehicleDispositionForm, dispositions_context
 from .vehicle_expenses import VehicleExpensesForm
-from .vehicle_profile import VEHICLE_PANE
+from .vehicle_profile import VEHICLE_PANE, delete_vehicle_holding
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .external_factors import ExternalFactorsForm
@@ -842,6 +843,45 @@ class VehicleDeleteView( _VehicleListView ):
         return antinode.response( replace_map = { 'vehicles-list': self._list( request, plans ) } )
 
 
+@method_decorator( ensure_organization, name = 'dispatch' )
+class VehicleDispositionView( View ):
+    """`/inputs/interview/vehicle-expenses/current/<handle>/` -- the disposition editor for one current
+    vehicle (Retain/Sell/Replace). GET opens the editor for the handle (or, with `?collapse`, empties the
+    editor area); POST background-saves the disposition (non-blocking) and refreshes the disposition list.
+    Mirrors `VehicleFormView`, but edit-only: the rows are the current vehicles, so there is no add or
+    delete -- Retain is the reset."""
+
+    _LIST_TEMPLATE = 'inputs/interview/sections/vehicle_disposition_list.html'
+    _FORM_TEMPLATE = 'inputs/interview/sections/vehicle_disposition_form.html'
+
+    def get( self, request, handle = None ):
+        profile, plans = _current_profile_and_plans( request )
+        if request.GET.get( 'collapse' ):
+            return antinode.response( main_content = self._form( request, None, None ) )
+        form = VehicleDispositionForm( profile = profile, plans = plans, handle = handle )
+        return antinode.response( main_content = self._form( request, handle, form ) )
+
+    def post( self, request, handle ):
+        profile, plans = _current_profile_and_plans( request )
+        form = VehicleDispositionForm( request.POST, profile = profile, plans = plans, handle = handle )
+        if not form.is_valid():
+            return antinode.response(                          # surface a genuine field error
+                replace_map = { 'vehicle-disposition-form': self._form( request, handle, form ) } )
+        _profile, plans = form.apply( profile, plans )
+        save_plans( current_plans_record( request ), plans )
+        return antinode.response(
+            replace_map = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
+
+    def _list( self, request, profile, plans ):
+        return render_to_string(
+            self._LIST_TEMPLATE, { 'dispositions': dispositions_context( profile, plans ) },
+            request = request )
+
+    def _form( self, request, handle, form ):
+        return render_to_string(
+            self._FORM_TEMPLATE, { 'disposition_form': form, 'handle': handle }, request = request )
+
+
 class RecurringExpensesView( SelfSavingPaneView ):
     """`/inputs/interview/living-expenses/edit/` -- the recurring-expenses table of the Living Expenses
     step: the `LIVING`-class expenses over the shared age-span timeline. Auto-saves each edit; a
@@ -1336,11 +1376,15 @@ class _PropertyFormView( _PropertyView ):
 
 
 class _PropertyDeleteView( _PropertyView ):
-    """Remove a mortgaged property as a unit, then refresh its list in place."""
+    """Remove a mortgaged property (or vehicle) as a unit, then refresh its list in place. `_delete` is
+    the unit removal -- `delete_property` for a property; a vehicle pane overrides it to also reap the
+    vehicle's plan disposition."""
+
+    _delete = staticmethod( delete_property )
 
     def post( self, request, handle ):
         profile, plans = _current_profile_and_plans( request )
-        profile, plans = delete_property( profile, plans, handle )
+        profile, plans = self._delete( profile, plans, handle )
         _save_profile_and_plans( request, profile, plans )
         # Refresh the list by id (replace, not insert) so the re-rendered `<div id=list_id>` swaps the
         # existing one rather than nesting inside it.
@@ -1381,9 +1425,11 @@ class VehicleHoldingFormView( _PropertyFormView ):
 
 
 class VehicleHoldingDeleteView( _PropertyDeleteView ):
-    """`/inputs/interview/vehicles/<handle>/delete/` -- removes the holding and its secured auto loan."""
+    """`/inputs/interview/vehicles/<handle>/delete/` -- removes the holding, its secured auto loan, and
+    any vehicle-plan disposition keyed to it."""
 
-    _PANE = VEHICLE_PANE
+    _PANE   = VEHICLE_PANE
+    _delete = staticmethod( delete_vehicle_holding )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

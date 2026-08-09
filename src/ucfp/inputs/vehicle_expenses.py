@@ -25,12 +25,13 @@ def vehicle_plan_of( plans ):
 
 
 def plan_has_content( plan ) -> bool:
-    """Whether a vehicle plan carries anything worth persisting -- any vehicle, or a running cost with an
-    amount. An all-blank plan (no vehicles, every running-cost amount cleared) is empty, so both panes
-    collapse it back to None rather than leaving a spurious plan that reads as "started"."""
+    """Whether a vehicle plan carries anything worth persisting -- any current-vehicle disposition, any
+    net-new vehicle, or a running cost with an amount. An all-blank plan (no dispositions, no vehicles,
+    every running-cost amount cleared) is empty, so every pane collapses it back to None rather than
+    leaving a spurious plan that reads as "started"."""
     if plan is None:
         return False
-    return ( bool( plan.vehicles )
+    return ( bool( plan.dispositions ) or bool( plan.vehicles )
              or any( cost.amount is not None for cost in plan.running_costs ) )
 
 

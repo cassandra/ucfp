@@ -16,9 +16,9 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer
 from ucfp.inputs.events import (
     EventContributions, POSSESSION_ROLE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent, TransferEvent,
-    vehicle_transition_contributions )
-from ucfp.inputs.plans.enums import EventKind
-from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehiclePlan
+    vehicle_disposition_contributions )
+from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
+from ucfp.inputs.plans.schemas import PlanEvent, Plans, VehicleDisposition, VehiclePlan
 
 
 def _profile( *holdings ):
@@ -141,52 +141,68 @@ class SellPossessionTests( unittest.TestCase ):
         self.assertTrue( SellPossessionEvent().offerable(
             _sale_profile( [ ( 'possession-1', AssetClass.COLLECTIBLES, 'Ring' ) ] ) ) )
 
+    def test_a_vehicle_is_not_offerable_here( self ):
+        # A vehicle (DEPRECIATING) is sold through its vehicle-plan disposition, not this manual sale, so
+        # a household with only a vehicle has nothing to sell here.
+        self.assertFalse( SellPossessionEvent().offerable(
+            _sale_profile( [ ( 'vehicle-1', AssetClass.DEPRECIATING, 'Car' ) ] ) ) )
 
-class VehicleTransitionTests( unittest.TestCase ):
-    """A plan vehicle's `replaces_vehicle` derives a sale of that current possession on the vehicle's
-    purchase date -- the automated transition, from the stored link (no written event). A link to a
-    missing possession is skipped, so a Profile edit degrades gracefully."""
+
+class VehicleDispositionTests( unittest.TestCase ):
+    """A Sell or Replace disposition derives a sale of that current vehicle on the disposition date -- the
+    automated transition, from the stored disposition (no written event). Retain sells nothing, and a
+    disposition for a missing vehicle is skipped, so a Profile edit degrades gracefully."""
 
     @staticmethod
-    def _profile( possessions = (), debts = () ):
+    def _profile( vehicles = (), debts = () ):
         return SimpleNamespace(
             assets   = [ SimpleNamespace( handle = h, asset_class = AssetClass.DEPRECIATING, name = n )
-                         for h, n in possessions ],
+                         for h, n in vehicles ],
             debts    = [ SimpleNamespace( handle = h, secured_asset = s, name = n ) for h, s, n in debts ],
             subjects = [] )
 
     @staticmethod
-    def _plans( replaces = None, purchase = date( 2030, 1, 1 ) ):
-        car = Vehicle( handle = 'vehicle-1', purchase_date = purchase, replaces_vehicle = replaces )
-        return Plans( vehicle_plan = VehiclePlan( vehicles = [ car ] ) )
+    def _plans( kind = None, when = date( 2030, 1, 1 ), handle = 'vehicle-1' ):
+        dispositions = ( [ VehicleDisposition( vehicle_handle = handle, kind = kind, sale_date = when ) ]
+                         if kind is not None else [] )
+        return Plans( vehicle_plan = VehiclePlan( dispositions = dispositions ) )
 
     def _derive( self, profile, plans ):
         into = EventContributions()
-        vehicle_transition_contributions( profile, plans, into )
+        vehicle_disposition_contributions( profile, plans, into )
         return into
 
-    def test_a_linked_vehicle_sells_its_possession_on_the_purchase_date( self ):
-        into = self._derive( self._profile( [ ( 'possession-1', 'Old car' ) ] ),
-                             self._plans( replaces = 'possession-1' ) )
-        self.assertEqual( into.possession_sales, { 'possession-1' : date( 2030, 1, 1 ) } )
+    def test_a_sell_disposition_sells_its_vehicle_on_the_date( self ):
+        into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
+                             self._plans( kind = VehicleDispositionKind.SELL ) )
+        self.assertEqual( into.possession_sales, { 'vehicle-1' : date( 2030, 1, 1 ) } )
         self.assertEqual( [ type( e ).__name__ for e in into.scheduled_events ], [ 'ScheduledRealization' ] )
-        self.assertEqual( into.scheduled_events[ 0 ].holding, 'possession-1' )
+        self.assertEqual( into.scheduled_events[ 0 ].holding, 'vehicle-1' )
 
-    def test_a_linked_vehicles_secured_loan_is_paid_off_too( self ):
+    def test_a_replace_disposition_also_sells_the_outgoing_vehicle( self ):
+        into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
+                             self._plans( kind = VehicleDispositionKind.REPLACE ) )
+        self.assertEqual( into.possession_sales, { 'vehicle-1' : date( 2030, 1, 1 ) } )
+
+    def test_a_secured_vehicles_loan_is_paid_off_too( self ):
         into = self._derive(
-            self._profile( [ ( 'possession-1', 'Old car' ) ], [ ( 'debt-1', 'possession-1', 'Loan' ) ] ),
-            self._plans( replaces = 'possession-1' ) )
+            self._profile( [ ( 'vehicle-1', 'Old car' ) ], [ ( 'debt-1', 'vehicle-1', 'Loan' ) ] ),
+            self._plans( kind = VehicleDispositionKind.SELL ) )
         self.assertEqual( [ type( e ).__name__ for e in into.scheduled_events ],
                           [ 'ScheduledRealization', 'ScheduledLoanPayoff' ] )
 
-    def test_no_link_derives_nothing( self ):
-        into = self._derive( self._profile( [ ( 'possession-1', 'Old car' ) ] ),
-                             self._plans( replaces = None ) )
+    def test_retain_derives_nothing( self ):
+        into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
+                             self._plans( kind = VehicleDispositionKind.KEEP ) )
         self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
 
-    def test_a_link_to_a_removed_possession_is_skipped( self ):
-        # Profile-change robustness: the possession is gone, so the transition derives nothing (no crash).
-        into = self._derive( self._profile( [] ), self._plans( replaces = 'possession-1' ) )
+    def test_no_disposition_derives_nothing( self ):
+        into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ), self._plans( kind = None ) )
+        self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
+
+    def test_a_disposition_for_a_removed_vehicle_is_skipped( self ):
+        # Profile-change robustness: the vehicle is gone, so the disposition derives nothing (no crash).
+        into = self._derive( self._profile( [] ), self._plans( kind = VehicleDispositionKind.SELL ) )
         self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
 
 

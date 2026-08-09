@@ -11,12 +11,11 @@ from decimal import Decimal
 from django.http import QueryDict
 from django.template.loader import render_to_string
 
-from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.plans.enums import PaymentMethod
 from ucfp.inputs.plans.schemas import Plans, Vehicle, VehiclePlan
-from ucfp.inputs.profile.schemas import AssetProfile, Profile
+from ucfp.inputs.profile.schemas import Profile
 from ucfp.inputs.vehicle import VehicleForm, _TYPICAL_PRICE, _TYPICAL_REPLACEMENT_YEARS
 from ucfp.inputs.vehicle_expenses import vehicle_plan_of
 
@@ -130,49 +129,6 @@ class VehicleSwitchTokenTests( unittest.TestCase ):
         attr = f'data-{AppConst.SWITCH_CASE_DATA_ATTR}'
         self.assertIn( f'{attr}="{PaymentMethod.LOAN.name}">Down payment', html )
         self.assertIn( f'{attr}="{PaymentMethod.LEASE.name}">Due at signing', html )
-
-
-class VehicleReplacesLinkTests( unittest.TestCase ):
-    """The optional link to a current vehicle possession round-trips through the form, and the dropdown
-    lists the current vehicles -- shown only when the household has one."""
-
-    @staticmethod
-    def _profile():
-        return Profile( assets = [ AssetProfile(
-            handle = 'possession-1', name = 'Old Car', asset_class = AssetClass.DEPRECIATING,
-            opening_value = Decimal( '20000' ) ) ] )
-
-    def test_a_submitted_link_is_carried_onto_the_vehicle( self ):
-        data = QueryDict( mutable = True )
-        data.update( { 'name': 'Car', 'purchase_date': '2030-01-01', 'purchase_price': '35,000',
-                       'recurrence_years': '7', 'replaces_vehicle': 'possession-1' } )
-        form = VehicleForm( data, profile = self._profile(), plans = Plans(), handle = 'vehicle-1' )
-        assert form.is_valid(), form.errors
-        _profile, plans = form.apply( self._profile(), Plans() )
-        self.assertEqual( vehicle_plan_of( plans ).vehicles[ 0 ].replaces_vehicle, 'possession-1' )
-
-    def test_no_link_leaves_it_unset( self ):
-        data = QueryDict( mutable = True )
-        data.update( { 'name': 'Car', 'purchase_date': '2030-01-01', 'purchase_price': '35,000',
-                       'recurrence_years': '7' } )                          # replaces_vehicle blank
-        form = VehicleForm( data, profile = self._profile(), plans = Plans(), handle = 'vehicle-1' )
-        assert form.is_valid(), form.errors
-        _profile, plans = form.apply( self._profile(), Plans() )
-        self.assertIsNone( vehicle_plan_of( plans ).vehicles[ 0 ].replaces_vehicle )
-
-    def test_the_link_pre_fills_on_edit( self ):
-        car = Vehicle( handle = 'vehicle-1', name = 'Car', purchase_date = date( 2030, 1, 1 ),
-                       purchase_price = Decimal( '35000' ), recurrence_years = 7,
-                       replaces_vehicle = 'possession-1' )
-        plans = Plans( vehicle_plan = VehiclePlan( vehicles = [ car ] ) )
-        form  = VehicleForm( profile = self._profile(), plans = plans, handle = 'vehicle-1' )
-        self.assertEqual( form.initial[ 'replaces_vehicle' ], 'possession-1' )
-
-    def test_the_dropdown_lists_current_vehicles_only_when_present( self ):
-        self.assertEqual( VehicleForm( handle = 'vehicle-1' ).replaceable_vehicles, [] )
-        self.assertEqual(
-            VehicleForm( profile = self._profile(), handle = 'vehicle-1' ).replaceable_vehicles,
-            [ ( 'possession-1', 'Old Car' ) ] )
 
 
 if __name__ == '__main__':

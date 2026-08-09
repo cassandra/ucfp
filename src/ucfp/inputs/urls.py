@@ -75,6 +75,8 @@ urlpatterns = [
           views.VehicleDeleteView.as_view(), name = 'vehicle_delete' ),
     path( 'interview/vehicle-expenses/vehicles/<str:handle>/', views.VehicleFormView.as_view(),
           name = 'vehicle_edit' ),
+    path( 'interview/vehicle-expenses/current/<str:handle>/', views.VehicleDispositionView.as_view(),
+          name = 'vehicle_disposition_edit' ),
     path( 'interview/vehicle-expenses/costs/edit/', views.VehicleExpensesView.as_view(),
           name = 'vehicle_expenses' ),
     path( 'interview/living-expenses/edit/', views.RecurringExpensesView.as_view(),

@@ -264,15 +264,24 @@ window.App.Inputs = (function () {
     // the chosen case makes relevant -- so this is pure presentation, (re)applied on load and after
     // each render, plus live on the control's change.
 
+    // The controls / case blocks belonging to *this* switch, not a nested one -- so switches can nest
+    // (a disposition's kind switch containing a payment switch): each answers only to its own control.
+    // For a lone switch every match's nearest `.js-switch` is itself, so this is a no-op there.
+    function ownedBy( $switch, $elements ) {
+        return $elements.filter( function () {
+            return $( this ).closest( classSelector( C.SWITCH_CLASS ) )[ 0 ] === $switch[ 0 ];
+        } );
+    }
+
     function switchValue( $switch ) {
-        const $control = $switch.find( classSelector( C.SWITCH_CONTROL_CLASS ) );
+        const $control = ownedBy( $switch, $switch.find( classSelector( C.SWITCH_CONTROL_CLASS ) ) );
         const $checked = $control.filter( ':radio:checked' );
         return $checked.length ? $checked.val() : $control.not( ':radio' ).val();
     }
 
     function applySwitch( $switch ) {
         const value = switchValue( $switch );
-        $switch.find( '[' + dataAttr( C.SWITCH_CASE_DATA_ATTR ) + ']' ).each( function () {
+        ownedBy( $switch, $switch.find( '[' + dataAttr( C.SWITCH_CASE_DATA_ATTR ) + ']' ) ).each( function () {
             const $case = $( this );
             const cases = ( $case.attr( dataAttr( C.SWITCH_CASE_DATA_ATTR ) ) || '' ).split( /\s+/ );
             $case.prop( 'hidden', cases.indexOf( value ) === -1 );

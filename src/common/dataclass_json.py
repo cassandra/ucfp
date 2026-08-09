@@ -79,6 +79,20 @@ def from_json_data( target_type: Any, data: Any ) -> Any:
     return data
 
 
+def _reject_shadowed_field( target_type: Any, hints: dict ) -> None:
+    """Guard the field-named-as-its-type footgun. A dataclass field named the same as its type *with a
+    default* -- `date: Optional[date] = None` -- binds a class attribute (`date = None`) that shadows the
+    type when `get_type_hints` resolves the annotation against the class namespace, collapsing it to
+    `NoneType`. `from_json_data` would then pass the raw value through untouched (an ISO string stays a
+    string), silently round-tripping corrupt data. No real field is annotated `None`, so a `NoneType`
+    hint is always this bug: fail loudly, naming the field, rather than deserialize wrong."""
+    shadowed = [ name for name, hint in hints.items() if hint is _NoneType ]
+    if shadowed:
+        raise DataclassJsonError(
+            f'{target_type.__name__} field(s) {shadowed} annotate to NoneType -- a field named the same '
+            f'as its type, with a default, shadows the type when annotations are resolved. Rename it.' )
+
+
 def _from_union( args: tuple, data: Any ) -> Any:
     if data is None:
         return None
@@ -108,6 +122,7 @@ def _from_enum( target_type: Any, data: Any ) -> Any:
 
 def _from_dataclass( target_type: Any, data: dict ) -> Any:
     hints = get_type_hints( target_type )
+    _reject_shadowed_field( target_type, hints )
     kwargs = { name: from_json_data( hints[ name ], value )
                for name, value in data.items() if name in hints }
     try:

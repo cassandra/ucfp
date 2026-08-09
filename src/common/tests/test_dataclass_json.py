@@ -5,8 +5,10 @@ verified independently of either app: Decimal (lossless), date, Enum (by name), 
 and `Duration` value objects, nested dataclasses, lists, tuples, and Optional/None.
 """
 import json
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 
 from django.test import SimpleTestCase
 
@@ -33,6 +35,13 @@ from ucfp.inputs.plans.schemas import (
     RetirementTiming, RothConversion, Withdrawal, Plans )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.assumptions.schemas import Assumptions
+
+
+@dataclass( frozen = True )
+class _FieldNamedAsType:
+    """A field named the same as its type, with a default -- the footgun the codec must reject (the
+    `date = None` default binds a class attribute that shadows the `date` type when hints are resolved)."""
+    date: Optional[ date ] = None
 
 
 def _sample_profile():
@@ -232,6 +241,16 @@ class DataclassJsonRoundTripTest( SimpleTestCase ):
         self.assertIn( 'GIVING', message )
         self.assertIn( 'ExpenseCategory', message )
         self.assertIn( 'schema change', message )
+
+    def test_a_field_named_as_its_type_is_rejected_loudly( self ):
+        # The field-named-as-its-type footgun: a `date: Optional[date] = None` field shadows the type, so
+        # its annotation resolves to NoneType and the value would silently fail to deserialize (an ISO
+        # string staying a string). The codec catches it by name rather than round-tripping corrupt data.
+        with self.assertRaises( DataclassJsonError ) as caught:
+            from_json_data( _FieldNamedAsType, { 'date': '2032-06-01' } )
+        message = str( caught.exception )
+        self.assertIn( '_FieldNamedAsType', message )
+        self.assertIn( 'NoneType', message )
 
 
 class DataclassJsonLeafTest( SimpleTestCase ):

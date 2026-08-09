@@ -24,7 +24,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import ContributionSource
 from ucfp.parameter_sets.enums import CadenceDomain, ExpenseCategory, PropertyContext, Realization
 
-from .enums import CreditCardPlanMode, EventKind, PaymentMethod
+from .enums import CreditCardPlanMode, EventKind, PaymentMethod, VehicleDispositionKind
 
 
 # ===== Personal choices (the levers a user turns) =====
@@ -220,9 +220,11 @@ class VehicleRunningCost:
 
 @dataclass( frozen = True )
 class Vehicle:
-    """One vehicle the household plans to buy over a window: bought at `purchase_price` on
-    `purchase_date` and replaced every `recurrence_years` thereafter, up to `end_date` (blank =
-    ongoing). `payment_method` sets how each purchase is modeled and which payment fields apply:
+    """A recurring vehicle purchase over a window: bought at `purchase_price` on `purchase_date` and
+    replaced every `recurrence_years` thereafter, up to `end_date` (blank = ongoing). It is used two
+    ways -- as a **net-new** future vehicle the household adds, and as the **replacement** a `Replace`
+    disposition buys when a current vehicle is retired (see `VehicleDisposition`). `payment_method` sets
+    how each purchase is modeled and which payment fields apply:
 
     - CASH: no payment fields -- the whole price buys an owned, depreciating asset each cycle.
     - LOAN: `down_payment` is paid up front and the remainder is financed; `monthly_payment` is
@@ -231,12 +233,10 @@ class Vehicle:
     - LEASE: `down_payment` is the first payment, `monthly_payment` the recurring lease payment, and
       `lease_end_payment` the disposition/turn-in cost -- no ownership, no trade-in.
 
-    `handle` is a stable per-vehicle identity (minted `vehicle-N`); every other field is optional so a
-    just-added vehicle persists while it is filled -- materialization emits its purchases only once
-    `purchase_date`, `purchase_price`, and `recurrence_years` are all set, and its running costs while
-    it is owned. `replaces_vehicle` optionally links this recurrence to a current vehicle
-    (by its handle) it stands in for: materialization then sells that vehicle (and pays off its loan)
-    on `purchase_date` -- the derived transition, from this one stored link rather than a written event."""
+    `handle` is a stable per-vehicle identity (a net-new mints `vehicle-N`; a replacement's is derived
+    from the current vehicle it succeeds); every other field is optional so a just-added vehicle persists
+    while it is filled -- materialization emits its purchases only once `purchase_date`, `purchase_price`,
+    and `recurrence_years` are all set, and its running costs while it is owned."""
     handle: str
     name: str = ''
     purchase_date: Optional[ date ] = None
@@ -247,17 +247,34 @@ class Vehicle:
     down_payment: Optional[ Decimal ] = None
     monthly_payment: Optional[ Decimal ] = None
     lease_end_payment: Optional[ Decimal ] = None
-    replaces_vehicle: Optional[ str ] = None   # a current vehicle this recurrence replaces
+
+
+@dataclass( frozen = True )
+class VehicleDisposition:
+    """What the household plans to do with one **current** vehicle, keyed to its Profile handle by
+    `vehicle_handle` -- the vehicle plan's per-vehicle input, mirroring a debt's `LoanRepayment`. `kind`
+    selects the fate; the absence of a stored disposition means KEEP (the vehicle depreciates in place,
+    running to the horizon), so only a non-default choice is recorded. `sale_date` is the sale/handover
+    date, used by SELL and REPLACE. `replacement` is the successor a REPLACE buys -- a fully-formed
+    `Vehicle` whose `purchase_date` is this `sale_date`, so it materializes exactly as a net-new vehicle
+    does; it is None for KEEP and SELL. (Not named `date`: a dataclass field named the same as its type,
+    with a default, shadows the type when annotations are resolved, so it would not deserialize.)"""
+    vehicle_handle: str
+    kind: VehicleDispositionKind
+    sale_date: Optional[ date ] = None
+    replacement: Optional[ Vehicle ] = None
 
 
 @dataclass( frozen = True )
 class VehiclePlan:
-    """The household's car-ownership plan: the `vehicles` it buys over time (each with its own
-    purchase/replacement schedule, ownership window, and optional financing) and the shared per-car
+    """The household's car-ownership plan: per-current-vehicle `dispositions` (what happens to each car
+    the household owns today), the net-new `vehicles` it adds over time (each with its own
+    purchase/replacement schedule, ownership window, and optional financing), and the shared per-car
     `running_costs` applied to each vehicle while it is owned. Purchases are smoothed within each
     vehicle's window (a lump every recurrence, plus a constant financed-cost stream when financed); the
-    running costs track the fleet as vehicles are added and retired. Both lists are optional so the plan
+    running costs track the fleet as vehicles are added and retired. Every list is optional so the plan
     persists whichever aspect the user has begun, and materialization emits only the complete parts."""
+    dispositions: list[ VehicleDisposition ] = field( default_factory = list )
     vehicles: list[ Vehicle ] = field( default_factory = list )
     running_costs: list[ VehicleRunningCost ] = field( default_factory = list )
 

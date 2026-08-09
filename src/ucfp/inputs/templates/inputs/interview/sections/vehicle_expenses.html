@@ -1,19 +1,24 @@
 {% comment %}
-The Vehicle Expenses step (Plans flow): the household's cars as a list of vehicles (each added/edited
-through its own async view, outside the section's Next form) and the shared per-car running costs. Two
-columns -- the replacement plan (the vehicle list, with the add/edit form opening beneath it) on the left,
-the running costs on the right. The form lives under the list so it stays next to the Edit it came from
-and, when the columns stack at narrow widths, appears right after the list rather than below everything.
-The list and its (initially empty) form area come from the section wrapper (`form.vehicles`, managed by
-`VehicleFormView` / `VehicleDeleteView`); the running-costs table is `form.vehicle_costs_form`
-(`VehicleExpensesView`). Each running cost is entered once per car and applies to every car while owned.
+The Vehicle Expenses step (Plans flow), Profile-driven like the Debt plan. Left column: the household's
+*current* vehicles, each with a plan disposition (retain / sell / replace), then any *additional* net-new
+future vehicles; each is edited through its own async view outside the section's Next form, opening beneath
+its list. Right column: the shared per-car running costs. The disposition rows come from the Vehicles
+(Profile) section via `form.dispositions` (managed by `VehicleDispositionView`); the net-new list is
+`form.vehicles` (`VehicleFormView` / `VehicleDeleteView`); the running-costs table is
+`form.vehicle_costs_form` (`VehicleExpensesView`). Each running cost is entered once per car and applies to
+every car while owned.
 {% endcomment %}
 <div class="row">
   <div class="col-lg-6 mb-3 mb-lg-0">
-    <h6>Replacement plan</h6>
-    <p class="text-muted small">Plan your recurring vehicle purchases -- for each car, when you next buy
-      it, its price, and how often you replace it. (A car you already own lives in Assets and Debts; here
-      you plan the future purchases.)</p>
+    <h6>Your current vehicles</h6>
+    <p class="text-muted small">For each vehicle you own today, what you plan to do with it -- keep it,
+      sell it, or replace it on a schedule. (These come from the Vehicles section.)</p>
+    {% include 'inputs/interview/sections/vehicle_disposition_list.html' with dispositions=form.dispositions %}
+    <div id="vehicle-disposition-form" class="mt-2"></div>
+
+    <h6 class="mt-4">Additional future vehicles</h6>
+    <p class="text-muted small">Any recurring vehicle purchases not tied to a car you own now -- a new car
+      you plan to add, on its own replacement schedule.</p>
     {% include 'inputs/interview/sections/vehicle_list.html' with vehicles=form.vehicles %}
     <div id="vehicles-form" class="mt-2"></div>
   </div>

@@ -73,6 +73,11 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
     for card_plan in plans.credit_card_plans:
         if card_plan.card_handle not in debts:
             issues.append( f'a paydown plan for an unknown card "{card_plan.card_handle}";' )
+    if plans.vehicle_plan is not None:
+        for disposition in plans.vehicle_plan.dispositions:
+            if disposition.vehicle_handle not in accounts:
+                issues.append(
+                    f'a plan for an unknown vehicle "{disposition.vehicle_handle}";' )
     if plans.drawdown is not None:
         for handle, _ in plans.drawdown.sweep_allocation:
             if handle not in accounts:
@@ -113,6 +118,19 @@ def _reaped_debt_event( event, removed: set ) -> bool:
     if event.kind is EventKind.CARD_PAYOFF:
         return event.selections.get( CARD_ROLE ) in removed
     return False
+
+
+def plans_without_vehicles( plans: Plans, removed: set ) -> Plans:
+    """Every vehicle-plan disposition for a removed vehicle handle stripped, so a deleted current vehicle
+    leaves no dangling disposition. The vehicle counterpart of `plans_without_debts`, called when a
+    vehicle is deleted from the Profile. (Net-new plan vehicles and running costs are not keyed to a
+    Profile vehicle, so they are untouched.)"""
+    plan = plans.vehicle_plan
+    if plan is None:
+        return plans
+    kept = [ disposition for disposition in plan.dispositions
+             if disposition.vehicle_handle not in removed ]
+    return replace( plans, vehicle_plan = replace( plan, dispositions = kept ) )
 
 
 def plans_without_accounts( plans: Plans, removed: set ) -> Plans:

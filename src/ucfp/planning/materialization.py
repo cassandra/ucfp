@@ -13,7 +13,7 @@ general rule). Lifestyle expenses materialize per the engine's 2x2 -- smoothed c
 expense streams, cadenced ones to placed items -- each stepping as the scheduled level changes.
 """
 from calendar import monthrange
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -48,14 +48,14 @@ from ucfp.inputs.plans.defaults import default_drawdown
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
     AssetProfile, Debt, Profile, RENTED_HOME_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX )
-from ucfp.inputs.plans.enums import CreditCardPlanMode, PaymentMethod
+from ucfp.inputs.plans.enums import CreditCardPlanMode, PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanRepayment, Plans, RetirementTiming, Vehicle )
 from ucfp.inputs.assumptions.defaults import default_transaction_costs
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 
-from ucfp.inputs.events import event_contributions, vehicle_transition_contributions
+from ucfp.inputs.events import event_contributions, vehicle_disposition_contributions
 
 
 @dataclass( frozen = True )
@@ -84,7 +84,7 @@ def materialize(
         plans, _primary_birthdate( profile ), frame )
     assets_by_handle = { asset.handle : asset for asset in profile.assets }
     events = event_contributions( profile, plans, subjects_by_handle )
-    vehicle_transition_contributions( profile, plans, events )   # derive each replaces_vehicle sale
+    vehicle_disposition_contributions( profile, plans, events )   # derive each disposition's sale
     expense_streams, expense_items = _property_expenses(
         profile, plans, assets_by_handle, events.property_sales )
     flow_streams, flow_items = _income_flows(
@@ -315,6 +315,32 @@ def _is_owned( vehicle : Vehicle ) -> bool:
     return vehicle.payment_method in ( PaymentMethod.CASH, PaymentMethod.LOAN )
 
 
+def _replacement_handle( vehicle_handle : str ) -> str:
+    """The holding identity of the successor a Replace disposition buys -- derived from the current
+    vehicle's handle, so it is stable and distinct from any net-new vehicle's `vehicle-N`."""
+    return f'{vehicle_handle}-replacement'
+
+
+def _replacement_vehicle( disposition ) -> Vehicle:
+    """The successor a Replace disposition buys, as a materializable `Vehicle`: the stored replacement
+    spec with its identity and first-purchase date supplied by the disposition -- the handle derived from
+    the current vehicle, the purchase date the handover date -- so it materializes exactly as a net-new
+    vehicle does."""
+    return replace( disposition.replacement,
+                    handle = _replacement_handle( disposition.vehicle_handle ),
+                    purchase_date = disposition.sale_date )
+
+
+def _plan_vehicles( plan ) -> list[ Vehicle ]:
+    """Every vehicle the plan materializes into purchases: the net-new vehicles the household adds and
+    each Replace disposition's successor. Retain and Sell dispositions add none -- Retain keeps the
+    current holding running to the horizon, Sell just ends it (see `vehicle_disposition_contributions`)."""
+    replacements = [ _replacement_vehicle( disposition ) for disposition in plan.dispositions
+                     if disposition.kind is VehicleDispositionKind.REPLACE
+                     and disposition.replacement is not None and disposition.sale_date is not None ]
+    return list( plan.vehicles ) + replacements
+
+
 def _vehicle_holding_handle( vehicle_handle : str ) -> str:
     """The account handle of an owned vehicle's holding -- scoped to the vehicle so each car is its own
     depreciating asset."""
@@ -367,7 +393,7 @@ def _vehicle_holdings( plans : Plans ) -> list[ AssetParameters ]:
     plan = plans.vehicle_plan
     if plan is None:
         return list()
-    return [ _vehicle_holding( vehicle ) for vehicle in plan.vehicles
+    return [ _vehicle_holding( vehicle ) for vehicle in _plan_vehicles( plan )
              if _is_owned( vehicle ) and _vehicle_ready( vehicle ) ]
 
 
@@ -392,7 +418,7 @@ def _vehicle_holding_purchases( plans : Plans ) -> list[ RecurringHoldingPurchas
     plan = plans.vehicle_plan
     if plan is None:
         return list()
-    return [ _vehicle_holding_purchase( vehicle ) for vehicle in plan.vehicles
+    return [ _vehicle_holding_purchase( vehicle ) for vehicle in _plan_vehicles( plan )
              if _is_owned( vehicle ) and _vehicle_ready( vehicle ) ]
 
 
@@ -420,7 +446,7 @@ def _vehicle_loan_originations( plans : Plans ) -> list[ RecurringLoanOriginatio
     plan = plans.vehicle_plan
     if plan is None:
         return list()
-    return [ _vehicle_loan_origination( vehicle ) for vehicle in plan.vehicles
+    return [ _vehicle_loan_origination( vehicle ) for vehicle in _plan_vehicles( plan )
              if _is_financed( vehicle ) and _vehicle_ready( vehicle ) ]
 
 
@@ -432,7 +458,7 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
     if plan is None:
         return list()
     items = list()
-    for vehicle in plan.vehicles:
+    for vehicle in _plan_vehicles( plan ):
         if _vehicle_ready( vehicle ) and vehicle.payment_method is PaymentMethod.LEASE:
             items.extend( _lease_vehicle_items( vehicle ) )
     return items
@@ -487,7 +513,7 @@ def _vehicle_windows( profile : Profile, plans : Plans, sale_dates : dict,
     chain with no gap and no double-count, and the near-term fleet is no longer undercounted."""
     plan    = plans.vehicle_plan
     planned = ( [ DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
-                  for vehicle in plan.vehicles if vehicle.purchase_date is not None ]
+                  for vehicle in _plan_vehicles( plan ) if vehicle.purchase_date is not None ]
                 if plan is not None else list() )
     current = [ DateWindow( start = start_date, end = _operated_until( possession, sale_dates ) )
                 for possession in profile.assets if possession.asset_class is AssetClass.DEPRECIATING ]

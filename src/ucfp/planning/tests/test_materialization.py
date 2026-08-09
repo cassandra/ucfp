@@ -7,6 +7,7 @@ flow, which has no owned asset) keeps its stored personal class. This mirrors th
 derivation tested end-to-end in `ucfp.forecast.tests.test_rental`.
 """
 import unittest
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -15,9 +16,10 @@ from common.recurrence import Duration, Recurrence, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.parameters import RecurringHoldingPurchase
-from ucfp.inputs.plans.enums import PaymentMethod
+from ucfp.inputs.plans.enums import PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
-    HealthCoverageAssumption, Plans, PropertyExpense, Vehicle, VehiclePlan, VehicleRunningCost )
+    HealthCoverageAssumption, Plans, PropertyExpense, Vehicle, VehicleDisposition, VehiclePlan,
+    VehicleRunningCost )
 from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
@@ -250,6 +252,58 @@ class MixedFleetTests( unittest.TestCase ):
                           [ 'vehicle-loan:vehicle-2' ] )
         # Only the lease emits purchase-cost expense items.
         self.assertTrue( _vehicle_expenses( plans ) )
+
+
+class DispositionMaterializationTests( unittest.TestCase ):
+    """A Replace disposition's successor materializes exactly as a net-new vehicle does -- an owned
+    holding and a recurring purchase -- under a handle derived from the current vehicle and a purchase
+    date driven by the disposition. Retain and Sell add no plan vehicle (their effect is the current
+    holding's sale, tested at the events layer)."""
+
+    @staticmethod
+    def _replacement( price = Decimal( '40000' ), years = 7, method = PaymentMethod.CASH, **kwargs ):
+        # The stored replacement spec: identity and first-purchase date are supplied at materialization
+        # from the disposition, so they are left off here (as the form stores them).
+        return Vehicle( handle = '', purchase_price = price, recurrence_years = years,
+                        payment_method = method, **kwargs )
+
+    def _plans( self, kind, when = date( 2030, 1, 1 ), replacement = None ):
+        disposition = VehicleDisposition( vehicle_handle = 'vehicle-1', kind = kind, sale_date = when,
+                                          replacement = replacement )
+        return Plans( vehicle_plan = VehiclePlan( dispositions = [ disposition ] ) )
+
+    def test_replace_successor_becomes_an_owned_recurring_purchase( self ):
+        plans     = self._plans( VehicleDispositionKind.REPLACE, replacement = self._replacement() )
+        holdings  = _vehicle_holdings( plans )
+        purchases = _vehicle_holding_purchases( plans )
+        self.assertEqual( [ h.handle for h in holdings ], [ 'vehicle:vehicle-1-replacement' ] )
+        self.assertEqual( len( purchases ), 1 )
+        self.assertEqual( purchases[ 0 ].holding, 'vehicle:vehicle-1-replacement' )
+        self.assertEqual( purchases[ 0 ].price, Decimal( '40000' ) )
+        # The successor's first purchase is the handover date the disposition names.
+        self.assertEqual( purchases[ 0 ].window.start, date( 2030, 1, 1 ) )
+
+    def test_a_financed_replacement_originates_a_loan_under_the_derived_handle( self ):
+        plans = self._plans(
+            VehicleDispositionKind.REPLACE,
+            replacement = self._replacement( method = PaymentMethod.LOAN, down_payment = Decimal( '8000' ) ) )
+        originations = _vehicle_loan_originations( plans )
+        self.assertEqual( [ o.handle for o in originations ], [ 'vehicle-loan:vehicle-1-replacement' ] )
+
+    def test_retain_and_sell_add_no_plan_vehicle( self ):
+        for kind in ( VehicleDispositionKind.KEEP, VehicleDispositionKind.SELL ):
+            plans = self._plans( kind )
+            self.assertEqual( _vehicle_holdings( plans ), [], kind )
+            self.assertEqual( _vehicle_holding_purchases( plans ), [], kind )
+
+    def test_a_replacement_joins_net_new_vehicles( self ):
+        # A net-new vehicle and a Replace successor both materialize, under distinct handles.
+        net_new = _vehicle( 'vehicle-2', date( 2028, 1, 1 ), purchase_price = Decimal( '20000' ),
+                            recurrence_years = 5 )
+        plans   = self._plans( VehicleDispositionKind.REPLACE, replacement = self._replacement() )
+        plans   = replace( plans, vehicle_plan = replace( plans.vehicle_plan, vehicles = [ net_new ] ) )
+        self.assertEqual( { h.handle for h in _vehicle_holdings( plans ) },
+                          { 'vehicle:vehicle-2', 'vehicle:vehicle-1-replacement' } )
 
 
 class VehicleRunningCostTests( unittest.TestCase ):

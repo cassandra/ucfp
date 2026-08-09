@@ -26,7 +26,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
     ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
-from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
+from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.widgets import IsoDateInput
 
@@ -81,11 +81,14 @@ def _properties( profile ) -> list:
              if asset.asset_class.is_real_estate ]
 
 
-_POSSESSION_CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES, AssetClass.DEPRECIATING )
+# Vehicles (DEPRECIATING) are deliberately excluded: a current vehicle's sale lives in its vehicle-plan
+# disposition (Sell/Replace), so it has one home. This manual sale covers the other tangibles.
+_POSSESSION_CLASSES = ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES )
 
 
 def _possessions( profile ) -> list:
-    """The tangible possessions a sale can sell -- precious metals, collectibles, vehicles."""
+    """The tangible possessions a manual sale can sell -- precious metals and collectibles. A vehicle is
+    sold through its vehicle-plan disposition instead, not here."""
     return [ ( asset.handle, asset.name ) for asset in profile.assets
              if asset.asset_class in _POSSESSION_CLASSES ]
 
@@ -494,21 +497,24 @@ def event_contributions( profile, plans, subjects : dict ) -> EventContributions
     return into
 
 
-def vehicle_transition_contributions( profile, plans, into : EventContributions ):
-    """The derived transitions: a plan vehicle's `replaces_vehicle` sells that current vehicle (and
-    pays off its loan, and ends its running costs) on the vehicle's purchase date -- the automated twin of
-    a hand-added sell-possession event, from the stored link rather than a written event. A link to a
-    vehicle the Profile no longer has is skipped, so a Profile edit degrades gracefully. (A current
-    vehicle is a `DEPRECIATING` holding, so the same possession-sale helper realizes it.)"""
+def vehicle_disposition_contributions( profile, plans, into : EventContributions ):
+    """The sales a vehicle plan's dispositions imply: a SELL or REPLACE disposition sells that current
+    vehicle (and pays off its loan, and ends its running costs) on the disposition date -- the automated
+    twin of a hand-added sell-possession event, from the stored disposition rather than a written event.
+    A REPLACE's successor purchase is materialized separately (as a plan vehicle); RETAIN sells nothing.
+    A disposition for a vehicle the Profile no longer has is skipped, so a Profile edit degrades
+    gracefully. (A current vehicle is a `DEPRECIATING` holding, so the same possession-sale helper
+    realizes it.)"""
     plan = plans.vehicle_plan
     if plan is None:
         return
     asset_handles = { asset.handle for asset in profile.assets }
-    for vehicle in plan.vehicles:
-        target = vehicle.replaces_vehicle
-        if ( target is None ) or ( vehicle.purchase_date is None ) or ( target not in asset_handles ):
-            continue                                     # no link, incomplete, or a dropped vehicle
-        _contribute_possession_sale( profile, target, vehicle.purchase_date, into )
+    for disposition in plan.dispositions:
+        if disposition.kind is VehicleDispositionKind.KEEP or disposition.sale_date is None:
+            continue                                     # retained, or no handover date yet
+        if disposition.vehicle_handle not in asset_handles:
+            continue                                     # a dropped vehicle
+        _contribute_possession_sale( profile, disposition.vehicle_handle, disposition.sale_date, into )
 
 
 # --- View/template context -------------------------------------------------
