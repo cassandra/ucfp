@@ -234,7 +234,9 @@ class Vehicle:
     `handle` is a stable per-vehicle identity (minted `vehicle-N`); every other field is optional so a
     just-added vehicle persists while it is filled -- materialization emits its purchases only once
     `purchase_date`, `purchase_price`, and `recurrence_years` are all set, and its running costs while
-    it is owned."""
+    it is owned. `replaces_possession` optionally links this recurrence to a current vehicle possession
+    (by its handle) it stands in for: materialization then sells that possession (and pays off its loan)
+    on `purchase_date` -- the derived transition, from this one stored link rather than a written event."""
     handle: str
     name: str = ''
     purchase_date: Optional[ date ] = None
@@ -245,6 +247,7 @@ class Vehicle:
     down_payment: Optional[ Decimal ] = None
     monthly_payment: Optional[ Decimal ] = None
     lease_end_payment: Optional[ Decimal ] = None
+    replaces_possession: Optional[ str ] = None   # a current vehicle possession this recurrence replaces
 
 
 @dataclass( frozen = True )

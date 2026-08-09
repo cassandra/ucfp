@@ -266,6 +266,19 @@ class SellPropertyEvent( EventType ):
         # expenses. Only the mortgage payoff above is contributed here.
 
 
+def _contribute_possession_sale( profile, possession_handle : str, sale_date, into : EventContributions ):
+    """Sell a possession into `into`: realize the whole holding at its projected value (tax follows its
+    asset class -- a vehicle is TAX_FREE, a collectible taxed as one), pay off any loan secured by it, and
+    record the sale date so materialization ends its running costs at it (mirroring a property sale).
+    Shared by the manual sell-possession event and the derived vehicle transition."""
+    into.possession_sales[ possession_handle ] = sale_date
+    into.scheduled_events.append( ScheduledRealization(
+        event_date = sale_date, holding = possession_handle ) )
+    for loan_handle in _secured_loans( profile, possession_handle ):
+        into.scheduled_events.append( ScheduledLoanPayoff(
+            event_date = sale_date, loan = loan_handle ) )
+
+
 class SellPossessionEvent( EventType ):
     kind        = EventKind.SELL_POSSESSION
     group       = _PROPERTY_GROUP
@@ -282,17 +295,7 @@ class SellPossessionEvent( EventType ):
         return f'Sell {name} in {event.date.year}{notice}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        # No amount: realize the whole possession at its projected value -- tax follows its asset class
-        # (a vehicle is TAX_FREE, a collectible is taxed as one) -- then pay off any loan secured by it.
-        # Recording the sale date lets materialization end the possession's running costs at it (a car
-        # sold on its replacement date stops incurring insurance/fuel), mirroring a property sale.
-        possession_handle = event.selections[ POSSESSION_ROLE ]
-        into.possession_sales[ possession_handle ] = event.date
-        into.scheduled_events.append( ScheduledRealization(
-            event_date = event.date, holding = possession_handle ) )
-        for loan_handle in _secured_loans( profile, possession_handle ):
-            into.scheduled_events.append( ScheduledLoanPayoff(
-                event_date = event.date, loan = loan_handle ) )
+        _contribute_possession_sale( profile, event.selections[ POSSESSION_ROLE ], event.date, into )
 
 
 class LoanPayoffEvent( EventType ):
@@ -489,6 +492,22 @@ def event_contributions( profile, plans, subjects : dict ) -> EventContributions
         if handler.is_materializable( event, profile, plans ):
             handler.contribute( event, profile, subjects, into )
     return into
+
+
+def vehicle_transition_contributions( profile, plans, into : EventContributions ):
+    """The derived transitions: a plan vehicle's `replaces_possession` sells that current possession (and
+    pays off its loan, and ends its running costs) on the vehicle's purchase date -- the automated twin of
+    a hand-added sell-possession event, from the stored link rather than a written event. A link to a
+    possession the Profile no longer has is skipped, so a Profile edit degrades gracefully."""
+    plan = plans.vehicle_plan
+    if plan is None:
+        return
+    possessions = { asset.handle for asset in profile.assets }
+    for vehicle in plan.vehicles:
+        target = vehicle.replaces_possession
+        if ( target is None ) or ( vehicle.purchase_date is None ) or ( target not in possessions ):
+            continue                                     # no link, incomplete, or a dropped possession
+        _contribute_possession_sale( profile, target, vehicle.purchase_date, into )
 
 
 # --- View/template context -------------------------------------------------

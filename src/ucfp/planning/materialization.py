@@ -55,7 +55,7 @@ from ucfp.inputs.assumptions.defaults import default_transaction_costs
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 
-from ucfp.inputs.events import event_contributions
+from ucfp.inputs.events import event_contributions, vehicle_transition_contributions
 
 
 @dataclass( frozen = True )
@@ -84,6 +84,7 @@ def materialize(
         plans, _primary_birthdate( profile ), frame )
     assets_by_handle = { asset.handle : asset for asset in profile.assets }
     events = event_contributions( profile, plans, subjects_by_handle )
+    vehicle_transition_contributions( profile, plans, events )   # derive each replaces_possession sale
     expense_streams, expense_items = _property_expenses(
         profile, plans, assets_by_handle, events.property_sales )
     flow_streams, flow_items = _income_flows(

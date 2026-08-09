@@ -27,6 +27,15 @@ it is already saved. Empty when no form is open. Reads `vehicle_form` and `handl
       <div class="col-sm-4">{{ vehicle_form.recurrence_years.as_field_group }}</div>
       <div class="col-sm-4">{{ vehicle_form.end_date.as_field_group }}</div>
     </div>
+    {% comment %}
+    Only shown when the household has current vehicles: linking this recurrence to one sells that current
+    car (and pays off its loan) on the purchase date, so the plan stands in for it rather than double-counting.
+    {% endcomment %}
+    {% if vehicle_form.replaceable_vehicles %}
+    <div class="form-row">
+      <div class="col-sm-6">{{ vehicle_form.replaces_possession.as_field_group }}</div>
+    </div>
+    {% endif %}
 
     <p class="small text-muted mb-1 mt-3"><strong>Payment</strong></p>
     <div class="{{ AppConst.SWITCH_CLASS }}">

@@ -13,6 +13,7 @@ from django import forms
 
 from common.forms import MoneyField, StyledFormMixin
 
+from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.plans.enums import PaymentMethod
@@ -32,6 +33,16 @@ def _vehicles( plans ) -> list:
     """The plan's vehicles, or an empty list when there is no plan yet."""
     plan = vehicle_plan_of( plans )
     return list( plan.vehicles ) if plan is not None else []
+
+
+def _current_vehicle_choices( profile ) -> list:
+    """The current vehicle possessions a recurrence can stand in for, as select choices led by a blank
+    'None' -- so the link is optional and unset by default. Only DEPRECIATING possessions are vehicles;
+    there are no real options when the household has none."""
+    current = ( [ ( asset.handle, asset.name ) for asset in profile.assets
+                  if asset.asset_class is AssetClass.DEPRECIATING ]
+                if profile is not None else list() )
+    return [ ( '', 'None' ) ] + current
 
 
 def _minted_vehicle_handle( plans ) -> str:
@@ -126,6 +137,19 @@ class VehicleForm( StyledFormMixin, forms.Form ):
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( plans, handle ) if handle else None )
         self._handle = handle
+        # Optional link to a current vehicle possession this recurrence replaces -- dynamic choices (from
+        # the profile), so it is built here rather than as a class field. Setting it makes materialization
+        # sell that possession on the purchase date (the derived transition).
+        self.fields[ 'replaces_possession' ] = forms.ChoiceField(
+            label = 'Replaces current vehicle', required = False,
+            choices = _current_vehicle_choices( profile ),
+            widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
+
+    @property
+    def replaceable_vehicles( self ) -> list:
+        """The real 'replaces' choices -- the current vehicle possessions -- so the template hides the
+        link entirely when the household has none."""
+        return [ choice for choice in self.fields[ 'replaces_possession' ].choices if choice[ 0 ] ]
 
     def clean( self ):
         # An owned-until date before the purchase date is an inverted ownership window: materialization
@@ -184,7 +208,8 @@ class VehicleForm( StyledFormMixin, forms.Form ):
                  'purchase_price': vehicle.purchase_price, 'recurrence_years': vehicle.recurrence_years,
                  'end_date': vehicle.end_date, 'payment_method': vehicle.payment_method.name,
                  'down_payment': vehicle.down_payment, 'monthly_payment': vehicle.monthly_payment,
-                 'lease_end_payment': vehicle.lease_end_payment }
+                 'lease_end_payment': vehicle.lease_end_payment,
+                 'replaces_possession': vehicle.replaces_possession }
 
     @staticmethod
     def _defaults( handle : str ) -> dict:
@@ -217,7 +242,8 @@ class VehicleForm( StyledFormMixin, forms.Form ):
             payment_method = PaymentMethod[ cleaned.get( 'payment_method' ) or PaymentMethod.CASH.name ],
             down_payment = cleaned.get( 'down_payment' ),
             monthly_payment = cleaned.get( 'monthly_payment' ),
-            lease_end_payment = cleaned.get( 'lease_end_payment' ) )
+            lease_end_payment = cleaned.get( 'lease_end_payment' ),
+            replaces_possession = cleaned.get( 'replaces_possession' ) or None )
         existing = vehicle_plan_of( plans ) or VehiclePlan()
         kept     = [ v for v in existing.vehicles if v.handle != handle ] + [ vehicle ]
         return profile, replace( plans, vehicle_plan = replace( existing, vehicles = kept ) )
