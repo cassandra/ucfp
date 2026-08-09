@@ -454,6 +454,18 @@ class VehicleRunningCostTests( unittest.TestCase ):
         self.assertEqual( streams[ 0 ].window,
                           DateWindow( start = date( 2026, 1, 1 ), end = date( 2029, 12, 31 ) ) )
 
+    def test_a_lease_missing_its_monthly_accrues_no_running_costs( self ):
+        # A lease still missing its monthly (its required, defining cost) is not yet a real lease: it
+        # accrues no running costs, matching the monthly item it also does not emit. The window and the
+        # payment gate alike on the monthly, so an incomplete lease never leaks a running-costs-only partial.
+        no_monthly = LeasedVehicleDisposition(
+            vehicle_handle = 'lease-1', lease_end = date( 2030, 1, 1 ),
+            kind = LeaseDispositionKind.RETURN )                       # lease_end set, monthly blank
+        plans = Plans( vehicle_plan = VehiclePlan(
+            leased_dispositions = [ no_monthly ],
+            running_costs = [ self._cost( Realization.SMOOTH, Duration( 1, TimeUnit.WEEK ) ) ] ) )
+        self.assertEqual( self._run( plans ), ( [], [] ) )
+
     def test_a_current_vehicle_possession_is_run_from_the_start( self ):
         # The fix: a car owned today (a DEPRECIATING possession) incurs running costs from the forecast
         # start over an open window -- previously it counted for nothing until a planned purchase. A

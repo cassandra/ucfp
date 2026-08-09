@@ -21,6 +21,7 @@ from ucfp.inputs.events import CARD_ROLE, LOAN_ROLE
 from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import Profile
+from ucfp.inputs.vehicle_expenses import plan_has_content
 
 
 # The shared lead-in for a plans-drift report, so the raise-at-use error and the pre-run readiness
@@ -136,8 +137,10 @@ def plans_without_vehicles( plans: Plans, removed: set ) -> Plans:
         return plans
     owned  = [ d for d in plan.dispositions if d.vehicle_handle not in removed ]
     leased = [ d for d in plan.leased_dispositions if d.vehicle_handle not in removed ]
-    return replace(
-        plans, vehicle_plan = replace( plan, dispositions = owned, leased_dispositions = leased ) )
+    reaped = replace( plan, dispositions = owned, leased_dispositions = leased )
+    # Collapse an emptied plan back to None, as every form `apply` does, so reaping a vehicle's only
+    # disposition never leaves a spurious plan that reads as "started".
+    return replace( plans, vehicle_plan = reaped if plan_has_content( reaped ) else None )
 
 
 def plans_without_accounts( plans: Plans, removed: set ) -> Plans:

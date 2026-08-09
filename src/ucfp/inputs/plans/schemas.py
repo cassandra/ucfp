@@ -315,17 +315,23 @@ class LeasedVehicleDisposition:
     successor: Optional[ Vehicle ] = None
 
     @property
+    def successor_ready( self ) -> bool:
+        """Whether the end-of-term successor has what it needs to materialize -- its own structural terms
+        plus the `lease_end` it begins at -- *independent* of the current lease's cost. A successor
+        materializes on this alone, so an unpriced-yet current lease never suppresses a fully-entered
+        renewal or purchase; a Return, which has no successor, is never ready."""
+        return ( self.kind is not LeaseDispositionKind.RETURN and self.lease_end is not None
+                 and self.successor is not None and self.successor.has_structural_terms )
+
+    @property
     def is_complete( self ) -> bool:
         """Whether this leased disposition has the structural fields it needs to fully materialize -- an
         incomplete one is a safe no-op (the lease does not enter the projection yet). The current lease's
         `monthly` (its defining cost) and `lease_end` (where every kind hands over or ends) are always
-        required; a successor kind (RENEW, BUY_CASH, BUY_LOAN) also needs its successor's structural terms
-        (the lease end becomes the successor's purchase date)."""
+        required; a successor kind (RENEW, BUY_CASH, BUY_LOAN) also needs its successor ready."""
         if self.lease_end is None or self.monthly is None:
             return False
-        if self.kind is LeaseDispositionKind.RETURN:
-            return True
-        return self.successor is not None and self.successor.has_structural_terms
+        return self.kind is LeaseDispositionKind.RETURN or self.successor_ready
 
 
 @dataclass( frozen = True )

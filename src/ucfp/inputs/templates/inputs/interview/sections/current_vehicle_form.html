@@ -35,7 +35,7 @@ Empty when no form is open. Reads `vehicle_form`, `heading`, and `handle`.
         </div>
         <div class="mt-2">
           <a class="btn btn-sm btn-outline-primary" data-async="#current-vehicle-form"
-             href="{% url 'current_vehicle_add' %}?collapse=1">Done</a>
+             href="{% url 'current_vehicle_edit' handle=handle %}?collapse=1">Done</a>
         </div>
       </form>
     </div>

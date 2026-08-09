@@ -1499,9 +1499,8 @@ class _PropertyFormView( _PropertyView ):
 
 
 class _PropertyDeleteView( _PropertyView ):
-    """Remove a mortgaged property (or vehicle) as a unit, then refresh its list in place. `_delete` is
-    the unit removal -- `delete_property` for a property; a vehicle pane overrides it to also reap the
-    vehicle's plan disposition."""
+    """Remove a mortgaged property as a unit, then refresh its list in place. `_delete` is the unit
+    removal (`delete_property`), a class attribute so a subclass can substitute its own remover."""
 
     _delete = staticmethod( delete_property )
 

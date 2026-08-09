@@ -38,8 +38,7 @@ class VehicleDispositionKind( LabeledEnum ):
     dispatches. KEEP holds the car to the end of its life (it depreciates in place, no replacement) --
     its user-facing label is 'Retain', and it is the default, so the absence of a stored disposition
     means KEEP. REPLACE sells it on a date and buys a replacement that recurs thereafter. SELL sells it
-    on a date with no replacement. (Leased dispositions -- renew, return, buy -- arrive with leased
-    current vehicles in a later phase.)"""
+    on a date with no replacement. (Leased vehicles use the sibling `LeaseDispositionKind`.)"""
 
     KEEP    = ( 'Retain' , 'Keep driving it to the end of its life -- no replacement.' )
     REPLACE = ( 'Replace', 'Sell it on a date and buy a replacement, recurring thereafter.' )

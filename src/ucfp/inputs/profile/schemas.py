@@ -167,7 +167,8 @@ class LeasedVehicle:
     """A vehicle the household currently leases -- a fact that a lease exists, not an owned asset. It is
     deliberately thin: the lease's terms (monthly payment, end date) and what happens at term end are the
     vehicle plan's, keyed to this `handle` (mirroring a debt, whose balance is the fact here but whose
-    repayment terms live in the Debt plan). `handle` is a stable identity (`lease-N`)."""
+    repayment terms live in the Debt plan). `handle` is a stable identity in the shared vehicle space
+    (`vehicle-N`), so flipping a vehicle between owned and leased keeps the same handle."""
     handle: str
     name: str
 

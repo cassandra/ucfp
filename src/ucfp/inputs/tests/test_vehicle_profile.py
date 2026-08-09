@@ -109,7 +109,7 @@ class OwnershipToggleTests( unittest.TestCase ):
                                  ownership = 'leased' )
         self.assertEqual( [ v.handle for v in profile.leased_vehicles ], [ 'vehicle-1' ] )
         self.assertEqual( ( profile.assets, profile.debts ), ( [], [] ) )      # the loan went with it
-        self.assertEqual( plans.vehicle_plan.dispositions, [] )                # the owned disposition reaped
+        self.assertIsNone( plans.vehicle_plan )                 # reaped -> emptied plan collapses to None
 
     def test_leased_to_owned_moves_stores_and_reaps_the_leased_disposition( self ):
         profile = Profile( leased_vehicles = [ LeasedVehicle( 'vehicle-1', 'Car' ) ] )
@@ -117,7 +117,7 @@ class OwnershipToggleTests( unittest.TestCase ):
                                  ownership = 'owned', value = '25,000' )
         self.assertEqual( [ a.handle for a in profile.assets ], [ 'vehicle-1' ] )
         self.assertEqual( profile.leased_vehicles, [] )
-        self.assertEqual( plans.vehicle_plan.leased_dispositions, [] )         # the leased disposition reaped
+        self.assertIsNone( plans.vehicle_plan )                 # reaped -> emptied plan collapses to None
 
     def test_editing_without_flipping_keeps_the_disposition( self ):
         profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ] )
@@ -139,13 +139,13 @@ class CombinedListTests( unittest.TestCase ):
         profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ], debts = [ _loan() ] )
         profile, plans = delete_current_vehicle( profile, _owned_disposition(), 'vehicle-1' )
         self.assertEqual( ( profile.assets, profile.debts ), ( [], [] ) )
-        self.assertEqual( plans.vehicle_plan.dispositions, [] )
+        self.assertIsNone( plans.vehicle_plan )                 # reaped -> emptied plan collapses to None
 
     def test_deleting_a_leased_vehicle_reaps_its_disposition( self ):
         profile = Profile( leased_vehicles = [ LeasedVehicle( 'vehicle-1', 'Lease' ) ] )
         profile, plans = delete_current_vehicle( profile, _leased_disposition(), 'vehicle-1' )
         self.assertEqual( profile.leased_vehicles, [] )
-        self.assertEqual( plans.vehicle_plan.leased_dispositions, [] )
+        self.assertIsNone( plans.vehicle_plan )                 # reaped -> emptied plan collapses to None
 
 
 if __name__ == '__main__':

@@ -106,6 +106,11 @@ class VehicleDriftTest( SimpleTestCase ):
         self.assertTrue( any( 'unknown leased vehicle' in issue for issue in issues ) )
 
     def test_reaping_a_vehicle_strips_owned_and_leased_dispositions( self ):
-        reaped = plans_without_vehicles( self._plans(), { 'vehicle-1', 'lease-1' } )
-        self.assertEqual( reaped.vehicle_plan.dispositions, [] )
-        self.assertEqual( reaped.vehicle_plan.leased_dispositions, [] )
+        # Reaping every current vehicle empties both disposition lists, and an emptied plan collapses to
+        # None (as every form apply does), leaving no spurious plan behind.
+        self.assertIsNone(
+            plans_without_vehicles( self._plans(), { 'vehicle-1', 'lease-1' } ).vehicle_plan )
+        # Reaping just the owned vehicle strips its disposition and leaves the leased one intact.
+        kept = plans_without_vehicles( self._plans(), { 'vehicle-1' } ).vehicle_plan
+        self.assertEqual( kept.dispositions, [] )
+        self.assertEqual( [ d.vehicle_handle for d in kept.leased_dispositions ], [ 'lease-1' ] )

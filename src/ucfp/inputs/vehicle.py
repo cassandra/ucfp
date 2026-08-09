@@ -97,7 +97,7 @@ class VehiclePurchaseForm( StyledFormMixin, forms.Form ):
     switch control) and how the forecast models each purchase."""
 
     purchase_price   = MoneyField(
-        label = 'Price per car', min_value = 0, required = False, css_class = AppConst.VEHICLE_PRICE_CLASS )
+        label = 'Price per vehicle', min_value = 0, required = False, css_class = AppConst.VEHICLE_PRICE_CLASS )
     recurrence_years = forms.IntegerField(
         label = 'Replace every (years)', min_value = 1, required = False,
         widget = forms.NumberInput( attrs = { 'class' : 'input-count' } ) )   # a year count, a digit or two

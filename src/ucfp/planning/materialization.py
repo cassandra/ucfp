@@ -49,7 +49,7 @@ from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
     AssetProfile, Debt, Profile, RENTED_HOME_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX )
 from ucfp.inputs.plans.enums import (
-    CreditCardPlanMode, LeaseDispositionKind, PaymentMethod, VehicleDispositionKind )
+    CreditCardPlanMode, PaymentMethod, VehicleDispositionKind )
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanRepayment, Plans, RetirementTiming, Vehicle )
 from ucfp.inputs.assumptions.defaults import default_transaction_costs
@@ -356,9 +356,7 @@ def _plan_vehicles( plan ) -> list[ Vehicle ]:
     replacements = [ _replacement_vehicle( disposition ) for disposition in plan.dispositions
                      if disposition.kind is VehicleDispositionKind.REPLACE and disposition.is_complete ]
     successors   = [ _leased_successor( disposition ) for disposition in plan.leased_dispositions
-                     if disposition.kind is not LeaseDispositionKind.RETURN
-                     and disposition.lease_end is not None
-                     and disposition.successor is not None and disposition.successor.has_structural_terms ]
+                     if disposition.successor_ready ]
     return list( plan.vehicles ) + replacements + successors
 
 
@@ -582,7 +580,7 @@ def _vehicle_windows( profile : Profile, plans : Plans, sale_dates : dict,
                 for possession in profile.assets if possession.asset_class is AssetClass.DEPRECIATING ]
     leased  = [ _lease_window( disposition, start_date )
                 for disposition in ( plan.leased_dispositions if plan is not None else list() )
-                if _leased_operative( disposition, start_date ) ]
+                if disposition.monthly and _leased_operative( disposition, start_date ) ]
     return planned + current + leased
 
 
