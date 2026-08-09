@@ -1,8 +1,9 @@
 {% comment %}
-The household's current vehicles (id=vehicle-dispositions-list), each with its plan disposition (Retain by
-default) and an Edit that opens the disposition editor in the pane's form area (#vehicle-disposition-form).
-Refreshed after a disposition is saved. `dispositions` is the list of {handle, name, summary}. There is no
-add or remove: the rows are the current vehicles (entered in the Vehicles section); Retain is the reset.
+The household's current vehicles for the Vehicle plan (id=vehicle-dispositions-list) -- owned and leased
+together, each with an ownership badge and its plan disposition, and an Edit that opens the matching editor
+in the shared form area (#vehicle-disposition-form). Refreshed after a disposition is saved. There is no
+add or remove here: the rows are the current vehicles (from the Vehicles section). `dispositions` is the
+combined list of {handle, name, ownership, summary, edit_route}.
 {% endcomment %}
 <div id="vehicle-dispositions-list">
   {% if dispositions %}
@@ -10,10 +11,13 @@ add or remove: the rows are the current vehicles (entered in the Vehicles sectio
     {% for vehicle in dispositions %}
     <li class="mb-2">
       <div class="d-flex justify-content-between align-items-baseline">
-        <span>{{ vehicle.name }} &mdash; <span class="text-muted">{{ vehicle.summary }}</span></span>
+        <span>
+          <span class="badge badge-{% if vehicle.ownership == 'Owned' %}info{% else %}secondary{% endif %} mr-1">{{ vehicle.ownership }}</span>
+          {{ vehicle.name }} <span class="text-muted">&mdash; {{ vehicle.summary }}</span>
+        </span>
         <span class="text-nowrap ml-3">
           <a data-async="#vehicle-disposition-form"
-             href="{% url 'vehicle_disposition_edit' handle=vehicle.handle %}"
+             href="{% url vehicle.edit_route handle=vehicle.handle %}"
              aria-label="Plan for {{ vehicle.name }}">Edit</a>
         </span>
       </div>

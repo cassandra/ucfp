@@ -1,0 +1,38 @@
+{% comment %}
+The add/edit form for one current vehicle (id=current-vehicle-form), owned or leased -- rendered into the
+list's form area. Auto-saves in the background. The ownership radio is a switch (inputs.js): Owned reveals
+the current value and any auto-loan balance; Leased reveals nothing more (its terms are the Vehicle plan's).
+Non-blocking: the vehicle appears in the list once its fields are set (a name, plus a value when owned).
+"Done" closes the form; it is already saved. Empty when no form is open. Reads `vehicle_form` and `handle`.
+{% endcomment %}
+<div id="current-vehicle-form">
+  {% if vehicle_form %}
+  <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }}"
+        action="{% url 'current_vehicle_edit' handle=handle %}">
+    {% csrf_token %}
+    <div class="form-row">
+      <div class="col-sm-6">{{ vehicle_form.name.as_field_group }}</div>
+    </div>
+    <div class="{{ AppConst.SWITCH_CLASS }}">
+      <fieldset class="form-group mb-2">
+        <legend class="col-form-label d-block mb-1 pt-0 small">This vehicle is</legend>
+        {% for radio in vehicle_form.ownership %}
+        <div class="form-check form-check-inline">
+          {{ radio.tag }}
+          <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+        </div>
+        {% endfor %}
+      </fieldset>
+      {# Owned only: current value and any auto-loan balance (a leased vehicle has neither here). #}
+      <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.owned_case }}">
+        <div class="col-sm-6">{{ vehicle_form.value.as_field_group }}</div>
+        <div class="col-sm-6">{{ vehicle_form.loan_balance.as_field_group }}</div>
+      </div>
+    </div>
+    <div class="mt-2">
+      <a class="btn btn-sm btn-outline-primary" data-async="#current-vehicle-form"
+         href="{% url 'current_vehicle_add' %}?collapse=1">Done</a>
+    </div>
+  </form>
+  {% endif %}
+</div>

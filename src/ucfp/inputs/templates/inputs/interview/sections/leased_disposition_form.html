@@ -1,12 +1,14 @@
 {% comment %}
-The end-of-term editor for one current leased vehicle (id=leased-disposition-form), opened beneath the
-leased-vehicles list. Auto-saves in the background. First the current lease terms (monthly, end); then the
+The end-of-term editor for one current leased vehicle (id=vehicle-disposition-form), opened from the one
+current-vehicles list into the shared form area (a leased row's Edit routes here; an owned row's routes to
+`vehicle_disposition_form.html`). Auto-saves in the background. First the current lease terms (monthly,
+end); then the
 `kind` radio drives a switch (inputs.js) revealing what each end-of-term choice needs: Return and Renew
 nothing more, Buy the purchase fields (with the payment method as a nested switch). Non-blocking: the plan
 takes effect once its fields are set. "Done" closes the editor; it is already saved. Empty when none is
 open. Reads `leased_form` and `handle`.
 {% endcomment %}
-<div id="leased-disposition-form">
+<div id="vehicle-disposition-form">
   {% if leased_form %}
   <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }} {{ AppConst.VEHICLE_FINANCE_CLASS }}"
         data-{{ AppConst.VEHICLE_APR_DATA_ATTR }}="{{ leased_form.auto_loan_apr_percent }}"
@@ -43,7 +45,7 @@ open. Reads `leased_form` and `handle`.
       </div>
     </div>
     <div class="mt-2">
-      <a class="btn btn-sm btn-outline-primary" data-async="#leased-disposition-form"
+      <a class="btn btn-sm btn-outline-primary" data-async="#vehicle-disposition-form"
          href="{% url 'leased_disposition_edit' handle=handle %}?collapse=1">Done</a>
     </div>
   </form>

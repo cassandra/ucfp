@@ -22,7 +22,7 @@ from ucfp.inputs.plans.schemas import (
     LeasedVehicleDisposition, Plans, Vehicle, VehicleDisposition, VehiclePlan )
 from ucfp.inputs.profile.schemas import AssetProfile, LeasedVehicle, Profile
 from ucfp.inputs.vehicle_disposition import (
-    LeasedVehicleDispositionForm, VehicleDispositionForm, dispositions_context,
+    LeasedVehicleDispositionForm, VehicleDispositionForm, all_dispositions_context, dispositions_context,
     leased_dispositions_context )
 
 
@@ -120,6 +120,18 @@ class DispositionListTests( unittest.TestCase ):
         self.assertEqual( [ r[ 'name' ] for r in rows ], [ 'Sedan', 'Truck' ] )
         self.assertEqual( rows[ 0 ][ 'summary' ], 'Sell in 2032' )
         self.assertEqual( rows[ 1 ][ 'summary' ], 'Retain' )      # no stored disposition -> the default
+
+    def test_combines_owned_and_leased_with_ownership_and_edit_route( self ):
+        # The one list carries both kinds -- owned then leased -- each tagged with the editor its Edit opens.
+        profile = Profile(
+            assets = [ AssetProfile( handle = 'vehicle-1', name = 'Sedan',
+                                     asset_class = AssetClass.DEPRECIATING,
+                                     opening_value = Decimal( '20000' ) ) ],
+            leased_vehicles = [ LeasedVehicle( handle = 'vehicle-2', name = 'Truck' ) ] )
+        rows = all_dispositions_context( profile, Plans() )
+        self.assertEqual( [ ( r[ 'name' ], r[ 'ownership' ], r[ 'edit_route' ] ) for r in rows ],
+                          [ ( 'Sedan', 'Owned', 'vehicle_disposition_edit' ),
+                            ( 'Truck', 'Leased', 'leased_disposition_edit' ) ] )
 
 
 def _leased_profile( *vehicles ) -> Profile:

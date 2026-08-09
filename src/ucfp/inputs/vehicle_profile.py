@@ -1,17 +1,14 @@
-"""Vehicles: an owned vehicle as a Profile unit -- the holding and any auto loan still owed.
+"""Vehicles: the household's current vehicles as one Profile section -- owned and leased together.
 
-Vehicles are their own Profile section, mirroring Real Estate. An owned vehicle is flat profile facts
-that belong together -- a `DEPRECIATING` `AssetProfile` and any `AUTO` `Debt` secured against it (its
-balance entered here and shown read-only in Debts) -- tied by a shared vehicle handle. This parallels a
-mortgaged property's holding + mortgage: `VehicleHoldingForm` mirrors `properties._PropertyForm`
-(loan where it says mortgage) and reuses its pane, list/edit views, and delete, so the app keeps seeing
-flat asset/debt lists while the user works with a whole vehicle. The holding is `DEPRECIATING`, so the
-materialization already built for vehicles (sale, running costs, the plan link) reaches it unchanged.
-
-A leased vehicle -- a fact with no holding -- is not modeled here yet; it arrives with the vehicle
-plan's dispositions, alongside the lease terms it is bound to. The near-duplication of the property
-form's `apply`/`_initial` skeleton is deliberate for now: unifying the two behind a shared holding base
-is a follow-up refactor, kept out of the section's first cut.
+A vehicle is owned or leased, the user's single choice per car, but it is one item in one list -- the way
+someone thinks about the cars in their driveway. Under the covers the two are stored differently: an
+**owned** vehicle is flat profile facts that belong together (a `DEPRECIATING` `AssetProfile` and any
+`AUTO` `Debt` secured against it, its balance entered here and shown read-only in Debts); a **leased**
+vehicle is a thin `LeasedVehicle` fact (a lease confers no ownership -- its terms and end-of-term plan are
+the vehicle plan's). Both share one handle space (`vehicle-N`), so a vehicle keeps its identity when its
+owned/leased choice is flipped: the form moves it between the asset store and the lease-fact store, and
+its now-mismatched vehicle-plan disposition is dropped (the owned and leased kinds differ). This module
+owns adding, editing, and removing a vehicle of either kind, and the combined list the section renders.
 """
 from dataclasses import replace
 
@@ -20,34 +17,73 @@ from django import forms
 from common.forms import MoneyField, StyledFormMixin
 
 from ucfp.accounts.enums import AssetClass
+from ucfp.environment.constants import AppConst
 from ucfp.inputs.compatibility import plans_without_vehicles
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle
-from ucfp.inputs.properties import PropertyPane, _minted_handle, delete_property
+from ucfp.inputs.properties import delete_property
 
 _VEHICLE_PREFIX = 'vehicle-'
 
+OWNED  = 'owned'
+LEASED = 'leased'
+_OWNERSHIP_CHOICES = ( ( OWNED, 'Owned' ), ( LEASED, 'Leased' ) )
+
 
 def _loan_handle( vehicle_handle : str ) -> str:
-    """The stable handle of the auto loan secured against a vehicle -- derived from the vehicle's own
-    handle (mirroring a mortgage's `{handle}-mortgage`), so the pair travels together and a sale or a
-    delete can find it."""
+    """The stable handle of the auto loan secured against an owned vehicle -- derived from the vehicle's
+    own handle (mirroring a mortgage's `{handle}-mortgage`), so the pair travels together and a sale, a
+    delete, or a switch to leased can find it."""
     return f'{vehicle_handle}-loan'
 
 
-class VehicleHoldingForm( StyledFormMixin, forms.Form ):
-    """One owned vehicle as a unit: the holding (name, current value) and any auto-loan balance still
-    owed. It writes a `DEPRECIATING` `AssetProfile` -- no cost basis, since a vehicle's sale is tax-free
-    -- and, when a balance is entered, an `AUTO` `Debt` secured against it (the same debt the Debts
-    section shows read-only; its repayment is set in the Debt plan). Non-blocking and handle-minted like
-    a property: it materializes only once name and value are set, and leaves other vehicles intact. This
-    mirrors `properties._PropertyForm` with a loan in place of a mortgage."""
+def _minted_current_vehicle_handle( profile ) -> str:
+    """A fresh `vehicle-N` handle, the lowest free among *every* current vehicle -- owned (a DEPRECIATING
+    asset) or leased (a fact) -- so the two share one identity space and a vehicle keeps its handle when
+    its owned/leased choice is flipped."""
+    taken = { asset.handle for asset in profile.assets } | { v.handle for v in profile.leased_vehicles }
+    index = 1
+    while f'{_VEHICLE_PREFIX}{index}' in taken:
+        index += 1
+    return f'{_VEHICLE_PREFIX}{index}'
 
-    _PREFIX       = _VEHICLE_PREFIX
-    _ASSET_FIELDS = ( 'name', 'value' )
-    field_order   = [ 'name', 'value', 'loan_balance' ]
 
-    name         = forms.CharField( label = 'Name', max_length = 100, required = False )
+def current_vehicles_context( profile ) -> list:
+    """The household's current vehicles for the list -- owned holdings then leased facts, each with its
+    handle, name, ownership label, and (owned only) value."""
+    owned = [ { 'handle': asset.handle, 'name': asset.name, 'ownership': 'Owned',
+                'value': asset.opening_value }
+              for asset in profile.assets if asset.asset_class is AssetClass.DEPRECIATING ]
+    leased = [ { 'handle': vehicle.handle, 'name': vehicle.name, 'ownership': 'Leased', 'value': None }
+               for vehicle in profile.leased_vehicles ]
+    return owned + leased
+
+
+def delete_current_vehicle( profile, plans, handle : str ):
+    """Remove a current vehicle -- an owned holding (and its secured loan, via `delete_property`) or a
+    leased fact -- and drop any vehicle-plan disposition keyed to it (owned or leased)."""
+    if any( asset.handle == handle for asset in profile.assets ):
+        profile, plans = delete_property( profile, plans, handle )
+    else:
+        profile = replace(
+            profile, leased_vehicles = [ v for v in profile.leased_vehicles if v.handle != handle ] )
+    return profile, plans_without_vehicles( plans, { handle } )
+
+
+class CurrentVehicleForm( StyledFormMixin, forms.Form ):
+    """One current vehicle, owned or leased -- the user's single choice, driving which fields apply. The
+    ownership radio is a switch (inputs.js): Owned reveals the current value and any auto-loan balance
+    (written as a `DEPRECIATING` holding + an `AUTO` `Debt`); Leased reveals nothing more (written as a
+    `LeasedVehicle` fact). Non-blocking and handle-minted: it materializes only once its needed fields are
+    set (a name, plus a value when owned), leaving other vehicles intact. Flipping ownership on an
+    existing vehicle moves it between the two stores under the same handle and drops its now-mismatched
+    disposition."""
+
+    name      = forms.CharField( label = 'Name', max_length = 100, required = False )
+    ownership = forms.ChoiceField(
+        label = 'This vehicle is', required = False, choices = _OWNERSHIP_CHOICES, initial = OWNED,
+        widget = forms.RadioSelect(
+            attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     value        = MoneyField( label = 'Current value', min_value = 0, required = False )
     loan_balance = MoneyField(
         label = 'Auto-loan balance owed (optional)', min_value = 0, required = False )
@@ -61,37 +97,74 @@ class VehicleHoldingForm( StyledFormMixin, forms.Form ):
     @classmethod
     def _initial( cls, profile, handle : str ) -> dict:
         asset = next( ( a for a in profile.assets if a.handle == handle ), None )
-        if asset is None:
-            return dict()
-        initial = { 'name': asset.name, 'value': asset.opening_value }
-        loan    = next( ( d for d in profile.debts if d.handle == _loan_handle( handle ) ), None )
-        if loan is not None:
-            initial[ 'loan_balance' ] = loan.balance
-        return initial
+        if asset is not None:
+            initial = { 'ownership': OWNED, 'name': asset.name, 'value': asset.opening_value }
+            loan    = next( ( d for d in profile.debts if d.handle == _loan_handle( handle ) ), None )
+            if loan is not None:
+                initial[ 'loan_balance' ] = loan.balance
+            return initial
+        leased = next( ( v for v in profile.leased_vehicles if v.handle == handle ), None )
+        if leased is not None:
+            return { 'ownership': LEASED, 'name': leased.name }
+        return dict()
 
     @property
-    def primary_fields( self ):
-        """The vehicle fields, in `field_order`."""
-        return [ self[ name ] for name in self.fields ]
+    def owned_case( self ) -> str:
+        """The ownership value whose extra fields (value, loan) show -- its switch-case value."""
+        return OWNED
+
+    def _ownership( self ) -> str:
+        return self.cleaned_data.get( 'ownership' ) or OWNED
 
     def _complete( self ) -> bool:
-        """Name and value are both present -- the condition for materializing the vehicle. Like a
-        property, there is no hard validation; a half-entered vehicle is simply not written."""
+        """The fields the vehicle needs to materialize are present -- a name always, and a value when
+        owned (a leased vehicle needs only its name here). No hard validation: a partial vehicle is simply
+        not written rather than fighting a background save."""
         cleaned = self.cleaned_data
-        return all( cleaned.get( field ) not in ( None, '' ) for field in self._ASSET_FIELDS )
+        if not cleaned.get( 'name' ):
+            return False
+        if self._ownership() == OWNED:
+            return cleaned.get( 'value' ) is not None
+        return True
 
     def apply( self, profile, plans ):
-        # Non-blocking and non-destructive, exactly as a property's: a partial edit writes nothing and
-        # leaves any existing vehicle (and its loan) untouched; only the explicit delete removes one. A
-        # complete form writes its holding and, if a balance is entered, its secured auto loan.
+        # Non-blocking and non-destructive: a partial edit writes nothing and leaves other vehicles
+        # intact. A complete form writes the vehicle in the store its ownership chooses, removing it from
+        # the other; if that flips its type, its now-mismatched disposition is dropped.
         if not self._complete():
             return profile, plans
-        handle   = self._handle or _minted_handle( profile, self._PREFIX )
+        handle     = self._handle or _minted_current_vehicle_handle( profile )
+        was_owned  = any( asset.handle == handle for asset in profile.assets )
+        was_leased = any( vehicle.handle == handle for vehicle in profile.leased_vehicles )
+        if self._ownership() == LEASED:
+            profile = self._as_leased( profile, handle )
+            if was_owned:                                    # type flipped -> its owned disposition is stale
+                plans = plans_without_vehicles( plans, { handle } )
+        else:
+            profile = self._as_owned( profile, handle )
+            if was_leased:                                   # type flipped -> its leased disposition is stale
+                plans = plans_without_vehicles( plans, { handle } )
+        return profile, plans
+
+    def _as_owned( self, profile, handle : str ):
         loan     = _loan_handle( handle )
         existing = next( ( d for d in profile.debts if d.handle == loan ), None )
-        assets   = [ a for a in profile.assets if a.handle != handle ] + [ self._asset( handle ) ]
-        debts    = [ d for d in profile.debts if d.handle != loan ] + self._loan( handle, existing )
-        return replace( profile, assets = assets, debts = debts ), plans
+        return replace(
+            profile,
+            assets          = ( [ a for a in profile.assets if a.handle != handle ]
+                                + [ self._asset( handle ) ] ),
+            debts           = ( [ d for d in profile.debts if d.handle != loan ]
+                                + self._loan( handle, existing ) ),
+            leased_vehicles = [ v for v in profile.leased_vehicles if v.handle != handle ] )
+
+    def _as_leased( self, profile, handle : str ):
+        loan = _loan_handle( handle )
+        return replace(
+            profile,
+            leased_vehicles = ( [ v for v in profile.leased_vehicles if v.handle != handle ]
+                                + [ LeasedVehicle( handle = handle, name = self.cleaned_data[ 'name' ] ) ] ),
+            assets          = [ a for a in profile.assets if a.handle != handle ],
+            debts           = [ d for d in profile.debts if d.handle != loan ] )
 
     def _asset( self, handle : str ) -> AssetProfile:
         cleaned = self.cleaned_data
@@ -111,90 +184,3 @@ class VehicleHoldingForm( StyledFormMixin, forms.Form ):
             name = existing.name if existing is not None else f"{self.cleaned_data[ 'name' ]} Loan",
             kind = existing.kind if existing is not None else DebtKind.AUTO,
             balance = balance, secured_asset = vehicle_handle ) ]
-
-
-VEHICLE_PANE = PropertyPane(
-    form = VehicleHoldingForm, asset_class = AssetClass.DEPRECIATING, heading = 'Vehicles',
-    list_id = 'vehicles-holding-list', form_id = 'vehicles-holding-form',
-    add_url = 'vehicle_holding_add', edit_url = 'vehicle_holding_edit',
-    delete_url = 'vehicle_holding_delete',
-    add_text = 'Add a vehicle', empty_text = 'No vehicles.' )
-
-# The vehicle panes in display order, iterated by the Vehicles section and mapped to their
-# add/edit/delete views. One kind today; a tuple to match the property panes' shape.
-VEHICLE_PANES = ( VEHICLE_PANE, )
-
-
-def delete_vehicle_holding( profile, plans, vehicle_handle : str ):
-    """Remove an owned vehicle as a unit -- its holding and any secured auto loan (`delete_property`) --
-    and drop any vehicle-plan disposition keyed to it, so a deleted vehicle leaves nothing dangling."""
-    profile, plans = delete_property( profile, plans, vehicle_handle )
-    return profile, plans_without_vehicles( plans, { vehicle_handle } )
-
-
-_LEASE_PREFIX = 'lease-'
-
-
-def _minted_leased_handle( taken : set ) -> str:
-    """The lowest `lease-N` handle free among `taken` -- a stable identity a leased vehicle keeps across
-    edits, since the vehicle plan references a lease by handle (mirrors the possessions form's scheme)."""
-    index = 1
-    while f'{_LEASE_PREFIX}{index}' in taken:
-        index += 1
-    return f'{_LEASE_PREFIX}{index}'
-
-
-class LeasedVehiclesForm( forms.Form ):
-    """The leased-vehicles list of the Vehicles section -- a background-saved list of the vehicles the
-    household currently leases, each just a name. A lease confers no ownership, so there is no value or
-    loan (unlike an owned `VehicleHoldingForm`); the lease's terms and end-of-term plan are the vehicle
-    plan's, keyed to the leased vehicle's handle. A trailing blank row adds one; an existing row's Remove
-    box drops it. `apply` replaces the leased-vehicle facts and reaps the vehicle plan of any disposition
-    for a removed lease. Each row carries its stable `handle` in a hidden field -- the plan references a
-    lease by it, so identity must survive edits rather than being reindexed by position."""
-
-    def __init__( self, data = None, *, profile = None, plans = None ):
-        super().__init__( data )
-        self._items = list( profile.leased_vehicles ) if profile is not None else []
-        for index in range( len( self._items ) + 1 ):   # existing rows, then one blank to add
-            self._build_row( index )
-
-    def _build_row( self, index : int ):
-        item = self._items[ index ] if index < len( self._items ) else None
-        self.fields[ f'handle_{index}' ] = forms.CharField(
-            required = False, widget = forms.HiddenInput, initial = item.handle if item else None )
-        self.fields[ f'name_{index}' ] = forms.CharField(
-            required = False, max_length = 100, initial = item.name if item else None,
-            widget = forms.TextInput( attrs = { 'class' : 'form-control' } ) )
-        if item is not None:
-            self.fields[ f'remove_{index}' ] = forms.BooleanField( required = False )
-
-    @property
-    def rows( self ) -> list:
-        rows = []
-        for index in range( len( self._items ) + 1 ):
-            remove = f'remove_{index}'
-            rows.append( { 'handle' : self[ f'handle_{index}' ], 'name' : self[ f'name_{index}' ],
-                           'remove' : self[ remove ] if remove in self.fields else None } )
-        return rows
-
-    def apply( self, profile, plans ):
-        leased  = self._leased()
-        removed = { item.handle for item in self._items } - { vehicle.handle for vehicle in leased }
-        return replace( profile, leased_vehicles = leased ), plans_without_vehicles( plans, removed )
-
-    def _leased( self ) -> list:
-        # Existing rows keep the handle their hidden field carries; new rows mint one free among every
-        # lease in play, so both survive an edit (the plan references a lease by handle).
-        taken  = { item.handle for item in self._items }
-        leased = []
-        for index in range( len( self._items ) + 1 ):
-            if self.cleaned_data.get( f'remove_{index}' ):
-                continue
-            name = self.cleaned_data.get( f'name_{index}' )
-            if not name:
-                continue                                     # incomplete row -- not materialized
-            handle = self.cleaned_data.get( f'handle_{index}' ) or _minted_leased_handle( taken )
-            taken.add( handle )
-            leased.append( LeasedVehicle( handle = handle, name = name ) )
-        return leased

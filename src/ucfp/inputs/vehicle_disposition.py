@@ -166,6 +166,17 @@ def _leased_summary( disposition ) -> str:
     return f'{disposition.kind.label} in {disposition.lease_end.year}'
 
 
+def all_dispositions_context( profile, plans ) -> list:
+    """One row per current vehicle -- owned then leased -- for the single disposition list: each with its
+    handle, name, ownership label, disposition summary, and the edit route its Edit opens (the owned and
+    leased editors are separate but share one form area)."""
+    owned = [ { **row, 'ownership': 'Owned', 'edit_route': 'vehicle_disposition_edit' }
+              for row in dispositions_context( profile, plans ) ]
+    leased = [ { **row, 'ownership': 'Leased', 'edit_route': 'leased_disposition_edit' }
+               for row in leased_dispositions_context( profile, plans ) ]
+    return owned + leased
+
+
 class LeasedVehicleDispositionForm( VehiclePurchaseForm ):
     """The disposition editor for one current leased vehicle: its current lease terms (monthly, end) and
     what happens at term end -- Return (let it expire), Renew (keep leasing -- the monthly continues), or

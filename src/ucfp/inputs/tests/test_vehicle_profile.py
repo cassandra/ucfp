@@ -1,11 +1,9 @@
-"""VehicleHoldingForm: an owned vehicle round-trips as a DEPRECIATING holding plus an optional auto loan.
+"""CurrentVehicleForm: one current vehicle -- owned or leased -- in one list.
 
-The value earning a test here is the holding + secured-debt write (the same shape a mortgaged property
-uses, with a loan in place of the mortgage): a complete vehicle materializes as a `DEPRECIATING`
-`AssetProfile`, a balance auto-creates an `AUTO` `Debt` secured against it (`{handle}-loan`), an edit
-pre-fills and preserves a name/kind the Debts section may have set, and clearing the balance drops the
-debt. Non-blocking materialization (a half-entered vehicle writes nothing) and the section listing round
-it out. The delete reap is `delete_property`'s, exercised through the vehicle's secured loan here.
+An owned vehicle materializes as a `DEPRECIATING` holding plus an optional `AUTO` loan; a leased vehicle
+as a thin `LeasedVehicle` fact. Both share one handle space, so flipping ownership moves the vehicle
+between the two stores under the same handle and drops its now-mismatched vehicle-plan disposition. The
+combined list and the delete reap round it out.
 """
 import unittest
 from decimal import Decimal
@@ -13,143 +11,141 @@ from decimal import Decimal
 from django.http import QueryDict
 
 from ucfp.accounts.enums import AssetClass
-from ucfp.inputs.interview import VehiclesForm
-from ucfp.inputs.plans.enums import LeaseDispositionKind
-from ucfp.inputs.plans.schemas import LeasedVehicleDisposition, Plans, VehiclePlan
+from ucfp.inputs.plans.enums import LeaseDispositionKind, VehicleDispositionKind
+from ucfp.inputs.plans.schemas import (
+    LeasedVehicleDisposition, Plans, VehicleDisposition, VehiclePlan )
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile
-from ucfp.inputs.properties import delete_property
-from ucfp.inputs.vehicle_profile import LeasedVehiclesForm, VehicleHoldingForm
+from ucfp.inputs.vehicle_profile import (
+    CurrentVehicleForm, current_vehicles_context, delete_current_vehicle )
 
 
-def _apply( profile : Profile, handle = None, **fields ):
-    """Submit the given vehicle fields over an existing profile and return the resulting profile."""
+def _apply( profile, plans, handle = None, **fields ):
     data = QueryDict( mutable = True )
     data.update( fields )
-    form = VehicleHoldingForm( data, profile = profile, plans = Plans(), handle = handle )
+    form = CurrentVehicleForm( data, profile = profile, plans = plans, handle = handle )
     assert form.is_valid(), form.errors
-    result, _plans = form.apply( profile, Plans() )
-    return result
+    return form.apply( profile, plans )
 
 
-def _vehicle( handle, name, value ) -> AssetProfile:
+def _owned( handle, name, value = '30000' ) -> AssetProfile:
     return AssetProfile( handle = handle, name = name, asset_class = AssetClass.DEPRECIATING,
                          opening_value = Decimal( value ) )
 
 
-class VehicleHoldingTests( unittest.TestCase ):
+def _loan( vehicle_handle = 'vehicle-1' ) -> Debt:
+    return Debt( handle = f'{vehicle_handle}-loan', name = 'Loan', kind = DebtKind.AUTO,
+                 balance = Decimal( '18000' ), secured_asset = vehicle_handle )
 
-    def test_a_complete_vehicle_writes_a_depreciating_holding( self ):
-        result = _apply( Profile(), name = 'Car', value = '30,000' )
-        self.assertEqual( len( result.assets ), 1 )
-        car = result.assets[ 0 ]
-        self.assertEqual( car.handle, 'vehicle-1' )                 # minted, lowest free
+
+def _owned_disposition( plans_handle = 'vehicle-1' ) -> Plans:
+    return Plans( vehicle_plan = VehiclePlan( dispositions = [
+        VehicleDisposition( vehicle_handle = plans_handle, kind = VehicleDispositionKind.SELL ) ] ) )
+
+
+def _leased_disposition( plans_handle = 'vehicle-1' ) -> Plans:
+    return Plans( vehicle_plan = VehiclePlan( leased_dispositions = [
+        LeasedVehicleDisposition( vehicle_handle = plans_handle, kind = LeaseDispositionKind.RENEW ) ] ) )
+
+
+class OwnedVehicleTests( unittest.TestCase ):
+
+    def test_owned_writes_a_depreciating_holding( self ):
+        profile, _plans = _apply( Profile(), Plans(), name = 'Car', ownership = 'owned', value = '30,000' )
+        self.assertEqual( len( profile.assets ), 1 )
+        car = profile.assets[ 0 ]
+        self.assertEqual( car.handle, 'vehicle-1' )                 # minted
         self.assertEqual( car.asset_class, AssetClass.DEPRECIATING )
         self.assertEqual( car.opening_value, Decimal( '30000' ) )
-        self.assertIsNone( car.cost_basis )                        # a vehicle's sale is tax-free
-        self.assertEqual( result.debts, [] )                       # no balance -> no loan
-
-    def test_a_half_entered_vehicle_writes_nothing( self ):
-        # Name without a value is incomplete; materialization is non-blocking, so nothing is written.
-        result = _apply( Profile(), name = 'Car' )
-        self.assertEqual( result.assets, [] )
+        self.assertEqual( profile.debts, [] )                      # no balance -> no loan
 
     def test_a_loan_balance_creates_a_secured_auto_loan( self ):
-        result = _apply( Profile(), handle = 'vehicle-1', name = 'Car', value = '30,000',
-                         loan_balance = '18,000' )
-        self.assertEqual( len( result.debts ), 1 )
-        loan = result.debts[ 0 ]
-        self.assertEqual( loan.handle, 'vehicle-1-loan' )
-        self.assertEqual( loan.kind, DebtKind.AUTO )
-        self.assertEqual( loan.balance, Decimal( '18000' ) )
-        self.assertEqual( loan.secured_asset, 'vehicle-1' )
-        self.assertEqual( loan.name, 'Car Loan' )
+        profile, _plans = _apply( Profile(), Plans(), handle = 'vehicle-1', name = 'Car',
+                                  ownership = 'owned', value = '30,000', loan_balance = '18,000' )
+        loan = profile.debts[ 0 ]
+        self.assertEqual( ( loan.handle, loan.kind, loan.secured_asset ),
+                          ( 'vehicle-1-loan', DebtKind.AUTO, 'vehicle-1' ) )
 
-    def test_an_edit_preserves_a_loan_name_and_kind_set_in_debts( self ):
-        # The vehicle is a balance-only surface onto the one debt; a name/kind the Debts section chose
-        # survives an edit here (only the balance is this form's to own).
-        profile = Profile(
-            assets = [ _vehicle( 'vehicle-1', 'Car', '30000' ) ],
-            debts  = [ Debt( handle = 'vehicle-1-loan', name = 'Credit Union Auto', kind = DebtKind.OTHER,
-                             balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ) ] )
-        result = _apply( profile, handle = 'vehicle-1', name = 'Car', value = '31,000',
-                         loan_balance = '17,000' )
-        loan = result.debts[ 0 ]
-        self.assertEqual( ( loan.name, loan.kind ), ( 'Credit Union Auto', DebtKind.OTHER ) )
-        self.assertEqual( loan.balance, Decimal( '17000' ) )       # the balance is updated
+    def test_owned_without_a_value_writes_nothing( self ):
+        profile, _plans = _apply( Profile(), Plans(), name = 'Car', ownership = 'owned' )
+        self.assertEqual( profile.assets, [] )
 
-    def test_clearing_the_balance_drops_the_loan( self ):
-        profile = Profile(
-            assets = [ _vehicle( 'vehicle-1', 'Car', '30000' ) ],
-            debts  = [ Debt( handle = 'vehicle-1-loan', name = 'Car Loan', kind = DebtKind.AUTO,
-                             balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ) ] )
-        result = _apply( profile, handle = 'vehicle-1', name = 'Car', value = '30,000' )   # balance blank
-        self.assertEqual( result.debts, [] )
-
-    def test_edit_pre_fills_name_value_and_loan_balance( self ):
-        profile = Profile(
-            assets = [ _vehicle( 'vehicle-1', 'Car', '30000' ) ],
-            debts  = [ Debt( handle = 'vehicle-1-loan', name = 'Car Loan', kind = DebtKind.AUTO,
-                             balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ) ] )
-        form = VehicleHoldingForm( profile = profile, plans = Plans(), handle = 'vehicle-1' )
-        self.assertEqual( form.initial[ 'name' ], 'Car' )
+    def test_owned_pre_fills_on_edit( self ):
+        profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ], debts = [ _loan() ] )
+        form = CurrentVehicleForm( profile = profile, plans = Plans(), handle = 'vehicle-1' )
+        self.assertEqual( form.initial[ 'ownership' ], 'owned' )
         self.assertEqual( form.initial[ 'value' ], Decimal( '30000' ) )
         self.assertEqual( form.initial[ 'loan_balance' ], Decimal( '18000' ) )
 
-    def test_deleting_a_vehicle_reaps_its_secured_loan( self ):
-        profile = Profile(
-            assets = [ _vehicle( 'vehicle-1', 'Car', '30000' ) ],
-            debts  = [ Debt( handle = 'vehicle-1-loan', name = 'Car Loan', kind = DebtKind.AUTO,
-                             balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ) ] )
-        result, _plans = delete_property( profile, Plans(), 'vehicle-1' )
-        self.assertEqual( ( result.assets, result.debts ), ( [], [] ) )
 
+class LeasedVehicleTests( unittest.TestCase ):
 
-class VehiclesSectionTests( unittest.TestCase ):
-    """The section pane lists the household's current vehicles -- the DEPRECIATING holdings -- and not
-    other asset kinds."""
-
-    def test_the_pane_lists_only_vehicles( self ):
-        profile = Profile( assets = [
-            _vehicle( 'vehicle-1', 'Car', '30000' ),
-            AssetProfile( handle = 'possession-1', name = 'Ring', asset_class = AssetClass.COLLECTIBLES,
-                          opening_value = Decimal( '5000' ) ) ] )
-        panes = VehiclesForm( profile = profile ).vehicle_panes
-        self.assertEqual( len( panes ), 1 )
-        listed = [ ( item[ 'handle' ], item[ 'name' ] ) for item in panes[ 0 ][ 'properties' ] ]
-        self.assertEqual( listed, [ ( 'vehicle-1', 'Car' ) ] )
-
-
-class LeasedVehiclesFormTests( unittest.TestCase ):
-    """The leased-vehicles inline list mints stable `lease-N` handles and, on removal, reaps the vehicle
-    plan of the removed lease's disposition -- the delete safety that keeps a plan from dangling."""
-
-    @staticmethod
-    def _apply( profile, plans, **fields ):
-        data = QueryDict( mutable = True )
-        data.update( fields )
-        form = LeasedVehiclesForm( data, profile = profile, plans = plans )
-        assert form.is_valid(), form.errors
-        return form.apply( profile, plans )
-
-    def test_a_new_leased_vehicle_mints_a_stable_handle( self ):
-        profile, _plans = self._apply( Profile(), Plans(), name_0 = 'Leased Sedan' )
+    def test_leased_writes_a_lease_fact_and_no_asset( self ):
+        profile, _plans = _apply( Profile(), Plans(), name = 'Leased Car', ownership = 'leased' )
         self.assertEqual( [ ( v.handle, v.name ) for v in profile.leased_vehicles ],
-                          [ ( 'lease-1', 'Leased Sedan' ) ] )
+                          [ ( 'vehicle-1', 'Leased Car' ) ] )
+        self.assertEqual( profile.assets, [] )
 
-    def test_removing_a_lease_reaps_its_disposition( self ):
-        profile = Profile( leased_vehicles = [ LeasedVehicle( handle = 'lease-1', name = 'Sedan' ) ] )
-        plans   = Plans( vehicle_plan = VehiclePlan( leased_dispositions = [
-            LeasedVehicleDisposition( vehicle_handle = 'lease-1', kind = LeaseDispositionKind.RENEW ) ] ) )
-        profile, plans = self._apply(                          # submit the row with its Remove box ticked
-            profile, plans, handle_0 = 'lease-1', name_0 = 'Sedan', remove_0 = 'on' )
+    def test_leased_pre_fills_on_edit( self ):
+        profile = Profile( leased_vehicles = [ LeasedVehicle( 'vehicle-1', 'Leased Car' ) ] )
+        form = CurrentVehicleForm( profile = profile, plans = Plans(), handle = 'vehicle-1' )
+        self.assertEqual( form.initial[ 'ownership' ], 'leased' )
+        self.assertEqual( form.initial[ 'name' ], 'Leased Car' )
+
+    def test_a_handle_is_minted_free_across_owned_and_leased( self ):
+        profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ],
+                           leased_vehicles = [ LeasedVehicle( 'vehicle-2', 'Lease' ) ] )
+        profile, _plans = _apply( profile, Plans(), name = 'New Lease', ownership = 'leased' )
+        self.assertIn( 'vehicle-3', [ v.handle for v in profile.leased_vehicles ] )
+
+
+class OwnershipToggleTests( unittest.TestCase ):
+    """Flipping ownership on an existing vehicle moves it between stores under the same handle and drops
+    its now-mismatched disposition; an edit that keeps the type keeps the disposition."""
+
+    def test_owned_to_leased_moves_stores_and_reaps_the_owned_disposition( self ):
+        profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ], debts = [ _loan() ] )
+        profile, plans = _apply( profile, _owned_disposition(), handle = 'vehicle-1', name = 'Car',
+                                 ownership = 'leased' )
+        self.assertEqual( [ v.handle for v in profile.leased_vehicles ], [ 'vehicle-1' ] )
+        self.assertEqual( ( profile.assets, profile.debts ), ( [], [] ) )      # the loan went with it
+        self.assertEqual( plans.vehicle_plan.dispositions, [] )                # the owned disposition reaped
+
+    def test_leased_to_owned_moves_stores_and_reaps_the_leased_disposition( self ):
+        profile = Profile( leased_vehicles = [ LeasedVehicle( 'vehicle-1', 'Car' ) ] )
+        profile, plans = _apply( profile, _leased_disposition(), handle = 'vehicle-1', name = 'Car',
+                                 ownership = 'owned', value = '25,000' )
+        self.assertEqual( [ a.handle for a in profile.assets ], [ 'vehicle-1' ] )
         self.assertEqual( profile.leased_vehicles, [] )
-        self.assertEqual( plans.vehicle_plan.leased_dispositions, [] )   # the orphaned disposition reaped
+        self.assertEqual( plans.vehicle_plan.leased_dispositions, [] )         # the leased disposition reaped
 
-    def test_an_existing_lease_keeps_its_handle_across_an_edit( self ):
-        profile = Profile( leased_vehicles = [ LeasedVehicle( handle = 'lease-2', name = 'Sedan' ) ] )
-        profile, _plans = self._apply( profile, Plans(), handle_0 = 'lease-2', name_0 = 'Sedan renamed' )
-        self.assertEqual( profile.leased_vehicles[ 0 ].handle, 'lease-2' )
+    def test_editing_without_flipping_keeps_the_disposition( self ):
+        profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ] )
+        profile, plans = _apply( profile, _owned_disposition(), handle = 'vehicle-1', name = 'Car',
+                                 ownership = 'owned', value = '31,000' )
+        self.assertEqual( len( plans.vehicle_plan.dispositions ), 1 )          # same type -> kept
+
+
+class CombinedListTests( unittest.TestCase ):
+
+    def test_lists_owned_then_leased_with_ownership( self ):
+        profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ],
+                           leased_vehicles = [ LeasedVehicle( 'vehicle-2', 'Lease' ) ] )
+        rows = current_vehicles_context( profile )
+        self.assertEqual( [ ( r[ 'name' ], r[ 'ownership' ] ) for r in rows ],
+                          [ ( 'Car', 'Owned' ), ( 'Lease', 'Leased' ) ] )
+
+    def test_deleting_an_owned_vehicle_reaps_its_loan_and_disposition( self ):
+        profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ], debts = [ _loan() ] )
+        profile, plans = delete_current_vehicle( profile, _owned_disposition(), 'vehicle-1' )
+        self.assertEqual( ( profile.assets, profile.debts ), ( [], [] ) )
+        self.assertEqual( plans.vehicle_plan.dispositions, [] )
+
+    def test_deleting_a_leased_vehicle_reaps_its_disposition( self ):
+        profile = Profile( leased_vehicles = [ LeasedVehicle( 'vehicle-1', 'Lease' ) ] )
+        profile, plans = delete_current_vehicle( profile, _leased_disposition(), 'vehicle-1' )
+        self.assertEqual( profile.leased_vehicles, [] )
+        self.assertEqual( plans.vehicle_plan.leased_dispositions, [] )
 
 
 if __name__ == '__main__':
