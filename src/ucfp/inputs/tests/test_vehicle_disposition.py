@@ -146,6 +146,19 @@ class DispositionListTests( unittest.TestCase ):
         flags = { r[ 'name' ] : r[ 'incomplete' ] for r in dispositions_context( profile, plans ) }
         self.assertEqual( flags, { 'Sedan' : True, 'Truck' : False, 'Coupe' : False } )
 
+    def test_flags_an_unconfigured_or_incomplete_leased_vehicle( self ):
+        # A leased vehicle contributes nothing without its current-lease terms, so an unconfigured one
+        # (no disposition) is flagged too -- unlike an owned Retain-by-default, a valid zero-input state.
+        profile = Profile( leased_vehicles = [
+            LeasedVehicle( handle = 'vehicle-1', name = 'Unset' ),
+            LeasedVehicle( handle = 'vehicle-2', name = 'Configured' ) ] )
+        configured = LeasedVehicleDisposition(
+            vehicle_handle = 'vehicle-2', monthly = Decimal( '400' ), lease_end = date( 2030, 1, 1 ),
+            kind = LeaseDispositionKind.RETURN )                                        # complete current lease
+        plans = Plans( vehicle_plan = VehiclePlan( leased_dispositions = [ configured ] ) )
+        flags = { r[ 'name' ] : r[ 'incomplete' ] for r in leased_dispositions_context( profile, plans ) }
+        self.assertEqual( flags, { 'Unset' : True, 'Configured' : False } )
+
 
 def _leased_profile( *vehicles ) -> Profile:
     return Profile( leased_vehicles = [ LeasedVehicle( handle = h, name = n ) for h, n in vehicles ] )

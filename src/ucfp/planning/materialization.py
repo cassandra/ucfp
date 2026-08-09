@@ -348,12 +348,17 @@ def _plan_vehicles( plan ) -> list[ Vehicle ]:
     Replace disposition's successor, and each non-Return leased disposition's successor (the lease or
     purchase that begins at lease end -- its payment method fixed by the kind). Retain/Sell/Return add
     none -- they keep or end a current vehicle without a successor (their sale/lease expense is handled
-    elsewhere). A disposition contributes its successor only once it is complete, so a half-entered plan
-    is a safe no-op rather than a partial purchase."""
+    elsewhere). An owned Replace contributes its successor only once the whole disposition is complete --
+    the successor and the sale it pairs with go together, so a half-entered Replace never sells the car
+    with nothing to succeed it. A leased successor gates on its *own* readiness instead (its structural
+    terms plus the lease-end it begins at); the current lease it follows is independent and materialized
+    elsewhere, so an unfinished successor never suppresses the lease the household is already paying."""
     replacements = [ _replacement_vehicle( disposition ) for disposition in plan.dispositions
                      if disposition.kind is VehicleDispositionKind.REPLACE and disposition.is_complete ]
     successors   = [ _leased_successor( disposition ) for disposition in plan.leased_dispositions
-                     if disposition.kind is not LeaseDispositionKind.RETURN and disposition.is_complete ]
+                     if disposition.kind is not LeaseDispositionKind.RETURN
+                     and disposition.lease_end is not None
+                     and disposition.successor is not None and disposition.successor.has_structural_terms ]
     return list( plan.vehicles ) + replacements + successors
 
 
@@ -537,14 +542,15 @@ def _leased_current_expenses( plans : Plans, start_date : date ) -> list[ Expens
     """The monthly cost of each current lease -- the leased twin of an owned car's holding: a leased
     vehicle is pure expense, so its current lease is a monthly item over its window (to the day before
     term end for every kind -- a Renew's continued lease and a Buy's purchase begin then, each
-    materialized separately as a plan vehicle). Emitted only once the disposition is complete (which
-    requires its monthly) and it is still operative."""
+    materialized separately as a plan vehicle). Emitted once the current lease's monthly is set and it is
+    still operative -- independent of the end-of-term plan, since the household pays the lease it holds now
+    regardless of what it has decided to do at term end."""
     plan = plans.vehicle_plan
     if plan is None:
         return list()
     items = list()
     for disposition in plan.leased_dispositions:
-        if disposition.is_complete and _leased_operative( disposition, start_date ):
+        if disposition.monthly and _leased_operative( disposition, start_date ):
             items.append( ExpenseItem(
                 name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
                 amounts = Schedule.constant( WindowedAmount( disposition.monthly ) ),
@@ -576,7 +582,7 @@ def _vehicle_windows( profile : Profile, plans : Plans, sale_dates : dict,
                 for possession in profile.assets if possession.asset_class is AssetClass.DEPRECIATING ]
     leased  = [ _lease_window( disposition, start_date )
                 for disposition in ( plan.leased_dispositions if plan is not None else list() )
-                if disposition.is_complete and _leased_operative( disposition, start_date ) ]
+                if _leased_operative( disposition, start_date ) ]
     return planned + current + leased
 
 

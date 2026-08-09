@@ -165,11 +165,13 @@ def leased_dispositions_context( profile, plans ) -> list:
 
 
 def _leased_row( vehicle, disposition ) -> dict:
-    """One current leased vehicle's list row -- its identity, end-of-term summary, and incompleteness (a
-    Return with no terms, stored as no disposition, is complete by definition, so it never flags)."""
+    """One current leased vehicle's list row -- its identity, end-of-term summary, and incompleteness. A
+    leased vehicle contributes nothing until its current lease is described (a monthly and an end), so an
+    unconfigured lease -- no disposition at all, or an incomplete one -- is flagged, unlike an owned
+    vehicle whose Retain default runs it to end-of-life at no extra input. So it is not silently free."""
     return { 'handle' : vehicle.handle, 'name' : vehicle.name,
              'summary' : _leased_summary( disposition ),
-             'incomplete' : disposition is not None and not disposition.is_complete }
+             'incomplete' : disposition is None or not disposition.is_complete }
 
 
 def _leased_summary( disposition ) -> str:

@@ -375,6 +375,17 @@ class LeasedDispositionMaterializationTests( unittest.TestCase ):
         plans = self._plans( LeaseDispositionKind.RETURN, monthly = None )
         self.assertEqual( _leased_current_expenses( plans, self._START ), [] )
 
+    def test_the_current_lease_charges_despite_an_unfinished_successor( self ):
+        # Regression: the current lease's monthly is independent of the end-of-term plan. A Renew whose
+        # renewed-lease terms are not yet entered is incomplete, but the household still pays the lease it
+        # holds now -- only the unready successor waits.
+        plans = self._plans( LeaseDispositionKind.RENEW,
+                             successor = self._successor( PaymentMethod.LEASE ) )   # no monthly -> incomplete
+        self.assertFalse( plans.vehicle_plan.leased_dispositions[ 0 ].is_complete )
+        charged = _leased_current_expenses( plans, self._START )
+        self.assertEqual( [ item.amounts.segments[ 0 ].amount for item in charged ], [ Decimal( '400' ) ] )
+        self.assertEqual( _vehicle_expenses( plans ), [] )                          # the successor waits
+
 
 class VehicleRunningCostTests( unittest.TestCase ):
     """A running cost is a per-car amount emitted once per *operated* vehicle window -- the current
@@ -424,6 +435,24 @@ class VehicleRunningCostTests( unittest.TestCase ):
         self.assertEqual( streams, [] )
         self.assertEqual( items[ 0 ].cadence.interval, semiannual )
         self.assertEqual( items[ 0 ].amounts.segments[ 0 ].amount, Decimal( '750' ) )   # per car
+
+    def test_a_leased_vehicle_accrues_running_costs_over_its_lease( self ):
+        # Regression: a current leased vehicle is operated over its lease term and accrues running costs
+        # even when its end-of-term successor is unfinished -- its window comes from the lease it holds
+        # now, not from the whole plan being complete. (A net-new lease already counted; this restores the
+        # current-lease parity that the atomic-disposition change had dropped.)
+        renew = LeasedVehicleDisposition(
+            vehicle_handle = 'lease-1', monthly = Decimal( '400' ), lease_end = date( 2030, 1, 1 ),
+            kind = LeaseDispositionKind.RENEW,
+            successor = Vehicle( handle = '', payment_method = PaymentMethod.LEASE ) )   # unfinished
+        self.assertFalse( renew.is_complete )
+        plans = Plans( vehicle_plan = VehiclePlan(
+            leased_dispositions = [ renew ],
+            running_costs = [ self._cost( Realization.SMOOTH, Duration( 1, TimeUnit.WEEK ) ) ] ) )
+        streams, _items = self._run( plans )
+        self.assertEqual( len( streams ), 1 )                                        # the operated lease
+        self.assertEqual( streams[ 0 ].window,
+                          DateWindow( start = date( 2026, 1, 1 ), end = date( 2029, 12, 31 ) ) )
 
     def test_a_current_vehicle_possession_is_run_from_the_start( self ):
         # The fix: a car owned today (a DEPRECIATING possession) incurs running costs from the forecast
