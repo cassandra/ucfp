@@ -220,10 +220,10 @@ def _general_expense_catalog() -> ExpenseCatalog:
         # materialization to each owned vehicle over its window); the car purchase/financing itself is
         # entered per vehicle, not a catalog item. Insurance is a discrete bill; the rest are smoothed
         # (fuel continuous, maintenance/repair unpredictable).
-        _expense( 'Auto Insurance', 'auto-insurance', vehicle, 10, '850', living, semiannual, discrete, mo_yr ),
-        _expense( 'Auto Maintenance', 'auto-maintenance', vehicle, 20, '300', living, yearly, smooth, mo_yr ),
-        _expense( 'Auto Repair', 'auto-repair', vehicle, 30, '1000', living, yearly, smooth, mo_yr ),
-        _expense( 'Gasoline', 'gasoline', vehicle, 40, '30', living, weekly, smooth, wk_mo ),
+        _expense( 'Insurance', 'auto-insurance', vehicle, 10, '850', living, semiannual, discrete, mo_yr ),
+        _expense( 'Maintenance', 'auto-maintenance', vehicle, 20, '300', living, yearly, smooth, mo_yr ),
+        _expense( 'Repairs', 'auto-repair', vehicle, 30, '1000', living, yearly, smooth, mo_yr ),
+        _expense( 'Fuel', 'gasoline', vehicle, 40, '30', living, weekly, smooth, wk_mo ),
     ] )
 
 

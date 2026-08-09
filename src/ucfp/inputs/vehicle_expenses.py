@@ -70,7 +70,7 @@ class VehicleExpensesForm( forms.Form ):
         for ci, cost in enumerate( self._costs ):
             amount = MoneyField( required = False, min_value = 0 )
             amount.initial = cost.amount
-            amount.widget.attrs[ 'aria-label' ] = f'{cost.name} — per car'
+            amount.widget.attrs[ 'aria-label' ] = f'{cost.name} — per vehicle'
             self.fields[ self._amount_key( ci ) ] = amount
             add_cadence_fields( self, self._cad_prefix( ci ), cost.interval, cost.cadence_domain )
 

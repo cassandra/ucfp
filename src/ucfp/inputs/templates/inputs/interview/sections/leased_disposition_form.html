@@ -19,46 +19,46 @@ down) carries conditional labels. The loan buy is marked so the auto-loan calcul
             action="{% url 'leased_disposition_edit' handle=handle %}">
         {% csrf_token %}
         <p class="small text-muted mb-1"><strong>Current lease</strong></p>
-    <div class="form-row">
-      <div class="col-sm-6">{{ leased_form.monthly.as_field_group }}</div>
-      <div class="col-sm-6">{{ leased_form.lease_end.as_field_group }}</div>
-    </div>
-    <div class="{{ AppConst.SWITCH_CLASS }}">
-      <fieldset class="form-group mb-2 mt-2">
-        <legend class="col-form-label d-block mb-1 pt-0 small">At lease end</legend>
-        {% for radio in leased_form.kind %}
-        <div class="form-check form-check-inline"{% if radio.data.value == leased_form.buy_loan_kind %} data-{{ AppConst.VEHICLE_FINANCES_DATA_ATTR }}="1"{% endif %}>
-          {{ radio.tag }}
-          <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+        <div class="form-row mb-2">
+          <div class="col-sm-6">{{ leased_form.monthly.as_field_group }}</div>
+          <div class="col-sm-6">{{ leased_form.lease_end.as_field_group }}</div>
         </div>
-        {% endfor %}
-      </fieldset>
-      {% comment %} The successor's fields -- each shown for the kinds it applies to (Return shows none),
-      with conditional labels where a field means different things for a renewed lease vs a bought car. {% endcomment %}
-      <div class="form-row">
-        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_kinds }}">{{ leased_form.purchase_price.as_field_group }}</div>
-        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.successor_kinds }}">{{ leased_form.recurrence_years.as_field_group }}</div>
-        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.successor_kinds }}">{{ leased_form.end_date.as_field_group }}</div>
-      </div>
-      <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.financed_kinds }}">
-        {% comment %}
-        One down field, two labels -- a renewed lease's "Due at signing" vs a loan buy's "Down payment"
-        (the field's own label is blank, so this holds the only one). The monthly is always "Monthly
-        payment" (its baked-in label), matching how an owned Replace shows a lease, so it needs no override.
-        {% endcomment %}
-        <div class="col-sm-4">
-          <label class="text-muted small mb-0 d-block" for="{{ leased_form.down_payment.id_for_label }}"><span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.renew_kind }}">Due at signing</span><span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_loan_kind }}">Down payment</span></label>
-          {{ leased_form.down_payment.as_field_group }}
+        <div class="{{ AppConst.SWITCH_CLASS }}">
+          <fieldset class="form-group mb-2 mt-2">
+            <legend class="col-form-label d-block mb-1 pt-0 small">At lease end</legend>
+            {% for radio in leased_form.kind %}
+            <div class="form-check form-check-inline"{% if radio.data.value == leased_form.buy_loan_kind %} data-{{ AppConst.VEHICLE_FINANCES_DATA_ATTR }}="1"{% endif %}>
+              {{ radio.tag }}
+              <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+            </div>
+            {% endfor %}
+          </fieldset>
+          {% comment %} The successor's fields -- each shown for the kinds it applies to (Return shows none),
+          with conditional labels where a field means different things for a renewed lease vs a bought car. {% endcomment %}
+          <div class="form-row mb-2">
+            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_kinds }}">{{ leased_form.purchase_price.as_field_group }}</div>
+            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.successor_kinds }}">{{ leased_form.recurrence_years.as_field_group }}</div>
+            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.successor_kinds }}">{{ leased_form.end_date.as_field_group }}</div>
+          </div>
+          <div class="form-row mb-2" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.financed_kinds }}">
+            {% comment %}
+            One down field, two labels -- a renewed lease's "Due at signing" vs a loan buy's "Down payment"
+            (the field's own label is blank, so this holds the only one). The monthly is always "Monthly
+            payment" (its baked-in label), matching how an owned Replace shows a lease, so needs no override.
+            {% endcomment %}
+            <div class="col-sm-4">
+              <label class="text-muted small mb-0 d-block" for="{{ leased_form.down_payment.id_for_label }}"><span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.renew_kind }}">Due at signing</span><span data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_loan_kind }}">Down payment</span></label>
+              {{ leased_form.down_payment.as_field_group }}
+            </div>
+            <div class="col-sm-4">{{ leased_form.monthly_payment.as_field_group }}</div>
+            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.renew_kind }}">{{ leased_form.lease_end_payment.as_field_group }}</div>
+          </div>
+          {# Loan buy only: the down and monthly are amortization-linked, so the calculator keeps them in step. #}
+          <p class="text-muted small mb-0" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_loan_kind }}">
+            Estimated at about {{ leased_form.auto_loan_apr_percent }}% over
+            {{ leased_form.auto_loan_term_years }} years -- set the down payment or the monthly payment and
+            the other updates.</p>
         </div>
-        <div class="col-sm-4">{{ leased_form.monthly_payment.as_field_group }}</div>
-        <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.renew_kind }}">{{ leased_form.lease_end_payment.as_field_group }}</div>
-      </div>
-      {# Loan buy only: the down and monthly are amortization-linked, so the calculator keeps them in step. #}
-      <p class="text-muted small mb-0" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ leased_form.buy_loan_kind }}">
-        Estimated at about {{ leased_form.auto_loan_apr_percent }}% over
-        {{ leased_form.auto_loan_term_years }} years -- set the down payment or the monthly payment and the
-        other updates.</p>
-    </div>
         <div class="mt-2">
           <a class="btn btn-sm btn-outline-primary" data-async="#vehicle-disposition-form"
              href="{% url 'leased_disposition_edit' handle=handle %}?collapse=1">Done</a>

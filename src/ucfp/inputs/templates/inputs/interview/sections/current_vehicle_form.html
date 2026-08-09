@@ -19,7 +19,7 @@ Empty when no form is open. Reads `vehicle_form`, `heading`, and `handle`.
         </div>
         <div class="{{ AppConst.SWITCH_CLASS }}">
           <fieldset class="form-group mb-2">
-            <legend class="col-form-label d-block mb-1 pt-0 small">This vehicle is</legend>
+            <legend class="sr-only">This vehicle is</legend>
             {% for radio in vehicle_form.ownership %}
             <div class="form-check form-check-inline">
               {{ radio.tag }}

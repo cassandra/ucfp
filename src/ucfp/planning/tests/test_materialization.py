@@ -379,7 +379,7 @@ class VehicleRunningCostTests( unittest.TestCase ):
     @staticmethod
     def _cost( realization, interval, amount = Decimal( '20' ) ):
         return VehicleRunningCost(
-            name = 'Gasoline', handle = 'gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
+            name = 'Fuel', handle = 'gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
             interval = interval, amount = amount, realization = realization )
 
     @staticmethod

@@ -25,20 +25,17 @@ payment method as a nested switch). Empty when none is open. Reads `disposition_
             </div>
             {% endfor %}
           </fieldset>
-          {# The handover date applies to Sell and Replace; Retain needs none. #}
-          <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.dated_kinds }}">
-            <div class="col-sm-6">{{ disposition_form.sale_date.as_field_group }}</div>
-          </div>
           {% comment %}
-          Replace only: the replacement's recurring-purchase fields plus its payment method (a nested
-          switch). The purchase date is not asked here -- it is the handover date above.
+          Timing on one row: the handover date (Sell or Replace) and, for a Replace, how often it recurs
+          and until when. The replacement's purchase date is not asked -- it is this handover date.
           {% endcomment %}
+          <div class="form-row mb-2">
+            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.dated_kinds }}">{{ disposition_form.sale_date.as_field_group }}</div>
+            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.replace_kind }}">{{ disposition_form.recurrence_years.as_field_group }}</div>
+            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.replace_kind }}">{{ disposition_form.end_date.as_field_group }}</div>
+          </div>
+          {# Replace only: the replacement's payment (its recurring-purchase timing is the row above). #}
           <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.replace_kind }}">
-            <p class="small text-muted mb-1 mt-2"><strong>Replacement</strong></p>
-            <div class="form-row">
-              <div class="col-sm-6">{{ disposition_form.recurrence_years.as_field_group }}</div>
-              <div class="col-sm-6">{{ disposition_form.end_date.as_field_group }}</div>
-            </div>
             {% include 'inputs/interview/sections/_vehicle_payment_fields.html' with form=disposition_form %}
           </div>
         </div>

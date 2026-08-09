@@ -92,7 +92,7 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     value        = MoneyField( label = 'Current value', min_value = 0, required = False )
     loan_balance = MoneyField(
-        label = 'Auto-loan balance owed (optional)', min_value = 0, required = False )
+        label = 'Loan balance (optional)', min_value = 0, required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( profile, handle ) if handle else None )

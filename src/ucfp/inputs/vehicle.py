@@ -101,7 +101,7 @@ class VehiclePurchaseForm( StyledFormMixin, forms.Form ):
         widget = forms.NumberInput( attrs = { 'class' : 'input-count' } ) )   # a year count, a digit or two
     end_date         = forms.DateField(
         label = 'Stop replacing by', required = False, widget = IsoDateInput(),
-        help_text = 'Blank to keep replacing indefinitely.' )
+        help_text = 'Blank = no end.' )
     # `monthly_payment` serves loan and lease; `lease_end_payment` is the lease's turn-in cost.
     # `down_payment` serves both too, but its label differs by method (a loan's "Down payment" vs a
     # lease's "Due at signing"), so it carries no baked-in label -- the template renders the two
@@ -118,7 +118,7 @@ class VehiclePurchaseForm( StyledFormMixin, forms.Form ):
     monthly_payment   = MoneyField(
         label = 'Monthly payment', min_value = 0, required = False,
         css_class = AppConst.VEHICLE_MONTHLY_CLASS )
-    lease_end_payment = MoneyField( label = 'Lease-end payment', min_value = 0, required = False )
+    lease_end_payment = MoneyField( label = 'Due at end', min_value = 0, required = False )
 
     @property
     def auto_loan_apr_percent( self ) -> float:

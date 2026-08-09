@@ -145,10 +145,10 @@ def _sample_plans():
                          recurrence_years = 10, monthly_payment = Decimal( '600' ) ) ],
             running_costs = [
                 VehicleRunningCost(
-                    name = 'Gasoline', handle = 'gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
+                    name = 'Fuel', handle = 'gasoline', expense_tax_class = ExpenseTaxClass.LIVING,
                     interval = Duration( 1, TimeUnit.WEEK ), amount = Decimal( '20' ) ),
                 VehicleRunningCost(
-                    name = 'Auto Insurance', handle = 'auto-insurance',
+                    name = 'Insurance', handle = 'auto-insurance',
                     expense_tax_class = ExpenseTaxClass.LIVING,
                     interval = Duration( 6, TimeUnit.MONTH ), amount = Decimal( '750' ),
                     realization = Realization.DISCRETE, cadence_domain = CadenceDomain.MO_YR ) ] ),
