@@ -305,12 +305,6 @@ _AUTO_LOAN_TERM        = Duration( BUILTIN_ASSUMPTIONS.auto_loan_term_years, Tim
 _AUTO_LOAN_TERM_MONTHS = BUILTIN_ASSUMPTIONS.auto_loan_term_months
 
 
-def _vehicle_ready( vehicle : Vehicle ) -> bool:
-    """Whether a vehicle has the fields it needs to materialize -- its purchase date, price, and
-    replacement interval. Until then it contributes nothing (a partial, still-being-entered vehicle)."""
-    return bool( vehicle.purchase_date and vehicle.purchase_price and vehicle.recurrence_years )
-
-
 def _is_owned( vehicle : Vehicle ) -> bool:
     """A cash or financed vehicle is owned -- a real depreciating holding that cycles on replacement. A
     leased vehicle is not owned (pure expense, no trade-in)."""
@@ -354,13 +348,12 @@ def _plan_vehicles( plan ) -> list[ Vehicle ]:
     Replace disposition's successor, and each non-Return leased disposition's successor (the lease or
     purchase that begins at lease end -- its payment method fixed by the kind). Retain/Sell/Return add
     none -- they keep or end a current vehicle without a successor (their sale/lease expense is handled
-    elsewhere)."""
+    elsewhere). A disposition contributes its successor only once it is complete, so a half-entered plan
+    is a safe no-op rather than a partial purchase."""
     replacements = [ _replacement_vehicle( disposition ) for disposition in plan.dispositions
-                     if disposition.kind is VehicleDispositionKind.REPLACE
-                     and disposition.replacement is not None and disposition.sale_date is not None ]
+                     if disposition.kind is VehicleDispositionKind.REPLACE and disposition.is_complete ]
     successors   = [ _leased_successor( disposition ) for disposition in plan.leased_dispositions
-                     if disposition.kind is not LeaseDispositionKind.RETURN
-                     and disposition.successor is not None and disposition.lease_end is not None ]
+                     if disposition.kind is not LeaseDispositionKind.RETURN and disposition.is_complete ]
     return list( plan.vehicles ) + replacements + successors
 
 
@@ -417,7 +410,7 @@ def _vehicle_holdings( plans : Plans ) -> list[ AssetParameters ]:
     if plan is None:
         return list()
     return [ _vehicle_holding( vehicle ) for vehicle in _plan_vehicles( plan )
-             if _is_owned( vehicle ) and _vehicle_ready( vehicle ) ]
+             if _is_owned( vehicle ) and vehicle.is_materializable ]
 
 
 def _vehicle_holding_purchase( vehicle : Vehicle ) -> RecurringHoldingPurchase:
@@ -442,7 +435,7 @@ def _vehicle_holding_purchases( plans : Plans ) -> list[ RecurringHoldingPurchas
     if plan is None:
         return list()
     return [ _vehicle_holding_purchase( vehicle ) for vehicle in _plan_vehicles( plan )
-             if _is_owned( vehicle ) and _vehicle_ready( vehicle ) ]
+             if _is_owned( vehicle ) and vehicle.is_materializable ]
 
 
 def _vehicle_loan_origination( vehicle : Vehicle ) -> RecurringLoanOrigination:
@@ -470,7 +463,7 @@ def _vehicle_loan_originations( plans : Plans ) -> list[ RecurringLoanOriginatio
     if plan is None:
         return list()
     return [ _vehicle_loan_origination( vehicle ) for vehicle in _plan_vehicles( plan )
-             if _is_financed( vehicle ) and _vehicle_ready( vehicle ) ]
+             if _is_financed( vehicle ) and vehicle.is_materializable ]
 
 
 def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
@@ -482,7 +475,7 @@ def _vehicle_expenses( plans : Plans ) -> list[ ExpenseItem ]:
         return list()
     items = list()
     for vehicle in _plan_vehicles( plan ):
-        if _vehicle_ready( vehicle ) and vehicle.payment_method is PaymentMethod.LEASE:
+        if vehicle.is_materializable and vehicle.payment_method is PaymentMethod.LEASE:
             items.extend( _lease_vehicle_items( vehicle ) )
     return items
 
@@ -542,15 +535,16 @@ def _lease_window( disposition, start_date : date ) -> DateWindow:
 
 def _leased_current_expenses( plans : Plans, start_date : date ) -> list[ ExpenseItem ]:
     """The monthly cost of each current lease -- the leased twin of an owned car's holding: a leased
-    vehicle is pure expense, so its current lease is a monthly item over its window (to the horizon for a
-    Renew, to term end for a Return or Buy). A Buy's successor purchase is materialized separately (as a
-    plan vehicle). Emitted only once the lease's monthly is set and the disposition is operative."""
+    vehicle is pure expense, so its current lease is a monthly item over its window (to the day before
+    term end for every kind -- a Renew's continued lease and a Buy's purchase begin then, each
+    materialized separately as a plan vehicle). Emitted only once the disposition is complete (which
+    requires its monthly) and it is still operative."""
     plan = plans.vehicle_plan
     if plan is None:
         return list()
     items = list()
     for disposition in plan.leased_dispositions:
-        if disposition.monthly and _leased_operative( disposition, start_date ):
+        if disposition.is_complete and _leased_operative( disposition, start_date ):
             items.append( ExpenseItem(
                 name = 'Car payments', expense_tax_class = ExpenseTaxClass.LIVING,
                 amounts = Schedule.constant( WindowedAmount( disposition.monthly ) ),
@@ -576,13 +570,13 @@ def _vehicle_windows( profile : Profile, plans : Plans, sale_dates : dict,
     chain with no gap and no double-count, and the near-term fleet is no longer undercounted."""
     plan    = plans.vehicle_plan
     planned = ( [ DateWindow( start = vehicle.purchase_date, end = vehicle.end_date )
-                  for vehicle in _plan_vehicles( plan ) if vehicle.purchase_date is not None ]
+                  for vehicle in _plan_vehicles( plan ) if vehicle.is_materializable ]
                 if plan is not None else list() )
     current = [ DateWindow( start = start_date, end = _operated_until( possession, sale_dates ) )
                 for possession in profile.assets if possession.asset_class is AssetClass.DEPRECIATING ]
     leased  = [ _lease_window( disposition, start_date )
                 for disposition in ( plan.leased_dispositions if plan is not None else list() )
-                if _leased_operative( disposition, start_date ) ]
+                if disposition.is_complete and _leased_operative( disposition, start_date ) ]
     return planned + current + leased
 
 

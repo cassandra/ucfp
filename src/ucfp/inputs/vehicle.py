@@ -46,11 +46,13 @@ def _minted_vehicle_handle( plans ) -> str:
 
 
 def vehicles_context( plans ) -> list:
-    """Each vehicle for the list template: its handle, name, and a two-line summary. The headline (price
-    and replacement interval) is the plan's shape; the detail (ownership span and -- least prominent --
-    the payment method) sits muted below."""
+    """Each vehicle for the list template: its handle, name, a two-line summary, and whether it is
+    incomplete (still missing the fields it needs to materialize, so it does not yet affect the
+    projection). The headline (price and replacement interval) is the plan's shape; the detail (ownership
+    span and -- least prominent -- the payment method) sits muted below."""
     return [ { 'handle': vehicle.handle, 'name': vehicle.name or 'Car',
-               'headline': _headline_summary( vehicle ), 'detail': _detail_summary( vehicle ) }
+               'headline': _headline_summary( vehicle ), 'detail': _detail_summary( vehicle ),
+               'incomplete': not vehicle.is_materializable }
              for vehicle in _vehicles( plans ) ]
 
 

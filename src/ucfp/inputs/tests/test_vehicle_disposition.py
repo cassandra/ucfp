@@ -7,6 +7,7 @@ vehicle's edit leaves the others' dispositions intact. The list summary and the 
 covered elsewhere (this pins the input write).
 """
 import unittest
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -133,6 +134,18 @@ class DispositionListTests( unittest.TestCase ):
                           [ ( 'Sedan', 'Owned', 'vehicle_disposition_edit' ),
                             ( 'Truck', 'Leased', 'leased_disposition_edit' ) ] )
 
+    def test_flags_only_an_incomplete_disposition( self ):
+        # A chosen plan still missing structural fields is flagged; a complete one and the default Retain
+        # (no stored disposition) are not -- the same predicate materialization gates on.
+        profile = _profile( ( 'vehicle-1', 'Sedan' ), ( 'vehicle-2', 'Truck' ), ( 'vehicle-3', 'Coupe' ) )
+        plans   = Plans( vehicle_plan = VehiclePlan( dispositions = [
+            VehicleDisposition( vehicle_handle = 'vehicle-1', kind = VehicleDispositionKind.REPLACE,
+                                sale_date = date( 2032, 1, 1 ) ),                     # no replacement terms
+            VehicleDisposition( vehicle_handle = 'vehicle-2', kind = VehicleDispositionKind.SELL,
+                                sale_date = date( 2032, 1, 1 ) ) ] ) )                # complete
+        flags = { r[ 'name' ] : r[ 'incomplete' ] for r in dispositions_context( profile, plans ) }
+        self.assertEqual( flags, { 'Sedan' : True, 'Truck' : False, 'Coupe' : False } )
+
 
 def _leased_profile( *vehicles ) -> Profile:
     return Profile( leased_vehicles = [ LeasedVehicle( handle = h, name = n ) for h, n in vehicles ] )
@@ -256,6 +269,52 @@ class DispositionFormRenderTests( unittest.TestCase ):
         self.assertIn( f'{attr}="{form.dated_kinds}"', html )               # kind switch: the date
         self.assertIn( f'{attr}="{form.replace_kind}"', html )             # kind switch: the replacement
         self.assertIn( f'{attr}="{form.payment_field_methods}"', html )    # nested payment switch
+
+
+class CompletenessPredicateTests( unittest.TestCase ):
+    """The structural-completeness predicates that gate atomic materialization and drive the 'Needs
+    details' badge -- one source of truth for 'this plan is fully entered'. Amounts stay optional; a lease
+    needs no purchase price (it is priced by its payments, so its readiness rests on the interval alone)."""
+
+    def test_cash_vehicle_needs_a_price_and_interval_then_a_date( self ):
+        bare = Vehicle( handle = 'v', payment_method = PaymentMethod.CASH )
+        self.assertFalse( bare.has_structural_terms )
+        priced = replace( bare, purchase_price = Decimal( '30000' ), recurrence_years = 5 )
+        self.assertTrue( priced.has_structural_terms )
+        self.assertFalse( priced.is_materializable )                       # structural, but no purchase date
+        self.assertTrue( replace( priced, purchase_date = date( 2030, 1, 1 ) ).is_materializable )
+
+    def test_lease_vehicle_needs_its_interval_and_monthly_not_a_price( self ):
+        bare = Vehicle( handle = 'v', payment_method = PaymentMethod.LEASE, recurrence_years = 3 )
+        self.assertFalse( bare.has_structural_terms )                      # a lease needs its monthly cost
+        priced = replace( bare, monthly_payment = Decimal( '400' ) )
+        self.assertTrue( priced.has_structural_terms )                     # interval + monthly, and no price
+        self.assertTrue( replace( priced, purchase_date = date( 2030, 1, 1 ) ).is_materializable )
+
+    def test_owned_disposition_completeness_by_kind( self ):
+        keep = VehicleDisposition( vehicle_handle = 'v', kind = VehicleDispositionKind.KEEP )
+        self.assertTrue( keep.is_complete )                               # Retain needs nothing
+        sell = VehicleDisposition( vehicle_handle = 'v', kind = VehicleDispositionKind.SELL )
+        self.assertFalse( sell.is_complete )
+        self.assertTrue( replace( sell, sale_date = date( 2030, 1, 1 ) ).is_complete )
+        replacement = Vehicle( handle = '', purchase_price = Decimal( '30000' ), recurrence_years = 5 )
+        dated = VehicleDisposition( vehicle_handle = 'v', kind = VehicleDispositionKind.REPLACE,
+                                    sale_date = date( 2030, 1, 1 ) )
+        self.assertFalse( dated.is_complete )                            # dated, but no replacement terms
+        self.assertTrue( replace( dated, replacement = replacement ).is_complete )
+
+    def test_leased_disposition_completeness_by_kind( self ):
+        ret = LeasedVehicleDisposition( vehicle_handle = 'v', kind = LeaseDispositionKind.RETURN )
+        self.assertFalse( ret.is_complete )                              # needs a lease-end and a monthly
+        dated = replace( ret, lease_end = date( 2030, 1, 1 ) )
+        self.assertFalse( dated.is_complete )                            # still missing the current monthly
+        current = replace( dated, monthly = Decimal( '300' ) )
+        self.assertTrue( current.is_complete )                           # Return: lease-end + current monthly
+        successor = Vehicle( handle = '', payment_method = PaymentMethod.LEASE,
+                             recurrence_years = 3, monthly_payment = Decimal( '450' ) )
+        renew = replace( current, kind = LeaseDispositionKind.RENEW )
+        self.assertFalse( renew.is_complete )                            # a renewed lease needs its terms
+        self.assertTrue( replace( renew, successor = successor ).is_complete )
 
 
 if __name__ == '__main__':

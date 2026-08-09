@@ -498,20 +498,21 @@ def event_contributions( profile, plans, subjects : dict ) -> EventContributions
 
 
 def vehicle_disposition_contributions( profile, plans, into : EventContributions ):
-    """The sales a vehicle plan's dispositions imply: a SELL or REPLACE disposition sells that current
-    vehicle (and pays off its loan, and ends its running costs) on the disposition date -- the automated
-    twin of a hand-added sell-possession event, from the stored disposition rather than a written event.
-    A REPLACE's successor purchase is materialized separately (as a plan vehicle); RETAIN sells nothing.
-    A disposition for a vehicle the Profile no longer has is skipped, so a Profile edit degrades
-    gracefully. (A current vehicle is a `DEPRECIATING` holding, so the same possession-sale helper
-    realizes it.)"""
+    """The sales a vehicle plan's dispositions imply: a complete SELL or REPLACE disposition sells that
+    current vehicle (and pays off its loan, and ends its running costs) on the disposition date -- the
+    automated twin of a hand-added sell-possession event, from the stored disposition rather than a
+    written event. Only a complete disposition sells, so a half-entered REPLACE never strands the vehicle
+    (sold with no replacement yet) -- it stays retained until finished. A REPLACE's successor purchase is
+    materialized separately (as a plan vehicle); RETAIN sells nothing. A disposition for a vehicle the
+    Profile no longer has is skipped, so a Profile edit degrades gracefully. (A current vehicle is a
+    `DEPRECIATING` holding, so the same possession-sale helper realizes it.)"""
     plan = plans.vehicle_plan
     if plan is None:
         return
     asset_handles = { asset.handle for asset in profile.assets }
     for disposition in plan.dispositions:
-        if disposition.kind is VehicleDispositionKind.KEEP or disposition.sale_date is None:
-            continue                                     # retained, or no handover date yet
+        if disposition.kind is VehicleDispositionKind.KEEP or not disposition.is_complete:
+            continue                                     # retained, or not yet fully entered
         if disposition.vehicle_handle not in asset_handles:
             continue                                     # a dropped vehicle
         _contribute_possession_sale( profile, disposition.vehicle_handle, disposition.sale_date, into )

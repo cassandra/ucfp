@@ -2,8 +2,9 @@
 The household's current vehicles for the Vehicle plan (id=vehicle-dispositions-list) -- owned and leased
 together, each with an ownership badge and its plan disposition, and an Edit that opens the matching editor
 in the shared form area (#vehicle-disposition-form). Refreshed after a disposition is saved. There is no
-add or remove here: the rows are the current vehicles (from the Vehicles section). `dispositions` is the
-combined list of {handle, name, ownership, summary, edit_route}.
+add or remove here: the rows are the current vehicles (from the Vehicles section). An incomplete plan (a
+chosen disposition still missing fields) shows a "Needs details" flag. `dispositions` is the combined list
+of {handle, name, ownership, summary, edit_route, incomplete}.
 {% endcomment %}
 <div id="vehicle-dispositions-list">
   {% if dispositions %}
@@ -14,6 +15,7 @@ combined list of {handle, name, ownership, summary, edit_route}.
         <span>
           <span class="badge badge-{% if vehicle.ownership == 'Owned' %}info{% else %}secondary{% endif %} mr-1">{{ vehicle.ownership }}</span>
           {{ vehicle.name }} <span class="text-muted">&mdash; {{ vehicle.summary }}</span>
+          {% if vehicle.incomplete %}<span class="badge badge-warning ml-1">Needs details</span>{% endif %}
         </span>
         <span class="text-nowrap ml-3">
           {% if vehicle.handle == active %}<span class="text-muted small mr-1">editing</span>{% endif %}

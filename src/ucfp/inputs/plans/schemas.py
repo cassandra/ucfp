@@ -249,6 +249,24 @@ class Vehicle:
     monthly_payment: Optional[ Decimal ] = None
     lease_end_payment: Optional[ Decimal ] = None
 
+    @property
+    def has_structural_terms( self ) -> bool:
+        """Whether the user-entered *structure* of the purchase is set -- the fields a purchase needs
+        besides its date (a net-new vehicle sets the date directly; a disposition supplies it from its
+        handover). A cash or financed purchase needs a price and a replacement interval. A lease is not
+        bought, so it needs no price; instead its `monthly_payment` -- its defining cost -- is required,
+        alongside the interval. Other amounts (a down/first payment, a lease-end payment) stay optional --
+        a blank is a legitimate zero, not a missing field."""
+        if self.payment_method is PaymentMethod.LEASE:
+            return self.recurrence_years is not None and self.monthly_payment is not None
+        return self.purchase_price is not None and self.recurrence_years is not None
+
+    @property
+    def is_materializable( self ) -> bool:
+        """Whether this vehicle has all it needs to emit its purchases -- its structural terms plus a
+        purchase date. Until then it contributes nothing (a partial, still-being-entered vehicle)."""
+        return self.purchase_date is not None and self.has_structural_terms
+
 
 @dataclass( frozen = True )
 class VehicleDisposition:
@@ -264,6 +282,20 @@ class VehicleDisposition:
     kind: VehicleDispositionKind
     sale_date: Optional[ date ] = None
     replacement: Optional[ Vehicle ] = None
+
+    @property
+    def is_complete( self ) -> bool:
+        """Whether this disposition has the structural fields it needs to fully materialize -- so an
+        incomplete one is a safe no-op (the vehicle stays retained), never a partial, misleading
+        projection. KEEP needs nothing; SELL needs its handover date; REPLACE needs that date and a
+        replacement carrying its structural terms (the date becomes the replacement's purchase date).
+        Amounts stay optional."""
+        if self.kind is VehicleDispositionKind.KEEP:
+            return True
+        if self.kind is VehicleDispositionKind.SELL:
+            return self.sale_date is not None
+        return ( self.sale_date is not None
+                 and self.replacement is not None and self.replacement.has_structural_terms )
 
 
 @dataclass( frozen = True )
@@ -281,6 +313,19 @@ class LeasedVehicleDisposition:
     lease_end: Optional[ date ] = None
     kind: LeaseDispositionKind = LeaseDispositionKind.RETURN
     successor: Optional[ Vehicle ] = None
+
+    @property
+    def is_complete( self ) -> bool:
+        """Whether this leased disposition has the structural fields it needs to fully materialize -- an
+        incomplete one is a safe no-op (the lease does not enter the projection yet). The current lease's
+        `monthly` (its defining cost) and `lease_end` (where every kind hands over or ends) are always
+        required; a successor kind (RENEW, BUY_CASH, BUY_LOAN) also needs its successor's structural terms
+        (the lease end becomes the successor's purchase date)."""
+        if self.lease_end is None or self.monthly is None:
+            return False
+        if self.kind is LeaseDispositionKind.RETURN:
+            return True
+        return self.successor is not None and self.successor.has_structural_terms
 
 
 @dataclass( frozen = True )

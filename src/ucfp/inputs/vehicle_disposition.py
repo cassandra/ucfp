@@ -41,11 +41,19 @@ def _disposition_for( plans, handle : str ):
 
 
 def dispositions_context( profile, plans ) -> list:
-    """One row per current vehicle for the disposition list -- its handle, name, and a summary of its
-    current disposition (Retain by default)."""
-    return [ { 'handle' : asset.handle, 'name' : asset.name,
-               'summary' : _summary( _disposition_for( plans, asset.handle ) ) }
+    """One row per current vehicle for the disposition list -- its handle, name, a summary of its current
+    disposition (Retain by default), and whether that disposition is incomplete (a chosen plan still
+    missing structural fields, so it does not yet affect the projection)."""
+    return [ _disposition_row( asset, _disposition_for( plans, asset.handle ) )
              for asset in _current_vehicles( profile ) ]
+
+
+def _disposition_row( asset, disposition ) -> dict:
+    """One current owned vehicle's list row -- its identity, disposition summary, and incompleteness (a
+    Retain, stored as no disposition, is complete by definition, so it never flags)."""
+    return { 'handle' : asset.handle, 'name' : asset.name,
+             'summary' : _summary( disposition ),
+             'incomplete' : disposition is not None and not disposition.is_complete }
 
 
 def _summary( disposition ) -> str:
@@ -148,12 +156,20 @@ def _leased_disposition_for( plans, handle : str ):
 
 
 def leased_dispositions_context( profile, plans ) -> list:
-    """One row per current leased vehicle for the disposition list -- its handle, name, and a summary of
-    its end-of-term plan (Return by default)."""
+    """One row per current leased vehicle for the disposition list -- its handle, name, a summary of its
+    end-of-term plan (Return by default), and whether that plan is incomplete (missing structural
+    fields, so it does not yet affect the projection)."""
     leased = profile.leased_vehicles if profile is not None else list()
-    return [ { 'handle' : vehicle.handle, 'name' : vehicle.name,
-               'summary' : _leased_summary( _leased_disposition_for( plans, vehicle.handle ) ) }
+    return [ _leased_row( vehicle, _leased_disposition_for( plans, vehicle.handle ) )
              for vehicle in leased ]
+
+
+def _leased_row( vehicle, disposition ) -> dict:
+    """One current leased vehicle's list row -- its identity, end-of-term summary, and incompleteness (a
+    Return with no terms, stored as no disposition, is complete by definition, so it never flags)."""
+    return { 'handle' : vehicle.handle, 'name' : vehicle.name,
+             'summary' : _leased_summary( disposition ),
+             'incomplete' : disposition is not None and not disposition.is_complete }
 
 
 def _leased_summary( disposition ) -> str:

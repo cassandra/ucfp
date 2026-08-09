@@ -227,6 +227,17 @@ class LeasedVehicleTests( unittest.TestCase ):
                           monthly_payment = Decimal( '400' ) )
         self.assertEqual( _vehicle_holdings( self._plans( lease ) ), [] )
 
+    def test_lease_materializes_with_no_purchase_price( self ):
+        # A lease is priced by its payments, so the form never collects a purchase price -- its monthly
+        # must still materialize. (Regression: readiness once demanded a price no real lease carries, so
+        # every lease silently emitted nothing.)
+        lease = _vehicle( 'vehicle-1', date( 2026, 1, 1 ), recurrence_years = 3,
+                          payment_method = PaymentMethod.LEASE, monthly_payment = Decimal( '400' ) )
+        self.assertIsNone( lease.purchase_price )
+        items = _vehicle_expenses( self._plans( lease ) )
+        self.assertEqual( [ item.name for item in items ], [ 'Car payments' ] )
+        self.assertEqual( items[ 0 ].amounts.segments[ 0 ].amount, Decimal( '400' ) )
+
 
 class MixedFleetTests( unittest.TestCase ):
     """A plan mixing cash, loan, and lease vehicles keeps each car's accounts distinct (handle-scoped) and
@@ -321,8 +332,11 @@ class LeasedDispositionMaterializationTests( unittest.TestCase ):
 
     @staticmethod
     def _successor( method, **kwargs ) -> Vehicle:
-        return Vehicle( handle = '', name = 'Next', purchase_price = Decimal( '30000' ),
-                        recurrence_years = 3, payment_method = method, **kwargs )
+        # A lease carries no purchase price (it is priced by its payments) -- the form never collects one,
+        # so the realistic successor omits it; a cash or financed buy does have one.
+        priced = dict() if method is PaymentMethod.LEASE else { 'purchase_price' : Decimal( '30000' ) }
+        return Vehicle( handle = '', name = 'Next', recurrence_years = 3,
+                        payment_method = method, **priced, **kwargs )
 
     def test_the_current_lease_charges_the_monthly_to_the_day_before_term_end( self ):
         items = _leased_current_expenses( self._plans( LeaseDispositionKind.RETURN ), self._START )
@@ -389,8 +403,10 @@ class VehicleRunningCostTests( unittest.TestCase ):
 
     def test_smooth_cost_is_one_annualized_stream_per_vehicle( self ):
         # $20/car/week annualized x 52 = $1,040/yr, one stream per vehicle, each in its own window.
-        v1 = _vehicle( 'vehicle-1', date( 2026, 1, 1 ) )
-        v2 = _vehicle( 'vehicle-2', date( 2028, 1, 1 ), end_date = date( 2035, 1, 1 ) )
+        v1 = _vehicle( 'vehicle-1', date( 2026, 1, 1 ),
+                       purchase_price = Decimal( '30000' ), recurrence_years = 5 )
+        v2 = _vehicle( 'vehicle-2', date( 2028, 1, 1 ), end_date = date( 2035, 1, 1 ),
+                       purchase_price = Decimal( '30000' ), recurrence_years = 5 )
         streams, items = self._run(
             self._plans( [ v1, v2 ], self._cost( Realization.SMOOTH, Duration( 1, TimeUnit.WEEK ) ) ) )
         self.assertEqual( items, [] )
@@ -401,7 +417,8 @@ class VehicleRunningCostTests( unittest.TestCase ):
 
     def test_discrete_cost_is_an_item_per_vehicle_at_its_cadence( self ):
         semiannual = Duration( 6, TimeUnit.MONTH )
-        vehicle = _vehicle( 'vehicle-1', date( 2026, 1, 1 ) )
+        vehicle = _vehicle( 'vehicle-1', date( 2026, 1, 1 ),
+                            purchase_price = Decimal( '30000' ), recurrence_years = 5 )
         streams, items = self._run(
             self._plans( [ vehicle ], self._cost( Realization.DISCRETE, semiannual, Decimal( '750' ) ) ) )
         self.assertEqual( streams, [] )

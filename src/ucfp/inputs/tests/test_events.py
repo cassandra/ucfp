@@ -18,7 +18,7 @@ from ucfp.inputs.events import (
     EventContributions, POSSESSION_ROLE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent, TransferEvent,
     vehicle_disposition_contributions )
 from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
-from ucfp.inputs.plans.schemas import PlanEvent, Plans, VehicleDisposition, VehiclePlan
+from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
 
 
 def _profile( *holdings ):
@@ -161,9 +161,16 @@ class VehicleDispositionTests( unittest.TestCase ):
             debts    = [ SimpleNamespace( handle = h, secured_asset = s, name = n ) for h, s, n in debts ],
             subjects = [] )
 
-    @staticmethod
-    def _plans( kind = None, when = date( 2030, 1, 1 ), handle = 'vehicle-1' ):
-        dispositions = ( [ VehicleDisposition( vehicle_handle = handle, kind = kind, sale_date = when ) ]
+    # A REPLACE sells the outgoing vehicle only once it is *complete* (its replacement carries structural
+    # terms), so the helper attaches a materializable replacement by default; pass replacement=None for
+    # the incomplete case (a chosen Replace still being filled in), which must sell nothing.
+    _REPLACEMENT = Vehicle( handle = '', purchase_price = Decimal( '30000' ), recurrence_years = 5 )
+
+    @classmethod
+    def _plans( cls, kind = None, when = date( 2030, 1, 1 ), handle = 'vehicle-1',
+                replacement = _REPLACEMENT ):
+        dispositions = ( [ VehicleDisposition( vehicle_handle = handle, kind = kind, sale_date = when,
+                                               replacement = replacement ) ]
                          if kind is not None else [] )
         return Plans( vehicle_plan = VehiclePlan( dispositions = dispositions ) )
 
@@ -183,6 +190,14 @@ class VehicleDispositionTests( unittest.TestCase ):
         into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
                              self._plans( kind = VehicleDispositionKind.REPLACE ) )
         self.assertEqual( into.possession_sales, { 'vehicle-1' : date( 2030, 1, 1 ) } )
+
+    def test_an_incomplete_replace_sells_nothing( self ):
+        # A Replace with a date but no filled-in replacement is incomplete: it must not strand the
+        # vehicle (sold with nothing replacing it). It stays retained until the replacement is entered.
+        into = self._derive(
+            self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
+            self._plans( kind = VehicleDispositionKind.REPLACE, replacement = None ) )
+        self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
 
     def test_a_secured_vehicles_loan_is_paid_off_too( self ):
         into = self._derive(
