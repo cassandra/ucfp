@@ -22,6 +22,7 @@ urlpatterns = [
     path( 'plans/', views.FlowEntryView.as_view( flow = 'plans' ), name = 'flow_plans' ),
     path( 'plans/<uuid:uuid>/rename/', views.PlansRenameView.as_view(), name = 'plans_rename' ),
     path( 'plans/<uuid:uuid>/edit/', views.PlansEditView.as_view(), name = 'plans_edit' ),
+    path( 'plans/<uuid:uuid>/reconcile/', views.PlansReconcileView.as_view(), name = 'plans_reconcile' ),
     path( 'assumptions/', views.FlowEntryView.as_view( flow = 'assumptions' ),
           name = 'flow_assumptions' ),
     path( 'assumptions/<uuid:uuid>/rename/', views.AssumptionsRenameView.as_view(),

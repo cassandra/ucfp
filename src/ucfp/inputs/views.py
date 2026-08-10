@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
 from user.decorators import ensure_organization
@@ -36,7 +37,7 @@ from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
     existing_pairings, rename_scenario, scenarios_for )
 from ucfp.inputs.compatibility import plans_reconciled_with_profile
-from ucfp.inputs.drift import scenario_drift
+from ucfp.inputs.drift import plans_drift
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -121,7 +122,7 @@ class ScenariosHomeView( View ):
         for scenario in scenarios:
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
             rows.append( { 'scenario': scenario, 'complete': complete,
-                           'drift': scenario_drift( profile, scenario ) if profile is not None else None,
+                           'drift': plans_drift( profile, scenario.plans ) if profile is not None else None,
                            'plans_uses': plans_uses[ scenario.plans_id ],
                            'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
         return rows
@@ -427,22 +428,50 @@ class ScenarioDeleteView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class ScenarioReconcileView( View ):
-    """`/inputs/scenarios/<uuid>/reconcile/` -- strip a scenario's Plans references that no longer resolve
-    against the current Profile (the "Remove stale references" fix a drift-blocked scenario offers on the
-    Forecast hub), then return there, where the reconciled scenario is runnable again. POST, since it edits
-    the Plans. No-op when there is no complete profile to reconcile against (nothing would resolve)."""
+class PlansReconcileView( View ):
+    """`/inputs/plans/<uuid>/reconcile/` -- strip a Plans record's references that no longer resolve
+    against the current Profile (the "Remove stale references" fix every drift surface offers). Plans, not
+    scenarios, carry the Profile dependencies, so this is the *core* reconcile -- one fix that serves every
+    scenario sharing these Plans. POST, since it edits the Plans; returns to the page it was triggered from.
+    No-op when there is no complete profile to reconcile against (nothing would resolve)."""
 
     def post( self, request, uuid ):
-        organization   = request.organization
-        scenario       = get_object_or_404(
-            ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
-        profile_record = completed_profile( organization )
-        if profile_record is not None:
-            reconciled = plans_reconciled_with_profile(
-                load_profile( profile_record ), load_plans( scenario.plans ) )
-            save_plans( scenario.plans, reconciled )
-        return redirect( 'financial_forecast' )
+        plans_record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+        _reconcile_plans_record( request.organization, plans_record )
+        return _reconcile_redirect( request )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioReconcileView( View ):
+    """`/inputs/scenarios/<uuid>/reconcile/` -- reconcile a scenario by its Plans: the scenario-keyed thin
+    wrapper over `PlansReconcileView`, dereferencing the scenario to its Plans record and reconciling that.
+    POST; returns to the page it was triggered from."""
+
+    def post( self, request, uuid ):
+        scenario = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = request.organization, usage_role = UsageRole.SAVED )
+        _reconcile_plans_record( request.organization, scenario.plans )
+        return _reconcile_redirect( request )
+
+
+def _reconcile_plans_record( organization, plans_record ):
+    """Strip `plans_record`'s references that no longer resolve against the org's current profile -- the
+    core both reconcile views share. A no-op when there is no complete profile (reconciling against nothing
+    would strip everything)."""
+    profile_record = completed_profile( organization )
+    if profile_record is not None:
+        save_plans( plans_record, plans_reconciled_with_profile(
+            load_profile( profile_record ), load_plans( plans_record ) ) )
+
+
+def _reconcile_redirect( request ):
+    """Back to the page the reconcile was triggered from -- the forecast hub, a Scenarios card, or a Plans
+    section -- re-rendered without the stale references; the Scenarios home is the fallback when the
+    referer is missing or off-site."""
+    referer = request.META.get( 'HTTP_REFERER' )
+    if referer and url_has_allowed_host_and_scheme( referer, allowed_hosts = { request.get_host() } ):
+        return redirect( referer )
+    return redirect( 'scenarios_home' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

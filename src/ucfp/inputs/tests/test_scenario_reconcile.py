@@ -1,8 +1,8 @@
-"""ScenarioReconcileView: the one-click "remove stale references" fix a drift-blocked scenario offers.
+"""The reconcile views: the one-click "remove stale references" fix every drift surface offers.
 
-The view strips a scenario's Plans references that no longer resolve against the current Profile and
-returns to the Forecast hub, where the reconciled scenario becomes runnable again. It is org-scoped and a
-no-op when there is no complete profile to reconcile against.
+`PlansReconcileView` is the core -- it strips a Plans record's references that no longer resolve against
+the current Profile; `ScenarioReconcileView` is the thin scenario-keyed wrapper over it. Both are
+org-scoped, no-op without a complete profile, and return to the page they were triggered from.
 """
 from decimal import Decimal
 
@@ -23,7 +23,7 @@ from ucfp.inputs.plans.repository import load_plans, save_plans
 from ucfp.inputs.plans.schemas import LoanRepayment, Plans
 from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.scenarios.repository import create_scenario
-from ucfp.inputs.views import ScenarioReconcileView
+from ucfp.inputs.views import PlansReconcileView, ScenarioReconcileView
 from ucfp.planning.tests.support import forecast_profile
 
 
@@ -55,27 +55,51 @@ class ScenarioReconcileViewTests( TestCase ):
         self.organization = Organization.objects.create( name = 'Org' )
         self.factory      = RequestFactory()
 
-    def _post( self, uuid, organization = None ):
-        request = self.factory.post( reverse( 'scenario_reconcile', kwargs = { 'uuid': uuid } ) )
+    def _post( self, uuid, organization = None, referer = None ):
+        extra   = { 'HTTP_REFERER': referer } if referer else dict()
+        request = self.factory.post( reverse( 'scenario_reconcile', kwargs = { 'uuid': uuid } ), **extra )
         request.organization = organization if organization is not None else self.organization
         return ScenarioReconcileView().post( request, uuid = uuid )
+
+    def _post_plans( self, plans_uuid ):
+        request = self.factory.post( reverse( 'plans_reconcile', kwargs = { 'uuid': plans_uuid } ) )
+        request.organization = self.organization
+        return PlansReconcileView().post( request, uuid = plans_uuid )
 
     @staticmethod
     def _repayment_debts( scenario ):
         scenario.plans.refresh_from_db()
         return [ r.debt_handle for r in load_plans( scenario.plans ).loan_repayments ]
 
-    def test_reconcile_strips_drift_and_redirects_to_the_hub( self ):
+    def test_scenario_reconcile_strips_drift_via_its_plans( self ):
         _complete_profile( self.organization )
         scenario = _drifted_scenario( self.organization )
         response = self._post( scenario.uuid )
         self.assertEqual( response.status_code, 302 )
-        self.assertEqual( response.url, reverse( 'financial_forecast' ) )
         self.assertEqual( self._repayment_debts( scenario ), [] )           # the drifted repayment stripped
+
+    def test_the_plans_reconcile_core_strips_drift( self ):
+        # The scenario wrapper is thin; the core reconciles a Plans record directly.
+        _complete_profile( self.organization )
+        scenario = _drifted_scenario( self.organization )
+        self._post_plans( scenario.plans.uuid )
+        self.assertEqual( self._repayment_debts( scenario ), [] )
+
+    def test_reconcile_returns_to_the_triggering_page( self ):
+        _complete_profile( self.organization )
+        scenario = _drifted_scenario( self.organization )
+        response = self._post( scenario.uuid, referer = 'http://testserver/inputs/scenarios/' )
+        self.assertEqual( response.url, 'http://testserver/inputs/scenarios/' )   # back where it came from
+
+    def test_reconcile_falls_back_to_the_scenarios_home_without_a_referer( self ):
+        _complete_profile( self.organization )
+        scenario = _drifted_scenario( self.organization )
+        response = self._post( scenario.uuid )
+        self.assertEqual( response.url, reverse( 'scenarios_home' ) )
 
     def test_reconcile_is_a_no_op_without_a_complete_profile( self ):
         # No complete profile to reconcile against: the plan is left untouched (reconciling against
-        # nothing would prune everything), and the view still redirects to the hub.
+        # nothing would prune everything), and the view still redirects.
         scenario = _drifted_scenario( self.organization )
         response = self._post( scenario.uuid )
         self.assertEqual( response.status_code, 302 )

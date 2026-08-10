@@ -23,7 +23,7 @@ from common.dataclass_json import from_json_data
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
-from ucfp.inputs.drift import scenario_drift
+from ucfp.inputs.drift import plans_drift
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ScenarioRecord
@@ -171,7 +171,7 @@ class FinancialForecastView( InputGatedMixin, View ):
         if profile_record is None:
             return list()
         profile = load_profile( profile_record )
-        return [ { 'label' : scenario.label, 'drift' : scenario_drift( profile, scenario ) }
+        return [ { 'label' : scenario.label, 'drift' : plans_drift( profile, scenario.plans ) }
                  for scenario in drift_blocked ]
 
     @classmethod
