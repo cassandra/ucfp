@@ -22,28 +22,19 @@ chooser below), and linking to the uuid-less workspace so it resumes without re-
 {% if drift_scenarios %}
 {% comment %}
 The drift-blocked scenarios: runnable but for Plans references the Profile no longer has, so they are
-kept out of the chooser below. Each names what drifted and offers the one-click reconcile (a POST to
-`scenario_reconcile`) that strips the stale references, after which it rejoins the chooser.
-`drift_scenarios` is the list of {label, message, fix_label, reconcile_url}.
+kept out of the chooser below. Each is named, with the shared scenario-drift pane listing what drifted
+and offering the one-click reconcile, after which it rejoins the chooser. `drift_scenarios` is the list
+of {label, drift} (the drift a readiness ReadinessIssue).
 {% endcomment %}
 <div class="alert alert-warning mt-3">
   <h2 class="h6 mb-2">Some scenarios need reconciling</h2>
   <p class="small mb-2">A scenario can't run while its plans reference things your profile no longer has.
     Remove the stale references to make it runnable again.</p>
   <ul class="list-unstyled mb-0">
-    {% for drift in drift_scenarios %}
+    {% for item in drift_scenarios %}
     <li class="border-top pt-2 mt-2">
-      <div class="d-flex flex-wrap align-items-start justify-content-between">
-        <strong class="my-1 mr-3">{{ drift.label }}</strong>
-        <form method="post" action="{{ drift.reconcile_url }}" class="m-0 my-1">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline-secondary btn-sm">{{ drift.fix_label }}</button>
-        </form>
-      </div>
-      <p class="text-muted small mb-1">Its plans reference things your profile no longer has:</p>
-      <ul class="text-muted small mb-0">
-        {% for reference in drift.references %}<li>{{ reference }}</li>{% endfor %}
-      </ul>
+      <strong>{{ item.label }}</strong>
+      {% include 'inputs/panes/scenario_drift.html' with drift=item.drift %}
     </li>
     {% endfor %}
   </ul>

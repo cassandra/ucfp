@@ -37,15 +37,13 @@ class ReadinessIssue:
     `fix_route` is a URL name and `fix_route_kwargs` its arguments (empty for a flow-entry link, or the
     section key to link straight to one interview step); `fix_label` is the link text. `fix_url` resolves
     the two for a template. `is_drift` marks a Plans->Profile drift issue -- the one kind a scenario can
-    clear in one click (a reconcile), so a selection surface can bucket and route it distinctly; its
-    `references` are the individual stale references (for a bullet list), the same the `message` folds
-    into one sentence."""
+    clear in one click (a reconcile), so a selection surface can bucket it distinctly and render the
+    stale references and reconcile through the shared `inputs.drift` notice."""
     message          : str
     fix_label        : str
     fix_route        : str
     fix_route_kwargs : dict  = field( default_factory = dict )
     is_drift         : bool  = False
-    references       : tuple = ()
 
     @property
     def fix_url( self ) -> str:
@@ -108,16 +106,14 @@ def _plans_issues( profile : Profile, plans : Plans ) -> list[ ReadinessIssue ]:
     issues = list()
     drift = compatibility_issues( profile, plans )
     if drift:
-        # A bundle-level fallback link (Review your plans); a per-scenario surface routes this to the
-        # one-click reconcile instead (see gating.scenario_readiness), keyed by `is_drift`. `references`
-        # carries the drift items individually (each `compatibility_issues` string, its trailing `;`
-        # trimmed) so a surface can list them as bullets rather than one run-on sentence.
+        # `is_drift` lets a selection surface bucket this distinctly (the reconcilable kind) and render
+        # the stale references + one-click fix through the shared `inputs.drift` notice. The bundle-level
+        # message/link here is the fallback for a surface that shows issues generically.
         issues.append( ReadinessIssue(
-            message    = DRIFT_LEAD_IN + ' ' + ' '.join( drift ),
-            references = tuple( reference.rstrip( ' ;' ) for reference in drift ),
-            fix_label  = 'Review your plans',
-            fix_route  = 'flow_plans',
-            is_drift   = True ) )
+            message   = DRIFT_LEAD_IN + ' ' + ' '.join( drift ),
+            fix_label = 'Review your plans',
+            fix_route = 'flow_plans',
+            is_drift  = True ) )
     issues.extend( _claiming_issues( profile, plans ) )
     return issues
 

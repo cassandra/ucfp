@@ -136,6 +136,12 @@ class SellPossessionTests( unittest.TestCase ):
         self.assertIn( 'Sell Car in 2030', summary )
         self.assertIn( 'loan paid off', summary )
 
+    def test_the_summary_degrades_gracefully_when_the_item_was_removed( self ):
+        # A sale event whose possession the profile no longer has (drift) reads as a removed item, not the
+        # bare "None" a missing name used to print.
+        summary = SellPossessionEvent().summary( _sell( 'possession-1' ), _sale_profile( [], [] ) )
+        self.assertEqual( summary, 'Sell a removed possession in 2030' )
+
     def test_offerable_only_when_a_possession_exists( self ):
         self.assertFalse( SellPossessionEvent().offerable( _sale_profile( [] ) ) )
         self.assertTrue( SellPossessionEvent().offerable(

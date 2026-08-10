@@ -36,6 +36,7 @@ from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
     existing_pairings, rename_scenario, scenarios_for )
 from ucfp.inputs.compatibility import plans_reconciled_with_profile
+from ucfp.inputs.drift import scenario_drift
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -88,7 +89,9 @@ class ScenariosHomeView( View ):
         plans_uses       = Counter( scenario.plans_id for scenario in scenarios )
         assumptions_uses = Counter( scenario.assumptions_id for scenario in scenarios )
         complete_ids     = self._complete_component_ids( organization, profile_record )
-        scenario_rows    = self._scenario_rows( scenarios, plans_uses, assumptions_uses, *complete_ids )
+        profile          = load_profile( profile_record ) if profile_record is not None else None
+        scenario_rows    = self._scenario_rows(
+            scenarios, profile, plans_uses, assumptions_uses, *complete_ids )
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
@@ -108,15 +111,17 @@ class ScenariosHomeView( View ):
                  { record.id for record in completed_assumptions( profile_record, organization ) } )
 
     @staticmethod
-    def _scenario_rows( scenarios, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
+    def _scenario_rows( scenarios, profile, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
         """Each saved scenario as a row -- `complete` (both components' flows walked, so an in-progress one
-        can offer to resume setup) plus how many scenarios share each of its components (`plans_uses` /
-        `assumptions_uses`), which drives the "shared" indicator. `scenarios` and the usage counters are
-        prepared once by the caller so the page makes a single scenarios query."""
+        can offer to resume setup), its `drift` notice against the current `profile` (None when it fully
+        resolves, else the stale references + reconcile shown on the card), and how many scenarios share
+        each of its components (`plans_uses` / `assumptions_uses`) for the "shared" indicator. `scenarios`
+        and the usage counters are prepared once by the caller so the page makes a single scenarios query."""
         rows = list()
         for scenario in scenarios:
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
             rows.append( { 'scenario': scenario, 'complete': complete,
+                           'drift': scenario_drift( profile, scenario ) if profile is not None else None,
                            'plans_uses': plans_uses[ scenario.plans_id ],
                            'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
         return rows

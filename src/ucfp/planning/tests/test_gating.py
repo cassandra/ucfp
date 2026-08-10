@@ -95,17 +95,13 @@ class PartitionScenariosTests( TestCase ):
         self.assertIn( scenario.uuid, [ s.uuid for s in complete ] )
         self.assertEqual( ( drift_blocked, in_progress ), ( [], [] ) )
 
-    def test_a_drift_only_scenario_is_drift_blocked_and_routes_to_reconcile( self ):
+    def test_a_drift_only_scenario_is_drift_blocked( self ):
+        # A scenario blocked only by drift is bucketed apart from the half-built; the stale references and
+        # the reconcile route are the shared `inputs.drift` notice's job (tested there).
         scenario = self._scenario( 'Foo', _drifted_plans() )
         _complete, drift_blocked, in_progress = partition_scenarios( self.organization, self.profile_record )
         self.assertEqual( in_progress, [] )
-        self.assertEqual( [ s.uuid for s, _issues in drift_blocked ], [ scenario.uuid ] )
-        ( _scenario, issues ) = drift_blocked[ 0 ]
-        drift = next( issue for issue in issues if issue.is_drift )
-        self.assertEqual( drift.fix_route, 'scenario_reconcile' )                # the one-click fix
-        self.assertEqual( drift.fix_route_kwargs, { 'uuid': scenario.uuid } )
-        # The individual references (for a bullet list) -- each trimmed of its trailing ";".
-        self.assertEqual( drift.references, ( 'a repayment plan for an unknown debt "gone"', ) )
+        self.assertEqual( [ s.uuid for s in drift_blocked ], [ scenario.uuid ] )
 
     def test_a_half_built_scenario_is_in_progress( self ):
         scenario = self._scenario( 'Half', Plans(), reviewed = False )

@@ -23,6 +23,7 @@ from common.dataclass_json import from_json_data
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.repository import BooksOfAccountRepository
+from ucfp.inputs.drift import scenario_drift
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ScenarioRecord
@@ -150,7 +151,7 @@ class FinancialForecastView( InputGatedMixin, View ):
             'has_profile'  : profile_record is not None,   # a *complete* profile
             'effective_date' : profile_record.effective_date if profile_record else None,
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
-            'drift_scenarios' : self._drift_notices( drift_blocked ),   # runnable-but-for-drift, with the fix
+            'drift_scenarios' : self._drift_notices( drift_blocked, profile_record ),
             'build_scenario'         : started_scenario or ( in_progress[ 0 ] if in_progress else None ),
             'build_scenario_started' : started_scenario is not None,
             'resume'       : self._live_resume( exploration, profile_record ),
@@ -163,17 +164,15 @@ class FinancialForecastView( InputGatedMixin, View ):
         }
 
     @staticmethod
-    def _drift_notices( drift_blocked ) -> list:
-        """Each drift-blocked scenario as `{label, references, fix_label, reconcile_url}` for the hub: its
-        drift issue names what stale references block it (listed individually) and links the one-click
-        reconcile that clears them. (A drift-blocked scenario's issues are all drift.)"""
-        notices = list()
-        for scenario, issues in drift_blocked:
-            drift = next( issue for issue in issues if issue.is_drift )
-            notices.append( {
-                'label' : scenario.label, 'references' : drift.references,
-                'fix_label' : drift.fix_label, 'reconcile_url' : drift.fix_url } )
-        return notices
+    def _drift_notices( drift_blocked, profile_record ) -> list:
+        """Each drift-blocked scenario as `{label, drift}` for the hub -- its stale references and
+        one-click reconcile from the shared `inputs.drift` notice, rendered through the shared
+        scenario-drift pane (the same one the Scenarios cards and Plans flow use)."""
+        if profile_record is None:
+            return list()
+        profile = load_profile( profile_record )
+        return [ { 'label' : scenario.label, 'drift' : scenario_drift( profile, scenario ) }
+                 for scenario in drift_blocked ]
 
     @classmethod
     def _live_resume( cls, exploration, profile_record ):
