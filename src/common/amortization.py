@@ -55,6 +55,24 @@ def present_value(
     return payment * ( ONE - discount ) / periodic_rate
 
 
+def rate_for_payment(
+        balance : Decimal, payment : Decimal, periods : int ) -> Decimal:
+    """The `periodic_rate` at which a level `payment` retires `balance` over `periods` -- `level_payment`
+    inverted for the rate (no closed form, so bisected: the payment rises monotonically with the rate).
+    Returns 0 when the payment does not exceed the zero-interest payment (`balance / periods`), since no
+    positive rate then fits; the search caps at 100%/period, far above any real loan."""
+    if periods <= 0 or payment <= balance / periods:
+        return Decimal( '0' )
+    low, high = Decimal( '0' ), ONE                         # 0 .. 100% per period brackets every real loan
+    for _ in range( 60 ):                                   # ~2^-60 precision -- exact to far past a cent
+        mid = ( low + high ) / 2
+        if level_payment( balance, mid, periods ) < payment:
+            low = mid
+        else:
+            high = mid
+    return ( low + high ) / 2
+
+
 def balance_after(
         principal : Decimal, periodic_rate : Decimal, payment : Decimal, periods : int ) -> Decimal:
     """The balance left after `periods` payments of a fixed `payment` against `principal` growing at

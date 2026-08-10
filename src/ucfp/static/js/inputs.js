@@ -563,6 +563,72 @@ window.App.Inputs = (function () {
         } );
     }
 
+    // ----- CurrentLoanCalculator: keep a current auto loan's rate and monthly consistent -----
+    // The balance is fixed (a Profile fact, on the block). Rate and monthly are two views of the same
+    // amortization over the months left: editing the monthly (or the months) back-solves the rate; editing
+    // the rate fills the monthly. The rate is what is stored, so the client keeps it authoritative. Bound
+    // on `input` so the mirror fills live; setting `.val()` fires no event, so the pair does not loop.
+
+    // The monthly rate at which `payment` retires `balance` over `months` (mirror of rate_for_payment):
+    // bisected, since the payment rises monotonically with the rate; 0 when the payment does not exceed
+    // the zero-interest payment.
+    function rateForPayment( balance, payment, months ) {
+        if ( months <= 0 || payment <= balance / months ) { return 0; }
+        let low = 0, high = 1;                            // 0 .. 100% per period brackets every real loan
+        for ( let i = 0; i < 60; i++ ) {
+            const mid = ( low + high ) / 2;
+            if ( paymentForMonths( balance, months, mid ) < payment ) { low = mid; } else { high = mid; }
+        }
+        return ( low + high ) / 2;
+    }
+
+    function currentLoanBalance( $block ) {
+        return parseFloat( $block.attr( dataAttr( C.CURRENT_LOAN_BALANCE_DATA_ATTR ) ) ) || 0;
+    }
+
+    function currentLoanMonths( $block ) {
+        return parseInt( $block.find( classSelector( C.CURRENT_LOAN_MONTHS_CLASS ) ).val(), 10 ) || 0;
+    }
+
+    const MAX_PLAUSIBLE_APR = 30;   // percent -- keep in sync with vehicle_disposition._MAX_PLAUSIBLE_APR
+
+    // Editing the rate fills the monthly: the level payment amortizing the balance over the months left. A
+    // directly-entered rate is explicit, so clear the "doesn't fit" hint.
+    function fillCurrentLoanMonthly( $block ) {
+        const balance = currentLoanBalance( $block ), months = currentLoanMonths( $block );
+        const ratePercent = parseFloat( $block.find( classSelector( C.CURRENT_LOAN_RATE_CLASS ) ).val() );
+        if ( !( balance > 0 ) || !( months > 0 ) || !( ratePercent >= 0 ) ) { return; }
+        setMoneyField( $block.find( classSelector( C.CURRENT_LOAN_MONTHLY_CLASS ) ),
+                       paymentForMonths( balance, months, ( ratePercent / 100 ) / 12 ) );
+        $block.find( classSelector( C.CURRENT_LOAN_HINT_CLASS ) ).addClass( 'd-none' );
+    }
+
+    // Editing the monthly (or the months) fills the rate -- the annual rate that payment implies, monthly
+    // held (the anchor). The payment must retire the balance in the term and imply a plausible rate;
+    // otherwise the monthly/term do not form a real loan, so leave the rate blank and show the hint rather
+    // than guess an implausible or unbounded rate.
+    function fillCurrentLoanRate( $block ) {
+        const balance = currentLoanBalance( $block ), months = currentLoanMonths( $block );
+        const monthly = parseAmount( $block.find( classSelector( C.CURRENT_LOAN_MONTHLY_CLASS ) ).val() );
+        if ( !( balance > 0 ) || !( months > 0 ) || !( monthly > 0 ) ) { return; }
+        const annualPercent = rateForPayment( balance, monthly, months ) * 12 * 100;
+        const fits = ( monthly * months >= balance ) && ( annualPercent <= MAX_PLAUSIBLE_APR );
+        $block.find( classSelector( C.CURRENT_LOAN_RATE_CLASS ) ).val( fits ? annualPercent.toFixed( 2 ) : '' );
+        $block.find( classSelector( C.CURRENT_LOAN_HINT_CLASS ) ).toggleClass( 'd-none', fits );
+    }
+
+    function enhanceCurrentLoan( $scope ) {
+        ( $scope || $( document.body ) ).find( classSelector( C.CURRENT_LOAN_CLASS ) ).each( function () {
+            const $block = $( this );
+            $block.find( classSelector( C.CURRENT_LOAN_RATE_CLASS ) ).off( 'input.currentLoan' )
+                .on( 'input.currentLoan', function () { fillCurrentLoanMonthly( $block ); } );
+            const monthlyOrMonths = classSelector( C.CURRENT_LOAN_MONTHLY_CLASS ) + ',' +
+                                    classSelector( C.CURRENT_LOAN_MONTHS_CLASS );
+            $block.find( monthlyOrMonths ).off( 'input.currentLoan' )
+                .on( 'input.currentLoan', function () { fillCurrentLoanRate( $block ); } );
+        } );
+    }
+
     // ----- New scenario, Copy card: reflect the chosen source's component names -----
     // The "copy from" select carries each source scenario's Plans/Assumptions labels per option; show the
     // chosen source's in two spans so the user sees what is being copied/reused. Display-only.
@@ -817,6 +883,7 @@ window.App.Inputs = (function () {
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
         enhanceVehicleFinance( $( document.body ) );
+        enhanceCurrentLoan( $( document.body ) );
         enhanceStateAutofill( $( document.body ) );
         enhanceCopySource( $( document.body ) );
         enhancePairCombine( $( document.body ) );
@@ -829,6 +896,7 @@ window.App.Inputs = (function () {
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
                 enhanceVehicleFinance( $( document.body ) );
+                enhanceCurrentLoan( $( document.body ) );
                 enhanceStateAutofill( $( document.body ) );
                 enhanceCopySource( $( document.body ) );
                 enhancePairCombine( $( document.body ) );

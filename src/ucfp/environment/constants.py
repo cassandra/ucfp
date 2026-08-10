@@ -147,6 +147,18 @@ class AppConst:
     # fills the monthly only when the checked method carries it -- so the JS never names the method.
     VEHICLE_FINANCES_DATA_ATTR = 'vehicle-finances'
 
+    # The current-loan calculator (the disposition card's "Current loan" subsection). Its balance is a
+    # Profile fact (fixed, on the block); rate and monthly are the two views of the same amortization over
+    # the remaining months, kept consistent: editing the monthly (or the months) back-solves the rate,
+    # editing the rate fills the monthly. The rate is what is stored (the client keeps it authoritative);
+    # the server back-solves from the monthly only as a no-JS fallback. Materialization is authoritative.
+    CURRENT_LOAN_CLASS          = 'js-current-loan'          # the subsection wrapper (carries the balance)
+    CURRENT_LOAN_BALANCE_DATA_ATTR = 'current-loan-balance'  # the outstanding balance, on the wrapper
+    CURRENT_LOAN_RATE_CLASS     = 'js-current-loan-rate'     # the interest-rate input (percent)
+    CURRENT_LOAN_MONTHLY_CLASS  = 'js-current-loan-monthly'  # the monthly-payment input
+    CURRENT_LOAN_MONTHS_CLASS   = 'js-current-loan-months'   # the remaining-months input
+    CURRENT_LOAN_HINT_CLASS     = 'js-current-loan-hint'     # shown when the monthly/term doesn't fit
+
     # The recurring-expenses table's per-column delete: the x stamps its span index into the form's
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.
     RECURRING_DELETE_CLASS  = 'js-recurring-delete'  # the per-column x control (carries data-span)

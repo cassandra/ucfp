@@ -1,9 +1,12 @@
 {% comment %}
 The disposition editor for one current owned vehicle (id=vehicle-disposition-form), opened as a card
-beneath the current-vehicles list; its header names the vehicle (from `heading`) so which one is clear.
-Auto-saves in the background. The `kind` radio drives a switch (inputs.js) revealing what each choice
-needs: Retain nothing, Sell a date, Replace a date plus the replacement's purchase fields (with the
-payment method as a nested switch). Empty when none is open. Reads `disposition_form`, `heading`, `handle`.
+beneath the current-vehicles list; its header names the vehicle (from `heading`). Auto-saves in the
+background. Three subsections in chronological order, each a bordered block so they stay distinct:
+(1) the vehicle's *current* loan (rate + months left) -- shown only when it is financed (`is_financed`);
+(2) the *plan* for it -- the `kind` switch (Retain / Sell / Replace) and, for Sell/Replace, the handover
+date; (3) the *replacement* (Replace only) -- its recurrence/end and how it is financed (the payment
+sub-block, with the method as a nested switch). Empty when none is open. Reads `disposition_form`,
+`heading`, `handle`.
 {% endcomment %}
 <div id="vehicle-disposition-form">
   {% if disposition_form %}
@@ -15,29 +18,49 @@ payment method as a nested switch). Empty when none is open. Reads `disposition_
             data-{{ AppConst.VEHICLE_TERM_DATA_ATTR }}="{{ disposition_form.auto_loan_term_months }}"
             action="{% url 'vehicle_disposition_edit' handle=handle %}">
         {% csrf_token %}
+        {% comment %}(1) The current loan -- financed owned vehicles only; its terms live in Plans, its
+        balance in Profile (the Vehicles section). Vehicle loans are managed here, not in the Debts
+        section. Balance is read-only and rides on the block as a data attr; the client calculator keeps
+        the monthly and rate consistent over the months left (edit either -- the other follows).{% endcomment %}
+        {% if disposition_form.is_financed %}
+        <fieldset class="border rounded px-2 pb-2 mb-2 {{ AppConst.CURRENT_LOAN_CLASS }}"
+                  data-{{ AppConst.CURRENT_LOAN_BALANCE_DATA_ATTR }}="{{ disposition_form.loan_balance }}">
+          <legend class="w-auto px-2 mb-1 h6">Current loan</legend>
+          <p class="text-muted small mb-1">Balance owed: <strong>${{ disposition_form.loan_balance|floatformat:0 }}</strong></p>
+          <div class="form-row">
+            <div class="col-sm-4">{{ disposition_form.loan_monthly.as_field_group }}</div>
+            <div class="col-sm-4">{{ disposition_form.loan_rate.as_field_group }}</div>
+            <div class="col-sm-4">{{ disposition_form.loan_months.as_field_group }}</div>
+          </div>
+          <p class="text-danger small mb-0 d-none {{ AppConst.CURRENT_LOAN_HINT_CLASS }}">That payment and
+            term don't fit the balance &mdash; check them.</p>
+        </fieldset>
+        {% endif %}
         <div class="{{ AppConst.SWITCH_CLASS }}">
-          <fieldset class="form-group mb-2">
-            <legend class="col-form-label d-block mb-1 pt-0 small">Plan for this vehicle</legend>
+          {% comment %}(2) The plan for this vehicle -- the kind switch, and (Sell/Replace) the handover
+          date. The replacement's purchase date is not asked; it is this handover date.{% endcomment %}
+          <fieldset class="border rounded px-2 pb-2 mb-2">
+            <legend class="w-auto px-2 mb-1 h6">Plan for this vehicle</legend>
             {% for radio in disposition_form.kind %}
             <div class="form-check form-check-inline">
               {{ radio.tag }}
               <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
             </div>
             {% endfor %}
+            <div class="form-row mt-1" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.dated_kinds }}">
+              <div class="col-sm-6">{{ disposition_form.sale_date.as_field_group }}</div>
+            </div>
           </fieldset>
-          {% comment %}
-          Timing on one row: the handover date (Sell or Replace) and, for a Replace, how often it recurs
-          and until when. The replacement's purchase date is not asked -- it is this handover date.
-          {% endcomment %}
-          <div class="form-row mb-2">
-            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.dated_kinds }}">{{ disposition_form.sale_date.as_field_group }}</div>
-            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.replace_kind }}">{{ disposition_form.recurrence_years.as_field_group }}</div>
-            <div class="col-sm-4" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.replace_kind }}">{{ disposition_form.end_date.as_field_group }}</div>
-          </div>
-          {# Replace only: the replacement's payment (its recurring-purchase timing is the row above). #}
-          <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.replace_kind }}">
+          {% comment %}(3) The replacement (Replace only) -- how often it recurs and until when, then how
+          each purchase is paid (the shared payment sub-block, its method a nested switch).{% endcomment %}
+          <fieldset class="border rounded px-2 pb-2 mb-2" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ disposition_form.replace_kind }}">
+            <legend class="w-auto px-2 mb-1 h6">Replacement</legend>
+            <div class="form-row">
+              <div class="col-sm-6">{{ disposition_form.recurrence_years.as_field_group }}</div>
+              <div class="col-sm-6">{{ disposition_form.end_date.as_field_group }}</div>
+            </div>
             {% include 'inputs/interview/sections/_vehicle_payment_fields.html' with form=disposition_form %}
-          </div>
+          </fieldset>
         </div>
         <div class="mt-2">
           <a class="btn btn-sm btn-outline-primary" data-async="#vehicle-disposition-form"

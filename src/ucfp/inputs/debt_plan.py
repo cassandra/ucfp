@@ -18,6 +18,7 @@ from ucfp.environment.constants import AppConst
 from ucfp.inputs.events import LOAN_ROLE
 from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import LoanPrepayment, LoanRepayment, PlanEvent
+from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.widgets import IsoDateInput
 
 
@@ -32,7 +33,11 @@ class DebtPlanForm( forms.Form ):
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
-        self._debts = ( [ debt for debt in profile.debts if debt.kind.is_amortizing ]
+        # Vehicle (auto) loans are excluded: their terms are authored in the Vehicle plan, not here (the
+        # debt plan covers the other debts). Any repayment they carry is left intact -- `apply` only
+        # rebuilds the shown debts' repayments, preserving the rest.
+        self._debts = ( [ debt for debt in profile.debts
+                          if debt.kind.is_amortizing and debt.kind is not DebtKind.AUTO ]
                         if profile is not None else [] )
         repayments = { r.debt_handle : r for r in ( plans.loan_repayments if plans else [] ) }
         extra      = { p.loan_handle : p.annual_amount for p in ( plans.prepayments if plans else [] ) }
