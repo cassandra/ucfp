@@ -765,8 +765,22 @@ class InterviewView( View ):
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,
+            # The Plans-flow drift banner: these plans reference removed Profile entities (None off Plans).
+            'drift'                : self._plans_drift( request, flow ),
             **self._profile_status( request, flow ),
         }
+
+    @staticmethod
+    def _plans_drift( request, flow ):
+        """The current Plans record's drift notice for the Plans-flow banner (stale Profile references +
+        the one-click reconcile), or None off the Plans flow (only Plans reference the Profile) or before a
+        profile exists to judge against."""
+        if flow != 'plans':
+            return None
+        profile_record = latest_profile( request.organization )
+        if profile_record is None:
+            return None
+        return plans_drift( load_profile( profile_record ), current_plans_record( request ) )
 
     @staticmethod
     def _is_last_step( request, sections, section, flow ) -> bool:
