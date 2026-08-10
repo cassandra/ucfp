@@ -5,6 +5,7 @@ calculator and forced age-flat. It is now a directly-typed per-band amount like 
 form reads the entered amounts as-is (never recomputing them from the calculator) and only *remembers* the
 calculator inputs to repopulate the panel. These tests pin that authority and the per-band freedom.
 """
+from dataclasses import replace
 from decimal import Decimal
 
 from django.core.management import call_command
@@ -90,3 +91,18 @@ class DurableAmountAuthoritativeTest( TestCase ):
         durables = sum( 1 for expense in form._expenses if expense.count is not None )
         self.assertEqual( html.count( AppConst.CALC_AUTOFILL_CLASS ), durables )   # one Auto fill per durable
         self.assertIn( f'data-{AppConst.CALC_DATA_ATTR}="{ei}"', html )            # bound to the row's calc id
+
+    def test_a_durable_that_varies_by_band_flags_the_change_like_any_row( self ):
+        # Phase 3: now that a durable can differ across bands, it earns the same up/down change flags as
+        # every other row -- the scan-for-what-changes affordance no longer skips durables.
+        spans    = [ 65, None ]
+        seed     = RecurringExpensesForm( profile = Profile(), plans = Plans( expense_spans = spans ) )
+        template = seed._expenses[ self._durable_index( seed ) ]      # a catalog durable's handle + count
+        varying  = replace( template, amounts = [ Decimal( '100' ), Decimal( '250' ) ] )
+        form  = RecurringExpensesForm(
+            profile = Profile(), plans = Plans( expense_spans = spans, recurring_expenses = [ varying ] ) )
+        ei    = next( i for i, e in enumerate( form._expenses ) if e.handle == template.handle )
+        cells = form._row( ei, form._expenses[ ei ] )[ 'cells' ]
+        self.assertFalse( cells[ 0 ][ 'changed' ] )                    # the first band is the baseline
+        self.assertTrue( cells[ 1 ][ 'changed' ] )                     # 100 -> 250 is a change...
+        self.assertEqual( cells[ 1 ][ 'direction' ], 'up' )           # ...a step up
