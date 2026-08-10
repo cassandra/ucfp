@@ -100,24 +100,27 @@ class LeasedVehicleTests( unittest.TestCase ):
 
 
 class OwnershipToggleTests( unittest.TestCase ):
-    """Flipping ownership on an existing vehicle moves it between stores under the same handle and drops
-    its now-mismatched disposition; an edit that keeps the type keeps the disposition."""
+    """Flipping ownership on an existing vehicle moves it between stores under the same handle; a
+    now-mismatched disposition is left for on-demand reconciliation, not dropped here. An edit that keeps
+    the type keeps the disposition."""
 
-    def test_owned_to_leased_moves_stores_and_reaps_the_owned_disposition( self ):
+    def test_owned_to_leased_moves_stores_leaving_the_owned_disposition( self ):
         profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ], debts = [ _loan() ] )
         profile, plans = _apply( profile, _owned_disposition(), handle = 'vehicle-1', name = 'Car',
                                  ownership = 'leased' )
         self.assertEqual( [ v.handle for v in profile.leased_vehicles ], [ 'vehicle-1' ] )
         self.assertEqual( ( profile.assets, profile.debts ), ( [], [] ) )      # the loan went with it
-        self.assertIsNone( plans.vehicle_plan )                 # reaped -> emptied plan collapses to None
+        # The now-mismatched owned disposition is left as drift (reconciled on demand), not reaped here.
+        self.assertEqual( [ d.vehicle_handle for d in plans.vehicle_plan.dispositions ], [ 'vehicle-1' ] )
 
-    def test_leased_to_owned_moves_stores_and_reaps_the_leased_disposition( self ):
+    def test_leased_to_owned_moves_stores_leaving_the_leased_disposition( self ):
         profile = Profile( leased_vehicles = [ LeasedVehicle( 'vehicle-1', 'Car' ) ] )
         profile, plans = _apply( profile, _leased_disposition(), handle = 'vehicle-1', name = 'Car',
                                  ownership = 'owned', value = '25,000' )
         self.assertEqual( [ a.handle for a in profile.assets ], [ 'vehicle-1' ] )
         self.assertEqual( profile.leased_vehicles, [] )
-        self.assertIsNone( plans.vehicle_plan )                 # reaped -> emptied plan collapses to None
+        self.assertEqual(
+            [ d.vehicle_handle for d in plans.vehicle_plan.leased_dispositions ], [ 'vehicle-1' ] )
 
     def test_editing_without_flipping_keeps_the_disposition( self ):
         profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ] )
@@ -135,17 +138,19 @@ class CombinedListTests( unittest.TestCase ):
         self.assertEqual( [ ( r[ 'name' ], r[ 'ownership' ] ) for r in rows ],
                           [ ( 'Car', 'Owned' ), ( 'Lease', 'Leased' ) ] )
 
-    def test_deleting_an_owned_vehicle_reaps_its_loan_and_disposition( self ):
+    def test_deleting_an_owned_vehicle_removes_it_and_its_loan( self ):
         profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ], debts = [ _loan() ] )
         profile, plans = delete_current_vehicle( profile, _owned_disposition(), 'vehicle-1' )
         self.assertEqual( ( profile.assets, profile.debts ), ( [], [] ) )
-        self.assertIsNone( plans.vehicle_plan )                 # reaped -> emptied plan collapses to None
+        # The disposition is left as drift (reconciled on demand), not reaped on delete.
+        self.assertEqual( [ d.vehicle_handle for d in plans.vehicle_plan.dispositions ], [ 'vehicle-1' ] )
 
-    def test_deleting_a_leased_vehicle_reaps_its_disposition( self ):
+    def test_deleting_a_leased_vehicle_removes_it( self ):
         profile = Profile( leased_vehicles = [ LeasedVehicle( 'vehicle-1', 'Lease' ) ] )
         profile, plans = delete_current_vehicle( profile, _leased_disposition(), 'vehicle-1' )
         self.assertEqual( profile.leased_vehicles, [] )
-        self.assertIsNone( plans.vehicle_plan )                 # reaped -> emptied plan collapses to None
+        self.assertEqual(
+            [ d.vehicle_handle for d in plans.vehicle_plan.leased_dispositions ], [ 'vehicle-1' ] )
 
 
 if __name__ == '__main__':

@@ -18,8 +18,7 @@ from ucfp.inputs.plans.enums import (
     CreditCardPlanMode, EventKind, LeaseDispositionKind, VehicleDispositionKind )
 from ucfp.forecast.parameters import ContributionSource
 from ucfp.inputs.compatibility import (
-    PlansIncompatibleError, assert_compatible, compatibility_issues, plans_reconciled_with_profile,
-    plans_without_vehicles )
+    PlansIncompatibleError, assert_compatible, compatibility_issues, plans_reconciled_with_profile )
 
 
 def _profile() -> Profile:
@@ -76,8 +75,9 @@ class CompatibilityTest( SimpleTestCase ):
 
 
 class VehicleDriftTest( SimpleTestCase ):
-    """A vehicle-plan disposition (owned or leased) must resolve against the Profile's vehicles, and a
-    deleted vehicle's disposition is reaped -- the vehicle counterpart of the debt drift/reap."""
+    """A vehicle-plan disposition (owned or leased) must resolve against the Profile's vehicles; a
+    disposition for a removed vehicle is flagged as drift (and reconciled on demand, like every other
+    Plans->Profile reference)."""
 
     def _profile( self ):
         return Profile(
@@ -106,16 +106,6 @@ class VehicleDriftTest( SimpleTestCase ):
     def test_a_disposition_for_a_removed_leased_vehicle_is_flagged( self ):
         issues = compatibility_issues( Profile( assets = self._profile().assets ), self._plans() )
         self.assertTrue( any( 'unknown leased vehicle' in issue for issue in issues ) )
-
-    def test_reaping_a_vehicle_strips_owned_and_leased_dispositions( self ):
-        # Reaping every current vehicle empties both disposition lists, and an emptied plan collapses to
-        # None (as every form apply does), leaving no spurious plan behind.
-        self.assertIsNone(
-            plans_without_vehicles( self._plans(), { 'vehicle-1', 'lease-1' } ).vehicle_plan )
-        # Reaping just the owned vehicle strips its disposition and leaves the leased one intact.
-        kept = plans_without_vehicles( self._plans(), { 'vehicle-1' } ).vehicle_plan
-        self.assertEqual( kept.dispositions, [] )
-        self.assertEqual( [ d.vehicle_handle for d in kept.leased_dispositions ], [ 'lease-1' ] )
 
 
 def _full_profile() -> Profile:

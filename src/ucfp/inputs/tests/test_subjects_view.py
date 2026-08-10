@@ -45,7 +45,7 @@ class SubjectsViewPartnerDropTests( TestCase ):
         request.session       = dict()
         return request
 
-    def test_dropping_a_partner_prunes_their_contribution_and_saves( self ):
+    def test_dropping_a_partner_leaves_their_contribution_as_drift( self ):
         # A household with a partner, the partner's pre-tax account, and a plan contribution into it.
         save_profile( self.organization, Profile(
             subjects = [
@@ -62,6 +62,8 @@ class SubjectsViewPartnerDropTests( TestCase ):
 
         response = SubjectsView().post( self._drop_partner_request() )
 
-        self.assertEqual( response.status_code, 200 )                          # no crash on the prune
+        self.assertEqual( response.status_code, 200 )                          # the profile edit saves fine
         saved = load_plans( latest_plans( self.organization ) )
-        self.assertEqual( saved.contributions, [] )                            # dangling contribution pruned
+        # Plans are no longer pruned on a Profile edit: the contribution into the departed partner's
+        # account is left as drift, reconciled on demand at the run surface.
+        self.assertEqual( [ c.account_handle for c in saved.contributions ], [ _PARTNER_PRETAX ] )

@@ -28,7 +28,6 @@ from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRETAX_ACCOUNT_HANDLE_PREFIX, PRIMARY_SUBJECT_HANDLE,
     RESIDENCE_ASSET_HANDLE, RESIDENCE_MORTGAGE_HANDLE, ROTH_ACCOUNT_HANDLE_PREFIX,
     AssetProfile, Debt, Profile, SubjectProfile )
-from ucfp.inputs.compatibility import plans_without_accounts
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionConcept, JurisdictionType
 from ucfp.jurisdiction.labels import local_term
@@ -166,12 +165,13 @@ class SubjectsForm( StyledFormMixin, forms.Form ):
     def apply( self, profile : Profile, plans : Plans ):
         subjects = self._subjects()
         assets   = _synced_taxable_accounts( _synced_retirement_accounts( profile.assets, subjects ) )
-        removed  = { asset.handle for asset in profile.assets } - { asset.handle for asset in assets }
         updated  = replace(
             profile, subjects = subjects, filing_status = self._filing_status( subjects ),
             assets = assets, us_state = self._us_state(),
             state_income_tax_rate = self._state_income_tax_rate() )
-        return updated, plans_without_accounts( plans, removed ) if removed else plans
+        # Plans are left untouched: a contribution/conversion/withdrawal left keyed to a departed
+        # subject's removed account is reconciled on demand at the run surface, not eagerly here.
+        return updated, plans
 
     def _us_state( self ) -> Optional[ USState ]:
         """The chosen state, or None for the 'other / not listed' blank."""

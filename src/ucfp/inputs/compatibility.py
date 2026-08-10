@@ -19,8 +19,6 @@ for a drifted scenario; a Profile edit does not prune Plans eagerly.
 from dataclasses import replace
 from decimal import Decimal
 
-from ucfp.inputs.events import CARD_ROLE, LOAN_ROLE
-from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import Profile
 from ucfp.inputs.vehicle_expenses import plan_has_content
@@ -172,56 +170,3 @@ def _event_resolves( event, entities: set ) -> bool:
     """Whether every entity a plan event selects still exists -- an event is dropped whole when any role
     it names (a subject, an account, a debt) is gone, matching how the drift check flags it."""
     return all( handle in entities for handle in event.selections.values() )
-
-
-def plans_without_debts( plans: Plans, removed: set ) -> Plans:
-    """Every Plans reference to a removed debt handle stripped -- a loan's repayment, its extra
-    principal, and its payoff, or a card's paydown plan and its payoff -- so a deleted debt leaves
-    nothing dangling. The single place that owns the debt reap, delegated to by every surface that
-    deletes a debt."""
-    return replace(
-        plans,
-        loan_repayments   = [ r for r in plans.loan_repayments if r.debt_handle not in removed ],
-        prepayments       = [ p for p in plans.prepayments if p.loan_handle not in removed ],
-        credit_card_plans = [ c for c in plans.credit_card_plans if c.card_handle not in removed ],
-        events            = [ e for e in plans.events if not _reaped_debt_event( e, removed ) ] )
-
-
-def _reaped_debt_event( event, removed: set ) -> bool:
-    """Whether a plan event should be dropped because the debt it targets was removed -- a loan or
-    card payoff whose debt is gone."""
-    if event.kind is EventKind.LOAN_PAYOFF:
-        return event.selections.get( LOAN_ROLE ) in removed
-    if event.kind is EventKind.CARD_PAYOFF:
-        return event.selections.get( CARD_ROLE ) in removed
-    return False
-
-
-def plans_without_vehicles( plans: Plans, removed: set ) -> Plans:
-    """Every vehicle-plan disposition for a removed vehicle handle stripped -- an owned disposition or a
-    leased one -- so a deleted current vehicle leaves no dangling plan. The vehicle counterpart of
-    `plans_without_debts`, called when a vehicle (owned or leased) is deleted from the Profile. (Owned and
-    leased handles are disjoint, so filtering both lists by the same removed set reaps each correctly. Net-
-    new plan vehicles and running costs are not keyed to a Profile vehicle, so they are untouched.)"""
-    plan = plans.vehicle_plan
-    if plan is None:
-        return plans
-    owned  = [ d for d in plan.dispositions if d.vehicle_handle not in removed ]
-    leased = [ d for d in plan.leased_dispositions if d.vehicle_handle not in removed ]
-    reaped = replace( plan, dispositions = owned, leased_dispositions = leased )
-    # Collapse an emptied plan back to None, as every form `apply` does, so reaping a vehicle's only
-    # disposition never leaves a spurious plan that reads as "started".
-    return replace( plans, vehicle_plan = reaped if plan_has_content( reaped ) else None )
-
-
-def plans_without_accounts( plans: Plans, removed: set ) -> Plans:
-    """Every Plans reference to a removed account handle stripped -- a contribution into it, and a Roth
-    conversion or scheduled withdrawal from it -- so a removed retirement account (a departed subject's)
-    leaves no dangling plan. The account counterpart of `plans_without_debts`, called when a subject is
-    dropped. (Events and the sweep also name accounts; those are left to the drift check, since they target
-    the shared taxable accounts rather than a departed subject's retirement ones.)"""
-    return replace(
-        plans,
-        contributions    = [ c for c in plans.contributions if c.account_handle not in removed ],
-        roth_conversions = [ v for v in plans.roth_conversions if v.source_handle not in removed ],
-        withdrawals      = [ w for w in plans.withdrawals if w.source_handle not in removed ] )

@@ -17,7 +17,6 @@ from django import forms
 
 from common.forms import CHOOSE_PLACEHOLDER, MoneyField
 
-from ucfp.inputs.compatibility import plans_without_debts
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import Debt
 
@@ -85,11 +84,9 @@ class DebtsForm( forms.Form ):
         return rows
 
     def apply( self, profile, plans ):
-        rebuilt = self._debts_from_rows()
-        removed = ( { debt.handle for debt in self._profile.debts }
-                    - { debt.handle for debt in rebuilt } )
-        plans   = plans_without_debts( plans, removed ) if removed else plans
-        return replace( profile, debts = rebuilt ), plans
+        # Plans are left untouched: a repayment/paydown/payoff left keyed to a removed debt is reconciled
+        # on demand at the run surface, not eagerly here.
+        return replace( profile, debts = self._debts_from_rows() ), plans
 
     def _debts_from_rows( self ) -> list:
         # New rows mint a handle free among every debt already in play; existing rows keep the handle
