@@ -3,8 +3,8 @@
 A financed vehicle mints a fresh loan, interest, and holding account for every replacement cycle it runs
 through. Left alone they proliferate as duplicate sibling columns keyed by reminted UUIDs. `display_placement`
 stamping resolves each back to its `vehicle-N` root and groups them: loans under a Vehicle Loans surface,
-interest under a Vehicle rung of the Non-deductible Interest class, holdings under the vehicle's Possessions
-rung -- so a vehicle's succession of accounts renders as one drillable column instead of a spray of them.
+interest under a Vehicle rung of the Non-deductible Interest class, holdings under a top-level Vehicles
+pane -- so a vehicle's succession of accounts renders as one drillable column instead of a spray of them.
 
 These tests run a full forecast (real handles, real reminted UUIDs) over a current financed vehicle that a
 Replace turns over across the horizon, so each axis carries several accounts to roll up.
@@ -12,9 +12,10 @@ Replace turns over across the horizon, so each axis carries several accounts to 
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
@@ -28,17 +29,19 @@ from ucfp.inputs.plans.enums import PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
     LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, SubjectProfile
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile, SubjectProfile
 from ucfp.inputs.vehicle_handles import is_vehicle_loan_handle, is_vehicle_loan_interest_handle
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
-from ucfp.planning.display_placement import stamp_display_placements
+from ucfp.planning.display_placement import (
+    _UNMAPPED_ORDER, _VehicleRung, _vehicle_group, _vehicle_rungs, stamp_display_placements )
 from ucfp.planning.materialization import ForecastFrame, materialize
 
-_VEHICLE_LOANS_KEY = 'class:LIABILITY:vehicle-loans'
+_VEHICLE_LOANS_KEY  = 'class:LIABILITY:vehicle-loans'
 _VEHICLE_1_LOAN_KEY = _VEHICLE_LOANS_KEY + '/vehicle-loan-vehicle-1'
+_VEHICLES_PANE_KEY  = 'class:ASSET:pane-vehicles'
 
 
 def _assumptions() -> Assumptions:
@@ -141,12 +144,16 @@ class VehicleRollupPlacementTest( TestCase ):
                 [ 'NON_DEDUCTIBLE_INTEREST', 'vehicle-interest', 'vehicle-interest-vehicle-1' ] )
 
     def test_current_and_replacement_holdings_share_one_vehicle_rung( self ):
-        books, _catalog = self._run()
+        books, catalog = self._run()
         holdings = [ a for a in books.accounts if a.asset_class is AssetClass.DEPRECIATING ]
         self.assertGreaterEqual( len( holdings ), 2, 'expected the current holding and its replacement(s)' )
         for account in holdings:
             self.assertEqual(
                 _path_keys( account ), [ 'pane-vehicles', 'holding-vehicle-vehicle-1' ] )
+        # And at the catalog level: the several holdings roll into one Vehicles-pane column per vehicle.
+        vehicle_column = catalog.get( BooksColumnKey( _VEHICLES_PANE_KEY + '/holding-vehicle-vehicle-1' ) )
+        self.assertIsInstance( vehicle_column, BooksSummaryColumn )
+        self.assertEqual( len( vehicle_column.member_keys ), len( holdings ) )
 
     def test_the_catalog_rolls_the_loans_into_one_vehicle_loans_column( self ):
         books, catalog = self._run()
@@ -178,10 +185,53 @@ class MultiVehicleRollupPlacementTest( TestCase ):
                            remaining_term = Duration( 60, TimeUnit.MONTH ) ),
             LoanRepayment( debt_handle = 'vehicle-2-loan', interest_rate = Rate.percent( Decimal( '6' ) ),
                            remaining_term = Duration( 48, TimeUnit.MONTH ) ) ] )
-        books, _catalog = _stamped( profile, plans )
+        books, catalog = _stamped( profile, plans )
         by_root = { tuple( _path_keys( a ) )
                     for a in books.accounts
                     if a.handle is not None and is_vehicle_loan_handle( str( a.handle ) ) }
         self.assertEqual( by_root, {
             ( 'vehicle-loans', 'vehicle-loan-vehicle-1' ),
             ( 'vehicle-loans', 'vehicle-loan-vehicle-2' ) } )
+        # At the catalog level: one shared surface, two distinct per-vehicle child columns under it.
+        surface = catalog.get( BooksColumnKey( _VEHICLE_LOANS_KEY ) )
+        self.assertEqual(
+            { key.token for key in surface.member_keys },
+            { _VEHICLE_LOANS_KEY + '/vehicle-loan-vehicle-1',
+              _VEHICLE_LOANS_KEY + '/vehicle-loan-vehicle-2' } )
+
+
+class NoVehicleBooksTest( TestCase ):
+    """A books with no vehicles leaves the vehicle passes as no-ops: no Vehicle Loans surface, no Vehicles
+    pane, and every account keeps its ordinary placement."""
+
+    def setUp( self ):
+        call_command( 'seed_parameter_sets' )
+
+    def test_the_vehicle_columns_are_absent_without_any_vehicle( self ):
+        _books, catalog = _stamped( _profile(), Plans() )       # _profile() has cash/stocks/bonds only
+        self.assertIsNone( catalog.get( BooksColumnKey( _VEHICLE_LOANS_KEY ) ) )
+        self.assertIsNone( catalog.get( BooksColumnKey( _VEHICLES_PANE_KEY ) ) )
+
+
+class VehicleRungOrderingTest( SimpleTestCase ):
+    """`_vehicle_rungs` orders the household's vehicles (owned holdings, then leased facts) and
+    `_vehicle_group` falls back to the account's own name for a vehicle no current household vehicle roots."""
+
+    def test_owned_then_leased_vehicles_are_ordered_and_named( self ):
+        profile = Profile(
+            subjects = [ SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
+            filing_status = FilingStatus.SINGLE,
+            assets = [ AssetProfile( handle = 'vehicle-1', name = 'Civic',
+                                     asset_class = AssetClass.DEPRECIATING,
+                                     opening_value = Decimal( '20000' ) ) ],
+            leased_vehicles = [ LeasedVehicle( handle = 'vehicle-2', name = 'Leased EV' ) ] )
+        rungs = _vehicle_rungs( profile )
+        self.assertEqual( rungs[ 'vehicle-1' ], _VehicleRung( 0, 'Civic' ) )       # owned first
+        self.assertEqual( rungs[ 'vehicle-2' ], _VehicleRung( 1, 'Leased EV' ) )   # leased folds in after
+
+    def test_a_net_new_vehicle_falls_back_to_its_account_name_at_the_tail( self ):
+        # A plan-acquired vehicle no current household vehicle roots -- absent from `_vehicle_rungs`.
+        group = _vehicle_group( 'vehicle-9', SimpleNamespace( name = 'New Truck' ), {}, 'vehicle-loan-' )
+        self.assertEqual( group.key, 'vehicle-loan-vehicle-9' )
+        self.assertEqual( group.label, 'New Truck' )
+        self.assertEqual( group.order, _UNMAPPED_ORDER )

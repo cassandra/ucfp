@@ -63,9 +63,9 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
                 <button type="submit" name="op" value="collapse" class="dropdown-item">Collapse</button>
                 {% endif %}
                 <button type="submit" name="op" value="move_left" class="dropdown-item"
-                        {% if not col.can_move_left %}disabled{% endif %}>Move left</button>
+                        {% if not col.can_move_left %}disabled aria-disabled="true"{% endif %}>Move left</button>
                 <button type="submit" name="op" value="move_right" class="dropdown-item"
-                        {% if not col.can_move_right %}disabled{% endif %}>Move right</button>
+                        {% if not col.can_move_right %}disabled aria-disabled="true"{% endif %}>Move right</button>
               </form>
               {% if col.column.account_uuid %}
               <a href="{% url 'books_journal' run_uuid=record.uuid account_uuid=col.column.account_uuid %}"

@@ -340,10 +340,18 @@ def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None
     return
 
 
-def _vehicle_holding_placement( account, root : str, vehicles : dict ) -> AccountDisplayPlacement:
-    """A vehicle's holding, grouped under a top-level Vehicles pane by its root vehicle -- so a car and
-    each replacement it buys share one column, and vehicles read as their own asset group rather than
-    nested under Possessions -> Depreciating Assets."""
+@dataclass( frozen = True )
+class _VehicleRung:
+    """A vehicle's per-vehicle rung facts, shared across its three axes (loans, interest, holdings): the
+    display `name` (the vehicle's own) and the `order` placing it among the household's vehicles."""
+
+    order : int
+    name  : str
+
+
+def _vehicle_holding_placement( account, root : str,
+                                vehicles : dict[ str, _VehicleRung ] ) -> AccountDisplayPlacement:
+    """A vehicle's holding, grouped under the top-level Vehicles pane by its root vehicle."""
     pane    = AccountDisplayGroup(
         key = 'pane-' + _VEHICLES_PANE_KEY, label = _VEHICLES_PANE_LABEL, order = _VEHICLES_PANE_ORDER )
     vehicle = _vehicle_group( root, account, vehicles, 'holding-vehicle-' )
@@ -351,40 +359,48 @@ def _vehicle_holding_placement( account, root : str, vehicles : dict ) -> Accoun
         path = ( pane, vehicle ), order = _vehicle_leaf_order( str( account.handle ) ) )
 
 
-def _vehicle_rungs( profile : Profile ) -> dict:
-    """Each current vehicle's per-vehicle rung info -- (list order, name) -- keyed by its `vehicle-N` root
-    handle. The household's vehicles in the order the vehicles step lists them (owned holdings, then leased
-    facts), so every account resolving to a given root -- its loans, interest, and holdings, current and
-    for each replacement/successor -- groups under one rung labelled by, and ordered with, that vehicle."""
+def _vehicle_rungs( profile : Profile ) -> dict[ str, _VehicleRung ]:
+    """Each current vehicle's `_VehicleRung` keyed by its `vehicle-N` root handle, in the order the vehicles
+    step lists them (owned holdings, then leased facts). Every account resolving to a given root -- its
+    loans, interest, and holdings, current and for each replacement/successor -- groups under one rung
+    labelled by, and ordered with, that vehicle."""
     vehicles  = [ ( asset.handle, asset.name ) for asset in profile.assets
                   if asset.asset_class is AssetClass.DEPRECIATING ]
     vehicles += [ ( leased.handle, leased.name ) for leased in profile.leased_vehicles ]
-    return { handle : ( order, name ) for order, ( handle, name ) in enumerate( vehicles ) }
+    return { handle : _VehicleRung( order, name )
+             for order, ( handle, name ) in enumerate( vehicles ) }
 
 
-def _vehicle_group( root : str, account, vehicles : dict, key_prefix : str ) -> AccountDisplayGroup:
+def _vehicle_group( root : str, account, vehicles : dict[ str, _VehicleRung ],
+                    key_prefix : str ) -> AccountDisplayGroup:
     """The per-vehicle rung for a root vehicle: labelled by the vehicle's name and ordered by its list
     position, falling back to the account's own name at the end for a net-new vehicle acquired in the plan
     that no current household vehicle roots. Keyed by `key_prefix` + root, so a given axis's rung is stable
     across runs (the root handle is stable; the reminted account UUID never enters the key)."""
-    order, name = vehicles.get( root, ( _UNMAPPED_ORDER, account.name ) )
-    return AccountDisplayGroup( key = key_prefix + root, label = name, order = order )
+    rung = vehicles.get( root, _VehicleRung( _UNMAPPED_ORDER, account.name ) )
+    return AccountDisplayGroup( key = key_prefix + root, label = rung.name, order = rung.order )
 
 
 def _vehicle_leaf_order( handle : str ) -> int:
     """A vehicle account's order within its per-vehicle rung: the current account (no cycle suffix) leads,
     then each replacement cycle in origination order. The engine suffixes a recurring account with its
-    cycle (`vehicle-loan:<v>:0`), so a trailing integer ranks it after the cycle-less current one."""
+    cycle (`vehicle-loan:<v>:0`), so a trailing integer ranks it after the cycle-less current one. A
+    current vehicle's later cycle and a Replace successor's cycle can share an order (both read only the
+    trailing cycle); such ties fall back to account-appearance order, so columns still render stably."""
     tail = handle.rsplit( ':', 1 )[ -1 ]
     return int( tail ) + 1 if tail.isdigit() else 0
 
 
-def _vehicle_interest_placement( account, root : str, vehicles : dict ) -> AccountDisplayPlacement:
+def _vehicle_interest_placement( account, root : str,
+                                 vehicles : dict[ str, _VehicleRung ] ) -> AccountDisplayPlacement:
     """A vehicle loan's interest, nested Non-deductible Interest -> Vehicle -> per-vehicle. The top rung
-    mirrors the engine-class fallback (the same key and order `_engine_class_placement` gives a
-    non-deductible-interest account) so vehicle interest joins that column rather than raising a rival one;
-    the Vehicle rung then gathers every vehicle's interest, each vehicle keeping its own sub-column."""
+    mirrors the engine-class fallback -- the bare tax-class name as key, the fallback order (the
+    `_UNMAPPED_ORDER`/`_FALLBACK_ORDER` lockstep noted at the top of this module) -- so vehicle interest
+    joins that same column rather than raising a rival one; the Vehicle rung then gathers every vehicle's
+    interest, each vehicle keeping its own sub-column."""
     tax_class = account.expense_tax_class
+    # Key by the bare tax-class name (not a slug) to match the engine-class fallback rung's key exactly,
+    # so this nests under that Non-deductible Interest column instead of beside it.
     interest  = AccountDisplayGroup(
         key = tax_class.name, label = tax_class.label, order = _UNMAPPED_ORDER )
     section = AccountDisplayGroup( key = 'vehicle-interest', label = 'Vehicle', order = 0 )

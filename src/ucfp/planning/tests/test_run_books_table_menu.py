@@ -6,6 +6,7 @@ column is one or the other, so only the applicable toggle shows (a leaf that is 
 These tests render the template with a synthetic column and pin which menu items appear and which are
 disabled.
 """
+import re
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -50,19 +51,24 @@ def _menu( col : BooksTableColumn ) -> str:
         request = RequestFactory().get( '/' ) )
 
 
+def _button( html : str, label : str ) -> str:
+    """The `<button>…label…</button>` for a menu action -- matched whole so a test reads its attributes
+    (e.g. `disabled`) without coupling to attribute order or the template's line wrapping. '' if absent."""
+    match = re.search( r'<button[^>]*>' + re.escape( label ) + r'</button>', html )
+    return match.group( 0 ) if match else ''
+
+
 class ColumnMenuIsStableTest( SimpleTestCase ):
 
     def test_move_actions_always_render_disabled_at_a_group_edge( self ):
         html = _menu( _summary_column( can_move_left = False, can_move_right = True ) )
-        self.assertIn( 'Move left', html )                     # both always present...
-        self.assertIn( 'Move right', html )
-        self.assertIn( 'disabled>Move left', html )            # ...the unavailable direction disabled
-        self.assertNotIn( 'disabled>Move right', html )
+        self.assertIn( 'disabled', _button( html, 'Move left' ) )      # both present, the edge one disabled
+        self.assertNotIn( 'disabled', _button( html, 'Move right' ) )
 
     def test_move_actions_are_enabled_off_an_edge( self ):
         html = _menu( _account_column( can_move_left = True, can_move_right = True ) )
-        self.assertNotIn( 'disabled>Move left', html )
-        self.assertNotIn( 'disabled>Move right', html )
+        self.assertNotIn( 'disabled', _button( html, 'Move left' ) )
+        self.assertNotIn( 'disabled', _button( html, 'Move right' ) )
 
     def test_transaction_history_is_a_disabled_item_without_an_account( self ):
         html = _menu( _summary_column() )                      # a summary has no account to drill

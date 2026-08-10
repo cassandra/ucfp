@@ -305,6 +305,8 @@ class BooksTableDefinition:
         members = [ member_key for member_key in column.member_keys
                     if ( member_key in catalog ) and ( member_key not in present ) ]
         anchor  = _present_anchor( catalog, key, present )
+        # No-op when there is nothing new to reveal, or -- the structural precondition -- when no ancestor
+        # is on the frontier to anchor the splice to (an adapt-away can leave a key with no present chain).
         if ( not members ) or ( anchor is None ):
             return self
         expanded : list[ BooksColumnKey ] = []

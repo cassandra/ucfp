@@ -78,14 +78,14 @@ def successor_handle( vehicle_handle : str ) -> str:
 def is_vehicle_loan_handle( handle : str ) -> bool:
     """True for a vehicle loan *liability* account handle (`vehicle-loan:<v>`, the engine's `:cycle`
     suffix included) -- distinguished from an interest handle by its exact head token, so
-    `vehicle-loan-interest:` never reads as a loan."""
-    return handle.partition( ':' )[ 0 ] == _LOAN_PREFIX
+    `vehicle-loan-interest:` never reads as a loan. The `:` is required, so the bare prefix does not match."""
+    return handle.partition( ':' )[ : 2 ] == ( _LOAN_PREFIX, ':' )
 
 
 def is_vehicle_loan_interest_handle( handle : str ) -> bool:
     """True for a vehicle loan *interest* expense account handle (`vehicle-loan-interest:<v>`, `:cycle`
-    included)."""
-    return handle.partition( ':' )[ 0 ] == _LOAN_INTEREST_PREFIX
+    included). The `:` is required, so the bare prefix does not match."""
+    return handle.partition( ':' )[ : 2 ] == ( _LOAN_INTEREST_PREFIX, ':' )
 
 
 def root_vehicle( handle : str ) -> Optional[ str ]:

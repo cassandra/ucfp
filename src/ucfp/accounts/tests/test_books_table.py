@@ -152,6 +152,34 @@ def _two_loan_catalog():
         _leaf( 'loan-b', 'veh-1' ) ] )
 
 
+def _two_vehicle_catalog():
+    """One Vehicle Loans class with two vehicles, each a single-child chain to its own loan leaf -- the
+    reorder case: moving a vehicle's rung must carry that vehicle's loan leaf with it."""
+    return BooksTableColumnCatalog( [
+        _summary( 'type:LIABILITY', [ 'vehicle-loans' ] ),
+        _summary( 'vehicle-loans', [ 'veh-1', 'veh-2' ], parent = 'type:LIABILITY' ),
+        _summary( 'veh-1', [ 'loan-1' ], parent = 'vehicle-loans' ),
+        _leaf( 'loan-1', 'veh-1' ),
+        _summary( 'veh-2', [ 'loan-2' ], parent = 'vehicle-loans' ),
+        _leaf( 'loan-2', 'veh-2' ) ] )
+
+
+def _shared_label_catalog():
+    """A single-child chain whose vehicle rung and terminal loan leaf carry the SAME label ('Civic'), to
+    exercise the breadcrumb's drop-the-duplicate-of-the-terminal step."""
+    return BooksTableColumnCatalog( [
+        BooksSummaryColumn( key = BooksColumnKey( 'type:LIABILITY' ), label = 'Liabilities',
+                            member_keys = ( BooksColumnKey( 'vehicle-loans' ), ) ),
+        BooksSummaryColumn( key = BooksColumnKey( 'vehicle-loans' ), label = 'Vehicle Loans',
+                            parent_key = BooksColumnKey( 'type:LIABILITY' ),
+                            member_keys = ( BooksColumnKey( 'veh-1' ), ) ),
+        BooksSummaryColumn( key = BooksColumnKey( 'veh-1' ), label = 'Civic',
+                            parent_key = BooksColumnKey( 'vehicle-loans' ),
+                            member_keys = ( BooksColumnKey.for_account( _LOAN_UUID ), ) ),
+        BooksLeafColumn( key = BooksColumnKey.for_account( _LOAN_UUID ), label = 'Civic',
+                         parent_key = BooksColumnKey( 'veh-1' ) ) ] )
+
+
 def _rendered_by_op( columns ):
     return { column.op_key.token : column for column in columns }
 
@@ -209,6 +237,55 @@ class RenderCompressesSingleChildChainsTest( unittest.TestCase ):
             _keys( 'type:LIABILITY', 'vehicle-loans', 'loan-a', 'loan-b' ) )
         folded   = expanded.collapse( catalog, BooksColumnKey( 'vehicle-loans' ) )
         self.assertEqual( _tokens( folded ), [ 'type:LIABILITY', 'vehicle-loans' ] )
+
+    def test_a_breadcrumb_rung_matching_the_terminal_label_is_dropped( self ):
+        # veh-1's rung and its one loan leaf both read 'Civic'; the crumb keeps 'Vehicle Loans' but drops
+        # the 'Civic' that would merely repeat the column's own label.
+        rendered = _rendered_by_op(
+            _render_columns( _shared_label_catalog(),
+                             BooksTableDefinition( _keys( 'type:LIABILITY', 'vehicle-loans' ) ) ) )
+        self.assertEqual( rendered[ 'vehicle-loans' ].breadcrumb, ( 'Vehicle Loans', ) )
+
+    def test_expand_and_collapse_are_never_both_offered( self ):
+        # The Part-3 premise: a column is expandable or collapsed, never both -- across collapsed, drilled,
+        # and leaf states of a chain.
+        catalog = _two_loan_catalog()
+        for definition in ( BooksTableDefinition( _keys( 'type:LIABILITY' ) ),
+                            BooksTableDefinition( _keys( 'type:LIABILITY', 'vehicle-loans' ) ),
+                            BooksTableDefinition(
+                                _keys( 'type:LIABILITY', 'vehicle-loans', 'loan-a', 'loan-b' ) ) ):
+            for column in _render_columns( catalog, definition ):
+                self.assertFalse( column.can_expand and column.can_collapse,
+                                  f'{column.op_key.token} offers both expand and collapse' )
+
+
+class CompressedChainStructuralOpsTest( unittest.TestCase ):
+    """Move and Hide act on a compressed chain's TOP (`op_key`) while it displays its terminal -- so the
+    ops carry the whole chain and mark it at the top, not at the absorbed terminal."""
+
+    def test_reordering_a_per_vehicle_rung_carries_its_loan_leaf( self ):
+        definition = BooksTableDefinition(
+            _keys( 'type:LIABILITY', 'vehicle-loans', 'veh-1', 'loan-1', 'veh-2', 'loan-2' ) )
+        moved = definition.move( _two_vehicle_catalog(), BooksColumnKey( 'veh-1' ), +1 )
+        self.assertEqual(                                        # veh-1's loan travels with its rung
+            _tokens( moved ),
+            [ 'type:LIABILITY', 'vehicle-loans', 'veh-2', 'loan-2', 'veh-1', 'loan-1' ] )
+
+    def test_reorder_is_a_no_op_at_the_group_edge( self ):
+        definition = BooksTableDefinition(
+            _keys( 'type:LIABILITY', 'vehicle-loans', 'veh-1', 'loan-1', 'veh-2', 'loan-2' ) )
+        self.assertEqual( definition.move( _two_vehicle_catalog(), BooksColumnKey( 'veh-2' ), +1 ),
+                          definition )
+
+    def test_hiding_a_compressed_chain_slivers_the_top_not_the_terminal_account( self ):
+        catalog    = _one_loan_catalog()
+        definition = BooksTableDefinition( _keys( 'type:LIABILITY', 'vehicle-loans', 'mortgage' ) )
+        rendered   = _rendered_by_op(
+            _render_columns( catalog, definition.remove( catalog, BooksColumnKey( 'vehicle-loans' ) ) ) )
+        self.assertTrue( rendered[ 'vehicle-loans' ].removed )                     # the chain top is hidden
+        self.assertNotIn( BooksColumnKey.for_account( _LOAN_UUID ).token, rendered )   # not the loan account
+        self.assertEqual( [ c for c in rendered.values() if c.removed ],
+                          [ rendered[ 'vehicle-loans' ] ] )                        # exactly one sliver
 
 
 if __name__ == '__main__':
