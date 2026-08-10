@@ -449,6 +449,23 @@ class DispositionFormRenderTests( unittest.TestCase ):
         self.assertIn( '$18000', html )                                              # balance shown read-only
 
 
+class LeasedDispositionFormRenderTests( unittest.TestCase ):
+    """The leased editor renders its three bordered subsections (matching the owned card) and the
+    kind-switch case values -- the server-side contract a JS test can't cover."""
+
+    def test_the_subsections_and_switch_cases_render( self ):
+        form = LeasedVehicleDispositionForm( profile = _leased_profile( ( 'vehicle-1', 'Sedan' ) ),
+                                             plans = Plans(), handle = 'vehicle-1' )
+        html = render_to_string(
+            'inputs/interview/sections/leased_disposition_form.html',
+            { 'leased_form': form, 'handle': 'vehicle-1', 'AppConst': AppConst } )
+        for legend in ( 'Current lease', 'At lease end', 'Successor' ):
+            self.assertIn( legend, html )
+        attr = f'data-{AppConst.SWITCH_CASE_DATA_ATTR}'
+        self.assertIn( f'{attr}="{form.successor_kinds}"', html )       # the successor block shows for Renew/Buy
+        self.assertIn( f'{attr}="{form.financed_kinds}"', html )        # the down/monthly row
+
+
 class CompletenessPredicateTests( unittest.TestCase ):
     """The structural-completeness predicates that gate atomic materialization and drive the 'Needs
     details' badge -- one source of truth for 'this plan is fully entered'. Amounts stay optional; a lease
