@@ -115,10 +115,12 @@ class LoanPayoffTests( unittest.TestCase ):
         reader.assert_balanced()
         self.assertEqual( reader.ledger.natural_balance( _account( reader, 'mortgage' ) ), Decimal( '0' ) )
 
-    def test_payoff_naming_an_unknown_loan_is_rejected( self ):
-        bogus = ScheduledLoanPayoff( date( 2030, 6, 1 ), 'no-such-loan' )
-        with self.assertRaises( MissingAccountError ):
-            Forecast( _parameters( date( 2030, 12, 31 ), [ bogus ] ) ).run()
+    def test_payoff_naming_an_unknown_loan_is_skipped( self ):
+        # A payoff of a loan account that never materialized (a sold vehicle whose loan has no terms, or a
+        # loan already cleared) has nothing to extinguish, so it is a no-op and the run completes rather
+        # than failing -- closing #150. A non-liability handle is still rejected (below).
+        skipped = ScheduledLoanPayoff( date( 2030, 6, 1 ), 'no-such-loan' )
+        self.assertIsNotNone( Forecast( _parameters( date( 2030, 12, 31 ), [ skipped ] ) ).run() )
 
     def test_payoff_naming_a_non_liability_is_rejected( self ):
         # The mortgage's own interest expense account carries a handle but is not a liability.

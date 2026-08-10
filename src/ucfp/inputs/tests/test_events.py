@@ -16,9 +16,10 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer
 from ucfp.inputs.events import (
     EventContributions, POSSESSION_ROLE, PROPERTY_ROLE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent,
-    SellPropertyEvent, TransferEvent, vehicle_disposition_contributions )
+    SellPropertyEvent, TransferEvent, _payoff_loan_handle, vehicle_disposition_contributions )
 from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
+from ucfp.inputs.profile.enums import DebtKind
 
 
 def _profile( *holdings ):
@@ -69,12 +70,19 @@ class TransferMaterializationTests( unittest.TestCase ):
                           ( 'cd', 'stk', Decimal( '50000' ) ) )
 
 
+def _debt_stub( handle, secured_asset, name ):
+    """A stand-in secured debt: a securing debt in these sale tests is an auto loan (so its payoff resolves
+    to the vehicle-scoped account handle); an unsecured one is a card (its kind never routes a payoff)."""
+    kind = DebtKind.AUTO if secured_asset is not None else DebtKind.CREDIT_CARD
+    return SimpleNamespace( handle = handle, secured_asset = secured_asset, name = name, kind = kind )
+
+
 def _sale_profile( possessions, debts = () ):
     """A stand-in profile for a possession sale: possessions as (handle, class, name) and any securing
     debts as (handle, secured_asset, name)."""
     return SimpleNamespace(
         assets   = [ SimpleNamespace( handle = h, asset_class = k, name = n ) for h, k, n in possessions ],
-        debts    = [ SimpleNamespace( handle = h, secured_asset = s, name = n ) for h, s, n in debts ],
+        debts    = [ _debt_stub( h, s, n ) for h, s, n in debts ],
         subjects = [] )
 
 
@@ -111,7 +119,9 @@ class SellPossessionTests( unittest.TestCase ):
         self.assertEqual( [ type( e ).__name__ for e in events ],
                           [ 'ScheduledRealization', 'ScheduledLoanPayoff' ] )
         self.assertIsInstance( events[ 1 ], ScheduledLoanPayoff )
-        self.assertEqual( events[ 1 ].loan, 'debt-1' )
+        # The payoff targets the loan's vehicle-scoped *account* handle, not the Debt's own `{v}-loan`
+        # identity -- an auto loan materializes under `vehicle-loan:{v}`.
+        self.assertEqual( events[ 1 ].loan, 'vehicle-loan:possession-1' )
 
     def test_a_sale_records_its_date_for_running_cost_clipping( self ):
         # The sale date is recorded so materialization ends the possession's running costs at it (a sold
@@ -172,7 +182,7 @@ class VehicleDispositionTests( unittest.TestCase ):
         return SimpleNamespace(
             assets   = [ SimpleNamespace( handle = h, asset_class = AssetClass.DEPRECIATING, name = n )
                          for h, n in vehicles ],
-            debts    = [ SimpleNamespace( handle = h, secured_asset = s, name = n ) for h, s, n in debts ],
+            debts    = [ _debt_stub( h, s, n ) for h, s, n in debts ],
             subjects = [] )
 
     # A REPLACE sells the outgoing vehicle only once it is *complete* (its replacement carries structural
@@ -219,6 +229,7 @@ class VehicleDispositionTests( unittest.TestCase ):
             self._plans( kind = VehicleDispositionKind.SELL ) )
         self.assertEqual( [ type( e ).__name__ for e in into.scheduled_events ],
                           [ 'ScheduledRealization', 'ScheduledLoanPayoff' ] )
+        self.assertEqual( into.scheduled_events[ 1 ].loan, 'vehicle-loan:vehicle-1' )   # vehicle-scoped
 
     def test_retain_derives_nothing( self ):
         into = self._derive( self._profile( [ ( 'vehicle-1', 'Old car' ) ] ),
@@ -233,6 +244,23 @@ class VehicleDispositionTests( unittest.TestCase ):
         # Profile-change robustness: the vehicle is gone, so the disposition derives nothing (no crash).
         into = self._derive( self._profile( [] ), self._plans( kind = VehicleDispositionKind.SELL ) )
         self.assertEqual( ( into.possession_sales, into.scheduled_events ), ( {}, [] ) )
+
+
+class PayoffLoanHandleTests( unittest.TestCase ):
+    """A loan-payoff event resolves its debt to the *account* handle the loan materializes under -- so a
+    vehicle auto loan's payoff (from the Debt plan) targets `vehicle-loan:{v}`, not the `{v}-loan` fact."""
+
+    def test_a_vehicle_loan_payoff_targets_the_vehicle_scoped_account( self ):
+        profile = SimpleNamespace( debts = [ _debt_stub( 'vehicle-1-loan', 'vehicle-1', 'Car loan' ) ] )
+        self.assertEqual( _payoff_loan_handle( profile, 'vehicle-1-loan' ), 'vehicle-loan:vehicle-1' )
+
+    def test_a_non_vehicle_loan_payoff_keeps_the_debt_handle( self ):
+        mortgage = SimpleNamespace( handle = 'debt-1', secured_asset = 'property-1', name = 'Mortgage',
+                                    kind = DebtKind.MORTGAGE )
+        self.assertEqual( _payoff_loan_handle( SimpleNamespace( debts = [ mortgage ] ), 'debt-1' ), 'debt-1' )
+
+    def test_an_unknown_debt_handle_passes_through( self ):
+        self.assertEqual( _payoff_loan_handle( SimpleNamespace( debts = [] ), 'gone' ), 'gone' )
 
 
 if __name__ == '__main__':

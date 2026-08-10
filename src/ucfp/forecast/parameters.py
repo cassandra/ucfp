@@ -423,17 +423,6 @@ class ScheduledEvent:
             raise MissingAccountError( f'No holding with handle "{handle}" for the scheduled event.' )
         return holding
 
-    def _liability( self, chart : Chart, handle : Handle ) -> Account:
-        """The liability account `handle` refers to, for an event that targets a loan. Resolved
-        through the chart (loans are not in `holdings`); a MissingAccountError if no such account
-        exists or the handle names something that is not a liability."""
-        account = chart.account( handle )
-        if account is None:
-            raise MissingAccountError( f'No account with handle "{handle}" for the scheduled event.' )
-        if account.effective_account_type is not AccountType.LIABILITY:
-            raise MissingAccountError(
-                f'The account with handle "{handle}" is not a liability; a loan payoff needs one.' )
-        return account
 
 
 @dataclass( frozen = True )
@@ -463,9 +452,17 @@ class ScheduledLoanPayoff( ScheduledEvent ):
     event_date : date
     loan       : Handle
 
-    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
-        return LoanPayoff(
-            self.event_date, self._liability( chart, self.loan ), self._cash( chart ) )
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> Optional[ PeriodEvent ]:
+        # A payoff whose loan account never materialized -- a sold vehicle whose loan has no terms yet, or a
+        # loan already cleared -- has nothing to extinguish, so it is skipped rather than failing the run. A
+        # handle that resolves to a non-liability is still a real wiring error.
+        account = chart.account( self.loan )
+        if account is None:
+            return None
+        if account.effective_account_type is not AccountType.LIABILITY:
+            raise MissingAccountError(
+                f'The account with handle "{self.loan}" is not a liability; a loan payoff needs one.' )
+        return LoanPayoff( self.event_date, account, self._cash( chart ) )
 
 
 @dataclass( frozen = True )

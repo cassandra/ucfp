@@ -117,7 +117,7 @@ def materialize(
             + _vehicle_expenses( plans ) + _leased_current_expenses( plans, frame.start_date )
             + vehicle_items ),
         expense_streams  = recurring_streams + expense_streams + vehicle_streams,
-        loans            = _loans( profile, plans ),
+        loans            = _loans( profile, plans ) + _current_vehicle_loans( profile, plans ),
         contributions    = _contributions( profile, plans ),
         recurring_realizations = conversion_recurring + withdrawal_recurring,
         recurring_holding_purchases = _vehicle_holding_purchases( plans ),
@@ -169,7 +169,8 @@ def _loans( profile : Profile, plans : Plans ) -> list[ LoanParameters ]:
     balance) and the Plans `LoanRepayment` that says how to repay it (rate + remaining term). A
     trigger debt (a credit card) is not `is_amortizing` and is skipped -- the debt plan, not the
     balance sheet, models it. An amortizing debt with no repayment plan yet is also skipped; it
-    becomes a loan once the plan supplies its terms."""
+    becomes a loan once the plan supplies its terms. A vehicle's auto loan is excluded here and
+    materialized vehicle-scoped by `_current_vehicle_loans` instead."""
     repayments = { repayment.debt_handle : repayment for repayment in plans.loan_repayments }
     extra      = { prepayment.loan_handle : prepayment.annual_amount
                    for prepayment in plans.prepayments }
@@ -177,6 +178,8 @@ def _loans( profile : Profile, plans : Plans ) -> list[ LoanParameters ]:
     loans = []
     for debt in profile.debts:
         repayment = repayments.get( debt.handle )
+        if debt.kind is DebtKind.AUTO:
+            continue                                    # vehicle-scoped in `_current_vehicle_loans`
         if not debt.kind.is_amortizing or repayment is None:
             continue
         interest_class = _debt_interest_class( debt, assets.get( debt.secured_asset ) )
@@ -185,15 +188,41 @@ def _loans( profile : Profile, plans : Plans ) -> list[ LoanParameters ]:
     return loans
 
 
+def _current_vehicle_loans( profile : Profile, plans : Plans ) -> list[ LoanParameters ]:
+    """Each current owned vehicle's auto loan as an engine loan under its **vehicle-scoped** account
+    handles (`vehicle-loan:{v}` liability + `vehicle-loan-interest:{v}` interest), composed from the
+    `Debt(AUTO)` balance and the Plans `LoanRepayment` giving its rate and remaining term. Vehicle-scoped
+    (not the Debt's own `{v}-loan` handle) so a current car and its future replacements group as one and
+    its interest is groupable; keyed for the repayment/prepayment lookup by the Debt handle. An auto debt
+    with no repayment plan yet is skipped (no terms -> no loan), as any amortizing debt would be."""
+    repayments = { repayment.debt_handle : repayment for repayment in plans.loan_repayments }
+    extra      = { prepayment.loan_handle : prepayment.annual_amount
+                   for prepayment in plans.prepayments }
+    loans = []
+    for debt in profile.debts:
+        repayment = repayments.get( debt.handle )
+        if debt.kind is not DebtKind.AUTO or debt.secured_asset is None or repayment is None:
+            continue
+        loans.append( _loan(
+            debt, repayment, ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST, extra.get( debt.handle, Decimal( '0' ) ),
+            handle          = vehicle_loan_handle( debt.secured_asset ),
+            interest_handle = vehicle_loan_interest_handle( debt.secured_asset ) ) )
+    return loans
+
+
 def _loan( debt : Debt, repayment : LoanRepayment, interest_class : ExpenseTaxClass,
-           extra_principal : Decimal ) -> LoanParameters:
+           extra_principal : Decimal, *, handle : Optional[ str ] = None,
+           interest_handle : Optional[ str ] = None ) -> LoanParameters:
     """The engine view of an amortizing debt: its current balance is the opening balance, repaid at
     the plan's rate over its remaining term (the engine projects forward from there). A Plans
-    prepayment becomes the engine's annual extra principal."""
+    prepayment becomes the engine's annual extra principal. `handle` / `interest_handle` override the
+    account handles the loan and its interest materialize under (the vehicle loans scope theirs); by
+    default the loan takes the Debt's own handle and its interest none (an unstamped fallback column)."""
     return LoanParameters(
         name = debt.name, opening_balance = debt.balance, interest_rate = repayment.interest_rate,
         term = repayment.remaining_term, interest_class = interest_class,
-        annual_extra_principal = extra_principal, handle = debt.handle )
+        annual_extra_principal = extra_principal,
+        handle = handle if handle is not None else debt.handle, interest_handle = interest_handle )
 
 
 def _debt_interest_class( debt : Debt, secured_asset : Optional[ AssetProfile ] ) -> ExpenseTaxClass:
