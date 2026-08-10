@@ -55,6 +55,9 @@ from ucfp.inputs.plans.schemas import (
 from ucfp.inputs.assumptions.defaults import default_transaction_costs
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
+from ucfp.inputs.vehicle_handles import (
+    replacement_handle, successor_handle, vehicle_holding_handle, vehicle_loan_handle,
+    vehicle_loan_interest_handle )
 
 from ucfp.inputs.events import event_contributions, vehicle_disposition_contributions
 
@@ -311,26 +314,14 @@ def _is_owned( vehicle : Vehicle ) -> bool:
     return vehicle.payment_method in ( PaymentMethod.CASH, PaymentMethod.LOAN )
 
 
-def _replacement_handle( vehicle_handle : str ) -> str:
-    """The holding identity of the successor a Replace disposition buys -- derived from the current
-    vehicle's handle, so it is stable and distinct from any net-new vehicle's `vehicle-N`."""
-    return f'{vehicle_handle}-replacement'
-
-
 def _replacement_vehicle( disposition ) -> Vehicle:
     """The successor a Replace disposition buys, as a materializable `Vehicle`: the stored replacement
     spec with its identity and first-purchase date supplied by the disposition -- the handle derived from
     the current vehicle, the purchase date the handover date -- so it materializes exactly as a net-new
     vehicle does."""
     return replace( disposition.replacement,
-                    handle = _replacement_handle( disposition.vehicle_handle ),
+                    handle = replacement_handle( disposition.vehicle_handle ),
                     purchase_date = disposition.sale_date )
-
-
-def _leased_successor_handle( vehicle_handle : str ) -> str:
-    """The identity of the successor a Renew or Buy disposition starts at lease end -- derived from the
-    leased vehicle's handle, so it is stable and distinct from any other vehicle."""
-    return f'{vehicle_handle}-successor'
 
 
 def _leased_successor( disposition ) -> Vehicle:
@@ -339,7 +330,7 @@ def _leased_successor( disposition ) -> Vehicle:
     the leased vehicle, the purchase date the lease end -- so it materializes exactly as a net-new vehicle
     does (an owned holding that cycles on replacement)."""
     return replace( disposition.successor,
-                    handle = _leased_successor_handle( disposition.vehicle_handle ),
+                    handle = successor_handle( disposition.vehicle_handle ),
                     purchase_date = disposition.lease_end )
 
 
@@ -358,22 +349,6 @@ def _plan_vehicles( plan ) -> list[ Vehicle ]:
     successors   = [ _leased_successor( disposition ) for disposition in plan.leased_dispositions
                      if disposition.successor_ready ]
     return list( plan.vehicles ) + replacements + successors
-
-
-def _vehicle_holding_handle( vehicle_handle : str ) -> str:
-    """The account handle of an owned vehicle's holding -- scoped to the vehicle so each car is its own
-    depreciating asset."""
-    return f'vehicle:{vehicle_handle}'
-
-
-def _vehicle_loan_handle( vehicle_handle : str ) -> str:
-    """The base liability handle for a financed vehicle's loans -- the engine appends the replacement
-    cycle (each replacement originates its own loan), so the first cycle's account is `vehicle-loan:<h>:0`."""
-    return f'vehicle-loan:{vehicle_handle}'
-
-
-def _vehicle_loan_interest_handle( vehicle_handle : str ) -> str:
-    return f'vehicle-loan-interest:{vehicle_handle}'
 
 
 def _vehicle_financed_principal( vehicle : Vehicle ) -> Decimal:
@@ -402,7 +377,7 @@ def _vehicle_holding( vehicle : Vehicle ) -> AssetParameters:
     return AssetParameters(
         name = vehicle.name or 'Vehicle', asset_class = AssetClass.DEPRECIATING,
         opening_value = Decimal( '0' ), cost_basis = Decimal( '0' ),
-        handle = _vehicle_holding_handle( vehicle.handle ) )
+        handle = vehicle_holding_handle( vehicle.handle ) )
 
 
 def _vehicle_holdings( plans : Plans ) -> list[ AssetParameters ]:
@@ -423,7 +398,7 @@ def _vehicle_holding_purchase( vehicle : Vehicle ) -> RecurringHoldingPurchase:
     financed cars acquire the same holding this way; a financed one adds `_vehicle_loan_originations` to
     fund it."""
     return RecurringHoldingPurchase(
-        holding  = _vehicle_holding_handle( vehicle.handle ),
+        holding  = vehicle_holding_handle( vehicle.handle ),
         price    = vehicle.purchase_price,
         interval = Duration( vehicle.recurrence_years, TimeUnit.YEAR ),
         window   = DateWindow( start = vehicle.purchase_date, end = vehicle.end_date ),
@@ -454,8 +429,8 @@ def _vehicle_loan_origination( vehicle : Vehicle ) -> RecurringLoanOrigination:
         term            = _AUTO_LOAN_TERM,
         interval        = Duration( vehicle.recurrence_years, TimeUnit.YEAR ),
         window          = DateWindow( start = vehicle.purchase_date, end = vehicle.end_date ),
-        handle          = _vehicle_loan_handle( vehicle.handle ),
-        interest_handle = _vehicle_loan_interest_handle( vehicle.handle ) )
+        handle          = vehicle_loan_handle( vehicle.handle ),
+        interest_handle = vehicle_loan_interest_handle( vehicle.handle ) )
 
 
 def _vehicle_loan_originations( plans : Plans ) -> list[ RecurringLoanOrigination ]:
