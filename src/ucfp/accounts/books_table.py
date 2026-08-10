@@ -195,6 +195,18 @@ def _subtree_block( catalog : 'BooksTableColumnCatalog', keys : list,
     return start, end
 
 
+def _present_anchor( catalog : 'BooksTableColumnCatalog', key : BooksColumnKey,
+                     present : set ) -> Optional[ BooksColumnKey ]:
+    """The frontier key a reveal of `key` anchors at: `key` itself when present, else the nearest ancestor
+    that is -- a compressed single-child chain sits on the frontier as its top, so a drill aimed at the
+    compressed terminal lands there. None when no ancestor is present."""
+    while ( key is not None ) and ( key not in present ):
+        column = catalog.get( key )
+        key    = column.parent_key if column is not None else None
+        continue
+    return key
+
+
 def _reveal_newcomers( catalog : 'BooksTableColumnCatalog', kept : list ) -> list:
     """`kept` with each already-expanded summary's newly-appeared catalog members inserted -- collapsed,
     at the summary's group tail. A summary is expanded when at least one of its immediate members is
@@ -280,8 +292,10 @@ class BooksTableDefinition:
     def expand( self, catalog : 'BooksTableColumnCatalog',
                 key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
         """Reveal a shown summary's members just after it -- the summary stays as the group header. Only
-        members not already present are inserted. No-op if the column is removed, not an expandable
-        summary, or already expanded."""
+        members not already present are inserted. A compressed chain's terminal is not itself on the
+        frontier (its single-child top is), so the reveal anchors at the nearest present ancestor and the
+        members splice into the tree there. No-op if the column is removed, not an expandable summary, or
+        already expanded."""
         if key in self.removed_keys:
             return self
         column = catalog.get( key )
@@ -290,12 +304,13 @@ class BooksTableDefinition:
         present = set( self.column_keys )
         members = [ member_key for member_key in column.member_keys
                     if ( member_key in catalog ) and ( member_key not in present ) ]
-        if not members:
+        anchor  = _present_anchor( catalog, key, present )
+        if ( not members ) or ( anchor is None ):
             return self
         expanded : list[ BooksColumnKey ] = []
         for frontier_key in self.column_keys:
             expanded.append( frontier_key )
-            if frontier_key == key:
+            if frontier_key == anchor:
                 expanded.extend( members )
             continue
         return BooksTableDefinition( tuple( expanded ), self.removed_keys )
@@ -498,10 +513,10 @@ class BooksTableColumnCatalog:
 @dataclass( frozen = True )
 class BooksTableColumn:
     """One column as rendered. `column` is what it displays -- normally the frontier column, but for a
-    single-child chain (a group whose one shown member would duplicate its value) the chain's terminal,
-    with the absorbed groups' labels in `breadcrumb`. `op_key` is the key structural ops (move / remove /
-    collapse) act on -- the top of the chain -- while `expand_key` is the terminal, so drilling deeper
-    still works. `removed` marks a restore sliver; `can_expand` / `can_collapse` gate those controls;
+    single-child chain (a rung whose one member would duplicate its value) the chain's terminal, with the
+    absorbed rungs' labels in `breadcrumb`. `op_key` is the key structural ops (move / remove / collapse)
+    act on -- the top of the chain -- while `expand_key` is the terminal, so drilling deeper still works.
+    `removed` marks a restore sliver; `can_expand` / `can_collapse` gate those controls;
     `depth` / `group` drive the tint; `can_move_*` gate the reorder arrows at a group edge (a reorder is a
     within-group sibling swap)."""
     column         : BooksColumn
@@ -580,59 +595,67 @@ def _sibling_order( catalog : BooksTableColumnCatalog,
              for group in by_parent.values() for key in group }
 
 
-def _is_transparent( catalog : BooksTableColumnCatalog, key : BooksColumnKey, shown : set ) -> bool:
-    """A shown summary with exactly one member, that member also shown: its single expanded child
-    duplicates its value, so it is absorbed into the child's column (path compression)."""
+def _compressible( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> bool:
+    """A single-child grouping rung that adds no information: a summary with exactly one member, below a
+    type root. It duplicates that member's value, so the chain shows as its terminal (path compression). A
+    type root (parent-less) is exempt -- the top-level total stays a column even when it has one child."""
     column = catalog.get( key )
     return ( isinstance( column, BooksSummaryColumn ) and ( len( column.member_keys ) == 1 )
-             and ( column.member_keys[ 0 ] in shown ) )
+             and ( column.parent_key is not None ) )
 
 
-def _chain_top( catalog : BooksTableColumnCatalog, key : BooksColumnKey,
-                transparent : set ) -> tuple:
-    """Walk up from `key` through transparent single-child ancestors: the top ancestor (the column
-    structural ops act on for the whole chain) and the breadcrumb of absorbed group labels, top-down."""
-    top    = key
+def _chain_bottom( catalog : BooksTableColumnCatalog, key : BooksColumnKey ) -> tuple:
+    """Walk down from `key` through compressible single-child rungs to the chain terminal -- the first
+    descendant that is a leaf or a genuinely branching (multi-member) summary -- collecting the absorbed
+    rungs' labels top-down. The chain thus renders as its terminal alone: a leaf keeps its account (its
+    Journal reachable while collapsed, no dead-end expand), a branching summary keeps its own expand."""
     labels : list = []
-    parent = catalog.get( key ).parent_key
-    while ( parent is not None ) and ( parent in transparent ):
-        labels.insert( 0, catalog.get( parent ).label )
-        top    = parent
-        parent = catalog.get( parent ).parent_key
+    while _compressible( catalog, key ):
+        labels.append( catalog.get( key ).label )
+        key = catalog.get( key ).member_keys[ 0 ]
         continue
-    return top, tuple( labels )
+    return key, tuple( labels )
+
+
+def _absorbed( catalog : BooksTableColumnCatalog, key : BooksColumnKey, shown : set ) -> bool:
+    """`key` is already carried by a shown compressible ancestor: its parent is a shown single-child rung,
+    so the whole chain renders once, at that ancestor's position -- this member is skipped here."""
+    parent = catalog.get( key ).parent_key
+    return ( parent is not None ) and ( parent in shown ) and _compressible( catalog, parent )
 
 
 def _render_columns( catalog : BooksTableColumnCatalog,
                      definition : BooksTableDefinition ) -> tuple[ BooksTableColumn, ... ]:
-    """Resolve the frontier to rendered columns. A single-child chain (a group whose one shown member
-    would duplicate its value, recursively) renders as its terminal alone, carrying the absorbed groups
-    as a breadcrumb and pointing structural ops at the chain top; every other column renders itself. Each
-    carries removed state, expand/collapse availability, tint depth/group, and sibling-move reach. Keys
-    absent from the catalog are skipped (callers adapt first)."""
-    removed     = set( definition.removed_keys )
-    frontier    = set( definition.column_keys )
-    shown       = { key for key in definition.column_keys if ( key in catalog ) and ( key not in removed ) }
-    transparent = { key for key in shown if _is_transparent( catalog, key, shown ) }
-    positions   = _sibling_order( catalog, definition.column_keys )
+    """Resolve the frontier to rendered columns. A single-child chain (a rung whose one member would
+    duplicate its value, recursively) renders as its terminal alone -- carrying the absorbed rungs as a
+    breadcrumb, structural ops pointed at the chain top and drill-in at the terminal -- so it never offers
+    a dead-end expand and a terminal account stays reachable while collapsed. Every other column renders
+    itself. Each carries removed state, expand/collapse availability, tint depth/group, and sibling-move
+    reach. Keys absent from the catalog are skipped (callers adapt first)."""
+    removed   = set( definition.removed_keys )
+    frontier  = set( definition.column_keys )
+    shown     = { key for key in definition.column_keys if ( key in catalog ) and ( key not in removed ) }
+    positions = _sibling_order( catalog, definition.column_keys )
     rendered : list[ BooksTableColumn ] = []
     for key in definition.column_keys:
-        if ( key not in catalog ) or ( key in transparent ):
-            continue                                   # absorbed into its single child's column
-        column          = catalog.get( key )
-        is_removed      = key in removed
-        top, breadcrumb = ( key, () ) if is_removed else _chain_top( catalog, key, transparent )
-        breadcrumb      = tuple( label for label in breadcrumb if label != column.label )
-        expanded        = column.expandable and any( member in frontier for member in column.member_keys )
-        index, count    = positions[ top ]
+        if key not in catalog:
+            continue
+        is_removed = key in removed
+        if ( not is_removed ) and _absorbed( catalog, key, shown ):
+            continue                                   # rendered by its single-child ancestor's column
+        terminal, breadcrumb = ( key, () ) if is_removed else _chain_bottom( catalog, key )
+        column       = catalog.get( terminal )
+        breadcrumb   = tuple( label for label in breadcrumb if label != column.label )
+        expanded     = column.expandable and any( member in frontier for member in column.member_keys )
+        index, count = positions[ key ]
         rendered.append( BooksTableColumn(
             column         = column,
-            op_key         = top,
-            expand_key     = key,
+            op_key         = key,
+            expand_key     = terminal,
             removed        = is_removed,
             can_expand     = ( not is_removed ) and column.expandable and ( not expanded ),
-            can_collapse   = ( not is_removed ) and ( expanded or ( top != key ) ),
-            depth          = _column_depth( catalog, top ),
+            can_collapse   = ( not is_removed ) and expanded,
+            depth          = _column_depth( catalog, key ),
             group          = _column_group( catalog, key ),
             can_move_left  = index > 0,
             can_move_right = index < count - 1,
