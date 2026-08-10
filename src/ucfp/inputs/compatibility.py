@@ -26,7 +26,7 @@ from ucfp.inputs.vehicle_expenses import plan_has_content
 
 # The shared lead-in for a plans-drift report, so the raise-at-use error and the pre-run readiness
 # check spell the drift the same way.
-DRIFT_LEAD_IN = 'These plans reference things your situation no longer has:'
+DRIFT_LEAD_IN = 'These plans reference things your profile no longer has:'
 
 
 class PlansIncompatibleError( ValueError ):

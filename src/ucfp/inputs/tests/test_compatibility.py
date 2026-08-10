@@ -226,6 +226,22 @@ class ReconcileTests( SimpleTestCase ):
         self.assertEqual(
             plans_reconciled_with_profile( _full_profile(), plans ).drawdown.sweep_allocation, [] )
 
+    def test_a_pruned_sweep_sums_to_exactly_one_despite_rounding( self ):
+        # Three equal survivors rescale to 1/3 each -- which sum to 0.999... under naive division; the
+        # residue-on-the-last-weight keeps the total exactly 1 and every weight positive, as
+        # AssetAllocation requires. (The 0.6/0.1 case above happens to divide cleanly, so this pins the
+        # rounding path.)
+        profile = Profile( assets = [
+            AssetProfile( handle = handle, name = handle, asset_class = AssetClass.CASH,
+                          opening_value = Decimal( '1' ) ) for handle in ( 'a', 'b', 'c' ) ] )
+        plans = Plans( drawdown = DrawdownPolicy( sweep_allocation = [
+            ( 'a', Decimal( '1' ) ), ( 'b', Decimal( '1' ) ),
+            ( 'c', Decimal( '1' ) ), ( 'gone', Decimal( '1' ) ) ] ) )
+        swept = plans_reconciled_with_profile( profile, plans ).drawdown.sweep_allocation
+        self.assertEqual( [ handle for handle, _ in swept ], [ 'a', 'b', 'c' ] )
+        self.assertEqual( sum( ( weight for _, weight in swept ), Decimal( '0' ) ), Decimal( '1' ) )
+        self.assertTrue( all( weight > 0 for _, weight in swept ) )
+
     def test_reconcile_leaves_a_clean_plan_unchanged( self ):
         # A plan with no drift reconciles to an equal plan (nothing pruned).
         clean = Plans( timing = [ RetirementTiming( subject_handle = 'you' ) ],

@@ -774,10 +774,12 @@ class InterviewView( View ):
     def _plans_drift( request, flow ):
         """The current Plans record's drift notice for the Plans-flow banner (stale Profile references +
         the one-click reconcile), or None off the Plans flow (only Plans reference the Profile) or before a
-        profile exists to judge against."""
+        *complete* profile exists to judge against. Gated on `completed_profile` (not merely the latest),
+        matching the reconcile action -- so the banner never shows a fix that would no-op, and an
+        incomplete profile can't read as false drift."""
         if flow != 'plans':
             return None
-        profile_record = latest_profile( request.organization )
+        profile_record = completed_profile( request.organization )
         if profile_record is None:
             return None
         return plans_drift( load_profile( profile_record ), current_plans_record( request ) )

@@ -38,15 +38,25 @@ def _complete_profile( organization ):
     return record
 
 
-def _drifted_scenario( organization ):
-    """A saved scenario whose Plans hold a repayment for a debt the profile does not have (drift)."""
-    plans_record = PlansRecord( organization = organization, label = 'Foo P' )
+def _drifted_plans_record( organization, label = 'Foo P' ):
+    """A Plans record holding a repayment for a debt the profile does not have (drift)."""
+    plans_record = PlansRecord( organization = organization, label = label )
     save_plans( plans_record, Plans( loan_repayments = [ LoanRepayment(
         debt_handle = 'gone', interest_rate = Rate( Decimal( '0.04' ) ),
         remaining_term = Duration( 25, TimeUnit.YEAR ) ) ] ) )
-    assumptions_record = AssumptionsRecord( organization = organization, label = 'Foo A' )
+    return plans_record
+
+
+def _scenario_on( organization, plans_record, label ):
+    """A saved scenario built on `plans_record` (its own fresh assumptions)."""
+    assumptions_record = AssumptionsRecord( organization = organization, label = f'{label} A' )
     save_assumptions( assumptions_record, Assumptions() )
-    return create_scenario( organization, plans_record, assumptions_record, 'Foo' )
+    return create_scenario( organization, plans_record, assumptions_record, label )
+
+
+def _drifted_scenario( organization ):
+    """A saved scenario whose Plans hold a repayment for a debt the profile does not have (drift)."""
+    return _scenario_on( organization, _drifted_plans_record( organization ), 'Foo' )
 
 
 class ScenarioReconcileViewTests( TestCase ):
@@ -104,6 +114,17 @@ class ScenarioReconcileViewTests( TestCase ):
         response = self._post( scenario.uuid )
         self.assertEqual( response.status_code, 302 )
         self.assertEqual( self._repayment_debts( scenario ), [ 'gone' ] )   # unchanged
+
+    def test_reconciling_shared_plans_clears_drift_for_every_scenario_on_them( self ):
+        # Plans, not scenarios, carry the Profile dependencies: a Plans record shared across scenarios
+        # holds one set of references, so a single Plans-keyed reconcile clears the drift for all of them.
+        _complete_profile( self.organization )
+        shared    = _drifted_plans_record( self.organization )
+        first     = _scenario_on( self.organization, shared, 'First' )
+        second    = _scenario_on( self.organization, shared, 'Second' )
+        self._post_plans( shared.uuid )
+        self.assertEqual( self._repayment_debts( first  ), [] )
+        self.assertEqual( self._repayment_debts( second ), [] )
 
     def test_reconcile_is_scoped_to_the_organization( self ):
         _complete_profile( self.organization )

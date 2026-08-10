@@ -15,8 +15,8 @@ from types import SimpleNamespace
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer
 from ucfp.inputs.events import (
-    EventContributions, POSSESSION_ROLE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent, TransferEvent,
-    vehicle_disposition_contributions )
+    EventContributions, POSSESSION_ROLE, PROPERTY_ROLE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent,
+    SellPropertyEvent, TransferEvent, vehicle_disposition_contributions )
 from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
 
@@ -141,6 +141,14 @@ class SellPossessionTests( unittest.TestCase ):
         # bare "None" a missing name used to print.
         summary = SellPossessionEvent().summary( _sell( 'possession-1' ), _sale_profile( [], [] ) )
         self.assertEqual( summary, 'Sell a removed possession in 2030' )
+
+    def test_the_property_sale_summary_also_degrades_when_the_property_was_removed( self ):
+        # The parallel fix for a sold-then-removed property (its role points at a REAL_ESTATE asset gone
+        # from the profile) -- "a removed property", not "None".
+        event   = PlanEvent( kind = EventKind.SELL_PROPERTY, date = date( 2030, 6, 1 ),
+                             selections = { PROPERTY_ROLE: 'property-1' } )
+        summary = SellPropertyEvent().summary( event, _sale_profile( [], [] ) )
+        self.assertEqual( summary, 'Sell a removed property in 2030' )
 
     def test_offerable_only_when_a_possession_exists( self ):
         self.assertFalse( SellPossessionEvent().offerable( _sale_profile( [] ) ) )

@@ -293,7 +293,7 @@ class SellPossessionEvent( EventType ):
 
     def summary( self, event : PlanEvent, profile ) -> str:
         handle = event.selections.get( POSSESSION_ROLE )
-        name   = _names( profile ).get( handle ) or 'a removed possession'   # the item may be gone (drift)
+        name   = _names( profile ).get( handle ) or 'a removed possession'  # may be gone (drift)
         notice = ' (loan paid off)' if _secured_loans( profile, handle ) else ''
         return f'Sell {name} in {event.date.year}{notice}'
 

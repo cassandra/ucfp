@@ -10,7 +10,8 @@ last step (`is_last`), else "Next".
   Forecast page does, so a deleted debt's stale repayment (or a removed possession's sale event) is visible
   where the user meets its effect, not silently absent. `drift` is None off the Plans flow.{% endcomment %}
   {% if drift %}
-  <div class="alert alert-warning">
+  {# role=alert: this banner is injected via antinode when navigating Plans sections, so announce it. #}
+  <div class="alert alert-warning" role="alert">
     {% include 'inputs/panes/scenario_drift.html' with drift=drift %}
   </div>
   {% endif %}
