@@ -6,9 +6,10 @@ someone thinks about the cars in their driveway. Under the covers the two are st
 `AUTO` `Debt` secured against it, its balance entered here and shown read-only in Debts); a **leased**
 vehicle is a thin `LeasedVehicle` fact (a lease confers no ownership -- its terms and end-of-term plan are
 the vehicle plan's). Both share one handle space (`vehicle-N`), so a vehicle keeps its identity when its
-owned/leased choice is flipped: the form moves it between the asset store and the lease-fact store, and
-its now-mismatched vehicle-plan disposition is dropped (the owned and leased kinds differ). This module
-owns adding, editing, and removing a vehicle of either kind, and the combined list the section renders.
+owned/leased choice is flipped: the form moves it between the asset store and the lease-fact store. A
+flip can leave a now-mismatched vehicle-plan disposition (the owned and leased kinds differ); that drift
+is reconciled on demand at the run surface, not dropped on the edit. This module owns adding, editing,
+and removing a vehicle of either kind, and the combined list the section renders.
 """
 from dataclasses import replace
 
@@ -18,7 +19,6 @@ from common.forms import MoneyField, StyledFormMixin
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.compatibility import plans_without_vehicles
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle
 from ucfp.inputs.properties import delete_property
@@ -67,13 +67,14 @@ def vehicle_heading( profile, handle : str ):
 
 def delete_current_vehicle( profile, plans, handle : str ):
     """Remove a current vehicle -- an owned holding (and its secured loan, via `delete_property`) or a
-    leased fact -- and drop any vehicle-plan disposition keyed to it (owned or leased)."""
+    leased fact. Plans are untouched: a disposition left keyed to the removed vehicle is reconciled on
+    demand at the run surface, not dropped here."""
     if any( asset.handle == handle for asset in profile.assets ):
         profile, plans = delete_property( profile, plans, handle )
     else:
         profile = replace(
             profile, leased_vehicles = [ v for v in profile.leased_vehicles if v.handle != handle ] )
-    return profile, plans_without_vehicles( plans, { handle } )
+    return profile, plans
 
 
 class CurrentVehicleForm( StyledFormMixin, forms.Form ):
@@ -82,8 +83,8 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
     (written as a `DEPRECIATING` holding + an `AUTO` `Debt`); Leased reveals nothing more (written as a
     `LeasedVehicle` fact). Non-blocking and handle-minted: it materializes only once its needed fields are
     set (a name, plus a value when owned), leaving other vehicles intact. Flipping ownership on an
-    existing vehicle moves it between the two stores under the same handle and drops its now-mismatched
-    disposition."""
+    existing vehicle moves it between the two stores under the same handle; any now-mismatched disposition
+    is left for on-demand reconciliation, not dropped here."""
 
     name      = forms.CharField( label = 'Name', max_length = 100, required = False )
     ownership = forms.ChoiceField(
@@ -136,20 +137,15 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
     def apply( self, profile, plans ):
         # Non-blocking and non-destructive: a partial edit writes nothing and leaves other vehicles
         # intact. A complete form writes the vehicle in the store its ownership chooses, removing it from
-        # the other; if that flips its type, its now-mismatched disposition is dropped.
+        # the other. Plans are never adjusted here: flipping a vehicle's type can strand its disposition,
+        # but that drift is reconciled on demand at the run surface, not eagerly on this edit.
         if not self._complete():
             return profile, plans
-        handle     = self._handle or _minted_current_vehicle_handle( profile )
-        was_owned  = any( asset.handle == handle for asset in profile.assets )
-        was_leased = any( vehicle.handle == handle for vehicle in profile.leased_vehicles )
+        handle = self._handle or _minted_current_vehicle_handle( profile )
         if self._ownership() == LEASED:
             profile = self._as_leased( profile, handle )
-            if was_owned:                                    # type flipped -> its owned disposition is stale
-                plans = plans_without_vehicles( plans, { handle } )
         else:
             profile = self._as_owned( profile, handle )
-            if was_leased:                                   # type flipped -> its leased disposition is stale
-                plans = plans_without_vehicles( plans, { handle } )
         return profile, plans
 
     def _as_owned( self, profile, handle : str ):

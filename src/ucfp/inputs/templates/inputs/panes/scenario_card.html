@@ -2,7 +2,8 @@
 One scenario as a hero card: its name (inline-renamable) with the prominent Review/Finish action, and its
 Plans and Assumptions shown as nested parts (label + description + a quiet Edit into that part's flow). The
 scenario is the editing context; its parts are reached from it. Reads `row` (a scenario with its `complete`
-flag and per-component `plans_uses`/`assumptions_uses` share counts) and `can_delete_scenario` from context.
+flag, its `drift` notice or None, and per-component `plans_uses`/`assumptions_uses` share counts) and
+`can_delete_scenario` from context.
 {% endcomment %}
 <div class="card mb-3">
   <div class="card-body">
@@ -12,11 +13,20 @@ flag and per-component `plans_uses`/`assumptions_uses` share counts) and `can_de
       {% url 'scenario_rename' row.scenario.uuid as rename_url %}
       {% include 'inputs/panes/inline_rename.html' with kind='scenario' uuid=row.scenario.uuid rename_url=rename_url label=row.scenario.label aria='Scenario name' title=True wrapper_class='mr-3' %}
       {% if not row.complete %}<span class="badge badge-secondary mr-3">in progress</span>{% endif %}
+      {% if row.drift %}<span class="badge badge-warning mr-3">needs reconciling</span>{% endif %}
       <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0">
         {% csrf_token %}
         <button type="submit" class="btn btn-primary btn-sm">{% if row.complete %}Review scenario{% else %}Finish setup{% endif %} &rarr;</button>
       </form>
     </div>
+    {% comment %}Drift is not blocking here (the card keeps every action) -- it names the stale references
+    and offers the same one-click reconcile the Forecast page does, so the card explains why the scenario
+    would not run rather than silently reading as ready.{% endcomment %}
+    {% if row.drift %}
+    <div class="alert alert-warning py-2 mb-3">
+      {% include 'inputs/panes/scenario_drift.html' with drift=row.drift %}
+    </div>
+    {% endif %}
     <div class="row">
       <div class="col-md-6 mb-2 mb-md-0">
         {% url 'plans_edit' row.scenario.plans.uuid as plans_edit_url %}

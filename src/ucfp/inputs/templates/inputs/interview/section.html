@@ -5,6 +5,16 @@ that form because nesting a form inside it would be invalid HTML. The button rea
 last step (`is_last`), else "Next".
 {% endcomment %}
 <div id="{{ section_target }}">
+  {% comment %}Plans-flow only: these plans reference Profile entities that are gone. Not blocking here --
+  the section still edits normally -- but it names the drift and offers the same one-click reconcile the
+  Forecast page does, so a deleted debt's stale repayment (or a removed possession's sale event) is visible
+  where the user meets its effect, not silently absent. `drift` is None off the Plans flow.{% endcomment %}
+  {% if drift %}
+  {# role=alert: this banner is injected via antinode when navigating Plans sections, so announce it. #}
+  <div class="alert alert-warning" role="alert">
+    {% include 'inputs/panes/scenario_drift.html' with drift=drift %}
+  </div>
+  {% endif %}
   <h2 class="h4 mb-3">{{ current_section.title }}</h2>
   {% if current_section.outer_template %}{% include current_section.outer_template %}{% endif %}
   <div class="interview-advance">

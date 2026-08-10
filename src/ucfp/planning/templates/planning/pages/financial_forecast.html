@@ -19,6 +19,28 @@ chooser below), and linking to the uuid-less workspace so it resumes without re-
 </div>
 {% endif %}
 
+{% if drift_scenarios %}
+{% comment %}
+The drift-blocked scenarios: runnable but for Plans references the Profile no longer has, so they are
+kept out of the chooser below. Each is named, with the shared scenario-drift pane listing what drifted
+and offering the one-click reconcile, after which it rejoins the chooser. `drift_scenarios` is the list
+of {label, drift}, where `drift` is the notice from `inputs.drift.plans_drift`.
+{% endcomment %}
+<div class="alert alert-warning mt-3">
+  <h2 class="h6 mb-2">Some scenarios need reconciling</h2>
+  <p class="small mb-2">These scenarios can't run until you remove the stale references their plans
+    still hold. Each is listed below with a one-click fix.</p>
+  <ul class="list-unstyled mb-0">
+    {% for item in drift_scenarios %}
+    <li class="border-top pt-2 mt-2">
+      <strong>{{ item.label }}</strong>
+      {% include 'inputs/panes/scenario_drift.html' with drift=item.drift %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 {% if not has_profile %}
 <div class="alert alert-info mt-3">
   <h2 class="h5 mb-2">First, set up your profile</h2>
@@ -68,7 +90,9 @@ chooser below), and linking to the uuid-less workspace so it resumes without re-
     </div>
   </div>
 </form>
-{% else %}
+{% elif not drift_scenarios %}
+{# Only prompt to build/resume when there is nothing runnable *and* nothing merely drift-blocked --
+   a drift-blocked scenario is not "no scenario", so its reconcile above is the action, not a new build. #}
 {% include 'planning/panes/scenario_required.html' %}
 {% endif %}
 

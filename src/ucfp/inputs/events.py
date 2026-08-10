@@ -249,9 +249,9 @@ class SellPropertyEvent( EventType ):
         return [ ReferenceSpec( PROPERTY_ROLE, 'Property', _properties ) ]
 
     def summary( self, event : PlanEvent, profile ) -> str:
-        name   = _names( profile ).get( event.selections.get( PROPERTY_ROLE ) )
-        notice = ( ' (mortgage paid off)'
-                   if _secured_loans( profile, event.selections.get( PROPERTY_ROLE ) ) else '' )
+        handle = event.selections.get( PROPERTY_ROLE )
+        name   = _names( profile ).get( handle ) or 'a removed property'    # may be gone (drift)
+        notice = ' (mortgage paid off)' if _secured_loans( profile, handle ) else ''
         return f'Sell {name} in {event.date.year}{notice}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
@@ -292,9 +292,9 @@ class SellPossessionEvent( EventType ):
         return [ ReferenceSpec( POSSESSION_ROLE, 'Possession', _possessions ) ]
 
     def summary( self, event : PlanEvent, profile ) -> str:
-        name   = _names( profile ).get( event.selections.get( POSSESSION_ROLE ) )
-        notice = ( ' (loan paid off)'
-                   if _secured_loans( profile, event.selections.get( POSSESSION_ROLE ) ) else '' )
+        handle = event.selections.get( POSSESSION_ROLE )
+        name   = _names( profile ).get( handle ) or 'a removed possession'  # may be gone (drift)
+        notice = ' (loan paid off)' if _secured_loans( profile, handle ) else ''
         return f'Sell {name} in {event.date.year}{notice}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):

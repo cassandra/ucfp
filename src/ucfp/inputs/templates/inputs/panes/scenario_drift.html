@@ -1,0 +1,17 @@
+{% comment %}
+The stale-references notice for one drifted scenario: what its plans reference that the profile no longer
+has (a bullet list), and the one-click reconcile (a POST to `drift.fix_url`) that strips them. Shared by
+every surface that surfaces drift -- the forecast hub, the Scenarios cards, and the Plans flow -- so they
+show the same thing and offer the same fix. Reads `drift`, the notice `inputs.drift.plans_drift` builds:
+`lead_in`, `references`, `fix_url`, and `fix_label`.
+{% endcomment %}
+<div class="mt-2">
+  <p class="text-muted small mb-1">{{ drift.lead_in }}</p>
+  <ul class="text-muted small mb-2">
+    {% for reference in drift.references %}<li>{{ reference }}</li>{% endfor %}
+  </ul>
+  <form method="post" action="{{ drift.fix_url }}" class="m-0">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-secondary btn-sm">{{ drift.fix_label }}</button>
+  </form>
+</div>

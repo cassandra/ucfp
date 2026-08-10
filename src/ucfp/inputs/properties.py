@@ -16,7 +16,6 @@ from common.forms import CHOOSE_PLACEHOLDER, MoneyField, StyledFormMixin
 
 from ucfp.accounts.enums import AssetClass, RealPropertyType
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.compatibility import plans_without_debts
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, PropertyProfile
 from ucfp.inputs.widgets import IsoDateInput
@@ -46,10 +45,9 @@ def properties_context( profile, asset_class : AssetClass ) -> list:
 
 
 def delete_property( profile, plans, property_handle : str ):
-    """Remove a property as a unit: its holding, any gross income, and any debts secured against it with
-    their full plan reap (repayment, extra principal, payoff). Its operating expenses need no reap here
-    -- property-expense overrides key by handle and are pruned on the next merge, and materialization
-    only reaches properties that still exist."""
+    """Remove a property as a unit: its holding, any gross income, and any debts secured against it. Plans
+    are left untouched -- a plan (a secured debt's repayment/payoff, an override) left keyed to what was
+    removed is reconciled on demand at the run surface, not eagerly here."""
     secured = { debt.handle for debt in profile.debts
                 if debt.secured_asset == property_handle }
     profile = replace(
@@ -58,7 +56,6 @@ def delete_property( profile, plans, property_handle : str ):
         income_flows = [ flow for flow in profile.income_flows
                          if flow.property_handle != property_handle ],
         debts        = [ debt for debt in profile.debts if debt.handle not in secured ] )
-    plans = plans_without_debts( plans, secured )
     return profile, plans
 
 

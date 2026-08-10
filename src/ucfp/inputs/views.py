@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
 from user.decorators import ensure_organization
@@ -35,6 +36,8 @@ from ucfp.inputs.assumptions.repository import (
 from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
     existing_pairings, rename_scenario, scenarios_for )
+from ucfp.inputs.compatibility import plans_reconciled_with_profile
+from ucfp.inputs.drift import plans_drift
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -87,7 +90,9 @@ class ScenariosHomeView( View ):
         plans_uses       = Counter( scenario.plans_id for scenario in scenarios )
         assumptions_uses = Counter( scenario.assumptions_id for scenario in scenarios )
         complete_ids     = self._complete_component_ids( organization, profile_record )
-        scenario_rows    = self._scenario_rows( scenarios, plans_uses, assumptions_uses, *complete_ids )
+        profile          = load_profile( profile_record ) if profile_record is not None else None
+        scenario_rows    = self._scenario_rows(
+            scenarios, profile, plans_uses, assumptions_uses, *complete_ids )
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
@@ -107,15 +112,17 @@ class ScenariosHomeView( View ):
                  { record.id for record in completed_assumptions( profile_record, organization ) } )
 
     @staticmethod
-    def _scenario_rows( scenarios, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
+    def _scenario_rows( scenarios, profile, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
         """Each saved scenario as a row -- `complete` (both components' flows walked, so an in-progress one
-        can offer to resume setup) plus how many scenarios share each of its components (`plans_uses` /
-        `assumptions_uses`), which drives the "shared" indicator. `scenarios` and the usage counters are
-        prepared once by the caller so the page makes a single scenarios query."""
+        can offer to resume setup), its `drift` notice against the current `profile` (None when it fully
+        resolves, else the stale references + reconcile shown on the card), and how many scenarios share
+        each of its components (`plans_uses` / `assumptions_uses`) for the "shared" indicator. `scenarios`
+        and the usage counters are prepared once by the caller so the page makes a single scenarios query."""
         rows = list()
         for scenario in scenarios:
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
             rows.append( { 'scenario': scenario, 'complete': complete,
+                           'drift': plans_drift( profile, scenario.plans ) if profile is not None else None,
                            'plans_uses': plans_uses[ scenario.plans_id ],
                            'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
         return rows
@@ -421,6 +428,53 @@ class ScenarioDeleteView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
+class PlansReconcileView( View ):
+    """`/inputs/plans/<uuid>/reconcile/` -- strip a Plans record's references that no longer resolve
+    against the current Profile (the "Remove stale references" fix every drift surface offers). Plans, not
+    scenarios, carry the Profile dependencies, so this is the *core* reconcile -- one fix that serves every
+    scenario sharing these Plans. POST, since it edits the Plans; returns to the page it was triggered from.
+    No-op when there is no complete profile to reconcile against (nothing would resolve)."""
+
+    def post( self, request, uuid ):
+        plans_record = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+        _reconcile_plans_record( request.organization, plans_record )
+        return _reconcile_redirect( request )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioReconcileView( View ):
+    """`/inputs/scenarios/<uuid>/reconcile/` -- reconcile a scenario by its Plans: the scenario-keyed thin
+    wrapper over `PlansReconcileView`, dereferencing the scenario to its Plans record and reconciling that.
+    POST; returns to the page it was triggered from."""
+
+    def post( self, request, uuid ):
+        scenario = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = request.organization, usage_role = UsageRole.SAVED )
+        _reconcile_plans_record( request.organization, scenario.plans )
+        return _reconcile_redirect( request )
+
+
+def _reconcile_plans_record( organization, plans_record ):
+    """Strip `plans_record`'s references that no longer resolve against the org's current profile -- the
+    core both reconcile views share. A no-op when there is no complete profile (reconciling against nothing
+    would strip everything)."""
+    profile_record = completed_profile( organization )
+    if profile_record is not None:
+        save_plans( plans_record, plans_reconciled_with_profile(
+            load_profile( profile_record ), load_plans( plans_record ) ) )
+
+
+def _reconcile_redirect( request ):
+    """Back to the page the reconcile was triggered from -- the forecast hub, a Scenarios card, or a Plans
+    section -- re-rendered without the stale references; the Scenarios home is the fallback when the
+    referer is missing or off-site."""
+    referer = request.META.get( 'HTTP_REFERER' )
+    if referer and url_has_allowed_host_and_scheme( referer, allowed_hosts = { request.get_host() } ):
+        return redirect( referer )
+    return redirect( 'scenarios_home' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
 class FlowEntryView( View ):
     """`/inputs/<flow>/` -- edit a single input flow (Profile, Plans, or Assumptions) on its own. `flow`
     is set per route via `as_view`. Profile is the standalone first flow; Plans/Assumptions are edited on
@@ -711,8 +765,24 @@ class InterviewView( View ):
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,
+            # The Plans-flow drift banner: these plans reference removed Profile entities (None off Plans).
+            'drift'                : self._plans_drift( request, flow ),
             **self._profile_status( request, flow ),
         }
+
+    @staticmethod
+    def _plans_drift( request, flow ):
+        """The current Plans record's drift notice for the Plans-flow banner (stale Profile references +
+        the one-click reconcile), or None off the Plans flow (only Plans reference the Profile) or before a
+        *complete* profile exists to judge against. Gated on `completed_profile` (not merely the latest),
+        matching the reconcile action -- so the banner never shows a fix that would no-op, and an
+        incomplete profile can't read as false drift."""
+        if flow != 'plans':
+            return None
+        profile_record = completed_profile( request.organization )
+        if profile_record is None:
+            return None
+        return plans_drift( load_profile( profile_record ), current_plans_record( request ) )
 
     @staticmethod
     def _is_last_step( request, sections, section, flow ) -> bool:
