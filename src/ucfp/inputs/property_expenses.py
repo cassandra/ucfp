@@ -139,7 +139,7 @@ class PropertyExpensesForm( forms.Form ):
             default.widget.attrs[ 'placeholder' ] = '0'
             default.widget.attrs[ 'class' ] += ' ' + self._default_class( expense )   # keep money styling
             default.widget.attrs[ 'aria-label' ] = self._cell_label( expense, self._default_column_label() )
-            if expense.count is not None:                  # directly editable; the calculator fills it on demand
+            if expense.count is not None:                  # editable; the calculator fills it on demand
                 default.widget.attrs[ f'data-{AppConst.CALC_DATA_ATTR}' ] = str( ri )
                 add_calculator_fields( self, ri, expense.count, expense.cost_each, expense.lifespan )
             self.fields[ self._default_key( ri ) ] = default
@@ -264,7 +264,7 @@ class PropertyExpensesForm( forms.Form ):
     def _edited( self, ri : int, expense ) -> PropertyExpense:
         """`expense` with its default, cadence, and overrides taken from the matrix. The Default is read
         directly from its cell, durable or not; a durable additionally remembers its calculator inputs
-        (which no longer drive the amount -- they only repopulate the calculator). Overrides are the
+        (which do not drive the amount -- they only repopulate the calculator). Overrides are the
         filled per-property cells (blank drops back to the default); collapsed, there are none."""
         cleaned   = self.cleaned_data
         interval  = read_cadence( self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain )

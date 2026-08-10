@@ -163,8 +163,8 @@ def calculator_cells( form, prefix, per_year_amount : Decimal ) -> dict:
 
 def read_calculator_inputs( form, prefix ) -> tuple:
     """A durable's remembered calculator inputs -- (count, cost_each, lifespan) -- read back from its
-    fields. The amount is no longer derived from these (it is entered directly per band); the inputs are
-    kept only to repopulate the calculator when it is reopened."""
+    fields. The amount is not derived from these (it is entered directly per band); the inputs are kept
+    only to repopulate the calculator when it is reopened."""
     cleaned = form.cleaned_data
     return ( cleaned.get( _calc_count_key( prefix ) ),
              cleaned.get( _calc_cost_key( prefix ) ),

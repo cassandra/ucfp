@@ -88,9 +88,45 @@ class DurableAmountAuthoritativeTest( TestCase ):
         html = render_to_string(
             _SECTION_TEMPLATE, { 'recurring_form': form, 'AppConst': AppConst },
             request = RequestFactory().get( '/' ) )
-        durables = sum( 1 for expense in form._expenses if expense.count is not None )
-        self.assertEqual( html.count( AppConst.CALC_AUTOFILL_CLASS ), durables )   # one Auto fill per durable
-        self.assertIn( f'data-{AppConst.CALC_DATA_ATTR}="{ei}"', html )            # bound to the row's calc id
+        # The durable row's panel offers an Auto fill checkbox -- checked, bound to the row's calc id.
+        self.assertInHTML(
+            f'<input type="checkbox" class="{AppConst.CALC_AUTOFILL_CLASS}" '
+            f'data-{AppConst.CALC_DATA_ATTR}="{ei}" '
+            f'aria-label="Auto fill amounts from the calculator" checked>', html )
+
+    def test_a_durable_survives_a_no_edit_round_trip_without_recompute( self ):
+        # Amounts hand-set to diverge from what the remembered inputs would compute (3 x 500 / 5 = 300):
+        # a plain resubmit with no edits must keep the amounts and the inputs, never recomputing from them.
+        spans  = [ 65, None ]
+        seed   = RecurringExpensesForm( profile = Profile(), plans = Plans( expense_spans = spans ) )
+        stored = replace( seed._expenses[ self._durable_index( seed ) ],
+                          amounts = [ Decimal( '100' ), Decimal( '400' ) ],
+                          count = 3, cost_each = Decimal( '500' ), lifespan = 5 )
+        plans  = Plans( expense_spans = spans, recurring_expenses = [ stored ] )
+        form   = RecurringExpensesForm( profile = Profile(), plans = plans )
+        bound  = RecurringExpensesForm( _baseline_data( form ), profile = Profile(), plans = plans )
+        self.assertTrue( bound.is_valid(), bound.errors )
+        _profile, new_plans = bound.apply( Profile(), plans )
+        durable = next( e for e in new_plans.recurring_expenses if e.handle == stored.handle )
+        self.assertEqual( durable.amounts, [ Decimal( '100' ), Decimal( '400' ) ] )   # not recomputed to 300
+        self.assertEqual(
+            ( durable.count, durable.cost_each, durable.lifespan ), ( 3, Decimal( '500' ), 5 ) )
+
+    def test_a_durable_with_no_calculator_inputs_keeps_its_amounts( self ):
+        # Entered amounts but a blank calculator: the amounts stand on their own and the inputs read back
+        # None (the "charge nothing" case the removed durable_amount() used to guard).
+        profile, plans = Profile(), Plans()
+        form = RecurringExpensesForm( profile = profile, plans = plans )
+        ei   = self._durable_index( form )
+        data = _baseline_data( form )
+        data[ f'amt_{ei}_0' ] = '175'
+        data[ f'count_{ei}' ] = data[ f'cost_{ei}' ] = data[ f'lifespan_{ei}' ] = ''
+        bound = RecurringExpensesForm( data, profile = profile, plans = plans )
+        self.assertTrue( bound.is_valid(), bound.errors )
+        _profile, new_plans = bound.apply( profile, plans )
+        durable = new_plans.recurring_expenses[ ei ]
+        self.assertEqual( durable.amounts, [ Decimal( '175' ) ] )
+        self.assertIsNone( durable.count )
 
     def test_a_durable_that_varies_by_band_flags_the_change_like_any_row( self ):
         # Phase 3: now that a durable can differ across bands, it earns the same up/down change flags as

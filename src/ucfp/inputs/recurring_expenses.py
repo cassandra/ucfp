@@ -87,7 +87,7 @@ class RecurringExpensesForm( forms.Form ):
                 cell = MoneyField( required = False, min_value = 0 )
                 cell.initial = self._span_amount( expense, si )
                 cell.widget.attrs[ 'class' ] += f' {AppConst.SPAN_AMOUNT_CLASS}'   # scanned for changes
-                if durable:                                # directly editable; the calculator fills it on demand
+                if durable:                                # editable; the calculator fills it on demand
                     cell.widget.attrs[ 'class' ] += f' {AppConst.CALC_TARGET_CLASS}'
                     cell.widget.attrs[ f'data-{AppConst.CALC_DATA_ATTR}' ] = str( ei )
                 self.fields[ self._amount_key( ei, si ) ] = cell
@@ -146,7 +146,7 @@ class RecurringExpensesForm( forms.Form ):
     def _cells( self, ei : int, expense ) -> list:
         """One amount cell per span, each flagged when its shown value differs from the previous span's
         -- a step up or down -- so a reader can scan which expenses change with age. The first span is
-        the baseline (never flagged); durables vary by band like any other row now, so they flag too."""
+        the baseline (never flagged); durables vary by band like any other row, so they flag too."""
         cells    = list()
         previous = None
         for si in range( len( self._spans ) ):
@@ -177,10 +177,10 @@ class RecurringExpensesForm( forms.Form ):
     def _edited( self, ei : int, expense, columns : list ):
         """`expense` with its cadence from this row's fields and its per-span amounts re-read from the
         columns -- authoritative, just like a normal row (per-age variation comes for free). A durable
-        additionally remembers its calculator inputs (count/cost-each/lifespan), which no longer drive the
+        additionally remembers its calculator inputs (count/cost-each/lifespan), which do not drive the
         amount -- they only repopulate the calculator when it is reopened."""
         interval = read_cadence( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
-        amounts  = [ amounts[ ei ] for _, amounts in columns ]
+        amounts  = [ column_amounts[ ei ] for _, column_amounts in columns ]
         if expense.count is not None:
             count, cost_each, lifespan = read_calculator_inputs( self, ei )
             return replace( expense, interval = interval, amounts = amounts,

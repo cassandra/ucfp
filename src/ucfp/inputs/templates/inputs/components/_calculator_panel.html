@@ -10,5 +10,6 @@ Buy {{ calc.count }} at {{ calc.cost }} each, replace every {{ calc.lifespan }} 
 &rarr; &asymp; $<span class="{{ AppConst.CALC_READOUT_CLASS }}">{{ calc.per_year }}</span>/yr
 <label class="ml-2 mb-0 text-nowrap">
   <input type="checkbox" class="{{ AppConst.CALC_AUTOFILL_CLASS }}"
-         data-{{ AppConst.CALC_DATA_ATTR }}="{{ calc_id }}" checked> Auto fill
+         data-{{ AppConst.CALC_DATA_ATTR }}="{{ calc_id }}"
+         aria-label="Auto fill amounts from the calculator" checked> Auto fill
 </label>
