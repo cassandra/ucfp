@@ -699,16 +699,28 @@ window.App.Inputs = (function () {
         return $( selector + '[' + dataAttr( C.CALC_DATA_ATTR ) + '="' + id + '"]' );
     }
 
+    function autofillOn( id ) {
+        return calcById( id, classSelector( C.CALC_AUTOFILL_CLASS ) ).prop( 'checked' );
+    }
+
+    // React to any calculator input -- including its Auto fill checkbox, which lives in the same panel.
+    // The readout always previews the estimate; the amount target(s) fill from it only while Auto fill is
+    // checked, so an unchecked calculator is a reference the user can hand-tune the bands against without
+    // it clobbering their edits (and ticking it back on applies the current estimate). Both readout and
+    // target are thousands-grouped, so the live preview reads the same as a saved-and-reloaded amount.
     function updateCalculator( id ) {
         const $panel   = calcById( id, classSelector( C.CALC_PANEL_CLASS ) );
         const count    = calcNumber( $panel, '[name^="count_"]' );
         const cost     = calcNumber( $panel, '[name^="cost_"]' );
         const lifespan = calcNumber( $panel, '[name^="lifespan_"]' ) || 1;
         const annual   = Math.round( ( count * cost ) / lifespan );
-        // The readout (inside the panel) mirrors the amount target, both thousands-grouped like every
-        // money value once enhanced -- so the live preview reads the same as a saved-and-reloaded amount.
-        calcById( id, classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? groupedThousands( annual ) : '' );
         $panel.find( classSelector( C.CALC_READOUT_CLASS ) ).text( groupedThousands( annual ) );
+        if ( ! autofillOn( id ) ) {
+            return;
+        }
+        const $targets = calcById( id, classSelector( C.CALC_TARGET_CLASS ) );
+        $targets.val( annual ? groupedThousands( annual ) : '' );
+        updateSpanTrends( $targets.first().closest( 'tr' ) );   // filled flat -> the change arrows clear
     }
 
     // The recurring-expenses table flags each amount that differs from the previous age span (a tinted

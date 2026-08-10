@@ -9,11 +9,15 @@ from decimal import Decimal
 
 from django.core.management import call_command
 from django.http import QueryDict
-from django.test import TestCase
+from django.template.loader import render_to_string
+from django.test import RequestFactory, TestCase
 
+from ucfp.environment.constants import AppConst
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import Profile
 from ucfp.inputs.recurring_expenses import RecurringExpensesForm
+
+_SECTION_TEMPLATE = 'inputs/interview/sections/recurring_expenses.html'
 
 
 def _baseline_data( form ) -> QueryDict:
@@ -73,3 +77,16 @@ class DurableAmountAuthoritativeTest( TestCase ):
         self.assertTrue( bound.is_valid(), bound.errors )
         _profile, new_plans = bound.apply( profile, plans )
         self.assertEqual( new_plans.recurring_expenses[ ei ].amounts, [ Decimal( '0' ) ] )
+
+    def test_a_durable_row_renders_editable_with_the_auto_fill_helper( self ):
+        form = RecurringExpensesForm( profile = Profile(), plans = Plans() )
+        ei   = self._durable_index( form )
+        attrs = form.fields[ f'amt_{ei}_0' ].widget.attrs
+        self.assertNotIn( 'readonly', attrs )                          # directly editable (Phase 1)
+        self.assertIn( AppConst.CALC_TARGET_CLASS, attrs[ 'class' ] )  # still a calculator fill target
+        html = render_to_string(
+            _SECTION_TEMPLATE, { 'recurring_form': form, 'AppConst': AppConst },
+            request = RequestFactory().get( '/' ) )
+        durables = sum( 1 for expense in form._expenses if expense.count is not None )
+        self.assertEqual( html.count( AppConst.CALC_AUTOFILL_CLASS ), durables )   # one Auto fill per durable
+        self.assertIn( f'data-{AppConst.CALC_DATA_ATTR}="{ei}"', html )            # bound to the row's calc id
