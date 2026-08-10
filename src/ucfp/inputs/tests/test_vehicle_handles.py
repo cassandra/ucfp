@@ -5,8 +5,9 @@ debt -- back to the one `vehicle-N` it belongs to (so a current vehicle and its 
 from django.test import SimpleTestCase
 
 from ucfp.inputs.vehicle_handles import (
-    loan_debt_handle, replacement_handle, root_vehicle, successor_handle, vehicle_holding_handle,
-    vehicle_loan_handle, vehicle_loan_interest_handle )
+    is_vehicle_loan_handle, is_vehicle_loan_interest_handle, loan_debt_handle, replacement_handle,
+    root_vehicle, successor_handle, vehicle_holding_handle, vehicle_loan_handle,
+    vehicle_loan_interest_handle )
 
 
 class MintTests( SimpleTestCase ):
@@ -18,6 +19,28 @@ class MintTests( SimpleTestCase ):
         self.assertEqual( loan_debt_handle( 'vehicle-3' ), 'vehicle-3-loan' )
         self.assertEqual( replacement_handle( 'vehicle-3' ), 'vehicle-3-replacement' )
         self.assertEqual( successor_handle( 'vehicle-3' ), 'vehicle-3-successor' )
+
+
+class LoanHandleClassificationTests( SimpleTestCase ):
+    """The loan/interest predicates split the two liability-vs-expense handles by their exact head token,
+    so `vehicle-loan-interest:` is never mistaken for a loan -- the run table's per-axis rollups rely on it."""
+
+    def test_it_recognises_loan_handles_current_and_recurring( self ):
+        for handle in ( 'vehicle-loan:vehicle-3', 'vehicle-loan:vehicle-3:0',
+                        'vehicle-loan:vehicle-3-replacement:2' ):
+            self.assertTrue( is_vehicle_loan_handle( handle ), handle )
+            self.assertFalse( is_vehicle_loan_interest_handle( handle ), handle )
+
+    def test_it_recognises_interest_handles_and_keeps_them_distinct_from_loans( self ):
+        for handle in ( 'vehicle-loan-interest:vehicle-3', 'vehicle-loan-interest:vehicle-3:0',
+                        'vehicle-loan-interest:vehicle-3-replacement:2' ):
+            self.assertTrue( is_vehicle_loan_interest_handle( handle ), handle )
+            self.assertFalse( is_vehicle_loan_handle( handle ), handle )
+
+    def test_neither_matches_a_holding_a_debt_fact_or_a_foreign_handle( self ):
+        for handle in ( 'vehicle:vehicle-3', 'vehicle-3', 'vehicle-3-loan', 'mortgage', 'cash' ):
+            self.assertFalse( is_vehicle_loan_handle( handle ), handle )
+            self.assertFalse( is_vehicle_loan_interest_handle( handle ), handle )
 
 
 class RootVehicleTests( SimpleTestCase ):

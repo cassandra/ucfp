@@ -42,6 +42,10 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
               {% icon 'gear' size='sm' %}
             </button>
             <div class="dropdown-menu dropdown-menu-right">
+              {% comment %}The menu is stable: Move left/right, Transaction history, and Hide always
+              appear, disabled when inapplicable, so their place never shifts under the cursor. Expand and
+              Collapse are the exception -- a column is one or the other, so only the applicable toggle
+              shows (a leaf that is neither shows neither).{% endcomment %}
               {% if col.can_expand %}
               <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
                     data-async="#books-table">
@@ -51,7 +55,6 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
                 <button type="submit" class="dropdown-item">Expand</button>
               </form>
               {% endif %}
-              {% if col.can_collapse or col.can_move_left or col.can_move_right %}
               <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
                     data-async="#books-table">
                 {% csrf_token %}
@@ -59,17 +62,16 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
                 {% if col.can_collapse %}
                 <button type="submit" name="op" value="collapse" class="dropdown-item">Collapse</button>
                 {% endif %}
-                {% if col.can_move_left %}
-                <button type="submit" name="op" value="move_left" class="dropdown-item">Move left</button>
-                {% endif %}
-                {% if col.can_move_right %}
-                <button type="submit" name="op" value="move_right" class="dropdown-item">Move right</button>
-                {% endif %}
+                <button type="submit" name="op" value="move_left" class="dropdown-item"
+                        {% if not col.can_move_left %}disabled aria-disabled="true"{% endif %}>Move left</button>
+                <button type="submit" name="op" value="move_right" class="dropdown-item"
+                        {% if not col.can_move_right %}disabled aria-disabled="true"{% endif %}>Move right</button>
               </form>
-              {% endif %}
               {% if col.column.account_uuid %}
               <a href="{% url 'books_journal' run_uuid=record.uuid account_uuid=col.column.account_uuid %}"
                  data-async="modal" class="dropdown-item">Transaction history</a>
+              {% else %}
+              <span class="dropdown-item disabled" aria-disabled="true">Transaction history</span>
               {% endif %}
               <div class="dropdown-divider"></div>
               <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
