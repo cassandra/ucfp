@@ -405,7 +405,10 @@ class ScheduledEvent:
         """Whether this event occurs within the interval `span`."""
         return span.start_date <= self.event_date <= span.end_date
 
-    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
+    def to_period_event( self, holdings : dict[ str, Account ],
+                         chart : Chart ) -> Optional[ PeriodEvent ]:
+        """This event as a `PeriodEvent`, or None to skip it (e.g. a payoff whose loan account never
+        materialized -- see `ScheduledLoanPayoff`)."""
         raise NotImplementedError
 
     def _cash( self, chart : Chart ) -> Account:
@@ -422,7 +425,6 @@ class ScheduledEvent:
         if holding is None:
             raise MissingAccountError( f'No holding with handle "{handle}" for the scheduled event.' )
         return holding
-
 
 
 @dataclass( frozen = True )

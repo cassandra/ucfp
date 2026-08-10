@@ -204,7 +204,8 @@ def _current_vehicle_loans( profile : Profile, plans : Plans ) -> list[ LoanPara
         if debt.kind is not DebtKind.AUTO or debt.secured_asset is None or repayment is None:
             continue
         loans.append( _loan(
-            debt, repayment, ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST, extra.get( debt.handle, Decimal( '0' ) ),
+            debt, repayment, interest_class = ExpenseTaxClass.NON_DEDUCTIBLE_INTEREST,
+            extra_principal = extra.get( debt.handle, Decimal( '0' ) ),
             handle          = vehicle_loan_handle( debt.secured_asset ),
             interest_handle = vehicle_loan_interest_handle( debt.secured_asset ) ) )
     return loans

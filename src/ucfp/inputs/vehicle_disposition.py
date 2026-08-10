@@ -35,8 +35,8 @@ _DEFAULT_LOAN_APR_PERCENT = BUILTIN_ASSUMPTIONS.auto_loan_apr.fraction * 100   #
 
 # A monthly-derived rate above this reads as "doesn't fit" -- the calculator declines to fabricate a rate
 # from a monthly/term inconsistent with the balance (a payment implying, say, 60%/yr is not a real auto
-# loan). Kept in sync with the client calculator's ceiling in inputs.js.
-_MAX_PLAUSIBLE_APR = Decimal( '0.30' )
+# loan). The ceiling has one source, `AppConst` (a percent), shared with the client calculator.
+_MAX_PLAUSIBLE_APR = Decimal( AppConst.MAX_PLAUSIBLE_LOAN_APR_PERCENT ) / 100
 
 
 def _plausible_rate_from_monthly( balance, monthly, months : int ):
@@ -96,15 +96,16 @@ def _disposition_row( asset, disposition, loan ) -> dict:
 def _loan_summary( profile, plans, handle : str ):
     """A current financed vehicle's loan status for its list row -- its rate and remaining term when set, a
     prompt when not (so a retained financed car is not silently missed), or None when it carries no auto
-    loan. The terms live behind the row's editor; this surfaces them so the row prompts when they are unset."""
+    loan. Its terms live behind the row's editor; this surfaces them so the row prompts when unset."""
     financed = any( d.kind is DebtKind.AUTO and d.secured_asset == handle for d in profile.debts )
     if not financed:
         return None
     repayment = _vehicle_repayment( plans, handle )
     if repayment is None:
         return 'Loan terms not set'
-    rate = f'{repayment.interest_rate.fraction * 100:.2f}'.rstrip( '0' ).rstrip( '.' )   # 5.00 -> 5, 5.50 -> 5.5
-    return f'Loan: {rate}%, {repayment.remaining_term.months()} mo left'
+    percent   = repayment.interest_rate.fraction * 100
+    rate_text = f'{percent:.2f}'.rstrip( '0' ).rstrip( '.' )     # trim trailing zeros: 5.00 -> 5, 5.50 -> 5.5
+    return f'Loan: {rate_text}%, {repayment.remaining_term.months()} mo left'
 
 
 def _summary( disposition ) -> str:
@@ -146,24 +147,26 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
         widget = forms.RadioSelect(
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     sale_date = forms.DateField( label = 'Sell or replace on', required = False, widget = IsoDateInput() )
-    # The current loan (an owned, financed vehicle only): the terms re-homed here from the Debt plan. Its
-    # balance is a Profile fact shown read-only (`loan_balance`); rate and monthly are the two views of the
-    # same amortization over `loan_months`, kept consistent by the client calculator -- editing the monthly
-    # (or the months) back-solves the rate, editing the rate fills the monthly. The rate is what is stored;
-    # the monthly is a convenience the server reads only to back-solve the rate without JS. Shown only when
-    # the vehicle carries an auto loan (`is_financed`); the rate pre-fills the assumed default until set.
-    loan_rate    = PercentField( label = 'Rate (%)', required = False, min_value = 0,
-                                 css_class = AppConst.CURRENT_LOAN_RATE_CLASS, initial = _DEFAULT_LOAN_APR_PERCENT )
+    # The current loan (an owned, financed vehicle only): its terms, re-homed here from the Debt plan. Rate
+    # and monthly are two views of one amortization over `loan_months` (the rate is stored; the monthly is
+    # a no-JS back-solve); shown only when financed, the rate pre-filling the assumed default until set.
+    # The `CURRENT_LOAN_*` constants own the fuller client/server contract.
+    loan_rate    = PercentField(
+        label = 'Rate (%)', required = False, min_value = 0,
+        css_class = AppConst.CURRENT_LOAN_RATE_CLASS, initial = _DEFAULT_LOAN_APR_PERCENT )
     loan_monthly = MoneyField( label = 'Monthly payment', required = False, min_value = 0,
                                css_class = AppConst.CURRENT_LOAN_MONTHLY_CLASS )
     loan_months  = forms.IntegerField(
         label = 'Months left', required = False, min_value = 1,
-        widget = forms.NumberInput( attrs = { 'class' : f'form-control {AppConst.CURRENT_LOAN_MONTHS_CLASS}' } ) )
+        widget = forms.NumberInput(
+            attrs = { 'class' : f'form-control {AppConst.CURRENT_LOAN_MONTHS_CLASS}' } ) )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         self._handle  = handle
         self._profile = profile
         super().__init__( data, initial = self._initial( plans ) if handle else None )
+        # The rate blanks (with a hint) when a monthly/term doesn't fit; point the input at that hint.
+        self.fields[ 'loan_rate' ].widget.attrs[ 'aria-describedby' ] = 'current-loan-hint'
 
     def _auto_debt( self ):
         """This vehicle's auto-loan `Debt`, or None when it is not financed -- the current loan the card
@@ -174,7 +177,7 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
 
     @property
     def is_financed( self ) -> bool:
-        """Whether this vehicle carries an auto loan -- the card shows the current-loan subsection only then."""
+        """Whether the vehicle carries an auto loan -- the card shows the current-loan subsection then."""
         return self._auto_debt() is not None
 
     @property

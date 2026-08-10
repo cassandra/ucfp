@@ -28,8 +28,8 @@ from ucfp.inputs.plans.schemas import (
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile
 from ucfp.inputs.vehicle_disposition import (
-    LeasedVehicleDispositionForm, VehicleDispositionForm, all_dispositions_context, dispositions_context,
-    leased_dispositions_context )
+    LeasedVehicleDispositionForm, VehicleDispositionForm, _plausible_rate_from_monthly,
+    all_dispositions_context, dispositions_context, leased_dispositions_context )
 from ucfp.inputs.vehicle_handles import loan_debt_handle
 
 
@@ -131,7 +131,7 @@ class VehicleDispositionFormTests( unittest.TestCase ):
 
 class VehicleLoanTermsTests( unittest.TestCase ):
     """The current-loan terms (rate + months left) the card re-homes from the Debt plan: shown only for a
-    financed vehicle, written as its `LoanRepayment`, pre-filled on edit, and kept alongside the disposition."""
+    financed vehicle, written as its `LoanRepayment`, pre-filled on edit, and kept with the disposition."""
 
     def test_a_financed_vehicle_shows_the_loan_subsection( self ):
         form = VehicleDispositionForm( profile = _financed_profile(), plans = Plans(), handle = 'vehicle-1' )
@@ -181,7 +181,7 @@ class VehicleLoanTermsTests( unittest.TestCase ):
         plans   = _apply( _financed_profile( balance = '18000' ), Plans(), 'vehicle-1',
                           kind = 'KEEP', loan_monthly = str( monthly ), loan_months = '36' )
         self.assertEqual( len( plans.loan_repayments ), 1 )
-        # A whole-dollar monthly cannot encode the exact rate, so the back-solve lands within ~0.1%.
+        # A whole-dollar monthly cannot encode the exact rate, so the back-solve is asserted loosely (~0.5%).
         self.assertAlmostEqual( plans.loan_repayments[ 0 ].interest_rate.fraction, Decimal( '0.05' ),
                                 places = 2 )
 
@@ -224,8 +224,33 @@ class VehicleLoanTermsTests( unittest.TestCase ):
                   balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ),
             Debt( handle = 'debt-1', name = 'Mortgage', kind = DebtKind.MORTGAGE,
                   balance = Decimal( '300000' ), secured_asset = 'property-1' ) ] )
-        form = DebtPlanForm( profile = profile, plans = Plans() )
-        self.assertEqual( [ debt.handle for debt in form._debts ], [ 'debt-1' ] )   # auto loan not listed
+        form  = DebtPlanForm( profile = profile, plans = Plans() )
+        names = [ row[ 'name' ] for row in form.rows ]
+        self.assertEqual( names, [ 'Mortgage' ] )                       # the auto loan is not listed
+
+
+class PlausibleRateTests( unittest.TestCase ):
+    """The plausibility guard on the monthly-derived rate: below the ~30% APR cap it back-solves a Rate,
+    at/below zero-interest it is 0%, and above the cap or when the payment can't retire the balance it is
+    None (so an inconsistent monthly/term never fabricates a stored rate)."""
+
+    def test_just_below_the_cap_back_solves_a_rate( self ):
+        below = level_payment( Decimal( '20000' ), Decimal( '0.29' ) / 12, 36 )   # ~29% APR, under the cap
+        rate  = _plausible_rate_from_monthly( Decimal( '20000' ), below, 36 )
+        self.assertIsNotNone( rate )
+        self.assertLess( rate.fraction, Decimal( '0.30' ) )
+
+    def test_just_above_the_cap_is_none( self ):
+        above = level_payment( Decimal( '20000' ), Decimal( '0.31' ) / 12, 36 )   # ~31% APR, over the cap
+        self.assertIsNone( _plausible_rate_from_monthly( Decimal( '20000' ), above, 36 ) )
+
+    def test_the_zero_interest_monthly_is_a_zero_rate( self ):
+        # A monthly of exactly balance/months amortizes at 0% -- a valid in-range rate, not None.
+        rate = _plausible_rate_from_monthly( Decimal( '18000' ), Decimal( '500' ), 36 )   # 18,000 / 36 = 500
+        self.assertEqual( rate.fraction, Decimal( '0' ) )
+
+    def test_a_monthly_that_cannot_retire_the_balance_is_none( self ):
+        self.assertIsNone( _plausible_rate_from_monthly( Decimal( '18000' ), Decimal( '400' ), 36 ) )
 
 
 class DispositionListTests( unittest.TestCase ):
@@ -462,7 +487,7 @@ class LeasedDispositionFormRenderTests( unittest.TestCase ):
         for legend in ( 'Current lease', 'At lease end', 'Successor' ):
             self.assertIn( legend, html )
         attr = f'data-{AppConst.SWITCH_CASE_DATA_ATTR}'
-        self.assertIn( f'{attr}="{form.successor_kinds}"', html )       # the successor block shows for Renew/Buy
+        self.assertIn( f'{attr}="{form.successor_kinds}"', html )       # successor block: Renew/Buy
         self.assertIn( f'{attr}="{form.financed_kinds}"', html )        # the down/monthly row
 
 

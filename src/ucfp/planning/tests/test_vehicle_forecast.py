@@ -7,21 +7,26 @@ sticker-price expense). A LOAN car is the same owned, depreciating holding finan
 loan: each cycle originates an auto-loan that amortizes on the books, and the outgoing car's loan is paid
 off at trade-in.
 """
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
 from django.core.management import call_command
 from django.test import TestCase
 
+from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.forecast import Forecast
+from ucfp.forecast.parameters import ScheduledLoanPayoff
 from ucfp.inputs.assumptions.schemas import Assumptions
-from ucfp.inputs.plans.enums import PaymentMethod
-from ucfp.inputs.plans.schemas import Plans, Vehicle, VehiclePlan
-from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
+from ucfp.inputs.plans.enums import PaymentMethod, VehicleDispositionKind
+from ucfp.inputs.plans.schemas import (
+    LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
+from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, SubjectProfile
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
@@ -177,3 +182,77 @@ class FinancedVehicleForecastTest( TestCase ):
         spent = ( without_car.ledger.market_value( without_car.chart.account( 'cash' ), through = through )
                   - with_car.ledger.market_value( with_car.chart.account( 'cash' ), through = through ) )
         self.assertEqual( spent, Decimal( '5125' ) )       # down = (30,000 - 25,000) x 1.025, not 30,750
+
+
+# --- Current (owned) vehicle loans -----------------------------------------
+
+def _run_with( profile : Profile, plans : Plans ) -> Bookkeeper:
+    """Like `_run`, but over a caller-supplied profile (the current-vehicle tests add an owned car)."""
+    frame = ForecastFrame(
+        start_date = date( 2026, 1, 1 ), end_date = date( 2036, 12, 31 ),
+        granularity = Duration( 1, TimeUnit.YEAR ) )
+    return Bookkeeper( Forecast( materialize(
+        profile = profile, plans = plans, assumptions = _assumptions(), frame = frame ) ).run().books )
+
+
+def _financed_current_profile() -> Profile:
+    """A base run profile plus one owned, financed current vehicle -- a DEPRECIATING holding and the `AUTO`
+    `Debt` secured against it (handle `vehicle-1-loan`)."""
+    base = _profile()
+    return replace(
+        base,
+        assets = base.assets + [ AssetProfile(
+            handle = 'vehicle-1', name = 'Civic', asset_class = AssetClass.DEPRECIATING,
+            opening_value = Decimal( '20000' ) ) ],
+        debts = [ Debt( handle = 'vehicle-1-loan', name = 'Civic loan', kind = DebtKind.AUTO,
+                        balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ) ] )
+
+
+def _current_loan_plans( disposition : VehicleDisposition ) -> Plans:
+    """A current vehicle loan (5%, 60 months on `vehicle-1-loan`) plus one disposition for it."""
+    return Plans(
+        loan_repayments = [ LoanRepayment(
+            debt_handle = 'vehicle-1-loan', interest_rate = Rate.percent( Decimal( '5' ) ),
+            remaining_term = Duration( 60, TimeUnit.MONTH ) ) ],
+        vehicle_plan = VehiclePlan( dispositions = [ disposition ] ) )
+
+
+class CurrentVehicleLoanForecastTest( TestCase ):
+    """A current owned vehicle's auto loan materializes vehicle-scoped and behaves end to end: it amortizes
+    under `vehicle-loan:{v}`, its sale pays it off (the positive payoff path the no-op guard exists beside),
+    and a Replace keeps the current loan and its successor's recurring loan under distinct handles."""
+
+    def setUp( self ):
+        call_command( 'seed_parameter_sets' )
+
+    def test_a_sold_financed_vehicles_loan_amortizes_then_is_paid_off( self ):
+        reader = _run_with( _financed_current_profile(), _current_loan_plans( VehicleDisposition(
+            vehicle_handle = 'vehicle-1', kind = VehicleDispositionKind.SELL,
+            sale_date = date( 2029, 1, 1 ) ) ) )
+        reader.assert_balanced()
+        loan = reader.chart.account( 'vehicle-loan:vehicle-1' )       # materialized vehicle-scoped
+        self.assertIsNotNone( loan )
+        self.assertGreater( reader.ledger.natural_balance( loan, through = date( 2028, 12, 31 ) ),
+                            Decimal( '0' ) )                          # owing before the sale
+        self.assertEqual( reader.ledger.natural_balance( loan, through = date( 2030, 12, 31 ) ),
+                          Decimal( '0' ) )                            # the sale paid it off
+
+    def test_a_replace_keeps_the_current_loan_and_its_successor_distinct( self ):
+        successor = Vehicle(
+            handle = '', name = 'Civic', purchase_price = Decimal( '32000' ), recurrence_years = 5,
+            payment_method = PaymentMethod.LOAN, down_payment = Decimal( '4000' ) )
+        params = materialize(
+            profile = _financed_current_profile(),
+            plans   = _current_loan_plans( VehicleDisposition(
+                vehicle_handle = 'vehicle-1', kind = VehicleDispositionKind.REPLACE,
+                sale_date = date( 2029, 1, 1 ), replacement = successor ) ),
+            assumptions = _assumptions(),
+            frame = ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2036, 12, 31 ),
+                                   granularity = Duration( 1, TimeUnit.YEAR ) ) )
+        current_loans = { loan.handle for loan in params.loans }
+        originations  = { origination.handle for origination in params.recurring_loan_originations }
+        payoffs       = { event.loan for event in params.events if isinstance( event, ScheduledLoanPayoff ) }
+        self.assertIn( 'vehicle-loan:vehicle-1', current_loans )                   # the current loan (t0)
+        self.assertIn( 'vehicle-loan:vehicle-1-replacement', originations )    # successor's recurring loan
+        self.assertNotIn( 'vehicle-loan:vehicle-1', originations )                 # distinct -- no collision
+        self.assertIn( 'vehicle-loan:vehicle-1', payoffs )                         # the sale pays it off

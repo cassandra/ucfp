@@ -158,6 +158,10 @@ class AppConst:
     CURRENT_LOAN_MONTHLY_CLASS  = 'js-current-loan-monthly'  # the monthly-payment input
     CURRENT_LOAN_MONTHS_CLASS   = 'js-current-loan-months'   # the remaining-months input
     CURRENT_LOAN_HINT_CLASS     = 'js-current-loan-hint'     # shown when the monthly/term doesn't fit
+    # A monthly-derived rate above this APR (percent) reads as "doesn't fit" -- the calculator declines to
+    # fabricate a rate from a monthly/term inconsistent with the balance. Shared by the client calculator
+    # (via `window.AppConst`) and the server's no-JS back-solve, so the ceiling has one source.
+    MAX_PLAUSIBLE_LOAN_APR_PERCENT = 30
 
     # The recurring-expenses table's per-column delete: the x stamps its span index into the form's
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.

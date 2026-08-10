@@ -26,5 +26,5 @@ class LoanPayoffGuardTests( SimpleTestCase ):
         assets = Account( name = 'Assets', account_type = AccountType.ASSET )
         cash   = Account( name = 'Cash', parent = assets, handle = 'cash' )
         payoff = ScheduledLoanPayoff( event_date = date( 2030, 1, 1 ), loan = 'cash' )
-        with self.assertRaises( MissingAccountError ):
+        with self.assertRaisesMessage( MissingAccountError, 'not a liability' ):   # the type guard fired
             payoff.to_period_event( {}, self._chart( assets, cash ) )

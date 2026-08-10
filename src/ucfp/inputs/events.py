@@ -107,7 +107,7 @@ def _secured_loans( profile, asset_handle : str ) -> list:
 def _loan_account_handle( debt ) -> str:
     """The chart account handle a secured debt's loan materializes under: a vehicle auto loan is
     vehicle-scoped (`vehicle-loan:{v}`, keyed off the secured vehicle), every other secured loan keeps the
-    Debt's own handle -- mirroring `materialization._current_vehicle_loans` / `_loans`."""
+    Debt's own handle."""
     if debt.kind is DebtKind.AUTO and debt.secured_asset is not None:
         return vehicle_loan_handle( debt.secured_asset )
     return debt.handle

@@ -793,7 +793,7 @@ class Forecast:
             if not event.in_span( span ):
                 continue
             period_event = event.to_period_event( self._baseline.holding_by_handle, chart )
-            if period_event is not None:                 # a skipped payoff (its loan never materialized) drops out
+            if period_event is not None:                 # a skipped payoff (no such loan account) drops out
                 scheduled.append( period_event )
         # Originations first, so the proceeds are on the books before any same-span event that reads a
         # balance (e.g. a settle-and-re-originate cycle whose payoff must see the freshly borrowed loan).

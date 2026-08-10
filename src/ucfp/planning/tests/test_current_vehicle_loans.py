@@ -62,5 +62,5 @@ class CurrentVehicleLoanTests( SimpleTestCase ):
         profile  = Profile( debts = [ mortgage ] )
         plans    = Plans( loan_repayments = [ _repayment( 'debt-1' ) ] )
         generic  = _loans( profile, plans )
-        self.assertEqual( [ loan.handle for loan in generic ], [ 'debt-1' ] )   # own handle, not vehicle-scoped
+        self.assertEqual( [ loan.handle for loan in generic ], [ 'debt-1' ] )   # its own handle
         self.assertEqual( _current_vehicle_loans( profile, plans ), [] )

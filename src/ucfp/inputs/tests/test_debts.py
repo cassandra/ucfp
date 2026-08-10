@@ -75,3 +75,16 @@ class VehicleLoanExclusionTests( SimpleTestCase ):
         self.assertTrue( form.is_valid() )
         result, _ = form.apply( profile, Plans() )
         self.assertEqual( { d.handle for d in result.debts }, { 'debt-1', 'vehicle-1-loan' } )
+
+    def test_adding_a_debt_mints_a_handle_distinct_from_the_preserved_vehicle_loan( self ):
+        # A new debt entered in the blank row mints against *all* debts (incl. the un-shown vehicle loan),
+        # so it cannot collide with it, and the vehicle loan is still preserved.
+        profile = self._profile()
+        data    = { 'handle_0' : 'debt-1', 'secured_0' : '', 'kind_0' : 'MORTGAGE', 'name_0' : 'Mortgage',
+                    'balance_0' : '200000',
+                    'handle_1' : '', 'secured_1' : '', 'kind_1' : 'STUDENT', 'name_1' : 'Student loan',
+                    'balance_1' : '15000' }
+        form = DebtsForm( data, profile = profile )
+        self.assertTrue( form.is_valid() )
+        result, _ = form.apply( profile, Plans() )
+        self.assertEqual( { d.handle for d in result.debts }, { 'debt-1', 'debt-2', 'vehicle-1-loan' } )

@@ -590,7 +590,7 @@ window.App.Inputs = (function () {
         return parseInt( $block.find( classSelector( C.CURRENT_LOAN_MONTHS_CLASS ) ).val(), 10 ) || 0;
     }
 
-    const MAX_PLAUSIBLE_APR = 30;   // percent -- keep in sync with vehicle_disposition._MAX_PLAUSIBLE_APR
+    const MAX_PLAUSIBLE_APR = C.MAX_PLAUSIBLE_LOAN_APR_PERCENT;   // percent; one source, in AppConst
 
     // Editing the rate fills the monthly: the level payment amortizing the balance over the months left. A
     // directly-entered rate is explicit, so clear the "doesn't fit" hint.
