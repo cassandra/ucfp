@@ -39,7 +39,7 @@ from .explore import run_working_scenario, start_fresh_exploration, transient_ru
 from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
-from .gating import partition_scenarios, scenario_started
+from .gating import partition_scenarios, scenario_readiness, scenario_started
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture
@@ -100,7 +100,7 @@ class FinancialForecastView( InputGatedMixin, View ):
     def post( self, request ):                             # "Run forecast": project a complete scenario
         organization   = request.organization
         profile_record = completed_profile( organization )
-        complete, _in_progress = self._scenarios( organization, profile_record )
+        complete, _drift_blocked, _in_progress = self._scenarios( organization, profile_record )
         form = ForecastForm( request.POST, scenarios = complete )
         if profile_record is None or not form.is_valid():
             return render( request, _HUB_TEMPLATE, self._context( request, form = form ) )
@@ -130,16 +130,17 @@ class FinancialForecastView( InputGatedMixin, View ):
 
     @staticmethod
     def _scenarios( organization, profile_record ):
-        """The org's (complete, in_progress) scenarios against the current profile -- both empty when there
-        is no *complete* profile yet (nothing is runnable, and the profile gate leads first)."""
+        """The org's (complete, drift_blocked, in_progress) scenarios against the current profile -- all
+        empty when there is no *complete* profile yet (nothing is runnable, and the profile gate leads
+        first)."""
         if profile_record is None:
-            return list(), list()
+            return list(), list(), list()
         return partition_scenarios( organization, profile_record )
 
     def _context( self, request, form = None, error = None ) -> dict:
         organization   = request.organization
         profile_record = completed_profile( organization )   # completeness, not mere existence
-        complete, in_progress = self._scenarios( organization, profile_record )
+        complete, drift_blocked, in_progress = self._scenarios( organization, profile_record )
         exploration    = scenario_exploration( organization )
         # The one in-progress scenario the gate leads into -- a started one to resume, else the untouched
         # Default to build. Either way the CTA enters *its* build flow (the Scenarios page is the only
@@ -149,9 +150,10 @@ class FinancialForecastView( InputGatedMixin, View ):
             'has_profile'  : profile_record is not None,   # a *complete* profile
             'effective_date' : profile_record.effective_date if profile_record else None,
             'scenarios'    : complete,                     # the chooser offers only runnable scenarios
+            'drift_scenarios' : self._drift_notices( drift_blocked ),   # runnable-but-for-drift, with the fix
             'build_scenario'         : started_scenario or ( in_progress[ 0 ] if in_progress else None ),
             'build_scenario_started' : started_scenario is not None,
-            'resume'       : self._resume( exploration ) if exploration is not None else None,
+            'resume'       : self._live_resume( exploration, profile_record ),
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),
             'results'      : PlanningResultRecord.objects.select_related( 'run' ).filter(
@@ -159,6 +161,38 @@ class FinancialForecastView( InputGatedMixin, View ):
                 usage_role = UsageRole.SAVED ).order_by( '-created_datetime' ),
             'error'        : error,
         }
+
+    @staticmethod
+    def _drift_notices( drift_blocked ) -> list:
+        """Each drift-blocked scenario as `{label, references, fix_label, reconcile_url}` for the hub: its
+        drift issue names what stale references block it (listed individually) and links the one-click
+        reconcile that clears them. (A drift-blocked scenario's issues are all drift.)"""
+        notices = list()
+        for scenario, issues in drift_blocked:
+            drift = next( issue for issue in issues if issue.is_drift )
+            notices.append( {
+                'label' : scenario.label, 'references' : drift.references,
+                'fix_label' : drift.fix_label, 'reconcile_url' : drift.fix_url } )
+        return notices
+
+    @classmethod
+    def _live_resume( cls, exploration, profile_record ):
+        """The resume-exploration notice, or None -- suppressed when there is no exploration or when the
+        one in progress has drifted against the current profile: either its `source` (the scenario it is
+        anchored to, which the notice names and the drift block flags) or its `working` copy references
+        something the profile no longer has. So the hub never offers to resume an exploration of a
+        drift-blocked scenario alongside the block telling the user to reconcile it."""
+        if exploration is None or profile_record is None:
+            return None
+        if cls._drifted( profile_record, exploration.source ) or \
+           cls._drifted( profile_record, exploration.working ):
+            return None
+        return cls._resume( exploration )
+
+    @staticmethod
+    def _drifted( profile_record, scenario_record ) -> bool:
+        """Whether a scenario has a Plans->Profile drift issue against `profile_record`."""
+        return any( issue.is_drift for issue in scenario_readiness( profile_record, scenario_record ) )
 
     @staticmethod
     def _resume( exploration ) -> dict:
