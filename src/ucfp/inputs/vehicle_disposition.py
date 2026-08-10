@@ -9,19 +9,45 @@ the shared vehicle-purchase fields (`VehiclePurchaseForm`); net-new future vehic
 (`vehicle.py`). This module owns listing the current vehicles and editing one's disposition.
 """
 from dataclasses import replace
+from decimal import Decimal
 
 from django import forms
 
-from common.forms import MoneyField
+from common.amortization import level_payment, rate_for_payment
+from common.forms import MoneyField, PercentField
+from common.rate import Rate
+from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
-    LeasedVehicleDisposition, Plans, Vehicle, VehicleDisposition, VehiclePlan )
+    LeasedVehicleDisposition, LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
+from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.vehicle import VehiclePurchaseForm
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
+from ucfp.inputs.vehicle_handles import loan_debt_handle
 from ucfp.inputs.widgets import IsoDateInput
+
+
+_DEFAULT_LOAN_APR_PERCENT = BUILTIN_ASSUMPTIONS.auto_loan_apr.fraction * 100   # pre-fill for a new loan
+
+# A monthly-derived rate above this reads as "doesn't fit" -- the calculator declines to fabricate a rate
+# from a monthly/term inconsistent with the balance (a payment implying, say, 60%/yr is not a real auto
+# loan). The ceiling has one source, `AppConst` (a percent), shared with the client calculator.
+_MAX_PLAUSIBLE_APR = Decimal( AppConst.MAX_PLAUSIBLE_LOAN_APR_PERCENT ) / 100
+
+
+def _plausible_rate_from_monthly( balance, monthly, months : int ):
+    """The annual `Rate` a `monthly` payment implies over `balance` and `months`, or None when it does not
+    form a plausible loan -- the payment cannot retire the balance in the term (total payments below it),
+    or the implied rate exceeds `_MAX_PLAUSIBLE_APR`. So an inconsistent monthly/term never stores a bogus
+    rate; a directly-entered rate is trusted as-is (this guards only the monthly-derived path)."""
+    if monthly * months < balance:                   # cannot retire the balance in the term at any rate
+        return None
+    rate = Rate( rate_for_payment( balance, monthly, months ) * 12 )
+    return rate if rate.fraction <= _MAX_PLAUSIBLE_APR else None
 
 
 def _current_vehicles( profile ) -> list:
@@ -40,20 +66,46 @@ def _disposition_for( plans, handle : str ):
     return next( ( d for d in plan.dispositions if d.vehicle_handle == handle ), None )
 
 
+def _vehicle_repayment( plans, handle : str ):
+    """The stored `LoanRepayment` for a current vehicle's auto loan -- keyed by its `{v}-loan` debt handle
+    -- or None. The loan's terms live in Plans (re-homed here from the Debt plan), the balance in Profile."""
+    if plans is None:
+        return None
+    debt_handle = loan_debt_handle( handle )
+    return next( ( r for r in plans.loan_repayments if r.debt_handle == debt_handle ), None )
+
+
 def dispositions_context( profile, plans ) -> list:
     """One row per current vehicle for the disposition list -- its handle, name, a summary of its current
-    disposition (Retain by default), and whether that disposition is incomplete (a chosen plan still
-    missing structural fields, so it does not yet affect the projection)."""
-    return [ _disposition_row( asset, _disposition_for( plans, asset.handle ) )
+    disposition (Retain by default), whether that disposition is incomplete (a chosen plan still missing
+    structural fields), and a `loan` line for a financed vehicle (its terms, or a prompt to set them)."""
+    return [ _disposition_row( asset, _disposition_for( plans, asset.handle ),
+                               _loan_summary( profile, plans, asset.handle ) )
              for asset in _current_vehicles( profile ) ]
 
 
-def _disposition_row( asset, disposition ) -> dict:
-    """One current owned vehicle's list row -- its identity, disposition summary, and incompleteness (a
-    Retain, stored as no disposition, is complete by definition, so it never flags)."""
+def _disposition_row( asset, disposition, loan ) -> dict:
+    """One current owned vehicle's list row -- its identity, disposition summary, incompleteness (a Retain,
+    stored as no disposition, is complete by definition, so it never flags), and its loan status."""
     return { 'handle' : asset.handle, 'name' : asset.name,
              'summary' : _summary( disposition ),
-             'incomplete' : disposition is not None and not disposition.is_complete }
+             'incomplete' : disposition is not None and not disposition.is_complete,
+             'loan' : loan }
+
+
+def _loan_summary( profile, plans, handle : str ):
+    """A current financed vehicle's loan status for its list row -- its rate and remaining term when set, a
+    prompt when not (so a retained financed car is not silently missed), or None when it carries no auto
+    loan. Its terms live behind the row's editor; this surfaces them so the row prompts when unset."""
+    financed = any( d.kind is DebtKind.AUTO and d.secured_asset == handle for d in profile.debts )
+    if not financed:
+        return None
+    repayment = _vehicle_repayment( plans, handle )
+    if repayment is None:
+        return 'Loan terms not set'
+    percent   = repayment.interest_rate.fraction * 100
+    rate_text = f'{percent:.2f}'.rstrip( '0' ).rstrip( '.' )     # trim trailing zeros: 5.00 -> 5, 5.50 -> 5.5
+    return f'Loan: {rate_text}%, {repayment.remaining_term.months()} mo left'
 
 
 def _summary( disposition ) -> str:
@@ -95,25 +147,68 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
         widget = forms.RadioSelect(
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     sale_date = forms.DateField( label = 'Sell or replace on', required = False, widget = IsoDateInput() )
+    # The current loan (an owned, financed vehicle only): its terms, re-homed here from the Debt plan. Rate
+    # and monthly are two views of one amortization over `loan_months` (the rate is stored; the monthly is
+    # a no-JS back-solve); shown only when financed, the rate pre-filling the assumed default until set.
+    # The `CURRENT_LOAN_*` constants own the fuller client/server contract.
+    loan_rate    = PercentField(
+        label = 'Rate (%)', required = False, min_value = 0,
+        css_class = AppConst.CURRENT_LOAN_RATE_CLASS, initial = _DEFAULT_LOAN_APR_PERCENT )
+    loan_monthly = MoneyField( label = 'Monthly payment', required = False, min_value = 0,
+                               css_class = AppConst.CURRENT_LOAN_MONTHLY_CLASS )
+    loan_months  = forms.IntegerField(
+        label = 'Months left', required = False, min_value = 1,
+        widget = forms.NumberInput(
+            attrs = { 'class' : f'form-control {AppConst.CURRENT_LOAN_MONTHS_CLASS}' } ) )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         self._handle  = handle
         self._profile = profile
-        super().__init__( data, initial = self._initial( plans, handle ) if handle else None )
+        super().__init__( data, initial = self._initial( plans ) if handle else None )
+        # The rate blanks (with a hint) when a monthly/term doesn't fit; point the input at that hint.
+        self.fields[ 'loan_rate' ].widget.attrs[ 'aria-describedby' ] = 'current-loan-hint'
 
-    @staticmethod
-    def _initial( plans, handle : str ) -> dict:
-        disposition = _disposition_for( plans, handle )
-        if disposition is None:
-            return { 'kind' : VehicleDispositionKind.KEEP.name }   # default Retain
-        initial = { 'kind' : disposition.kind.name, 'sale_date' : disposition.sale_date }
-        car = disposition.replacement
-        if car is not None:
-            initial.update( {
-                'purchase_price' : car.purchase_price, 'recurrence_years' : car.recurrence_years,
-                'end_date' : car.end_date, 'payment_method' : car.payment_method.name,
-                'down_payment' : car.down_payment, 'monthly_payment' : car.monthly_payment,
-                'lease_end_payment' : car.lease_end_payment } )
+    def _auto_debt( self ):
+        """This vehicle's auto-loan `Debt`, or None when it is not financed -- the current loan the card
+        edits (a `DEPRECIATING` vehicle carrying an `AUTO` debt secured against it)."""
+        debts = self._profile.debts if self._profile is not None else []
+        return next( ( d for d in debts if d.kind is DebtKind.AUTO and d.secured_asset == self._handle ),
+                     None )
+
+    @property
+    def is_financed( self ) -> bool:
+        """Whether the vehicle carries an auto loan -- the card shows the current-loan subsection then."""
+        return self._auto_debt() is not None
+
+    @property
+    def loan_balance( self ):
+        """The current loan's outstanding balance -- a Profile fact (the `AUTO` `Debt`'s balance), shown
+        read-only in the card and carried to the client calculator; None when the vehicle is not financed."""
+        debt = self._auto_debt()
+        return debt.balance if debt is not None else None
+
+    def _initial( self, plans ) -> dict:
+        disposition = _disposition_for( plans, self._handle )
+        initial = { 'kind' : disposition.kind.name if disposition is not None
+                    else VehicleDispositionKind.KEEP.name }              # default Retain
+        if disposition is not None:
+            initial[ 'sale_date' ] = disposition.sale_date
+            car = disposition.replacement
+            if car is not None:
+                initial.update( {
+                    'purchase_price' : car.purchase_price, 'recurrence_years' : car.recurrence_years,
+                    'end_date' : car.end_date, 'payment_method' : car.payment_method.name,
+                    'down_payment' : car.down_payment, 'monthly_payment' : car.monthly_payment,
+                    'lease_end_payment' : car.lease_end_payment } )
+        repayment = _vehicle_repayment( plans, self._handle )
+        if repayment is not None:                                       # the current loan's stored terms
+            months = repayment.remaining_term.months()
+            initial[ 'loan_rate' ]   = repayment.interest_rate.fraction * 100
+            initial[ 'loan_months' ] = months
+            balance = self.loan_balance
+            if balance is not None and balance > 0:                     # show the implied monthly too
+                initial[ 'loan_monthly' ] = round( level_payment(
+                    balance, repayment.interest_rate.fraction / 12, months ) )
         return initial
 
     # The kind-switch case values, so the template carries no member-name literals (mirrors the payment
@@ -131,7 +226,36 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
     def apply( self, profile, plans ):
         kind = VehicleDispositionKind[ self.cleaned_data.get( 'kind' ) or VehicleDispositionKind.KEEP.name ]
         disposition = self._disposition( kind, self.cleaned_data )
-        return profile, _apply_disposition( plans, self._handle, 'dispositions', disposition )
+        plans = _apply_disposition( plans, self._handle, 'dispositions', disposition )
+        return profile, self._apply_loan_terms( plans )
+
+    def _apply_loan_terms( self, plans ) -> Plans:
+        """Upsert (or clear) this vehicle's auto-loan repayment from the current-loan fields -- the terms
+        re-homed from the Debt plan. A non-financed vehicle, or a term that resolves no rate, stores none;
+        keyed by the `{v}-loan` debt handle, leaving other debts' repayments intact."""
+        if not self.is_financed:
+            return plans
+        debt_handle = loan_debt_handle( self._handle )
+        others      = [ r for r in plans.loan_repayments if r.debt_handle != debt_handle ]
+        months      = self.cleaned_data.get( 'loan_months' )
+        rate        = self._resolved_rate( months ) if months is not None else None
+        if rate is None:
+            return replace( plans, loan_repayments = others )           # incomplete -> no terms yet
+        repayment = LoanRepayment( debt_handle = debt_handle, interest_rate = rate,
+                                   remaining_term = Duration( months, TimeUnit.MONTH ) )
+        return replace( plans, loan_repayments = others + [ repayment ] )
+
+    def _resolved_rate( self, months : int ):
+        """The loan's annual rate from the current-loan fields: the entered `loan_rate` (which the client
+        keeps authoritative -- it fills it from an edited monthly), or, as a no-JS fallback, back-solved
+        from the monthly payment over the balance and `months`. None when neither determines a rate."""
+        rate = self.cleaned_data.get( 'loan_rate' )
+        if rate is not None:
+            return Rate.percent( rate )                # a directly-entered rate stands as given
+        monthly, balance = self.cleaned_data.get( 'loan_monthly' ), self.loan_balance
+        if monthly is None or balance is None or balance <= 0:
+            return None
+        return _plausible_rate_from_monthly( balance, monthly, months )   # None when it doesn't fit
 
     def _disposition( self, kind, cleaned ):
         # Retain is the default, so it is stored as the absence of a disposition (nothing to persist).

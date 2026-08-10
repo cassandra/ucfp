@@ -4,7 +4,25 @@ from decimal import Decimal
 from django.test import SimpleTestCase
 
 from common.amortization import (
-    balance_after, level_payment, periods_to_repay, present_value, remaining_balance )
+    balance_after, level_payment, periods_to_repay, present_value, rate_for_payment, remaining_balance )
+
+
+class RateForPaymentTest( SimpleTestCase ):
+    """The inverse of `level_payment` solved for the rate -- the current vehicle loan's rate from its
+    (known) monthly payment and remaining term."""
+
+    def test_it_recovers_the_rate_that_produced_a_payment( self ):
+        # Round-trip: a payment amortizing 18,000 at 0.5%/month over 36 months back-solves to ~0.5%.
+        payment = level_payment( Decimal( '18000' ), Decimal( '0.005' ), 36 )
+        self.assertEqual( round( rate_for_payment( Decimal( '18000' ), payment, 36 ), 6 ),
+                          Decimal( '0.005000' ) )
+
+    def test_a_payment_at_the_zero_interest_level_is_zero_rate( self ):
+        self.assertEqual( rate_for_payment( Decimal( '1200' ), Decimal( '100' ), 12 ), Decimal( '0' ) )
+
+    def test_a_payment_below_the_zero_interest_level_is_zero_rate( self ):
+        # A payment that does not even cover straight-line principal implies no positive rate.
+        self.assertEqual( rate_for_payment( Decimal( '1200' ), Decimal( '90' ), 12 ), Decimal( '0' ) )
 
 
 class LevelPaymentTest( SimpleTestCase ):

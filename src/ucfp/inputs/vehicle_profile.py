@@ -3,7 +3,8 @@
 A vehicle is owned or leased, the user's single choice per car, but it is one item in one list -- the way
 someone thinks about the cars in their driveway. Under the covers the two are stored differently: an
 **owned** vehicle is flat profile facts that belong together (a `DEPRECIATING` `AssetProfile` and any
-`AUTO` `Debt` secured against it, its balance entered here and shown read-only in Debts); a **leased**
+`AUTO` `Debt` secured against it, its balance entered here -- a vehicle stands alone, so its loan is not
+shown in the Debts section, and its terms live in the Vehicle plan); a **leased**
 vehicle is a thin `LeasedVehicle` fact (a lease confers no ownership -- its terms and end-of-term plan are
 the vehicle plan's). Both share one handle space (`vehicle-N`), so a vehicle keeps its identity when its
 owned/leased choice is flipped: the form moves it between the asset store and the lease-fact store. A
@@ -22,19 +23,11 @@ from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle
 from ucfp.inputs.properties import delete_property
-
-_VEHICLE_PREFIX = 'vehicle-'
+from ucfp.inputs.vehicle_handles import VEHICLE_PREFIX, loan_debt_handle
 
 OWNED  = 'owned'
 LEASED = 'leased'
 _OWNERSHIP_CHOICES = ( ( OWNED, 'Owned' ), ( LEASED, 'Leased' ) )
-
-
-def _loan_handle( vehicle_handle : str ) -> str:
-    """The stable handle of the auto loan secured against an owned vehicle -- derived from the vehicle's
-    own handle (mirroring a mortgage's `{handle}-mortgage`), so the pair travels together and a sale, a
-    delete, or a switch to leased can find it."""
-    return f'{vehicle_handle}-loan'
 
 
 def _minted_current_vehicle_handle( profile ) -> str:
@@ -43,9 +36,9 @@ def _minted_current_vehicle_handle( profile ) -> str:
     its owned/leased choice is flipped."""
     taken = { asset.handle for asset in profile.assets } | { v.handle for v in profile.leased_vehicles }
     index = 1
-    while f'{_VEHICLE_PREFIX}{index}' in taken:
+    while f'{VEHICLE_PREFIX}{index}' in taken:
         index += 1
-    return f'{_VEHICLE_PREFIX}{index}'
+    return f'{VEHICLE_PREFIX}{index}'
 
 
 def current_vehicles_context( profile ) -> list:
@@ -106,7 +99,7 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
         asset = next( ( a for a in profile.assets if a.handle == handle ), None )
         if asset is not None:
             initial = { 'ownership': OWNED, 'name': asset.name, 'value': asset.opening_value }
-            loan    = next( ( d for d in profile.debts if d.handle == _loan_handle( handle ) ), None )
+            loan    = next( ( d for d in profile.debts if d.handle == loan_debt_handle( handle ) ), None )
             if loan is not None:
                 initial[ 'loan_balance' ] = loan.balance
             return initial
@@ -149,7 +142,7 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
         return profile, plans
 
     def _as_owned( self, profile, handle : str ):
-        loan     = _loan_handle( handle )
+        loan     = loan_debt_handle( handle )
         existing = next( ( d for d in profile.debts if d.handle == loan ), None )
         return replace(
             profile,
@@ -160,7 +153,7 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
             leased_vehicles = [ v for v in profile.leased_vehicles if v.handle != handle ] )
 
     def _as_leased( self, profile, handle : str ):
-        loan = _loan_handle( handle )
+        loan = loan_debt_handle( handle )
         return replace(
             profile,
             leased_vehicles = ( [ v for v in profile.leased_vehicles if v.handle != handle ]
@@ -182,7 +175,7 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
         if balance is None:
             return []
         return [ Debt(
-            handle = _loan_handle( vehicle_handle ),
+            handle = loan_debt_handle( vehicle_handle ),
             name = existing.name if existing is not None else f"{self.cleaned_data[ 'name' ]} Loan",
             kind = existing.kind if existing is not None else DebtKind.AUTO,
             balance = balance, secured_asset = vehicle_handle ) ]

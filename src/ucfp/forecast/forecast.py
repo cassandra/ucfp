@@ -788,9 +788,13 @@ class Forecast:
         same-interval events apply as authored. The recurring realizations (scheduled withdrawals,
         Roth conversion ladders) expand into per-interval realizations appended after them."""
         chart = bookkeeper.chart
-        scheduled = [
-            event.to_period_event( self._baseline.holding_by_handle, chart )
-            for event in self._parameters.events if event.in_span( span ) ]
+        scheduled = []
+        for event in self._parameters.events:
+            if not event.in_span( span ):
+                continue
+            period_event = event.to_period_event( self._baseline.holding_by_handle, chart )
+            if period_event is not None:                 # a skipped payoff (no such loan account) drops out
+                scheduled.append( period_event )
         # Originations first, so the proceeds are on the books before any same-span event that reads a
         # balance (e.g. a settle-and-re-originate cycle whose payoff must see the freshly borrowed loan).
         return ( self._loan_origination_events_for( span, chart ) + scheduled

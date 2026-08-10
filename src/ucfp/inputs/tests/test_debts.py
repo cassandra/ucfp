@@ -43,3 +43,48 @@ class DebtsFormReapTests( SimpleTestCase ):
             remaining_term = Duration( 25, TimeUnit.YEAR ) ) ] )
         _, reconciled = self._removing_the_debt( profile ).apply( profile, plans )
         self.assertEqual( [ r.debt_handle for r in reconciled.loan_repayments ], [ 'debt-1' ] )
+
+
+class VehicleLoanExclusionTests( SimpleTestCase ):
+    """Vehicle (auto) loans are owned by the Vehicles section / Vehicle plan: the Debts editor neither
+    shows nor offers them, but preserves them across an edit so the rebuild never drops the fact."""
+
+    def _profile( self ):
+        return Profile( debts = [
+            Debt( handle = 'debt-1', name = 'Mortgage', kind = DebtKind.MORTGAGE,
+                  balance = Decimal( '200000' ) ),
+            Debt( handle = 'vehicle-1-loan', name = 'Civic loan', kind = DebtKind.AUTO,
+                  balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ) ] )
+
+    def test_the_editor_shows_only_non_vehicle_debts( self ):
+        form  = DebtsForm( profile = self._profile() )
+        shown = [ row[ 'name' ].value() for row in form.rows if row[ 'name' ].value() ]
+        self.assertEqual( shown, [ 'Mortgage' ] )                  # the vehicle loan is not a row
+
+    def test_auto_is_not_an_addable_kind( self ):
+        kinds = { name for name, _label in DebtsForm._KIND_CHOICES }
+        self.assertNotIn( DebtKind.AUTO.name, kinds )
+
+    def test_apply_preserves_the_vehicle_loan( self ):
+        # Resubmit the mortgage row unchanged (a no-op edit); the un-shown vehicle loan must survive.
+        profile = self._profile()
+        data    = { 'handle_0' : 'debt-1', 'secured_0' : '', 'kind_0' : 'MORTGAGE', 'name_0' : 'Mortgage',
+                    'balance_0' : '200000',
+                    'handle_1' : '', 'secured_1' : '', 'kind_1' : '', 'name_1' : '', 'balance_1' : '' }
+        form = DebtsForm( data, profile = profile )
+        self.assertTrue( form.is_valid() )
+        result, _ = form.apply( profile, Plans() )
+        self.assertEqual( { d.handle for d in result.debts }, { 'debt-1', 'vehicle-1-loan' } )
+
+    def test_adding_a_debt_mints_a_handle_distinct_from_the_preserved_vehicle_loan( self ):
+        # A new debt entered in the blank row mints against *all* debts (incl. the un-shown vehicle loan),
+        # so it cannot collide with it, and the vehicle loan is still preserved.
+        profile = self._profile()
+        data    = { 'handle_0' : 'debt-1', 'secured_0' : '', 'kind_0' : 'MORTGAGE', 'name_0' : 'Mortgage',
+                    'balance_0' : '200000',
+                    'handle_1' : '', 'secured_1' : '', 'kind_1' : 'STUDENT', 'name_1' : 'Student loan',
+                    'balance_1' : '15000' }
+        form = DebtsForm( data, profile = profile )
+        self.assertTrue( form.is_valid() )
+        result, _ = form.apply( profile, Plans() )
+        self.assertEqual( { d.handle for d in result.debts }, { 'debt-1', 'debt-2', 'vehicle-1-loan' } )

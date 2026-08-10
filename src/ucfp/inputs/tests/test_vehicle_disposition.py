@@ -14,17 +14,23 @@ from decimal import Decimal
 from django.http import QueryDict
 from django.template.loader import render_to_string
 
+from common.amortization import level_payment
 from common.dataclass_json import from_json_data, to_json_data
+from common.rate import Rate
+from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.debt_plan import DebtPlanForm
 from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
-    LeasedVehicleDisposition, Plans, Vehicle, VehicleDisposition, VehiclePlan )
-from ucfp.inputs.profile.schemas import AssetProfile, LeasedVehicle, Profile
+    LeasedVehicleDisposition, LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
+from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile
 from ucfp.inputs.vehicle_disposition import (
-    LeasedVehicleDispositionForm, VehicleDispositionForm, all_dispositions_context, dispositions_context,
-    leased_dispositions_context )
+    LeasedVehicleDispositionForm, VehicleDispositionForm, _plausible_rate_from_monthly,
+    all_dispositions_context, dispositions_context, leased_dispositions_context )
+from ucfp.inputs.vehicle_handles import loan_debt_handle
 
 
 def _profile( *vehicles ) -> Profile:
@@ -33,6 +39,21 @@ def _profile( *vehicles ) -> Profile:
         AssetProfile( handle = h, name = n, asset_class = AssetClass.DEPRECIATING,
                       opening_value = Decimal( '20000' ) )
         for h, n in vehicles ] )
+
+
+def _financed_profile( handle = 'vehicle-1', name = 'Sedan', balance = '18000' ) -> Profile:
+    """A profile with one owned, *financed* vehicle -- a DEPRECIATING holding plus the `AUTO` `Debt`
+    secured against it (its `{v}-loan` handle), the current loan the disposition card's terms edit."""
+    return Profile(
+        assets = [ AssetProfile( handle = handle, name = name, asset_class = AssetClass.DEPRECIATING,
+                                 opening_value = Decimal( '20000' ) ) ],
+        debts  = [ Debt( handle = loan_debt_handle( handle ), name = f'{name} loan', kind = DebtKind.AUTO,
+                         balance = Decimal( balance ), secured_asset = handle ) ] )
+
+
+def _repayment( debt_handle = 'vehicle-1-loan', rate = '5', months = 36 ) -> LoanRepayment:
+    return LoanRepayment( debt_handle = debt_handle, interest_rate = Rate.percent( Decimal( rate ) ),
+                          remaining_term = Duration( months, TimeUnit.MONTH ) )
 
 
 def _apply( profile, plans, handle, **fields ):
@@ -108,6 +129,130 @@ class VehicleDispositionFormTests( unittest.TestCase ):
         self.assertEqual( form.initial[ 'down_payment' ], Decimal( '9000' ) )
 
 
+class VehicleLoanTermsTests( unittest.TestCase ):
+    """The current-loan terms (rate + months left) the card re-homes from the Debt plan: shown only for a
+    financed vehicle, written as its `LoanRepayment`, pre-filled on edit, and kept with the disposition."""
+
+    def test_a_financed_vehicle_shows_the_loan_subsection( self ):
+        form = VehicleDispositionForm( profile = _financed_profile(), plans = Plans(), handle = 'vehicle-1' )
+        self.assertTrue( form.is_financed )
+
+    def test_a_cash_vehicle_has_no_loan_subsection( self ):
+        form = VehicleDispositionForm( profile = _profile( ( 'vehicle-1', 'Sedan' ) ),
+                                       plans = Plans(), handle = 'vehicle-1' )
+        self.assertFalse( form.is_financed )
+
+    def test_setting_terms_writes_the_repayment( self ):
+        plans = _apply( _financed_profile(), Plans(), 'vehicle-1',
+                        kind = 'KEEP', loan_rate = '5', loan_months = '36' )
+        self.assertEqual( len( plans.loan_repayments ), 1 )
+        repayment = plans.loan_repayments[ 0 ]
+        self.assertEqual( repayment.debt_handle, 'vehicle-1-loan' )
+        self.assertEqual( repayment.interest_rate, Rate.percent( Decimal( '5' ) ) )
+        self.assertEqual( repayment.remaining_term, Duration( 36, TimeUnit.MONTH ) )
+
+    def test_incomplete_terms_write_no_repayment( self ):
+        plans = _apply( _financed_profile(), Plans(), 'vehicle-1', kind = 'KEEP', loan_rate = '5' )
+        self.assertEqual( plans.loan_repayments, [] )                     # no months -> no terms yet
+
+    def test_a_non_financed_vehicle_never_writes_a_repayment( self ):
+        plans = _apply( _profile( ( 'vehicle-1', 'Sedan' ) ), Plans(), 'vehicle-1',
+                        kind = 'KEEP', loan_rate = '5', loan_months = '36' )
+        self.assertEqual( plans.loan_repayments, [] )
+
+    def test_edit_pre_fills_stored_terms( self ):
+        existing = Plans( loan_repayments = [ _repayment( rate = '4.5', months = 24 ) ] )
+        form     = VehicleDispositionForm( profile = _financed_profile(), plans = existing,
+                                           handle = 'vehicle-1' )
+        self.assertEqual( form.initial[ 'loan_rate' ], Decimal( '4.5' ) )
+        self.assertEqual( form.initial[ 'loan_months' ], 24 )
+
+    def test_edit_pre_fills_the_implied_monthly( self ):
+        existing = Plans( loan_repayments = [ _repayment( rate = '5', months = 36 ) ] )
+        form     = VehicleDispositionForm( profile = _financed_profile( balance = '18000' ),
+                                           plans = existing, handle = 'vehicle-1' )
+        expected = round( level_payment( Decimal( '18000' ), Decimal( '0.05' ) / 12, 36 ) )
+        self.assertEqual( form.initial[ 'loan_monthly' ], expected )   # the monthly the terms imply
+
+    def test_a_no_js_monthly_back_solves_the_rate( self ):
+        # Without JS the rate field is blank; the monthly payment + balance + months determine the rate. A
+        # payment amortizing 18,000 at 5%/yr over 36 mo back-solves to ~5%.
+        monthly = round( level_payment( Decimal( '18000' ), Decimal( '0.05' ) / 12, 36 ) )
+        plans   = _apply( _financed_profile( balance = '18000' ), Plans(), 'vehicle-1',
+                          kind = 'KEEP', loan_monthly = str( monthly ), loan_months = '36' )
+        self.assertEqual( len( plans.loan_repayments ), 1 )
+        # A whole-dollar monthly cannot encode the exact rate, so the back-solve is asserted loosely (~0.5%).
+        self.assertAlmostEqual( plans.loan_repayments[ 0 ].interest_rate.fraction, Decimal( '0.05' ),
+                                places = 2 )
+
+    def test_an_implausible_monthly_stores_no_rate( self ):
+        # $500/mo on $9,000 over 48 months implies ~60% APR -- beyond a plausible auto loan, so the
+        # monthly/term is treated as not fitting the balance and no terms are stored (the client blanks the
+        # rate and shows a hint; the server declines the derived rate here).
+        plans = _apply( _financed_profile( balance = '9000' ), Plans(), 'vehicle-1',
+                        kind = 'KEEP', loan_monthly = '500', loan_months = '48' )
+        self.assertEqual( plans.loan_repayments, [] )
+
+    def test_a_monthly_that_cannot_retire_the_balance_stores_no_rate( self ):
+        # 150 x 48 = 7,200 < 9,000 -- no rate ever pays it off, so nothing is stored (not a bogus 0%).
+        plans = _apply( _financed_profile( balance = '9000' ), Plans(), 'vehicle-1',
+                        kind = 'KEEP', loan_monthly = '150', loan_months = '48' )
+        self.assertEqual( plans.loan_repayments, [] )
+
+    def test_a_directly_entered_high_rate_is_trusted( self ):
+        # The plausibility guard is only on the monthly-derived path; a rate the user types stands as given.
+        plans = _apply( _financed_profile(), Plans(), 'vehicle-1',
+                        kind = 'KEEP', loan_rate = '35', loan_months = '36' )
+        self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( Decimal( '35' ) ) )
+
+    def test_the_rate_field_wins_when_both_are_given( self ):
+        # The client keeps the rate authoritative (filling it from an edited monthly), so a submitted rate
+        # is stored as-is even alongside a monthly.
+        plans = _apply( _financed_profile(), Plans(), 'vehicle-1',
+                        kind = 'KEEP', loan_rate = '6', loan_monthly = '999', loan_months = '36' )
+        self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( Decimal( '6' ) ) )
+
+    def test_terms_persist_alongside_a_disposition( self ):
+        plans = _apply( _financed_profile(), Plans(), 'vehicle-1', kind = 'SELL',
+                        sale_date = '2032-06-01', loan_rate = '6', loan_months = '48' )
+        self.assertEqual( len( _dispositions( plans ) ), 1 )             # the sale...
+        self.assertEqual( len( plans.loan_repayments ), 1 )             # ...and the loan terms both saved
+
+    def test_the_debt_plan_excludes_vehicle_auto_loans( self ):
+        profile = replace( _financed_profile(), debts = [
+            Debt( handle = 'vehicle-1-loan', name = 'Car loan', kind = DebtKind.AUTO,
+                  balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ),
+            Debt( handle = 'debt-1', name = 'Mortgage', kind = DebtKind.MORTGAGE,
+                  balance = Decimal( '300000' ), secured_asset = 'property-1' ) ] )
+        form  = DebtPlanForm( profile = profile, plans = Plans() )
+        names = [ row[ 'name' ] for row in form.rows ]
+        self.assertEqual( names, [ 'Mortgage' ] )                       # the auto loan is not listed
+
+
+class PlausibleRateTests( unittest.TestCase ):
+    """The plausibility guard on the monthly-derived rate: below the ~30% APR cap it back-solves a Rate,
+    at/below zero-interest it is 0%, and above the cap or when the payment can't retire the balance it is
+    None (so an inconsistent monthly/term never fabricates a stored rate)."""
+
+    def test_just_below_the_cap_back_solves_a_rate( self ):
+        below = level_payment( Decimal( '20000' ), Decimal( '0.29' ) / 12, 36 )   # ~29% APR, under the cap
+        rate  = _plausible_rate_from_monthly( Decimal( '20000' ), below, 36 )
+        self.assertIsNotNone( rate )
+        self.assertLess( rate.fraction, Decimal( '0.30' ) )
+
+    def test_just_above_the_cap_is_none( self ):
+        above = level_payment( Decimal( '20000' ), Decimal( '0.31' ) / 12, 36 )   # ~31% APR, over the cap
+        self.assertIsNone( _plausible_rate_from_monthly( Decimal( '20000' ), above, 36 ) )
+
+    def test_the_zero_interest_monthly_is_a_zero_rate( self ):
+        # A monthly of exactly balance/months amortizes at 0% -- a valid in-range rate, not None.
+        rate = _plausible_rate_from_monthly( Decimal( '18000' ), Decimal( '500' ), 36 )   # 18,000 / 36 = 500
+        self.assertEqual( rate.fraction, Decimal( '0' ) )
+
+    def test_a_monthly_that_cannot_retire_the_balance_is_none( self ):
+        self.assertIsNone( _plausible_rate_from_monthly( Decimal( '18000' ), Decimal( '400' ), 36 ) )
+
+
 class DispositionListTests( unittest.TestCase ):
     """The list shows every current vehicle -- Retain when none is stored, else the stored kind summarized
     with the year it happens."""
@@ -121,6 +266,16 @@ class DispositionListTests( unittest.TestCase ):
         self.assertEqual( [ r[ 'name' ] for r in rows ], [ 'Sedan', 'Truck' ] )
         self.assertEqual( rows[ 0 ][ 'summary' ], 'Sell in 2032' )
         self.assertEqual( rows[ 1 ][ 'summary' ], 'Retain' )      # no stored disposition -> the default
+
+    def test_a_financed_vehicles_row_carries_its_loan_status( self ):
+        profile = _financed_profile()
+        self.assertEqual( dispositions_context( profile, Plans() )[ 0 ][ 'loan' ], 'Loan terms not set' )
+        with_terms = dispositions_context( profile, Plans( loan_repayments = [ _repayment() ] ) )
+        self.assertEqual( with_terms[ 0 ][ 'loan' ], 'Loan: 5%, 36 mo left' )
+
+    def test_a_cash_vehicles_row_has_no_loan_line( self ):
+        row = dispositions_context( _profile( ( 'vehicle-1', 'Sedan' ) ), Plans() )[ 0 ]
+        self.assertIsNone( row[ 'loan' ] )
 
     def test_combines_owned_and_leased_with_ownership_and_edit_route( self ):
         # The one list carries both kinds -- owned then leased -- each tagged with the editor its Edit opens.
@@ -297,6 +452,43 @@ class DispositionFormRenderTests( unittest.TestCase ):
         self.assertIn( f'{attr}="{form.dated_kinds}"', html )               # kind switch: the date
         self.assertIn( f'{attr}="{form.replace_kind}"', html )             # kind switch: the replacement
         self.assertIn( f'{attr}="{form.payment_field_methods}"', html )    # nested payment switch
+
+    def test_the_current_loan_subsection_shows_only_when_financed( self ):
+        financed = render_to_string(
+            'inputs/interview/sections/vehicle_disposition_form.html',
+            { 'disposition_form': VehicleDispositionForm( profile = _financed_profile(), plans = Plans(),
+                                                          handle = 'vehicle-1' ),
+              'handle': 'vehicle-1', 'AppConst': AppConst } )
+        self.assertIn( 'Current loan', financed )
+        self.assertNotIn( 'Current loan', self._render()[ 1 ] )             # a cash vehicle: no loan block
+
+    def test_the_current_loan_block_carries_the_balance_and_calculator_hooks( self ):
+        html = render_to_string(
+            'inputs/interview/sections/vehicle_disposition_form.html',
+            { 'disposition_form': VehicleDispositionForm( profile = _financed_profile( balance = '18000' ),
+                                                          plans = Plans(), handle = 'vehicle-1' ),
+              'handle': 'vehicle-1', 'AppConst': AppConst } )
+        self.assertIn( AppConst.CURRENT_LOAN_CLASS, html )                            # calculator wrapper
+        self.assertIn( f'data-{AppConst.CURRENT_LOAN_BALANCE_DATA_ATTR}="18000"', html )   # balance on it
+        self.assertIn( AppConst.CURRENT_LOAN_MONTHLY_CLASS, html )                    # the monthly input
+        self.assertIn( '$18000', html )                                              # balance shown read-only
+
+
+class LeasedDispositionFormRenderTests( unittest.TestCase ):
+    """The leased editor renders its three bordered subsections (matching the owned card) and the
+    kind-switch case values -- the server-side contract a JS test can't cover."""
+
+    def test_the_subsections_and_switch_cases_render( self ):
+        form = LeasedVehicleDispositionForm( profile = _leased_profile( ( 'vehicle-1', 'Sedan' ) ),
+                                             plans = Plans(), handle = 'vehicle-1' )
+        html = render_to_string(
+            'inputs/interview/sections/leased_disposition_form.html',
+            { 'leased_form': form, 'handle': 'vehicle-1', 'AppConst': AppConst } )
+        for legend in ( 'Current lease', 'At lease end', 'Successor' ):
+            self.assertIn( legend, html )
+        attr = f'data-{AppConst.SWITCH_CASE_DATA_ATTR}'
+        self.assertIn( f'{attr}="{form.successor_kinds}"', html )       # successor block: Renew/Buy
+        self.assertIn( f'{attr}="{form.financed_kinds}"', html )        # the down/monthly row
 
 
 class CompletenessPredicateTests( unittest.TestCase ):

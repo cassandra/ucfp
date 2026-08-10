@@ -28,6 +28,8 @@ from ucfp.forecast.parameters import (
     ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent
+from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.vehicle_handles import vehicle_loan_handle
 from ucfp.inputs.widgets import IsoDateInput
 
 
@@ -94,9 +96,29 @@ def _possessions( profile ) -> list:
 
 
 def _secured_loans( profile, asset_handle : str ) -> list:
-    """The handles of the debts secured by `asset_handle` -- the loans a sale of that asset pays off (a
-    property's mortgage, a vehicle's auto loan). An asset may carry more than one, so this is a list."""
-    return [ debt.handle for debt in profile.debts if debt.secured_asset == asset_handle ]
+    """The **account** handles of the loans secured by `asset_handle` -- the loans a sale of that asset
+    pays off (a property's mortgage, a vehicle's auto loan). An asset may carry more than one, so this is a
+    list. The handle is the account the engine holds, not the Debt's own identity: a vehicle's auto loan
+    materializes vehicle-scoped (`vehicle-loan:{v}`), so a payoff resolves to the account, not `{v}-loan`."""
+    return [ _loan_account_handle( debt ) for debt in profile.debts
+             if debt.secured_asset == asset_handle ]
+
+
+def _loan_account_handle( debt ) -> str:
+    """The chart account handle a secured debt's loan materializes under: a vehicle auto loan is
+    vehicle-scoped (`vehicle-loan:{v}`, keyed off the secured vehicle), every other secured loan keeps the
+    Debt's own handle."""
+    if debt.kind is DebtKind.AUTO and debt.secured_asset is not None:
+        return vehicle_loan_handle( debt.secured_asset )
+    return debt.handle
+
+
+def _payoff_loan_handle( profile, debt_handle : str ) -> str:
+    """The chart account handle a loan-payoff event targets: a debt by handle resolved to the account its
+    loan materializes under (an auto loan's is vehicle-scoped), so the payoff finds the engine's account
+    rather than the Debt's own identity. An unknown handle passes through (the engine skips a no-op)."""
+    debt = next( ( d for d in profile.debts if d.handle == debt_handle ), None )
+    return _loan_account_handle( debt ) if debt is not None else debt_handle
 
 
 def _names( profile ) -> dict:
@@ -326,7 +348,7 @@ class LoanPayoffEvent( EventType ):
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
         into.scheduled_events.append( ScheduledLoanPayoff(
-            event_date = event.date, loan = event.selections[ LOAN_ROLE ] ) )
+            event_date = event.date, loan = _payoff_loan_handle( profile, event.selections[ LOAN_ROLE ] ) ) )
 
 
 class CardPayoffEvent( EventType ):

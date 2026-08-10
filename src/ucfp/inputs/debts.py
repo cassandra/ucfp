@@ -1,11 +1,16 @@
 """§ Debts: the household's debts as a background-saved facts list.
 
 A debt is a Profile fact -- its kind, name, and current balance (see `Debt`); how it is repaid is a
-Plans strategy captured later, not here. This form is the full editor over *every* debt the way a
+Plans strategy captured later, not here. This form is the editor over the household's debts the way a
 person thinks of them -- one flat list of loans, mortgages included, with no user-visible split
 between secured and unsecured. A mortgage secured against a property can also have its balance
 adjusted on that property (a convenience surface), but it is the same `Debt` and is fully editable
 here too.
+
+**Vehicle (auto) loans are the exception: they are owned by the Vehicles section and the Vehicle plan,
+not shown or added here** -- a vehicle stands on its own (its loan's balance in the Vehicles section, its
+terms in the Vehicle plan). They are preserved untouched across an edit here (so rebuilding the shown
+debts never drops them), and `AUTO` is not an addable kind.
 
 Each row carries its debt's stable `handle` and its `secured_asset` link in hidden fields -- the
 handle because Plans reference debts by it (identity must survive edits rather than being reindexed),
@@ -40,12 +45,18 @@ class DebtsForm( forms.Form ):
     ignored. `apply` rebuilds the whole debt list from the rows, each row preserving the debt's stable
     handle and any property it is secured against."""
 
-    _KIND_CHOICES = ( ( '', CHOOSE_PLACEHOLDER ), ) + tuple( ( kind.name, kind.label ) for kind in DebtKind )
+    # Every debt kind but the vehicle auto loan -- those are managed in the Vehicles section / Vehicle plan.
+    _KIND_CHOICES = ( ( '', CHOOSE_PLACEHOLDER ), ) + tuple(
+        ( kind.name, kind.label ) for kind in DebtKind if kind is not DebtKind.AUTO )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
         self._profile = profile
-        self._debts   = list( profile.debts ) if profile is not None else []
+        all_debts = list( profile.debts ) if profile is not None else []
+        # Vehicle (auto) loans belong to the Vehicles section / Vehicle plan: not shown here, but kept so
+        # rebuilding the shown debts on `apply` never drops them.
+        self._vehicle_loans = [ debt for debt in all_debts if debt.kind is DebtKind.AUTO ]
+        self._debts         = [ debt for debt in all_debts if debt.kind is not DebtKind.AUTO ]
         for index in range( len( self._debts ) + 1 ):   # existing rows, then one blank to add
             self._build_row( index )
 
@@ -84,9 +95,10 @@ class DebtsForm( forms.Form ):
         return rows
 
     def apply( self, profile, plans ):
-        # Plans are left untouched: a repayment/paydown/payoff left keyed to a removed debt is reconciled
-        # on demand at the run surface, not eagerly here.
-        return replace( profile, debts = self._debts_from_rows() ), plans
+        # The shown (non-vehicle) debts are rebuilt from the rows; the vehicle loans are preserved as-is
+        # (owned elsewhere). Plans are left untouched: a repayment/paydown/payoff left keyed to a removed
+        # debt is reconciled on demand at the run surface, not eagerly here.
+        return replace( profile, debts = self._debts_from_rows() + self._vehicle_loans ), plans
 
     def _debts_from_rows( self ) -> list:
         # New rows mint a handle free among every debt already in play; existing rows keep the handle
