@@ -3,7 +3,8 @@
 A vehicle is owned or leased, the user's single choice per car, but it is one item in one list -- the way
 someone thinks about the cars in their driveway. Under the covers the two are stored differently: an
 **owned** vehicle is flat profile facts that belong together (a `DEPRECIATING` `AssetProfile` and any
-`AUTO` `Debt` secured against it, its balance entered here and shown read-only in Debts); a **leased**
+`AUTO` `Debt` secured against it, its balance entered here -- a vehicle stands alone, so its loan is not
+shown in the Debts section, and its terms live in the Vehicle plan); a **leased**
 vehicle is a thin `LeasedVehicle` fact (a lease confers no ownership -- its terms and end-of-term plan are
 the vehicle plan's). Both share one handle space (`vehicle-N`), so a vehicle keeps its identity when its
 owned/leased choice is flipped: the form moves it between the asset store and the lease-fact store. A
