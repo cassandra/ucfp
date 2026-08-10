@@ -15,6 +15,13 @@ axes are stamped:
     Properties / Possessions) then the asset class then the holding itself, keyed by its handle and
     ordered by profile position -- so several holdings of one class each keep a run-stable column.
 
+A fourth, cross-cutting axis rolls each vehicle's accounts up by their *root vehicle* (see
+`inputs/vehicle_handles`): a financed vehicle mints a fresh loan, interest, and holding account for every
+replacement cycle it runs through, which would otherwise proliferate as duplicate sibling columns. All of
+them resolve to one `vehicle-N` root, so they gather under a per-vehicle rung -- loans under a Vehicle
+Loans surface, interest under a Vehicle rung of the Non-deductible Interest class, holdings under a
+top-level Vehicles pane of their own -- turning that spray of columns into one drillable column per vehicle.
+
 This is the one place carrying `parameter_sets`/grouping knowledge to the books; the accounts layer
 stays oblivious, reading the placement opaquely. Best-effort by design: an account the mapping does not
 cover keeps the engine-class fallback, and any failure leaves that pass unstamped. It must never fail
@@ -27,6 +34,8 @@ from ucfp.accounts.books import AccountDisplayGroup, AccountDisplayPlacement, Bo
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.inputs.expenses import is_renting, ordered_catalog, owned_property_handles
 from ucfp.inputs.profile.schemas import Profile, RENTED_HOME_HANDLE
+from ucfp.inputs.vehicle_handles import (
+    is_vehicle_loan_handle, is_vehicle_loan_interest_handle, root_vehicle )
 from ucfp.parameter_sets.enums import ExpenseCategory, ExpenseClass
 
 
@@ -51,6 +60,13 @@ _TAXES_AND_FEES_ORDER = len( ExpenseClass )
 CAR_PURCHASE_HANDLE = 'car-purchase'
 CAR_PAYMENTS_HANDLE = 'car-payments'
 _GENERATED_VEHICLE_ORDER = { CAR_PURCHASE_HANDLE : 0, CAR_PAYMENTS_HANDLE : 5 }
+
+# The vehicle rollup axis (inputs/vehicle_handles): a financed vehicle's loan, interest, and holding
+# accounts -- the current set plus one more per replacement cycle -- all resolve to one root vehicle and
+# gather under a per-vehicle rung. The Vehicle Loans surface leads the liabilities (no other liability
+# pass ranks them); the interest's Vehicle rung and the holdings' per-vehicle rung nest within their
+# existing class / pane groupings.
+_VEHICLE_LOANS_ORDER = 0
 
 # A property expense's account handle scopes the catalog handle to its property (`property-tax:rental-1`),
 # so each property's costs are a distinct account -- a unique handle, keeping its own per-property tax
@@ -97,6 +113,13 @@ _PANE_BY_CLASS = { asset_class : ( order, pane )
                    for order, pane in enumerate( _ASSET_PANES )
                    for asset_class in pane.classes }
 
+# Vehicles are their own top-level asset pane, grouped by root vehicle -- not nested under Possessions ->
+# Depreciating Assets. A vehicle spans a succession of holdings (a car and each replacement it buys) that
+# read most naturally as one asset group of their own, so they leave the class-derived panes above.
+_VEHICLES_PANE_KEY   = 'vehicles'
+_VEHICLES_PANE_LABEL = 'Vehicles'
+_VEHICLES_PANE_ORDER = len( _ASSET_PANES )   # after the class-derived panes
+
 # Income sources: a coarser, user-facing grouping of income tax classes, in display order. Every income
 # account carries a tax class, so the map covers them all -- an uncovered class would simply fall back to
 # its own tax-class rung.
@@ -127,7 +150,8 @@ def stamp_display_placements( books : BooksOfAccount, profile : Profile ) -> Non
     silenced, so a broken mapping surfaces rather than invisibly degrading."""
     for stamp in ( lambda : _stamp_expense_placements( books, profile ),
                    lambda : _stamp_income_placements( books, profile ),
-                   lambda : _stamp_asset_placements( books, profile ) ):
+                   lambda : _stamp_asset_placements( books, profile ),
+                   lambda : _stamp_vehicle_loan_placements( books, profile ) ):
         try:
             stamp()
         except Exception:
@@ -151,6 +175,7 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
     tax-payment class gathers them under one Taxes & Fees surface rather than a flat column each."""
     catalog    = { row.handle : row for row in ordered_catalog() }
     properties = _property_rungs( profile )
+    vehicles   = _vehicle_rungs( profile )
     for account in books.accounts:
         if ( account.expense_tax_class is not None ) and account.expense_tax_class.is_tax_payment:
             account.display_placement = _tax_expense_placement( account.expense_tax_class )
@@ -158,6 +183,11 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
         if account.handle is None:
             continue
         handle = str( account.handle )
+        if is_vehicle_loan_interest_handle( handle ):
+            root = root_vehicle( handle )
+            if root is not None:
+                account.display_placement = _vehicle_interest_placement( account, root, vehicles )
+            continue
         base   = _base_expense_handle( handle )
         row    = catalog.get( base )
         if row is not None:
@@ -279,8 +309,13 @@ def _income_class_group( income_tax_class ) -> AccountDisplayGroup:
 
 def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None:
     positions = { asset.handle : index for index, asset in enumerate( profile.assets ) }
+    vehicles  = _vehicle_rungs( profile )
     for account in books.accounts:
         if account.asset_class is None:
+            continue
+        root = root_vehicle( str( account.handle ) ) if account.handle is not None else None
+        if root is not None:                                 # a vehicle holding -- its own Vehicles pane
+            account.display_placement = _vehicle_holding_placement( account, root, vehicles )
             continue
         grouping = _PANE_BY_CLASS.get( account.asset_class )
         if grouping is None:
@@ -301,5 +336,81 @@ def _stamp_asset_placements( books : BooksOfAccount, profile : Profile ) -> None
                                               label = account.name, order = leaf_order ) )
             leaf_order = 0
         account.display_placement = AccountDisplayPlacement( path = tuple( path ), order = leaf_order )
+        continue
+    return
+
+
+def _vehicle_holding_placement( account, root : str, vehicles : dict ) -> AccountDisplayPlacement:
+    """A vehicle's holding, grouped under a top-level Vehicles pane by its root vehicle -- so a car and
+    each replacement it buys share one column, and vehicles read as their own asset group rather than
+    nested under Possessions -> Depreciating Assets."""
+    pane    = AccountDisplayGroup(
+        key = 'pane-' + _VEHICLES_PANE_KEY, label = _VEHICLES_PANE_LABEL, order = _VEHICLES_PANE_ORDER )
+    vehicle = _vehicle_group( root, account, vehicles, 'holding-vehicle-' )
+    return AccountDisplayPlacement(
+        path = ( pane, vehicle ), order = _vehicle_leaf_order( str( account.handle ) ) )
+
+
+def _vehicle_rungs( profile : Profile ) -> dict:
+    """Each current vehicle's per-vehicle rung info -- (list order, name) -- keyed by its `vehicle-N` root
+    handle. The household's vehicles in the order the vehicles step lists them (owned holdings, then leased
+    facts), so every account resolving to a given root -- its loans, interest, and holdings, current and
+    for each replacement/successor -- groups under one rung labelled by, and ordered with, that vehicle."""
+    vehicles  = [ ( asset.handle, asset.name ) for asset in profile.assets
+                  if asset.asset_class is AssetClass.DEPRECIATING ]
+    vehicles += [ ( leased.handle, leased.name ) for leased in profile.leased_vehicles ]
+    return { handle : ( order, name ) for order, ( handle, name ) in enumerate( vehicles ) }
+
+
+def _vehicle_group( root : str, account, vehicles : dict, key_prefix : str ) -> AccountDisplayGroup:
+    """The per-vehicle rung for a root vehicle: labelled by the vehicle's name and ordered by its list
+    position, falling back to the account's own name at the end for a net-new vehicle acquired in the plan
+    that no current household vehicle roots. Keyed by `key_prefix` + root, so a given axis's rung is stable
+    across runs (the root handle is stable; the reminted account UUID never enters the key)."""
+    order, name = vehicles.get( root, ( _UNMAPPED_ORDER, account.name ) )
+    return AccountDisplayGroup( key = key_prefix + root, label = name, order = order )
+
+
+def _vehicle_leaf_order( handle : str ) -> int:
+    """A vehicle account's order within its per-vehicle rung: the current account (no cycle suffix) leads,
+    then each replacement cycle in origination order. The engine suffixes a recurring account with its
+    cycle (`vehicle-loan:<v>:0`), so a trailing integer ranks it after the cycle-less current one."""
+    tail = handle.rsplit( ':', 1 )[ -1 ]
+    return int( tail ) + 1 if tail.isdigit() else 0
+
+
+def _vehicle_interest_placement( account, root : str, vehicles : dict ) -> AccountDisplayPlacement:
+    """A vehicle loan's interest, nested Non-deductible Interest -> Vehicle -> per-vehicle. The top rung
+    mirrors the engine-class fallback (the same key and order `_engine_class_placement` gives a
+    non-deductible-interest account) so vehicle interest joins that column rather than raising a rival one;
+    the Vehicle rung then gathers every vehicle's interest, each vehicle keeping its own sub-column."""
+    tax_class = account.expense_tax_class
+    interest  = AccountDisplayGroup(
+        key = tax_class.name, label = tax_class.label, order = _UNMAPPED_ORDER )
+    section = AccountDisplayGroup( key = 'vehicle-interest', label = 'Vehicle', order = 0 )
+    vehicle = _vehicle_group( root, account, vehicles, 'vehicle-interest-' )
+    return AccountDisplayPlacement(
+        path = ( interest, section, vehicle ), order = _vehicle_leaf_order( str( account.handle ) ) )
+
+
+def _stamp_vehicle_loan_placements( books : BooksOfAccount, profile : Profile ) -> None:
+    """Group every vehicle loan liability -- a current vehicle's loan and each replacement cycle's loan,
+    all resolving to one root vehicle -- under a single Vehicle Loans surface then a per-vehicle rung, so a
+    financed vehicle shows one drillable column in place of a fresh sibling per replacement."""
+    vehicles = _vehicle_rungs( profile )
+    surface  = AccountDisplayGroup(
+        key = 'vehicle-loans', label = 'Vehicle Loans', order = _VEHICLE_LOANS_ORDER )
+    for account in books.accounts:
+        if account.handle is None:
+            continue
+        handle = str( account.handle )
+        if not is_vehicle_loan_handle( handle ):
+            continue
+        root = root_vehicle( handle )
+        if root is None:
+            continue
+        vehicle = _vehicle_group( root, account, vehicles, 'vehicle-loan-' )
+        account.display_placement = AccountDisplayPlacement(
+            path = ( surface, vehicle ), order = _vehicle_leaf_order( handle ) )
         continue
     return
