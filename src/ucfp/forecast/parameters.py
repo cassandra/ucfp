@@ -181,7 +181,14 @@ class ExpenseItem:
     amount then in effect, inflated -- to a per-item account tagged with `expense_tax_class`, so
     the Books keep item detail while tax aggregates by class. `handle` is the planner's identity
     for the item's account, to associate it with the planner's artifact in results; optional.
-    For a smooth cost with no meaningful schedule, use `ExpenseStream` instead."""
+    For a smooth cost with no meaningful schedule, use `ExpenseStream` instead.
+
+    `cadence_anchor` phases the recurrence independently of the `window`: by default the cadence is
+    anchored to the window's own start, but a cost whose schedule outlives any single window -- a
+    fleet-wide vehicle running cost that carries across a car's replacements -- anchors to a shared
+    origin so the phase stays continuous, and the window merely gates which occurrences apply.
+    Without it, two adjacent windows (a car and its replacement) would each restart the cadence and
+    double-count the changeover period."""
 
     name              : str
     expense_tax_class : ExpenseTaxClass
@@ -189,6 +196,7 @@ class ExpenseItem:
     cadence           : Cadence
     window            : DateWindow      = DateWindow()
     handle            : Optional[ Handle ] = None
+    cadence_anchor    : Optional[ date ] = None
 
 
 @dataclass( frozen = True )

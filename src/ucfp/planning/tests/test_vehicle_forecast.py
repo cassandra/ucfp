@@ -18,18 +18,18 @@ from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import ScheduledLoanPayoff
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.plans.enums import PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
-    LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
+    LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan, VehicleRunningCost )
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, SubjectProfile
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
-from ucfp.parameter_sets.enums import EconomicOutlookVariant
+from ucfp.parameter_sets.enums import EconomicOutlookVariant, Realization
 from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.planning.materialization import ForecastFrame, materialize
 
@@ -256,3 +256,48 @@ class CurrentVehicleLoanForecastTest( TestCase ):
         self.assertIn( 'vehicle-loan:vehicle-1-replacement', originations )    # successor's recurring loan
         self.assertNotIn( 'vehicle-loan:vehicle-1', originations )                 # distinct -- no collision
         self.assertIn( 'vehicle-loan:vehicle-1', payoffs )                         # the sale pays it off
+
+
+class RunningCostAcrossReplacementTest( TestCase ):
+    """A discrete (semi-annual) running cost bills on one fleet-wide schedule, so replacing a vehicle
+    mid-year splits that year's billing between the outgoing and incoming car instead of billing both in
+    full. The year's total tracks the number of cars operated, not the number of changeovers -- a
+    regression guard for the cadence-phase double-count that made a replacement year charge ~1.5x."""
+
+    def setUp( self ):
+        call_command( 'seed_parameter_sets' )
+
+    @staticmethod
+    def _insurance() -> VehicleRunningCost:
+        # Semi-annual: a mis-phased changeover would surface as an extra occurrence in the swap year.
+        return VehicleRunningCost(
+            name = 'Insurance', handle = 'vehicle-insurance', expense_tax_class = ExpenseTaxClass.LIVING,
+            interval = Duration( 6, TimeUnit.MONTH ), amount = Decimal( '600' ),
+            realization = Realization.DISCRETE )
+
+    def _insurance_2034( self, plans : Plans ) -> Decimal:
+        reader  = _run_with( _financed_current_profile(), plans )
+        account = next( a for a in reader.chart.accounts() if a.name == 'Insurance' )
+        return sum( ( posting.signed_amount for posting in reader.postings( account )
+                      if posting.date.year == 2034 ), Decimal( '0' ) )
+
+    def test_a_mid_year_replacement_does_not_inflate_the_years_running_cost( self ):
+        repay = [ LoanRepayment(
+            debt_handle = 'vehicle-1-loan', interest_rate = Rate.percent( Decimal( '5' ) ),
+            remaining_term = Duration( 60, TimeUnit.MONTH ) ) ]
+        kept = self._insurance_2034( Plans(
+            loan_repayments = repay,
+            vehicle_plan = VehiclePlan( running_costs = [ self._insurance() ] ) ) )
+        replaced = self._insurance_2034( Plans(
+            loan_repayments = repay,
+            vehicle_plan = VehiclePlan(
+                running_costs = [ self._insurance() ],
+                dispositions  = [ VehicleDisposition(
+                    vehicle_handle = 'vehicle-1', kind = VehicleDispositionKind.REPLACE,
+                    sale_date = date( 2034, 7, 1 ),
+                    replacement = Vehicle(
+                        handle = '', name = 'Civic', purchase_price = Decimal( '32000' ),
+                        recurrence_years = 5, payment_method = PaymentMethod.LOAN,
+                        down_payment = Decimal( '4000' ) ) ) ] ) ) )
+        self.assertLess( kept, Decimal( '0' ) )        # the cost actually posted...
+        self.assertEqual( replaced, kept )             # ...and the swap year matches the kept year, not 1.5x

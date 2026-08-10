@@ -749,7 +749,7 @@ class Forecast:
             if clipped is None:
                 continue
             start, end = clipped
-            since = item.window.start if item.window.start is not None else self._parameters.start_date
+            since = self._cadence_anchor( item.cadence_anchor, item.window )
             occurrences = item.cadence.count_in( start = start, end = end, since = since )
             windowed_amount = item.amounts.at( span.start_date )
             if ( occurrences == 0 ) or ( windowed_amount is None ):
@@ -879,6 +879,15 @@ class Forecast:
         if start > end:
             return None
         return ( start, end )
+
+    def _cadence_anchor( self, anchor : Optional[ date ], window : DateWindow ) -> date:
+        """The date a windowed item's cadence phases from: its explicit `cadence_anchor` when set (a
+        fleet-wide schedule that outlives the window), else the window's own start, else the forecast
+        start. Sharing an anchor across adjacent windows keeps the phase continuous, so a run cost does
+        not restart -- and double-count -- at each of a vehicle's replacements."""
+        if anchor is not None:
+            return anchor
+        return window.start if window.start is not None else self._parameters.start_date
 
     def _income_growth_factor( self, income_tax_class : IncomeTaxClass, target_year : int ) -> Decimal:
         return self._cumulative_factor(

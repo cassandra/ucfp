@@ -594,8 +594,11 @@ def _vehicle_running_costs( profile : Profile, plans : Plans, sale_dates : dict,
     """The shared per-car running costs applied to each vehicle the household operates as (streams,
     items): each cost's per-car amount is emitted once per vehicle window (see `_vehicle_windows` -- the
     current possessions and the planned vehicles), so the total tracks the fleet operated over time. A
-    SMOOTH cost enters as an annualized stream, a DISCRETE one as an item placed at its cadence. Empty
-    when there is no running cost (or it is blank)."""
+    SMOOTH cost enters as an annualized stream, a DISCRETE one as an item placed at its cadence. A
+    discrete cost anchors its cadence to the forecast start (not each window's own start), so its billing
+    phase is one fleet-wide schedule: a car and its replacement share it, so the changeover window is
+    gated -- not re-phased -- and the transition period is never double-billed. Empty when there is no
+    running cost (or it is blank)."""
     plan          = plans.vehicle_plan
     running_costs = plan.running_costs if plan is not None else list()
     windows = _vehicle_windows( profile, plans, sale_dates, start_date )
@@ -612,7 +615,8 @@ def _vehicle_running_costs( profile : Profile, plans : Plans, sale_dates : dict,
             else:
                 items.append( ExpenseItem(
                     name = cost.name, handle = cost.handle, expense_tax_class = cost.expense_tax_class,
-                    amounts = amounts, cadence = Recurrence( cost.interval ), window = window ) )
+                    amounts = amounts, cadence = Recurrence( cost.interval ), window = window,
+                    cadence_anchor = start_date ) )
     return streams, items
 
 
