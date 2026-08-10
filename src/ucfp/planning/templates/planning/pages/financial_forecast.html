@@ -91,8 +91,8 @@ of {label, drift}, where `drift` is the notice from `inputs.drift.plans_drift`.
   </div>
 </form>
 {% elif not drift_scenarios %}
-{# Only prompt to build/resume when there is nothing runnable *and* nothing merely drift-blocked --
-   a drift-blocked scenario is not "no scenario", so its reconcile above is the action, not a new build. #}
+{% comment %}Only prompt to build/resume when there is nothing runnable *and* nothing merely drift-blocked
+-- a drift-blocked scenario is not "no scenario", so its reconcile above is the action, not a new build.{% endcomment %}
 {% include 'planning/panes/scenario_required.html' %}
 {% endif %}
 

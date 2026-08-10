@@ -32,8 +32,8 @@ sub-block, with the method as a nested switch). Empty when none is open. Reads `
             <div class="col-sm-4">{{ disposition_form.loan_rate.as_field_group }}</div>
             <div class="col-sm-4">{{ disposition_form.loan_months.as_field_group }}</div>
           </div>
-          {# role=alert announces the hint when the calculator reveals it; the rate input points at it via
-             aria-describedby (a display:none hint is skipped by screen readers until shown). #}
+          {% comment %}role=alert announces the hint when the calculator reveals it; the rate input points
+          at it via aria-describedby (a display:none hint is skipped by screen readers until shown).{% endcomment %}
           <p id="current-loan-hint" role="alert"
              class="text-danger small mb-0 d-none {{ AppConst.CURRENT_LOAN_HINT_CLASS }}">That payment and
             term don't fit the balance &mdash; check them.</p>
