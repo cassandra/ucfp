@@ -35,6 +35,7 @@ from ucfp.inputs.assumptions.repository import (
 from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
     existing_pairings, rename_scenario, scenarios_for )
+from ucfp.inputs.compatibility import plans_reconciled_with_profile
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -418,6 +419,25 @@ class ScenarioDeleteView( View ):
         _forget_if_current( request, 'current_scenario_uuid', record )
         delete_scenario( record )
         return redirect( 'scenarios_home' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioReconcileView( View ):
+    """`/inputs/scenarios/<uuid>/reconcile/` -- strip a scenario's Plans references that no longer resolve
+    against the current Profile (the "Remove stale references" fix a drift-blocked scenario offers on the
+    Forecast hub), then return there, where the reconciled scenario is runnable again. POST, since it edits
+    the Plans. No-op when there is no complete profile to reconcile against (nothing would resolve)."""
+
+    def post( self, request, uuid ):
+        organization   = request.organization
+        scenario       = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = organization, usage_role = UsageRole.SAVED )
+        profile_record = completed_profile( organization )
+        if profile_record is not None:
+            reconciled = plans_reconciled_with_profile(
+                load_profile( profile_record ), load_plans( scenario.plans ) )
+            save_plans( scenario.plans, reconciled )
+        return redirect( 'financial_forecast' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

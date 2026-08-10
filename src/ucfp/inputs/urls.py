@@ -14,6 +14,8 @@ urlpatterns = [
     path( 'scenarios/<uuid:uuid>/edit/', views.ScenarioEditView.as_view(), name = 'scenario_edit' ),
     path( 'scenarios/<uuid:uuid>/rename/', views.ScenarioRenameView.as_view(), name = 'scenario_rename' ),
     path( 'scenarios/<uuid:uuid>/delete/', views.ScenarioDeleteView.as_view(), name = 'scenario_delete' ),
+    path( 'scenarios/<uuid:uuid>/reconcile/', views.ScenarioReconcileView.as_view(),
+          name = 'scenario_reconcile' ),
 
     # The three input flows, each editable on its own (a scenario build chains Plans then Assumptions).
     path( 'profile/', views.FlowEntryView.as_view( flow = 'profile' ), name = 'flow_profile' ),
