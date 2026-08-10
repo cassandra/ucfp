@@ -36,18 +36,9 @@ def is_editable( domain ) -> bool:
     return bool( _UNITS_BY_DOMAIN[ domain ] )
 
 
-def durable_amount( count : Optional[ int ], cost_each : Optional[ Decimal ],
-                    lifespan : Optional[ int ] ) -> Optional[ Decimal ]:
-    """A durable's annualized amount -- count x cost-each / lifespan -- or None when any input is missing
-    (non-blocking: an incomplete calculator charges nothing)."""
-    if count is None or cost_each is None or not lifespan:
-        return None
-    return count * cost_each / lifespan
-
-
 def per_year( amount : Optional[ Decimal ], interval : Optional[ Duration ] ) -> Decimal:
-    """A per-cadence amount as a whole-dollar yearly figure -- the durable calculator's advisory readout
-    (count x cost-each is a per-cycle total; this annualizes it)."""
+    """A per-cadence amount as a whole-dollar yearly figure -- the durable calculator's advisory readout,
+    annualizing the (authoritative) per-band amount for the "~ $N/yr" preview."""
     if amount is None or interval is None:
         return Decimal( 0 )
     return ( amount * interval.occurrences_per_year() ).quantize( Decimal( 1 ) )
@@ -134,10 +125,11 @@ def read_optional_cadence( form, prefix, domain ):
 
 
 # ----- The durable "count-entry" calculator (a shared control on both expense tables) -----
-# A durable expense's amount is not entered directly but computed from a small breakdown: `count` items
-# at `cost_each`, replaced every `lifespan` years, giving the annualized `durable_amount`. Those three
-# inputs are remembered on the expense; the amount stays server-authoritative (the client fill is a
-# preview). Both tables build, view, and read the calculator through these helpers so they behave alike.
+# A durable expense's amount is entered directly per band, like any other expense; the calculator is an
+# optional helper that estimates an annual figure -- `count` items at `cost_each`, replaced every
+# `lifespan` years -- and fills the bands on demand. Its three inputs are remembered on the expense only
+# to repopulate the calculator when it is reopened; the amount is authoritative and never recomputed from
+# them. Both tables build, view, and read the calculator through these helpers so they behave alike.
 
 def add_calculator_fields( form, prefix, count : Optional[ int ], cost_each : Optional[ Decimal ],
                            lifespan : Optional[ int ] ) -> None:
@@ -169,15 +161,14 @@ def calculator_cells( form, prefix, per_year_amount : Decimal ) -> dict:
         'per_year' : per_year_amount }
 
 
-def read_durable( form, prefix ) -> tuple:
-    """A durable's (amount, count, cost_each, lifespan) read back from its calculator fields: the
-    annualized `durable_amount` (None when the calculator is incomplete -- charging nothing) alongside
-    the raw inputs to remember."""
-    cleaned   = form.cleaned_data
-    count     = cleaned.get( _calc_count_key( prefix ) )
-    cost_each = cleaned.get( _calc_cost_key( prefix ) )
-    lifespan  = cleaned.get( _calc_lifespan_key( prefix ) )
-    return durable_amount( count, cost_each, lifespan ), count, cost_each, lifespan
+def read_calculator_inputs( form, prefix ) -> tuple:
+    """A durable's remembered calculator inputs -- (count, cost_each, lifespan) -- read back from its
+    fields. The amount is no longer derived from these (it is entered directly per band); the inputs are
+    kept only to repopulate the calculator when it is reopened."""
+    cleaned = form.cleaned_data
+    return ( cleaned.get( _calc_count_key( prefix ) ),
+             cleaned.get( _calc_cost_key( prefix ) ),
+             cleaned.get( _calc_lifespan_key( prefix ) ) )
 
 
 def _count_key( prefix ) -> str:

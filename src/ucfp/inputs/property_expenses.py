@@ -19,7 +19,7 @@ from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
-    read_durable )
+    read_calculator_inputs )
 from ucfp.inputs.expenses import (
     OWNED_PROPERTY_CONTEXT, grouped_sections, has_property, is_renting, kept_attr, kept_interval,
     ordered_catalog, owned_property_handles )
@@ -139,8 +139,7 @@ class PropertyExpensesForm( forms.Form ):
             default.widget.attrs[ 'placeholder' ] = '0'
             default.widget.attrs[ 'class' ] += ' ' + self._default_class( expense )   # keep money styling
             default.widget.attrs[ 'aria-label' ] = self._cell_label( expense, self._default_column_label() )
-            if expense.count is not None:                  # a durable's amount is filled by the calculator
-                default.widget.attrs[ 'readonly' ] = True
+            if expense.count is not None:                  # directly editable; the calculator fills it on demand
                 default.widget.attrs[ f'data-{AppConst.CALC_DATA_ATTR}' ] = str( ri )
                 add_calculator_fields( self, ri, expense.count, expense.cost_each, expense.lifespan )
             self.fields[ self._default_key( ri ) ] = default
@@ -239,8 +238,7 @@ class PropertyExpensesForm( forms.Form ):
     def _row( self, ri : int, expense ) -> dict:
         """One displayed expense row: its name, cadence, and a cell per column -- the bound Default field,
         then each property's override field, or None where the row is N/A for that property. A durable
-        row's Default is filled by its `calculator` (count x cost-each), and its cadence shows read-only
-        (edited inside the calculator panel)."""
+        row's Default is directly editable, with an optional `calculator` that fills it on demand."""
         durable = expense.count is not None
         cells   = [ self[ self._default_key( ri ) ] ]
         if not self._collapsed:
@@ -264,19 +262,19 @@ class PropertyExpensesForm( forms.Form ):
         return profile, replace( plans, property_expenses = expenses )
 
     def _edited( self, ri : int, expense ) -> PropertyExpense:
-        """`expense` with its default, cadence, and overrides taken from the matrix. A durable's default
-        is computed from its calculator (count x cost-each, both remembered); a normal row's is the
-        Default cell. Overrides are the filled per-property cells (blank drops back to the default);
-        collapsed, there are none."""
+        """`expense` with its default, cadence, and overrides taken from the matrix. The Default is read
+        directly from its cell, durable or not; a durable additionally remembers its calculator inputs
+        (which no longer drive the amount -- they only repopulate the calculator). Overrides are the
+        filled per-property cells (blank drops back to the default); collapsed, there are none."""
         cleaned   = self.cleaned_data
         interval  = read_cadence( self, self._cad_prefix( ri ), expense.interval, expense.cadence_domain )
         overrides = dict() if self._collapsed else self._read_overrides( ri )
+        default   = cleaned.get( self._default_key( ri ) )
         if expense.count is not None:
-            default, count, cost_each, lifespan = read_durable( self, ri )
+            count, cost_each, lifespan = read_calculator_inputs( self, ri )
             return replace( expense, interval = interval, default_amount = default, count = count,
                             cost_each = cost_each, lifespan = lifespan, overrides = overrides )
-        return replace( expense, interval = interval,
-                        default_amount = cleaned.get( self._default_key( ri ) ), overrides = overrides )
+        return replace( expense, interval = interval, default_amount = default, overrides = overrides )
 
     def _read_overrides( self, ri : int ) -> dict:
         cleaned = self.cleaned_data
