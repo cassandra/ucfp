@@ -1,0 +1,15 @@
+{% comment %}
+The run frame's when-controls -- the scenario chooser, start-from, and duration -- rendered from the
+context `form`. Extracted so the setup card stays uncluttered; the outer context's `effective_date` is
+used for the default-start note.
+{% endcomment %}
+<div class="form-row">
+  <div class="col-sm-6 col-md-5 mb-1">{{ form.scenario.as_field_group }}</div>
+  <div class="col-sm-6 col-md-4 mb-1">
+    <label class="text-muted small mb-0 d-block" for="{{ form.start_from.id_for_label }}">{{ form.start_from.label }}</label>
+    {{ form.start_from }}
+  </div>
+  <div class="col-6 col-md-3 mb-1">{{ form.duration_years.as_field_group }}</div>
+</div>
+<p class="text-muted small">Runs from your profile's date{% if effective_date %} ({{ effective_date|date:"F Y" }}){% endif %}
+  by default; a year-aligned start is approximate.</p>

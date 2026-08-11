@@ -3,22 +3,9 @@
 
 {% block app_content %}
 <h1 class="mb-1">Financial Forecast</h1>
-{% if has_profile and scenarios %}<p class="text-muted">Set up a run, then project it once or open it to explore and tweak the scenario.</p>{% endif %}
+{% if has_profile and scenarios %}<p class="text-muted">Project a scenario once, or explore it interactively.</p>{% endif %}
 
 {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
-
-{% if resume %}
-{% comment %}
-Offered only while an exploration is in progress; keyed off the exploration's own anchor (not the
-chooser below), and linking to the uuid-less workspace so it resumes without re-seeding.
-{% endcomment %}
-<div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between">
-  <span class="my-1">Exploration in progress &mdash;
-    {% if resume.changed %}a variation of <strong>{{ resume.source.label }}</strong>
-      ({{ resume.drift_summary }}){% else %}<strong>{{ resume.source.label }}</strong>, unchanged{% endif %}.</span>
-  <a href="{% url 'explore' %}" class="btn btn-primary btn-sm my-1">Resume &rarr;</a>
-</div>
-{% endif %}
 
 {% if drift_scenarios %}
 {% comment %}
@@ -52,45 +39,33 @@ of {label, drift}, where `drift` is the notice from `inputs.drift.plans_drift`.
   <a href="{% url 'flow_profile' %}" class="btn btn-primary">Set up your profile</a>
 </div>
 {% elif scenarios %}
-<form method="post" class="mt-3 forecast-setup">
+{% comment %}One setup for the scenario + frame, with both ways to project it attached directly beneath:
+Run once (this page's POST -- a saved projection) and Run & Explore (the interactive workspace). Both
+submit this same form, so the setup and its actions are one connected unit. Its hidden yearly interval:
+this hub is general long-term forecasting, where yearly is the only sensible interval (the engine still
+supports finer granularity for the features that need it). An in-progress exploration is a separate state
+shown below -- it does not use this form.{% endcomment %}
+<form method="post" class="forecast-setup mt-3">
   {% csrf_token %}
-  {% comment %}This hub is general long-term forecasting, where yearly is the only sensible interval; the
-  engine still supports finer granularity for the features that need it, just not chosen here.{% endcomment %}
   <input type="hidden" name="interval" value="year">
-  <h2 class="h6">1. Set up the run</h2>
-  <div class="form-row">
-    <div class="col-sm-6 col-md-4 mb-1">{{ form.scenario.as_field_group }}</div>
-    <div class="col-sm-6 col-md-4 mb-1">
-      <label class="text-muted small mb-0 d-block" for="{{ form.start_from.id_for_label }}">{{ form.start_from.label }}</label>
-      {{ form.start_from }}
-    </div>
-    <div class="col-6 col-md-3 mb-1">{{ form.duration_years.as_field_group }}</div>
-  </div>
-  <p class="text-muted small">Runs from your profile's date{% if effective_date %} ({{ effective_date|date:"F Y" }}){% endif %}
-    by default; a year-aligned start is approximate.</p>
-  <h2 class="h6 mt-4">2. Run or explore</h2>
-  <div class="row">
-    <div class="col-md-6 mb-3">
-      <div class="card h-100">
-        <div class="card-body">
-          <h3 class="h6">Run once</h3>
-          <p class="text-muted small">One projection, saved so you can revisit it.</p>
-          <button type="submit" class="btn btn-primary">Run forecast</button>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-6 mb-3">
-      <div class="card h-100">
-        <div class="card-body">
-          <h3 class="h6">Explore scenarios</h3>
-          <p class="text-muted small">Tweak assumptions and plans live and compare against this scenario.</p>
-          <button type="submit" class="btn btn-outline-primary"
-                  formaction="{% url 'explore_enter' %}">Explore &amp; tweak &rarr;</button>
-        </div>
-      </div>
+  <div class="card">
+    <div class="card-body">
+      {% include 'planning/panes/run_frame_fields.html' %}
+      <button type="submit" class="btn btn-primary mr-2">Run once</button>
+      <button type="submit" class="btn btn-primary" formaction="{% url 'explore_enter' %}">Run &amp; Explore</button>
     </div>
   </div>
 </form>
+
+{% if resume %}
+{% comment %}An in-progress exploration is its own state -- separate from the setup form, since it does not
+use it. Name the anchor and offer Resume; what has diverged from the anchor is shown on the Explore
+workspace itself, not repeated here.{% endcomment %}
+<div class="alert alert-info d-flex flex-wrap align-items-center mt-3 mb-0">
+  <span class="mr-3 my-1">Exploration in progress &mdash; <strong>{{ resume.source.label }}</strong>.</span>
+  <a href="{% url 'explore' %}" class="btn btn-primary btn-sm my-1">Resume</a>
+</div>
+{% endif %}
 {% elif not drift_scenarios %}
 {% comment %}Only prompt to build/resume when there is nothing runnable *and* nothing merely drift-blocked
 -- a drift-blocked scenario is not "no scenario", so its reconcile above is the action, not a new build.{% endcomment %}

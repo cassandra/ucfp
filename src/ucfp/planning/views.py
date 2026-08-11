@@ -209,6 +209,8 @@ class FinancialForecastView( InputGatedMixin, View ):
             'build_scenario'         : started_scenario or ( in_progress[ 0 ] if in_progress else None ),
             'build_scenario_started' : started_scenario is not None,
             'resume'       : self._live_resume( exploration, profile_record ),
+            # One setup form; both actions submit it -- Run once (this view's POST) and Run & Explore (the
+            # workspace). A run whose submission erred is re-rendered in place with its messages.
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),
             'saved_runs'   : self._saved_runs( organization ),
@@ -256,13 +258,10 @@ class FinancialForecastView( InputGatedMixin, View ):
 
     @staticmethod
     def _resume( exploration ) -> dict:
-        """The in-progress exploration surfaced on the hub: its anchor and how far the sandbox has diverged,
-        so Resume can say what it returns to -- the anchor as-is, or a variation of it."""
-        drift = value_changes( load_scenario( exploration.source ), load_scenario( exploration.working ) )
-        return {
-            'source'       : exploration.source,
-            'drift_summary': describe_changes( drift ),
-            'changed'      : bool( drift ) }
+        """The in-progress exploration surfaced on the hub: just its anchor scenario. The hub names it and
+        offers Resume; what has diverged from the anchor is shown on the Explore workspace itself, not
+        repeated here."""
+        return { 'source': exploration.source }
 
     @staticmethod
     def _selection_defaults( request ) -> dict:
