@@ -9,7 +9,8 @@
   </ol>
 </nav>
 
-<h1 class="mb-1">{{ record.label }}</h1>
+{% url 'rename_run' record.uuid as rename_url %}
+{% include 'inputs/panes/inline_rename.html' with kind='run' uuid=record.uuid rename_url=rename_url label=record.label aria='Run name' title=True wrapper_class='mb-1' %}
 <p class="mb-3">
   <span class="text-muted">{{ horizon_start }}&ndash;{{ horizon_end }} ({{ horizon_years }} yr)</span>
   &middot;

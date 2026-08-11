@@ -9,6 +9,7 @@ from . import views
 
 urlpatterns = [
     path( '<uuid:run_uuid>/', views.RunResultsView.as_view(), name = 'run_results' ),
+    path( '<uuid:run_uuid>/rename/', views.RenameRunView.as_view(), name = 'rename_run' ),
     path( '<uuid:run_uuid>/books/', views.ProjectionRunBooksTableView.as_view(),
           name = 'run_books_table' ),
     path( '<uuid:run_uuid>/books/account/<uuid:account_uuid>/journal/',

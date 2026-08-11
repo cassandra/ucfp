@@ -315,6 +315,22 @@ class RunResultsView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
+class RenameRunView( View ):
+    """`/run/<uuid>/rename/` -- rename a captured run from the results page's inline editor. Renames the run
+    record itself -- the one label the results page and the hub both show -- and saves silently (a blank
+    name is ignored). Runs need not be uniquely named, so there is no conflict check."""
+
+    def post( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        label = request.POST.get( 'label', '' ).strip()
+        if label:
+            record.label = label
+            record.save()
+        return antinode.response()
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
 class EnterExploreView( InputGatedMixin, View ):
     """`/plan/financial-forecast/explore/enter/` -- from the hub, start or resume exploring the chosen saved
     scenario, then redirect to the workspace. Idempotent: re-entering the scenario already in progress
