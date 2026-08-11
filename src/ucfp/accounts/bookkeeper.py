@@ -160,17 +160,20 @@ class Bookkeeper:
                  proceeds              : Optional[ Decimal ],
                  *,
                  proceeds_account      : Account,
-                 realized_gain_account : Account,
+                 realized_gain_account : Optional[ Account ],
                  on_date               : date,
                  description           : str = '' ) -> Optional[ Transaction ]:
         """Realize `proceeds` of `holding`'s market value into `proceeds_account`: draw
         down cost and valuation proportionally, recognize the realized gain (the valuation
         portion) into `realized_gain_account`, and reverse the Unrealized Gains equity. The
         gain may be negative -- an underwater holding realizes a loss. Net-worth-neutral --
-        the gain just moves from unrealized to realized (taxable). `proceeds` of None realizes the
-        entire holding (a full sale); otherwise it caps at the holding's market value. Returns the
-        posted transaction (None if the holding has no value to realize), so a caller can reference
-        it (e.g. in a Notice)."""
+        the gain just moves from unrealized to realized (taxable). A `realized_gain_account` of
+        None recognizes no realized gain (a personal depreciating asset whose class carries none):
+        the valuation mark is cleared but the gain stays *unrealized* -- already in net worth -- so
+        the sale is a plain asset->cash swap with no income entry (still net-worth-neutral).
+        `proceeds` of None realizes the entire holding (a full sale); otherwise it caps at the
+        holding's market value. Returns the posted transaction (None if the holding has no value to
+        realize), so a caller can reference it (e.g. in a Notice)."""
         ledger = self.ledger
         market = ledger.market_value( holding )
         if market <= 0:
@@ -186,14 +189,15 @@ class Bookkeeper:
             gain = proceeds - cost_sold
         postings = [ ( proceeds_account, -proceeds ), ( holding, cost_sold ) ]
         if gain != 0:
-            unrealized_gain_account = self.chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
-            if unrealized_gain_account is None:
-                raise MissingAccountError( 'No Unrealized Gains equity account to realize against.' )
-            postings += [
-                ( valuation_account, gain ),
-                ( unrealized_gain_account, -gain ),
-                ( realized_gain_account, gain ),
-            ]
+            postings.append( ( valuation_account, gain ) )   # clear the sold holding's valuation mark
+            if realized_gain_account is not None:
+                unrealized_gain_account = self.chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
+                if unrealized_gain_account is None:
+                    raise MissingAccountError( 'No Unrealized Gains equity account to realize against.' )
+                postings += [                                 # move the gain from unrealized to realized
+                    ( unrealized_gain_account, -gain ),
+                    ( realized_gain_account, gain ),
+                ]
         return self.record( on_date, postings, description = description )
 
     # -- invariants and index access -----------------------------------------

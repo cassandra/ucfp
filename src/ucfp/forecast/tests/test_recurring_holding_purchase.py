@@ -16,7 +16,7 @@ from common.date_window import DateWindow
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AccountType, AssetClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
@@ -82,7 +82,7 @@ class RecurringHoldingPurchaseTests( unittest.TestCase ):
         self.assertEqual( reader.ledger.market_value( holding, through = date( 2026, 12, 31 ) ),
                           Decimal( '10000' ) )
 
-    def test_trade_in_swaps_the_whole_depreciated_holding_tax_free( self ):
+    def test_trade_in_swaps_the_whole_depreciated_holding_with_no_income( self ):
         # 20%/yr depreciation, no inflation, replaced every 3 years from 2026. Each replacement trades the
         # whole depreciated holding in to cash and rebuys at 30,000; between times it just erodes.
         params = _params(
@@ -99,8 +99,13 @@ class RecurringHoldingPurchaseTests( unittest.TestCase ):
         self.assertEqual( ledger.market_value( holding, through = date( 2027, 12, 31 ) ), Decimal( '24000' ) )
         self.assertEqual( ledger.market_value( holding, through = date( 2028, 12, 31 ) ), Decimal( '19200' ) )
         self.assertEqual( ledger.market_value( holding, through = date( 2029, 12, 31 ) ), Decimal( '30000' ) )
-        # net worth fell only by the real depreciation (the trade-in loss is TAX_FREE, so no tax leaks):
-        # 6,000 (2027) + 4,800 (2028) + 3,840 (2029) = 14,640 off the opening 200,000.
+        # A personal depreciating trade-in recognizes NO income: its class realizes no gain, so the loss
+        # stays a permanent *unrealized* item and the swap posts no revenue (the run's only revenue would be
+        # such a realization; there is none here). Net worth still falls by the real depreciation alone --
+        # 6,000 (2027) + 4,800 (2028) + 3,840 (2029) = 14,640 off the opening 200,000 -- because the
+        # depreciation is already carried in net worth whether or not the trade-in realizes it.
+        self.assertEqual( ledger.type_total( AccountType.REVENUE, through = date( 2029, 12, 31 ) ),
+                          Decimal( '0' ) )
         self.assertEqual( ledger.net_worth( through = date( 2029, 12, 31 ) ), Decimal( '185360' ) )
 
     def test_without_trade_in_it_is_a_plain_recurring_investment( self ):

@@ -160,9 +160,11 @@ class AssetClass( LabeledEnum ):
     @property
     def realized_gain_income_class( self ):
         """The income tax-class the gain realized on a sale or withdrawal is
-        recognized in. None for face-value classes (cash, CDs) that never carry a
-        gain to realize; TAX_FREE for personal-use depreciating assets, whose
-        gain/loss is recognized in the books but excluded from tax."""
+        recognized in, or None for classes that recognize no realized gain:
+        face-value classes (cash, CDs) that carry no gain, and personal-use
+        depreciating assets, whose value change stays a permanent *unrealized*
+        item (already in net worth) rather than being realized as income -- so a
+        car trade-in is a plain asset->cash swap, not a tax-free income spike."""
         return _REALIZED_GAIN_INCOME_CLASS.get( self )
 
     @property
@@ -263,10 +265,12 @@ _DISTRIBUTION_INCOME_CLASS = {
 
 
 # The income tax-class the gain realized on a sale or withdrawal is recognized in,
-# per asset class. Cash and CDs are absent (face value -- no gain to realize).
-# Depreciating personal assets map to TAX_FREE: their gain/loss is real to the books
-# but not taxable (a personal-use loss is non-deductible, gains are rare), so it is
-# recognized and then excluded from tax -- a deliberate simplification.
+# per asset class. Absent classes recognize no realized gain. Cash and CDs are face
+# value (no gain to realize). DEPRECIATING is absent deliberately: a personal-use
+# vehicle's decline is already carried gradually as unrealized depreciation (in net
+# worth), and it is never a tax event, so realizing it on trade-in would only post a
+# tax-free loss to the income statement -- confusing noise. Its trade-in instead just
+# clears the holding to cash (see `Bookkeeper.realize`), leaving the loss unrealized.
 _REALIZED_GAIN_INCOME_CLASS = {
     AssetClass.STOCKS                  : IncomeTaxClass.LONG_TERM_GAINS,
     AssetClass.DIVIDEND_STOCKS         : IncomeTaxClass.LONG_TERM_GAINS,
@@ -278,7 +282,6 @@ _REALIZED_GAIN_INCOME_CLASS = {
     AssetClass.ROTH                    : IncomeTaxClass.TAX_FREE,
     AssetClass.PRECIOUS_METALS         : IncomeTaxClass.COLLECTIBLES_GAINS,
     AssetClass.COLLECTIBLES            : IncomeTaxClass.COLLECTIBLES_GAINS,
-    AssetClass.DEPRECIATING            : IncomeTaxClass.TAX_FREE,
 }
 
 
