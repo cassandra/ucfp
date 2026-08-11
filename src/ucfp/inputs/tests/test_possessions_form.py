@@ -75,6 +75,17 @@ class PossessionsFormTests( unittest.TestCase ):
         result = _apply( profile, name_0 = 'Ring', value_0 = '5,000', type_0 = 'COLLECTIBLES' )
         self.assertIn( 'vehicle-1', [ asset.handle for asset in result.assets ] )
 
+    def test_a_new_possession_avoids_a_handle_a_transition_asset_still_holds( self ):
+        # Pre-split transition data: a DEPRECIATING asset still occupies possession-1. Minting saw only
+        # precious-metals/collectibles, so it re-minted possession-1 onto it -- a collision that 500s at
+        # book persistence (#146). A new possession must skip to possession-2, past the retained asset.
+        profile = Profile( assets = [
+            _possession( 'possession-1', '2009 Honda Civic', AssetClass.DEPRECIATING, '20000' ) ] )
+        result  = _apply( profile, name_0 = 'Coins', value_0 = '5,000', type_0 = 'COLLECTIBLES' )
+        self.assertIn( 'possession-1', [ asset.handle for asset in result.assets ] )   # the asset is kept...
+        coins = next( asset for asset in result.assets if asset.name == 'Coins' )
+        self.assertEqual( coins.handle, 'possession-2' )                               # ...and not collided
+
 
 if __name__ == '__main__':
     unittest.main()
