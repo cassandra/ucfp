@@ -39,7 +39,7 @@ an age to split it, clear a span's age to delete it. Ages are the primary person
         {% if row.count_entry %}
         <tr class="{{ AppConst.CALC_PANEL_CLASS }} calc-detail" data-{{ AppConst.CALC_DATA_ATTR }}="{{ row.calc_id }}" hidden>
           <td colspan="{{ recurring_form.span_count|add:2 }}" class="small text-muted">
-            {% include 'inputs/components/_calculator_panel.html' with calc=row.calculator %}</td>
+            {% include 'inputs/components/_calculator_panel.html' with calc=row.calculator calc_id=row.calc_id %}</td>
         </tr>
         {% endif %}
         {% endfor %}

@@ -699,16 +699,41 @@ window.App.Inputs = (function () {
         return $( selector + '[' + dataAttr( C.CALC_DATA_ATTR ) + '="' + id + '"]' );
     }
 
+    function autofillOn( id ) {
+        return calcById( id, classSelector( C.CALC_AUTOFILL_CLASS ) ).prop( 'checked' );
+    }
+
+    // React to any calculator input -- including its Auto fill checkbox, which lives in the same panel.
+    // The readout always previews the estimate; the amount target(s) fill from it only while Auto fill is
+    // checked, so an unchecked calculator is a reference the user can hand-tune the bands against without
+    // it clobbering their edits (and ticking it back on applies the current estimate). Both readout and
+    // target are thousands-grouped, so the live preview reads the same as a saved-and-reloaded amount.
     function updateCalculator( id ) {
         const $panel   = calcById( id, classSelector( C.CALC_PANEL_CLASS ) );
         const count    = calcNumber( $panel, '[name^="count_"]' );
         const cost     = calcNumber( $panel, '[name^="cost_"]' );
         const lifespan = calcNumber( $panel, '[name^="lifespan_"]' ) || 1;
         const annual   = Math.round( ( count * cost ) / lifespan );
-        // The readout (inside the panel) mirrors the amount target, both thousands-grouped like every
-        // money value once enhanced -- so the live preview reads the same as a saved-and-reloaded amount.
-        calcById( id, classSelector( C.CALC_TARGET_CLASS ) ).val( annual ? groupedThousands( annual ) : '' );
         $panel.find( classSelector( C.CALC_READOUT_CLASS ) ).text( groupedThousands( annual ) );
+        if ( ! autofillOn( id ) ) {
+            return;
+        }
+        const $targets = calcById( id, classSelector( C.CALC_TARGET_CLASS ) );
+        $targets.val( annual ? groupedThousands( annual ) : '' );
+        // A flat fill clears the recurring row's change arrows; a no-op on the single-Default property
+        // table, whose row carries no span-amount cells.
+        updateSpanTrends( $targets.first().closest( 'tr' ) );
+    }
+
+    // Apply a calculator's fill when one of its inputs (or its Auto fill checkbox) is about to be saved.
+    // A programmatic .val() emits no change of its own, so the fill must run BEFORE the form serializes --
+    // like syncField below -- otherwise re-checking Auto fill would persist the pre-fill values. A no-op
+    // for any field outside a calculator panel.
+    function applyCalculatorFill( $field ) {
+        const $panel = $field.closest( classSelector( C.CALC_PANEL_CLASS ) );
+        if ( $panel.length ) {
+            updateCalculator( $panel.attr( dataAttr( C.CALC_DATA_ATTR ) ) );
+        }
     }
 
     // The recurring-expenses table flags each amount that differs from the previous age span (a tinted
@@ -748,6 +773,7 @@ window.App.Inputs = (function () {
             const $field = $( this );
             syncField( $field );
             if ( pairMidEntry( $field ) ) { return; }   // person mid-entry: defer until the pair is whole
+            applyCalculatorFill( $field );              // a calculator fill must land before the serialize
             saveForm( $field.closest( 'form' ) );
         } );
         // Enter (or any submit) routes through the same silent save, never a full-page POST.
@@ -850,8 +876,12 @@ window.App.Inputs = (function () {
             $panel.prop( 'hidden', ! $panel.prop( 'hidden' ) );
         } );
 
-        // Recompute a calculator's total + per-year and fill its amount target(s) as its inputs change.
-        $( 'body' ).on( 'input change', classSelector( C.CALC_PANEL_CLASS ) + ' :input', function () {
+        // Live-preview a calculator as its inputs (or its Auto fill checkbox) change: recompute the
+        // readout and, while Auto fill is on, fill the amount target(s). This covers the `input` phase;
+        // the matching `change` runs through the autosave handler above (applyCalculatorFill), which fills
+        // once more just before serializing so the saved values are the filled ones -- not dependent on
+        // `input` firing before `change`.
+        $( 'body' ).on( 'input', classSelector( C.CALC_PANEL_CLASS ) + ' :input', function () {
             updateCalculator( $( this ).closest( classSelector( C.CALC_PANEL_CLASS ) )
                 .attr( dataAttr( C.CALC_DATA_ATTR ) ) );
         } );

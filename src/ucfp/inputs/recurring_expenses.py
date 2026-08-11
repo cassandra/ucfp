@@ -17,7 +17,7 @@ from ucfp.parameter_sets.enums import ExpenseClass
 from ucfp.inputs.plans.schemas import RecurringExpense
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
-    read_durable )
+    read_calculator_inputs )
 from ucfp.inputs.expenses import grouped_sections, kept_attr, kept_interval, ordered_catalog
 
 
@@ -81,15 +81,14 @@ class RecurringExpensesForm( forms.Form ):
         for ei, expense in enumerate( self._expenses ):
             add_cadence_fields( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
             durable = expense.count is not None
-            if durable:                                    # a durable's amount is filled by the calculator
+            if durable:                                    # a durable also carries an optional calculator
                 add_calculator_fields( self, ei, expense.count, expense.cost_each, expense.lifespan )
             for si in range( len( self._spans ) ):
                 cell = MoneyField( required = False, min_value = 0 )
                 cell.initial = self._span_amount( expense, si )
                 cell.widget.attrs[ 'class' ] += f' {AppConst.SPAN_AMOUNT_CLASS}'   # scanned for changes
-                if durable:
-                    cell.widget.attrs[ 'readonly' ] = True
-                    cell.widget.attrs[ 'class' ] += f' {AppConst.CALC_TARGET_CLASS}'   # keep money styling
+                if durable:                                # editable; the calculator fills it on demand
+                    cell.widget.attrs[ 'class' ] += f' {AppConst.CALC_TARGET_CLASS}'
                     cell.widget.attrs[ f'data-{AppConst.CALC_DATA_ATTR}' ] = str( ei )
                 self.fields[ self._amount_key( ei, si ) ] = cell
 
@@ -125,14 +124,16 @@ class RecurringExpensesForm( forms.Form ):
     def sections( self ) -> list:
         """The expense rows grouped into ordered category sections (a header per category), in the shared
         deliberate (group, item) order. Each row is its name, cadence, and one amount cell per span; a
-        durable row's span amounts are filled by its `calculator` (count x cost-each, age-flat) and its
-        cadence shows read-only."""
+        durable row's span amounts are directly editable and may vary by band, with an optional
+        `calculator` that fills them on demand."""
         return grouped_sections(
             ( expense.category, self._row( ei, expense ) )
             for ei, expense in enumerate( self._expenses ) )
 
     def _row( self, ei : int, expense ) -> dict:
         durable = expense.count is not None
+        cells   = self._cells( ei, expense )
+        uniform = not any( cell[ 'changed' ] for cell in cells )   # no per-band variation to protect
         return {
             'name'        : expense.name,
             'calc_id'     : ei,
@@ -140,14 +141,15 @@ class RecurringExpensesForm( forms.Form ):
                 self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ),
             'count_entry' : durable,
             'calculator'  : ( calculator_cells(
-                self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ) )
+                self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ),
+                autofill = uniform )
                 if durable else None ),
-            'cells'       : self._cells( ei, expense ) }
+            'cells'       : cells }
 
     def _cells( self, ei : int, expense ) -> list:
         """One amount cell per span, each flagged when its shown value differs from the previous span's
         -- a step up or down -- so a reader can scan which expenses change with age. The first span is
-        the baseline (never flagged); an age-flat durable never changes."""
+        the baseline (never flagged); durables vary by band like any other row, so they flag too."""
         cells    = list()
         previous = None
         for si in range( len( self._spans ) ):
@@ -177,18 +179,16 @@ class RecurringExpensesForm( forms.Form ):
 
     def _edited( self, ei : int, expense, columns : list ):
         """`expense` with its cadence from this row's fields and its per-span amounts re-read from the
-        columns. A durable's amount is computed from its calculator (count x cost-each) and applied
-        age-flat to every span; its count/cost-each are remembered."""
+        columns -- authoritative, just like a normal row (per-age variation comes for free). A durable
+        additionally remembers its calculator inputs (count/cost-each/lifespan), which do not drive the
+        amount -- they only repopulate the calculator when it is reopened."""
         interval = read_cadence( self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain )
+        amounts  = [ column_amounts[ ei ] for _, column_amounts in columns ]
         if expense.count is not None:
-            amount, count, cost_each, lifespan = read_durable( self, ei )
-            # An incomplete calculator charges nothing; `amounts` is non-Optional, so that reads as 0
-            # here (the PropertyExpense default_amount, which is Optional, stores None for the same case).
-            total = amount if amount is not None else Decimal( '0' )
-            return replace( expense, interval = interval, amounts = [ total ] * len( columns ),
+            count, cost_each, lifespan = read_calculator_inputs( self, ei )
+            return replace( expense, interval = interval, amounts = amounts,
                             count = count, cost_each = cost_each, lifespan = lifespan )
-        return replace(
-            expense, interval = interval, amounts = [ amounts[ ei ] for _, amounts in columns ] )
+        return replace( expense, interval = interval, amounts = amounts )
 
     def spans_changed( self ) -> bool:
         """Whether the applied span timeline differs from the current one -- a span added, removed, or
