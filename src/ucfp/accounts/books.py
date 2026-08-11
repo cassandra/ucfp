@@ -220,11 +220,13 @@ class BooksOfAccount:
         for account in self.accounts:
             if account.handle is not None:
                 by_handle.setdefault( str( account.handle ), list() ).append( account.name )
-        collisions = [ ( handle, names ) for handle, names in by_handle.items() if len( names ) > 1 ]
+        collisions = [ ( handle, names ) for handle, names in by_handle.items()
+                       if len( names ) > 1 ]
         if not collisions:
             return
-        detail = '; '.join( f'"{handle}" is shared by {" and ".join( names )}'
-                            for handle, names in collisions )
+        phrases = [ f'"{handle}" is shared by {" and ".join( names )}'
+                    for handle, names in collisions ]
+        detail  = '; '.join( phrases )
         raise DuplicateAccountHandleError(
             f'Account handles must be unique within a books, but {detail}. This usually means two '
             f'profile items were minted onto the same handle.' )
