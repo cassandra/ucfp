@@ -10,7 +10,16 @@
 </nav>
 
 {% url 'rename_run' record.uuid as rename_url %}
-{% include 'inputs/panes/inline_rename.html' with kind='run' uuid=record.uuid rename_url=rename_url label=record.label aria='Run name' title=True wrapper_class='mb-1' %}
+<div class="d-flex align-items-start justify-content-between">
+  {% include 'inputs/panes/inline_rename.html' with kind='run' uuid=record.uuid rename_url=rename_url label=record.label aria='Run name' title=True wrapper_class='flex-grow-1 mr-3 mb-1' %}
+  {% comment %}Runs are kept by default; Discard is the prominent way to prune one you don't want to keep --
+  the same removal as the hub's per-row delete, landing back on the hub.{% endcomment %}
+  <form method="post" action="{% url 'delete_run' record.uuid %}" class="m-0 flex-shrink-0"
+        data-confirm="Discard this run &quot;{{ record.label }}&quot;? It is removed from your saved runs. This cannot be undone.">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-danger">{% icon 'delete' size='sm' css_class='mr-1' %}Discard</button>
+  </form>
+</div>
 <p class="mb-3">
   <span class="text-muted">{{ horizon_start }}&ndash;{{ horizon_end }} ({{ horizon_years }} yr)</span>
   &middot;

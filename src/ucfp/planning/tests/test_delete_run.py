@@ -7,6 +7,7 @@ scoped -- only this org's SAVED forecast runs, never a transient/working run or 
 from django.core.management import call_command
 from django.http import Http404
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from organization.models import Organization
 
@@ -55,10 +56,13 @@ class DeleteRunTests( TestCase ):
         books_id = result.run.books_id
         self.assertTrue( BooksOfAccountRecord.objects.filter( pk = books_id ).exists() )
 
-        self._delete( result.run.uuid )
+        response = self._delete( result.run.uuid )
 
         self.assertFalse( PlanningResultRecord.objects.filter( pk = result.pk ).exists() )
         self.assertFalse( BooksOfAccountRecord.objects.filter( pk = books_id ).exists() )   # no orphan
+        # deleting (from the hub or the run page's Discard) lands back on the hub
+        self.assertEqual( response.status_code, 302 )
+        self.assertEqual( response.url, reverse( 'financial_forecast' ) )
 
     def test_a_working_run_is_not_deletable_here( self ):
         working = self._saved_run( usage_role = UsageRole.WORKING )
