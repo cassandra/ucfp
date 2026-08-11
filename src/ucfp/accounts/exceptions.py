@@ -20,3 +20,9 @@ class CurrencyConversionError( AccountsError ):
 
 class MissingAccountError( AccountsError ):
     """Raised when a chart operation needs an account the books do not contain."""
+
+
+class DuplicateAccountHandleError( AccountsError, ValueError ):
+    """Raised when two accounts in one books share a handle -- caught before persistence so it surfaces
+    as an actionable, named error rather than the DB's opaque `unique_account_handle_per_books`
+    `IntegrityError`. Also a `ValueError` so the forecast view's run-error path renders it inline."""

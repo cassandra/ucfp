@@ -24,7 +24,7 @@ from .enums import (
     SideType,
     SystemAccountRole,
 )
-from .exceptions import AccountStructureError, TransactionImbalanceError
+from .exceptions import AccountStructureError, DuplicateAccountHandleError, TransactionImbalanceError
 from .schemas import Handle
 
 
@@ -211,3 +211,20 @@ class BooksOfAccount:
     label        : str                = ''
     accounts     : list[ Account ]     = field( default_factory = list )
     transactions : list[ Transaction ] = field( default_factory = list )
+
+    def assert_unique_handles( self ) -> None:
+        """Raise `DuplicateAccountHandleError` if two accounts share a handle -- the books-level twin of
+        the DB's `unique_account_handle_per_books` constraint, checked in the domain so the failure names
+        the handle and the colliding accounts rather than surfacing later as an opaque `IntegrityError`."""
+        by_handle : dict[ str, list[ str ] ] = dict()
+        for account in self.accounts:
+            if account.handle is not None:
+                by_handle.setdefault( str( account.handle ), list() ).append( account.name )
+        collisions = [ ( handle, names ) for handle, names in by_handle.items() if len( names ) > 1 ]
+        if not collisions:
+            return
+        detail = '; '.join( f'"{handle}" is shared by {" and ".join( names )}'
+                            for handle, names in collisions )
+        raise DuplicateAccountHandleError(
+            f'Account handles must be unique within a books, but {detail}. This usually means two '
+            f'profile items were minted onto the same handle.' )
