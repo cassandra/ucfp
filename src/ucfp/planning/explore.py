@@ -14,7 +14,8 @@ from ucfp.accounts.models import BooksOfAccountRecord
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
-from ucfp.inputs.scenarios.exploration import enter_exploration, working_scenario
+from ucfp.inputs.scenarios.exploration import (
+    enter_exploration, scenario_exploration, working_scenario )
 from ucfp.inputs.scenarios.repository import load_scenario
 from ucfp.inputs.scenarios.schemas import Scenario
 
@@ -52,9 +53,13 @@ def run_working_scenario(
         return None
     scenario = load_scenario( working )
     label    = _run_label( organization, scenario )
+    # A transient run is labelled by what it changed; its provenance is the anchor scenario it varies.
+    exploration  = scenario_exploration( organization )
+    source_label = exploration.source.label if exploration is not None else None
     run = run_and_capture(
         organization = organization, profile = load_profile( profile_record ),
-        plans = scenario.plans, assumptions = scenario.assumptions, frame = frame, label = label )
+        plans = scenario.plans, assumptions = scenario.assumptions, frame = frame, label = label,
+        source_label = source_label )
     result = PlanningResultRecord.objects.create(
         organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
         run = run, label = label, usage_role = UsageRole.WORKING )

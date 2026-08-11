@@ -29,14 +29,15 @@ class SavedRunDigestTests( SimpleTestCase ):
         digest = _saved_run_digest( _FakeRun( _data( stopped_early = False ) ) )
         self.assertEqual( digest, {
             'start_year': 2026, 'end_year': 2065, 'duration_years': 40,
-            'lasted': True, 'ran_out_year': None } )
+            'lasted': True, 'ran_out_year': None, 'years_short': None } )
 
-    def test_depleted_run_reports_the_year_the_money_ran_out( self ):
+    def test_depleted_run_reports_the_year_and_how_far_short( self ):
         steps  = [ { 'end_date': '2026-12-31', 'is_depleted': False },
                    { 'end_date': '2049-12-31', 'is_depleted': True } ]
         digest = _saved_run_digest( _FakeRun( _data( stopped_early = True, steps = steps ) ) )
         self.assertFalse( digest[ 'lasted' ] )
         self.assertEqual( digest[ 'ran_out_year' ], 2049 )
+        self.assertEqual( digest[ 'years_short' ], 16 )                # 2065 horizon - 2049 depletion
 
     def test_depleted_without_a_marked_step_still_reports_not_lasted( self ):
         # stopped_early but no is_depleted step: not lasted, but no year to name (defensive, not a crash).

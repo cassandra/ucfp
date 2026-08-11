@@ -106,9 +106,10 @@ of {label, drift}, where `drift` is the notice from `inputs.drift.plans_drift`.
     <a href="{% url 'run_results' row.result.run.uuid %}" class="flex-grow-1 text-body text-decoration-none">
       {{ row.result.run.label }}
       <span class="text-muted small d-block">
-        {% if row.digest %}{{ row.digest.start_year }}&ndash;{{ row.digest.end_year }} ({{ row.digest.duration_years }} yr) &middot;
-          {% if row.digest.lasted %}<span class="text-success">lasted</span>{% else %}<span class="text-danger">ran out{% if row.digest.ran_out_year %} {{ row.digest.ran_out_year }}{% endif %}</span>{% endif %} &middot;
-        {% endif %}Run {{ row.result.created_datetime|date:"M j, Y, g:i a" }}
+        {% if row.result.run.source_label and row.result.run.source_label != row.result.run.label %}from {{ row.result.run.source_label }} &middot; {% endif %}
+        {% if row.digest %}{{ row.digest.start_year }}&ndash;{{ row.digest.end_year }} ({{ row.digest.duration_years }} yr){% if not row.digest.lasted %}
+          &middot; <span class="text-danger">{% icon 'warning' size='sm' css_class='mr-1' %}money runs out in {{ row.digest.ran_out_year }}{% if row.digest.years_short %} ({{ row.digest.years_short }} years early){% endif %}</span>{% endif %}
+          &middot; {% endif %}Run {{ row.result.created_datetime|date:"M j, Y, g:i a" }}
       </span>
     </a>
     <a href="{% url 'run_discard_confirm' row.result.run.uuid %}" data-async="modal"

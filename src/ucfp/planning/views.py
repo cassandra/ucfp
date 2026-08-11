@@ -109,6 +109,9 @@ def _saved_run_digest( run_record ):
             'duration_years' : end_year - start_year + 1,
             'lasted'         : not result.get( 'stopped_early' ),
             'ran_out_year'   : ran_out_year,
+            # How far before the planned horizon the money ran out -- distinguishes a near miss from an
+            # early collapse. None when the money lasts or the depletion year is unknown.
+            'years_short'    : ( end_year - ran_out_year ) if ran_out_year else None,
         }
     except ( KeyError, TypeError, ValueError ):
         return None

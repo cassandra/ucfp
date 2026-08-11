@@ -17,6 +17,11 @@
   <a href="{% url 'run_discard_confirm' record.uuid %}" data-async="modal"
      class="btn btn-outline-danger flex-shrink-0">{% icon 'delete' size='sm' css_class='mr-1' %}Discard</a>
 </div>
+{% comment %}Once a run is renamed its title no longer names the scenario, so surface the scenario it came
+from -- shown only when the title has been changed from it.{% endcomment %}
+{% if record.source_label and record.source_label != record.label %}
+<p class="text-muted mb-1">Scenario: {{ record.source_label }}</p>
+{% endif %}
 <p class="mb-3">
   <span class="text-muted">{{ horizon_start }}&ndash;{{ horizon_end }} ({{ horizon_years }} yr)</span>
   &middot;

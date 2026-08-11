@@ -40,10 +40,14 @@ class RenameRunTests( TestCase ):
         request.organization = organization or self.org
         return RenameRunView().post( request, run_uuid = run_uuid )
 
-    def test_rename_updates_the_run_label( self ):
+    def test_capture_records_the_scenario_as_the_source_label( self ):
+        self.assertEqual( self.run.source_label, 'Default Scenario' )   # defaults to the run's label
+
+    def test_rename_updates_the_label_but_keeps_the_source_scenario( self ):
         self._rename( self.run.uuid, 'Baseline 30yr' )
         self.run.refresh_from_db()
         self.assertEqual( self.run.label, 'Baseline 30yr' )
+        self.assertEqual( self.run.source_label, 'Default Scenario' )   # provenance survives the rename
 
     def test_a_blank_name_is_ignored( self ):
         self._rename( self.run.uuid, '   ' )
