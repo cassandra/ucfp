@@ -1,0 +1,28 @@
+{% extends "pages/app_base.html" %}
+{% comment %}
+Detail page layout -- a page nested under a top-level destination (a forecast run, an exploration, a
+Plans/Assumptions component, a new scenario). A breadcrumb back-trail to the parent, then the page TYPE as
+the heading, an optional editable Name for the object beneath it, an optional muted meta line, and the
+body. Top-level destinations use `pages/top_page.html` instead. Fill these blocks:
+  breadcrumb    -- the parent trail, as <li class="breadcrumb-item"> items (required)
+  page_type     -- the kind of page, e.g. "Forecast Run" or "Plans" (required; the h1)
+  page_actions  -- top-right header actions (optional)
+  page_name     -- the object's editable name, via pages/editable_name.html (optional)
+  page_meta     -- a muted metadata line, as styled markup (optional)
+  page_body     -- the page content (required)
+
+The breadcrumb trails only to the parent, not the current page: the page type is the h1 and the object's
+name is the editable field, so repeating either in the breadcrumb would be redundant.
+{% endcomment %}
+{% block app_content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb bg-white border">{% block breadcrumb %}{% endblock %}</ol>
+</nav>
+<div class="d-flex align-items-start justify-content-between">
+  <h1 class="mb-1">{% block page_type %}{% endblock %}</h1>
+  {% block page_actions %}{% endblock %}
+</div>
+{% block page_name %}{% endblock %}
+{% block page_meta %}{% endblock %}
+{% block page_body %}{% endblock %}
+{% endblock %}

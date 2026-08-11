@@ -1,4 +1,4 @@
-{% extends "pages/app_base.html" %}
+{% extends "pages/detail_page.html" %}
 {% load common_tags icons %}
 
 {% comment %}
@@ -12,21 +12,19 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
 `stopped_early`, and the `books_table` context.
 {% endcomment %}
 
-{% block app_content %}
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb bg-white border">
-    <li class="breadcrumb-item"><a href="{% url 'financial_forecast' %}">Financial Forecast</a></li>
-    <li class="breadcrumb-item active">Explore</li>
-  </ol>
-</nav>
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'financial_forecast' %}">Financial Forecast</a></li>
+{% endblock %}
 
-<div class="d-flex align-items-baseline justify-content-between mb-2">
-  <div>
-    <h1 class="h3 mb-0">Explore <span class="text-muted">— {{ source.label }}{% if drift %} (unsaved changes){% endif %}</span></h1>
-    <div class="text-muted small">Tweaks apply to a working copy — the saved scenario changes only when
-      you save.</div>
-  </div>
-</div>
+{% block page_type %}Explore{% endblock %}
+
+{% block page_meta %}
+<p class="text-muted mb-1">{{ source.label }}{% if drift %} &middot; unsaved changes{% endif %}</p>
+<p class="text-muted small mb-3">Tweaks apply to a working copy &mdash; the saved scenario changes only
+  when you save.</p>
+{% endblock %}
+
+{% block page_body %}
 
 {% comment %}
 TOP: two input columns, each an independent auto-saving section form. Editing a dial persists it to the

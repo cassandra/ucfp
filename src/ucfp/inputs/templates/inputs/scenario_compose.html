@@ -1,4 +1,4 @@
-{% extends "pages/app_base.html" %}
+{% extends "pages/detail_page.html" %}
 
 {% comment %}
 New scenario: two common ways up top -- Copy an existing scenario (per side, copy or reuse) and Start fresh
@@ -13,19 +13,19 @@ select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete
 `copy_form` / `copy_sources`, and `pair_form` / `pair_plans` / `pair_assumptions`.
 {% endcomment %}
 
-{% block app_content %}
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb bg-white border">
-    <li class="breadcrumb-item"><a href="{% url 'scenarios_home' %}">Scenarios</a></li>
-    <li class="breadcrumb-item active">New scenario</li>
-  </ol>
-</nav>
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'scenarios_home' %}">Scenarios</a></li>
+{% endblock %}
 
-<h1 class="mb-2">New scenario</h1>
+{% block page_type %}New scenario{% endblock %}
+
+{% block page_meta %}
 <p class="text-muted">A scenario pairs a set of <strong>Plans</strong> with a set of
   <strong>Assumptions</strong>. Copy an existing scenario or start a fresh one &mdash; or pair sets you
   already have into a new combination.</p>
+{% endblock %}
 
+{% block page_body %}
 {% if not has_complete_scenario %}
 {# No finished scenario yet: finishing the one in progress comes before creating another. #}
 <div class="alert alert-info" style="max-width: 40rem">

@@ -608,7 +608,10 @@ class InterviewView( View ):
     so advancing (or revisiting) never clobbers another section's facts.
     """
 
-    _PAGE_TEMPLATE    = 'inputs/interview/page.html'
+    # Profile is a top-level page, a scenario component (Plans/Assumptions) a detail page; they share the
+    # stepping body but not the header, so each flow renders its own thin page over the shared layouts.
+    _PROFILE_TEMPLATE   = 'inputs/interview/profile_page.html'
+    _COMPONENT_TEMPLATE = 'inputs/interview/component_page.html'
     _SECTION_TEMPLATE = 'inputs/interview/section.html'
     _STEPPER_TEMPLATE = 'inputs/interview/stepper.html'
     _SECTION_TARGET   = 'interview-section'
@@ -622,7 +625,9 @@ class InterviewView( View ):
         form     = self._form( current, profile, other )
         if is_ajax( request ):
             return self._swap( request, sections, current, form )
-        return render( request, self._PAGE_TEMPLATE, self._context( request, sections, current, form ) )
+        template = ( self._PROFILE_TEMPLATE if flow_of( current ) == 'profile'
+                     else self._COMPONENT_TEMPLATE )
+        return render( request, template, self._context( request, sections, current, form ) )
 
     def _seed_and_acknowledge( self, request, section ):
         """Presenting a section to the user is the acknowledgment that they have seen it. On the first

@@ -1,0 +1,12 @@
+{% comment %}
+The interview's stepping body -- the left-hand section stepper and the current section -- shared by the
+Profile and component (Plans/Assumptions) interview pages, which differ only in their header.
+{% endcomment %}
+<div class="d-md-flex">
+  <div class="interview-stepper mb-4 mr-md-4">
+    {% include "inputs/interview/stepper.html" %}
+  </div>
+  <div class="flex-fill">
+    {% include "inputs/interview/section.html" %}
+  </div>
+</div>

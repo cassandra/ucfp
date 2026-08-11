@@ -1,0 +1,10 @@
+{% comment %}
+The standard editable name for a detail page: a small "Name" label beside the inline autosave rename
+field, sitting under the page-type heading (so the name is clearly an editable field, not the page's
+title). Include in a detail page's `page_name` block with the rename target's:
+  kind, uuid, rename_url, label, aria   (passed through to inputs/panes/inline_rename.html)
+{% endcomment %}
+<div class="d-flex align-items-center mb-3" style="max-width: 28rem">
+  <label class="text-muted small mr-2 mb-0 flex-shrink-0">Name</label>
+  {% include 'inputs/panes/inline_rename.html' with kind=kind uuid=uuid rename_url=rename_url label=label aria=aria bold=True %}
+</div>

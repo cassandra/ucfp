@@ -1,0 +1,26 @@
+{% extends "pages/detail_page.html" %}
+{% comment %}
+A scenario component (Plans/Assumptions) interview -- a detail page under Scenarios. The breadcrumb trails
+to the scenario being built (during a build) or back to Scenarios; the page type is the component kind, and
+its editable Name sits beneath, so it can be renamed here (e.g. straight after a create or clone). The body
+is the shared stepping layout.
+{% endcomment %}
+{% block main_container_class %}container-fluid{% endblock %}
+
+{% block breadcrumb %}
+{% if editing_scenario_name %}
+<li class="breadcrumb-item">Future Scenario: {{ editing_scenario_name }}</li>
+{% else %}
+<li class="breadcrumb-item"><a href="{% url 'scenarios_home' %}">Scenarios</a></li>
+{% endif %}
+{% endblock %}
+
+{% block page_type %}{{ flow_heading }}{% endblock %}
+
+{% block page_name %}
+{% if component_rename %}
+{% include 'pages/editable_name.html' with kind=component_rename.kind uuid=component_rename.uuid rename_url=component_rename.rename_url label=component_rename.label aria=flow_title|add:' name' %}
+{% endif %}
+{% endblock %}
+
+{% block page_body %}{% include "inputs/interview/body.html" %}{% endblock %}
