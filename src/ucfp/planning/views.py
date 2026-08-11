@@ -7,6 +7,8 @@ a captured run -- the net-worth trajectory derived from its persisted books, whe
 early, and the notices. The interview and the input editors live in the `inputs` app.
 """
 
+from datetime import date
+
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -82,6 +84,33 @@ def _run_frame( result ) -> ForecastFrame:
     """The frame a captured transient run was projected over, read from its embedded snapshot -- so the
     workspace can tell whether an existing run still matches the exploration's current frame."""
     return from_json_data( ProjectionRun, result.run.data ).frame
+
+
+def _saved_run_digest( run_record ):
+    """Cheap, cache-free display facts for a saved-run row, read straight from the captured run JSON (no
+    books load): the projection's year span and whether the money lasted (or the year it ran out). All of
+    this already lives in the immutable run, so nothing is cached or can drift. Returns None if the data is
+    absent or malformed -- the row then falls back to just its name and date, so a run captured under an
+    older (or later) shape never breaks the list."""
+    try:
+        data   = run_record.data
+        frame  = data[ 'frame' ]
+        result = data[ 'result' ]
+        start_year = date.fromisoformat( frame[ 'start_date' ] ).year
+        end_year   = date.fromisoformat( frame[ 'end_date' ] ).year
+        ran_out_year = None
+        if result.get( 'stopped_early' ):
+            depleted = next( ( step for step in result[ 'steps' ] if step.get( 'is_depleted' ) ), None )
+            ran_out_year = date.fromisoformat( depleted[ 'end_date' ] ).year if depleted else None
+        return {
+            'start_year'     : start_year,
+            'end_year'       : end_year,
+            'duration_years' : end_year - start_year + 1,
+            'lasted'         : not result.get( 'stopped_early' ),
+            'ran_out_year'   : ran_out_year,
+        }
+    except ( KeyError, TypeError, ValueError ):
+        return None
 
 
 def _remember_selection( request, form, scenario_record ) -> None:
@@ -165,11 +194,18 @@ class FinancialForecastView( InputGatedMixin, View ):
             'resume'       : self._live_resume( exploration, profile_record ),
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),
-            'results'      : PlanningResultRecord.objects.select_related( 'run' ).filter(
-                organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
-                usage_role = UsageRole.SAVED ).order_by( '-created_datetime' ),
+            'saved_runs'   : self._saved_runs( organization ),
             'error'        : error,
         }
+
+    @staticmethod
+    def _saved_runs( organization ) -> list:
+        """The org's saved forecast runs, newest first, each paired with a cheap display digest read from
+        its captured run JSON (no books load) so the list is scannable -- horizon and outcome per row."""
+        records = PlanningResultRecord.objects.select_related( 'run' ).filter(
+            organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
+            usage_role = UsageRole.SAVED ).order_by( '-created_datetime' )
+        return [ { 'result': record, 'digest': _saved_run_digest( record.run ) } for record in records ]
 
     @staticmethod
     def _drift_notices( drift_blocked, profile_record ) -> list:

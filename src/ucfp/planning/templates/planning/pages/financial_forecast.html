@@ -99,16 +99,20 @@ of {label, drift}, where `drift` is the notice from `inputs.drift.plans_drift`.
 
 {% if has_profile and scenarios %}
 <h2 class="h4 mt-5 mb-3">Saved runs</h2>
-{% if results %}
+{% if saved_runs %}
 <div class="list-group">
-  {% for result in results %}
+  {% for row in saved_runs %}
   <div class="list-group-item d-flex align-items-center">
-    <a href="{% url 'run_results' result.run.uuid %}" class="flex-grow-1 text-body text-decoration-none">
-      {{ result.label }}
-      <span class="text-muted small d-block">Run {{ result.created_datetime|date:"M j, Y, g:i a" }}</span>
+    <a href="{% url 'run_results' row.result.run.uuid %}" class="flex-grow-1 text-body text-decoration-none">
+      {{ row.result.label }}
+      <span class="text-muted small d-block">
+        {% if row.digest %}{{ row.digest.start_year }}&ndash;{{ row.digest.end_year }} ({{ row.digest.duration_years }} yr) &middot;
+          {% if row.digest.lasted %}<span class="text-success">lasted</span>{% else %}<span class="text-danger">ran out{% if row.digest.ran_out_year %} {{ row.digest.ran_out_year }}{% endif %}</span>{% endif %} &middot;
+        {% endif %}Run {{ row.result.created_datetime|date:"M j, Y, g:i a" }}
+      </span>
     </a>
-    <form method="post" action="{% url 'delete_run' result.run.uuid %}" class="m-0 ml-3"
-          data-confirm="Delete this saved run of &quot;{{ result.label }}&quot;? This cannot be undone.">
+    <form method="post" action="{% url 'delete_run' row.result.run.uuid %}" class="m-0 ml-3"
+          data-confirm="Delete this saved run of &quot;{{ row.result.label }}&quot;? This cannot be undone.">
       {% csrf_token %}
       <button type="submit" class="btn btn-sm btn-link text-danger p-1" aria-label="Delete this saved run">
         {% icon "delete" size="sm" %}
