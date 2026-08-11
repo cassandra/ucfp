@@ -9,6 +9,8 @@ from . import views
 
 urlpatterns = [
     path( 'financial-forecast/', views.FinancialForecastView.as_view(), name = 'financial_forecast' ),
+    path( 'financial-forecast/runs/<uuid:run_uuid>/delete/', views.DeleteRunView.as_view(),
+          name = 'delete_run' ),
     # The workspace is org-level (one exploration per org), so it lives at a uuid-less URL and reads the
     # current exploration; `enter/` initialises-or-resumes from the hub's scenario, then redirects here.
     path( 'financial-forecast/explore/', views.ExploreView.as_view(), name = 'explore' ),

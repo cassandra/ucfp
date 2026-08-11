@@ -85,12 +85,13 @@ def transient_runs( organization: Organization ):
         usage_role = UsageRole.WORKING ).select_related( 'run' ).order_by( '-updated_datetime' )
 
 
-def _delete_transient_runs( results ) -> None:
-    """Delete the given transient runs by dropping each captured run's books; the `ProjectionRunRecord`
+def delete_runs( results ) -> None:
+    """Delete the given captured runs by dropping each one's books; the `ProjectionRunRecord`
     and `PlanningResultRecord` cascade away, so no orphans remain. One bulk delete over the books (each
     run's `books_id` read straight off the joined-in run, never traversing a possibly-gone books row), so
     it stays correct even when another teardown -- an organization cascade -- is removing the same rows
-    concurrently. The single home for the how; callers choose which runs."""
+    concurrently. The single home for the how; callers choose which runs (a recency-pruned transient set,
+    a whole exploration's runs, or one saved run the user deleted)."""
     book_ids = [ result.run.books_id for result in results ]
     BooksOfAccountRecord.objects.filter( pk__in = book_ids ).delete()
     return
@@ -98,7 +99,7 @@ def _delete_transient_runs( results ) -> None:
 
 def _prune_transient_runs( organization: Organization ) -> None:
     """Drop the oldest transient runs beyond the retention cap -- the recency-bounded recovery buffer."""
-    _delete_transient_runs( transient_runs( organization )[ _TRANSIENT_KEEP: ] )
+    delete_runs( transient_runs( organization )[ _TRANSIENT_KEEP: ] )
     return
 
 
@@ -106,5 +107,5 @@ def clear_transient_runs( organization: Organization ) -> None:
     """Drop every transient run -- the fresh-session reset when *starting* (or Resetting) an exploration,
     and the teardown when an exploration is deleted (its anchor removed). Kept SAVED runs are untouched, as
     they are not transient."""
-    _delete_transient_runs( transient_runs( organization ) )
+    delete_runs( transient_runs( organization ) )
     return

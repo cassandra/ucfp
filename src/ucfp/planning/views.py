@@ -36,7 +36,7 @@ from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
-from .explore import run_working_scenario, start_fresh_exploration, transient_runs
+from .explore import delete_runs, run_working_scenario, start_fresh_exploration, transient_runs
 from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
@@ -493,6 +493,20 @@ class KeepRunView( InputGatedMixin, View ):
         result.usage_role = UsageRole.SAVED
         result.save( update_fields = [ 'usage_role', 'updated_datetime' ] )
         return redirect( 'explore' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class DeleteRunView( InputGatedMixin, View ):
+    """`.../financial-forecast/runs/<uuid>/delete/` -- delete a saved forecast run from the hub's
+    Saved-runs list, dropping its captured books. Scoped to the org's SAVED forecast results, so a stale
+    or foreign uuid 404s rather than deleting."""
+
+    def post( self, request, run_uuid ):
+        result = get_object_or_404(
+            PlanningResultRecord, run__uuid = run_uuid, organization = request.organization,
+            feature = PlanningFeature.FINANCIAL_FORECAST, usage_role = UsageRole.SAVED )
+        delete_runs( [ result ] )
+        return redirect( 'financial_forecast' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

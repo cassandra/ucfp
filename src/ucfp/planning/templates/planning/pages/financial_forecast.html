@@ -1,4 +1,5 @@
 {% extends "pages/app_base.html" %}
+{% load icons %}
 
 {% block app_content %}
 <h1 class="mb-1">Financial Forecast</h1>
@@ -101,10 +102,19 @@ of {label, drift}, where `drift` is the notice from `inputs.drift.plans_drift`.
 {% if results %}
 <div class="list-group">
   {% for result in results %}
-  <a href="{% url 'run_results' result.run.uuid %}" class="list-group-item list-group-item-action">
-    {{ result.label }}
-    <div class="text-muted small">Run {{ result.created_datetime|date:"M j, Y, g:i a" }}</div>
-  </a>
+  <div class="list-group-item d-flex align-items-center">
+    <a href="{% url 'run_results' result.run.uuid %}" class="flex-grow-1 text-body text-decoration-none">
+      {{ result.label }}
+      <span class="text-muted small d-block">Run {{ result.created_datetime|date:"M j, Y, g:i a" }}</span>
+    </a>
+    <form method="post" action="{% url 'delete_run' result.run.uuid %}" class="m-0 ml-3"
+          data-confirm="Delete this saved run of &quot;{{ result.label }}&quot;? This cannot be undone.">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-link text-danger p-1" aria-label="Delete this saved run">
+        {% icon "delete" size="sm" %}
+      </button>
+    </form>
+  </div>
   {% endfor %}
 </div>
 {% else %}
