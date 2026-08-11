@@ -255,6 +255,9 @@ class Period:
                     ( term.interest_account, -interest ),
                     ( cash_account, payment ),
                 ],
+                description = (
+                    f'{term.liability_account.name} payment: {format_money( interest )} interest '
+                    f'+ {format_money( total_principal )} principal' ),
             )
             continue
         return

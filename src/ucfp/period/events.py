@@ -26,7 +26,9 @@ class PeriodEvent:
         """Post this operation's balanced transaction via `bookkeeper`, with `description` as
         its memo, and return it (None if nothing was posted) -- so a caller can reference the
         transaction, e.g. in a Notice. Events themselves raise no Notices: they are the user's
-        requested operations, so they carry a memo, not an attention signal."""
+        requested operations, so they carry a memo, not an attention signal. When the caller
+        supplies no memo, each event falls back to a self-describing one (`_describe`) built from
+        the accounts it touches, so a scheduled operation still reads meaningfully in the drill-down."""
         raise NotImplementedError
 
 
@@ -43,8 +45,11 @@ class Transfer( PeriodEvent ):
         return bookkeeper.record(
             self.event_date,
             [ ( self.target_account, -self.amount ), ( self.source_account, self.amount ) ],
-            description = description,
+            description = description or self._describe(),
         )
+
+    def _describe( self ) -> str:
+        return f'Transfer from {self.source_account.name} to {self.target_account.name}'
 
 
 @dataclass( frozen = True )
@@ -64,8 +69,11 @@ class ExternalReceipt( PeriodEvent ):
         return bookkeeper.record(
             self.event_date,
             [ ( self.cash_account, -self.amount ), ( self.equity_account, self.amount ) ],
-            description = description,
+            description = description or self._describe(),
         )
+
+    def _describe( self ) -> str:
+        return f'Gift or inheritance received into {self.cash_account.name}'
 
 
 @dataclass( frozen = True )
@@ -84,8 +92,11 @@ class ExternalDisbursement( PeriodEvent ):
         return bookkeeper.record(
             self.event_date,
             [ ( self.cash_account, self.amount ), ( self.equity_account, -self.amount ) ],
-            description = description,
+            description = description or self._describe(),
         )
+
+    def _describe( self ) -> str:
+        return f'Personal gift given from {self.cash_account.name}'
 
 
 @dataclass( frozen = True )
@@ -108,8 +119,11 @@ class LoanPayoff( PeriodEvent ):
         return bookkeeper.record(
             self.event_date,
             [ ( self.liability_account, -balance ), ( self.cash_account, balance ) ],
-            description = description,
+            description = description or self._describe(),
         )
+
+    def _describe( self ) -> str:
+        return f'Payoff of {self.liability_account.name}'
 
 
 @dataclass( frozen = True )
@@ -137,8 +151,11 @@ class LoanOrigination( PeriodEvent ):
         return bookkeeper.record(
             self.event_date,
             [ ( self.liability_account, self.principal ), ( self.cash_account, -self.principal ) ],
-            description = description,
+            description = description or self._describe(),
         )
+
+    def _describe( self ) -> str:
+        return f'Origination of {self.liability_account.name}'
 
 
 @dataclass( frozen = True )
@@ -155,8 +172,11 @@ class Purchase( PeriodEvent ):
         return bookkeeper.record(
             self.event_date,
             [ ( self.asset_account, -self.amount ), ( self.funding_account, self.amount ) ],
-            description = description,
+            description = description or self._describe(),
         )
+
+    def _describe( self ) -> str:
+        return f'Purchase of {self.asset_account.name} funded from {self.funding_account.name}'
 
 
 @dataclass( frozen = True )
