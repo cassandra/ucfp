@@ -564,7 +564,7 @@ class Period:
         postings.append( ( cash_account, surplus ) )
         bookkeeper.record(
             self._parameters.date_span.end_date, postings,
-            description = 'Swept surplus cash into the investment allocation.' )
+            description = f'Swept {format_money( surplus )} of surplus cash into the investment allocation' )
         return
 
     def _close( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:

@@ -346,27 +346,30 @@ class BaselineBuilder:
         for holding, value, cost_basis in holdings:
             self._record_opening(
                 bookkeeper, opening_date,
-                self._opening_value_postings( chart, holding, value, cost_basis ), opening_balances )
+                self._opening_value_postings( chart, holding, value, cost_basis ), opening_balances,
+                f'{holding.name} opening balance' )
             continue
         for loan in self._loans:
             if loan.parameters.origination_date is not None:
                 continue          # originated mid-forecast: credited at its date, not seeded at t0
             self._record_opening(
                 bookkeeper, opening_date,
-                [ ( loan.account, loan.parameters.opening_balance ) ], opening_balances )
+                [ ( loan.account, loan.parameters.opening_balance ) ], opening_balances,
+                f'{loan.account.name} opening balance' )
             continue
         return
 
     def _record_opening( self, bookkeeper : Bookkeeper, opening_date : date,
                          postings : list[ tuple[ Account, Decimal ] ],
-                         opening_balances : Account ) -> None:
-        """Record one account's opening `postings` as a balanced transaction, with Opening Balances
-        absorbing their residual. Skips a fully-zero seed (a zero-basis holding contributes nothing
-        here -- its whole value is the embedded gain, already balanced against Unrealized Gains)."""
+                         opening_balances : Account, description : str ) -> None:
+        """Record one account's opening `postings` as a balanced transaction (memoed by `description`),
+        with Opening Balances absorbing their residual. Skips a fully-zero seed (a zero-basis holding
+        contributes nothing here -- its whole value is the embedded gain, already balanced against
+        Unrealized Gains)."""
         plug     = -sum( ( amount for _account, amount in postings ), Decimal( '0' ) )
         balanced = postings + [ ( opening_balances, plug ) ]
         if any( amount != 0 for _account, amount in balanced ):
-            bookkeeper.record( opening_date, balanced, description = 'Opening balance' )
+            bookkeeper.record( opening_date, balanced, description = description )
         return
 
     def _opening_value_postings( self, chart : Chart, holding : Account, value : Decimal,
