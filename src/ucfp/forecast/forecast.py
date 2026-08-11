@@ -42,7 +42,7 @@ from ucfp.accounts.enums import (
 )
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.ledger import Ledger
-from ucfp.accounts.money_utils import quantize_money
+from ucfp.accounts.money_utils import format_money, quantize_money
 from ucfp.period.parameters import (
     ContributionLine,
     ExpenseLine,
@@ -320,8 +320,8 @@ class BaselineBuilder:
             if ( limit is None ) or ( total <= limit ):
                 continue
             raise ValueError(
-                f'First-year retirement contributions for "{owner}" total {total}, over the '
-                f'{limit} annual limit.' )
+                f'First-year retirement contributions for "{owner}" total {format_money( total )}, over the '
+                f'{format_money( limit )} annual limit.' )
         return
 
     def _owner_age( self, owner : str, year : int ) -> Optional[ int ]:
@@ -677,7 +677,7 @@ class Forecast:
             factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
             amount = windowed_amount.amount * factor * year_fraction
             account = self._baseline.income_accounts.account_for( stream.subject, stream.income_tax_class )
-            lines.append( IncomeLine( account = account, gross_amount = amount ) )
+            lines.append( IncomeLine( account = account, gross_amount = amount, source = stream.name ) )
             continue
         return lines
 
@@ -699,8 +699,9 @@ class Forecast:
                 continue
             factor = self._income_growth_factor( item.income_tax_class, span.start_date.year )
             account = self._baseline.income_accounts.account_for( item.subject, item.income_tax_class )
-            lines.append(
-                IncomeLine( account = account, gross_amount = occurrences * windowed_amount.amount * factor ) )
+            lines.append( IncomeLine(
+                account = account, gross_amount = occurrences * windowed_amount.amount * factor,
+                source = item.name ) )
             continue
         return lines
 

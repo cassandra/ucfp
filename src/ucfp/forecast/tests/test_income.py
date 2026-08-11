@@ -130,7 +130,38 @@ def _run_income_class_forecast( income_tax_class ):
     return Forecast( parameters ).run()
 
 
+def _run_two_named_wage_flows():
+    """One earner with two named WAGES flows (two jobs), full-year 2026 -- they share the single
+    (worker, WAGES) account, so only the posting memo tells them apart."""
+    worker = Subject( 'Worker', date( 1980, 1, 1 ), 'worker' )
+    parameters = ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( 2026, 12, 31 ),
+        filing_status = FilingStatus.SINGLE,
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+        subjects      = [ worker ],
+        assets        = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
+        income_streams = [
+            IncomeStream( worker, IncomeTaxClass.WAGES,
+                          Schedule.constant( WindowedAmount( Decimal( '80000' ) ) ), name = 'Day job' ),
+            IncomeStream( worker, IncomeTaxClass.WAGES,
+                          Schedule.constant( WindowedAmount( Decimal( '20000' ) ) ), name = 'Consulting' ) ],
+    )
+    return Forecast( parameters ).run()
+
+
 class IncomeForecastTests( unittest.TestCase ):
+
+    def test_collapsed_wage_flows_are_told_apart_by_the_posting_memo( self ):
+        # Two WAGES flows for one worker share a single revenue account, so the memo is the only thing
+        # that distinguishes their postings in the drill-down.
+        reader   = Bookkeeper( _run_two_named_wage_flows().books )
+        wages    = reader.chart.income_account( IncomeTaxClass.WAGES, owner_handle = 'worker' )
+        credited = { txn.description: entry.account
+                     for txn in reader.books.transactions
+                     for entry in txn.entries if entry.account is wages }
+        self.assertEqual( set( credited ), { 'Day job', 'Consulting' } )   # both post, each with its label
+        self.assertEqual( list( credited.values() ), [ wages, wages ] )    # into the one shared account
 
     def test_recurring_income_item_resolves_count_times_amount( self ):
         result = _run_recurring_income_forecast()

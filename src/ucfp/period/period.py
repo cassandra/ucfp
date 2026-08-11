@@ -154,6 +154,7 @@ class Period:
             bookkeeper.record(
                 income_date,
                 [ ( cash_account, -amount ), ( income_line.account, amount ) ],
+                description = income_line.source or '',
             )
             continue
         return
@@ -327,8 +328,9 @@ class Period:
             return
         net = quantize_money( sale_price ) - total
         description = (
-            f'Selling costs on {event.holding.name}: {realtor_fee} realtor fee + {fixed} fixed costs on '
-            f'a {quantize_money( sale_price )} sale (net {net}).' )
+            f'Selling costs on {event.holding.name}: {format_money( realtor_fee )} realtor fee + '
+            f'{format_money( fixed )} fixed costs on a {format_money( sale_price )} sale '
+            f'(net {format_money( net )}).' )
         transaction = bookkeeper.record(
             event.event_date, [ ( gain_account, -total ), ( cash_account, total ) ],
             description = description )

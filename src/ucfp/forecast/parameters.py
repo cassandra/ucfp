@@ -149,6 +149,7 @@ class IncomeStream:
     amounts          : Schedule[ WindowedAmount ]
     window           : DateWindow         = DateWindow()
     source_handle    : Optional[ Handle ] = None
+    name             : Optional[ str ]    = None   # the source's own label, for the posting memo
 
 
 @dataclass( frozen = True )
@@ -170,6 +171,7 @@ class IncomeItem:
     cadence          : Cadence
     window           : DateWindow         = DateWindow()
     source_handle    : Optional[ Handle ] = None
+    name             : Optional[ str ]    = None   # the source's own label, for the posting memo
 
 
 @dataclass( frozen = True )

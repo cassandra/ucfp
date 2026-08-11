@@ -645,12 +645,12 @@ def _income_flows(
         if flow.interval is None:
             streams.append( IncomeStream(
                 subject = subject, income_tax_class = flow.income_tax_class,
-                amounts = amounts, source_handle = flow.property_handle ) )
+                amounts = amounts, source_handle = flow.property_handle, name = flow.name ) )
         else:
             items.append( IncomeItem(
                 subject = subject, income_tax_class = flow.income_tax_class,
                 amounts = amounts, cadence = Recurrence( flow.interval ),
-                source_handle = flow.property_handle ) )
+                source_handle = flow.property_handle, name = flow.name ) )
     return streams, items
 
 
@@ -683,7 +683,8 @@ def _entitlement_income(
             subject = subjects_by_handle[ pension.subject_handle ],
             income_tax_class = IncomeTaxClass.PENSION,
             amounts = Schedule.constant( WindowedAmount( pension.base_annual_amount ) ),
-            window = DateWindow( start = _pension_start( timing.get( pension.subject_handle ) ) ) ) )
+            window = DateWindow( start = _pension_start( timing.get( pension.subject_handle ) ) ),
+            name = IncomeTaxClass.PENSION.label ) )
     # Social Security is realized couple-aware (the spousal benefit couples the two subjects), so it
     # goes through the household realizer rather than a per-entitlement loop.
     for realized in realized_government_pensions(
@@ -692,7 +693,8 @@ def _entitlement_income(
             subject = subjects_by_handle[ realized.subject_handle ],
             income_tax_class = government_pension.income_tax_class(),
             amounts = realized.amounts,
-            window = DateWindow( start = realized.start_date ) ) )
+            window = DateWindow( start = realized.start_date ),
+            name = government_pension.income_tax_class().label ) )
     return streams
 
 
