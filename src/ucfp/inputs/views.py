@@ -24,6 +24,7 @@ from django.views import View
 from user.decorators import ensure_organization
 
 from common import antinode
+from common.async_view import ModalView
 from common.request_utils import is_ajax
 
 from ucfp.inputs.profile.repository import (
@@ -71,6 +72,7 @@ from .recurring_expenses import RecurringExpensesForm
 from .retirement import RetirementForm
 
 _SCENARIOS_TEMPLATE = 'inputs/scenarios_home.html'
+_SCENARIO_DELETE_CONFIRM_TEMPLATE = 'inputs/modals/scenario_delete_confirm.html'
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -425,6 +427,20 @@ class ScenarioDeleteView( View ):
         _forget_if_current( request, 'current_scenario_uuid', record )
         delete_scenario( record )
         return redirect( 'scenarios_home' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioDeleteConfirmView( ModalView ):
+    """`/inputs/scenarios/<uuid>/delete-confirm/` -- the styled confirm dialog the Scenarios page opens
+    before deleting a scenario. Its Delete action posts to `scenario_delete`."""
+
+    def get_template_name( self ):
+        return _SCENARIO_DELETE_CONFIRM_TEMPLATE
+
+    def get( self, request, uuid ):
+        record = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = request.organization, usage_role = UsageRole.SAVED )
+        return self.modal_response( request, context = { 'scenario': record } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

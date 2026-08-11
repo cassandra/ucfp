@@ -23,7 +23,7 @@ from ucfp.planning.enums import PlanningFeature
 from ucfp.planning.models import PlanningResultRecord
 from ucfp.planning.orchestration import run_and_capture
 from ucfp.planning.tests.support import expected_assumptions, forecast_frame, forecast_profile
-from ucfp.planning.views import DeleteRunView
+from ucfp.planning.views import DeleteRunView, RunDiscardConfirmView
 
 
 class DeleteRunTests( TestCase ):
@@ -76,3 +76,22 @@ class DeleteRunTests( TestCase ):
         with self.assertRaises( Http404 ):
             self._delete( result.run.uuid, organization = other )
         self.assertTrue( PlanningResultRecord.objects.filter( pk = result.pk ).exists() )
+
+    def _confirm( self, run_uuid, organization = None ):
+        request = self.factory.get( '/discard-confirm', HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
+        request.organization = organization or self.org
+        return RunDiscardConfirmView().get( request, run_uuid = run_uuid )
+
+    def test_discard_confirm_modal_names_the_run( self ):
+        result = self._saved_run()
+        result.run.label = 'Baseline 30yr'
+        result.run.save()
+        response = self._confirm( result.run.uuid )
+        self.assertEqual( response.status_code, 200 )
+        self.assertIn( 'Baseline 30yr', response.content.decode() )    # the styled modal, not window.confirm
+
+    def test_discard_confirm_is_scoped_to_the_org( self ):
+        result = self._saved_run()
+        other  = Organization.objects.create( name = 'Other confirm' )
+        with self.assertRaises( Http404 ):
+            self._confirm( result.run.uuid, organization = other )

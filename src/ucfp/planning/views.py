@@ -52,6 +52,7 @@ _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
 _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
 _BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
 _JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
+_DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
 _COMING_SOON_TEMPLATE = 'planning/pages/coming_soon.html'
 
 # The unbuilt planning features: title + one-line pitch for their placeholder pages.
@@ -328,6 +329,21 @@ class RenameRunView( View ):
             record.label = label
             record.save()
         return antinode.response()
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RunDiscardConfirmView( ModalView ):
+    """`/run/<uuid>/discard-confirm/` -- the styled confirm dialog for discarding a run, opened from the
+    run page's Discard and the hub's per-row delete (both remove the same saved run). Its Discard action
+    posts to `delete_run`."""
+
+    def get_template_name( self ):
+        return _DISCARD_CONFIRM_TEMPLATE
+
+    def get( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        return self.modal_response( request, context = { 'record': record } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

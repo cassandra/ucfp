@@ -1,0 +1,23 @@
+{% extends "modals/action_with_cancel.html" %}
+{% load icons %}
+{% comment %}
+Confirm discarding a captured run -- opened from the run results page's Discard and the hub's per-row
+delete (both remove the same saved run). CANCEL comes from the shell; the Discard action posts to
+`delete_run`, which drops the run and its books and returns to the hub.
+{% endcomment %}
+
+{% block header_class %}bg-danger{% endblock %}
+
+{% block title_text %}Discard run{% endblock %}
+
+{% block body %}
+<p class="mb-0">Discard the run &ldquo;{{ record.label }}&rdquo;? It is removed from your saved runs.
+  This cannot be undone.</p>
+{% endblock %}
+
+{% block action_right %}
+<form method="post" action="{% url 'delete_run' record.uuid %}" class="m-0">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-danger">{% icon "delete" css_class="icon-left" %}Discard</button>
+</form>
+{% endblock %}

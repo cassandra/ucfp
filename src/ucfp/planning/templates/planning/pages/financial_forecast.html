@@ -111,13 +111,10 @@ of {label, drift}, where `drift` is the notice from `inputs.drift.plans_drift`.
         {% endif %}Run {{ row.result.created_datetime|date:"M j, Y, g:i a" }}
       </span>
     </a>
-    <form method="post" action="{% url 'delete_run' row.result.run.uuid %}" class="m-0 ml-3"
-          data-confirm="Delete this saved run of &quot;{{ row.result.run.label }}&quot;? This cannot be undone.">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-sm btn-link text-danger p-1" aria-label="Delete this saved run">
-        {% icon "delete" size="sm" %}
-      </button>
-    </form>
+    <a href="{% url 'run_discard_confirm' row.result.run.uuid %}" data-async="modal"
+       class="btn btn-sm btn-link text-danger p-1 ml-3" aria-label="Discard this saved run">
+      {% icon "delete" size="sm" %}
+    </a>
   </div>
   {% endfor %}
 </div>

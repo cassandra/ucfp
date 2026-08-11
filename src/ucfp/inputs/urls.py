@@ -14,6 +14,8 @@ urlpatterns = [
     path( 'scenarios/<uuid:uuid>/edit/', views.ScenarioEditView.as_view(), name = 'scenario_edit' ),
     path( 'scenarios/<uuid:uuid>/rename/', views.ScenarioRenameView.as_view(), name = 'scenario_rename' ),
     path( 'scenarios/<uuid:uuid>/delete/', views.ScenarioDeleteView.as_view(), name = 'scenario_delete' ),
+    path( 'scenarios/<uuid:uuid>/delete-confirm/', views.ScenarioDeleteConfirmView.as_view(),
+          name = 'scenario_delete_confirm' ),
     path( 'scenarios/<uuid:uuid>/reconcile/', views.ScenarioReconcileView.as_view(),
           name = 'scenario_reconcile' ),
 

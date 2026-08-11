@@ -41,11 +41,8 @@ flag, its `drift` notice or None, and per-component `plans_uses`/`assumptions_us
   {% comment %}Deleting is offered only when another scenario remains -- a household keeps at least one.{% endcomment %}
   {% if can_delete_scenario %}
   <div class="card-footer bg-white border-top-0 py-1 text-right">
-    <form method="post" action="{% url 'scenario_delete' row.scenario.uuid %}" class="m-0"
-          data-confirm="Delete &quot;{{ row.scenario.label }}&quot;? Its Plans and Assumptions are kept. This cannot be undone.">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete scenario</button>
-    </form>
+    <a href="{% url 'scenario_delete_confirm' row.scenario.uuid %}" data-async="modal"
+       class="btn btn-sm btn-link text-danger p-0">Delete scenario</a>
   </div>
   {% endif %}
 </div>
