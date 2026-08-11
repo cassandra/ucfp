@@ -15,6 +15,7 @@ from typing import Optional
 
 from ucfp.accounts.books import Account, Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.enums import AssetClass
 from ucfp.accounts.exceptions import MissingAccountError
 
 
@@ -192,5 +193,15 @@ class Realization( PeriodEvent ):
             proceeds_account = self.destination,
             realized_gain_account = realized_gain_account,
             on_date = self.event_date,
-            description = description,
+            description = description or self._describe(),
         )
+
+    def _describe( self ) -> str:
+        """A default memo naming the operation from the accounts involved: a conversion when the proceeds
+        go to another holding, a withdrawal when a retirement holding is drawn to cash, else a plain sale.
+        Used only when the caller supplies no memo -- a derived RMD passes its own reason instead."""
+        if self.destination.asset_class != AssetClass.CASH:
+            return f'Conversion of {self.holding.name} to {self.destination.name}'
+        if self.holding.asset_class in ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ):
+            return f'Withdrawal from {self.holding.name}'
+        return f'Sale of {self.holding.name}'

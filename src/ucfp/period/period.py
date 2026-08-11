@@ -25,7 +25,7 @@ from ucfp.accounts.books import Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
-from ucfp.accounts.money_utils import quantize_money
+from ucfp.accounts.money_utils import format_money, quantize_money
 from ucfp.jurisdiction.engine import ContributionKind
 
 from .events import Realization
@@ -93,9 +93,14 @@ class Period:
                 continue
             if unrealized_gain_account is None:
                 raise MissingAccountError( 'No Unrealized Gains equity account for growth.' )
+            # A depreciating holding accrues a negative appreciation; name the motion and show its rate
+            # as a positive magnitude, so the memo reads 'depreciation: 18% on ...', not '-18%'.
+            motion, shown_rate = (
+                ( 'appreciation', rate ) if appreciation > 0 else ( 'depreciation', rate.negated() ) )
             bookkeeper.record(
                 growth_date,
                 [ ( valuation_account, -appreciation ), ( unrealized_gain_account, appreciation ) ],
+                description = f'{holding.name} {motion}: {shown_rate} on {format_money( opening_market )}',
             )
             continue
         return
@@ -128,6 +133,7 @@ class Period:
             bookkeeper.record(
                 distribution_date,
                 [ ( cash_account, -distribution ), ( income_account, distribution ) ],
+                description = f'{holding.name} distribution: {rate} on {format_money( opening_value )}',
             )
             continue
         return
