@@ -6,10 +6,11 @@ its editable Name sits beneath, so it can be renamed here (e.g. straight after a
 is the shared stepping layout.
 {% endcomment %}
 {% block main_container_class %}container-fluid{% endblock %}
+{% block header_container %}container{% endblock %}
 
 {% block breadcrumb %}
 {% if editing_scenario_name %}
-<li class="breadcrumb-item">Future Scenario: {{ editing_scenario_name }}</li>
+<li class="breadcrumb-item">Scenario: {{ editing_scenario_name }}</li>
 {% else %}
 <li class="breadcrumb-item"><a href="{% url 'scenarios_home' %}">Scenarios</a></li>
 {% endif %}

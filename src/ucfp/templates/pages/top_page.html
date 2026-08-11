@@ -4,16 +4,21 @@ Top-level page layout -- a destination reached straight from the app nav (Home, 
 Scenarios, Settings, coming-soon). A static page title, an optional top-right action area, an optional
 muted subtitle, then the body; no breadcrumb, since there is no parent to trail back to. Pages nested
 under a top-level destination use `pages/detail_page.html` instead. Fill these blocks:
-  page_title    -- the page name (required; rendered as the h1)
-  page_actions  -- top-right header actions (optional)
-  page_subtitle -- a muted description line, as a styled <p> (optional)
-  page_body     -- the page content (required)
+  page_title       -- the page name (required; rendered as the h1)
+  page_actions     -- top-right header actions (optional)
+  page_subtitle    -- a muted description line, as a styled <p> (optional)
+  page_body        -- the page content (required)
+  header_container -- a container class to bound the header when the page runs full-width (optional; set
+                      it to "container" alongside a container-fluid `main_container_class` so a wide body
+                      keeps a normal-width header -- see the interview pages)
 {% endcomment %}
 {% block app_content %}
-<div class="d-flex align-items-start justify-content-between">
-  <h1 class="mb-1">{% block page_title %}{% endblock %}</h1>
-  {% block page_actions %}{% endblock %}
+<div class="{% block header_container %}{% endblock %}">
+  <div class="d-flex align-items-start justify-content-between">
+    <h1 class="mb-1">{% block page_title %}{% endblock %}</h1>
+    {% block page_actions %}{% endblock %}
+  </div>
+  {% block page_subtitle %}{% endblock %}
 </div>
-{% block page_subtitle %}{% endblock %}
 {% block page_body %}{% endblock %}
 {% endblock %}
