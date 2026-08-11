@@ -30,8 +30,8 @@ from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
 from ucfp.inputs.scenarios.exploration import (
-    COPY, OVERWRITE, component_usage, overwrite_working, save_working, scenario_exploration,
-    working_scenario )
+    COPY, OVERWRITE, component_usage, overwrite_working, record_exploration_frame, save_working,
+    scenario_exploration, working_scenario )
 from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
@@ -76,6 +76,12 @@ class ComingSoonView( TemplateView ):
         title, pitch = _COMING_SOON[ self.feature_key ]
         context.update( feature_title = title, feature_pitch = pitch )
         return context
+
+
+def _run_frame( result ) -> ForecastFrame:
+    """The frame a captured transient run was projected over, read from its embedded snapshot -- so the
+    workspace can tell whether an existing run still matches the exploration's current frame."""
+    return from_json_data( ProjectionRun, result.run.data ).frame
 
 
 def _remember_selection( request, form, scenario_record ) -> None:
@@ -280,6 +286,12 @@ class EnterExploreView( InputGatedMixin, View ):
         # anchor -> start fresh (re-seed and clear runs). A hard restart of the same anchor is Reset.
         if exploration is None or exploration.source_id != scenario_record.id:
             start_fresh_exploration( organization, scenario_record )
+            exploration = scenario_exploration( organization )
+        # Record the chosen frame onto the exploration so the workspace projects over it (rather than a
+        # session default); the workspace re-runs whenever this diverges from its latest run's frame.
+        record_exploration_frame(
+            exploration, form.cleaned_data[ 'start_from' ],
+            form.cleaned_data[ 'duration_years' ], form.cleaned_data[ 'interval' ] )
         return redirect( 'explore' )
 
 
@@ -300,9 +312,13 @@ class ExploreView( InputGatedMixin, View ):
             return redirect( 'financial_forecast' )        # nothing to explore yet
         source  = exploration.source
         working = exploration.working
-        runs = list( transient_runs( organization ) )
-        if not runs:                                       # first entry: produce the initial run
-            run_working_scenario( organization, self._frame( request ) )
+        # Produce a run for the entered frame when there is none yet (first entry) or the latest run was
+        # projected over a different frame (the user changed the when-controls and resumed) -- so the
+        # results shown always match the current frame without waiting on an explicit Re-run.
+        frame = self._frame( request )
+        runs  = list( transient_runs( organization ) )
+        if not runs or _run_frame( runs[ 0 ] ) != frame:
+            run_working_scenario( organization, frame )
             runs = list( transient_runs( organization ) )
         selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
         working_inputs = load_scenario( working )
@@ -369,13 +385,16 @@ class ExploreView( InputGatedMixin, View ):
         return runs[ 0 ]
 
     def _frame( self, request ) -> ForecastFrame:
-        state   = request.session_state
-        profile = latest_profile( request.organization )
+        """The frame the exploration's runs project over -- resolved from the frame recorded on the
+        exploration (not the session, which only seeds the hub form's defaults). The `or` fallbacks cover
+        only a legacy exploration entered before the frame was recorded; entry always records it now."""
+        exploration = scenario_exploration( request.organization )
+        profile     = latest_profile( request.organization )
         return resolve_frame(
             effective_date = profile.effective_date,
-            start_choice   = state.forecast_start_from or 'effective',
-            duration_years = state.forecast_duration_years or 40,
-            granularity    = GRANULARITY.get( state.forecast_interval or 'year', GRANULARITY[ 'year' ] ) )
+            start_choice   = exploration.frame_start_from or 'effective',
+            duration_years = exploration.frame_duration_years or 40,
+            granularity    = GRANULARITY.get( exploration.frame_interval or 'year', GRANULARITY[ 'year' ] ) )
 
 
 class _ExploreSectionAutosaveView( InputGatedMixin, View ):

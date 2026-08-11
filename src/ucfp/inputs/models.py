@@ -129,7 +129,14 @@ class ScenarioExploration( TimestampedModel ):
     exploration itself is just "a scenario under tweak", so a later feature could explore the same way.
     Deleting the `source` deletes the exploration (a variation is meaningless without its anchor, so
     `source` is never null); a `post_delete` receiver tears down the owned WORKING copy, which nothing else
-    references, so a cascade leaves no orphan."""
+    references, so a cascade leaves no orphan.
+
+    It also records the projection *frame* its runs use -- the when-controls (start-from, duration, and
+    interval) chosen on entry. This is genuine exploration state, not a per-request setting: every run
+    (the initial one and each Re-run) projects over this window, so it lives with the exploration rather
+    than being re-derived from the session on each request. Null only for an exploration entered before the
+    frame was recorded; entry always sets it. The raw choice strings are opaque here -- the planning layer
+    resolves them against the profile's effective date (see `planning.forms.resolve_frame`)."""
 
     organization = models.OneToOneField(
         Organization, on_delete = models.CASCADE, related_name = 'scenario_exploration' )
@@ -137,6 +144,10 @@ class ScenarioExploration( TimestampedModel ):
         ScenarioRecord, on_delete = models.CASCADE, related_name = 'owning_exploration' )
     source  = models.ForeignKey(
         ScenarioRecord, on_delete = models.CASCADE, related_name = 'anchored_explorations' )
+
+    frame_start_from     = models.CharField( max_length = 20, null = True, blank = True )
+    frame_duration_years = models.PositiveIntegerField( null = True, blank = True )
+    frame_interval       = models.CharField( max_length = 10, null = True, blank = True )
 
     def __str__( self ):
         return f'Exploration of {self.source.label} ({self.organization})'

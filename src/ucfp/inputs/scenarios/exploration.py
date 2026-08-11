@@ -59,6 +59,18 @@ def enter_exploration( organization: Organization, source: ScenarioRecord ) -> S
             organization = organization, working = working, source = source )
 
 
+def record_exploration_frame(
+        exploration: ScenarioExploration, start_from: str, duration_years: int, interval: str ) -> None:
+    """Record the projection frame the exploration's runs use -- the when-controls chosen on entry -- onto
+    the exploration itself, so every run projects over the entered window rather than a session-derived
+    default. The raw choices are stored opaquely; the planning layer resolves them. Called on every entry
+    (fresh or resume), so a changed frame takes effect on the next run."""
+    exploration.frame_start_from     = start_from
+    exploration.frame_duration_years = duration_years
+    exploration.frame_interval       = interval
+    exploration.save()
+
+
 def overwrite_working( organization: Organization, scenario: Scenario ) -> Optional[ ScenarioRecord ]:
     """Overwrite the sandbox's values in place with `scenario`, leaving the anchor untouched -- how a tweak
     autosaves as the user edits. None when no exploration is in progress."""
