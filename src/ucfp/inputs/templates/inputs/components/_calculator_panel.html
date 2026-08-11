@@ -1,15 +1,17 @@
 {% comment %}
 A durable expense's calculator content: "Buy N at $X each, replace every Y yr -> ~ $Z/yr", with a live
-per-year readout and an "Auto fill" checkbox. While Auto fill is checked (the default), editing the inputs
-fills the row's amount target(s); unchecked, only the readout updates -- an independent estimate to
-hand-tune the bands against. The enclosing element carries js-calc-panel + a matching data-calc (its
-wrapper is an inline div or a full-width detail-row cell). Include with `calc` = the row's calculator dict
-(count, cost, lifespan, per_year) and `calc_id` = the row's calc id (ties the checkbox to its targets).
+per-year readout and an "Auto fill" checkbox. While Auto fill is checked, editing the inputs fills the
+row's amount target(s); unchecked, only the readout updates -- an independent estimate to hand-tune the
+bands against. It starts checked only for a uniform row (`calc.autofill`); a row already varied by band
+starts unchecked so opening the calculator to reference it does not flatten the variation on first edit.
+The enclosing element carries js-calc-panel + a matching data-calc (its wrapper is an inline div or a
+full-width detail-row cell). Include with `calc` = the row's calculator dict (count, cost, lifespan,
+per_year, autofill) and `calc_id` = the row's calc id (ties the checkbox to its targets).
 {% endcomment %}
 Buy {{ calc.count }} at {{ calc.cost }} each, replace every {{ calc.lifespan }} yr
 &rarr; &asymp; $<span class="{{ AppConst.CALC_READOUT_CLASS }}">{{ calc.per_year }}</span>/yr
 <label class="ml-2 mb-0 text-nowrap">
   <input type="checkbox" class="{{ AppConst.CALC_AUTOFILL_CLASS }}"
          data-{{ AppConst.CALC_DATA_ATTR }}="{{ calc_id }}"
-         aria-label="Auto fill amounts from the calculator" checked> Auto fill
+         aria-label="Auto fill amounts from the calculator"{% if calc.autofill %} checked{% endif %}> Auto fill
 </label>

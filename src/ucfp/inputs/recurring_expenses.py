@@ -132,6 +132,8 @@ class RecurringExpensesForm( forms.Form ):
 
     def _row( self, ei : int, expense ) -> dict:
         durable = expense.count is not None
+        cells   = self._cells( ei, expense )
+        uniform = not any( cell[ 'changed' ] for cell in cells )   # no per-band variation to protect
         return {
             'name'        : expense.name,
             'calc_id'     : ei,
@@ -139,9 +141,10 @@ class RecurringExpensesForm( forms.Form ):
                 self, self._cad_prefix( ei ), expense.interval, expense.cadence_domain ),
             'count_entry' : durable,
             'calculator'  : ( calculator_cells(
-                self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ) )
+                self, ei, per_year( expense.amounts[ 0 ] if expense.amounts else None, expense.interval ),
+                autofill = uniform )
                 if durable else None ),
-            'cells'       : self._cells( ei, expense ) }
+            'cells'       : cells }
 
     def _cells( self, ei : int, expense ) -> list:
         """One amount cell per span, each flagged when its shown value differs from the previous span's

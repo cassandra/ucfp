@@ -151,14 +151,17 @@ def add_calculator_fields( form, prefix, count : Optional[ int ], cost_each : Op
     form.fields[ _calc_lifespan_key( prefix ) ] = lifespan_field
 
 
-def calculator_cells( form, prefix, per_year_amount : Decimal ) -> dict:
-    """The template's view of a durable row's calculator: its three bound fields, plus the seeded annual
-    cost for the initial (pre-JS) readout."""
+def calculator_cells( form, prefix, per_year_amount : Decimal, autofill : bool = True ) -> dict:
+    """The template's view of a durable row's calculator: its three bound fields, the seeded annual cost
+    for the initial (pre-JS) readout, and whether Auto fill starts on. `autofill` starts a row's fill on
+    only when its amounts are uniform (nothing per-band to protect); a row already varied by band starts
+    off, so opening the calculator to reference it never flattens the variation on the first edit."""
     return {
         'count'    : form[ _calc_count_key( prefix ) ],
         'cost'     : form[ _calc_cost_key( prefix ) ],
         'lifespan' : form[ _calc_lifespan_key( prefix ) ],
-        'per_year' : per_year_amount }
+        'per_year' : per_year_amount,
+        'autofill' : autofill }
 
 
 def read_calculator_inputs( form, prefix ) -> tuple:

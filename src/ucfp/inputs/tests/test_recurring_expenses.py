@@ -142,3 +142,22 @@ class DurableAmountAuthoritativeTest( TestCase ):
         self.assertFalse( cells[ 0 ][ 'changed' ] )                    # the first band is the baseline
         self.assertTrue( cells[ 1 ][ 'changed' ] )                     # 100 -> 250 is a change...
         self.assertEqual( cells[ 1 ][ 'direction' ], 'up' )           # ...a step up
+
+    def test_auto_fill_starts_unchecked_for_a_durable_already_varied_by_band( self ):
+        # Smart default: a row with per-band variation opens with Auto fill OFF, so referencing the
+        # calculator does not flatten the variation on the first edit. (A uniform row starts checked --
+        # see test_a_durable_row_renders_editable_with_the_auto_fill_helper.)
+        spans    = [ 65, None ]
+        seed     = RecurringExpensesForm( profile = Profile(), plans = Plans( expense_spans = spans ) )
+        template = seed._expenses[ self._durable_index( seed ) ]
+        varying  = replace( template, amounts = [ Decimal( '100' ), Decimal( '250' ) ] )
+        form  = RecurringExpensesForm(
+            profile = Profile(), plans = Plans( expense_spans = spans, recurring_expenses = [ varying ] ) )
+        ei    = next( i for i, e in enumerate( form._expenses ) if e.handle == template.handle )
+        html  = render_to_string(
+            _SECTION_TEMPLATE, { 'recurring_form': form, 'AppConst': AppConst },
+            request = RequestFactory().get( '/' ) )
+        self.assertInHTML(                                             # the checkbox renders WITHOUT `checked`
+            f'<input type="checkbox" class="{AppConst.CALC_AUTOFILL_CLASS}" '
+            f'data-{AppConst.CALC_DATA_ATTR}="{ei}" '
+            f'aria-label="Auto fill amounts from the calculator">', html )
