@@ -9,13 +9,16 @@
   </ol>
 </nav>
 
-<h1 class="mb-2">{{ record.label }}</h1>
-<p>
+<h1 class="mb-1">{{ record.label }}</h1>
+<p class="mb-3">
+  <span class="text-muted">{{ horizon_start }}&ndash;{{ horizon_end }} ({{ horizon_years }} yr)</span>
+  &middot;
   {% if stopped_early %}
     <span class="text-danger font-weight-bold">Money ran out before the horizon.</span>
   {% else %}
     <span class="text-success font-weight-bold">Money lasted through the horizon.</span>
   {% endif %}
+  &middot; <span class="font-weight-bold">{{ ending_net_worth|money:currency }}</span> net worth at the end
 </p>
 
 {% if notices %}

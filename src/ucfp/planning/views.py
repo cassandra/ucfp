@@ -113,6 +113,19 @@ def _saved_run_digest( run_record ):
         return None
 
 
+def _run_outcome( run, books ) -> dict:
+    """The results page's headline outcome: the projection's year span and the net worth at the horizon.
+    Net worth is computed live from the already-loaded books -- never cached -- keeping the books the one
+    source of truth for book-derived figures (a captured run is immutable, so the live figure is stable)."""
+    frame = run.frame
+    return {
+        'horizon_start'    : frame.start_date.year,
+        'horizon_end'      : frame.end_date.year,
+        'horizon_years'    : frame.end_date.year - frame.start_date.year + 1,
+        'ending_net_worth' : Bookkeeper( books ).ledger.net_worth( through = frame.end_date ),
+    }
+
+
 def _remember_selection( request, form, scenario_record ) -> None:
     """Persist the chosen scenario and frame to the session, so the hub chooser defaults to them on the
     next visit and Explore (which reads the frame from the session) projects over the same window."""
@@ -283,6 +296,7 @@ class RunResultsView( View ):
             # The worst severity present tints the collapsed toggle, previewing what is inside.
             'notices_severity' : str( worst_severity ) if worst_severity else None,
         }
+        context.update( _run_outcome( run, books ) )
         context.update( run_books_table_context( request, run, books ) )
         return render( request, _RESULTS_TEMPLATE, context )
 
