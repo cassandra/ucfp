@@ -339,12 +339,15 @@ class PossessionsForm( forms.Form ):
 
     def apply( self, profile, plans ):
         kept = [ asset for asset in profile.assets if asset.asset_class not in self._CLASSES ]
-        return replace( profile, assets = kept + self._possessions() ), plans
+        return replace( profile, assets = kept + self._possessions( kept ) ), plans
 
-    def _possessions( self ) -> list:
+    def _possessions( self, kept : list[ AssetProfile ] ) -> list:
         # Existing rows keep the handle their hidden field carries; new rows mint one free among every
-        # possession in play, so both survive an edit (Plans reference possessions by handle).
-        taken = { item.handle for item in self._items }
+        # asset in play -- the possessions being rebuilt AND the retained assets. The latter matters
+        # because a transition-era holding (a pre-split vehicle) can still occupy a `possession-N`; minting
+        # only against the possessions being rebuilt would re-mint onto it and collide at persistence.
+        held  = self._items + kept
+        taken = { asset.handle for asset in held if asset.handle is not None }
         possessions = []
         for index in range( len( self._items ) + 1 ):
             if self.cleaned_data.get( f'remove_{index}' ):

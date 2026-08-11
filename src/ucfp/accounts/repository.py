@@ -57,6 +57,7 @@ class BooksOfAccountRepository:
         Accounts are written parents-first (the domain builds them in that order), so each
         child's parent record exists when it is referenced; transactions and their entries
         follow, mapping each domain account to the record just created for it."""
+        books.assert_unique_handles()
         books_record = BooksOfAccountRecord.objects.create(
             organization = organization, label = books.label )
         record_by_account = dict()

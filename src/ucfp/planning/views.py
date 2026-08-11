@@ -125,6 +125,8 @@ class FinancialForecastView( InputGatedMixin, View ):
                     organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
                     run = run, label = run.label )
         except ValueError as error:
+            # Run-time input errors surface inline rather than as a 500: `materialize`'s validation and
+            # the books' `DuplicateAccountHandleError` (a ValueError) both land here.
             return render(
                 request, _HUB_TEMPLATE, self._context( request, form = form, error = str( error ) ) )
         return redirect( 'run_results', run_uuid = run.uuid )
