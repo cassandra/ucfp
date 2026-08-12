@@ -229,6 +229,13 @@ if UNIT_TESTING:
         'django.contrib.auth.hashers.MD5PasswordHasher',
     ]
 
+# Sign-in abuse prevention (rate limits, verify cooldown, alerting). On for real
+# deployments; off under the test suite (so unrelated tests are not throttled --
+# the dedicated abuse tests re-enable it via @override_settings) and off in local
+# development (see settings/development.py). A self-host that wants it off can
+# override this in its own settings module.
+ABUSE_PREVENTION_ENABLED = not UNIT_TESTING
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
@@ -351,6 +358,10 @@ EMAIL_SUBJECT_PREFIX = ENV.EMAIL_SUBJECT_PREFIX
 DEFAULT_FROM_EMAIL = ENV.DEFAULT_FROM_EMAIL
 SERVER_EMAIL = ENV.SERVER_EMAIL
 FROM_EMAIL_NAME = SITE_NAME
+
+# Where abuse-prevention admin alerts are sent. Reuses the server/ops address by
+# default; a deployment can point it at a distinct inbox by overriding this.
+ADMIN_ALERT_EMAIL = SERVER_EMAIL
 
 # Normal Settings
 EMAIL_HOST = ENV.EMAIL_HOST

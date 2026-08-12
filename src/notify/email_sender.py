@@ -54,6 +54,11 @@ class EmailData:
     files                       : List            = None  # For attachments
     non_blocking                : bool            = True
 
+    # System messages (e.g. operational admin alerts) set this to bypass the
+    # unsubscribe suppression list and omit the unsubscribe link. Such messages
+    # are operational, not promotional, and must not be silenceable.
+    skip_unsubscribe            : bool            = False
+
     # For testing (can use the unsubscribe link to test for the original intended "to" email)
     override_to_email_address   : str             = None
 
@@ -69,12 +74,14 @@ class EmailSender:
         return
 
     def send(self):
-        self._assert_not_unsubscribed()
+        if not self._data.skip_unsubscribe:
+            self._assert_not_unsubscribed()
         self._send_helper()
         return
 
     async def send_async( self):
-        await self._assert_not_unsubscribed_async()
+        if not self._data.skip_unsubscribe:
+            await self._assert_not_unsubscribed_async()
         self._send_helper()
         return
 
@@ -84,7 +91,10 @@ class EmailSender:
         context = self._data.template_context
         self._add_base_url( context = context )
         self._add_home_url( context = context )
-        self._add_unsubscribe_url( context = context )
+        extra_headers = None
+        if not self._data.skip_unsubscribe:
+            self._add_unsubscribe_url( context = context )
+            extra_headers = self._list_unsubscribe_headers( context )
 
         if self._data.override_to_email_address:
             effective_to_email_address = self._data.override_to_email_address
@@ -101,8 +111,21 @@ class EmailSender:
             context = context,
             files = self._data.files,
             non_blocking = self._data.non_blocking,
+            extra_headers = extra_headers,
         )
         return
+
+    def _list_unsubscribe_headers( self, context : Dict ):
+        """One-click unsubscribe headers (RFC 8058) from the unsubscribe URL, so
+        mail clients can offer a native Unsubscribe control and providers rank us
+        as legitimate bulk mail."""
+        unsubscribe_url = context.get('UNSUBSCRIBE_URL')
+        if not unsubscribe_url:
+            return None
+        return {
+            'List-Unsubscribe'      : f'<{unsubscribe_url}>',
+            'List-Unsubscribe-Post' : 'List-Unsubscribe=One-Click',
+        }
 
     def _add_base_url( self, context : Dict ):
         if self._data.request:

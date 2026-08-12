@@ -1,0 +1,7 @@
+{% load common_tags %}{% settings_value 'SITE_NAME' %} abuse-prevention alert.
+
+Type:   {{ alert_type }}
+Detail: {{ detail }}
+
+This is an automated operational notice. It is coalesced per alert type, so
+repeated activity will not flood this inbox.

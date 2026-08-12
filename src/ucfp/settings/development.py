@@ -4,6 +4,10 @@ from .base import *
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+# Sign-in abuse prevention off in local development, so hammering the sign-in
+# flow while iterating never trips a rate limit.
+ABUSE_PREVENTION_ENABLED = False
+
 # Development/DEBUG-only testing hub (the /testing UI + devtools auto-discovery).
 # Kept out of base INSTALLED_APPS so production carries no trace of it; its URLs
 # are likewise mounted only under `if settings.DEBUG` (see ucfp/urls.py).

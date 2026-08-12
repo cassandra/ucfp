@@ -95,6 +95,22 @@ class SendTest(TestCase):
         self.assertIn('rcpt@example.com', message.to)
         self.assertIn(hash_with_seed('rcpt@example.com'), message.alternatives[0][0])
 
+    def test_send_sets_one_click_list_unsubscribe_headers(self):
+        with override_settings(TEMPLATES=self._templates(),
+                               BASE_URL_FOR_EMAIL_LINKS='http://t', **EMAIL_CFG):
+            EmailSender(_data('rcpt@example.com', template_context={'name': 'Ada'},
+                              non_blocking=False)).send()
+        headers = mail.outbox[0].extra_headers
+        self.assertIn('List-Unsubscribe', headers)
+        self.assertEqual(headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
+
+    def test_system_email_omits_list_unsubscribe_headers(self):
+        with override_settings(TEMPLATES=self._templates(),
+                               BASE_URL_FOR_EMAIL_LINKS='http://t', **EMAIL_CFG):
+            EmailSender(_data('ops@example.com', template_context={'name': 'Ops'},
+                              non_blocking=False, skip_unsubscribe=True)).send()
+        self.assertNotIn('List-Unsubscribe', mail.outbox[0].extra_headers)
+
 
 class EmailUnsubscribeViewTest(ViewTestBase):
 

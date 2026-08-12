@@ -27,6 +27,7 @@ class AuthenticationMiddleware:
         'privacy',
         'terms',
         'notify_email_unsubscribe',
+        'notify_email_resubscribe',
         'user_signin',
         'user_signin_magic_code',
         'user_signin_magic_link',
