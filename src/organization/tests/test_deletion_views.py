@@ -1,0 +1,226 @@
+import logging
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
+
+from organization.enums import OrganizationRole
+from organization.models import Organization, OrganizationMember
+
+logging.disable(logging.CRITICAL)
+
+User = get_user_model()
+
+
+def _user( email ):
+    return User.objects.create_user( email = email )
+
+
+def _add_member( org, user, role ):
+    return OrganizationMember.objects.create(
+        organization = org, user = user, organization_role = role )
+
+
+class OrganizationDeleteViewTest(TestCase):
+
+    def _url( self, org ):
+        return reverse( 'organization_delete', kwargs = { 'organization_uuid': org.uuid } )
+
+    def test_owner_deletes_household_with_confirmation(self):
+        user = _user( 'a@x.test' )
+        org = Organization.objects.create_for_owner( user, 'A' )
+        self.client.force_login( user )
+
+        response = self.client.post( self._url( org ), { 'confirm': 'delete' } )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertFalse( Organization.objects.filter( pk = org.pk ).exists() )
+
+    def test_deletion_requires_the_typed_confirmation(self):
+        user = _user( 'a@x.test' )
+        org = Organization.objects.create_for_owner( user, 'A' )
+        self.client.force_login( user )
+
+        response = self.client.post( self._url( org ), { 'confirm': 'nope' } )
+
+        self.assertEqual( response.status_code, 400 )
+        self.assertTrue( Organization.objects.filter( pk = org.pk ).exists() )
+
+    def test_non_owner_is_forbidden(self):
+        owner, member_user = _user( 'o@x.test' ), _user( 'm@x.test' )
+        org = Organization.objects.create_for_owner( owner, 'A' )
+        _add_member( org, member_user, OrganizationRole.MEMBER )
+        self.client.force_login( member_user )
+
+        response = self.client.post( self._url( org ), { 'confirm': 'delete' } )
+
+        self.assertEqual( response.status_code, 403 )
+        self.assertTrue( Organization.objects.filter( pk = org.pk ).exists() )
+
+    def test_non_member_gets_404(self):
+        user, other = _user( 'a@x.test' ), _user( 'b@x.test' )
+        org = Organization.objects.create_for_owner( other, 'A' )
+        self.client.force_login( user )
+
+        response = self.client.post( self._url( org ), { 'confirm': 'delete' } )
+
+        self.assertEqual( response.status_code, 404 )
+
+
+class OrganizationLeaveViewTest(TestCase):
+
+    def _url( self, org ):
+        return reverse( 'organization_leave', kwargs = { 'organization_uuid': org.uuid } )
+
+    def test_co_owner_can_leave_and_household_persists(self):
+        u1, u2 = _user( 'a@x.test' ), _user( 'b@x.test' )
+        org = Organization.objects.create_for_owner( u1, 'A' )
+        _add_member( org, u2, OrganizationRole.OWNER )
+        self.client.force_login( u1 )
+
+        response = self.client.post( self._url( org ) )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertTrue( Organization.objects.filter( pk = org.pk ).exists() )
+        self.assertFalse( OrganizationMember.objects.filter( organization = org, user = u1 ).exists() )
+
+    def test_sole_owner_cannot_leave(self):
+        user = _user( 'a@x.test' )
+        org = Organization.objects.create_for_owner( user, 'A' )
+        self.client.force_login( user )
+
+        response = self.client.post( self._url( org ) )
+
+        self.assertEqual( response.status_code, 400 )
+        self.assertTrue( OrganizationMember.objects.filter( organization = org, user = user ).exists() )
+
+
+class AccountDeleteViewTest(TestCase):
+
+    def test_deletes_account_and_logs_out(self):
+        user = _user( 'a@x.test' )
+        Organization.objects.create_for_owner( user, 'A' )
+        self.client.force_login( user )
+        user_id = user.pk
+
+        response = self.client.post( reverse( 'account_delete' ), { 'confirm': 'delete' } )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertFalse( User.objects.filter( pk = user_id ).exists() )
+        self.assertNotIn( '_auth_user_id', self.client.session )
+
+    def test_requires_the_typed_confirmation(self):
+        user = _user( 'a@x.test' )
+        Organization.objects.create_for_owner( user, 'A' )
+        self.client.force_login( user )
+        user_id = user.pk
+
+        response = self.client.post( reverse( 'account_delete' ), { 'confirm': '' } )
+
+        self.assertEqual( response.status_code, 400 )
+        self.assertTrue( User.objects.filter( pk = user_id ).exists() )
+
+
+class DangerSectionRenderTest(TestCase):
+
+    def test_sole_owner_of_one_org_sees_combined_action(self):
+        user = _user( 'a@x.test' )
+        Organization.objects.create_for_owner( user, 'A' )
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'user_account' ) )
+
+        self.assertContains( response, 'Delete my account and all my data' )
+        self.assertContains( response, 'data-async="modal"' )  # antinode confirm modal
+
+    def test_multi_org_shows_per_household_controls(self):
+        user = _user( 'a@x.test' )
+        other_owner = _user( 'b@x.test' )
+        Organization.objects.create_for_owner( user, 'A' )  # sole owner
+        org_b = Organization.objects.create_for_owner( other_owner, 'B' )
+        _add_member( org_b, user, OrganizationRole.MEMBER )  # plain member of B
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'user_account' ) )
+
+        self.assertContains( response, 'Danger zone' )
+        self.assertContains( response, 'Leave' )              # the member control for B
+        self.assertNotContains( response, 'and all my data' )  # not the collapsed single-org form
+
+
+class ConfirmModalViewTest(TestCase):
+    """The antinode confirm-modal views (opened by the data-async triggers)."""
+
+    AJAX = { 'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest' }
+
+    def test_account_delete_confirm_lone_account_hides_the_org_name(self):
+        user = _user( 'a@x.test' )
+        Organization.objects.create_for_owner( user, 'Alpha' )
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'account_delete_confirm' ), **self.AJAX )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, 'all your data' )
+        self.assertNotContains( response, 'Alpha' )  # the auto-named lone household is not shown
+
+    def test_account_delete_confirm_multi_org_itemizes_by_name(self):
+        user = _user( 'a@x.test' )
+        other = _user( 'b@x.test' )
+        Organization.objects.create_for_owner( user, 'Alpha' )      # solely owned -> deleted
+        org_b = Organization.objects.create_for_owner( other, 'Beta' )
+        _add_member( org_b, user, OrganizationRole.MEMBER )         # left
+
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'account_delete_confirm' ), **self.AJAX )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, 'Alpha' )
+        self.assertContains( response, 'Beta' )
+
+    def test_org_delete_confirm_owner_ok(self):
+        user = _user( 'a@x.test' )
+        org = Organization.objects.create_for_owner( user, 'Alpha' )
+        self.client.force_login( user )
+
+        response = self.client.get(
+            reverse( 'organization_delete_confirm', kwargs = { 'organization_uuid': org.uuid } ),
+            **self.AJAX )
+
+        self.assertEqual( response.status_code, 200 )
+
+    def test_org_delete_confirm_non_owner_forbidden(self):
+        owner, member_user = _user( 'o@x.test' ), _user( 'm@x.test' )
+        org = Organization.objects.create_for_owner( owner, 'Alpha' )
+        _add_member( org, member_user, OrganizationRole.MEMBER )
+        self.client.force_login( member_user )
+
+        response = self.client.get(
+            reverse( 'organization_delete_confirm', kwargs = { 'organization_uuid': org.uuid } ),
+            **self.AJAX )
+
+        self.assertEqual( response.status_code, 403 )
+
+    def test_org_leave_confirm_member_ok(self):
+        owner, member_user = _user( 'o@x.test' ), _user( 'm@x.test' )
+        org = Organization.objects.create_for_owner( owner, 'Alpha' )
+        _add_member( org, member_user, OrganizationRole.MEMBER )
+        self.client.force_login( member_user )
+
+        response = self.client.get(
+            reverse( 'organization_leave_confirm', kwargs = { 'organization_uuid': org.uuid } ),
+            **self.AJAX )
+
+        self.assertEqual( response.status_code, 200 )
+
+    def test_org_leave_confirm_sole_owner_rejected(self):
+        user = _user( 'a@x.test' )
+        org = Organization.objects.create_for_owner( user, 'Alpha' )
+        self.client.force_login( user )
+
+        response = self.client.get(
+            reverse( 'organization_leave_confirm', kwargs = { 'organization_uuid': org.uuid } ),
+            **self.AJAX )
+
+        self.assertEqual( response.status_code, 400 )

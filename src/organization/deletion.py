@@ -16,6 +16,18 @@ from django.db import transaction
 from .models import OrganizationMember
 
 
+def account_deletion_plan( user : UserType ):
+    """What deleting ``user``'s account would do to each of their organizations:
+    a ``(deleted, left)`` pair of the organizations that would be permanently
+    deleted (those the user solely owns) versus merely left (co-owned / non-owned).
+    """
+    memberships = list(
+        OrganizationMember.objects.for_user( user ).select_related( 'organization' ) )
+    deleted = [ member.organization for member in memberships if member.is_sole_active_owner ]
+    left = [ member.organization for member in memberships if not member.is_sole_active_owner ]
+    return deleted, left
+
+
 def delete_organization( organization ):
     """Permanently delete an organization and everything it owns.
 

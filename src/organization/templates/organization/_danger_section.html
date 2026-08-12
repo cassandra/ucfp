@@ -1,0 +1,35 @@
+{% comment %}
+  Account-page "Danger" section, composed into the user app's account page via the
+  {% household_danger_section %} inclusion tag. Each control opens an antinode
+  confirmation modal (served by the *_confirm views); the destructive action is a
+  typed "delete" confirmation there, so an accidental click cannot destroy anything.
+{% endcomment %}
+{% if show %}
+<div class="card border-danger mt-4" style="max-width: 40rem">
+  <div class="card-header bg-danger text-white py-2"><h2 class="h6 mb-0">Danger zone</h2></div>
+  <div class="card-body">
+  {% if simple %}
+    <p class="text-muted small mb-3">Permanently delete your account and all your data. This cannot be undone.</p>
+    <a href="{% url 'account_delete_confirm' %}" data-async="modal" class="btn btn-danger">
+      Delete my account and all my data</a>
+  {% else %}
+    <p class="text-muted small mb-2">The households you belong to:</p>
+    <ul class="list-unstyled mb-3">
+      {% for row in rows %}
+      <li class="d-flex justify-content-between align-items-center border-bottom py-2">
+        <span>{{ row.organization.name }} <span class="text-muted small">({{ row.role_label }})</span></span>
+        {% if row.can_delete %}
+        <a href="{% url 'organization_delete_confirm' organization_uuid=row.organization.uuid %}"
+           data-async="modal" class="btn btn-sm btn-outline-danger">Delete</a>
+        {% else %}
+        <a href="{% url 'organization_leave_confirm' organization_uuid=row.organization.uuid %}"
+           data-async="modal" class="btn btn-sm btn-outline-secondary">Leave</a>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <a href="{% url 'account_delete_confirm' %}" data-async="modal" class="btn btn-danger">Delete my account</a>
+  {% endif %}
+  </div>
+</div>
+{% endif %}

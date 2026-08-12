@@ -1,0 +1,39 @@
+{% extends "modals/action_with_cancel.html" %}
+{% load icons %}
+{% comment %}
+Confirm permanent deletion of the whole account. Lists exactly which households
+are deleted (solely owned) versus left. The form wraps the footer (preamble/
+postamble) so the Delete button sits beside CANCEL yet submits the typed "delete"
+confirmation to `account_delete`.
+{% endcomment %}
+
+{% block header_class %}bg-danger{% endblock %}
+
+{% block title_text %}Delete your account{% endblock %}
+
+{% block preamble %}<form method="post" action="{% url 'account_delete' %}">{% csrf_token %}{% endblock %}
+
+{% block body %}
+{% if is_lone_account %}
+<p>This permanently deletes your account and all your data. It cannot be undone.</p>
+{% else %}
+<p>This permanently deletes your account. It cannot be undone.</p>
+{% if deleted_orgs %}
+<p class="mb-1"><strong>These households and all their data will be permanently deleted:</strong></p>
+<ul>{% for org in deleted_orgs %}<li>{{ org.name }}</li>{% endfor %}</ul>
+{% endif %}
+{% if left_orgs %}
+<p class="mb-1"><strong>You will leave these households (they and their data remain):</strong></p>
+<ul>{% for org in left_orgs %}<li>{{ org.name }}</li>{% endfor %}</ul>
+{% endif %}
+{% endif %}
+<label class="small mb-1 d-block" for="confirm-account">Type <strong>delete</strong> to confirm</label>
+<input class="form-control" id="confirm-account" name="confirm" autocomplete="off"
+       pattern="[Dd][Ee][Ll][Ee][Tt][Ee]" required placeholder="delete">
+{% endblock %}
+
+{% block action_right %}
+<button type="submit" class="btn btn-danger">{% icon "delete" css_class="icon-left" %}Delete my account</button>
+{% endblock %}
+
+{% block postamble %}</form>{% endblock %}
