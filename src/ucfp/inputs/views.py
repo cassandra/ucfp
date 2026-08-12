@@ -21,7 +21,7 @@ from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
-from user.decorators import ensure_organization
+from organization.decorators import ensure_organization
 
 from common import antinode
 from common.async_view import ModalView

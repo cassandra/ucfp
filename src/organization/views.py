@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 
-from user.decorators import ensure_organization
+from .decorators import ensure_organization
 
 from .forms import OrganizationSettingsForm
 

@@ -8,7 +8,8 @@ from django.test import RequestFactory, TestCase
 from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 from ucfp.session_state import SessionState
-from user.decorators import ensure_organization
+
+from organization.decorators import ensure_organization
 
 _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
 

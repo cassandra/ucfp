@@ -17,7 +17,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
 
-from user.decorators import ensure_organization
+from organization.decorators import ensure_organization
 
 from common import antinode
 from common.async_view import ModalView

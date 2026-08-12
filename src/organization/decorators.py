@@ -1,7 +1,7 @@
-"""View decorators for the user/account area."""
+"""View decorators for resolving the current organization on a request."""
 import functools
 
-from organization.models import Organization, OrganizationMember
+from .models import Organization, OrganizationMember
 
 
 def ensure_organization( view_func ):
