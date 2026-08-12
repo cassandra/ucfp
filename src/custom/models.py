@@ -89,11 +89,10 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
 
     def clean(self):
         super().clean()
-        if self.email:
-            self.email = self.__class__.objects.normalize_email(self.email).strip()
-        # Collapse blank/whitespace emails to NULL so they are exempt from the
-        # unique constraint (an empty string is not, but NULL is).
-        self.email = self.email or None
+        # Canonicalize through the manager so admin/form-created users match the
+        # passwordless sign-in path: normalized, lowercased, blank collapsed to
+        # NULL (which is exempt from the unique constraint; an empty string is not).
+        self.email = self.__class__.objects.canonicalize_email(self.email)
         return
 
     @property

@@ -41,23 +41,16 @@ class UserSigninView( View ):
         except ValidationError:
             raise BadRequest( 'Invalid email provided' )
 
+        # Sign-in is passwordless and account creation happens here: an unknown
+        # email becomes a new account rather than a dead end, since the email is
+        # simply the stable identifier we tie a person's plan to.
         User = get_user_model()
-        try:
-            existing_user = User.objects.get( email = email_address )
-            logger.debug( f'Found existing user with email: {email_address}' )
-            return SendMagicLinkEmailView().send_signin_magic_link(
-                request = request,
-                override_user = existing_user,
-            )
-        except User.DoesNotExist:
-            # Show the same message so as not to give away whether the account exists.
-            logger.debug( f'No user exists with email: {email_address}' )
-            return SigninMagicCodeView().get_response(
-                request = request,
-                magic_code_form = forms.SigninMagicCodeForm(
-                    initial = { 'email_address': email_address }
-                )
-            )
+        user, created = User.objects.get_or_create_by_email( email_address )
+        logger.debug( f'{"Created" if created else "Found"} user with email: {user.email}' )
+        return SendMagicLinkEmailView().send_signin_magic_link(
+            request = request,
+            override_user = user,
+        )
 
 
 class SendMagicLinkEmailView( View ):
@@ -105,8 +98,9 @@ class SigninMagicCodeView( View ):
         magic_code = magic_code_form.cleaned_data.get('magic_code')
 
         User = get_user_model()
+        canonical_email = User.objects.canonicalize_email( email_address )
         try:
-            existing_user = User.objects.get( email = email_address )
+            existing_user = User.objects.get( email = canonical_email )
         except User.DoesNotExist:
             raise BadRequest( 'Email is invalid.' )
 
@@ -114,13 +108,13 @@ class SigninMagicCodeView( View ):
         magic_code_status = magic_code_generator.check_magic_code( request, magic_code = magic_code )
 
         if magic_code_status == MagicCodeStatus.INVALID:
-            error_message = 'Invalid access code.'
+            error_message = 'Invalid sign-in code.'
         elif magic_code_status == MagicCodeStatus.EXPIRED:
-            error_message = 'Access code has expired.'
+            error_message = 'Sign-in code has expired.'
         elif magic_code_status == MagicCodeStatus.VALID:
             error_message = None
         else:
-            error_message = 'Access code generated an unexpected error.'
+            error_message = 'Sign-in code generated an unexpected error.'
 
         logger.debug( f'Signin Magic: Email={email_address}, Status={magic_code_status}' )
 
@@ -148,8 +142,9 @@ class SigninMagicLinkView( View ):
             raise BadRequest( 'Malformed request.' )
 
         User = get_user_model()
+        canonical_email = User.objects.canonicalize_email( email_address )
         try:
-            existing_user = User.objects.get( email = email_address )
+            existing_user = User.objects.get( email = canonical_email )
         except User.DoesNotExist:
             raise BadRequest( 'Email is not valid.' )
 

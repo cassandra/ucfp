@@ -14,6 +14,6 @@ class SigninMagicCodeForm( forms.Form ):
         label = '',
         max_length = 2 * MagicCodeGenerator.MAGIC_CODE_LENGTH,
         widget = forms.TextInput( attrs = { 'autofocus': 'autofocus',
-                                            'placeholder': 'access code',
+                                            'placeholder': 'sign-in code',
                                             'width': str( 2 * MagicCodeGenerator.MAGIC_CODE_LENGTH ) } ),
         required = True )

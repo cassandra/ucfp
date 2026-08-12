@@ -1,1 +1,1 @@
-{% load common_tags %}{% settings_value 'SITE_NAME' %}: Sign In Access Code
+{% load common_tags %}{% settings_value 'SITE_NAME' %}: Your sign-in code

@@ -17,7 +17,11 @@
         action="{% url 'user_signin' %}"
         data-synchronous="true">
     {% csrf_token %}
-    <div class="h3 text-center">Sign In</div>
+    <div class="h3 text-center">Get your sign-in code</div>
+    <p class="small text-muted text-center mt-3 mb-0">
+      Enter your email and we'll send a one-time sign-in code — no password.
+      Your email is used only to save your plan and send your code. No marketing, no data sold, ever.
+    </p>
     <div class="d-flex mt-3">
       <input style="width: 20rem;"
              type="email"
@@ -30,7 +34,7 @@
       <button id="signin-button"
               role="button" type="submit"
               class="btn btn-lg btn-primary my-4">
-        <b>Sign In</b>
+        <b>Email me a code</b>
       </button>
     </div>
   </form>

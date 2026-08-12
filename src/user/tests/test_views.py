@@ -88,18 +88,39 @@ class TestUserSigninView(SyncViewTestCase):
         call_kwargs = mock_send_view.send_signin_magic_link.call_args[1]
         self.assertEqual(call_kwargs['override_user'], self.user)
 
-    @patch('user.views.SigninMagicCodeView')
-    def test_post_signin_nonexistent_user(self, mock_magic_code_view_class):
-        """Test POST request with nonexistent user email."""
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_post_signin_unknown_email_creates_user(self, mock_send_view_class):
+        """An unknown email creates a new account and proceeds to send a code."""
         from django.http import HttpResponse
-        mock_magic_code_view = mock_magic_code_view_class.return_value
-        mock_magic_code_view.get_response.return_value = HttpResponse('mock_response')
+        mock_send_view = mock_send_view_class.return_value
+        mock_send_view.send_signin_magic_link.return_value = HttpResponse('mock_response')
+
+        new_email = 'newcomer@example.com'
+        self.assertFalse(User.objects.filter(email=new_email).exists())
 
         url = reverse('user_signin')
-        _ = self.client.post(url, {'email': 'nonexistent@example.com'})
+        _ = self.client.post(url, {'email': new_email})
 
-        # Should delegate to SigninMagicCodeView
-        mock_magic_code_view.get_response.assert_called_once()
+        # The previously-unknown email now has an account...
+        created_user = User.objects.get(email=new_email)
+        # ...and the flow proceeds to send a sign-in code for that user.
+        mock_send_view.send_signin_magic_link.assert_called_once()
+        call_kwargs = mock_send_view.send_signin_magic_link.call_args[1]
+        self.assertEqual(call_kwargs['override_user'], created_user)
+
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_post_signin_canonicalizes_email_case(self, mock_send_view_class):
+        """Mixed-case variants of one address resolve to a single account."""
+        from django.http import HttpResponse
+        mock_send_view = mock_send_view_class.return_value
+        mock_send_view.send_signin_magic_link.return_value = HttpResponse('mock_response')
+
+        url = reverse('user_signin')
+        self.client.post(url, {'email': 'Mixed.Case@Example.COM'})
+        self.client.post(url, {'email': 'mixed.case@example.com'})
+
+        self.assertEqual(User.objects.filter(email='mixed.case@example.com').count(), 1)
+        self.assertFalse(User.objects.filter(email='Mixed.Case@Example.COM').exists())
 
     def test_post_signin_email_validation_error(self):
         """Test POST request with email that fails validation."""

@@ -205,6 +205,15 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Passwordless sign-in: how long an emailed one-time code (and the magic link in
+# the same email) stays valid. Kept short to limit code-guessing on the sign-in
+# form -- long enough to absorb email-delivery lag, not the multi-day window
+# Django's PASSWORD_RESET_TIMEOUT defaults to. The emailed link is validated by
+# PasswordResetTokenGenerator, which reads PASSWORD_RESET_TIMEOUT internally, so
+# we point that at the same value to keep the code and the link expiring together.
+SIGNIN_CODE_TIMEOUT_SECS = 15 * 60
+PASSWORD_RESET_TIMEOUT   = SIGNIN_CODE_TIMEOUT_SECS
+
 # True when invoked as ``manage.py test`` (WSGI / gunicorn / runserver /
 # migrate / shell do not match, so production processes are unaffected).
 # Drives test-only behavior: the fast password hasher below, plus the

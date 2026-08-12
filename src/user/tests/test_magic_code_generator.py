@@ -1,6 +1,8 @@
 import logging
 from unittest.mock import Mock, patch
 
+from django.conf import settings
+
 from user.magic_code_generator import MagicCodeGenerator, MagicCodeStatus
 from testing.base_test_case import BaseTestCase
 
@@ -124,3 +126,33 @@ class TestMagicCodeGenerator(BaseTestCase):
 
         self.assertEqual(timeout, MagicCodeGenerator.MAGIC_CODE_TIMEOUT_SECS)
         self.assertIsInstance(timeout, int)
+
+    def test_timeout_reads_signin_code_setting(self):
+        """The code lifetime is driven by the intent-named sign-in setting, not
+        Django's PASSWORD_RESET_TIMEOUT default."""
+        self.assertEqual(MagicCodeGenerator.MAGIC_CODE_TIMEOUT_SECS,
+                         settings.SIGNIN_CODE_TIMEOUT_SECS)
+
+    @patch('user.magic_code_generator.MagicCodeGenerator.get_elapsed_seconds')
+    def test_advertised_lifetime_matches_enforced_code_expiry(self, mock_elapsed_seconds):
+        """The lifetime the sign-in email advertises is the one the checker enforces.
+
+        The email shows get_timeout_seconds() // 60 minutes; a code must still be
+        valid at the edge of that window and expired just past it -- so the number
+        the user reads cannot drift from the actual expiry.
+        """
+        advertised_lifetime_secs = self.generator.get_timeout_seconds()
+        start_seconds = 1000
+
+        mock_elapsed_seconds.return_value = start_seconds
+        magic_code = self.generator.make_magic_code(self.mock_request)
+
+        # At the edge of the advertised window: still valid.
+        mock_elapsed_seconds.return_value = start_seconds + advertised_lifetime_secs
+        self.assertEqual(self.generator.check_magic_code(self.mock_request, magic_code),
+                         MagicCodeStatus.VALID)
+
+        # One second past the advertised window: expired.
+        mock_elapsed_seconds.return_value = start_seconds + advertised_lifetime_secs + 1
+        self.assertEqual(self.generator.check_magic_code(self.mock_request, magic_code),
+                         MagicCodeStatus.EXPIRED)
