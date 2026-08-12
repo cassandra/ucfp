@@ -1,9 +1,12 @@
 {% extends "pages/base_public.html" %}
 {% load common_tags %}
 {% comment %}
-  Public terms page. DRAFT starting point -- review the wording, the legal entity, the effective date,
-  and the contact with counsel before any public launch. The "not financial advice" disclaimer is
-  essential for a planning tool and should not be removed.
+  Public terms page. DRAFT -- review the wording, the legal entity, the effective date, and the contact
+  with counsel before any public launch. The "not financial advice" disclaimer is essential for a
+  planning tool and should not be removed.
+
+  The "Deleting your data" section assumes #160 (self-service account & data deletion) is complete; it is
+  release-gating and we do not go public until it ships.
 {% endcomment %}
 
 {% block page_title %}Terms of Service{% endblock %}
@@ -33,6 +36,11 @@
 <p>You own the financial information you enter. By using the Service you grant us a limited licence to
   store and process it solely to provide the Service to you. You represent that you have the right to
   provide the information you enter.</p>
+
+<h5 class="text-primary mt-4">Deleting your data</h5>
+<p>You may delete your account and all associated data at any time from your account page. Deletion is
+  permanent: we erase your information and retain only what the law requires us to keep. You can also
+  remove individual records as you work.</p>
 
 <h5 class="text-primary mt-4">Prohibited conduct</h5>
 <p>You agree not to:</p>

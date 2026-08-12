@@ -1,8 +1,13 @@
 {% extends "pages/base_public.html" %}
 {% load common_tags %}
 {% comment %}
-  Public privacy page. DRAFT starting point -- review the wording, the effective date, and the contact
-  before any public launch. Adapted for a financial-planning app (your financial data is yours).
+  Public privacy page. DRAFT -- review the wording, the effective date, the data-controller/legal entity,
+  and the contact with counsel before any public launch. Adapted for a financial-planning app (your
+  financial data is yours).
+
+  Written as if two release-gating features are complete; we do not go public until they ship:
+    - #159 encrypt user financial data at rest (server-side) -> the "encrypted at rest" statement
+    - #160 self-service account & data deletion              -> the "delete it yourself, anytime" statement
 {% endcomment %}
 
 {% block page_title %}Privacy Policy{% endblock %}
@@ -23,12 +28,28 @@
     Your financial information is used to build and show you your own projections. Nothing else.
   </li>
   <li class="mb-3">
+    <strong class="text-primary">No passwords, and email used only when necessary.</strong>
+    We never store a password. You sign in with a one-time code we email you, and we use your address
+    only to send those codes and the occasional essential service notice &mdash; never marketing.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">Your data is encrypted at rest.</strong>
+    Your financial information is encrypted where it is stored, so it stays protected even if the
+    underlying storage or backups were ever exposed. Because we build your projections on our servers,
+    our service can process your data to do that &mdash; and for nothing else.
+  </li>
+  <li class="mb-3">
     <strong class="text-primary">We don't track you.</strong>
     No third-party analytics, no advertising trackers, no behavioral profiling.
   </li>
   <li class="mb-3">
     <strong class="text-primary">We don't sell or share your data.</strong>
     Your information stays between you and the service. It is never sold or shared for marketing.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">You can delete everything yourself, anytime.</strong>
+    Remove individual records as you work, or delete your account and all its data yourself from your
+    account page. When you do, it is permanently erased &mdash; no "contact us and wait" required.
   </li>
   <li class="mb-3">
     <strong class="text-primary">You can keep your data on your own machine.</strong>
@@ -38,14 +59,6 @@
   <li class="mb-3">
     <strong class="text-primary">We only use necessary cookies.</strong>
     A session cookie keeps you signed in. There are no tracking cookies.
-  </li>
-  <li class="mb-3">
-    <strong class="text-primary">You can delete your data anytime.</strong>
-    Remove individual records as you work, or contact us to delete your account and all associated data.
-  </li>
-  <li class="mb-3">
-    <strong class="text-primary">We email you only when necessary.</strong>
-    Sign-in verification and critical service notices &mdash; no marketing.
   </li>
 </ol>
 
