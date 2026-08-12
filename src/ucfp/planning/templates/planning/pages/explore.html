@@ -52,13 +52,15 @@ scenario immediately (js-autosave, silent); the Re-run at the foot of the inputs
         <form method="post" action="{% url 'explore_save_plans' %}"
               class="{{ AppConst.AUTOSAVE_CLASS }} border rounded p-2">
           {% csrf_token %}
-          <div class="font-weight-bold small mb-2">Living Expenses</div>
-          {# One row per expense, one editable cell per age band (the columns). #}
+          {% comment %}
+          The "Living Expenses" label shares the header row with the age-band columns, so the grid starts a
+          row higher and its inputs line up with the Assumptions card beside it.
+          {% endcomment %}
           <div class="table-responsive">
             <table class="table table-sm mb-1">
               <thead>
                 <tr>
-                  <th class="font-weight-normal small text-muted border-top-0"></th>
+                  <th class="font-weight-bold small border-top-0">Living Expenses</th>
                   {% for band_label in living_form.bands %}
                   <th class="font-weight-normal small text-muted text-right border-top-0">{{ band_label }}</th>
                   {% endfor %}
@@ -102,8 +104,11 @@ scenario immediately (js-autosave, silent); the Re-run at the foot of the inputs
         <form method="post" action="{% url 'explore_save_assumptions' %}"
               class="{{ AppConst.AUTOSAVE_CLASS }} border rounded p-2">
           {% csrf_token %}
-          <div class="font-weight-bold small mb-2">Economic Assumptions
-            <span class="text-muted font-weight-normal">(% per year)</span></div>
+          {# Match the Plans grid's header rule: a delimiter under the title so the two cards read alike. #}
+          <div class="d-flex justify-content-between small border-bottom pb-2 mb-2">
+            <div class="font-weight-bold">Economic Assumptions</div>
+            <div class="text-muted font-weight-normal">(% per year)</div>
+          </div>
           <div class="form-row">
             {% for row in econ_form.rows %}
             {% comment %}

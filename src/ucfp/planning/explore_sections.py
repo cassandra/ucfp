@@ -24,9 +24,10 @@ from ucfp.inputs.external_factors import ECONOMIC_FACTORS
 from ucfp.inputs.plans.schemas import Plans
 
 # The inputs shown by default in each Explore section before the user curates the set -- the big variable
-# "what-if" items. The section renders every input regardless; these are only the initial selection.
-_DEFAULT_EXPENSE_HANDLES = ( 'vacations', 'travel', 'dining-out', 'medical-expenses' )
-_DEFAULT_RATE_FIELDS     = ( 'inflation', 'stock_appreciation', 'bond_appreciation', 'retirement_growth' )
+# "what-if" items. Three apiece keeps the two cards compact and their rows aligned; the section still
+# renders every input, so this is only the initial selection the user can widen.
+_DEFAULT_EXPENSE_HANDLES = ( 'vacations', 'dining-out', 'medical-expenses' )
+_DEFAULT_RATE_FIELDS     = ( 'inflation', 'stock_appreciation', 'retirement_growth' )
 
 _UNIT_ABBREV = { 'DAY': 'day', 'WEEK': 'wk', 'MONTH': 'mo', 'YEAR': 'yr' }
 
