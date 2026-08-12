@@ -7,16 +7,13 @@ from .models import Organization, OrganizationMember
 
 
 def require_authenticated_user( view_func ):
-    """Reject the request unless it carries a real authenticated user.
+    """Reject the request with `Http404` unless it carries an authenticated user.
 
-    Guards views that only make sense for a signed-in account (e.g. deleting that
-    account or a household). The gate is the absence of an authenticated user, not
-    any deployment mode: whenever `request.user` is anonymous the account/household
-    surfaces do not exist, so the request is answered with `Http404` rather than
-    being allowed to act on a non-existent user. In practice that only arises when
-    `SUPPRESS_AUTHENTICATION` is set (typically a self-hosted single-user run),
-    since otherwise the middleware has already ensured a user -- so under normal
-    authentication this is a no-op.
+    Guards views that only exist for a signed-in account (deleting that account or a
+    household). The gate is the absent user, not any deployment mode: with no user
+    there is no such surface, so answering 404 is truthful rather than acting on a
+    non-existent user. An anonymous request reaches a view only when
+    `SUPPRESS_AUTHENTICATION` is set (typically a self-hosted single-user run).
     """
     @functools.wraps( view_func )
     def wrapped( request, *args, **kwargs ):

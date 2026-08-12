@@ -319,9 +319,8 @@ class ConfirmModalViewTest(TestCase):
 
 @override_settings(SUPPRESS_AUTHENTICATION=True)
 class SuppressedAuthDeletionTest(TestCase):
-    """Under suppressed authentication (self-hosted single-user) the request carries
-    no real user, so every deletion endpoint must reject cleanly (404) rather than
-    act on an anonymous user and raise. Regression for the reported 500."""
+    """With no authenticated user, every deletion endpoint must reject cleanly (404)
+    rather than act on the anonymous user and raise."""
 
     def _org_uuid(self):
         # A syntactically valid uuid is all the URL needs: the auth guard runs on
@@ -349,3 +348,16 @@ class SuppressedAuthDeletionTest(TestCase):
                 url = reverse( name, kwargs = { 'organization_uuid': organization_uuid } )
                 response = getattr( self.client, method )( url )
                 self.assertEqual( response.status_code, 404 )
+
+    def test_a_signed_in_user_can_still_delete(self):
+        # The gate is the absence of a user, not the setting: a real user who signs
+        # in even under suppressed authentication may still delete their account.
+        user = _user( 'a@x.test' )
+        Organization.objects.create_for_owner( user, 'A' )
+        self.client.force_login( user )
+        user_id = user.pk
+
+        response = self.client.post( reverse( 'account_delete' ), { 'confirm': 'delete' } )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertFalse( User.objects.filter( pk = user_id ).exists() )
