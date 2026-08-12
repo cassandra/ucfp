@@ -2,8 +2,8 @@
 {% load common_tags %}
 {% load icons %}
 {% comment %}
-  Public contact page. DRAFT starting point -- add a real support email address before public launch;
-  GitHub issues is the open-source channel in the meantime.
+  Public contact page. GitHub issues is the primary channel for bugs and feature requests; a private
+  email is offered for account, sign-in, and privacy matters that should not be posted publicly.
 {% endcomment %}
 
 {% block page_title %}Contact{% endblock %}
@@ -23,6 +23,8 @@
       <a href="https://github.com/cassandra/ucfp" target="_blank" rel="noopener">repository</a>.</span></li>
   <li class="d-flex">
     <span class="mr-3">{% icon 'info-circle' color='primary' %}</span>
-    <span><strong>Everything else.</strong> A general support address will be listed here.</span></li>
+    <span><strong>Account, sign-in, or privacy.</strong> For anything you'd rather not post publicly
+      &mdash; trouble signing in, account access, or a privacy matter &mdash; email
+      <a href="mailto:hello-ucfp@cassandra.org">hello-ucfp@cassandra.org</a>.</span></li>
 </ul>
 {% endblock %}
