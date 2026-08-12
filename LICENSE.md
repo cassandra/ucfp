@@ -56,6 +56,6 @@ By contributing to this project, you agree that your contributions are provided 
 
 ## Summary
 - **You can**: Use, modify, and share for personal and non-commercial purposes under the MIT License.
-- **You cannot**: Use this software commercially without a separate license from POMDP, Inc.
+- **You cannot**: Use this software commercially without a separate license from POMDP, LLC
 
 For licensing inquiries, contact: info@pomdp.com
