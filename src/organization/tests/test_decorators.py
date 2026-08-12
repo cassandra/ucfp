@@ -1,4 +1,5 @@
 """Tests for the ensure_organization view decorator (organization bootstrapping)."""
+import uuid
 from importlib import import_module
 
 from django.conf import settings
@@ -50,6 +51,21 @@ class EnsureOrganizationTest( TestCase ):
         self.assertEqual( organization, existing )
         self.assertEqual(
             Organization.objects.filter( members__user = user ).distinct().count(), 1 )
+
+    def test_reprovisions_when_session_points_at_a_deleted_organization( self ):
+        # After deleting their last household, the session still references the now-
+        # gone organization; ensure_organization must self-heal to a fresh owned org
+        # rather than fail, so the user is never left org-less.
+        user = self._user()
+        request = _request_for( user )
+        request.session_state.current_organization_uuid = str( uuid.uuid4() )
+
+        organization = _organization_view( request )
+
+        self.assertEqual( organization.name, f'user-{user.uuid}' )
+        self.assertTrue( OrganizationMember.objects.filter(
+            user = user, organization = organization,
+            organization_role = OrganizationRole.OWNER, is_active = True ).exists() )
 
     def test_reuses_the_session_selected_organization( self ):
         user = self._user()
