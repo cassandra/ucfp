@@ -5,9 +5,8 @@
   and the contact with counsel before any public launch. Adapted for a financial-planning app (your
   financial data is yours).
 
-  Written as if two release-gating features are complete; we do not go public until they ship:
-    - #159 encrypt user financial data at rest (server-side) -> the "encrypted at rest" statement
-    - #160 self-service account & data deletion              -> the "delete it yourself, anytime" statement
+  The account/household deletion wording matches #160 (implemented). The "encrypted at rest" statement
+  is still release-gating on #159 (encrypt user financial data at rest); we do not go public until it ships.
 {% endcomment %}
 
 {% block page_title %}Privacy Policy{% endblock %}
@@ -48,8 +47,10 @@
   </li>
   <li class="mb-3">
     <strong class="text-primary">You can delete everything yourself, anytime.</strong>
-    Remove individual records as you work, or delete your account and all its data yourself from your
-    account page. When you do, it is permanently erased &mdash; no "contact us and wait" required.
+    From your account page you can permanently delete your account and all your data &mdash; immediately,
+    no "contact us and wait". This deletes the data in every household you own, including any you share
+    with others; when you delete your account you can choose to keep a shared household for its other
+    owners instead. You can also delete or leave individual households, or remove records as you work.
   </li>
   <li class="mb-3">
     <strong class="text-primary">You can keep your data on your own machine.</strong>

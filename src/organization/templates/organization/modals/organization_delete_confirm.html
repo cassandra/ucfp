@@ -1,0 +1,27 @@
+{% extends "modals/action_with_cancel.html" %}
+{% load icons %}
+{% comment %}
+Confirm permanent deletion of a single household and all its data. The form wraps
+the footer (preamble/postamble) so the Delete button submits the typed "delete"
+confirmation to `organization_delete`.
+{% endcomment %}
+
+{% block header_class %}bg-danger{% endblock %}
+
+{% block title_text %}Delete household{% endblock %}
+
+{% block preamble %}<form method="post" action="{% url 'organization_delete' organization_uuid=organization.uuid %}">{% csrf_token %}{% endblock %}
+
+{% block body %}
+<p>Permanently delete &ldquo;<strong>{{ organization.display_name }}</strong>&rdquo; and all of its data. This cannot
+  be undone.{% if not is_sole_owner %} Its other owners will lose access.{% endif %}</p>
+<label class="small mb-1 d-block" for="confirm-org">Type <strong>delete</strong> to confirm</label>
+<input class="form-control" id="confirm-org" name="confirm" autocomplete="off"
+       pattern="[Dd][Ee][Ll][Ee][Tt][Ee]" required placeholder="delete">
+{% endblock %}
+
+{% block action_right %}
+<button type="submit" class="btn btn-danger">{% icon "delete" css_class="icon-left" %}Delete household</button>
+{% endblock %}
+
+{% block postamble %}</form>{% endblock %}

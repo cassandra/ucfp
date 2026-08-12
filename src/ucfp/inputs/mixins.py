@@ -7,7 +7,7 @@ it (and keeps decorating its own dispatch with `ensure_organization`).
 """
 from django.utils.decorators import method_decorator
 
-from user.decorators import ensure_organization
+from organization.decorators import ensure_organization
 
 from ucfp.inputs.state import input_state
 

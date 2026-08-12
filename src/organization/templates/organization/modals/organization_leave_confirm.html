@@ -1,0 +1,22 @@
+{% extends "modals/action_with_cancel.html" %}
+{% load icons %}
+{% comment %}
+Confirm leaving a household (removing only this membership); the household and its
+data remain for its other members. The form wraps the footer (preamble/postamble)
+so the Leave button submits to `organization_leave`.
+{% endcomment %}
+
+{% block title_text %}Leave household{% endblock %}
+
+{% block preamble %}<form method="post" action="{% url 'organization_leave' organization_uuid=organization.uuid %}">{% csrf_token %}{% endblock %}
+
+{% block body %}
+<p class="mb-0">Leave &ldquo;<strong>{{ organization.display_name }}</strong>&rdquo;? You lose access, but the household
+  and its data remain for its other members.</p>
+{% endblock %}
+
+{% block action_right %}
+<button type="submit" class="btn btn-warning">{% icon "door-exit" css_class="icon-left" %}Leave</button>
+{% endblock %}
+
+{% block postamble %}</form>{% endblock %}
