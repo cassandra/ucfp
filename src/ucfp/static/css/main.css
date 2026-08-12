@@ -283,6 +283,16 @@ a:hover, a:focus {
     z-index: 1020;
 }
 
+/* The Save-changes modal's "save as a new scenario" fields (name + per-component copy/reuse) are hidden
+   until that option is chosen -- a pure-CSS reveal off the radio, no script. The radio and the options
+   block are siblings inside the form, so the general-sibling selector matches when it is checked. */
+.explore-save-new-options {
+    display: none;
+}
+#explore-save-new:checked ~ .explore-save-new-options {
+    display: block;
+}
+
 /* An Assumptions input list (economic factors, selling costs) is a fixed, readable width, so each row's
    help wraps under its label and value rather than stretching across the page, and the value right-aligns
    in a consistent column. The percent inputs hold only a few digits, so keep them narrow. */

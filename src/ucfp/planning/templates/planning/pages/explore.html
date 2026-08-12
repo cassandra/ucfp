@@ -2,21 +2,23 @@
 {% load common_tags icons %}
 
 {% comment %}
-The Explore workspace, for the scenario named by `source`. Top: two input columns
-(Plans | Assumptions), each an auto-saving section holding all of its inputs, with a "Choose inputs"
-gear that reveals every input plus a checkbox to curate which stay visible when collapsed (saved to the
-session per section on close -- see the curate script below). Then the Scenario controls (update `source`
-or save a new scenario, with a drill-down of the drift), the Re-run controls (re-project, the transient-run
-strip, keep a run's output), and the selected run's results table via the shared run_books_table partial.
-Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_runs`, `selected`,
-`stopped_early`, and the `books_table` context.
+The Explore workspace, for the scenario named by `source`, laid out as Inputs → Re-run → Output so the run
+is visible without scrolling past a wall of controls. INPUTS: two auto-saving columns (Plans | Assumptions),
+each holding all of its inputs with a "Choose inputs" gear that reveals every input plus a checkbox to curate
+which stay visible when collapsed (saved per section on close -- see the curate script below). RE-RUN sits at
+the foot of the inputs (the dials auto-save; this re-projects them). OUTPUT: a compact outcome banner (did
+the money last, ending net worth, horizon), the transient-run history + Keep, then the selected run's table
+via the shared run_books_table partial. Finally a slim sticky bar (only while the working copy differs from
+the anchor) carrying the scenario-level actions: Save scenario changes opens the review-and-save modal, and
+Reset discards the sandbox. Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`,
+`transient_runs`, `selected`, `stopped_early`, the `_run_outcome` figures, and the `books_table` context.
 {% endcomment %}
 
 {% block breadcrumb %}
 <li class="breadcrumb-item"><a href="{% url 'financial_forecast' %}">Financial Forecast</a></li>
 {% endblock %}
 
-{% block page_type %}Explore{% endblock %}
+{% block page_type %}Explore Scenarios{% endblock %}
 
 {% block page_meta %}
 <p class="text-muted mb-1">{{ source.label }}{% if drift %} &middot; unsaved changes{% endif %}</p>
@@ -27,8 +29,8 @@ Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`, `transient_r
 {% block page_body %}
 
 {% comment %}
-TOP: two input columns, each an independent auto-saving section form. Editing a dial persists it to the
-working scenario immediately (js-autosave, silent); Re-run (below) re-projects the saved edits.
+INPUTS: two columns, each an independent auto-saving section form. Editing a dial persists it to the working
+scenario immediately (js-autosave, silent); the Re-run at the foot of the inputs re-projects the saved edits.
 {% endcomment %}
 <div class="row">
   {% comment %}
@@ -80,26 +82,6 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
           </div>
         </form>
       </div>
-      {% comment %}
-      How these Plans save: a radio per the unified Save button below (associated by form=), plus the
-      sharing scope. Smart-defaulted -- overwrite in place when private, a protective copy when shared.
-      {% endcomment %}
-      {% with opt=save_options.plans %}
-      <div class="card-footer py-2 small">
-        <div class="text-muted mb-1">
-          {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
-        </div>
-        <div role="radiogroup" aria-label="Plans — what to do when you save">
-          <span class="text-muted">When you save:</span>
-          <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="overwrite"
-                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
-            {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
-          <label class="mb-0 font-weight-normal"><input type="radio" name="dest_plans" value="copy"
-                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
-            new copy</label>
-        </div>
-      </div>
-      {% endwith %}
     </div>
   </div>
 
@@ -142,38 +124,40 @@ working scenario immediately (js-autosave, silent); Re-run (below) re-projects t
           </div>
         </form>
       </div>
-      {% with opt=save_options.assumptions %}
-      <div class="card-footer py-2 small">
-        <div class="text-muted mb-1">
-          {% if opt.shared_with %}Shared with {{ opt.shared_with }} other scenario{{ opt.shared_with|pluralize }}{% else %}Private to this scenario{% endif %}{% if opt.changed %} &middot; changed{% endif %}
-        </div>
-        <div role="radiogroup" aria-label="Assumptions — what to do when you save">
-          <span class="text-muted">When you save:</span>
-          <label class="ml-2 mr-3 mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="overwrite"
-                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'overwrite' %} checked{% endif %}>
-            {% if opt.shared_with %}update the shared set{% else %}update it{% endif %}</label>
-          <label class="mb-0 font-weight-normal"><input type="radio" name="dest_assumptions" value="copy"
-                 form="explore-save-form" class="js-save-dest"{% if opt.default == 'copy' %} checked{% endif %}>
-            new copy</label>
-        </div>
-      </div>
-      {% endwith %}
     </div>
   </div>
 </div>
 
 {% comment %}
-RESULTS: the run toolbar (re-project the auto-saved edits, browse recent transient runs, keep a run's
-output) sits directly above the selected run's table -- the run→see half of the tweak→run→see loop, kept
-together. Keeping a run saves only that output; the scenario is unaffected.
+RE-RUN belongs to the inputs, not the output: the dials auto-save silently, so this projects the accumulated
+tweaks and refreshes the output below. Placed at the foot of the inputs, it is the natural next step after
+editing -- and it keeps the outcome and table directly beneath it rather than below a wall of inputs, so a
+first-time visitor sees the run and this CTA without hunting.
+{% endcomment %}
+<form method="post" action="{% url 'explore' %}" class="d-flex align-items-center mb-4">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-primary">{% icon 'rotate' size='sm' css_class='mr-1' %}Re-run</button>
+  <span class="text-muted small ml-3">Re-run the forecast with your latest changes.</span>
+</form>
+
+{% comment %}
+OUTPUT: the selected run's outcome and table. A compact banner leads with the point of the run -- whether the
+money lasted and the ending net worth -- so it reads before the long table. The run selector (history chips)
+and Keep act on the output and sit with it; Re-run lives with the inputs above.
 {% endcomment %}
 <div class="card mb-4">
+  <div class="card-header bg-white">
+    <div class="d-flex flex-wrap align-items-baseline">
+      <span class="h5 mb-0 mr-auto {% if stopped_early %}text-danger{% else %}text-success{% endif %}">
+        {% if stopped_early %}{% icon 'warning' size='sm' css_class='mr-1' %}Money ran out before the horizon{% else %}{% icon 'check' size='sm' css_class='mr-1' %}Money lasted the full horizon{% endif %}</span>
+      <span class="text-nowrap"><span class="text-muted small">Ending net worth</span>
+        <span class="h5 font-weight-bold ml-1">{{ ending_net_worth|money:currency }}</span></span>
+    </div>
+    <div class="text-muted small">{{ horizon_start }}&ndash;{{ horizon_end }} &middot; {{ horizon_years }} years
+      &middot; showing {{ selected.label }}</div>
+  </div>
   <div class="card-body">
     <div class="d-flex flex-wrap align-items-center mb-3">
-      <form method="post" action="{% url 'explore' %}" class="my-1 mr-3">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-primary">{% icon 'rotate' size='sm' css_class='mr-1' %}Re-run</button>
-      </form>
       <div class="d-flex align-items-center flex-wrap my-1 mr-auto">
         <span class="text-muted small mr-2">Run history</span>
         {% for result in transient_runs %}
@@ -193,48 +177,24 @@ together. Keeping a run saves only that output; the scenario is unaffected.
                 title="Save this run's output; the scenario is unaffected">Keep this run</button>
       </form>
     </div>
-    <div class="d-flex align-items-baseline justify-content-between mb-2 border-top pt-2">
-      <h2 class="h5 mb-0">Results <span class="text-muted small">— {{ selected.label }}</span></h2>
-      {% if stopped_early %}
-        <span class="text-danger font-weight-bold small">Money ran out before the horizon.</span>
-      {% else %}
-        <span class="text-success font-weight-bold small">Money lasted through the horizon.</span>
-      {% endif %}
-    </div>
     {% include "planning/pages/run_books_table.html" %}
   </div>
 </div>
 
 {% comment %}
-CONCLUDE (sticky): the working copy is transient until saved here, so this bar appears only when it differs
-from the anchor. One Save commits per each input card's "when you save" toggle -- components set to update
-write to this scenario, any set to a new copy branch a new one (named); the drill-down shows what an update
-would change. Reset discards the sandbox and its run history. As the page's last flow element it docks at
-the end and floats above the long table until then, staying reachable without interrupting tweak→run→see.
+CONCLUDE (sticky): the working copy is transient until saved, so this slim bar appears only when it differs
+from the anchor. It carries just the two scenario-level actions: Save scenario changes opens the review-and-
+save modal (update the anchor or branch a new scenario -- see ExploreSaveModalView), and Reset discards the
+sandbox and its run history. As the page's last flow element it docks at the end and floats above the long
+table until then, staying reachable without interrupting tweak→run→see.
 {% endcomment %}
 {% if drift %}
 <div class="explore-conclude-bar border-top shadow-sm bg-white py-2 px-3">
   <div class="d-flex flex-wrap align-items-center">
-    <div class="mr-auto my-1 small">
-      Differs from <strong>{{ source.label }}</strong> — {{ drift_summary }}.
-      <details class="d-inline-block align-middle ml-1">
-        <summary class="text-primary" style="cursor:pointer">Show all changes</summary>
-        <ul class="mb-0 mt-1">
-          {% for change in drift %}<li>{{ change }}</li>{% endfor %}
-        </ul>
-      </details>
-    </div>
-    {% comment %}
-    One Save. The per-card radios post with this form (form= association); the name field shows and the
-    label flips to "Save as new" when any card is "copy" (see the script below).
-    {% endcomment %}
-    <form method="post" action="{% url 'explore_save' %}" id="explore-save-form" class="form-inline my-1 mr-3">
-      {% csrf_token %}
-      <input type="text" name="name" id="explore-save-name" class="form-control form-control-sm mr-2 d-none"
-             placeholder="New scenario name" aria-label="New scenario name">
-      <button type="submit" id="explore-save-button" class="btn btn-success btn-sm"
-              data-update-label="Update &ldquo;{{ source.label }}&rdquo;" data-new-label="Save as new">Save</button>
-    </form>
+    <span class="mr-auto my-1 small">
+      Unsaved changes to <strong>{{ source.label }}</strong> — {{ drift_summary }}.</span>
+    <a href="{% url 'explore_save_dialog' %}" data-async="modal" class="btn btn-success btn-sm my-1 mr-2">
+      Save scenario changes…</a>
     <form method="post" action="{% url 'explore_reset' %}" class="my-1">
       {% csrf_token %}
       <button type="submit" class="btn btn-outline-danger btn-sm"
@@ -242,7 +202,6 @@ the end and floats above the long table until then, staying reachable without in
         Reset to &ldquo;{{ source.label }}&rdquo;</button>
     </form>
   </div>
-  <div class="small text-muted mt-1">Your edits are held in a working copy — nothing is kept until you save.</div>
 </div>
 {% endif %}
 
@@ -274,24 +233,6 @@ loaded before content, and AN.post adds the CSRF token from the cookie.
               { section: section.data( 'curate-key' ), keys: keys.join( ',' ) },
               { suppressLoader: true } );
    } );
- })();
-</script>
-
-{% comment %}
-Adapt the single Save to the card toggles: any component set to "copy" means a new scenario, so reveal the
-name field and label the button "Save as new"; otherwise it updates this scenario in place. Runs on load so
-the smart defaults are reflected, and on every toggle change.
-{% endcomment %}
-<script>
- (function () {
-   var button = $( '#explore-save-button' );
-   function refresh() {
-     var anyCopy = $( '.js-save-dest[value="copy"]:checked' ).length > 0;
-     $( '#explore-save-name' ).toggleClass( 'd-none', !anyCopy );
-     button.text( anyCopy ? button.data( 'new-label' ) : button.data( 'update-label' ) );
-   }
-   $( 'body' ).on( 'change', '.js-save-dest', refresh );
-   refresh();
  })();
 </script>
 {% endblock %}

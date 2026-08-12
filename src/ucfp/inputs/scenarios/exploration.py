@@ -131,10 +131,23 @@ def save_working(
         return record
 
 
+def branch_destinations( source_inputs: Scenario, working_inputs: Scenario ) -> dict[ str, str ]:
+    """The per-component destinations for saving the sandbox as a NEW scenario: copy each component that has
+    diverged from the anchor (the branch owns the change while the anchor keeps its value) and reuse each
+    unchanged one (sharing the anchor's set -- copying an unchanged component would only mint a duplicate,
+    and identical scenarios are disallowed). Whenever there are unsaved changes at least one component has
+    diverged, so the branch is always distinct from the anchor. Feeds `save_working` for the 'save as new'
+    case, so the user need not decide copy-vs-reuse per component -- the divergence decides it."""
+    return {
+        component: ( COPY if getattr( working_inputs, component ) != getattr( source_inputs, component )
+                     else OVERWRITE )
+        for component in ( 'plans', 'assumptions' ) }
+
+
 def component_usage( source: ScenarioRecord ) -> dict[ str, int ]:
-    """How many *other* scenarios reference each of `source`'s components -- the sharing scope, for showing
-    it and for defaulting a component's save to an in-place overwrite (private: no others) or a protective
-    copy (shared: some). SAVED scenarios only, since the working sandbox references its own copies."""
+    """How many *other* scenarios reference each of `source`'s components -- the sharing scope. Used to steer
+    the Save-changes modal toward "save as a new scenario" when an in-place update would write a change into
+    a set another scenario shares. SAVED scenarios only, since the working sandbox references its own copies."""
     return {
         'plans'       : source.plans.scenarios.exclude( pk = source.pk ).count(),
         'assumptions' : source.assumptions.scenarios.exclude( pk = source.pk ).count() }

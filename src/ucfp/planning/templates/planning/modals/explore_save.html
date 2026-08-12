@@ -1,0 +1,48 @@
+{% extends "modals/action_with_cancel.html" %}
+{% comment %}
+The Save-scenario-changes dialog for the Explore workspace, opened from the sticky Save bar. Shows the
+changes against the anchor for review, then offers two destinations: update the anchor in place, or branch
+a new scenario (just a name -- its changed parts are copied and unchanged parts reused automatically, so
+there is nothing per-component to choose). The name field reveals via CSS when "save as new" is chosen (see
+main.css). CANCEL comes from the shell; Save posts to `explore_save` (SaveView) and is associated by form=
+so it can live in the footer. Reads `source`, `drift`, `drift_summary`, `default_new`.
+{% endcomment %}
+
+{% block modal_dialog_class %}modal-lg{% endblock %}
+
+{% block title_text %}Save scenario changes{% endblock %}
+
+{% block body %}
+<p class="mb-2 small">Changes to <strong>{{ source.label }}</strong> — {{ drift_summary }}.</p>
+{% if drift %}
+<ul class="small text-muted mb-3">{% for change in drift %}<li>{{ change }}</li>{% endfor %}</ul>
+{% endif %}
+
+<form method="post" action="{% url 'explore_save' %}" id="explore-save-form">
+  {% csrf_token %}
+  <input type="radio" name="save_mode" id="explore-save-update" value="update" class="mr-1"
+         {% if not default_new %}checked{% endif %}>
+  <label for="explore-save-update" class="mb-2 d-block">
+    <strong>Update &ldquo;{{ source.label }}&rdquo;</strong>
+    <span class="text-muted small d-block ml-4">Write these changes back into this scenario.</span></label>
+
+  <input type="radio" name="save_mode" id="explore-save-new" value="new" class="mr-1"
+         {% if default_new %}checked{% endif %}>
+  <label for="explore-save-new" class="mb-1 d-block">
+    <strong>Save as a new scenario</strong>
+    <span class="text-muted small d-block ml-4">Keep &ldquo;{{ source.label }}&rdquo; as it is and branch a
+      new one.</span></label>
+
+  <div class="explore-save-new-options border rounded bg-light p-3 mt-1 ml-4">
+    <div class="form-group mb-0">
+      <label for="explore-save-name" class="small font-weight-bold mb-1">New scenario name</label>
+      <input type="text" name="name" id="explore-save-name" class="form-control form-control-sm"
+             placeholder="e.g. Higher inflation">
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block action_right %}
+<button type="submit" form="explore-save-form" class="btn btn-primary">Save</button>
+{% endblock %}

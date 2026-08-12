@@ -32,8 +32,8 @@ from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
 from ucfp.inputs.scenarios.exploration import (
-    COPY, OVERWRITE, component_usage, overwrite_working, record_exploration_frame, save_working,
-    scenario_exploration, working_scenario )
+    OVERWRITE, branch_destinations, component_usage, overwrite_working, record_exploration_frame,
+    save_working, scenario_exploration, working_scenario )
 from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
@@ -53,6 +53,7 @@ _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
 _BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
 _JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
 _DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
+_EXPLORE_SAVE_TEMPLATE = 'planning/modals/explore_save.html'
 _COMING_SOON_TEMPLATE = 'planning/pages/coming_soon.html'
 
 # The unbuilt planning features: title + one-line pitch for their placeholder pages.
@@ -415,10 +416,9 @@ class ExploreView( InputGatedMixin, View ):
                 scenario = working_inputs, selected = state.explore_curated_rates ) }
         # Drift is measured against the saved source scenario -- exactly what an "update" would overwrite.
         drift    = value_changes( source_inputs, working_inputs )
-        save_options = self._save_options( source, working_inputs, source_inputs )
         return render(
             request, self._TEMPLATE,
-            self._context( request, source, runs, selected, forms, drift, save_options ) )
+            self._context( request, source, runs, selected, forms, drift ) )
 
     def post( self, request ):                             # Re-run: project the auto-saved working scenario
         organization = request.organization
@@ -426,20 +426,7 @@ class ExploreView( InputGatedMixin, View ):
             run_working_scenario( organization, self._frame( request ) )
         return redirect( 'explore' )
 
-    @staticmethod
-    def _save_options( source, working_inputs, source_inputs ) -> dict:
-        """Per-component context for the card save controls: whether the component diverged, how many other
-        scenarios share it, and the smart default -- overwrite it in place when it is private, a protective
-        copy when it is shared."""
-        usage = component_usage( source )
-        return {
-            component: {
-                'changed'     : getattr( working_inputs, component ) != getattr( source_inputs, component ),
-                'shared_with' : usage[ component ],
-                'default'     : OVERWRITE if usage[ component ] == 0 else COPY }
-            for component in ( 'plans', 'assumptions' ) }
-
-    def _context( self, request, source, runs, selected, forms, drift, save_options ) -> dict:
+    def _context( self, request, source, runs, selected, forms, drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
         books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
@@ -451,9 +438,9 @@ class ExploreView( InputGatedMixin, View ):
             'stopped_early'  : run.result.stopped_early,
             'drift'          : drift,                          # curated changes vs the source scenario
             'drift_summary'  : describe_changes( drift ),
-            'save_options'   : save_options,                   # per-component card save controls + defaults
             **forms,
         }
+        context.update( _run_outcome( run, books ) )           # horizon + ending net worth for the banner
         context.update( run_books_table_context( request, run, books ) )
         return context
 
@@ -534,21 +521,55 @@ class ExploreCurationView( InputGatedMixin, View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class SaveView( InputGatedMixin, View ):
-    """`.../explore/save/` -- persist the sandbox per the destination each component's card selects:
-    `dest_<component>` = 'copy' (a new independent set) or 'overwrite' (write into the source's existing set,
-    in place). All-overwrite updates the anchor; any 'copy' branches a new scenario named `name`. One action
-    for both 'update this scenario' and 'save as new'."""
+    """`.../explore/save/` -- persist the sandbox from the Save-changes modal. `save_mode` is 'update' (write
+    the changes back into the anchor -- both components overwrite in place) or 'new' (branch a scenario named
+    `name`, copying the components that diverged and reusing the unchanged ones -- `branch_destinations`
+    decides that, so the user makes no per-component choice). Either way it drives the one `save_working`
+    primitive."""
 
     def post( self, request ):
         organization = request.organization
         exploration  = scenario_exploration( organization )
         if exploration is not None:
-            destinations = {
-                component: ( COPY if request.POST.get( f'dest_{component}' ) == COPY else OVERWRITE )
-                for component in ( 'plans', 'assumptions' ) }
-            save_working(
-                organization, exploration.source, destinations, request.POST.get( 'name', '' ) )
+            if request.POST.get( 'save_mode' ) == 'new':
+                destinations = branch_destinations(
+                    load_scenario( exploration.source ), load_scenario( exploration.working ) )
+                name = request.POST.get( 'name', '' )
+            else:                                          # update the existing scenario: overwrite both
+                destinations = { component: OVERWRITE for component in ( 'plans', 'assumptions' ) }
+                name = ''
+            save_working( organization, exploration.source, destinations, name )
         return redirect( 'explore' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ExploreSaveModalView( ModalView ):
+    """`.../explore/save-dialog/` -- the styled Save-changes dialog opened from the workspace's sticky bar.
+    Presents the changes against the anchor for review, then the choice to update the anchor in place or
+    branch a new scenario (whose diverged components are copied and unchanged ones reused -- decided for the
+    user). Its Save posts to `explore_save` (`SaveView`), which drives the same `save_working` primitive."""
+
+    def get_template_name( self ):
+        return _EXPLORE_SAVE_TEMPLATE
+
+    def get( self, request ):
+        exploration = scenario_exploration( request.organization )
+        if exploration is None:
+            raise Http404( 'No exploration in progress.' )
+        source_inputs  = load_scenario( exploration.source )
+        working_inputs = load_scenario( exploration.working )
+        drift = value_changes( source_inputs, working_inputs )
+        usage = component_usage( exploration.source )
+        return self.modal_response( request, context = {
+            'source'        : exploration.source,
+            'drift'         : drift,
+            'drift_summary' : describe_changes( drift ),
+            # Open in "save as new" when an in-place update would write a change into a set another scenario
+            # shares -- branching copies that changed component instead, leaving the shared set untouched.
+            'default_new'   : any(
+                usage[ component ] and getattr( working_inputs, component ) != getattr( source_inputs, component )
+                for component in ( 'plans', 'assumptions' ) ),
+        } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

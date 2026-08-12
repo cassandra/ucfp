@@ -21,6 +21,8 @@ urlpatterns = [
           views.ExploreAssumptionsAutosaveView.as_view(), name = 'explore_save_assumptions' ),
     path( 'financial-forecast/explore/curate/', views.ExploreCurationView.as_view(),
           name = 'explore_curate' ),
+    path( 'financial-forecast/explore/save-dialog/', views.ExploreSaveModalView.as_view(),
+          name = 'explore_save_dialog' ),
     path( 'financial-forecast/explore/save/', views.SaveView.as_view(), name = 'explore_save' ),
     path( 'financial-forecast/explore/keep-run/', views.KeepRunView.as_view(),
           name = 'explore_keep_run' ),
