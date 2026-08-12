@@ -10,7 +10,7 @@ from django.views import View
 from common.async_view import ModalView
 
 from . import deletion
-from .decorators import ensure_organization
+from .decorators import ensure_organization, require_authenticated_user
 from .forms import OrganizationSettingsForm
 from .models import OrganizationMember
 
@@ -58,6 +58,7 @@ class OrganizationSettingsView( View ):
         } )
 
 
+@method_decorator( require_authenticated_user, name = 'dispatch' )
 class AccountDeleteConfirmView( ModalView ):
     """The confirm-deletion modal for the whole account, itemizing which
     households will be deleted versus left."""
@@ -78,6 +79,7 @@ class AccountDeleteConfirmView( ModalView ):
         } )
 
 
+@method_decorator( require_authenticated_user, name = 'dispatch' )
 class OrganizationDeleteConfirmView( ModalView ):
     """The confirm-deletion modal for a single household (owner only)."""
 
@@ -94,6 +96,7 @@ class OrganizationDeleteConfirmView( ModalView ):
         } )
 
 
+@method_decorator( require_authenticated_user, name = 'dispatch' )
 class OrganizationLeaveConfirmView( ModalView ):
     """The confirm-leave modal for a single household (non-sole-owner)."""
 
@@ -107,6 +110,7 @@ class OrganizationLeaveConfirmView( ModalView ):
         return self.modal_response( request, context = { 'organization': member.organization } )
 
 
+@method_decorator( require_authenticated_user, name = 'dispatch' )
 class OrganizationDeleteView( View ):
     """POST: permanently delete a household the user owns, and all its data.
 
@@ -124,6 +128,7 @@ class OrganizationDeleteView( View ):
         return redirect( reverse( 'home' ) )
 
 
+@method_decorator( require_authenticated_user, name = 'dispatch' )
 class OrganizationLeaveView( View ):
     """POST: leave a household (remove only this membership; the household stays).
 
@@ -139,6 +144,7 @@ class OrganizationLeaveView( View ):
         return redirect( reverse( 'home' ) )
 
 
+@method_decorator( require_authenticated_user, name = 'dispatch' )
 class AccountDeleteView( View ):
     """POST: permanently delete the user's account and the data that goes with it
     (households they solely own), then sign out."""
