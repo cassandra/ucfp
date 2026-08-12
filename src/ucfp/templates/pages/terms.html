@@ -1,9 +1,12 @@
 {% extends "pages/base_public.html" %}
 {% load common_tags %}
 {% comment %}
-  Public terms page. DRAFT starting point -- review the wording, the legal entity, the effective date,
-  and the contact with counsel before any public launch. The "not financial advice" disclaimer is
-  essential for a planning tool and should not be removed.
+  Public terms page. DRAFT -- review the wording, the legal entity, the effective date, and the contact
+  with counsel before any public launch. The "not financial advice" disclaimer is essential for a
+  planning tool and should not be removed.
+
+  The "Deleting your data" section assumes #160 (self-service account & data deletion) is complete; it is
+  release-gating and we do not go public until it ships.
 {% endcomment %}
 
 {% block page_title %}Terms of Service{% endblock %}
@@ -34,19 +37,20 @@
   store and process it solely to provide the Service to you. You represent that you have the right to
   provide the information you enter.</p>
 
+<h5 class="text-primary mt-4">Deleting your data</h5>
+<p>You may delete your account and all associated data at any time from your account page. Deletion is
+  permanent: we erase your information and retain only what the law requires us to keep. You can also
+  remove individual records as you work.</p>
+
 <h5 class="text-primary mt-4">Prohibited conduct</h5>
 <p>You agree not to:</p>
 <ul>
   <li>Use the Service for any unlawful purpose</li>
   <li>Attempt to gain unauthorized access to the Service or other users' accounts</li>
-  <li>Reverse engineer or extract source code beyond what the open-source licence permits</li>
+  <li>Reverse engineer, decompile, or extract source code from the Service, except to the extent this restriction is prohibited by law</li>
   <li>Use automated tools to scrape or disrupt the Service</li>
   <li>Interfere with the proper functioning of the Service</li>
 </ul>
-
-<h5 class="text-primary mt-4">Open source</h5>
-<p>{% settings_value 'SITE_NAME' %} is available as open-source software under the MIT License; your use
-  of the source code is governed by that licence. These Terms govern your use of the hosted Service.</p>
 
 <h5 class="text-primary mt-4">Disclaimer of warranties</h5>
 <p>The Service is provided "as is" and "as available" without warranties of any kind. We do not warrant

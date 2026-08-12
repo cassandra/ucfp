@@ -2,7 +2,7 @@
 {% load common_tags %}
 {% block content %}{% settings_value 'SITE_NAME' %} Sign In
 
-Your access code is:
+Your sign-in code is:
 
     {{ magic_code }}
 
@@ -10,4 +10,7 @@ Note that this code will expire after {{ magic_code_lifetime_minutes }} minutes.
 
 Or sign in directly using this link:
 
-    {{ page_url }}{% endblock %}
+    {{ page_url }}
+
+You're receiving this because you asked to sign in to {% settings_value 'SITE_NAME' %}.
+We only use your email to send this code and save your plan — no marketing.{% endblock %}

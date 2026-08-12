@@ -6,6 +6,14 @@ from . import views
 
 urlpatterns = [
 
+    path( 'account',
+          views.UserAccountView.as_view(),
+          name = 'user_account' ),
+
+    path( 'signout',
+          views.UserSignoutView.as_view(),
+          name = 'user_signout' ),
+
     path( 'signin',
           views.UserSigninView.as_view(),
           name = 'user_signin' ),

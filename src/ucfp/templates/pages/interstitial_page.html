@@ -4,7 +4,9 @@
 {% block content %}
 <div class="container-fluid interstitial-page">
   <div class="interstitial-header text-center mb-3 mx-auto">
-    <img class="img-fluid w-75 w-md-50 w-lg-25" src="{% static 'img/app-logo-w-tagline-h200.png' %}" alt="Logo" />
+    <a href="{% url 'home' %}">
+      <img class="img-fluid w-75 w-md-50 w-lg-25" src="{% static 'img/app-logo-w-tagline-h200.png' %}" alt="Logo" />
+    </a>
   </div>
   <div class="interstitial-body mx-auto">
     {% block interstitial_content %}

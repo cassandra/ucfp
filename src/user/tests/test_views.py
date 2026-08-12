@@ -49,15 +49,25 @@ class TestUserSigninView(SyncViewTestCase):
         self.assertSuccessResponse(response)
         self.assertEqual(response.context['email_not_configured'], True)
 
-    def test_post_signin_already_authenticated(self):
-        """Test POST request when user is already authenticated."""
-        # Force authentication
+    def test_get_signin_already_authenticated_redirects_home(self):
+        """An authenticated user has no sign-in step to complete; GET redirects home."""
+        self.client.force_login(self.user)
+
+        url = reverse('user_signin')
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
+
+    def test_post_signin_already_authenticated_redirects_home(self):
+        """An authenticated user posting the sign-in form is redirected home, not errored."""
         self.client.force_login(self.user)
 
         url = reverse('user_signin')
         response = self.client.post(url, {'email': 'test@example.com'})
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
 
     def test_post_signin_no_email(self):
         """Test POST request without email."""
@@ -88,18 +98,39 @@ class TestUserSigninView(SyncViewTestCase):
         call_kwargs = mock_send_view.send_signin_magic_link.call_args[1]
         self.assertEqual(call_kwargs['override_user'], self.user)
 
-    @patch('user.views.SigninMagicCodeView')
-    def test_post_signin_nonexistent_user(self, mock_magic_code_view_class):
-        """Test POST request with nonexistent user email."""
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_post_signin_unknown_email_creates_user(self, mock_send_view_class):
+        """An unknown email creates a new account and proceeds to send a code."""
         from django.http import HttpResponse
-        mock_magic_code_view = mock_magic_code_view_class.return_value
-        mock_magic_code_view.get_response.return_value = HttpResponse('mock_response')
+        mock_send_view = mock_send_view_class.return_value
+        mock_send_view.send_signin_magic_link.return_value = HttpResponse('mock_response')
+
+        new_email = 'newcomer@example.com'
+        self.assertFalse(User.objects.filter(email=new_email).exists())
 
         url = reverse('user_signin')
-        _ = self.client.post(url, {'email': 'nonexistent@example.com'})
+        _ = self.client.post(url, {'email': new_email})
 
-        # Should delegate to SigninMagicCodeView
-        mock_magic_code_view.get_response.assert_called_once()
+        # The previously-unknown email now has an account...
+        created_user = User.objects.get(email=new_email)
+        # ...and the flow proceeds to send a sign-in code for that user.
+        mock_send_view.send_signin_magic_link.assert_called_once()
+        call_kwargs = mock_send_view.send_signin_magic_link.call_args[1]
+        self.assertEqual(call_kwargs['override_user'], created_user)
+
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_post_signin_canonicalizes_email_case(self, mock_send_view_class):
+        """Mixed-case variants of one address resolve to a single account."""
+        from django.http import HttpResponse
+        mock_send_view = mock_send_view_class.return_value
+        mock_send_view.send_signin_magic_link.return_value = HttpResponse('mock_response')
+
+        url = reverse('user_signin')
+        self.client.post(url, {'email': 'Mixed.Case@Example.COM'})
+        self.client.post(url, {'email': 'mixed.case@example.com'})
+
+        self.assertEqual(User.objects.filter(email='mixed.case@example.com').count(), 1)
+        self.assertFalse(User.objects.filter(email='Mixed.Case@Example.COM').exists())
 
     def test_post_signin_email_validation_error(self):
         """Test POST request with email that fails validation."""
@@ -193,6 +224,20 @@ class TestSigninMagicCodeView(SyncViewTestCase):
 
         # Should render the magic code template
         self.assertEqual(response.status_code, 200)
+
+    def test_post_already_authenticated_redirects_home(self):
+        """A stale code submission from an already-authenticated user redirects
+        home rather than re-running the login."""
+        self.client.force_login(self.user)
+
+        url = reverse('user_signin_magic_code')
+        response = self.client.post(url, {
+            'email_address': self.user.email,
+            'magic_code': '123456'
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
 
     def test_post_invalid_form(self):
         """Test POST request with invalid form data."""
@@ -366,3 +411,41 @@ class TestSigninMagicLinkView(SyncViewTestCase):
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, 405)
+
+
+class TestUserAccountView(SyncViewTestCase):
+    """Tests for the signed-in user's account page."""
+
+    def test_get_shows_logged_in_email(self):
+        """The account page renders and shows the email the user is identified by."""
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('user_account'))
+
+        self.assertSuccessResponse(response)
+        self.assertTemplateRendered(response, 'user/pages/account.html')
+        self.assertContains(response, self.user.email)
+
+
+class TestUserSignoutView(SyncViewTestCase):
+    """Tests for the sign-out action."""
+
+    def test_post_signs_out_and_redirects_home(self):
+        """POST clears the session and returns the user to the site root."""
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse('user_signout'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
+        # Session no longer carries an authenticated user.
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_get_not_allowed(self):
+        """Sign-out is POST-only; a GET must not log the user out."""
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('user_signout'))
+
+        self.assertEqual(response.status_code, 405)
+        self.assertIn('_auth_user_id', self.client.session)

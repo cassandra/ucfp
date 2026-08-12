@@ -1,6 +1,6 @@
 import logging
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, logout
 from django.contrib.auth.models import User as UserType
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import BadRequest, ValidationError
@@ -20,7 +20,20 @@ from .schemas import UserAuthenticationData
 logger = logging.getLogger(__name__)
 
 
-class UserSigninView( View ):
+class RedirectAuthenticatedUserMixin:
+    """Send an already-authenticated user to the home page instead of showing a
+    sign-in step they don't need. Applied to the interactive entry points of the
+    flow (the sign-in form and the code page); the internal, non-dispatched calls
+    that render the code page mid-flow are unaffected.
+    """
+
+    def dispatch( self, request, *args, **kwargs ):
+        if request.user.is_authenticated:
+            return HttpResponseRedirect( reverse( 'home' ) )
+        return super().dispatch( request, *args, **kwargs )
+
+
+class UserSigninView( RedirectAuthenticatedUserMixin, View ):
 
     def get(self, request, *args, **kwargs):
         context = {
@@ -29,9 +42,6 @@ class UserSigninView( View ):
         return render( request, 'user/pages/signin.html', context )
 
     def post(self, request, *args, **kwargs):
-        if request.user.is_authenticated:
-            raise BadRequest( 'You are already logged in.' )
-
         email_address = request.POST.get('email')
         if not email_address:
             raise BadRequest( 'No email provided' )
@@ -41,23 +51,16 @@ class UserSigninView( View ):
         except ValidationError:
             raise BadRequest( 'Invalid email provided' )
 
+        # Sign-in is passwordless and account creation happens here: an unknown
+        # email becomes a new account rather than a dead end, since the email is
+        # simply the stable identifier we tie a person's plan to.
         User = get_user_model()
-        try:
-            existing_user = User.objects.get( email = email_address )
-            logger.debug( f'Found existing user with email: {email_address}' )
-            return SendMagicLinkEmailView().send_signin_magic_link(
-                request = request,
-                override_user = existing_user,
-            )
-        except User.DoesNotExist:
-            # Show the same message so as not to give away whether the account exists.
-            logger.debug( f'No user exists with email: {email_address}' )
-            return SigninMagicCodeView().get_response(
-                request = request,
-                magic_code_form = forms.SigninMagicCodeForm(
-                    initial = { 'email_address': email_address }
-                )
-            )
+        user, created = User.objects.get_or_create_by_email( email_address )
+        logger.debug( f'{"Created" if created else "Found"} user with email: {user.email}' )
+        return SendMagicLinkEmailView().send_signin_magic_link(
+            request = request,
+            override_user = user,
+        )
 
 
 class SendMagicLinkEmailView( View ):
@@ -80,7 +83,7 @@ class SendMagicLinkEmailView( View ):
         )
 
 
-class SigninMagicCodeView( View ):
+class SigninMagicCodeView( RedirectAuthenticatedUserMixin, View ):
 
     TEMPLATE_NAME = 'user/pages/magic_code_signin.html'
 
@@ -105,8 +108,9 @@ class SigninMagicCodeView( View ):
         magic_code = magic_code_form.cleaned_data.get('magic_code')
 
         User = get_user_model()
+        canonical_email = User.objects.canonicalize_email( email_address )
         try:
-            existing_user = User.objects.get( email = email_address )
+            existing_user = User.objects.get( email = canonical_email )
         except User.DoesNotExist:
             raise BadRequest( 'Email is invalid.' )
 
@@ -114,13 +118,13 @@ class SigninMagicCodeView( View ):
         magic_code_status = magic_code_generator.check_magic_code( request, magic_code = magic_code )
 
         if magic_code_status == MagicCodeStatus.INVALID:
-            error_message = 'Invalid access code.'
+            error_message = 'Invalid sign-in code.'
         elif magic_code_status == MagicCodeStatus.EXPIRED:
-            error_message = 'Access code has expired.'
+            error_message = 'Sign-in code has expired.'
         elif magic_code_status == MagicCodeStatus.VALID:
             error_message = None
         else:
-            error_message = 'Access code generated an unexpected error.'
+            error_message = 'Sign-in code generated an unexpected error.'
 
         logger.debug( f'Signin Magic: Email={email_address}, Status={magic_code_status}' )
 
@@ -148,8 +152,9 @@ class SigninMagicLinkView( View ):
             raise BadRequest( 'Malformed request.' )
 
         User = get_user_model()
+        canonical_email = User.objects.canonicalize_email( email_address )
         try:
-            existing_user = User.objects.get( email = email_address )
+            existing_user = User.objects.get( email = canonical_email )
         except User.DoesNotExist:
             raise BadRequest( 'Email is not valid.' )
 
@@ -167,3 +172,23 @@ class SigninMagicLinkView( View ):
 
         url = reverse( 'home' )
         return HttpResponseRedirect( url )
+
+
+class UserAccountView( View ):
+    """The signed-in user's account page. Minimal for now -- it shows the email we
+    identify them by; it is the future home for data export/deletion and other
+    account controls. Login-gated by AuthenticationMiddleware (not on the public
+    allow-list), so it always has an authenticated ``request.user``."""
+
+    def get( self, request, *args, **kwargs ):
+        return render( request, 'user/pages/account.html', {} )
+
+
+class UserSignoutView( View ):
+    """Sign the current user out and return them to the site root. POST-only so a
+    sign-out cannot be triggered by an incidental GET (link prefetch, an <img> src,
+    a shared URL)."""
+
+    def post( self, request, *args, **kwargs ):
+        logout( request )
+        return HttpResponseRedirect( reverse( 'home' ) )

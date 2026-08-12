@@ -1,0 +1,16 @@
+{% extends "pages/top_page.html" %}
+
+{% block page_title %}Account{% endblock %}
+
+{% block page_subtitle %}<p class="text-muted">Your account and the email address we use to identify you.</p>{% endblock %}
+
+{% block page_body %}
+<div class="card" style="max-width: 40rem">
+  <div class="card-body">
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Email</dt>
+      <dd class="col-sm-9 mb-0">{{ request.user.email }}</dd>
+    </dl>
+  </div>
+</div>
+{% endblock %}

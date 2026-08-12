@@ -53,7 +53,7 @@ class TestSigninMagicCodeForm(TestCase):
         # Verify widget attributes
         widget_attrs = magic_code_field.widget.attrs
         self.assertEqual(widget_attrs['autofocus'], 'autofocus')
-        self.assertEqual(widget_attrs['placeholder'], 'access code')
+        self.assertEqual(widget_attrs['placeholder'], 'sign-in code')
         self.assertEqual(widget_attrs['width'], str(2 * MagicCodeGenerator.MAGIC_CODE_LENGTH))
 
     def test_form_validation_with_valid_data(self):

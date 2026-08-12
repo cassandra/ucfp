@@ -17,22 +17,22 @@
         action="{% url 'user_signin' %}"
         data-synchronous="true">
     {% csrf_token %}
-    <div class="h3 text-center">Sign In</div>
-    <div class="d-flex mt-3">
-      <input style="width: 20rem;"
-             type="email"
-             name="email"
-             value=""
-             autofocus="autofocus"
-             placeholder="e-mail address" required="" id="signin-email"/>
-    </div>
-    <div>
-      <button id="signin-button"
-              role="button" type="submit"
-              class="btn btn-lg btn-primary my-4">
-        <b>Sign In</b>
-      </button>
-    </div>
+    <div class="h3 text-center mb-0">Get your sign-in code</div>
+    <p class="small text-muted text-center mt-3 mb-0">
+      Enter your email and we'll send a one-time sign-in code — no password.
+      Your email is used only to save your plan and send your code. No marketing, no data sold, ever.
+    </p>
+    <input type="email"
+           name="email"
+           value=""
+           class="form-control form-control-lg mt-3"
+           autofocus="autofocus"
+           placeholder="e-mail address" required="" id="signin-email"/>
+    <button id="signin-button"
+            role="button" type="submit"
+            class="btn btn-lg btn-primary mt-4">
+      <b>Email me a code</b>
+    </button>
   </form>
 </div>
 {% endblock %}

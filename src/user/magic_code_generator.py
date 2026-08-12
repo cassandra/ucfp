@@ -38,7 +38,7 @@ class MagicCodeGenerator:
     MAGIC_CODE = 'magic_code'
     MAGIC_CODE_TIMESTAMP = 'magic_code_timestamp'
 
-    MAGIC_CODE_TIMEOUT_SECS = settings.PASSWORD_RESET_TIMEOUT
+    MAGIC_CODE_TIMEOUT_SECS = settings.SIGNIN_CODE_TIMEOUT_SECS
     MAGIC_CODE_CHARS = 'abcdefhkpqrstwxy'
     MAGIC_CODE_LENGTH = 6
 

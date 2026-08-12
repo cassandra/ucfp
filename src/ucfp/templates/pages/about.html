@@ -4,7 +4,7 @@
   Public about page. DRAFT starting point -- refine the story/positioning as the product settles.
 {% endcomment %}
 
-{% block page_title %}About {% settings_value 'SITE_NAME' %}{% endblock %}
+{% block page_title %}About {% settings_value 'SITE_NAME' %}&trade;{% endblock %}
 
 {% block public_content %}
 <p class="lead text-center text-muted mb-4">A single, well-modeled home for your financial planning.</p>
@@ -19,11 +19,24 @@
   <strong>Social Security</strong> timing &mdash; each a different lens on the same finances, at a
   different timescale.</p>
 
-<p>{% settings_value 'SITE_NAME' %} is open source. Use the free hosted version, or
+<p>{% settings_value 'SITE_NAME' %} is built and maintained independently &mdash; by someone who wanted a
+  single, trustworthy model for their own long-term planning, not a company chasing growth at your
+  expense.</p>
+
+<p>So your data stays yours. There are no ads and no trackers, we never sell or share your information,
+  and we email you only to send a sign-in code or an essential notice &mdash; never marketing. Our
+  <a href="{% url 'privacy' %}">privacy approach</a> spells out the rest, including how your data is
+  protected and how to remove it.</p>
+
+<p>{% settings_value 'SITE_NAME' %} is source-available. Use the free hosted version, or
   <a href="https://github.com/cassandra/ucfp" target="_blank" rel="noopener">self-host your own private
   instance</a> to keep your data entirely on your own machine.</p>
 
-<div class="text-center mt-4">
-  <a href="{% url 'home' %}" class="btn btn-primary">Get started</a>
+<p class="text-muted small">{% settings_value 'SITE_NAME' %} is a planning tool, not financial advice: its
+  projections are estimates based on the numbers and assumptions you provide. For decisions that matter,
+  check with a qualified professional.</p>
+
+<div class="text-center mt-4 mb-5">
+  <a href="{% url 'user_signin' %}" class="btn btn-primary">Get started</a>
 </div>
 {% endblock %}
