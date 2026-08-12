@@ -13,10 +13,15 @@ def get_absolute_static_path( relative_path ):
 
 
 def get_client_ip( request : HttpRequest ) -> str:
-    """The originating client IP. Behind a reverse proxy (nginx) the real client
-    is the left-most entry of the ``X-Forwarded-For`` list; fall back to
-    ``REMOTE_ADDR`` when the header is absent (e.g. a direct/local connection)."""
+    """The client IP as observed by the trusted reverse proxy (nginx).
+
+    nginx sets ``X-Forwarded-For`` via ``$proxy_add_x_forwarded_for``, which
+    **appends** the real peer to any client-supplied value -- so the **right-most**
+    entry is the address nginx actually saw, while the left-most entries are
+    attacker-controllable and must not be trusted for rate limiting. Take the
+    right-most (this assumes a single trusted proxy hop); fall back to
+    ``REMOTE_ADDR`` when there is no proxy (a direct/local connection)."""
     forwarded_for = request.headers.get( 'x-forwarded-for' )
     if forwarded_for:
-        return forwarded_for.split( ',' )[ 0 ].strip()
+        return forwarded_for.split( ',' )[ -1 ].strip()
     return request.META.get( 'REMOTE_ADDR', '' )

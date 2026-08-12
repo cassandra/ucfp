@@ -153,6 +153,23 @@ class TestUserSigninView(SyncViewTestCase):
 
         self.assertTemplateRendered(response, 'user/pages/signin_unsubscribed.html')
 
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        EMAIL_HOST='smtp.example.com', EMAIL_PORT=587, EMAIL_HOST_USER='u',
+        DEFAULT_FROM_EMAIL='from@example.com', SERVER_EMAIL='srv@example.com',
+    )
+    def test_real_signin_code_email_carries_list_unsubscribe_header(self):
+        """The genuine sign-in code email (not a synthetic send) carries the
+        one-click List-Unsubscribe headers -- the deliverability contract."""
+        from django.core import mail
+
+        self.client.post(reverse('user_signin'), {'email': 'fresh@example.com'})
+
+        self.assertEqual(len(mail.outbox), 1)
+        headers = mail.outbox[0].extra_headers
+        self.assertIn('List-Unsubscribe', headers)
+        self.assertEqual(headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
+
 
 class TestSendMagicLinkEmailView(SyncViewTestCase):
     """
@@ -520,6 +537,37 @@ class TestUserSigninThrottling(SyncViewTestCase):
         self.assertEqual(response.status_code, 200)
         mock_send.send_signin_magic_link.assert_called_once()
 
+    @override_settings(SIGNIN_PER_IP_LIMIT=100, SIGNIN_PER_EMAIL_HOURLY_LIMIT=100,
+                       SIGNIN_PER_EMAIL_DAILY_LIMIT=1)
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_per_email_daily_cap(self, mock_send_view_class):
+        mock_send = mock_send_view_class.return_value
+        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
+
+        url = reverse('user_signin')
+        # Only the per-email DAILY cap (1) is low enough to trip.
+        self.client.post(url, {'email': 'repeat@example.com'})
+        response = self.client.post(url, {'email': 'repeat@example.com'})
+
+        self.assertEqual(response.status_code, 200)
+        mock_send.send_signin_magic_link.assert_called_once()
+
+    @override_settings(SIGNIN_PER_IP_LIMIT=100, SIGNIN_PER_EMAIL_HOURLY_LIMIT=100,
+                       SIGNIN_PER_EMAIL_DAILY_LIMIT=100, SIGNIN_GLOBAL_LIMIT=1)
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_global_ceiling_throttles_across_ips_and_emails(self, mock_send_view_class):
+        mock_send = mock_send_view_class.return_value
+        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
+
+        url = reverse('user_signin')
+        # Distinct IPs and emails, so only the global email ceiling (1) can trip.
+        self.client.post(url, {'email': 'a@example.com'}, HTTP_X_FORWARDED_FOR='1.1.1.1')
+        response = self.client.post(url, {'email': 'b@example.com'}, HTTP_X_FORWARDED_FOR='2.2.2.2')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(email='b@example.com').exists())
+        mock_send.send_signin_magic_link.assert_called_once()
+
     @override_settings(ABUSE_PREVENTION_ENABLED=False)
     @patch('user.views.SendMagicLinkEmailView')
     def test_disabled_flag_does_not_throttle(self, mock_send_view_class):
@@ -611,6 +659,24 @@ class TestSigninVerifyCooldown(SyncViewTestCase):
         # Cooldown never blocks here; the per-IP limit of 1 does.
         self._post_code('wrongg')
         self.assertEqual(self._post_code('wrongg').status_code, 429)
+
+    @override_settings(
+        SIGNIN_VERIFY_FREE_ATTEMPTS=99,
+        SIGNIN_VERIFY_PER_IP_LIMIT=1,
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        EMAIL_HOST='smtp.example.com', EMAIL_PORT=587, EMAIL_HOST_USER='u',
+        DEFAULT_FROM_EMAIL='from@example.com', SERVER_EMAIL='srv@example.com',
+    )
+    def test_per_ip_backstop_trip_sends_one_coalesced_alert(self):
+        from django.core import mail
+
+        self._post_code('wrongg')  # first attempt within the backstop of 1
+        self._post_code('wrongg')  # second trips the backstop -> alert
+        self._post_code('wrongg')  # still tripped -> coalesced, no second alert
+
+        alerts = [m for m in mail.outbox if 'abuse alert' in m.subject]
+        self.assertEqual(len(alerts), 1)
+        self.assertIn('verify-per-ip', alerts[0].subject)
 
     def test_disabled_flag_has_no_cooldown(self):
         with override_settings(ABUSE_PREVENTION_ENABLED=False):

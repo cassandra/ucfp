@@ -3,5 +3,5 @@
 Type:   {{ alert_type }}
 Detail: {{ detail }}
 
-This is an automated operational notice. It coalesces to at most one message
-per hour per alert type, so repeated activity will not flood this inbox.
+This is an automated operational notice. It is coalesced per alert type, so
+repeated activity will not flood this inbox.

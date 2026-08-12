@@ -18,7 +18,7 @@ fails open and nothing throttles.
 Run:
     ./src/manage.py runserver --settings=ucfp.settings.test_local_abuse
 
-See docs/dev/testing/signin-abuse-prevention-manual-test-plan.md.
+See docs/dev/testing/test-plan-abuse-prevention.md.
 """
 from .development import *
 

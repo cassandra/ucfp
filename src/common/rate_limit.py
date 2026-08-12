@@ -31,9 +31,12 @@ def check_rate_limit( key : str, limit : int, window_secs : int ) -> bool:
 
     redis_key = f'{_RATE_LIMIT_KEY_NAMESPACE}:{key}'
     try:
+        # Establish the counter with its TTL on first use via an atomic SET-NX-EX,
+        # then count the hit. Because the key is born with an expiry, a crash can
+        # never leave a counter without a TTL (which would block that key forever);
+        # NX means an existing window keeps its original TTL, so it stays fixed.
+        redis_client.set( redis_key, 0, nx = True, ex = window_secs )
         hit_count = redis_client.incr( redis_key )
-        if hit_count == 1:
-            redis_client.expire( redis_key, window_secs )
         return hit_count <= limit
     except Exception:
         logger.warning( 'Rate-limit check failed open for key=%s', key, exc_info = True )

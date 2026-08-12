@@ -28,7 +28,7 @@ _MESSAGE_HTML_TEMPLATE = 'notify/emails/admin_alert_message.html'
 _DEFAULT_WINDOW_SECS = 60 * 60
 
 
-def alert_admin( alert_type : str, detail : str, window_secs : int = _DEFAULT_WINDOW_SECS ):
+def alert_admin( alert_type : str, detail : str, window_secs : int = _DEFAULT_WINDOW_SECS ) -> None:
     """Emit a coalesced admin alert (WARNING log + email) at most once per window
     per ``alert_type``. Best-effort: never raises into the caller."""
     try:
@@ -45,7 +45,7 @@ def _admin_recipient() -> str:
     return getattr( settings, 'ADMIN_ALERT_EMAIL', '' ) or getattr( settings, 'SERVER_EMAIL', '' )
 
 
-def _send_admin_email( alert_type : str, detail : str ):
+def _send_admin_email( alert_type : str, detail : str ) -> None:
     recipient = _admin_recipient()
     if not recipient or not EmailSender.is_email_configured():
         return

@@ -51,6 +51,9 @@ class CheckRateLimitTestCase(SimpleTestCase):
 
     def test_fails_open_when_redis_errors(self):
         class _Boom:
+            def set(self, *args, **kwargs):
+                raise RuntimeError( 'redis down' )
+
             def incr(self, *args, **kwargs):
                 raise RuntimeError( 'redis down' )
 
@@ -65,6 +68,13 @@ class BackoffDelaySecsTestCase(SimpleTestCase):
                                                   factor = 2, max_delay = 4 )
                    for n in range( 0, 3 ) ]
         self.assertEqual( delays, [ 0, 0, 0 ] )
+
+    def test_no_free_attempts_delays_from_first_failure(self):
+        # Boundary on `step = failure_count - free_attempts - 1`: the first failure
+        # with no free attempts must yield exactly first_delay, not 0 or doubled.
+        delay = rate_limit.backoff_delay_secs( 1, free_attempts = 0, first_delay = 5,
+                                               factor = 2, max_delay = 60 )
+        self.assertEqual( delay, 5 )
 
     def test_delay_grows_geometrically_then_caps(self):
         schedule = [ rate_limit.backoff_delay_secs( n, free_attempts = 2, first_delay = 1,

@@ -41,3 +41,11 @@ class ShouldAlertTestCase(SimpleTestCase):
             self.assertTrue( alerting.should_alert( 'k', window_secs = 3600 ) )
             # Without Redis it cannot coalesce, so it alerts rather than swallow.
             self.assertTrue( alerting.should_alert( 'k', window_secs = 3600 ) )
+
+    def test_fails_open_when_redis_errors(self):
+        class _Boom:
+            def set(self, *args, **kwargs):
+                raise RuntimeError( 'redis down' )
+
+        with patch.object( alerting, 'get_redis_client', return_value = _Boom() ):
+            self.assertTrue( alerting.should_alert( 'k', window_secs = 3600 ) )

@@ -37,11 +37,10 @@ def _limit( name : str ) -> int:
 def is_signin_request_allowed( request : HttpRequest, canonical_email : str ) -> bool:
     """Whether this sign-in POST may proceed to create an account and send a code.
 
-    Enforces, in order, a per-IP request limit, per-email (hourly and daily) send
-    caps, and a global sign-in-email ceiling. The checks short-circuit: a request
-    already blocked by an earlier limit does not count against the later ones, so
-    one throttled IP cannot inflate the global ceiling into a self-inflicted
-    lockout. Returns True (allowed) when abuse prevention is disabled.
+    Enforces a per-IP request limit, per-email (hourly and daily) send caps, and a
+    global sign-in-email ceiling (see ``_first_tripped_limit`` for the ordering and
+    its rationale). On a block it logs and fires a coalesced admin alert naming the
+    tripped limit. Returns True (allowed) when abuse prevention is disabled.
     """
     if not getattr( settings, 'ABUSE_PREVENTION_ENABLED', False ):
         return True
@@ -57,7 +56,7 @@ def is_signin_request_allowed( request : HttpRequest, canonical_email : str ) ->
     return False
 
 
-def _first_tripped_limit( client_ip : str, canonical_email : str ):
+def _first_tripped_limit( client_ip : str, canonical_email : str ) -> str | None:
     """The name of the first limit this request exceeds, or None if within all.
 
     Checks run in order and stop at the first failure, so a request already over
