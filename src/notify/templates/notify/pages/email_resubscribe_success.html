@@ -1,0 +1,9 @@
+{% extends "pages/base.html" %}
+
+{% block content %}
+<div class="container py-5 text-center" style="max-width: 40rem;">
+  <h1 class="h3">Emails re-enabled.</h1>
+  <p class="text-muted">"{{ email }}" will receive email from us again, including sign-in codes.</p>
+  <p><a href="{% url 'user_signin' %}">Sign in</a></p>
+</div>
+{% endblock %}

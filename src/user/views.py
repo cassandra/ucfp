@@ -10,7 +10,8 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views.generic import View
 
-from notify.email_sender import EmailSender
+from notify.email_sender import EmailSender, UnsubscribedEmailError
+from notify.views import resubscribe_url_for
 
 from . import forms
 from . import signin_cooldown
@@ -88,10 +89,18 @@ class SendMagicLinkEmailView( View ):
             request = request,
             override_user = override_user,
         )
-        SigninManager().send_signin_magic_link_email(
-            request = request,
-            user_auth_data = user_auth_data,
-        )
+        try:
+            SigninManager().send_signin_magic_link_email(
+                request = request,
+                user_auth_data = user_auth_data,
+            )
+        except UnsubscribedEmailError:
+            # The code email is suppressed because this address unsubscribed.
+            # Don't dead-end silently: offer the (victim-controlled) re-enable path.
+            return render( request, 'user/pages/signin_unsubscribed.html', {
+                'email': user_auth_data.email_address,
+                'resubscribe_url': resubscribe_url_for( user_auth_data.email_address ),
+            } )
         return SigninMagicCodeView().get_response(
             request = request,
             magic_code_form = user_auth_data.magic_code_form,

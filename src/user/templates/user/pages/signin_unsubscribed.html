@@ -1,0 +1,12 @@
+{% extends "pages/interstitial_page.html" %}
+
+{% block interstitial_content %}
+<div class="h3 text-center">Emails are turned off for this address</div>
+<p class="small text-muted text-center mt-3 mb-0">
+  "{{ email }}" previously unsubscribed, so we can't send it a sign-in code. If that was
+  you and you'd like to sign in, re-enable emails and try again.
+</p>
+<div class="text-center mt-4">
+  <a href="{{ resubscribe_url }}" class="btn btn-lg btn-primary"><b>Re-enable emails</b></a>
+</div>
+{% endblock %}

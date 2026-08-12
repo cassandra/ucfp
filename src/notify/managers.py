@@ -12,3 +12,18 @@ class UnsubscribedEmailModelManager( models.Manager ):
         if not email:
             return False
         return self.filter( email__iexact = email ).exists()
+
+    def unsubscribe( self, email : str ):
+        """Suppress all mail to this address. Idempotent."""
+        if not email:
+            return
+        self.get_or_create( email = email )
+        return
+
+    def resubscribe( self, email : str ):
+        """Re-enable mail to this address by removing any suppression. Idempotent
+        -- the victim-controlled counterpart to unsubscribe."""
+        if not email:
+            return
+        self.filter( email__iexact = email ).delete()
+        return

@@ -143,6 +143,16 @@ class TestUserSigninView(SyncViewTestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_post_signin_unsubscribed_email_offers_resubscribe(self):
+        """A sign-in for an unsubscribed address surfaces the re-enable path
+        instead of silently dead-ending (the code email is suppressed)."""
+        from notify.models import UnsubscribedEmail
+        UnsubscribedEmail.objects.create(email=self.user.email)
+
+        response = self.client.post(reverse('user_signin'), {'email': self.user.email})
+
+        self.assertTemplateRendered(response, 'user/pages/signin_unsubscribed.html')
+
 
 class TestSendMagicLinkEmailView(SyncViewTestCase):
     """

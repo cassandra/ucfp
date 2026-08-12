@@ -41,7 +41,8 @@ def send_html_email( request,
                      context = None,
                      files = None,
                      non_blocking = False,
-                     from_email_name = None ):
+                     from_email_name = None,
+                     extra_headers = None ):
     if not from_email_address:
         from_email_address = settings.DEFAULT_FROM_EMAIL
     if not from_email_name:
@@ -69,6 +70,7 @@ def send_html_email( request,
         message_text.strip(),
         "%s <%s>" % ( from_email_name, from_email_address ),
         to_email_addresses,
+        headers = extra_headers or None,
     )
     message.attach_alternative( message_html, "text/html" )
 

@@ -91,8 +91,10 @@ class EmailSender:
         context = self._data.template_context
         self._add_base_url( context = context )
         self._add_home_url( context = context )
+        extra_headers = None
         if not self._data.skip_unsubscribe:
             self._add_unsubscribe_url( context = context )
+            extra_headers = self._list_unsubscribe_headers( context )
 
         if self._data.override_to_email_address:
             effective_to_email_address = self._data.override_to_email_address
@@ -109,8 +111,21 @@ class EmailSender:
             context = context,
             files = self._data.files,
             non_blocking = self._data.non_blocking,
+            extra_headers = extra_headers,
         )
         return
+
+    def _list_unsubscribe_headers( self, context : Dict ):
+        """One-click unsubscribe headers (RFC 8058) from the unsubscribe URL, so
+        mail clients can offer a native Unsubscribe control and providers rank us
+        as legitimate bulk mail."""
+        unsubscribe_url = context.get('UNSUBSCRIBE_URL')
+        if not unsubscribe_url:
+            return None
+        return {
+            'List-Unsubscribe'      : f'<{unsubscribe_url}>',
+            'List-Unsubscribe-Post' : 'List-Unsubscribe=One-Click',
+        }
 
     def _add_base_url( self, context : Dict ):
         if self._data.request:
