@@ -20,7 +20,20 @@ from .schemas import UserAuthenticationData
 logger = logging.getLogger(__name__)
 
 
-class UserSigninView( View ):
+class RedirectAuthenticatedUserMixin:
+    """Send an already-authenticated user to the home page instead of showing a
+    sign-in step they don't need. Applied to the interactive entry points of the
+    flow (the sign-in form and the code page); the internal, non-dispatched calls
+    that render the code page mid-flow are unaffected.
+    """
+
+    def dispatch( self, request, *args, **kwargs ):
+        if request.user.is_authenticated:
+            return HttpResponseRedirect( reverse( 'home' ) )
+        return super().dispatch( request, *args, **kwargs )
+
+
+class UserSigninView( RedirectAuthenticatedUserMixin, View ):
 
     def get(self, request, *args, **kwargs):
         context = {
@@ -29,9 +42,6 @@ class UserSigninView( View ):
         return render( request, 'user/pages/signin.html', context )
 
     def post(self, request, *args, **kwargs):
-        if request.user.is_authenticated:
-            raise BadRequest( 'You are already logged in.' )
-
         email_address = request.POST.get('email')
         if not email_address:
             raise BadRequest( 'No email provided' )
@@ -73,7 +83,7 @@ class SendMagicLinkEmailView( View ):
         )
 
 
-class SigninMagicCodeView( View ):
+class SigninMagicCodeView( RedirectAuthenticatedUserMixin, View ):
 
     TEMPLATE_NAME = 'user/pages/magic_code_signin.html'
 

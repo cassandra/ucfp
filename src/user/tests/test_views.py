@@ -49,15 +49,25 @@ class TestUserSigninView(SyncViewTestCase):
         self.assertSuccessResponse(response)
         self.assertEqual(response.context['email_not_configured'], True)
 
-    def test_post_signin_already_authenticated(self):
-        """Test POST request when user is already authenticated."""
-        # Force authentication
+    def test_get_signin_already_authenticated_redirects_home(self):
+        """An authenticated user has no sign-in step to complete; GET redirects home."""
+        self.client.force_login(self.user)
+
+        url = reverse('user_signin')
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
+
+    def test_post_signin_already_authenticated_redirects_home(self):
+        """An authenticated user posting the sign-in form is redirected home, not errored."""
         self.client.force_login(self.user)
 
         url = reverse('user_signin')
         response = self.client.post(url, {'email': 'test@example.com'})
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
 
     def test_post_signin_no_email(self):
         """Test POST request without email."""
@@ -214,6 +224,20 @@ class TestSigninMagicCodeView(SyncViewTestCase):
 
         # Should render the magic code template
         self.assertEqual(response.status_code, 200)
+
+    def test_post_already_authenticated_redirects_home(self):
+        """A stale code submission from an already-authenticated user redirects
+        home rather than re-running the login."""
+        self.client.force_login(self.user)
+
+        url = reverse('user_signin_magic_code')
+        response = self.client.post(url, {
+            'email_address': self.user.email,
+            'magic_code': '123456'
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
 
     def test_post_invalid_form(self):
         """Test POST request with invalid form data."""
