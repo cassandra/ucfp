@@ -120,6 +120,35 @@ class AccountDeleteViewTest(TestCase):
         self.assertEqual( response.status_code, 400 )
         self.assertTrue( User.objects.filter( pk = user_id ).exists() )
 
+    def test_co_owned_household_is_deleted_by_default(self):
+        user, co_owner = _user( 'a@x.test' ), _user( 'b@x.test' )
+        org = Organization.objects.create_for_owner( user, 'Shared' )
+        _add_member( org, co_owner, OrganizationRole.OWNER )
+        self.client.force_login( user )
+        user_id = user.pk
+
+        response = self.client.post( reverse( 'account_delete' ), { 'confirm': 'delete' } )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertFalse( User.objects.filter( pk = user_id ).exists() )
+        self.assertFalse( Organization.objects.filter( pk = org.pk ).exists() )
+
+    def test_co_owned_household_is_kept_when_requested(self):
+        user, co_owner = _user( 'a@x.test' ), _user( 'b@x.test' )
+        org = Organization.objects.create_for_owner( user, 'Shared' )
+        _add_member( org, co_owner, OrganizationRole.OWNER )
+        self.client.force_login( user )
+        user_id = user.pk
+
+        response = self.client.post(
+            reverse( 'account_delete' ),
+            { 'confirm': 'delete', 'keep_org': str( org.uuid ) } )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertFalse( User.objects.filter( pk = user_id ).exists() )
+        self.assertTrue( Organization.objects.filter( pk = org.pk ).exists() )
+        self.assertTrue( OrganizationMember.objects.active_owners( org ).filter( user = co_owner ).exists() )
+
 
 class DangerSectionRenderTest(TestCase):
 
@@ -178,6 +207,19 @@ class ConfirmModalViewTest(TestCase):
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Alpha' )
         self.assertContains( response, 'Beta' )
+
+    def test_account_delete_confirm_co_owned_offers_keep_checkbox(self):
+        user, co_owner = _user( 'a@x.test' ), _user( 'b@x.test' )
+        org = Organization.objects.create_for_owner( user, 'Shared' )
+        _add_member( org, co_owner, OrganizationRole.OWNER )
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'account_delete_confirm' ), **self.AJAX )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, 'keep_org' )               # the opt-out control (JSON-escaped attrs)
+        self.assertContains( response, str( org.uuid ) )          # scoped to the co-owned household
+        self.assertContains( response, 'Shared' )
 
     def test_org_delete_confirm_owner_ok(self):
         user = _user( 'a@x.test' )

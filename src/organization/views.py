@@ -66,14 +66,15 @@ class AccountDeleteConfirmView( ModalView ):
         return 'organization/modals/delete_account_confirm.html'
 
     def get( self, request, *args, **kwargs ):
-        deleted_orgs, left_orgs = deletion.account_deletion_plan( request.user )
+        sole_owned, co_owned, non_owned = deletion.account_deletion_disposition( request.user )
         return self.modal_response( request, context = {
             # The lone-household case (a single, solely-owned organization) needs no
             # itemization -- naming the auto-generated personal household means nothing
             # to the user; just say the account and all its data go.
-            'is_lone_account' : ( len( deleted_orgs ) == 1 ) and ( not left_orgs ),
-            'deleted_orgs'    : deleted_orgs,
-            'left_orgs'       : left_orgs,
+            'is_lone_account' : ( len( sole_owned ) == 1 ) and ( not co_owned ) and ( not non_owned ),
+            'sole_owned_orgs' : sole_owned,
+            'co_owned_orgs'   : co_owned,
+            'non_owned_orgs'  : non_owned,
         } )
 
 
@@ -145,6 +146,9 @@ class AccountDeleteView( View ):
     def post( self, request ):
         if not _is_confirmed( request ):
             raise BadRequest( 'Deletion was not confirmed.' )
-        deletion.delete_account( request.user )
+        # Co-owned households the user chose to keep for their other owners; every
+        # other owned household is deleted by default.
+        keep_organization_uuids = request.POST.getlist( 'keep_org' )
+        deletion.delete_account( request.user, keep_organization_uuids = keep_organization_uuids )
         logout( request )
         return redirect( reverse( 'home' ) )

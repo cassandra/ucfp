@@ -102,16 +102,27 @@ class DeleteAccountTest(TestCase):
         self.assertFalse( User.objects.filter( pk = user.pk ).exists() )
         self.assertFalse( Organization.objects.filter( pk = org.pk ).exists() )
 
-    def test_co_owner_leaves_and_org_persists_for_others(self):
+    def test_co_owned_org_is_deleted_by_default(self):
         u1, u2 = _user( 'a@x.test' ), _user( 'b@x.test' )
         org = Organization.objects.create_for_owner( u1, 'A' )
         _add_member( org, u2, OrganizationRole.OWNER )
         u1_id = u1.pk
 
-        deletion.delete_account( u1 )
+        deletion.delete_account( u1 )  # no keep -> the shared household goes too
 
         self.assertFalse( User.objects.filter( pk = u1_id ).exists() )
-        self.assertTrue( Organization.objects.filter( pk = org.pk ).exists() )
+        self.assertFalse( Organization.objects.filter( pk = org.pk ).exists() )
+
+    def test_co_owned_org_is_kept_when_requested(self):
+        u1, u2 = _user( 'a@x.test' ), _user( 'b@x.test' )
+        org = Organization.objects.create_for_owner( u1, 'A' )
+        _add_member( org, u2, OrganizationRole.OWNER )
+        u1_id = u1.pk
+
+        deletion.delete_account( u1, keep_organization_uuids = [ org.uuid ] )
+
+        self.assertFalse( User.objects.filter( pk = u1_id ).exists() )
+        self.assertTrue( Organization.objects.filter( pk = org.pk ).exists() )  # kept for the co-owner
         self.assertTrue( OrganizationMember.objects.active_owners( org ).filter( user = u2 ).exists() )
         self.assertFalse( OrganizationMember.objects.filter( user_id = u1_id ).exists() )
 
@@ -127,16 +138,16 @@ class DeleteAccountTest(TestCase):
         self.assertTrue( Organization.objects.filter( pk = org.pk ).exists() )
         self.assertFalse( OrganizationMember.objects.filter( user_id = member_user_id ).exists() )
 
-    def test_multi_org_mixed_dispositions(self):
+    def test_multi_org_default_deletes_owned_leaves_non_owned(self):
         user = _user( 'a@x.test' )
         co_owner = _user( 'b@x.test' )
         other_owner = _user( 'c@x.test' )
         # A: user is the sole owner -> deleted with its data.
         org_a = Organization.objects.create_for_owner( user, 'A' )
-        # B: user is a co-owner -> persists for the co-owner.
+        # B: user is a co-owner -> deleted by default (with its data).
         org_b = Organization.objects.create_for_owner( co_owner, 'B' )
         _add_member( org_b, user, OrganizationRole.OWNER )
-        # C: user is a plain member -> persists for its owner.
+        # C: user is a plain member -> left for its owner.
         org_c = Organization.objects.create_for_owner( other_owner, 'C' )
         _add_member( org_c, user, OrganizationRole.MEMBER )
         user_id = user.pk
@@ -145,9 +156,25 @@ class DeleteAccountTest(TestCase):
 
         self.assertFalse( User.objects.filter( pk = user_id ).exists() )
         self.assertFalse( Organization.objects.filter( pk = org_a.pk ).exists() )
-        self.assertTrue( Organization.objects.filter( pk = org_b.pk ).exists() )
+        self.assertFalse( Organization.objects.filter( pk = org_b.pk ).exists() )
         self.assertTrue( Organization.objects.filter( pk = org_c.pk ).exists() )
         self.assertFalse( OrganizationMember.objects.filter( user_id = user_id ).exists() )
-        # The surviving organizations still each retain an active owner.
-        self.assertTrue( OrganizationMember.objects.active_owners( org_b ).exists() )
+        # The one surviving (non-owned) organization keeps its own owner.
         self.assertTrue( OrganizationMember.objects.active_owners( org_c ).exists() )
+
+    def test_multi_org_keeps_only_the_requested_co_owned(self):
+        user = _user( 'a@x.test' )
+        co_owner = _user( 'b@x.test' )
+        # A: solely owned -> always deleted, even when named in keep.
+        org_a = Organization.objects.create_for_owner( user, 'A' )
+        # B: co-owned -> kept because requested.
+        org_b = Organization.objects.create_for_owner( co_owner, 'B' )
+        _add_member( org_b, user, OrganizationRole.OWNER )
+        user_id = user.pk
+
+        deletion.delete_account( user, keep_organization_uuids = [ org_a.uuid, org_b.uuid ] )
+
+        self.assertFalse( User.objects.filter( pk = user_id ).exists() )
+        self.assertFalse( Organization.objects.filter( pk = org_a.pk ).exists() )  # sole-owned ignores keep
+        self.assertTrue( Organization.objects.filter( pk = org_b.pk ).exists() )
+        self.assertTrue( OrganizationMember.objects.active_owners( org_b ).filter( user = co_owner ).exists() )

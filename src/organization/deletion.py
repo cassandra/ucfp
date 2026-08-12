@@ -16,16 +16,21 @@ from django.db import transaction
 from .models import OrganizationMember
 
 
-def account_deletion_plan( user : UserType ):
-    """What deleting ``user``'s account would do to each of their organizations:
-    a ``(deleted, left)`` pair of the organizations that would be permanently
-    deleted (those the user solely owns) versus merely left (co-owned / non-owned).
+def account_deletion_disposition( user : UserType ):
+    """How deleting ``user``'s account treats each of their organizations, grouped:
+
+    - ``sole_owned`` -- deleted with their data; cannot be kept (leaving would
+      orphan them).
+    - ``co_owned`` -- deleted with their data **by default**, but the user may
+      choose to keep each one for its other owners instead.
+    - ``non_owned`` -- left intact; the user is removed but never owned the data.
     """
     memberships = list(
         OrganizationMember.objects.for_user( user ).select_related( 'organization' ) )
-    deleted = [ member.organization for member in memberships if member.is_sole_active_owner ]
-    left = [ member.organization for member in memberships if not member.is_sole_active_owner ]
-    return deleted, left
+    sole_owned = [ m.organization for m in memberships if m.is_sole_active_owner ]
+    co_owned   = [ m.organization for m in memberships if m.is_active_owner and not m.is_sole_active_owner ]
+    non_owned  = [ m.organization for m in memberships if not m.is_active_owner ]
+    return sole_owned, co_owned, non_owned
 
 
 def delete_organization( organization ):
@@ -49,32 +54,39 @@ def leave_organization( member : OrganizationMember ):
     return
 
 
-def delete_account( user : UserType ):
+def delete_account( user : UserType, keep_organization_uuids = () ):
     """Permanently delete ``user`` and the data that goes with them.
 
-    Ordered so the last-active-owner invariant is never violated and no
-    organization is left ownerless:
+    By default **every organization the user owns** is deleted with its data.
+    Pass ``keep_organization_uuids`` to preserve specific *co-owned* organizations
+    (leaving them for their other owners) instead. A solely-owned organization is
+    always deleted -- leaving it would orphan it -- and cannot be kept.
 
-    1. Delete the organizations the user **solely owns** -- this cascades their
-       data and the user's membership in them.
-    2. Remove the user's remaining memberships (now all non-sole-owner, so each
-       passes the guarded delete) -- co-owned and non-owned organizations are
-       left intact for their other members.
+    Ordered so the last-active-owner invariant is never violated:
+
+    1. Delete each owned organization that is not being kept -- this cascades its
+       data and the user's membership in it.
+    2. Remove the user's remaining memberships (kept co-owned organizations, and
+       non-owned ones); each passes the guarded delete, leaving those organizations
+       for their other members.
     3. Delete the user record itself.
 
     A naive ``user.delete()`` must never be used: the ``OrganizationMember.user``
     cascade bulk-deletes memberships and bypasses the owner-invariant guard,
-    which would silently orphan any solely-owned organization.
+    which would silently orphan any owned organization.
     """
+    kept = { str( organization_uuid ) for organization_uuid in keep_organization_uuids }
     with transaction.atomic():
-        active_memberships = list(
-            OrganizationMember.objects.filter( user = user, is_active = True ) )
-        for member in active_memberships:
-            if member.is_sole_active_owner:
+        owned_memberships = list(
+            OrganizationMember.objects.for_user( user ).select_related( 'organization' ) )
+        for member in owned_memberships:
+            if not member.is_active_owner:
+                continue
+            if member.is_sole_active_owner or ( str( member.organization.uuid ) not in kept ):
                 member.organization.delete()
 
-        # Whatever memberships survive the org deletions are non-sole-owner, so
-        # the guarded row delete accepts them.
+        # Whatever memberships survive (kept co-owned, or non-owned) are safe for
+        # the guarded row delete -- none is the last active owner of its org.
         for member in list( OrganizationMember.objects.filter( user = user ) ):
             member.delete()
 

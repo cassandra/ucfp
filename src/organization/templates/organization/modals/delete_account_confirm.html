@@ -18,16 +18,27 @@ confirmation to `account_delete`.
 <p>This permanently deletes your account and all your data. It cannot be undone.</p>
 {% else %}
 <p>This permanently deletes your account. It cannot be undone.</p>
-{% if deleted_orgs %}
+{% if sole_owned_orgs %}
 <p class="mb-1"><strong>These households and all their data will be permanently deleted:</strong></p>
-<ul>{% for org in deleted_orgs %}<li>{{ org.name }}</li>{% endfor %}</ul>
+<ul>{% for org in sole_owned_orgs %}<li>{{ org.name }}</li>{% endfor %}</ul>
 {% endif %}
-{% if left_orgs %}
-<p class="mb-1"><strong>You will leave these households (they and their data remain):</strong></p>
-<ul>{% for org in left_orgs %}<li>{{ org.name }}</li>{% endfor %}</ul>
+{% if co_owned_orgs %}
+<p class="mb-1"><strong>These shared households and all their data will also be deleted</strong>
+  unless you keep them for their other owners:</p>
+{% for org in co_owned_orgs %}
+<div class="form-check">
+  <input class="form-check-input" type="checkbox" name="keep_org" value="{{ org.uuid }}" id="keep-{{ org.uuid }}">
+  <label class="form-check-label" for="keep-{{ org.uuid }}">Keep &ldquo;{{ org.name }}&rdquo; for its other owners
+    (don&rsquo;t delete its data)</label>
+</div>
+{% endfor %}
+{% endif %}
+{% if non_owned_orgs %}
+<p class="mb-1 mt-2"><strong>You will leave these households</strong> (they and their data remain for their members):</p>
+<ul>{% for org in non_owned_orgs %}<li>{{ org.name }}</li>{% endfor %}</ul>
 {% endif %}
 {% endif %}
-<label class="small mb-1 d-block" for="confirm-account">Type <strong>delete</strong> to confirm</label>
+<label class="small mb-1 d-block mt-2" for="confirm-account">Type <strong>delete</strong> to confirm</label>
 <input class="form-control" id="confirm-account" name="confirm" autocomplete="off"
        pattern="[Dd][Ee][Ll][Ee][Tt][Ee]" required placeholder="delete">
 {% endblock %}
