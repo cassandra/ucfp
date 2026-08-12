@@ -522,6 +522,25 @@ class TestUserSigninThrottling(SyncViewTestCase):
 
         self.assertEqual(mock_send.send_signin_magic_link.call_count, 3)
 
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        EMAIL_HOST='smtp.example.com', EMAIL_PORT=587, EMAIL_HOST_USER='u',
+        DEFAULT_FROM_EMAIL='from@example.com', SERVER_EMAIL='srv@example.com',
+    )
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_throttle_sends_one_coalesced_admin_alert(self, mock_send_view_class):
+        from django.core import mail
+        mock_send = mock_send_view_class.return_value
+        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
+
+        url = reverse('user_signin')
+        self.client.post(url, {'email': 'a@example.com'})  # within per-IP limit of 1
+        self.client.post(url, {'email': 'b@example.com'})  # over -> alert
+        self.client.post(url, {'email': 'c@example.com'})  # over -> coalesced, no 2nd alert
+
+        admin_alerts = [m for m in mail.outbox if 'abuse alert' in m.subject]
+        self.assertEqual(len(admin_alerts), 1)
+
 
 @override_settings(ABUSE_PREVENTION_ENABLED=True)
 class TestSigninVerifyCooldown(SyncViewTestCase):

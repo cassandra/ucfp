@@ -359,6 +359,10 @@ DEFAULT_FROM_EMAIL = ENV.DEFAULT_FROM_EMAIL
 SERVER_EMAIL = ENV.SERVER_EMAIL
 FROM_EMAIL_NAME = SITE_NAME
 
+# Where abuse-prevention admin alerts are sent. Reuses the server/ops address by
+# default; a deployment can point it at a distinct inbox by overriding this.
+ADMIN_ALERT_EMAIL = SERVER_EMAIL
+
 # Normal Settings
 EMAIL_HOST = ENV.EMAIL_HOST
 try:

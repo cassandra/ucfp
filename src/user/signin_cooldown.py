@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from common.rate_limit import backoff_delay_secs, check_rate_limit
 from common.request_utils import get_client_ip
+from notify.admin_alert import alert_admin
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +59,16 @@ def seconds_until_allowed( request : HttpRequest ) -> int:
 
 def is_per_ip_backstop_ok( request : HttpRequest ) -> bool:
     """Record and check a verify attempt against the per-IP hourly backstop
-    (fail-open via the underlying limiter)."""
+    (fail-open via the underlying limiter). Alerts (coalesced) when it trips,
+    since sustained verify attempts from one IP suggest brute-forcing."""
     client_ip = get_client_ip( request )
-    return check_rate_limit( f'verify:ip:{client_ip}',
-                             _setting( 'SIGNIN_VERIFY_PER_IP_LIMIT' ),
-                             _HOUR_SECS )
+    is_ok = check_rate_limit( f'verify:ip:{client_ip}',
+                              _setting( 'SIGNIN_VERIFY_PER_IP_LIMIT' ),
+                              _HOUR_SECS )
+    if not is_ok:
+        logger.info( 'Verify per-IP backstop tripped: ip=%s', client_ip )
+        alert_admin( 'verify-per-ip', f'Verify per-IP backstop tripped (ip={client_ip})' )
+    return is_ok
 
 
 def register_failure( request : HttpRequest ) -> int:

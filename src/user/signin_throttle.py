@@ -14,6 +14,7 @@ from django.http import HttpRequest
 
 from common.rate_limit import check_rate_limit
 from common.request_utils import get_client_ip
+from notify.admin_alert import alert_admin
 
 logger = logging.getLogger(__name__)
 
@@ -46,20 +47,35 @@ def is_signin_request_allowed( request : HttpRequest, canonical_email : str ) ->
         return True
 
     client_ip = get_client_ip( request )
-    is_allowed = (
-        check_rate_limit( f'signin:ip:{client_ip}',
-                          _limit( 'SIGNIN_PER_IP_LIMIT' ),
-                          _limit( 'SIGNIN_PER_IP_WINDOW_SECS' ) )
-        and check_rate_limit( f'signin:email-hour:{canonical_email}',
-                              _limit( 'SIGNIN_PER_EMAIL_HOURLY_LIMIT' ),
-                              _HOUR_SECS )
-        and check_rate_limit( f'signin:email-day:{canonical_email}',
-                              _limit( 'SIGNIN_PER_EMAIL_DAILY_LIMIT' ),
-                              _DAY_SECS )
-        and check_rate_limit( 'signin:global',
-                              _limit( 'SIGNIN_GLOBAL_LIMIT' ),
-                              _HOUR_SECS )
-    )
-    if not is_allowed:
-        logger.info( 'Sign-in throttled: ip=%s email=%s', client_ip, canonical_email )
-    return is_allowed
+    tripped_limit = _first_tripped_limit( client_ip, canonical_email )
+    if tripped_limit is None:
+        return True
+
+    logger.info( 'Sign-in throttled [%s]: ip=%s email=%s', tripped_limit, client_ip, canonical_email )
+    alert_admin( f'signin-{tripped_limit}',
+                 f'Sign-in rate limit "{tripped_limit}" tripped (ip={client_ip})' )
+    return False
+
+
+def _first_tripped_limit( client_ip : str, canonical_email : str ):
+    """The name of the first limit this request exceeds, or None if within all.
+
+    Checks run in order and stop at the first failure, so a request already over
+    an earlier limit is not counted against the later ones -- one throttled IP
+    cannot inflate the global ceiling into a self-inflicted lockout.
+    """
+    ordered_checks = [
+        ( 'per-ip', f'signin:ip:{client_ip}',
+          _limit( 'SIGNIN_PER_IP_LIMIT' ), _limit( 'SIGNIN_PER_IP_WINDOW_SECS' ) ),
+        ( 'per-email-hour', f'signin:email-hour:{canonical_email}',
+          _limit( 'SIGNIN_PER_EMAIL_HOURLY_LIMIT' ), _HOUR_SECS ),
+        ( 'per-email-day', f'signin:email-day:{canonical_email}',
+          _limit( 'SIGNIN_PER_EMAIL_DAILY_LIMIT' ), _DAY_SECS ),
+        ( 'global', 'signin:global',
+          _limit( 'SIGNIN_GLOBAL_LIMIT' ), _HOUR_SECS ),
+    ]
+    for limit_name, key, limit, window_secs in ordered_checks:
+        if not check_rate_limit( key, limit, window_secs ):
+            return limit_name
+        continue
+    return None

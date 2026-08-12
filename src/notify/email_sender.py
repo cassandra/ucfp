@@ -54,6 +54,11 @@ class EmailData:
     files                       : List            = None  # For attachments
     non_blocking                : bool            = True
 
+    # System messages (e.g. operational admin alerts) set this to bypass the
+    # unsubscribe suppression list and omit the unsubscribe link. Such messages
+    # are operational, not promotional, and must not be silenceable.
+    skip_unsubscribe            : bool            = False
+
     # For testing (can use the unsubscribe link to test for the original intended "to" email)
     override_to_email_address   : str             = None
 
@@ -69,12 +74,14 @@ class EmailSender:
         return
 
     def send(self):
-        self._assert_not_unsubscribed()
+        if not self._data.skip_unsubscribe:
+            self._assert_not_unsubscribed()
         self._send_helper()
         return
 
     async def send_async( self):
-        await self._assert_not_unsubscribed_async()
+        if not self._data.skip_unsubscribe:
+            await self._assert_not_unsubscribed_async()
         self._send_helper()
         return
 
@@ -84,7 +91,8 @@ class EmailSender:
         context = self._data.template_context
         self._add_base_url( context = context )
         self._add_home_url( context = context )
-        self._add_unsubscribe_url( context = context )
+        if not self._data.skip_unsubscribe:
+            self._add_unsubscribe_url( context = context )
 
         if self._data.override_to_email_address:
             effective_to_email_address = self._data.override_to_email_address
