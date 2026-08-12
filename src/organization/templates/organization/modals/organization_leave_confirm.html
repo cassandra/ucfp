@@ -11,7 +11,7 @@ so the Leave button submits to `organization_leave`.
 {% block preamble %}<form method="post" action="{% url 'organization_leave' organization_uuid=organization.uuid %}">{% csrf_token %}{% endblock %}
 
 {% block body %}
-<p class="mb-0">Leave &ldquo;<strong>{{ organization.name }}</strong>&rdquo;? You lose access, but the household
+<p class="mb-0">Leave &ldquo;<strong>{{ organization.display_name }}</strong>&rdquo;? You lose access, but the household
   and its data remain for its other members.</p>
 {% endblock %}
 

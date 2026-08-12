@@ -82,7 +82,10 @@ def delete_account( user : UserType, keep_organization_uuids = () ):
         for member in owned_memberships:
             if not member.is_active_owner:
                 continue
-            if member.is_sole_active_owner or ( str( member.organization.uuid ) not in kept ):
+            # A solely-owned organization is always deleted (keeping it would
+            # orphan it); a co-owned one is kept only when the user asked to.
+            is_kept = ( not member.is_sole_active_owner ) and ( str( member.organization.uuid ) in kept )
+            if not is_kept:
                 member.organization.delete()
 
         # Whatever memberships survive (kept co-owned, or non-owned) are safe for

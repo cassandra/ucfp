@@ -40,6 +40,33 @@ class OrganizationProvisioningTestCase( BaseTestCase ):
         return
 
 
+class OrganizationDisplayNameTestCase( BaseTestCase ):
+    """`display_name` hides the auto-provisioned `user-<uuid>` name (meaningless
+    to a person) behind a placeholder, while showing a real name verbatim."""
+
+    def setUp(self):
+        super().setUp()
+        self.User = get_user_model()
+        return
+
+    def test_auto_provisioned_name_shows_a_placeholder(self):
+        user = self.User.objects.create_user( email = 'u@example.com' )
+        organization = Organization.objects.create_default_for_user( user )
+
+        self.assertEqual( organization.name, f'user-{user.uuid}' )
+        self.assertEqual( organization.display_name, 'Untitled household' )
+
+    def test_user_chosen_name_is_shown_verbatim(self):
+        organization = Organization.objects.create( name = 'Our Household' )
+        self.assertEqual( organization.display_name, 'Our Household' )
+
+    def test_name_that_merely_starts_with_user_is_not_treated_as_auto(self):
+        # The recognizer requires a real UUID after the prefix, so an ordinary
+        # name like this is shown as-is, not mistaken for an auto-provisioned one.
+        organization = Organization.objects.create( name = 'user-group budget' )
+        self.assertEqual( organization.display_name, 'user-group budget' )
+
+
 class OrganizationMemberQueryTestCase( BaseTestCase ):
 
     def setUp(self):

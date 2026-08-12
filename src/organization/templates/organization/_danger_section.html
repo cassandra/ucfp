@@ -17,7 +17,7 @@
     <ul class="list-unstyled mb-3">
       {% for row in rows %}
       <li class="d-flex justify-content-between align-items-center border-bottom py-2">
-        <span>{{ row.organization.name }} <span class="text-muted small">({{ row.role_label }})</span></span>
+        <span>{{ row.organization.display_name }} <span class="text-muted small">({{ row.role_label }})</span></span>
         {% if row.can_delete %}
         <a href="{% url 'organization_delete_confirm' organization_uuid=row.organization.uuid %}"
            data-async="modal" class="btn btn-sm btn-outline-danger">Delete</a>

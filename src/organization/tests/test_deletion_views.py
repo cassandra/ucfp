@@ -1,11 +1,13 @@
 import logging
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
 from django.urls import reverse
 
 from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
+from organization.templatetags.organization_tags import household_danger_section
 
 logging.disable(logging.CRITICAL)
 
@@ -120,6 +122,21 @@ class AccountDeleteViewTest(TestCase):
         self.assertEqual( response.status_code, 400 )
         self.assertTrue( User.objects.filter( pk = user_id ).exists() )
 
+    def test_confirmation_word_is_case_and_space_insensitive(self):
+        # The HTML pattern accepts any case, and users may add stray spaces; the
+        # server normalizes both, so these must all count as confirmed.
+        for index, typed in enumerate( ( 'DELETE', '  Delete  ', 'delete' ) ):
+            with self.subTest( typed = typed ):
+                user = _user( f'confirm{index}@x.test' )
+                Organization.objects.create_for_owner( user, 'A' )
+                self.client.force_login( user )
+                user_id = user.pk
+
+                response = self.client.post( reverse( 'account_delete' ), { 'confirm': typed } )
+
+                self.assertEqual( response.status_code, 302 )
+                self.assertFalse( User.objects.filter( pk = user_id ).exists() )
+
     def test_co_owned_household_is_deleted_by_default(self):
         user, co_owner = _user( 'a@x.test' ), _user( 'b@x.test' )
         org = Organization.objects.create_for_owner( user, 'Shared' )
@@ -177,6 +194,23 @@ class DangerSectionRenderTest(TestCase):
         self.assertNotContains( response, 'and all my data' )  # not the collapsed single-org form
 
 
+class DangerSectionTagTest(TestCase):
+    """The household_danger_section inclusion tag, which renders nothing unless
+    there is an authenticated user with at least one membership."""
+
+    def test_no_user_is_inert(self):
+        self.assertEqual( household_danger_section( None ), { 'show': False } )
+
+    def test_anonymous_user_is_inert(self):
+        self.assertEqual( household_danger_section( AnonymousUser() ), { 'show': False } )
+
+    def test_authenticated_but_memberless_user_is_inert(self):
+        # E.g. under suppressed authentication, where the shared organization has
+        # no members; there is nothing to delete or leave, so show nothing.
+        user = _user( 'a@x.test' )
+        self.assertEqual( household_danger_section( user ), { 'show': False } )
+
+
 class ConfirmModalViewTest(TestCase):
     """The antinode confirm-modal views (opened by the data-async triggers)."""
 
@@ -207,6 +241,20 @@ class ConfirmModalViewTest(TestCase):
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Alpha' )
         self.assertContains( response, 'Beta' )
+
+    def test_account_delete_confirm_shows_placeholder_for_auto_named_household(self):
+        user = _user( 'a@x.test' )
+        other = _user( 'b@x.test' )
+        Organization.objects.create_default_for_user( user )        # named user-<user.uuid>, solely owned
+        org_b = Organization.objects.create_for_owner( other, 'Beta' )
+        _add_member( org_b, user, OrganizationRole.MEMBER )          # a 2nd membership -> not the lone case
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'account_delete_confirm' ), **self.AJAX )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, 'Untitled household' )
+        self.assertNotContains( response, str( user.uuid ) )   # the meaningless raw name is not shown
 
     def test_account_delete_confirm_co_owned_offers_keep_checkbox(self):
         user, co_owner = _user( 'a@x.test' ), _user( 'b@x.test' )
