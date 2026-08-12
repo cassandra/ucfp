@@ -1,6 +1,6 @@
 import logging
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, logout
 from django.contrib.auth.models import User as UserType
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import BadRequest, ValidationError
@@ -172,3 +172,23 @@ class SigninMagicLinkView( View ):
 
         url = reverse( 'home' )
         return HttpResponseRedirect( url )
+
+
+class UserAccountView( View ):
+    """The signed-in user's account page. Minimal for now -- it shows the email we
+    identify them by; it is the future home for data export/deletion and other
+    account controls. Login-gated by AuthenticationMiddleware (not on the public
+    allow-list), so it always has an authenticated ``request.user``."""
+
+    def get( self, request, *args, **kwargs ):
+        return render( request, 'user/pages/account.html', {} )
+
+
+class UserSignoutView( View ):
+    """Sign the current user out and return them to the site root. POST-only so a
+    sign-out cannot be triggered by an incidental GET (link prefetch, an <img> src,
+    a shared URL)."""
+
+    def post( self, request, *args, **kwargs ):
+        logout( request )
+        return HttpResponseRedirect( reverse( 'home' ) )

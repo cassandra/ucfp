@@ -186,6 +186,21 @@ a:hover, a:focus {
     box-shadow: inset 0 -3px 0 rgba(255, 255, 255, 0.9);
 }
 
+/* A dropdown menu anchored in the bg-primary navbar is a light popover that
+   detaches from the bar, so its items must not inherit the bar's on-primary
+   (white) link color from `.bg-primary a` -- that leaves near-invisible white
+   text on the light menu. Restore Bootstrap's default item colors, targeting
+   both <a> and <button> items so the whole menu (including Sign out) matches. */
+.navbar .dropdown-menu .dropdown-item {
+    color: #212529;
+}
+.navbar .dropdown-menu .dropdown-item:hover,
+.navbar .dropdown-menu .dropdown-item:focus {
+    color: #16181b;
+    background-color: #e9ecef;
+    opacity: 1;
+}
+
 .modal-title-image img {
     max-height: 3rem;
 }

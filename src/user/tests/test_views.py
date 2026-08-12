@@ -411,3 +411,41 @@ class TestSigninMagicLinkView(SyncViewTestCase):
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, 405)
+
+
+class TestUserAccountView(SyncViewTestCase):
+    """Tests for the signed-in user's account page."""
+
+    def test_get_shows_logged_in_email(self):
+        """The account page renders and shows the email the user is identified by."""
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('user_account'))
+
+        self.assertSuccessResponse(response)
+        self.assertTemplateRendered(response, 'user/pages/account.html')
+        self.assertContains(response, self.user.email)
+
+
+class TestUserSignoutView(SyncViewTestCase):
+    """Tests for the sign-out action."""
+
+    def test_post_signs_out_and_redirects_home(self):
+        """POST clears the session and returns the user to the site root."""
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse('user_signout'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
+        # Session no longer carries an authenticated user.
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_get_not_allowed(self):
+        """Sign-out is POST-only; a GET must not log the user out."""
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('user_signout'))
+
+        self.assertEqual(response.status_code, 405)
+        self.assertIn('_auth_user_id', self.client.session)

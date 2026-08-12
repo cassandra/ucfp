@@ -1,6 +1,7 @@
 {% extends "pages/base.html" %}
 {% load common_tags %}
 {% load static %}
+{% load icons %}
 {% comment %}
   The shared application shell: the top navbar + a content region, extended by every
   authenticated app page (home, the planning features, the inputs area, settings). Sign-in,
@@ -53,9 +54,21 @@
           <a class="nav-link {% if active_nav == 'scenarios' %}active{% endif %}"
              href="{% url 'scenarios_home' %}">Scenarios</a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link {% if url_name == 'organization_settings' %}active{% endif %}"
-             href="{% url 'organization_settings' %}">Settings</a>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if url_name == 'user_account' or url_name == 'organization_settings' %}active{% endif %}"
+             href="#" id="user-menu" role="button" data-toggle="dropdown"
+             aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+            {% icon 'user' size='lg' %}
+          </a>
+          <div class="dropdown-menu dropdown-menu-right" aria-labelledby="user-menu">
+            <a class="dropdown-item" href="{% url 'user_account' %}">Account</a>
+            <a class="dropdown-item" href="{% url 'organization_settings' %}">Organization</a>
+            <div class="dropdown-divider"></div>
+            <form method="post" action="{% url 'user_signout' %}" class="mb-0">
+              {% csrf_token %}
+              <button type="submit" class="dropdown-item">Sign out</button>
+            </form>
+          </div>
         </li>
       </ul>
     </div>
