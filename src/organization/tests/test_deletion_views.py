@@ -1,8 +1,9 @@
 import logging
+import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from organization.enums import OrganizationRole
@@ -314,3 +315,37 @@ class ConfirmModalViewTest(TestCase):
             **self.AJAX )
 
         self.assertEqual( response.status_code, 400 )
+
+
+@override_settings(SUPPRESS_AUTHENTICATION=True)
+class SuppressedAuthDeletionTest(TestCase):
+    """Under suppressed authentication (self-hosted single-user) the request carries
+    no real user, so every deletion endpoint must reject cleanly (404) rather than
+    act on an anonymous user and raise. Regression for the reported 500."""
+
+    def _org_uuid(self):
+        # A syntactically valid uuid is all the URL needs: the auth guard runs on
+        # dispatch, before any membership lookup, so no real org is required.
+        return uuid.uuid4()
+
+    def test_account_delete_confirm_is_not_found(self):
+        response = self.client.get( reverse( 'account_delete_confirm' ) )
+        self.assertEqual( response.status_code, 404 )
+
+    def test_account_delete_is_not_found(self):
+        response = self.client.post( reverse( 'account_delete' ), { 'confirm': 'delete' } )
+        self.assertEqual( response.status_code, 404 )
+
+    def test_household_endpoints_are_not_found(self):
+        organization_uuid = self._org_uuid()
+        routes = [
+            ( 'get', 'organization_delete_confirm' ),
+            ( 'post', 'organization_delete' ),
+            ( 'get', 'organization_leave_confirm' ),
+            ( 'post', 'organization_leave' ),
+        ]
+        for method, name in routes:
+            with self.subTest( route = name ):
+                url = reverse( name, kwargs = { 'organization_uuid': organization_uuid } )
+                response = getattr( self.client, method )( url )
+                self.assertEqual( response.status_code, 404 )

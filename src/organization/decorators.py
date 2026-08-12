@@ -1,7 +1,27 @@
 """View decorators for resolving the current organization on a request."""
 import functools
 
+from django.http import Http404
+
 from .models import Organization, OrganizationMember
+
+
+def require_authenticated_user( view_func ):
+    """Reject the request unless it carries a real authenticated user.
+
+    Guards views that only make sense for a signed-in account (e.g. deleting that
+    account or a household). When authentication is suppressed (self-hosted
+    single-user) `request.user` is anonymous and these surfaces do not exist, so
+    the request is answered with `Http404` rather than being allowed to act on a
+    non-existent user. Under normal authentication the middleware has already
+    ensured a user, so this is a no-op.
+    """
+    @functools.wraps( view_func )
+    def wrapped( request, *args, **kwargs ):
+        if not request.user.is_authenticated:
+            raise Http404( 'No such page for an unauthenticated request.' )
+        return view_func( request, *args, **kwargs )
+    return wrapped
 
 
 def ensure_organization( view_func ):
