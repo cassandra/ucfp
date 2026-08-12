@@ -25,7 +25,7 @@ from ucfp.accounts.books import Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
-from ucfp.accounts.money_utils import quantize_money
+from ucfp.accounts.money_utils import format_money, quantize_money
 from ucfp.jurisdiction.engine import ContributionKind
 
 from .events import Realization
@@ -93,9 +93,14 @@ class Period:
                 continue
             if unrealized_gain_account is None:
                 raise MissingAccountError( 'No Unrealized Gains equity account for growth.' )
+            # A depreciating holding accrues a negative appreciation; name the motion and show its rate
+            # as a positive magnitude, so the memo reads 'depreciation: 18% on ...', not '-18%'.
+            motion, shown_rate = (
+                ( 'appreciation', rate ) if appreciation > 0 else ( 'depreciation', rate.negated() ) )
             bookkeeper.record(
                 growth_date,
                 [ ( valuation_account, -appreciation ), ( unrealized_gain_account, appreciation ) ],
+                description = f'{holding.name} {motion}: {shown_rate} on {format_money( opening_market )}',
             )
             continue
         return
@@ -128,6 +133,7 @@ class Period:
             bookkeeper.record(
                 distribution_date,
                 [ ( cash_account, -distribution ), ( income_account, distribution ) ],
+                description = f'{holding.name} distribution: {rate} on {format_money( opening_value )}',
             )
             continue
         return
@@ -148,6 +154,7 @@ class Period:
             bookkeeper.record(
                 income_date,
                 [ ( cash_account, -amount ), ( income_line.account, amount ) ],
+                description = income_line.source or '',
             )
             continue
         return
@@ -249,6 +256,9 @@ class Period:
                     ( term.interest_account, -interest ),
                     ( cash_account, payment ),
                 ],
+                description = (
+                    f'{term.liability_account.name} payment: {format_money( interest )} interest '
+                    f'+ {format_money( total_principal )} principal' ),
             )
             continue
         return
@@ -318,8 +328,9 @@ class Period:
             return
         net = quantize_money( sale_price ) - total
         description = (
-            f'Selling costs on {event.holding.name}: {realtor_fee} realtor fee + {fixed} fixed costs on '
-            f'a {quantize_money( sale_price )} sale (net {net}).' )
+            f'Selling costs on {event.holding.name}: {format_money( realtor_fee )} realtor fee + '
+            f'{format_money( fixed )} fixed costs on a {format_money( sale_price )} sale '
+            f'(net {format_money( net )}).' )
         transaction = bookkeeper.record(
             event.event_date, [ ( gain_account, -total ), ( cash_account, total ) ],
             description = description )
@@ -555,7 +566,7 @@ class Period:
         postings.append( ( cash_account, surplus ) )
         bookkeeper.record(
             self._parameters.date_span.end_date, postings,
-            description = 'Swept surplus cash into the investment allocation.' )
+            description = f'Swept {format_money( surplus )} of surplus cash into the investment allocation' )
         return
 
     def _close( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:

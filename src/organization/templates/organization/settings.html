@@ -1,9 +1,10 @@
-{% extends "pages/app_base.html" %}
+{% extends "pages/top_page.html" %}
 
-{% block app_content %}
-<h1 class="mb-1">Organization settings</h1>
-<p class="text-muted">Settings that apply across your whole organization.</p>
+{% block page_title %}Organization settings{% endblock %}
 
+{% block page_subtitle %}<p class="text-muted">Settings that apply across your whole organization.</p>{% endblock %}
+
+{% block page_body %}
 <form method="post" action="{% url 'organization_settings' %}" style="max-width: 40rem">
   {% csrf_token %}
 

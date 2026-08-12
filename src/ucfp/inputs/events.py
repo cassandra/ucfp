@@ -404,7 +404,7 @@ class TaxableReceiptEvent( EventType ):
             subject = subjects[ event.selections[ RECIPIENT_ROLE ] ],
             income_tax_class = IncomeTaxClass.ORDINARY,
             amounts = Schedule.constant( WindowedAmount( event.amount ) ),
-            cadence = OneTime( event.date ) ) )
+            cadence = OneTime( event.date ), name = 'Taxable receipt' ) )
 
 
 class TaxFreeReceiptEvent( EventType ):

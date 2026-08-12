@@ -1,0 +1,23 @@
+{% extends "modals/action_with_cancel.html" %}
+{% load icons %}
+{% comment %}
+Confirm deleting a scenario -- opened from the Scenarios page's delete control. CANCEL comes from the
+shell; the Delete action posts to `scenario_delete`, which removes only the pairing (its Plans and
+Assumptions are kept for other scenarios).
+{% endcomment %}
+
+{% block header_class %}bg-danger{% endblock %}
+
+{% block title_text %}Delete scenario{% endblock %}
+
+{% block body %}
+<p class="mb-0">Delete the scenario &ldquo;{{ scenario.label }}&rdquo;? Its Plans and Assumptions are
+  kept for other scenarios. This cannot be undone.</p>
+{% endblock %}
+
+{% block action_right %}
+<form method="post" action="{% url 'scenario_delete' scenario.uuid %}" class="m-0">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-danger">{% icon "delete" css_class="icon-left" %}Delete</button>
+</form>
+{% endblock %}

@@ -1,4 +1,4 @@
-{% extends "pages/app_base.html" %}
+{% extends "pages/top_page.html" %}
 
 {% comment %}
 The Scenarios landing (Manage Scenarios): the review/edit hub for the organization's saved scenarios. Each
@@ -8,18 +8,18 @@ part's flow). Creating a scenario is the one other action here, a link to the Ne
 have no standalone management: they are born, edited, and retired through the scenarios that use them.
 {% endcomment %}
 
-{% block app_content %}
-<div class="d-flex align-items-center justify-content-between flex-wrap mb-2">
-  <h1 class="mb-0">Manage Scenarios</h1>
-  {# The one create action, kept at the top so it stays reachable however long the list of scenarios grows. #}
-  {% if profile_complete %}<a href="{% url 'scenario_compose' %}" class="btn btn-primary">+ New scenario</a>{% endif %}
-</div>
+{% block page_title %}Manage Scenarios{% endblock %}
+{# The one create action, kept at the top so it stays reachable however long the list of scenarios grows. #}
+{% block page_actions %}{% if profile_complete %}<a href="{% url 'scenario_compose' %}" class="btn btn-primary">+ New scenario</a>{% endif %}{% endblock %}
+{% block page_subtitle %}
 <p class="text-muted">
   A <strong>Scenario</strong> pairs a set of <strong>Plans</strong> (the future you're contemplating)
   with a set of <strong>Assumptions</strong> (the economy and tax outlook to project under). Review and
   refine your scenarios here.
 </p>
+{% endblock %}
 
+{% block page_body %}
 {% if not profile_complete %}
 {# A scenario builds on the profile's facts, so a completed profile comes first. #}
 {% include 'inputs/panes/profile_required.html' %}

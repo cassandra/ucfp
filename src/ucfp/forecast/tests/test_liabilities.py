@@ -56,6 +56,16 @@ class LiabilityTests( unittest.TestCase ):
         # opening (day before the start): $500k cash less the $200k mortgage
         self.assertEqual( reader.ledger.net_worth( through = date( 2025, 12, 31 ) ), Decimal( '300000' ) )
 
+    def test_payment_memo_splits_interest_and_principal( self ):
+        # The blended payment posts one transaction; its memo names the loan and the interest/principal
+        # split, which the single netted payment amount does not otherwise reveal.
+        books    = Forecast( _parameters( date( 2026, 12, 31 ) ) ).run().books
+        payments = [ txn for txn in books.transactions if txn.description.startswith( 'Mortgage payment:' ) ]
+        self.assertTrue( payments )
+        self.assertRegex(
+            payments[ 0 ].description,
+            r'^Mortgage payment: \$[\d,.]+ interest \+ \$[\d,.]+ principal$' )
+
     def test_first_year_interest_is_monthly_compounded( self ):
         # Twelve monthly steps at 5%/12 on a declining balance accrue a little under the flat
         # 200000 x 5% = 10000 of simple annual interest (~9933), and the balance falls.

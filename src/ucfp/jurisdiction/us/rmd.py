@@ -13,6 +13,7 @@ from decimal import Decimal
 # distribution is the prior year-end balance divided by the factor. Ages past the table
 # use the final (120+) factor.
 _UNIFORM_LIFETIME_TABLE = {
+    72 : Decimal( '27.4' ),
     73 : Decimal( '26.5' ), 74 : Decimal( '25.5' ), 75 : Decimal( '24.6' ),
     76 : Decimal( '23.7' ), 77 : Decimal( '22.9' ), 78 : Decimal( '22.0' ),
     79 : Decimal( '21.1' ), 80 : Decimal( '20.2' ), 81 : Decimal( '19.4' ),

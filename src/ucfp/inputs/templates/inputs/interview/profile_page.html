@@ -1,0 +1,18 @@
+{% extends "pages/top_page.html" %}
+{% comment %}
+The Profile interview -- a top-level page (its own nav home). Its subtitle shows whether the profile is
+complete and when it was last updated, in place of a breadcrumb; the body is the shared stepping layout.
+{% endcomment %}
+{% block main_container_class %}container-fluid{% endblock %}
+{% block header_container %}container{% endblock %}
+
+{% block page_title %}{{ flow_heading }}{% endblock %}
+
+{% block page_subtitle %}
+<p class="mb-4">
+  {% if profile_complete %}<span class="badge badge-success">Profile complete</span>{% else %}<span class="badge badge-secondary">Profile incomplete</span>{% endif %}
+  {% if profile_updated %}<span class="text-muted small ml-1">last updated {{ profile_updated|date:"F Y" }}</span>{% endif %}
+</p>
+{% endblock %}
+
+{% block page_body %}{% include "inputs/interview/body.html" %}{% endblock %}

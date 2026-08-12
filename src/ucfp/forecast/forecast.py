@@ -42,7 +42,7 @@ from ucfp.accounts.enums import (
 )
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.ledger import Ledger
-from ucfp.accounts.money_utils import quantize_money
+from ucfp.accounts.money_utils import format_money, quantize_money
 from ucfp.period.parameters import (
     ContributionLine,
     ExpenseLine,
@@ -320,8 +320,8 @@ class BaselineBuilder:
             if ( limit is None ) or ( total <= limit ):
                 continue
             raise ValueError(
-                f'First-year retirement contributions for "{owner}" total {total}, over the '
-                f'{limit} annual limit.' )
+                f'First-year retirement contributions for "{owner}" total {format_money( total )}, over the '
+                f'{format_money( limit )} annual limit.' )
         return
 
     def _owner_age( self, owner : str, year : int ) -> Optional[ int ]:
@@ -346,27 +346,30 @@ class BaselineBuilder:
         for holding, value, cost_basis in holdings:
             self._record_opening(
                 bookkeeper, opening_date,
-                self._opening_value_postings( chart, holding, value, cost_basis ), opening_balances )
+                self._opening_value_postings( chart, holding, value, cost_basis ), opening_balances,
+                f'{holding.name} opening balance' )
             continue
         for loan in self._loans:
             if loan.parameters.origination_date is not None:
                 continue          # originated mid-forecast: credited at its date, not seeded at t0
             self._record_opening(
                 bookkeeper, opening_date,
-                [ ( loan.account, loan.parameters.opening_balance ) ], opening_balances )
+                [ ( loan.account, loan.parameters.opening_balance ) ], opening_balances,
+                f'{loan.account.name} opening balance' )
             continue
         return
 
     def _record_opening( self, bookkeeper : Bookkeeper, opening_date : date,
                          postings : list[ tuple[ Account, Decimal ] ],
-                         opening_balances : Account ) -> None:
-        """Record one account's opening `postings` as a balanced transaction, with Opening Balances
-        absorbing their residual. Skips a fully-zero seed (a zero-basis holding contributes nothing
-        here -- its whole value is the embedded gain, already balanced against Unrealized Gains)."""
+                         opening_balances : Account, description : str ) -> None:
+        """Record one account's opening `postings` as a balanced transaction (memoed by `description`),
+        with Opening Balances absorbing their residual. Skips a fully-zero seed (a zero-basis holding
+        contributes nothing here -- its whole value is the embedded gain, already balanced against
+        Unrealized Gains)."""
         plug     = -sum( ( amount for _account, amount in postings ), Decimal( '0' ) )
         balanced = postings + [ ( opening_balances, plug ) ]
         if any( amount != 0 for _account, amount in balanced ):
-            bookkeeper.record( opening_date, balanced, description = 'Opening balance' )
+            bookkeeper.record( opening_date, balanced, description = description )
         return
 
     def _opening_value_postings( self, chart : Chart, holding : Account, value : Decimal,
@@ -674,7 +677,7 @@ class Forecast:
             factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
             amount = windowed_amount.amount * factor * year_fraction
             account = self._baseline.income_accounts.account_for( stream.subject, stream.income_tax_class )
-            lines.append( IncomeLine( account = account, gross_amount = amount ) )
+            lines.append( IncomeLine( account = account, gross_amount = amount, source = stream.name ) )
             continue
         return lines
 
@@ -696,8 +699,9 @@ class Forecast:
                 continue
             factor = self._income_growth_factor( item.income_tax_class, span.start_date.year )
             account = self._baseline.income_accounts.account_for( item.subject, item.income_tax_class )
-            lines.append(
-                IncomeLine( account = account, gross_amount = occurrences * windowed_amount.amount * factor ) )
+            lines.append( IncomeLine(
+                account = account, gross_amount = occurrences * windowed_amount.amount * factor,
+                source = item.name ) )
             continue
         return lines
 

@@ -65,6 +65,11 @@ class CashSweepTests( unittest.TestCase ):
             ledger.market_value( _holding( reader, 'brokerage' ), through = through ),
             Decimal( '150000' ) )
         reader.assert_balanced()
+        # the sweep's memo names the swept surplus (the 150k moved above the 50k ceiling)
+        swept = [ txn.description for txn in reader.books.transactions
+                  if txn.description.startswith( 'Swept ' ) ]
+        self.assertEqual(
+            swept, [ 'Swept $150,000.00 of surplus cash into the investment allocation' ] )
 
     def test_no_sweep_when_cash_below_ceiling( self ):
         reader = Bookkeeper( Forecast( ForecastParameters(

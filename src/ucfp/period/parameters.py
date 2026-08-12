@@ -56,11 +56,14 @@ class IncomeLine:
     per-worker Social Security cap treats them separately). Lines name the account
     directly so multiple accounts of one class (per-worker wages) post unambiguously;
     distributions and realized gains, which are one account per class, are posted by
-    class elsewhere.
+    class elsewhere. `source` is the income's own label (the flow's name), carried so the
+    posting memo can tell apart several sources that share one (subject, class) account --
+    two jobs, say; None when the source has no distinct label.
     """
 
     account      : Account
     gross_amount : Decimal
+    source       : Optional[ str ] = None
 
 
 @dataclass( frozen = True )

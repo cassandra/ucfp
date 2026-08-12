@@ -41,5 +41,10 @@ class Rate:
         the negative growth the projection applies."""
         return Rate( -self.fraction )
 
+    def __str__( self ) -> str:
+        """A human-readable percent with trailing zeros trimmed, for memos and logs:
+        `Rate( Decimal( '0.021' ) )` renders as '2.1%'."""
+        return f'{( self.fraction * 100 ).normalize():f}%'
+
 
 ZERO_RATE = Rate( Decimal( '0' ) )

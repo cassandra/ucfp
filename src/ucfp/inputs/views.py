@@ -24,6 +24,7 @@ from django.views import View
 from user.decorators import ensure_organization
 
 from common import antinode
+from common.async_view import ModalView
 from common.request_utils import is_ajax
 
 from ucfp.inputs.profile.repository import (
@@ -71,6 +72,7 @@ from .recurring_expenses import RecurringExpensesForm
 from .retirement import RetirementForm
 
 _SCENARIOS_TEMPLATE = 'inputs/scenarios_home.html'
+_SCENARIO_DELETE_CONFIRM_TEMPLATE = 'inputs/modals/scenario_delete_confirm.html'
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -428,6 +430,20 @@ class ScenarioDeleteView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
+class ScenarioDeleteConfirmView( ModalView ):
+    """`/inputs/scenarios/<uuid>/delete-confirm/` -- the styled confirm dialog the Scenarios page opens
+    before deleting a scenario. Its Delete action posts to `scenario_delete`."""
+
+    def get_template_name( self ):
+        return _SCENARIO_DELETE_CONFIRM_TEMPLATE
+
+    def get( self, request, uuid ):
+        record = get_object_or_404(
+            ScenarioRecord, uuid = uuid, organization = request.organization, usage_role = UsageRole.SAVED )
+        return self.modal_response( request, context = { 'scenario': record } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
 class PlansReconcileView( View ):
     """`/inputs/plans/<uuid>/reconcile/` -- strip a Plans record's references that no longer resolve
     against the current Profile (the "Remove stale references" fix every drift surface offers). Plans, not
@@ -592,7 +608,10 @@ class InterviewView( View ):
     so advancing (or revisiting) never clobbers another section's facts.
     """
 
-    _PAGE_TEMPLATE    = 'inputs/interview/page.html'
+    # Profile is a top-level page, a scenario component (Plans/Assumptions) a detail page; they share the
+    # stepping body but not the header, so each flow renders its own thin page over the shared layouts.
+    _PROFILE_TEMPLATE   = 'inputs/interview/profile_page.html'
+    _COMPONENT_TEMPLATE = 'inputs/interview/component_page.html'
     _SECTION_TEMPLATE = 'inputs/interview/section.html'
     _STEPPER_TEMPLATE = 'inputs/interview/stepper.html'
     _SECTION_TARGET   = 'interview-section'
@@ -606,7 +625,9 @@ class InterviewView( View ):
         form     = self._form( current, profile, other )
         if is_ajax( request ):
             return self._swap( request, sections, current, form )
-        return render( request, self._PAGE_TEMPLATE, self._context( request, sections, current, form ) )
+        template = ( self._PROFILE_TEMPLATE if flow_of( current ) == 'profile'
+                     else self._COMPONENT_TEMPLATE )
+        return render( request, template, self._context( request, sections, current, form ) )
 
     def _seed_and_acknowledge( self, request, section ):
         """Presenting a section to the user is the acknowledgment that they have seen it. On the first

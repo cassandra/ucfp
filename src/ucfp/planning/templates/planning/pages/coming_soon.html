@@ -1,12 +1,10 @@
-{% extends "pages/app_base.html" %}
+{% extends "pages/top_page.html" %}
 
-{% block app_content %}
-<div class="d-flex align-items-center mb-1">
-  <h1 class="mb-0 mr-2">{{ feature_title }}</h1>
-  <span class="badge badge-secondary">Coming soon</span>
-</div>
-<p class="text-muted">{{ feature_pitch }}</p>
+{% block page_title %}{{ feature_title }} <span class="badge badge-secondary align-middle">Coming soon</span>{% endblock %}
 
+{% block page_subtitle %}<p class="text-muted">{{ feature_pitch }}</p>{% endblock %}
+
+{% block page_body %}
 <div class="text-center text-muted py-5">
   <h4>Not built yet</h4>
   <p>It will share the same inputs and result views as

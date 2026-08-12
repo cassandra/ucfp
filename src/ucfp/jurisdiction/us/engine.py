@@ -67,6 +67,7 @@ from typing import Iterator, NamedTuple, Optional
 from common.date_span import DateSpan
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.money_utils import format_money
 from ucfp.jurisdiction.brackets import BracketTable
 from ucfp.jurisdiction.engine import (
     ContributionKind,
@@ -333,7 +334,8 @@ class USFederalTaxEngine( TaxEngine ):
                 TaxPenalty(
                     tax_class = ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,
                     amount    = rate * distributed,
-                    reason    = f'{rate:.0%} early-withdrawal penalty on {distributed} from {holding}.',
+                    reason    = f'{rate:.0%} early-withdrawal penalty on {format_money( distributed )} '
+                                f'from {holding}.',
                 )
             )
             continue
@@ -357,7 +359,8 @@ class USFederalTaxEngine( TaxEngine ):
                 ForcedTransaction(
                     account = holding,
                     amount  = shortfall,
-                    reason  = f'Required minimum distribution of {shortfall} from {holding}.' ) )
+                    reason  = f'Required minimum distribution of {format_money( shortfall )} '
+                              f'from {holding}.' ) )
             continue
         return forced
 

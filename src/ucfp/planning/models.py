@@ -10,7 +10,8 @@ A `PlanningResultRecord` is the feature-facing wrapper: it tags an engine run wi
 feature that produced it, so a feature lists and presents only its own results while reusing the
 shared run views. Financial Forecasting is the degenerate case -- one run per result -- so a result
 holds a single `run` FK; a sweeping feature's per-run comparison data lands in the inherited `data`
-JSON later. Both are immutable once created.
+JSON later. A run's captured inputs, books, and result are immutable once created; only its user-facing
+`label` is editable (a run can be renamed), which is why the scenario it came from is preserved separately.
 """
 from django.db import models
 
@@ -32,6 +33,10 @@ class ProjectionRunRecord( JsonDocumentModel ):
     # so a run must not block the deletion of the books it references (right-to-erasure, #47).
     books = models.ForeignKey(
         BooksOfAccountRecord, on_delete = models.CASCADE, related_name = '+' )
+    # The name of the scenario that produced this run, captured at run time. `label` starts equal to it,
+    # but a run can be renamed, so this preserves the provenance the title would then no longer carry.
+    # Null for a run captured before this was recorded.
+    source_label = models.CharField( max_length = 255, null = True, blank = True )
 
     def __str__( self ):
         return f'{self.label} ({self.organization})'

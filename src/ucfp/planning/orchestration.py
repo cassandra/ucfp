@@ -4,6 +4,8 @@ The composition point that ties the layers together: materialize the user's Prof
 Assumptions + frame into engine parameters, run the engine, persist the books through the accounts
 repository, and record the inputs and non-books result as a coherent, immutable package.
 """
+from typing import Optional
+
 from common.dataclass_json import to_json_data
 
 from organization.models import Organization
@@ -22,8 +24,10 @@ from .schemas import NoticeRecord, ProjectionResult, ProjectionRun, StepResult
 
 def run_and_capture(
         organization: Organization, profile: Profile, plans: Plans, assumptions: Assumptions,
-        frame: ForecastFrame, label: str ) -> ProjectionRunRecord:
-    """Materialize, run, persist the books, and capture the run as a `ProjectionRunRecord`."""
+        frame: ForecastFrame, label: str, source_label: Optional[ str ] = None ) -> ProjectionRunRecord:
+    """Materialize, run, persist the books, and capture the run as a `ProjectionRunRecord`. `label` is the
+    run's initial title (editable later); `source_label` is the scenario it came from, preserved so a
+    rename does not lose that provenance (defaults to `label`)."""
     parameters   = materialize(
         profile = profile, plans = plans, assumptions = assumptions, frame = frame )
     result       = Forecast( parameters ).run()
@@ -34,6 +38,7 @@ def run_and_capture(
         result = _summarize( result ) )
     return ProjectionRunRecord.objects.create(
         organization = organization, books = books_record, label = label,
+        source_label = label if source_label is None else source_label,
         data = to_json_data( captured ) )
 
 

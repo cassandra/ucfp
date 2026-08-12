@@ -6,7 +6,7 @@ rows per subject are the Social Security and pension entitlement amounts. WHEN e
 windows and claiming dates -- is the separate Retirement section, not here. Edits save in the
 background; only a genuine input error (a negative amount) re-renders here.
 {% endcomment %}
-<div>
+<div id="income-table">
   <form method="post" action="{% url 'income_table' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <table class="table table-sm w-auto">

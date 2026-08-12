@@ -7,6 +7,8 @@ a captured run -- the net-worth trajectory derived from its persisted books, whe
 early, and the notices. The interview and the input editors live in the `inputs` app.
 """
 
+from datetime import date
+
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -30,13 +32,13 @@ from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
 from ucfp.inputs.scenarios.exploration import (
-    COPY, OVERWRITE, component_usage, overwrite_working, save_working, scenario_exploration,
-    working_scenario )
+    OVERWRITE, branch_destinations, component_usage, overwrite_working, record_exploration_frame,
+    save_working, scenario_exploration, working_scenario )
 from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
-from .explore import run_working_scenario, start_fresh_exploration, transient_runs
+from .explore import delete_runs, run_working_scenario, start_fresh_exploration, transient_runs
 from .explore_diff import describe_changes, value_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
@@ -50,6 +52,8 @@ _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
 _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
 _BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
 _JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
+_DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
+_EXPLORE_SAVE_TEMPLATE = 'planning/modals/explore_save.html'
 _COMING_SOON_TEMPLATE = 'planning/pages/coming_soon.html'
 
 # The unbuilt planning features: title + one-line pitch for their placeholder pages.
@@ -76,6 +80,55 @@ class ComingSoonView( TemplateView ):
         title, pitch = _COMING_SOON[ self.feature_key ]
         context.update( feature_title = title, feature_pitch = pitch )
         return context
+
+
+def _run_frame( result ) -> ForecastFrame:
+    """The frame a captured transient run was projected over, read from its embedded snapshot -- so the
+    workspace can tell whether an existing run still matches the exploration's current frame."""
+    return from_json_data( ProjectionRun, result.run.data ).frame
+
+
+def _saved_run_digest( run_record ):
+    """Cheap, cache-free display facts for a saved-run row, read straight from the captured run JSON (no
+    books load): the projection's year span and whether the money lasted (or the year it ran out). All of
+    this already lives in the immutable run, so nothing is cached or can drift. Returns None if the data is
+    absent or malformed -- the row then falls back to just its name and date, so a run captured under an
+    older (or later) shape never breaks the list."""
+    try:
+        data   = run_record.data
+        frame  = data[ 'frame' ]
+        result = data[ 'result' ]
+        start_year = date.fromisoformat( frame[ 'start_date' ] ).year
+        end_year   = date.fromisoformat( frame[ 'end_date' ] ).year
+        ran_out_year = None
+        if result.get( 'stopped_early' ):
+            depleted = next( ( step for step in result[ 'steps' ] if step.get( 'is_depleted' ) ), None )
+            ran_out_year = date.fromisoformat( depleted[ 'end_date' ] ).year if depleted else None
+        return {
+            'start_year'     : start_year,
+            'end_year'       : end_year,
+            'duration_years' : end_year - start_year + 1,
+            'lasted'         : not result.get( 'stopped_early' ),
+            'ran_out_year'   : ran_out_year,
+            # How far before the planned horizon the money ran out -- distinguishes a near miss from an
+            # early collapse. None when the money lasts or the depletion year is unknown.
+            'years_short'    : ( end_year - ran_out_year ) if ran_out_year else None,
+        }
+    except ( KeyError, TypeError, ValueError ):
+        return None
+
+
+def _run_outcome( run, books ) -> dict:
+    """The results page's headline outcome: the projection's year span and the net worth at the horizon.
+    Net worth is computed live from the already-loaded books -- never cached -- keeping the books the one
+    source of truth for book-derived figures (a captured run is immutable, so the live figure is stable)."""
+    frame = run.frame
+    return {
+        'horizon_start'    : frame.start_date.year,
+        'horizon_end'      : frame.end_date.year,
+        'horizon_years'    : frame.end_date.year - frame.start_date.year + 1,
+        'ending_net_worth' : Bookkeeper( books ).ledger.net_worth( through = frame.end_date ),
+    }
 
 
 def _remember_selection( request, form, scenario_record ) -> None:
@@ -157,13 +210,22 @@ class FinancialForecastView( InputGatedMixin, View ):
             'build_scenario'         : started_scenario or ( in_progress[ 0 ] if in_progress else None ),
             'build_scenario_started' : started_scenario is not None,
             'resume'       : self._live_resume( exploration, profile_record ),
+            # One setup form; both actions submit it -- Run once (this view's POST) and Run & Explore (the
+            # workspace). A run whose submission erred is re-rendered in place with its messages.
             'form'         : form or ForecastForm(
                 scenarios = complete, initial = self._selection_defaults( request ) ),
-            'results'      : PlanningResultRecord.objects.select_related( 'run' ).filter(
-                organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
-                usage_role = UsageRole.SAVED ).order_by( '-created_datetime' ),
+            'saved_runs'   : self._saved_runs( organization ),
             'error'        : error,
         }
+
+    @staticmethod
+    def _saved_runs( organization ) -> list:
+        """The org's saved forecast runs, newest first, each paired with a cheap display digest read from
+        its captured run JSON (no books load) so the list is scannable -- horizon and outcome per row."""
+        records = PlanningResultRecord.objects.select_related( 'run' ).filter(
+            organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
+            usage_role = UsageRole.SAVED ).order_by( '-created_datetime' )
+        return [ { 'result': record, 'digest': _saved_run_digest( record.run ) } for record in records ]
 
     @staticmethod
     def _drift_notices( drift_blocked, profile_record ) -> list:
@@ -197,13 +259,10 @@ class FinancialForecastView( InputGatedMixin, View ):
 
     @staticmethod
     def _resume( exploration ) -> dict:
-        """The in-progress exploration surfaced on the hub: its anchor and how far the sandbox has diverged,
-        so Resume can say what it returns to -- the anchor as-is, or a variation of it."""
-        drift = value_changes( load_scenario( exploration.source ), load_scenario( exploration.working ) )
-        return {
-            'source'       : exploration.source,
-            'drift_summary': describe_changes( drift ),
-            'changed'      : bool( drift ) }
+        """The in-progress exploration surfaced on the hub: just its anchor scenario. The hub names it and
+        offers Resume; what has diverged from the anchor is shown on the Explore workspace itself, not
+        repeated here."""
+        return { 'source': exploration.source }
 
     @staticmethod
     def _selection_defaults( request ) -> dict:
@@ -241,6 +300,7 @@ class RunResultsView( View ):
             # The worst severity present tints the collapsed toggle, previewing what is inside.
             'notices_severity' : str( worst_severity ) if worst_severity else None,
         }
+        context.update( _run_outcome( run, books ) )
         context.update( run_books_table_context( request, run, books ) )
         return render( request, _RESULTS_TEMPLATE, context )
 
@@ -256,6 +316,37 @@ class RunResultsView( View ):
             'amount'         : notice.amount,
             'detail'         : notice.detail,
         }
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RenameRunView( View ):
+    """`/run/<uuid>/rename/` -- rename a captured run from the results page's inline editor. Renames the run
+    record itself -- the one label the results page and the hub both show -- and saves silently (a blank
+    name is ignored). Runs need not be uniquely named, so there is no conflict check."""
+
+    def post( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        label = request.POST.get( 'label', '' ).strip()
+        if label:
+            record.label = label
+            record.save()
+        return antinode.response()
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RunDiscardConfirmView( ModalView ):
+    """`/run/<uuid>/discard-confirm/` -- the styled confirm dialog for discarding a run, opened from the
+    run page's Discard and the hub's per-row delete (both remove the same saved run). Its Discard action
+    posts to `delete_run`."""
+
+    def get_template_name( self ):
+        return _DISCARD_CONFIRM_TEMPLATE
+
+    def get( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        return self.modal_response( request, context = { 'record': record } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -280,6 +371,12 @@ class EnterExploreView( InputGatedMixin, View ):
         # anchor -> start fresh (re-seed and clear runs). A hard restart of the same anchor is Reset.
         if exploration is None or exploration.source_id != scenario_record.id:
             start_fresh_exploration( organization, scenario_record )
+            exploration = scenario_exploration( organization )
+        # Record the chosen frame onto the exploration so the workspace projects over it (rather than a
+        # session default); the workspace re-runs whenever this diverges from its latest run's frame.
+        record_exploration_frame(
+            exploration, form.cleaned_data[ 'start_from' ],
+            form.cleaned_data[ 'duration_years' ], form.cleaned_data[ 'interval' ] )
         return redirect( 'explore' )
 
 
@@ -300,9 +397,13 @@ class ExploreView( InputGatedMixin, View ):
             return redirect( 'financial_forecast' )        # nothing to explore yet
         source  = exploration.source
         working = exploration.working
-        runs = list( transient_runs( organization ) )
-        if not runs:                                       # first entry: produce the initial run
-            run_working_scenario( organization, self._frame( request ) )
+        # Produce a run for the entered frame when there is none yet (first entry) or the latest run was
+        # projected over a different frame (the user changed the when-controls and resumed) -- so the
+        # results shown always match the current frame without waiting on an explicit Re-run.
+        frame = self._frame( request )
+        runs  = list( transient_runs( organization ) )
+        if not runs or _run_frame( runs[ 0 ] ) != frame:
+            run_working_scenario( organization, frame )
             runs = list( transient_runs( organization ) )
         selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
         working_inputs = load_scenario( working )
@@ -315,10 +416,9 @@ class ExploreView( InputGatedMixin, View ):
                 scenario = working_inputs, selected = state.explore_curated_rates ) }
         # Drift is measured against the saved source scenario -- exactly what an "update" would overwrite.
         drift    = value_changes( source_inputs, working_inputs )
-        save_options = self._save_options( source, working_inputs, source_inputs )
         return render(
             request, self._TEMPLATE,
-            self._context( request, source, runs, selected, forms, drift, save_options ) )
+            self._context( request, source, runs, selected, forms, drift ) )
 
     def post( self, request ):                             # Re-run: project the auto-saved working scenario
         organization = request.organization
@@ -326,20 +426,7 @@ class ExploreView( InputGatedMixin, View ):
             run_working_scenario( organization, self._frame( request ) )
         return redirect( 'explore' )
 
-    @staticmethod
-    def _save_options( source, working_inputs, source_inputs ) -> dict:
-        """Per-component context for the card save controls: whether the component diverged, how many other
-        scenarios share it, and the smart default -- overwrite it in place when it is private, a protective
-        copy when it is shared."""
-        usage = component_usage( source )
-        return {
-            component: {
-                'changed'     : getattr( working_inputs, component ) != getattr( source_inputs, component ),
-                'shared_with' : usage[ component ],
-                'default'     : OVERWRITE if usage[ component ] == 0 else COPY }
-            for component in ( 'plans', 'assumptions' ) }
-
-    def _context( self, request, source, runs, selected, forms, drift, save_options ) -> dict:
+    def _context( self, request, source, runs, selected, forms, drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
         books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
@@ -351,9 +438,9 @@ class ExploreView( InputGatedMixin, View ):
             'stopped_early'  : run.result.stopped_early,
             'drift'          : drift,                          # curated changes vs the source scenario
             'drift_summary'  : describe_changes( drift ),
-            'save_options'   : save_options,                   # per-component card save controls + defaults
             **forms,
         }
+        context.update( _run_outcome( run, books ) )           # horizon + ending net worth for the banner
         context.update( run_books_table_context( request, run, books ) )
         return context
 
@@ -369,13 +456,16 @@ class ExploreView( InputGatedMixin, View ):
         return runs[ 0 ]
 
     def _frame( self, request ) -> ForecastFrame:
-        state   = request.session_state
-        profile = latest_profile( request.organization )
+        """The frame the exploration's runs project over -- resolved from the frame recorded on the
+        exploration (not the session, which only seeds the hub form's defaults). The `or` fallbacks cover
+        only a legacy exploration entered before the frame was recorded; entry always records it now."""
+        exploration = scenario_exploration( request.organization )
+        profile     = latest_profile( request.organization )
         return resolve_frame(
             effective_date = profile.effective_date,
-            start_choice   = state.forecast_start_from or 'effective',
-            duration_years = state.forecast_duration_years or 40,
-            granularity    = GRANULARITY.get( state.forecast_interval or 'year', GRANULARITY[ 'year' ] ) )
+            start_choice   = exploration.frame_start_from or 'effective',
+            duration_years = exploration.frame_duration_years or 40,
+            granularity    = GRANULARITY.get( exploration.frame_interval or 'year', GRANULARITY[ 'year' ] ) )
 
 
 class _ExploreSectionAutosaveView( InputGatedMixin, View ):
@@ -431,21 +521,55 @@ class ExploreCurationView( InputGatedMixin, View ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class SaveView( InputGatedMixin, View ):
-    """`.../explore/save/` -- persist the sandbox per the destination each component's card selects:
-    `dest_<component>` = 'copy' (a new independent set) or 'overwrite' (write into the source's existing set,
-    in place). All-overwrite updates the anchor; any 'copy' branches a new scenario named `name`. One action
-    for both 'update this scenario' and 'save as new'."""
+    """`.../explore/save/` -- persist the sandbox from the Save-changes modal. `save_mode` is 'update' (write
+    the changes back into the anchor -- both components overwrite in place) or 'new' (branch a scenario named
+    `name`, copying the components that diverged and reusing the unchanged ones -- `branch_destinations`
+    decides that, so the user makes no per-component choice). Either way it drives the one `save_working`
+    primitive."""
 
     def post( self, request ):
         organization = request.organization
         exploration  = scenario_exploration( organization )
         if exploration is not None:
-            destinations = {
-                component: ( COPY if request.POST.get( f'dest_{component}' ) == COPY else OVERWRITE )
-                for component in ( 'plans', 'assumptions' ) }
-            save_working(
-                organization, exploration.source, destinations, request.POST.get( 'name', '' ) )
+            if request.POST.get( 'save_mode' ) == 'new':
+                destinations = branch_destinations(
+                    load_scenario( exploration.source ), load_scenario( exploration.working ) )
+                name = request.POST.get( 'name', '' )
+            else:                                          # update the existing scenario: overwrite both
+                destinations = { component: OVERWRITE for component in ( 'plans', 'assumptions' ) }
+                name = ''
+            save_working( organization, exploration.source, destinations, name )
         return redirect( 'explore' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ExploreSaveModalView( ModalView ):
+    """`.../explore/save-dialog/` -- the styled Save-changes dialog opened from the workspace's sticky bar.
+    Presents the changes against the anchor for review, then the choice to update the anchor in place or
+    branch a new scenario (whose diverged components are copied and unchanged ones reused -- decided for the
+    user). Its Save posts to `explore_save` (`SaveView`), which drives the same `save_working` primitive."""
+
+    def get_template_name( self ):
+        return _EXPLORE_SAVE_TEMPLATE
+
+    def get( self, request ):
+        exploration = scenario_exploration( request.organization )
+        if exploration is None:
+            raise Http404( 'No exploration in progress.' )
+        source_inputs  = load_scenario( exploration.source )
+        working_inputs = load_scenario( exploration.working )
+        drift = value_changes( source_inputs, working_inputs )
+        usage = component_usage( exploration.source )
+        return self.modal_response( request, context = {
+            'source'        : exploration.source,
+            'drift'         : drift,
+            'drift_summary' : describe_changes( drift ),
+            # Open in "save as new" when an in-place update would write a change into a set another scenario
+            # shares -- branching copies that changed component instead, leaving the shared set untouched.
+            'default_new'   : any(
+                usage[ component ] and getattr( working_inputs, component ) != getattr( source_inputs, component )
+                for component in ( 'plans', 'assumptions' ) ),
+        } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -474,6 +598,20 @@ class KeepRunView( InputGatedMixin, View ):
         result.usage_role = UsageRole.SAVED
         result.save( update_fields = [ 'usage_role', 'updated_datetime' ] )
         return redirect( 'explore' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class DeleteRunView( InputGatedMixin, View ):
+    """`.../financial-forecast/runs/<uuid>/delete/` -- delete a saved forecast run from the hub's
+    Saved-runs list, dropping its captured books. Scoped to the org's SAVED forecast results, so a stale
+    or foreign uuid 404s rather than deleting."""
+
+    def post( self, request, run_uuid ):
+        result = get_object_or_404(
+            PlanningResultRecord, run__uuid = run_uuid, organization = request.organization,
+            feature = PlanningFeature.FINANCIAL_FORECAST, usage_role = UsageRole.SAVED )
+        delete_runs( [ result ] )
+        return redirect( 'financial_forecast' )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
