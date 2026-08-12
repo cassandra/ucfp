@@ -127,6 +127,18 @@ class OrganizationMember( TimestampedModel ):
     def is_active_owner(self) -> bool:
         return bool( self.is_active and ( self.organization_role == OrganizationRole.OWNER ) )
 
+    @property
+    def is_sole_active_owner(self) -> bool:
+        """True when this is an active owner and the organization has no other
+        active owner -- so removing it would leave the organization ownerless.
+        This is the gate for whether deleting the member's account must delete
+        the organization (it cannot simply be left behind)."""
+        if not self.is_active_owner:
+            return False
+        another_owner_exists = self.__class__.objects.active_owners(
+            self.organization_id ).exclude( pk = self.pk ).exists()
+        return not another_owner_exists
+
     def save( self, *args, **kwargs ):
         # Only an update that strips active-owner status from a current active
         # owner can threaten the invariant; everything else saves directly.
