@@ -10,11 +10,13 @@ def require_authenticated_user( view_func ):
     """Reject the request unless it carries a real authenticated user.
 
     Guards views that only make sense for a signed-in account (e.g. deleting that
-    account or a household). When authentication is suppressed (self-hosted
-    single-user) `request.user` is anonymous and these surfaces do not exist, so
-    the request is answered with `Http404` rather than being allowed to act on a
-    non-existent user. Under normal authentication the middleware has already
-    ensured a user, so this is a no-op.
+    account or a household). The gate is the absence of an authenticated user, not
+    any deployment mode: whenever `request.user` is anonymous the account/household
+    surfaces do not exist, so the request is answered with `Http404` rather than
+    being allowed to act on a non-existent user. In practice that only arises when
+    `SUPPRESS_AUTHENTICATION` is set (typically a self-hosted single-user run),
+    since otherwise the middleware has already ensured a user -- so under normal
+    authentication this is a no-op.
     """
     @functools.wraps( view_func )
     def wrapped( request, *args, **kwargs ):
@@ -32,8 +34,9 @@ def ensure_organization( view_func ):
     organization already selected in the session, else the user's only one, else -- when they
     have none -- auto-provisions one they own (the `organization` app owns the creation and
     naming policy). Until multi-organization selection exists, a user with several raises rather
-    than guess. An anonymous user -- which only occurs when authentication is suppressed
-    (self-hosted single-user) -- resolves to the single shared, memberless organization.
+    than guess. An anonymous user -- which reaches a view only when `SUPPRESS_AUTHENTICATION` is
+    set (typically a self-hosted single-user run) -- resolves to the single shared, memberless
+    organization.
 
     The resolved organization is attached as ``request.organization``; its uuid is stored via
     ``SessionState`` (``request.session_state.current_organization_uuid``).
@@ -60,8 +63,8 @@ def _resolve_current_organization( request ) -> Organization:
 
 def _current_organization_for_request( request ) -> Organization:
     """The organization for the request: an authenticated user's own (auto-provisioned if they
-    have none), or -- for an anonymous user, which only occurs when authentication is suppressed
-    -- the single shared, memberless organization."""
+    have none), or -- for an anonymous user, which reaches here only when `SUPPRESS_AUTHENTICATION`
+    is set -- the single shared, memberless organization."""
     if not request.user.is_authenticated:
         return Organization.objects.get_or_create_shared()
     return _organization_for_user( request.user )
