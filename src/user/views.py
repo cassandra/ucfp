@@ -13,6 +13,7 @@ from django.views.generic import View
 from notify.email_sender import EmailSender
 
 from . import forms
+from . import signin_throttle
 from .magic_code_generator import MagicCodeStatus, MagicCodeGenerator
 from .signin_manager import SigninManager
 from .schemas import UserAuthenticationData
@@ -51,11 +52,24 @@ class UserSigninView( RedirectAuthenticatedUserMixin, View ):
         except ValidationError:
             raise BadRequest( 'Invalid email provided' )
 
+        User = get_user_model()
+        canonical_email = User.objects.canonicalize_email( email_address )
+
+        # Abuse prevention: a throttled request neither creates an account nor
+        # sends a code, and returns the same neutral "check your email" response
+        # so it leaks no signal about the limit (or the email) to an attacker.
+        if not signin_throttle.is_signin_request_allowed( request, canonical_email ):
+            return SigninMagicCodeView().get_response(
+                request = request,
+                magic_code_form = forms.SigninMagicCodeForm(
+                    initial = { 'email_address': canonical_email }
+                ),
+            )
+
         # Sign-in is passwordless and account creation happens here: an unknown
         # email becomes a new account rather than a dead end, since the email is
         # simply the stable identifier we tie a person's plan to.
-        User = get_user_model()
-        user, created = User.objects.get_or_create_by_email( email_address )
+        user, created = User.objects.get_or_create_by_email( canonical_email )
         logger.debug( f'{"Created" if created else "Found"} user with email: {user.email}' )
         return SendMagicLinkEmailView().send_signin_magic_link(
             request = request,

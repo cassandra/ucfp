@@ -229,6 +229,13 @@ if UNIT_TESTING:
         'django.contrib.auth.hashers.MD5PasswordHasher',
     ]
 
+# Sign-in abuse prevention (rate limits, verify cooldown, alerting). On for real
+# deployments; off under the test suite (so unrelated tests are not throttled --
+# the dedicated abuse tests re-enable it via @override_settings) and off in local
+# development (see settings/development.py). A self-host that wants it off can
+# override this in its own settings module.
+ABUSE_PREVENTION_ENABLED = not UNIT_TESTING
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/

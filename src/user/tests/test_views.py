@@ -3,8 +3,11 @@ from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.http import HttpResponse
+from django.test import override_settings
 from django.urls import reverse
 
+from common.redis_client import get_redis_client
 from notify.email_sender import EmailSender
 from user.magic_code_generator import MagicCodeStatus, MagicCodeGenerator
 from user.signin_manager import SigninManager
@@ -449,3 +452,72 @@ class TestUserSignoutView(SyncViewTestCase):
 
         self.assertEqual(response.status_code, 405)
         self.assertIn('_auth_user_id', self.client.session)
+
+
+@override_settings(
+    ABUSE_PREVENTION_ENABLED=True,
+    SIGNIN_PER_IP_LIMIT=1,
+    SIGNIN_PER_EMAIL_HOURLY_LIMIT=1,
+    SIGNIN_PER_EMAIL_DAILY_LIMIT=5,
+    SIGNIN_GLOBAL_LIMIT=1000,
+)
+class TestUserSigninThrottling(SyncViewTestCase):
+    """Rate limiting on the sign-in POST (disabled by default in tests; enabled here)."""
+
+    def setUp(self):
+        super().setUp()
+        # fakeredis is one shared instance for the run; clear the throttle counters.
+        get_redis_client().flushdb()
+
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_within_limits_proceeds(self, mock_send_view_class):
+        mock_send = mock_send_view_class.return_value
+        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
+
+        self.client.post(reverse('user_signin'), {'email': 'first@example.com'})
+
+        mock_send.send_signin_magic_link.assert_called_once()
+
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_over_per_ip_limit_creates_no_user_and_sends_nothing(self, mock_send_view_class):
+        mock_send = mock_send_view_class.return_value
+        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
+
+        url = reverse('user_signin')
+        # First request is within the per-IP limit of 1.
+        self.client.post(url, {'email': 'a@example.com'})
+        # Second request from the same IP (distinct email so per-email is not what
+        # trips) exceeds the per-IP limit.
+        response = self.client.post(url, {'email': 'b@example.com'})
+
+        # Neutral response, no account for the throttled email, no second send.
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateRendered(response, 'user/pages/magic_code_signin.html')
+        self.assertFalse(User.objects.filter(email='b@example.com').exists())
+        mock_send.send_signin_magic_link.assert_called_once()
+
+    @override_settings(SIGNIN_PER_IP_LIMIT=100)
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_per_email_cap_independent_of_ip(self, mock_send_view_class):
+        mock_send = mock_send_view_class.return_value
+        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
+
+        url = reverse('user_signin')
+        # Per-IP is generous here; the per-email hourly cap of 1 is what trips.
+        self.client.post(url, {'email': 'repeat@example.com'})
+        response = self.client.post(url, {'email': 'repeat@example.com'})
+
+        self.assertEqual(response.status_code, 200)
+        mock_send.send_signin_magic_link.assert_called_once()
+
+    @override_settings(ABUSE_PREVENTION_ENABLED=False)
+    @patch('user.views.SendMagicLinkEmailView')
+    def test_disabled_flag_does_not_throttle(self, mock_send_view_class):
+        mock_send = mock_send_view_class.return_value
+        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
+
+        url = reverse('user_signin')
+        for email in ('x@example.com', 'y@example.com', 'z@example.com'):
+            self.client.post(url, {'email': email})
+
+        self.assertEqual(mock_send.send_signin_magic_link.call_count, 3)
