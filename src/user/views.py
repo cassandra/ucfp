@@ -13,6 +13,7 @@ from django.views.generic import View
 from notify.email_sender import EmailSender
 
 from . import forms
+from . import signin_cooldown
 from . import signin_throttle
 from .magic_code_generator import MagicCodeStatus, MagicCodeGenerator
 from .signin_manager import SigninManager
@@ -129,29 +130,49 @@ class SigninMagicCodeView( RedirectAuthenticatedUserMixin, View ):
             raise BadRequest( 'Email is invalid.' )
 
         magic_code_generator = MagicCodeGenerator()
-        magic_code_status = magic_code_generator.check_magic_code( request, magic_code = magic_code )
 
-        if magic_code_status == MagicCodeStatus.INVALID:
-            error_message = 'Invalid sign-in code.'
-        elif magic_code_status == MagicCodeStatus.EXPIRED:
+        # Abuse prevention: slow and cap code brute-forcing. Reject fast while
+        # inside the escalating per-session cooldown (checked first -- session
+        # only, no Redis), then apply the per-IP backstop against session cycling.
+        if signin_cooldown.is_enabled():
+            if signin_cooldown.seconds_until_allowed( request ) > 0:
+                magic_code_form.add_error(
+                    'magic_code', 'Too many attempts. Please wait a few seconds and try again.' )
+                return self.get_response( request, magic_code_form = magic_code_form, status = 429 )
+            if not signin_cooldown.is_per_ip_backstop_ok( request ):
+                magic_code_form.add_error(
+                    'magic_code', 'Too many attempts. Please try again later.' )
+                return self.get_response( request, magic_code_form = magic_code_form, status = 429 )
+
+        magic_code_status = magic_code_generator.check_magic_code( request, magic_code = magic_code )
+        logger.debug( f'Signin Magic: Email={email_address}, Status={magic_code_status}' )
+
+        if magic_code_status == MagicCodeStatus.VALID:
+            signin_cooldown.reset( request )
+            request.user = existing_user
+            SigninManager().do_login( request = request, verified_email = True )
+            magic_code_generator.expire_magic_code( request )
+            return HttpResponseRedirect( reverse( 'home' ) )
+
+        if magic_code_status == MagicCodeStatus.EXPIRED:
             error_message = 'Sign-in code has expired.'
-        elif magic_code_status == MagicCodeStatus.VALID:
-            error_message = None
+        elif magic_code_status == MagicCodeStatus.INVALID:
+            error_message = 'Invalid sign-in code.'
         else:
             error_message = 'Sign-in code generated an unexpected error.'
 
-        logger.debug( f'Signin Magic: Email={email_address}, Status={magic_code_status}' )
+        # Count only a genuine wrong guess (INVALID) toward the cooldown/cap; an
+        # EXPIRED code is a timeout, not a brute-force attempt. At the hard cap,
+        # invalidate the code so the attacker must start a fresh sign-in.
+        if signin_cooldown.is_enabled() and magic_code_status == MagicCodeStatus.INVALID:
+            failure_count = signin_cooldown.register_failure( request )
+            if signin_cooldown.is_over_max_failures( failure_count ):
+                magic_code_generator.expire_magic_code( request )
+                signin_cooldown.reset( request )
+                error_message = 'Too many attempts. Please start a new sign-in.'
 
-        if error_message:
-            magic_code_form.add_error( 'magic_code', error_message )
-            return self.get_response( request, magic_code_form = magic_code_form, status = 400 )
-
-        request.user = existing_user
-        SigninManager().do_login( request = request, verified_email = True )
-        magic_code_generator.expire_magic_code( request )
-
-        url = reverse( 'home' )
-        return HttpResponseRedirect( url )
+        magic_code_form.add_error( 'magic_code', error_message )
+        return self.get_response( request, magic_code_form = magic_code_form, status = 400 )
 
 
 class SigninMagicLinkView( View ):

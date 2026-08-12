@@ -521,3 +521,70 @@ class TestUserSigninThrottling(SyncViewTestCase):
             self.client.post(url, {'email': email})
 
         self.assertEqual(mock_send.send_signin_magic_link.call_count, 3)
+
+
+@override_settings(ABUSE_PREVENTION_ENABLED=True)
+class TestSigninVerifyCooldown(SyncViewTestCase):
+    """Cooldown-backoff and hard cap on magic-code verification."""
+
+    def setUp(self):
+        super().setUp()
+        get_redis_client().flushdb()
+        # Prime a known valid magic code into the client session.
+        session = self.client.session
+        session[MagicCodeGenerator.MAGIC_CODE] = 'abcdef'
+        session[MagicCodeGenerator.MAGIC_CODE_TIMESTAMP] = MagicCodeGenerator.get_elapsed_seconds()
+        session.save()
+        self.url = reverse('user_signin_magic_code')
+
+    def _post_code(self, code):
+        return self.client.post(self.url, {'email_address': self.user.email, 'magic_code': code})
+
+    @override_settings(
+        SIGNIN_VERIFY_FREE_ATTEMPTS=0,
+        SIGNIN_VERIFY_FIRST_DELAY_SECS=5,
+        SIGNIN_VERIFY_MAX_DELAY_SECS=10,
+        SIGNIN_VERIFY_MAX_FAILURES=99,
+    )
+    def test_immediate_retry_is_blocked_by_cooldown(self):
+        # First wrong attempt registers a cooldown (0 free attempts).
+        self.assertEqual(self._post_code('wrongg').status_code, 400)
+        # The immediate second attempt is rejected fast by the cooldown (429),
+        # without the code even being checked.
+        self.assertEqual(self._post_code('wrongg').status_code, 429)
+
+    @override_settings(
+        SIGNIN_VERIFY_FREE_ATTEMPTS=0,
+        SIGNIN_VERIFY_FIRST_DELAY_SECS=0,
+        SIGNIN_VERIFY_MAX_FAILURES=2,
+    )
+    def test_hard_cap_invalidates_the_code(self):
+        # No cooldown (delay 0); two wrong guesses reach the cap and invalidate.
+        self._post_code('wrongg')
+        self.assertEqual(self._post_code('wrongg').status_code, 400)
+        # The real code no longer works -- it was invalidated at the cap.
+        self.assertEqual(self._post_code('abcdef').status_code, 400)
+
+    @override_settings(
+        SIGNIN_VERIFY_FREE_ATTEMPTS=0,
+        SIGNIN_VERIFY_FIRST_DELAY_SECS=0,
+        SIGNIN_VERIFY_MAX_FAILURES=99,
+    )
+    def test_correct_code_logs_in_and_resets_state(self):
+        self._post_code('wrongg')  # one failure recorded
+        response = self._post_code('abcdef')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
+        self.assertNotIn('magic_code_failures', self.client.session)
+
+    @override_settings(SIGNIN_VERIFY_FREE_ATTEMPTS=99, SIGNIN_VERIFY_PER_IP_LIMIT=1)
+    def test_per_ip_backstop_blocks_session_cycling(self):
+        # Cooldown never blocks here; the per-IP limit of 1 does.
+        self._post_code('wrongg')
+        self.assertEqual(self._post_code('wrongg').status_code, 429)
+
+    def test_disabled_flag_has_no_cooldown(self):
+        with override_settings(ABUSE_PREVENTION_ENABLED=False):
+            # Many wrong attempts, all plain 400s -- no cooldown, no 429.
+            statuses = {self._post_code('wrongg').status_code for _ in range(6)}
+        self.assertEqual(statuses, {400})
