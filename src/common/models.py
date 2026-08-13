@@ -80,8 +80,7 @@ class ExclusiveMaxValueValidator( MaxValueValidator ):
 def build_bound_validators( min_value = None, max_value = None,
                             exclusive_min = False, exclusive_max = False ) -> list:
     """The value-bound validators for a numeric field: an optionally-exclusive lower
-    and/or upper bound. Shared so the bounded and encrypted decimal fields declare
-    their bounds identically."""
+    and/or upper bound."""
     bound = list()
     if min_value is not None:
         bound.append(

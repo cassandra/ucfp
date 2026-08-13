@@ -13,7 +13,8 @@ from ucfp.accounts.models import BooksOfAccountRecord
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord, ProfileRecord
 from ucfp.parameter_sets.enums import ParameterSetKind
 from ucfp.parameter_sets.models import ParameterSet
-from ucfp.planning.models import ProjectionRunRecord
+from ucfp.planning.enums import PlanningFeature
+from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 
 _KEY = Fernet.generate_key().decode()
 _PAYLOAD = { 'secret': 12345 }
@@ -57,6 +58,14 @@ class EncryptedDocumentScopeTest( TestCase ):
         books = BooksOfAccountRecord.objects.create( organization = self.organization )
         self._assert_encrypted( ProjectionRunRecord.objects.create(
             organization = self.organization, books = books, label = 'R', data = _PAYLOAD ) )
+
+    def test_planning_result_document_is_encrypted( self ):
+        books = BooksOfAccountRecord.objects.create( organization = self.organization )
+        run = ProjectionRunRecord.objects.create(
+            organization = self.organization, books = books, label = 'R', data = {} )
+        self._assert_encrypted( PlanningResultRecord.objects.create(
+            organization = self.organization, feature = PlanningFeature.FINANCIAL_FORECAST,
+            run = run, label = 'Res', data = _PAYLOAD ) )
 
     def test_assumptions_document_stays_plaintext( self ):
         self._assert_plaintext( AssumptionsRecord.objects.create(

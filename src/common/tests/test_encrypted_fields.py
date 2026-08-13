@@ -89,3 +89,14 @@ class KeyRotationTest( SimpleTestCase ):
                 FIELD_ENCRYPTION_CODEC = 'fernet', FIELD_ENCRYPTION_KEYS = ( _KEY_2, _KEY ) ):
             restored = EncryptedTextField().from_db_value( stored, None, None )
         self.assertEqual( restored, 'rotate me' )
+
+    def test_a_value_does_not_decrypt_under_an_unrelated_key( self ):
+        # The ciphertext is useless without the key it was written under -- not merely
+        # that it round-trips with the same key. This exercises Fernet's authentication.
+        with override_settings(
+                FIELD_ENCRYPTION_CODEC = 'fernet', FIELD_ENCRYPTION_KEYS = ( _KEY, ) ):
+            stored = EncryptedTextField().get_prep_value( 'secret' )
+        with override_settings(
+                FIELD_ENCRYPTION_CODEC = 'fernet', FIELD_ENCRYPTION_KEYS = ( _KEY_2, ) ):
+            with self.assertRaises( ValueError ):
+                EncryptedTextField().from_db_value( stored, None, None )

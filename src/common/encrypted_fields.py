@@ -20,7 +20,9 @@ The cipher is selected by ``settings.FIELD_ENCRYPTION_CODEC``:
   settings, never in the database.
 - ``identity``: a pass-through that stores plaintext, for measuring the cipher's
   overhead without changing the schema (the column is text either way). Refused
-  unless ``DEBUG``, so a real deployment can never store plaintext.
+  unless ``DEBUG``, so a real deployment can never store plaintext. Rows it writes
+  are plaintext and are not recoverable as ciphertext, so it is strictly a
+  throwaway-database measurement tool.
 """
 import json
 from decimal import ROUND_HALF_UP, Decimal
@@ -94,12 +96,12 @@ class EncryptedDecimalField( _EncryptedField ):
     quantized precision is preserved on read."""
 
     def __init__( self, *args,
-                  max_digits     = None,
-                  decimal_places = None,
-                  min_value      = None,
-                  max_value      = None,
-                  exclusive_min  = False,
-                  exclusive_max  = False,
+                  max_digits     : int     = None,
+                  decimal_places : int     = None,
+                  min_value      : Decimal = None,
+                  max_value      : Decimal = None,
+                  exclusive_min  : bool    = False,
+                  exclusive_max  : bool    = False,
                   **kwargs ):
         self.max_digits     = max_digits
         self.decimal_places = decimal_places

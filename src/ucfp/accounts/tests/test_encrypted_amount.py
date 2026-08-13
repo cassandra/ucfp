@@ -54,3 +54,8 @@ class EncryptedAmountTest( TestCase ):
     def test_non_positive_amount_is_rejected_as_it_is_saved( self ):
         with self.assertRaises( ValidationError ):
             self._entry( Decimal( '0' ) )
+
+    def test_amount_exceeding_max_digits_is_rejected_as_it_is_saved( self ):
+        # max_digits = 19, decimal_places = 5 -> at most 14 integer digits; 15 is too many.
+        with self.assertRaises( ValidationError ):
+            self._entry( Decimal( '1' + '0' * 14 ) )
