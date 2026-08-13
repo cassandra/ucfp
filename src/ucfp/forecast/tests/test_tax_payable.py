@@ -11,7 +11,8 @@ from datetime import date
 from decimal import Decimal
 
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AccountType, AssetClass, IncomeTaxClass, SystemAccountRole
+from ucfp.accounts.enums import (
+    AccountType, AssetClass, ExpenseTaxClass, IncomeTaxClass, SystemAccountRole )
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, IncomeStream, Subject, WindowedAmount )
@@ -25,8 +26,9 @@ _PAYABLE = SystemAccountRole.TAXES_PAYABLE
 
 
 def _run_wage_forecast():
-    """A single earner on 100k wages, 50k cash, 2026-2028 -- a steady income-tax and payroll-tax
-    liability each year, with cash ample enough that no shortfall funding muddies the picture."""
+    """A single earner on 100k wages, 50k cash, 2026-2028 -- a steady income-tax liability (deferred to
+    the payable) and FICA (withheld in-year) each year, with cash ample enough that no shortfall
+    funding muddies the picture."""
     worker = Subject( 'Worker', date( 1980, 1, 1 ), 'worker' )
     parameters = ForecastParameters(
         start_date    = date( 2026, 1, 1 ),
@@ -41,25 +43,44 @@ def _run_wage_forecast():
     return Bookkeeper( Forecast( parameters ).run().books )
 
 
-def _total_tax_expense( reader, year ):
-    """Every tax expense (income-tax layers + payroll) booked in `year`."""
+def _deferred_tax_expense( reader, year ):
+    """The tax expense that defers to the payable in `year` -- the income-tax layers, NIIT, state, and
+    the early-withdrawal penalty. Excludes FICA, which is withheld in-year rather than deferred."""
     start, end = date( year, 1, 1 ), date( year, 12, 31 )
     total = _D( '0' )
     for account in reader.chart.accounts( account_type = AccountType.EXPENSE ):
-        if account.expense_tax_class is not None and account.expense_tax_class.is_tax_payment:
+        tax_class = account.expense_tax_class
+        if ( tax_class is not None and tax_class.is_tax_payment
+                and tax_class is not ExpenseTaxClass.EMPLOYMENT_TAX ):
             total += reader.ledger.natural_flow( account, start = start, end = end )
     return total
 
 
 class TaxPayableTests( unittest.TestCase ):
 
-    def test_tax_is_accrued_to_the_payable_at_year_close_not_paid_from_cash( self ):
+    def test_income_tax_is_accrued_to_the_payable_at_year_close_not_paid_from_cash( self ):
         reader = _run_wage_forecast()
         payable = reader.chart.system_account( _PAYABLE )
         owed = reader.ledger.natural_balance( payable, through = date( 2026, 12, 31 ) )
-        # The whole of 2026's tax stands as a liability at year end -- accrued, not yet paid.
+        # 2026's deferred tax (income tax + penalties, not FICA) stands as a liability at year end.
         self.assertGreater( owed, _D( '0' ) )
-        self.assertEqual( owed, _total_tax_expense( reader, 2026 ) )
+        self.assertEqual( owed, _deferred_tax_expense( reader, 2026 ) )
+
+    def test_employment_tax_is_withheld_in_year_not_deferred( self ):
+        reader = _run_wage_forecast()
+        fica = reader.chart.expense_account( ExpenseTaxClass.EMPLOYMENT_TAX )
+        payable = reader.chart.system_account( _PAYABLE )
+        # FICA is booked as a 2026 expense (withheld that year) ...
+        self.assertGreater(
+            reader.ledger.natural_flow( fica, start = date( 2026, 1, 1 ), end = date( 2026, 12, 31 ) ),
+            _D( '0' ) )
+        # ... and stays out of the deferred payable, which is exactly the non-FICA tax.
+        owed = reader.ledger.natural_balance( payable, through = date( 2026, 12, 31 ) )
+        self.assertEqual( owed, _deferred_tax_expense( reader, 2026 ) )
+        # The withholding lands in-year as its own transaction.
+        withholdings = [ txn for txn in reader.books.transactions
+                         if txn.description == 'FICA withholding' and txn.transaction_date.year == 2026 ]
+        self.assertTrue( withholdings )
 
     def test_year_end_net_worth_reflects_the_tax_owed( self ):
         reader = _run_wage_forecast()

@@ -56,6 +56,7 @@ class Period:
         midpoint)."""
         self._apply_asset_returns( bookkeeper, result )
         self._recognize_income( bookkeeper, result )
+        self._withhold_employment_tax( bookkeeper, result )
         self._apply_contributions( bookkeeper, result )
         self._service_liabilities( bookkeeper, result )
         self._apply_expenses( bookkeeper, result )
@@ -164,6 +165,38 @@ class Period:
                 description = income_line.source or '',
             )
             continue
+        return
+
+    def _withhold_employment_tax( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Withhold this interval's employment tax (US FICA: Social Security + Medicare) to cash, at
+        the midpoint alongside the wages it rides on -- paid in-year as earned, not deferred to the tax
+        payable like income tax. FICA carries annual, per-worker figures (the Social Security cap, the
+        Medicare surtax threshold), so the engine reads it over the year-to-date window and this pays
+        only the portion not yet withheld this tax year: the whole year in one step at annual
+        granularity, each interval's increment at finer ones. No engine, or nothing left to withhold,
+        means nothing to do."""
+        tax_engine = self._parameters.tax_engine
+        if tax_engine is None:
+            return
+        fiscal_window = self._parameters.fiscal_window
+        year_to_date = tax_engine.assess_employment_tax( fiscal_window, self._parameters.tax_context )
+        chart = bookkeeper.chart
+        employment_tax_account = chart.expense_account( ExpenseTaxClass.EMPLOYMENT_TAX )
+        if employment_tax_account is None:
+            raise MissingAccountError( 'No employment-tax expense account to withhold to.' )
+        already_withheld = bookkeeper.ledger.natural_flow(
+            employment_tax_account,
+            start = fiscal_window.span.start_date, end = fiscal_window.span.end_date )
+        withholding = quantize_money( year_to_date - already_withheld )
+        if withholding == 0:
+            return
+        cash_account = chart.cash_account()
+        if cash_account is None:
+            raise MissingAccountError( 'No cash account to withhold employment tax from.' )
+        bookkeeper.record(
+            self._parameters.date_span.midpoint,
+            [ ( employment_tax_account, -withholding ), ( cash_account, withholding ) ],
+            description = 'FICA withholding' )
         return
 
     def _apply_contributions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:

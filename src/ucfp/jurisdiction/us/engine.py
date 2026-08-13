@@ -261,17 +261,16 @@ class USFederalTaxEngine( TaxEngine ):
         niit = self._net_investment_income_tax(
             status, figures.niit_magi, net_investment_income )
 
-        payroll_tax = self._payroll_tax( status, fiscal_window )
         premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.health_enrollment )
 
-        # Income tax splits into its rate layers, each its own account; payroll tax and NIIT stand
-        # apart. The refundable premium credit offsets the ordinary income tax (its natural home).
+        # Income tax splits into its rate layers, each its own account; NIIT stands apart. Employment
+        # tax (FICA) is withheld in-year (see `assess_employment_tax`), not assessed here. The
+        # refundable premium credit offsets the ordinary income tax (its natural home).
         income_tax_charges = (
             ( ExpenseTaxClass.ORDINARY_INCOME_TAX, income_tax.ordinary ),
             ( ExpenseTaxClass.CAPITAL_GAINS_TAX, income_tax.capital_gains ),
             ( ExpenseTaxClass.SECTION_1250_TAX, income_tax.section_1250 ),
             ( ExpenseTaxClass.COLLECTIBLES_TAX, income_tax.collectibles ),
-            ( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ),
             ( ExpenseTaxClass.NIIT, niit ),
             ( ExpenseTaxClass.STATE_INCOME_TAX, state_income_tax ) )
         charges = [ TaxCharge( tax_class, amount )
@@ -287,6 +286,14 @@ class USFederalTaxEngine( TaxEngine ):
                 passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ) ),
             figures           = figures,
         )
+
+    def assess_employment_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext ) -> Decimal:
+        """Employee FICA on the year-to-date wages in `fiscal_window`, at the year's effective filing
+        status (the surtax threshold is status-dependent). Cumulative by construction, so the caller
+        pays the increment not yet withheld this year."""
+        status = resolve_filing_status(
+            tax_context.filing_status, tax_context.spouse_death_year, fiscal_window.span.end_date.year )
+        return self._employment_tax( status, fiscal_window )
 
     def _pretax_holdings( self, fiscal_window : FiscalWindowView,
                           tax_context : TaxContext ) -> Iterator[ tuple[ Account, TaxSubject ] ]:
@@ -647,7 +654,7 @@ class USFederalTaxEngine( TaxEngine ):
         excess = max( _ZERO, magi - self._parameters.niit_thresholds[ status ] )
         return self._parameters.niit_rate * min( net_investment_income, excess )
 
-    def _payroll_tax( self, status : FilingStatus, fiscal_window : FiscalWindowView ) -> Decimal:
+    def _employment_tax( self, status : FilingStatus, fiscal_window : FiscalWindowView ) -> Decimal:
         """Employee FICA: Social Security on each worker's wages up to the wage base
         (capped per worker, so two earners get two caps), Medicare on all wages, plus
         the Additional Medicare surtax on combined wages over the filing-status
