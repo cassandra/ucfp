@@ -18,13 +18,17 @@ The cipher is selected by ``settings.FIELD_ENCRYPTION_CODEC``:
   unless ``DEBUG``, so a real deployment can never store plaintext.
 """
 import json
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from functools import lru_cache
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.core.validators import DecimalValidator
 from django.db import models
+from django.utils.functional import cached_property
+
+from common.models import build_bound_validators
 
 _FERNET   = 'fernet'
 _IDENTITY = 'identity'
@@ -76,13 +80,68 @@ class EncryptedJSONField( _EncryptedField ):
 
 
 class EncryptedDecimalField( _EncryptedField ):
+    """A decimal field with the precision and bounds of a BoundedDecimalField, but
+    stored encrypted. The database only sees ciphertext, so the guarantees a
+    ``DECIMAL`` column and a CheckConstraint would give are applied here on the
+    write path instead: the value is quantized to ``decimal_places``, then validated
+    (digit count and bounds), so an out-of-range value is rejected as it is saved
+    rather than silently stored. ``str``<->``Decimal`` round-trips exactly, so the
+    quantized precision is preserved on read."""
+
+    def __init__( self, *args,
+                  max_digits     = None,
+                  decimal_places = None,
+                  min_value      = None,
+                  max_value      = None,
+                  exclusive_min  = False,
+                  exclusive_max  = False,
+                  **kwargs ):
+        self.max_digits     = max_digits
+        self.decimal_places = decimal_places
+        self.min_value      = min_value
+        self.max_value      = max_value
+        self.exclusive_min  = exclusive_min
+        self.exclusive_max  = exclusive_max
+        super().__init__( *args, **kwargs )
+        return
+
+    @cached_property
+    def validators( self ) -> list:
+        built = list( super().validators )
+        if ( self.max_digits is not None ) and ( self.decimal_places is not None ):
+            built.append( DecimalValidator( self.max_digits, self.decimal_places ) )
+        built.extend( build_bound_validators(
+            self.min_value, self.max_value, self.exclusive_min, self.exclusive_max ) )
+        return built
 
     def _to_bytes( self, value ) -> bytes:
-        return str( value ).encode( 'utf-8' )
+        number = value if isinstance( value, Decimal ) else Decimal( str( value ) )
+        if self.decimal_places is not None:
+            number = number.quantize(
+                Decimal( 1 ).scaleb( -self.decimal_places ), rounding = ROUND_HALF_UP )
+        # Validate on the write path so a bad value raises as it is saved -- the role
+        # the DECIMAL column and its CheckConstraint played before encryption.
+        self.run_validators( number )
+        return str( number ).encode( 'utf-8' )
 
     def _from_bytes( self, data : bytes ) -> Decimal:
-        # str<->Decimal round-trips exactly, preserving the stored precision.
         return Decimal( data.decode( 'utf-8' ) )
+
+    def deconstruct( self ):
+        name, path, args, kwargs = super().deconstruct()
+        if self.max_digits is not None:
+            kwargs[ 'max_digits' ] = self.max_digits
+        if self.decimal_places is not None:
+            kwargs[ 'decimal_places' ] = self.decimal_places
+        if self.min_value is not None:
+            kwargs[ 'min_value' ] = self.min_value
+        if self.max_value is not None:
+            kwargs[ 'max_value' ] = self.max_value
+        if self.exclusive_min:
+            kwargs[ 'exclusive_min' ] = self.exclusive_min
+        if self.exclusive_max:
+            kwargs[ 'exclusive_max' ] = self.exclusive_max
+        return name, path, args, kwargs
 
 
 # --------------------------------------------------------------------------- #
@@ -105,7 +164,15 @@ class _FernetCipher( _Cipher ):
         if not keys:
             raise ImproperlyConfigured(
                 'FIELD_ENCRYPTION_KEYS is empty; a key is required to store encrypted fields.' )
-        self._multi = MultiFernet( [ Fernet( key ) for key in keys ] )
+        try:
+            self._multi = MultiFernet( [ Fernet( key ) for key in keys ] )
+        except ValueError as error:
+            raise ImproperlyConfigured(
+                'FIELD_ENCRYPTION_KEYS holds an invalid key: each must be 32 url-safe '
+                'base64-encoded bytes -- 44 characters ending in "=", as produced by '
+                'cryptography.fernet.Fernet.generate_key(). Check that a trailing "=" '
+                'was not dropped.'
+            ) from error
         return
 
     def encrypt( self, data : bytes ) -> str:

@@ -77,6 +77,23 @@ class ExclusiveMaxValueValidator( MaxValueValidator ):
         return bool( value >= limit )
 
 
+def build_bound_validators( min_value = None, max_value = None,
+                            exclusive_min = False, exclusive_max = False ) -> list:
+    """The value-bound validators for a numeric field: an optionally-exclusive lower
+    and/or upper bound. Shared so the bounded and encrypted decimal fields declare
+    their bounds identically."""
+    bound = list()
+    if min_value is not None:
+        bound.append(
+            ExclusiveMinValueValidator( min_value ) if exclusive_min
+            else MinValueValidator( min_value ) )
+    if max_value is not None:
+        bound.append(
+            ExclusiveMaxValueValidator( max_value ) if exclusive_max
+            else MaxValueValidator( max_value ) )
+    return bound
+
+
 class BoundedDecimalField( models.DecimalField ):
     """A DecimalField with optional inclusive/exclusive value bounds.
 
@@ -110,18 +127,8 @@ class BoundedDecimalField( models.DecimalField ):
         return [ *super().validators, *self._bound_validators() ]
 
     def _bound_validators( self ) -> list:
-        bound = list()
-        if self.min_value is not None:
-            if self.exclusive_min:
-                bound.append( ExclusiveMinValueValidator( self.min_value ) )
-            else:
-                bound.append( MinValueValidator( self.min_value ) )
-        if self.max_value is not None:
-            if self.exclusive_max:
-                bound.append( ExclusiveMaxValueValidator( self.max_value ) )
-            else:
-                bound.append( MaxValueValidator( self.max_value ) )
-        return bound
+        return build_bound_validators(
+            self.min_value, self.max_value, self.exclusive_min, self.exclusive_max )
 
     def deconstruct( self ):
         name, path, args, kwargs = super().deconstruct()
