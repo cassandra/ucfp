@@ -24,6 +24,9 @@ jobs:
     env:
       DJANGO_SETTINGS_MODULE: "ucfp.settings.ci"
       DJANGO_SECRET_KEY: "django-insecure-@egpl51khoap^%x8*jc4xj0(hv)foor-%5897+@h665k3txo))7"
+      # CI-only key for the encrypted model fields; not a secret (the test database is
+      # ephemeral). Real deployments set their own UCFP_FIELD_ENCRYPTION_KEY.
+      UCFP_FIELD_ENCRYPTION_KEY: "0z8GJRYhLHWoLJXCtWvlC1hgq3bJevf9HPz2H4pZ97Y="
       DJANGO_SUPERUSER_EMAIL: "foo@example.com"
       DJANGO_SUPERUSER_PASSWORD: "foobar"
       UCFP_REDIS_HOST: "localhost"

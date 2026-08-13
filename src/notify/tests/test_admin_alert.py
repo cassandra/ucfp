@@ -48,9 +48,11 @@ class AlertAdminTestCase(TestCase):
         admin_alert.alert_admin('signin-per-ip', 'x')  # a system alert must still send
         self.assertEqual(len(mail.outbox), 1)
 
+    @override_settings(EMAIL_HOST='')
     def test_no_email_when_email_not_configured(self):
-        # Without the email settings, is_email_configured() is False: it still
-        # coalesces/logs, but sends nothing (and must not raise).
+        # With email unconfigured (no host), is_email_configured() is False: the alert
+        # still coalesces/logs, but sends nothing (and must not raise). Forced here via
+        # override so the test does not depend on the ambient environment's mail config.
         admin_alert.alert_admin('signin-per-ip', 'x')
         self.assertEqual(len(mail.outbox), 0)
 
