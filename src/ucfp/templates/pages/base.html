@@ -78,5 +78,9 @@
     </div>
     {% endif %}
 
+    {% if request.show_privacy_banner %}
+    {% include "components/privacy_banner.html" %}
+    {% endif %}
+
   </body>
 </html>

@@ -1,0 +1,19 @@
+{% load common_tags %}
+{% comment %}
+  Cookie-usage notice for anonymous visitors -- included by base.html when
+  request.show_privacy_banner is set (see ucfp.privacy_consent). The Acknowledge form
+  posts asynchronously (antinode); PrivacyAcceptView returns a replace that removes this
+  wrapper (by its id) in place. Copy is placeholder pending review.
+{% endcomment %}
+<div id="privacy-consent-banner" class="fixed-bottom bg-white border-top shadow-sm">
+  <div class="container d-flex flex-wrap align-items-center justify-content-between py-2">
+    <p class="mb-2 mb-md-0 mr-md-3 small text-muted">
+      We use only the cookies necessary to run {% settings_value 'SITE_NAME' %} and keep you signed in
+      &mdash; no tracking. <a href="{% url 'privacy' %}">Learn more</a>.
+    </p>
+    <form action="{% url 'privacy_accept' %}" method="post" data-async="true" class="mb-0">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-primary">Got it</button>
+    </form>
+  </div>
+</div>

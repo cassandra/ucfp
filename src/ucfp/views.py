@@ -12,6 +12,7 @@ from common.request_utils import is_ajax
 
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.state import completed_profile
+from ucfp.privacy_consent import PrivacyConsent
 
 
 def error_response( request             : HttpRequest,
@@ -146,6 +147,15 @@ class HealthView( View ):
         status_dict = do_healthcheck()
         response_status = 200 if status_dict['is_healthy'] else 500
         return JsonResponse( {'status': status_dict}, status = response_status )
+
+
+class PrivacyAcceptView( View ):
+    """Records that the visitor acknowledged the cookie-usage notice and removes the
+    banner in place (an antinode replace of its wrapper)."""
+
+    def post( self, request, *args, **kwargs ):
+        PrivacyConsent.acknowledge( request )
+        return antinode.response( replace_map = { 'privacy-consent-banner': '' } )
 
 
 class HomeView( InputGatedMixin, View ):

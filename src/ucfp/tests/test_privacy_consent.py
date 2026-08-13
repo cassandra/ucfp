@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, TestCase, override_settings
+from django.urls import reverse
 
 from ucfp.middleware import PrivacyBannerMiddleware
 from ucfp.privacy_consent import PrivacyConsent
@@ -62,3 +63,25 @@ class MiddlewareTest( TestCase ):
         request = _request( AnonymousUser() )
         PrivacyBannerMiddleware( lambda req: None )( request )
         self.assertTrue( request.show_privacy_banner )
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class PrivacyBannerViewTest( TestCase ):
+
+    _BANNER_ID = 'privacy-consent-banner'
+
+    def test_banner_renders_on_a_public_page_for_an_anonymous_visitor( self ):
+        response = self.client.get( reverse( 'privacy' ) )
+        self.assertContains( response, self._BANNER_ID )
+
+    def test_accept_records_the_acknowledgment_and_dismisses_in_place( self ):
+        response = self.client.post( reverse( 'privacy_accept' ) )
+        self.assertEqual( response.status_code, 200 )
+        self.assertIn( self._BANNER_ID, response.content.decode() )   # the antinode replace target
+        # The session now carries the ack, so the banner no longer renders.
+        self.assertNotContains( self.client.get( reverse( 'privacy' ) ), self._BANNER_ID )
+
+    def test_no_banner_for_an_authenticated_user( self ):
+        user = get_user_model().objects.create_user( email = 'a@x.test' )
+        self.client.force_login( user )
+        self.assertNotContains( self.client.get( reverse( 'privacy' ) ), self._BANNER_ID )

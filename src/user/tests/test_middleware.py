@@ -47,6 +47,7 @@ class TestAuthenticationMiddleware(BaseTestCase):
             'terms',
             'notify_email_unsubscribe',
             'notify_email_resubscribe',
+            'privacy_accept',
             'user_signin',
             'user_signin_magic_code',
             'user_signin_magic_link',
