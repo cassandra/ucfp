@@ -84,6 +84,10 @@ class SessionState:
     forecast_duration_years : Optional[ int ] = None
     forecast_interval : Optional[ str ] = None
 
+    # Whether the visitor has acknowledged the cookie-usage notice, so the banner is not
+    # shown again this session (see ucfp.privacy_consent).
+    cookies_acknowledged : bool = False
+
     def to_session( self, request : HttpRequest ):
         """Write this state back into the session (extend as fields are added)."""
         if not hasattr( request, 'session' ):
@@ -100,6 +104,7 @@ class SessionState:
         request.session[ 'forecast_start_from' ] = self.forecast_start_from
         request.session[ 'forecast_duration_years' ] = self.forecast_duration_years
         request.session[ 'forecast_interval' ] = self.forecast_interval
+        request.session[ 'cookies_acknowledged' ] = self.cookies_acknowledged
         return
 
     @staticmethod
@@ -119,4 +124,5 @@ class SessionState:
                 request.session.get( 'books_table_definition' ) ),
             forecast_start_from = request.session.get( 'forecast_start_from' ),
             forecast_duration_years = _int_or_none( request.session.get( 'forecast_duration_years' ) ),
-            forecast_interval = request.session.get( 'forecast_interval' ) )
+            forecast_interval = request.session.get( 'forecast_interval' ),
+            cookies_acknowledged = bool( request.session.get( 'cookies_acknowledged', False ) ) )
