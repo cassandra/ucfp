@@ -710,10 +710,8 @@ body.has-cookie-notice {
     }
 }
 
-/* Public marketing page: a soft brand-tinted hero band with a hairline edge, so it reads
-   as a distinct section against the white content below (the two were near-identical light
-   greys before). */
-.marketing-hero {
-    background-color: var(--info-bg-light);
-    border-bottom: 1px solid #d5e0ea;
+/* Public marketing page: a neutral grey feature band between the white hero and the white
+   page, so the sections read distinctly and the white feature cards lift off it. */
+.marketing-band {
+    background-color: #e9ecef;
 }

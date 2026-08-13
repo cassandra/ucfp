@@ -10,7 +10,7 @@
 {% endcomment %}
 
 {% block content %}
-<header class="text-center py-4 marketing-hero">
+<header class="text-center py-4">
   <div class="container">
     <img class="img-fluid mb-4" style="max-height: 72px" src="{% static 'img/app-logo-h200.png' %}"
          alt="{% settings_value 'SITE_NAME' %}">
@@ -22,50 +22,52 @@
   </div>
 </header>
 
-<section class="container py-5">
-  <div class="row justify-content-center">
-    <div class="col-lg-8 text-center">
-      <h2 class="h3 mb-3">One model for all your financial planning</h2>
-      <p class="text-muted mb-0">Most calculators answer a single question at a single moment.
-        {% settings_value 'SITE_NAME' %} replaces the tangle of spreadsheets with one robust,
-        double-entry model so you can see whether your
-        money lasts, and keep your plan honest against reality as it unfolds.</p>
+<section class="marketing-band py-5">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-8 text-center">
+        <h2 class="h3 mb-3">One model for all your financial planning</h2>
+        <p class="text-muted mb-0">Most calculators answer a single question at a single moment.
+          {% settings_value 'SITE_NAME' %} replaces the tangle of spreadsheets with one robust,
+          double-entry model so you can see whether your
+          money lasts, and keep your plan honest against reality as it unfolds.</p>
+      </div>
     </div>
-  </div>
 
-  <div class="row mt-5">
-    <div class="col-md-4 mb-4 mb-md-0">
-      <div class="card h-100 shadow-sm">
-        <div class="card-body text-center">
-          {% icon 'clock' size='xxl' color='primary' %}
-          <h3 class="h5 mt-3">Retirement</h3>
-          <p class="text-muted small mb-0">Long-horizon budgeting: how much you need, and when you can stop working.</p>
+    <div class="row mt-5">
+      <div class="col-md-4 mb-4 mb-md-0">
+        <div class="card h-100 border-0 shadow">
+          <div class="card-body text-center">
+            {% icon 'clock' size='xxl' color='primary' %}
+            <h3 class="h5 mt-3">Retirement</h3>
+            <p class="text-muted small mb-0">Long-horizon budgeting: how much you need, and when you can stop working.</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4 mb-4 mb-md-0">
+        <div class="card h-100 border-0 shadow">
+          <div class="card-body text-center">
+            {% icon 'shield' size='xxl' color='primary' %}
+            <h3 class="h5 mt-3">Social Security timing</h3>
+            <p class="text-muted small mb-0">Compare claiming strategies to find the one that pays you most.</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100 border-0 shadow">
+          <div class="card-body text-center">
+            {% icon 'dollar-sign' size='xxl' color='primary' %}
+            <h3 class="h5 mt-3">Near-term cash flow</h3>
+            <p class="text-muted small mb-0">The next twelve months at fine granularity, so nothing catches you short.</p>
+          </div>
         </div>
       </div>
     </div>
-    <div class="col-md-4 mb-4 mb-md-0">
-      <div class="card h-100 shadow-sm">
-        <div class="card-body text-center">
-          {% icon 'shield' size='xxl' color='primary' %}
-          <h3 class="h5 mt-3">Social Security timing</h3>
-          <p class="text-muted small mb-0">Compare claiming strategies to find the one that pays you most.</p>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card h-100 shadow-sm">
-        <div class="card-body text-center">
-          {% icon 'dollar-sign' size='xxl' color='primary' %}
-          <h3 class="h5 mt-3">Near-term cash flow</h3>
-          <p class="text-muted small mb-0">The next twelve months at fine granularity, so nothing catches you short.</p>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <p class="text-center text-muted small mt-4 mb-0">
-    Sanity-checked &middot; Private, no marketing &middot; Past, present &amp; future in one model
-  </p>
+    <p class="text-center text-muted small mt-4 mb-0">
+      Sanity-checked &middot; Private, no marketing &middot; Past, present &amp; future in one model
+    </p>
+  </div>
 </section>
 
 <section class="text-center py-4 bg-primary text-white">
