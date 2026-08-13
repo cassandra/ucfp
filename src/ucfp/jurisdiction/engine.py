@@ -157,6 +157,14 @@ class TaxEngine:
         pays the increment not yet withheld. Default: none."""
         return Decimal( '0' )
 
+    def estimate_income_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
+                             opening_tax_state : Optional[ TaxState ] ) -> Decimal:
+        """The income tax to prepay in-year as a safe-harbor estimate, before the year's true
+        liability is settled to the payable. Withholding income tax through the year (rather than
+        floating the whole bill to next April) matches reality; the year-end settlement then trues it
+        up on the payable. Default: none (the whole liability defers)."""
+        return Decimal( '0' )
+
     def assess_penalties( self, fiscal_window : FiscalWindowView,
                           tax_context : TaxContext ) -> list[ TaxPenalty ]:
         """The `TaxPenalty`s the year's activity incurs (e.g. the early-withdrawal penalty),

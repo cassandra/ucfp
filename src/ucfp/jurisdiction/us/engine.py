@@ -278,12 +278,15 @@ class USFederalTaxEngine( TaxEngine ):
         credits = []
         if premium_credit > 0:
             credits.append( TaxCredit( ExpenseTaxClass.ORDINARY_INCOME_TAX, premium_credit ) )
+        income_tax_total = ( sum( ( charge.amount for charge in charges ), _ZERO )
+                             - sum( ( credit.amount for credit in credits ), _ZERO ) )
         return TaxAssessment(
             charges           = charges,
             credits           = credits,
             closing_tax_state = TaxState(
                 capital_loss_carryover = netted.carryover,
-                passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ) ),
+                passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ),
+                prior_year_income_tax  = income_tax_total ),
             figures           = figures,
         )
 
@@ -294,6 +297,24 @@ class USFederalTaxEngine( TaxEngine ):
         status = resolve_filing_status(
             tax_context.filing_status, tax_context.spouse_death_year, fiscal_window.span.end_date.year )
         return self._employment_tax( status, fiscal_window )
+
+    def estimate_income_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
+                             opening_tax_state : Optional[ TaxState ] ) -> Decimal:
+        """The safe-harbor estimate to prepay: the lesser of this year's liability so far -- assessed
+        on the income recognized before any funding draw -- and last year's total tax. A smart planner
+        pays the minimum needed to avoid an underpayment penalty and floats the rest (a one-time spike
+        included) to the return next year; capping at the actual current liability also means an
+        anomalously high prior year never over-charges the year after. With no prior year on file
+        (bootstrapping), the current figure is used uncapped."""
+        assessment = self.assess( fiscal_window, tax_context, opening_tax_state )
+        current = max(
+            _ZERO,
+            sum( ( charge.amount for charge in assessment.charges ), _ZERO )
+            - sum( ( credit.amount for credit in assessment.credits ), _ZERO ) )
+        prior = opening_tax_state.prior_year_income_tax if isinstance( opening_tax_state, TaxState ) else None
+        if prior is None:
+            return current
+        return min( prior, current )
 
     def _pretax_holdings( self, fiscal_window : FiscalWindowView,
                           tax_context : TaxContext ) -> Iterator[ tuple[ Account, TaxSubject ] ]:

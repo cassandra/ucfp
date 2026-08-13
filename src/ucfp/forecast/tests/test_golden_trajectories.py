@@ -22,12 +22,12 @@ _D = Decimal
 # economics + the profile's complete cash policy), January start. Regenerate deliberately when an engine
 # or 2026-parameter change is intended -- a diff here means composed behaviour moved.
 _GOLDEN = {
-    'wage_earner': ( None, _D( '1018455.02749' ), _D( '679491.73806' ) ),
-    'retiree': ( 2036, _D( '-100132.82616' ), _D( '195456.71743' ) ),
-    'rental_owner': ( None, _D( '1781108.33133' ), _D( '871363.57835' ) ),
-    'couple_survivor': ( None, _D( '1556994.53039' ), _D( '236576.67540' ) ),
-    'life_events': ( 2044, _D( '-29182.71688' ), _D( '-7426.08413' ) ),
-    'gig_worker': ( None, _D( '546146.80897' ), _D( '174425.71870' ) ),
+    'wage_earner': ( None, _D( '982944.30258' ), _D( '681208.24153' ) ),
+    'retiree': ( 2035, _D( '-5508.76211' ), _D( '191464.82502' ) ),
+    'rental_owner': ( None, _D( '1773406.70794' ), _D( '868324.92931' ) ),
+    'couple_survivor': ( None, _D( '1539365.69213' ), _D( '239242.28298' ) ),
+    'life_events': ( 2044, _D( '-29478.71013' ), _D( '-7369.68025' ) ),
+    'gig_worker': ( None, _D( '536939.65647' ), _D( '174158.71051' ) ),
 }
 
 

@@ -383,17 +383,19 @@ class Period:
         return
 
     def _settle_and_fund( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Pay last year's tax first (the Taxes Payable carried in), then fund cash up to the
-        policy's floor -- so the funding draw covers that payment along with the year's expenses,
-        and the draws' realized income is taxed this year (accrued below, paid next year). Then
-        accrue this year's tax to Taxes Payable, and finally sweep any surplus above the ceiling
-        into investments (a basis-establishing purchase, so it is not a taxable event and rightly
-        runs after settlement). Because the tax payment precedes funding, the back-dated draw keeps
-        cash at the floor rather than letting tax punch it negative; only a net worth at or below
-        zero ends the forecast (see _close). And because all funding precedes accrual, no untaxed
-        income is ever carried -- only the payable is, deliberately, to next year's payment."""
+        """Settle last year's tax first (the Taxes Payable carried in) and prepay this year's income
+        tax as a safe-harbor estimate, then fund cash up to the policy's floor -- so the funding draw
+        covers both, and the draws' realized income (over the estimate) is taxed this year (accrued
+        below, paid next year). Then accrue this year's true tax to Taxes Payable -- which nets the
+        estimate already prepaid, leaving only the balance owed -- and finally sweep any surplus above
+        the ceiling into investments (a basis-establishing purchase, so it is not a taxable event and
+        rightly runs after settlement). Because the tax outflows precede funding, the back-dated draw
+        keeps cash at the floor rather than letting tax punch it negative; only a net worth at or
+        below zero ends the forecast (see _close). And because all funding precedes accrual, no
+        untaxed income is ever carried -- only the payable is, deliberately, to next year's payment."""
         self._pay_prior_tax_payable( bookkeeper, result )
         self._check_forced_tax_transactions( bookkeeper, result )
+        self._prepay_income_tax_estimate( bookkeeper, result )
         self._fund_to_target( bookkeeper, result )
         self._assess_penalties( bookkeeper, result )
         self._settle_tax( bookkeeper, result )
@@ -429,6 +431,37 @@ class Period:
         bookkeeper.record(
             payment_date, [ ( taxes_payable, -owed ), ( cash_account, owed ) ],
             description = 'Prior-year tax settlement' )
+        return
+
+    def _prepay_income_tax_estimate( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Prepay this year's income tax as a safe-harbor estimate -- in-year, before funding, so most
+        income tax leaves as it is earned rather than floating the whole bill to next April, and the
+        funding draw sees the reduced cash. The engine caps the estimate (see `estimate_income_tax`),
+        so a one-time spike or the funding draws' own gains float past it; the year-end settlement then
+        accrues the full true tax to Taxes Payable, which nets this prepayment and leaves only the
+        balance owed next year. Booked as a prepayment against the payable (DR Taxes Payable / CR
+        cash), midpoint-dated like the wages it estimates; the true tax is the expense, recognized at
+        settlement. Only at a full tax-year close, like settlement; no engine means nothing to
+        prepay."""
+        if not ( self._is_close_of_tax_year() and self._parameters.full_tax_year ):
+            return
+        tax_engine = self._parameters.tax_engine
+        if tax_engine is None:
+            return
+        estimate = quantize_money( tax_engine.estimate_income_tax(
+            self._parameters.fiscal_window, self._parameters.tax_context,
+            self._parameters.opening_tax_state ) )
+        if estimate <= 0:
+            return
+        chart = bookkeeper.chart
+        taxes_payable = chart.system_account( SystemAccountRole.TAXES_PAYABLE )
+        cash_account = chart.cash_account()
+        if taxes_payable is None or cash_account is None:
+            raise MissingAccountError( 'No Taxes Payable or cash account to prepay income tax to.' )
+        bookkeeper.record(
+            self._parameters.date_span.midpoint,
+            [ ( taxes_payable, -estimate ), ( cash_account, estimate ) ],
+            description = 'Estimated income tax (prepayment)' )
         return
 
     def _is_close_of_tax_year( self ) -> bool:
