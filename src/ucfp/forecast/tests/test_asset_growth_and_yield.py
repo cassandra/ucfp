@@ -35,6 +35,21 @@ def _run( holding, economics ):
     ) ).run().books )
 
 
+def _run_single( holding, economics ):
+    """Run a forecast whose only asset is `holding` -- so a distributing cash hub can be seeded
+    with a chosen (here negative) opening balance without a second cash account confusing the
+    hub lookup."""
+    return Bookkeeper( Forecast( ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( 2026, 12, 31 ),
+        filing_status = FilingStatus.SINGLE,
+        statute       = _PROFILE,
+        subjects      = [ _SUBJECT ],
+        assets        = [ holding ],
+        economic_outlook = EconomicOutlook.constant( economics ),
+    ) ).run().books )
+
+
 class AssetGrowthAndYieldTests( unittest.TestCase ):
 
     def test_appreciation_grows_market_value_by_the_class_rate( self ):
@@ -58,6 +73,16 @@ class AssetGrowthAndYieldTests( unittest.TestCase ):
         reader  = _run( holding, EconomicParameters( bond_interest = Rate( _D( '0.04' ) ) ) )
         interest = reader.chart.income_account( IncomeTaxClass.TAXABLE_INTEREST )
         self.assertEqual( reader.ledger.natural_balance( interest ), _D( '4000' ) )   # 4% of 100,000
+
+    def test_no_distribution_is_recognized_on_a_non_positive_balance( self ):
+        # A depleted forecast can carry the cash hub negative (tax settles after the single funding
+        # pass), and that negative balance opens the next period. Yield must not be posted on it:
+        # the distribution rate on a negative principal would book negative "interest income" and
+        # deepen the shortfall. Seeding cash negative stands in for that mid-forecast state.
+        holding  = AssetParameters( 'Cash', AssetClass.CASH, _D( '-1000' ), _D( '-1000' ), handle = 'cash' )
+        reader   = _run_single( holding, EconomicParameters( savings_interest = Rate( _D( '0.02' ) ) ) )
+        interest = reader.chart.income_account( IncomeTaxClass.TAXABLE_INTEREST )
+        self.assertEqual( reader.ledger.natural_balance( interest ), _D( '0' ) )   # no yield on an overdraft
 
 
 if __name__ == '__main__':
