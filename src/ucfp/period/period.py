@@ -120,6 +120,12 @@ class Period:
                 continue
             rate = self._parameters.asset_rates.distribution_rate( holding.asset_class )
             opening_value = ledger.market_value( holding, through = opening_through )
+            # A non-positive opening balance is not a yield-bearing position: a depleted or
+            # overdrawn cash hub is a shortfall, not principal. Applying the distribution rate
+            # to it would book negative "income" and deepen the very hole it reacts to, so no
+            # distribution is recognized until the balance is positive again.
+            if opening_value <= 0:
+                continue
             distribution = quantize_money( rate.change_on( opening_value ) )
             if distribution == 0:
                 continue
