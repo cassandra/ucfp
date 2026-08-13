@@ -5,9 +5,9 @@
   posts asynchronously (antinode); PrivacyAcceptView returns a replace that removes this
   wrapper (by its id) in place. Copy is placeholder pending review.
 {% endcomment %}
-<div id="privacy-consent-banner" class="fixed-bottom bg-white border-top shadow-sm">
+<div id="privacy-consent-banner" class="fixed-bottom shadow">
   <div class="container d-flex flex-wrap align-items-center justify-content-between py-2">
-    <p class="mb-2 mb-md-0 mr-md-3 small text-muted">
+    <p class="mb-2 mb-md-0 mr-md-3 small">
       We use only the cookies necessary to run {% settings_value 'SITE_NAME' %} and keep you signed in
       &mdash; no tracking. <a href="{% url 'privacy' %}">Learn more</a>.
     </p>

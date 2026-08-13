@@ -690,6 +690,14 @@ a:hover, a:focus {
     box-shadow: none;
 }
 
+/* The cookie-usage notice reads as an "info" surface: the light info tint with a
+   brand-coloured top edge (matching .notice-item--info), distinct from the white page
+   without the weight of a solid-colour bar. */
+#privacy-consent-banner {
+    background-color: var(--info-bg-light);
+    border-top: 2px solid var(--info-color);
+}
+
 /* Reserve space at the bottom of the page for the fixed cookie-usage notice
    (components/privacy_banner.html) so it does not occlude the footer. Wider allowance
    on narrow screens, where the message wraps above the button. */
