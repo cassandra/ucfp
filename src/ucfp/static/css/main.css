@@ -709,3 +709,11 @@ body.has-cookie-notice {
         padding-bottom: 4rem;
     }
 }
+
+/* Public marketing page: a soft brand-tinted hero band with a hairline edge, so it reads
+   as a distinct section against the white content below (the two were near-identical light
+   greys before). */
+.marketing-hero {
+    background-color: var(--info-bg-light);
+    border-bottom: 1px solid #d5e0ea;
+}

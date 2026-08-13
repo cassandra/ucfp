@@ -10,7 +10,7 @@
 {% endcomment %}
 
 {% block content %}
-<header class="text-center py-4 bg-light">
+<header class="text-center py-4 marketing-hero">
   <div class="container">
     <img class="img-fluid mb-4" style="max-height: 72px" src="{% static 'img/app-logo-h200.png' %}"
          alt="{% settings_value 'SITE_NAME' %}">
@@ -35,7 +35,7 @@
 
   <div class="row mt-5">
     <div class="col-md-4 mb-4 mb-md-0">
-      <div class="card h-100 border-0 shadow-sm">
+      <div class="card h-100 shadow-sm">
         <div class="card-body text-center">
           {% icon 'clock' size='xxl' color='primary' %}
           <h3 class="h5 mt-3">Retirement</h3>
@@ -44,7 +44,7 @@
       </div>
     </div>
     <div class="col-md-4 mb-4 mb-md-0">
-      <div class="card h-100 border-0 shadow-sm">
+      <div class="card h-100 shadow-sm">
         <div class="card-body text-center">
           {% icon 'shield' size='xxl' color='primary' %}
           <h3 class="h5 mt-3">Social Security timing</h3>
@@ -53,7 +53,7 @@
       </div>
     </div>
     <div class="col-md-4">
-      <div class="card h-100 border-0 shadow-sm">
+      <div class="card h-100 shadow-sm">
         <div class="card-body text-center">
           {% icon 'dollar-sign' size='xxl' color='primary' %}
           <h3 class="h5 mt-3">Near-term cash flow</h3>
