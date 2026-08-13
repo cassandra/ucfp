@@ -94,7 +94,7 @@ def all_env_var_names():
     """
     names = [ spec.env_name for spec in _ENV_SPEC ]
     names += [ ENV_PREFIX + 'EXTRA_HOST_URLS', ENV_PREFIX + 'EXTRA_CSP_URLS',
-               ENV_PREFIX + 'SECRET_URL_PREFIX_UUID' ]
+               ENV_PREFIX + 'SECRET_URL_PREFIX_UUID', ENV_PREFIX + 'FIELD_ENCRYPTION_KEY' ]
     return names
 
 
@@ -132,6 +132,7 @@ class EnvironmentSettings:
     REDIS_HOST                 : str           = 'localhost'
     REDIS_PORT                 : int           = 6379
     SUPPRESS_AUTHENTICATION    : bool          = True
+    FIELD_ENCRYPTION_KEYS      : Tuple[ str ]  = field( default_factory = tuple )
     SECRET_URL_PREFIX          : str           = ''
     EMAIL_SUBJECT_PREFIX       : str           = ''
     DEFAULT_FROM_EMAIL         : str           = ''
@@ -191,6 +192,13 @@ class EnvironmentSettings:
         secret_url_prefix_uuid = cls.get_env_variable( ENV_PREFIX + 'SECRET_URL_PREFIX_UUID', '' )
         if secret_url_prefix_uuid:
             env_settings.SECRET_URL_PREFIX = f'{secret_url_prefix_uuid}/'
+
+        # Field-encryption keys are a comma-separated list so keys can rotate: the
+        # first encrypts, all decrypt. Parsed into a tuple here; empty when unset,
+        # which the encrypted fields treat as "not configured".
+        raw_field_encryption_keys = cls.get_env_variable( ENV_PREFIX + 'FIELD_ENCRYPTION_KEY', '' )
+        env_settings.FIELD_ENCRYPTION_KEYS = tuple(
+            key.strip() for key in raw_field_encryption_keys.split( ',' ) if key.strip() )
 
         ###########
         # Extras to satisfy security requirements:

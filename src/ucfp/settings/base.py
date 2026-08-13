@@ -335,6 +335,12 @@ CACHES = {
 AUTH_USER_MODEL = "custom.CustomUser"
 SUPPRESS_AUTHENTICATION = ENV.SUPPRESS_AUTHENTICATION
 
+# Keys and cipher for the encrypted model fields (see common.encrypted_fields).
+# Empty keys mean "not configured" -- the fields fail closed on first use rather
+# than store plaintext; every real deployment sets UCFP_FIELD_ENCRYPTION_KEY.
+FIELD_ENCRYPTION_KEYS = ENV.FIELD_ENCRYPTION_KEYS
+FIELD_ENCRYPTION_CODEC = 'fernet'
+
 # Unguessable URL prefix for the admin-only entry points (admin/, env/), set on
 # public deployments via UCFP_SECRET_URL_PREFIX_UUID. Blank in the default
 # self-host setup, leaving the routes at /admin/ and /env/. See ucfp/urls.py.

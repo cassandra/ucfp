@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import base64
 import os
 import platform
 import re
@@ -148,6 +149,10 @@ class EnvironmentGenerator:
         ( 'Public URL obfuscation',
           'optional; set to a UUID on public deployments to hide /admin/ and /env/ behind it', [
               ( 'UCFP_SECRET_URL_PREFIX_UUID', '' ),
+          ] ),
+        ( 'Data encryption',
+          'required; the key that encrypts sensitive fields at rest', [
+              ( 'UCFP_FIELD_ENCRYPTION_KEY', '<replace-with-generated-fernet-key>' ),
           ] ),
         ( 'Email / alerts',
           'optional; leave UCFP_EMAIL_HOST empty to disable email notifications', [
@@ -309,6 +314,7 @@ class EnvironmentGenerator:
         server_email = email_settings.email_address
 
         self._settings_map['DJANGO_SECRET_KEY'] = self._generate_secret_key()
+        self._settings_map['UCFP_FIELD_ENCRYPTION_KEY'] = self._generate_field_encryption_key()
         self._settings_map['DJANGO_SUPERUSER_EMAIL'] = django_admin_email
         self._settings_map['DJANGO_SUPERUSER_PASSWORD'] = django_admin_password
         self._settings_map['UCFP_DEFAULT_FROM_EMAIL'] = from_email
@@ -769,6 +775,10 @@ class EnvironmentGenerator:
     def _generate_secret_key( self, length : int = 50 ):
         chars = string.ascii_letters + string.digits + string.punctuation
         return ''.join(secrets.choice(chars) for _ in range(length))
+
+    def _generate_field_encryption_key( self ):
+        # A Fernet key: 32 random bytes, url-safe base64 encoded.
+        return base64.urlsafe_b64encode( os.urandom( 32 ) ).decode( 'ascii' )
 
     @classmethod
     def input_boolean( cls, message : str, default : bool = None ) -> bool:
