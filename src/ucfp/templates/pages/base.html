@@ -42,7 +42,7 @@
     {% block head_css %}{% endblock %}
     {% block head_javascript %}{% endblock %}
   </head>
-  <body>
+  <body{% if request.show_privacy_banner %} class="has-cookie-notice"{% endif %}>
     <script>
      window.__APP_CONFIG__ = {{ app_client_config.to_json_dict|safe }};
      window.AppConst = {{ AppConst.to_json_dict_str|safe }};

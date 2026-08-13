@@ -689,3 +689,15 @@ a:hover, a:focus {
     background-color: #fff;
     box-shadow: none;
 }
+
+/* Reserve space at the bottom of the page for the fixed cookie-usage notice
+   (components/privacy_banner.html) so it does not occlude the footer. Wider allowance
+   on narrow screens, where the message wraps above the button. */
+body.has-cookie-notice {
+    padding-bottom: 6rem;
+}
+@media (min-width: 768px) {
+    body.has-cookie-notice {
+        padding-bottom: 4rem;
+    }
+}
