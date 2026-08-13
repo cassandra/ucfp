@@ -19,6 +19,7 @@ from django.http import (
 from common.exceptions import MethodNotAllowedError
 
 from . import views
+from .privacy_consent import PrivacyConsent
 from .session_state import SessionState
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,22 @@ class SessionStateMiddleware:
 
     def __call__( self, request ):
         request.session_state = SessionState.from_session( request )
+        return self.get_response( request )
+
+
+class PrivacyBannerMiddleware:
+    """
+    Attaches ``request.show_privacy_banner`` -- whether to show the cookie-usage
+    notice (see ucfp.privacy_consent). Runs after the auth and SessionState
+    middleware, since the decision reads ``request.user`` and ``request.session_state``.
+    """
+
+    def __init__( self, get_response ):
+        self.get_response = get_response
+        return
+
+    def __call__( self, request ):
+        request.show_privacy_banner = PrivacyConsent.should_show( request )
         return self.get_response( request )
 
 

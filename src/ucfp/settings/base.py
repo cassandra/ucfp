@@ -115,6 +115,9 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'user.middleware.AuthenticationMiddleware',
+    # Attaches request.show_privacy_banner -- after the auth middleware, whose
+    # request.user it reads (and after SessionStateMiddleware above).
+    'ucfp.middleware.PrivacyBannerMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Stamp `Cache-Control: no-store` on dynamic HTML/JSON. Outer of

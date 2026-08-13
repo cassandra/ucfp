@@ -31,6 +31,7 @@ urlpatterns = [
     path( 'about', TemplateView.as_view( template_name = 'pages/about.html' ), name = 'about' ),
     path( 'contact', TemplateView.as_view( template_name = 'pages/contact.html' ), name = 'contact' ),
     path( 'privacy', TemplateView.as_view( template_name = 'pages/privacy.html' ), name = 'privacy' ),
+    path( 'privacy/accept', views.PrivacyAcceptView.as_view(), name = 'privacy_accept' ),
     path( 'terms', TemplateView.as_view( template_name = 'pages/terms.html' ), name = 'terms' ),
 
     path( f'{settings.SECRET_URL_PREFIX}env/', include( 'ucfp.environment.urls' )),
