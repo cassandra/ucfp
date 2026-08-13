@@ -261,17 +261,16 @@ class USFederalTaxEngine( TaxEngine ):
         niit = self._net_investment_income_tax(
             status, figures.niit_magi, net_investment_income )
 
-        payroll_tax = self._payroll_tax( status, fiscal_window )
         premium_credit = self._premium_tax_credit( figures.aca_magi, tax_context.health_enrollment )
 
-        # Income tax splits into its rate layers, each its own account; payroll tax and NIIT stand
-        # apart. The refundable premium credit offsets the ordinary income tax (its natural home).
+        # Income tax splits into its rate layers, each its own account; NIIT stands apart. Employment
+        # tax (FICA) is withheld in-year (see `assess_employment_tax`), not assessed here. The
+        # refundable premium credit offsets the ordinary income tax (its natural home).
         income_tax_charges = (
             ( ExpenseTaxClass.ORDINARY_INCOME_TAX, income_tax.ordinary ),
             ( ExpenseTaxClass.CAPITAL_GAINS_TAX, income_tax.capital_gains ),
             ( ExpenseTaxClass.SECTION_1250_TAX, income_tax.section_1250 ),
             ( ExpenseTaxClass.COLLECTIBLES_TAX, income_tax.collectibles ),
-            ( ExpenseTaxClass.PAYROLL_TAX, payroll_tax ),
             ( ExpenseTaxClass.NIIT, niit ),
             ( ExpenseTaxClass.STATE_INCOME_TAX, state_income_tax ) )
         charges = [ TaxCharge( tax_class, amount )
@@ -279,14 +278,48 @@ class USFederalTaxEngine( TaxEngine ):
         credits = []
         if premium_credit > 0:
             credits.append( TaxCredit( ExpenseTaxClass.ORDINARY_INCOME_TAX, premium_credit ) )
+        income_tax_total = self._net_income_tax( charges, credits )
         return TaxAssessment(
             charges           = charges,
             credits           = credits,
             closing_tax_state = TaxState(
                 capital_loss_carryover = netted.carryover,
-                passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ) ),
+                passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ),
+                prior_year_income_tax  = income_tax_total ),
             figures           = figures,
         )
+
+    def assess_employment_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext ) -> Decimal:
+        """Employee FICA on the year-to-date wages in `fiscal_window`, at the year's effective filing
+        status (the surtax threshold is status-dependent). Cumulative by construction, so the caller
+        pays the increment not yet withheld this year."""
+        status = resolve_filing_status(
+            tax_context.filing_status, tax_context.spouse_death_year, fiscal_window.span.end_date.year )
+        return self._employment_tax( status, fiscal_window )
+
+    @staticmethod
+    def _net_income_tax( charges : list, credits : list ) -> Decimal:
+        """The net income tax an assessment charges: total charges less refundable credits. The same
+        quantity that closes onto `TaxState.prior_year_income_tax` and that the estimate caps against,
+        so both read it from here."""
+        return ( sum( ( charge.amount for charge in charges ), _ZERO )
+                 - sum( ( credit.amount for credit in credits ), _ZERO ) )
+
+    def estimate_income_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
+                             opening_tax_state : Optional[ TaxState ] ) -> Decimal:
+        """The safe-harbor estimate to prepay: the lesser of this year's liability so far -- assessed
+        on the income recognized before any funding draw (exactly so at annual granularity; see the
+        Period's note on the sub-annual case) -- and last year's total tax. A smart planner pays the
+        minimum needed to avoid an underpayment penalty and floats the rest (a one-time spike included)
+        to the return next year; capping at the actual current liability also means an anomalously high
+        prior year never over-charges the year after. With no prior year on file (bootstrapping), the
+        current figure is used uncapped."""
+        assessment = self.assess( fiscal_window, tax_context, opening_tax_state )
+        current = max( _ZERO, self._net_income_tax( assessment.charges, assessment.credits ) )
+        prior = opening_tax_state.prior_year_income_tax if isinstance( opening_tax_state, TaxState ) else None
+        if prior is None:
+            return current
+        return min( prior, current )
 
     def _pretax_holdings( self, fiscal_window : FiscalWindowView,
                           tax_context : TaxContext ) -> Iterator[ tuple[ Account, TaxSubject ] ]:
@@ -647,7 +680,7 @@ class USFederalTaxEngine( TaxEngine ):
         excess = max( _ZERO, magi - self._parameters.niit_thresholds[ status ] )
         return self._parameters.niit_rate * min( net_investment_income, excess )
 
-    def _payroll_tax( self, status : FilingStatus, fiscal_window : FiscalWindowView ) -> Decimal:
+    def _employment_tax( self, status : FilingStatus, fiscal_window : FiscalWindowView ) -> Decimal:
         """Employee FICA: Social Security on each worker's wages up to the wage base
         (capped per worker, so two earners get two caps), Medicare on all wages, plus
         the Additional Medicare surtax on combined wages over the filing-status

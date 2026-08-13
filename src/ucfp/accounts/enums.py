@@ -108,6 +108,8 @@ class SystemAccountRole( LabeledEnum ):
         'External Receipts', 'Equity counterpart for non-taxable value received from outside.' )
     EXTERNAL_DISBURSEMENTS = (
         'External Disbursements', 'Equity counterpart for non-deductible value given away.' )
+    TAXES_PAYABLE = (
+        'Taxes Payable', 'Liability for tax assessed this year and paid the following year.' )
 
 
 class AssetClass( LabeledEnum ):
@@ -308,7 +310,9 @@ class ExpenseTaxClass( LabeledEnum ):
     SECTION_1250_TAX        = (
         'Section 1250 Tax', 'Tax on unrecaptured §1250 depreciation, capped at its own rate.' )
     COLLECTIBLES_TAX        = ( 'Collectibles Tax', 'Tax on collectibles gains, capped at its own rate.' )
-    PAYROLL_TAX             = ( 'Payroll Tax', 'FICA / Medicare on wages.' )
+    EMPLOYMENT_TAX          = (
+        'FICA (Social Security & Medicare)',
+        'Social Security + Medicare on wages (employee FICA); withheld in-year, not income tax.' )
     NIIT                    = ( 'Net Investment Income Tax', '3.8% net investment income tax.' )
     STATE_INCOME_TAX        = (
         'State Income Tax', 'A flat per-state rate on federal AGI; a simplified estimate, not real brackets.' )
@@ -330,7 +334,7 @@ _TAX_PAYMENT_EXPENSE_CLASSES = frozenset( (
     ExpenseTaxClass.CAPITAL_GAINS_TAX,
     ExpenseTaxClass.SECTION_1250_TAX,
     ExpenseTaxClass.COLLECTIBLES_TAX,
-    ExpenseTaxClass.PAYROLL_TAX,
+    ExpenseTaxClass.EMPLOYMENT_TAX,
     ExpenseTaxClass.NIIT,
     ExpenseTaxClass.STATE_INCOME_TAX,
     ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,

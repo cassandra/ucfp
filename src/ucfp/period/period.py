@@ -11,10 +11,11 @@ The interval is computed in three phases (see `ucfp/FORECAST_ENGINE.md`):
   1. Accrue        -- effects whose magnitude is known up front: asset growth and
                       distributions, income, liability service, scheduled expenses
                       and money-movement events, each at its temporal-POV instant.
-  2. Settle & fund -- fund cash to the floor via the funding waterfall first (so the
-                      draws' realized income is taxed this period), then settle the
-                      period's tax. Tax may pull cash below the floor (even negative),
-                      carried forward rather than grossed up for.
+  2. Settle & fund -- pay last year's tax (the Taxes Payable carried in), fund cash to
+                      the floor via the funding waterfall (so the back-dated draw covers
+                      that payment and the draws' realized income is taxed this year),
+                      then accrue this year's tax to Taxes Payable -- owed now, paid next
+                      year. The payment precedes funding, so cash stays at the floor.
   3. Close         -- finalize ending balances and the stop condition.
 """
 from datetime import date
@@ -55,6 +56,7 @@ class Period:
         midpoint)."""
         self._apply_asset_returns( bookkeeper, result )
         self._recognize_income( bookkeeper, result )
+        self._withhold_employment_tax( bookkeeper, result )
         self._apply_contributions( bookkeeper, result )
         self._service_liabilities( bookkeeper, result )
         self._apply_expenses( bookkeeper, result )
@@ -163,6 +165,38 @@ class Period:
                 description = income_line.source or '',
             )
             continue
+        return
+
+    def _withhold_employment_tax( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Withhold this interval's employment tax (US FICA: Social Security + Medicare) to cash, at
+        the midpoint alongside the wages it rides on -- paid in-year as earned, not deferred to the tax
+        payable like income tax. FICA carries annual, per-worker figures (the Social Security cap, the
+        Medicare surtax threshold), so the engine reads it over the year-to-date window and this pays
+        only the portion not yet withheld this tax year: the whole year in one step at annual
+        granularity, each interval's increment at finer ones. No engine, or nothing left to withhold,
+        means nothing to do."""
+        tax_engine = self._parameters.tax_engine
+        if tax_engine is None:
+            return
+        fiscal_window = self._parameters.fiscal_window
+        year_to_date = tax_engine.assess_employment_tax( fiscal_window, self._parameters.tax_context )
+        chart = bookkeeper.chart
+        employment_tax_account = chart.expense_account( ExpenseTaxClass.EMPLOYMENT_TAX )
+        if employment_tax_account is None:
+            raise MissingAccountError( 'No employment-tax expense account to withhold to.' )
+        already_withheld = bookkeeper.ledger.natural_flow(
+            employment_tax_account,
+            start = fiscal_window.span.start_date, end = fiscal_window.span.end_date )
+        withholding = quantize_money( year_to_date - already_withheld )
+        if withholding == 0:
+            return
+        cash_account = chart.cash_account()
+        if cash_account is None:
+            raise MissingAccountError( 'No cash account to withhold employment tax from.' )
+        bookkeeper.record(
+            self._parameters.date_span.midpoint,
+            [ ( employment_tax_account, -withholding ), ( cash_account, withholding ) ],
+            description = 'FICA withholding' )
         return
 
     def _apply_contributions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
@@ -349,18 +383,81 @@ class Period:
         return
 
     def _settle_and_fund( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Fund cash up to the policy's floor first -- so the draws' realized income is taxed
-        this period -- then settle the period's tax on the full income, and finally sweep any
-        surplus above the ceiling into investments (a basis-establishing purchase, so it is not
-        a taxable event and rightly runs after settlement). Tax may pull cash below the floor
-        (even negative); that balance is carried into the next period as a visible cash-flow
-        signal, and only a net worth at or below zero ends the forecast (see _close). Because
-        all funding precedes settlement, no untaxed income is ever carried -- only cash is."""
+        """Pay last year's Taxes Payable, prepay this year's income-tax estimate, then fund cash to the
+        floor, then accrue this year's true tax to Taxes Payable (which nets the prepayment, leaving
+        only the balance owed), then sweep any surplus above the ceiling. Ordering is load-bearing: the
+        tax outflows precede funding, so the back-dated draw covers them and keeps cash at the floor
+        instead of tax punching it negative; and all funding precedes accrual, so no untaxed income is
+        carried -- only the payable, deliberately, to next year. The sweep is a basis-establishing
+        purchase (not taxable), so it rightly runs last. The final year's accrual is never settled --
+        its payment date lies beyond the horizon -- so it stands as a real terminal liability. Only a
+        net worth at or below zero ends the forecast (see _close)."""
+        self._pay_prior_tax_payable( bookkeeper, result )
         self._check_forced_tax_transactions( bookkeeper, result )
+        self._prepay_income_tax_estimate( bookkeeper, result )
         self._fund_to_target( bookkeeper, result )
         self._assess_penalties( bookkeeper, result )
         self._settle_tax( bookkeeper, result )
         self._sweep_to_ceiling( bookkeeper, result )
+        return
+
+    def _pay_prior_tax_payable( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Settle the Taxes Payable carried in from last year's accrual, on the payment date the tax
+        law sets (civil default: April 15). One sign-agnostic entry (DR Taxes Payable / CR cash)
+        settles either direction: a positive balance is paid out, a negative one -- a refund receivable
+        from credits beyond the tax -- is collected in. No engine, no Taxes Payable account, a zero
+        balance, or a payment date outside this interval -> nothing to do."""
+        tax_engine = self._parameters.tax_engine
+        if tax_engine is None:
+            return
+        chart = bookkeeper.chart
+        taxes_payable = chart.system_account( SystemAccountRole.TAXES_PAYABLE )
+        if taxes_payable is None:
+            return
+        span = self._parameters.date_span
+        payment_date = tax_engine.tax_payment_date( span.start_date.year - 1 )
+        if not ( span.start_date <= payment_date <= span.end_date ):
+            return
+        owed = bookkeeper.ledger.natural_balance( taxes_payable )
+        if owed == 0:
+            return
+        cash_account = chart.cash_account()
+        if cash_account is None:
+            raise MissingAccountError( 'No cash account to settle Taxes Payable from.' )
+        bookkeeper.record(
+            payment_date, [ ( taxes_payable, -owed ), ( cash_account, owed ) ],
+            description = 'Prior-year tax settlement' )
+        return
+
+    def _prepay_income_tax_estimate( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Prepay this year's income tax as a safe-harbor estimate, so most of it leaves cash within
+        the year it is earned rather than the whole bill floating to next April. Booked as a prepayment
+        against the payable (DR Taxes Payable / CR cash), so the year-end settlement books the full true
+        tax and nets this prepayment, leaving only the balance owed; the engine caps the estimate (see
+        `estimate_income_tax`), so a spike or the funding draws' own gains float past it. Assessed on
+        pre-funding-draw income -- exactly so at annual granularity, where this is the year's only
+        Period; at finer granularity the single year-close estimate reads a window that already
+        includes earlier draws, which the settlement nets back out (no total is wrong). Only at a full
+        tax-year close, like settlement; no engine means nothing to prepay."""
+        if not ( self._is_close_of_tax_year() and self._parameters.full_tax_year ):
+            return
+        tax_engine = self._parameters.tax_engine
+        if tax_engine is None:
+            return
+        estimate = quantize_money( tax_engine.estimate_income_tax(
+            self._parameters.fiscal_window, self._parameters.tax_context,
+            self._parameters.opening_tax_state ) )
+        if estimate <= 0:
+            return
+        chart = bookkeeper.chart
+        taxes_payable = chart.system_account( SystemAccountRole.TAXES_PAYABLE )
+        cash_account = chart.cash_account()
+        if taxes_payable is None or cash_account is None:
+            raise MissingAccountError( 'No Taxes Payable or cash account to prepay income tax to.' )
+        bookkeeper.record(
+            self._parameters.date_span.midpoint,
+            [ ( taxes_payable, -estimate ), ( cash_account, estimate ) ],
+            description = 'Estimated income tax (prepayment)' )
         return
 
     def _is_close_of_tax_year( self ) -> bool:
@@ -373,16 +470,17 @@ class Period:
             self._parameters.date_span.end_date )
 
     def _settle_tax( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Assess the tax year and book each charge as a tax expense drawn from the cash hub.
-        (The zero-tax engine yields none.) Settlement runs only at the tax-year close.
+        """Assess the tax year and accrue each charge to Taxes Payable, dated the year's end --
+        owed now, paid the following year (see `_pay_prior_tax_payable`). (The zero-tax engine
+        yields none.) Settlement runs only at the tax-year close.
 
         The engine's opening tax state (carryforwards) is threaded in, and its closing
         state captured on the result -- even in a no-charge year, since a capital-loss year
         produces a carryover with no tax due.
 
-        Charges are paid (DR tax expense / CR cash); refundable credits are the reverse
-        (CR the tax expense / DR cash), so a credit beyond the matching tax leaves a net
-        refund -- modeled here as a negated charge against the same expense class.
+        Charges accrue as owed (DR tax expense / CR Taxes Payable); refundable credits are the
+        reverse (CR the tax expense / DR Taxes Payable), so a credit beyond the matching tax leaves
+        a net refund -- modeled here as a negated charge against the same expense class.
 
         Income tax is assessed only on a whole calendar year: a partial year (a mid-year start
         or a trailing year short of December 31) is not a `full_tax_year`, so this returns before
@@ -397,43 +495,45 @@ class Period:
         settlements = (
             [ ( charge.tax_class, charge.amount ) for charge in assessment.charges ]
             + [ ( credit.tax_class, -credit.amount ) for credit in assessment.credits ] )
-        self._book_charges( bookkeeper, settlements, self._parameters.date_span.end_date )
+        self._accrue_tax_charges( bookkeeper, settlements, self._parameters.date_span.end_date )
         return
 
-    def _book_charges( self, bookkeeper : Bookkeeper,
-                       settlements : list[ tuple[ ExpenseTaxClass, Decimal ] ],
-                       settle_date : date ) -> None:
-        """Book each `(expense tax-class, amount)` as a tax expense drawn from the cash hub."""
+    def _accrue_tax_charges( self, bookkeeper : Bookkeeper,
+                             settlements : list[ tuple[ ExpenseTaxClass, Decimal ] ],
+                             settle_date : date ) -> None:
+        """Accrue each `(tax expense-class, amount)` to Taxes Payable."""
         for expense_class, amount in settlements:
-            self._book_charge( bookkeeper, expense_class, amount, settle_date )
+            self._accrue_tax_charge( bookkeeper, expense_class, amount, settle_date )
             continue
         return
 
-    def _book_charge( self, bookkeeper : Bookkeeper, expense_class : ExpenseTaxClass,
-                      amount : Decimal, settle_date : date,
-                      description : str = '' ) -> Optional[ Transaction ]:
-        """Book one `expense_class` charge as a tax expense drawn from the cash hub (DR expense
-        / CR cash); a negative amount -- a refundable credit -- reverses it. Returns the posted
-        transaction, or None for a zero amount, so a caller can reference it in a Notice."""
+    def _accrue_tax_charge( self, bookkeeper : Bookkeeper, expense_class : ExpenseTaxClass,
+                            amount : Decimal, settle_date : date,
+                            description : str = '' ) -> Optional[ Transaction ]:
+        """Accrue one `expense_class` tax charge as owed but not yet paid (DR tax expense
+        / CR Taxes Payable); a negative amount -- a refundable credit -- reverses it, which can
+        leave the payable negative (a refund receivable). The liability is settled to cash the
+        following year (see `_pay_prior_tax_payable`). Returns the posted transaction, or None
+        for a zero amount, so a caller can reference it in a Notice."""
         amount = quantize_money( amount )
         if amount == 0:
             return None
         chart = bookkeeper.chart
-        cash_account = chart.cash_account()
-        if cash_account is None:
-            raise MissingAccountError( 'No cash account to pay tax from.' )
+        taxes_payable = chart.system_account( SystemAccountRole.TAXES_PAYABLE )
+        if taxes_payable is None:
+            raise MissingAccountError( 'No Taxes Payable account to accrue tax to.' )
         expense_account = chart.expense_account( expense_class )
         if expense_account is None:
             raise MissingAccountError(
                 f'No expense account for expense tax-class {expense_class.label}.' )
         return bookkeeper.record(
-            settle_date, [ ( expense_account, -amount ), ( cash_account, amount ) ],
+            settle_date, [ ( expense_account, -amount ), ( taxes_payable, amount ) ],
             description = description )
 
     def _assess_penalties( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """At the tax-year close, book the penalties the engine reads from the books view (the
-        early-withdrawal penalty) -- each a tax expense from cash, with a WARNING Notice linked
-        to its charge (the charge's memo carries the reason). Reading the whole year's
+        """At the tax-year close, accrue the penalties the engine reads from the books view (the
+        early-withdrawal penalty) -- each its own tax charge on Taxes Payable, with a WARNING Notice
+        linked to its charge (the charge's memo carries the reason). Reading the whole year's
         distributions from the books (not this interval's events) means it sees them however
         they arose, funding draws included; the engine owns the rule."""
         if not self._is_close_of_tax_year():
@@ -443,7 +543,7 @@ class Period:
             fiscal_window, self._parameters.tax_context )
         settle_date = self._parameters.date_span.end_date
         for penalty in penalties:
-            charge = self._book_charge(
+            charge = self._accrue_tax_charge(
                 bookkeeper, penalty.tax_class, penalty.amount, settle_date,
                 description = penalty.reason )
             if charge is None:

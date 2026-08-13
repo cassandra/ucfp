@@ -218,11 +218,18 @@ class GranularityInvarianceTest( unittest.TestCase ):
 
     def test_finer_granularity_converges_on_terminal_net_worth( self ):
         """Refining is monotonic: quarterly terminal net worth lies between annual and monthly
-        (within rounding) for a full-calendar forecast. Asserted on the combos that survive the
-        horizon, where there is no post-depletion carry to muddy the terminal figure. A mid-year
-        start's partial first year carries an inherent sub-1% granularity sensitivity (see
-        `_PARTIAL_YEAR_REL_TOL`), so from that start it is held to close convergence rather than
-        the strict noise-floor bound."""
+        for a full-calendar forecast. Asserted on the combos that survive the horizon, where there
+        is no post-depletion carry to muddy the terminal figure.
+
+        Held to close convergence (`_PARTIAL_YEAR_REL_TOL`) rather than the noise floor, for two
+        independent sub-1% reasons: a mid-year start's partial first year (the cash-sweep stub, see
+        the constant), and -- for every start, January included -- mid-year income-tax settlement.
+        Tax is paid on a fixed calendar date (April 15), and cash interest accrues on each period's
+        *opening* balance, so an annual step never sees the mid-year payment reduce that year's
+        interest while finer steps do: the finer view is the more accurate one, and annual is a
+        legitimately coarser interest approximation. The flow/level invariants above are untouched
+        by this (tax timing only moves interest on the cash the payment carries), so they still hold
+        to the noise floor."""
         for profile_name, build in PROFILES.items():
             for tier_name, transform in TIERS.items():
                 for start_name, start in STARTS.items():
@@ -233,8 +240,7 @@ class GranularityInvarianceTest( unittest.TestCase ):
                     quarterly = comparison[ 'quarterly' ][ 1 ].terminal_net_worth
                     monthly   = comparison[ 'monthly' ][ 1 ].terminal_net_worth
                     low, high = min( annual, monthly ), max( annual, monthly )
-                    tolerance = _REL_TOL if start_name == 'january' else _PARTIAL_YEAR_REL_TOL
-                    slack     = max( abs( high ), Decimal( '1' ) ) * tolerance
+                    slack     = max( abs( high ), Decimal( '1' ) ) * _PARTIAL_YEAR_REL_TOL
                     with self.subTest( profile = profile_name, tier = tier_name, start = start_name ):
                         self.assertTrue(
                             low - slack <= quarterly <= high + slack,

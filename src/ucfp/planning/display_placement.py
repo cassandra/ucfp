@@ -171,7 +171,7 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
     of income's per-subject rung. The Vehicle pane's generated purchase and payment expenses carry no
     catalog row, so they map to the Vehicle section directly -- joining the catalog's vehicle running
     costs instead of falling back to their (Living) deductibility class. The engine's tax settlements
-    (income/payroll tax, NIIT, the early-withdrawal penalty) have no handle at all, but their
+    (income/employment tax, NIIT, the early-withdrawal penalty) have no handle at all, but their
     tax-payment class gathers them under one Taxes & Fees surface rather than a flat column each."""
     catalog    = { row.handle : row for row in ordered_catalog() }
     properties = _property_rungs( profile )
@@ -202,7 +202,7 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
 
 def _tax_expense_placement( tax_class ) -> AccountDisplayPlacement:
     """A tax-payment account's placement: one Taxes & Fees surface gathering the engine's tax
-    settlements (income/payroll tax, NIIT, the early-withdrawal penalty), then a per-tax-class rung so
+    settlements (income/employment tax, NIIT, the early-withdrawal penalty), then a per-tax-class rung so
     each tax renders as its own column. The surface sits after the spending classes, ahead of the
     engine-class fallback.
 

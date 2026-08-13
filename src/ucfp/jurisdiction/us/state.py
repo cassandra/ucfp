@@ -9,6 +9,7 @@ engine reads and returns.
 """
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Optional
 
 from ucfp.jurisdiction.engine import TaxState as NeutralTaxState
 
@@ -40,3 +41,6 @@ class TaxState( NeutralTaxState ):
         default_factory = CapitalLossCarryover )
     passive_loss_carryover : PassiveLossCarryover = field(
         default_factory = PassiveLossCarryover )
+    # The income tax assessed for the year this state closes -- read the next year as the prior-year
+    # figure that caps the estimated-tax safe harbor. None until a first full year has been assessed.
+    prior_year_income_tax : Optional[ Decimal ] = None

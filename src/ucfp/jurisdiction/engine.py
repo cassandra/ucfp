@@ -70,7 +70,7 @@ class FiscalWindowView( Protocol ):
 @dataclass( frozen = True )
 class TaxCharge:
     """A tax to pay: an amount attributed to an expense tax-class, which the Period
-    posts as a tax expense drawn from cash."""
+    accrues as owed to the tax payable, settled to cash the following year."""
 
     tax_class : ExpenseTaxClass
     amount    : Decimal
@@ -148,6 +148,23 @@ class TaxEngine:
                 opening_tax_state : Optional[ TaxState ] ) -> TaxAssessment:
         raise NotImplementedError
 
+    def assess_employment_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext ) -> Decimal:
+        """The employee employment tax (US FICA: Social Security + Medicare) on the wages in
+        `fiscal_window` -- distinct from income tax. It is withheld as wages are earned, so the Period
+        pays it to cash in-year rather than deferring it to the tax payable -- hence its own entry
+        point, separate from `assess`. The window is year-to-date, so the annual figures (the Social
+        Security wage cap, the Medicare surtax threshold) apply against cumulative wages and a caller
+        pays the increment not yet withheld. Default: none."""
+        return Decimal( '0' )
+
+    def estimate_income_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext,
+                             opening_tax_state : Optional[ TaxState ] ) -> Decimal:
+        """The income tax to prepay in-year as a safe-harbor estimate, before the year's true
+        liability is settled to the payable. Withholding income tax through the year (rather than
+        floating the whole bill to next April) matches reality; the year-end settlement then trues it
+        up on the payable. Default: none (the whole liability defers)."""
+        return Decimal( '0' )
+
     def assess_penalties( self, fiscal_window : FiscalWindowView,
                           tax_context : TaxContext ) -> list[ TaxPenalty ]:
         """The `TaxPenalty`s the year's activity incurs (e.g. the early-withdrawal penalty),
@@ -181,6 +198,12 @@ class TaxEngine:
         """The (start, end) dates of the tax year containing `on_date` -- the full span the
         engine assesses over. Civil-year default: January 1 to December 31 of that year."""
         return ( date( on_date.year, 1, 1 ), date( on_date.year, 12, 31 ) )
+
+    def tax_payment_date( self, tax_year : int ) -> date:
+        """The date `tax_year`'s assessed tax is settled to cash -- the return's filing/payment
+        day, the year after the income is earned, so the payment (and any draw funding it) falls
+        in the following tax year. Civil-year default: April 15 of `tax_year` + 1."""
+        return date( tax_year + 1, 4, 15 )
 
 
 class ZeroTaxEngine( TaxEngine ):

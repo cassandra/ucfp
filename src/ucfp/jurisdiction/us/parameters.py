@@ -64,7 +64,7 @@ class ItemizedRules:
 
 @dataclass( frozen = True )
 class FICARules:
-    """Employee payroll-tax rates and bounds: Social Security (capped per worker at
+    """Employee FICA (employment-tax) rates and bounds: Social Security (capped per worker at
     the wage base), Medicare (uncapped), and the Additional Medicare surtax on
     combined wages over the filing-status threshold."""
 
