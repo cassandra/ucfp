@@ -5,8 +5,10 @@
   and the contact with counsel before any public launch. Adapted for a financial-planning app (your
   financial data is yours).
 
-  The account/household deletion wording matches #160 (implemented). The "encrypted at rest" statement
-  is still release-gating on #159 (encrypt user financial data at rest); we do not go public until it ships.
+  The deletion (#160) and encryption (#159) statements describe implemented behavior; keep them
+  consistent with it. The encryption claim is deliberately honest: the figures are encrypted at rest
+  and there is no routine operator path to them, but the server holds the key to build the forecast --
+  so it does not claim we cannot decrypt. Self-hosting is the answer for anyone who needs that.
 {% endcomment %}
 
 {% block page_title %}Privacy Policy{% endblock %}
@@ -24,7 +26,7 @@
   </li>
   <li class="mb-3">
     <strong class="text-primary">We use your data only to provide the service.</strong>
-    Your financial information is used to build and show you your own projections. Nothing else.
+    Your financial information is used to build and show you your own forecast. Nothing else.
   </li>
   <li class="mb-3">
     <strong class="text-primary">No passwords, and email used only when necessary.</strong>
@@ -32,10 +34,12 @@
     only to send those codes and the occasional essential service notice &mdash; never marketing.
   </li>
   <li class="mb-3">
-    <strong class="text-primary">Your data is encrypted at rest.</strong>
-    Your financial information is encrypted where it is stored, so it stays protected even if the
-    underlying storage or backups were ever exposed. Because we build your projections on our servers,
-    our service can process your data to do that &mdash; and for nothing else.
+    <strong class="text-primary">Your data is encrypted, in transit and at rest.</strong>
+    Your connection is protected with HTTPS, and the sensitive figures you enter &mdash; your balances
+    and amounts, and the profile and plans that hold them &mdash; are encrypted where they are stored,
+    so they stay protected even if the storage or a backup were ever exposed. Our servers build your
+    forecast, so the service can decrypt your figures to do that and nothing else; we have built it so
+    that no one running it has a routine way to browse them &mdash; no admin screen, no logs.
   </li>
   <li class="mb-3">
     <strong class="text-primary">We don't track you.</strong>
@@ -54,8 +58,9 @@
   </li>
   <li class="mb-3">
     <strong class="text-primary">You can keep your data on your own machine.</strong>
-    {% settings_value 'SITE_NAME' %} is source-available. If you would rather no one else host your data,
-    run your own private instance &mdash; your data never leaves your computer.
+    {% settings_value 'SITE_NAME' %} is source-available. For the strongest privacy, run your own private
+    instance &mdash; your data stays on your computer and never reaches us. Either way, the code is open
+    for anyone to inspect to ensure your data stays yours.
   </li>
   <li class="mb-3">
     <strong class="text-primary">We only use necessary cookies.</strong>
