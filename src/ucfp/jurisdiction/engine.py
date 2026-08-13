@@ -182,6 +182,12 @@ class TaxEngine:
         engine assesses over. Civil-year default: January 1 to December 31 of that year."""
         return ( date( on_date.year, 1, 1 ), date( on_date.year, 12, 31 ) )
 
+    def tax_payment_date( self, tax_year : int ) -> date:
+        """The date `tax_year`'s assessed tax is settled to cash -- the return's filing/payment
+        day, the year after the income is earned, so the payment (and any draw funding it) falls
+        in the following tax year. Civil-year default: April 15 of `tax_year` + 1."""
+        return date( tax_year + 1, 4, 15 )
+
 
 class ZeroTaxEngine( TaxEngine ):
     """Country-neutral stand-in that assesses no tax, so the Period flow can be
