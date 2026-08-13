@@ -702,7 +702,7 @@ a:hover, a:focus {
    (components/privacy_banner.html) so it does not occlude the footer. Wider allowance
    on narrow screens, where the message wraps above the button. */
 body.has-cookie-notice {
-    padding-bottom: 6rem;
+    padding-bottom: 7rem;
 }
 @media (min-width: 768px) {
     body.has-cookie-notice {

@@ -1,5 +1,6 @@
 """The cookie-usage notice is shown only to an anonymous, not-yet-acknowledged visitor
 when authentication is enabled, and acknowledgment persists for the session."""
+import json
 from importlib import import_module
 
 from django.conf import settings
@@ -74,12 +75,24 @@ class PrivacyBannerViewTest( TestCase ):
         response = self.client.get( reverse( 'privacy' ) )
         self.assertContains( response, self._BANNER_ID )
 
+    def test_banner_renders_on_the_home_page_for_an_anonymous_visitor( self ):
+        # The home page (the marketing landing for an anonymous cloud visitor) is where
+        # the notice most matters; it extends the same base template.
+        self.assertContains( self.client.get( reverse( 'home' ) ), self._BANNER_ID )
+
     def test_accept_records_the_acknowledgment_and_dismisses_in_place( self ):
         response = self.client.post( reverse( 'privacy_accept' ) )
         self.assertEqual( response.status_code, 200 )
-        self.assertIn( self._BANNER_ID, response.content.decode() )   # the antinode replace target
+        # The antinode reply removes the banner by id (an empty-string replace).
+        self.assertEqual( json.loads( response.content )[ 'replace' ], { self._BANNER_ID: '' } )
         # The session now carries the ack, so the banner no longer renders.
         self.assertNotContains( self.client.get( reverse( 'privacy' ) ), self._BANNER_ID )
+
+    def test_anonymous_visitor_can_post_accept_without_a_signin_redirect( self ):
+        # privacy_accept is in the auth middleware's exempt set, so the anonymous POST
+        # reaches the view (200) instead of being answered with the signin page.
+        response = self.client.post( reverse( 'privacy_accept' ) )
+        self.assertEqual( response.status_code, 200 )
 
     def test_no_banner_for_an_authenticated_user( self ):
         user = get_user_model().objects.create_user( email = 'a@x.test' )
