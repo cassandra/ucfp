@@ -383,16 +383,15 @@ class Period:
         return
 
     def _settle_and_fund( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Settle last year's tax first (the Taxes Payable carried in) and prepay this year's income
-        tax as a safe-harbor estimate, then fund cash up to the policy's floor -- so the funding draw
-        covers both, and the draws' realized income (over the estimate) is taxed this year (accrued
-        below, paid next year). Then accrue this year's true tax to Taxes Payable -- which nets the
-        estimate already prepaid, leaving only the balance owed -- and finally sweep any surplus above
-        the ceiling into investments (a basis-establishing purchase, so it is not a taxable event and
-        rightly runs after settlement). Because the tax outflows precede funding, the back-dated draw
-        keeps cash at the floor rather than letting tax punch it negative; only a net worth at or
-        below zero ends the forecast (see _close). And because all funding precedes accrual, no
-        untaxed income is ever carried -- only the payable is, deliberately, to next year's payment."""
+        """Pay last year's Taxes Payable, prepay this year's income-tax estimate, then fund cash to the
+        floor, then accrue this year's true tax to Taxes Payable (which nets the prepayment, leaving
+        only the balance owed), then sweep any surplus above the ceiling. Ordering is load-bearing: the
+        tax outflows precede funding, so the back-dated draw covers them and keeps cash at the floor
+        instead of tax punching it negative; and all funding precedes accrual, so no untaxed income is
+        carried -- only the payable, deliberately, to next year. The sweep is a basis-establishing
+        purchase (not taxable), so it rightly runs last. The final year's accrual is never settled --
+        its payment date lies beyond the horizon -- so it stands as a real terminal liability. Only a
+        net worth at or below zero ends the forecast (see _close)."""
         self._pay_prior_tax_payable( bookkeeper, result )
         self._check_forced_tax_transactions( bookkeeper, result )
         self._prepay_income_tax_estimate( bookkeeper, result )
@@ -405,12 +404,9 @@ class Period:
     def _pay_prior_tax_payable( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Settle the Taxes Payable carried in from last year's accrual, on the payment date the tax
         law sets (civil default: April 15). One sign-agnostic entry (DR Taxes Payable / CR cash)
-        settles either direction: a positive balance is paid out, a negative one -- a refund
-        receivable from credits beyond the tax -- is collected in. Runs before the funding draw so
-        the draw, back-dated to the year's start, has already covered the outflow by the time it
-        lands in the journal, and before this year's accrual so it settles only the prior balance.
-        No engine, no Taxes Payable account, a zero balance, or a payment date outside this interval
-        -> nothing to do."""
+        settles either direction: a positive balance is paid out, a negative one -- a refund receivable
+        from credits beyond the tax -- is collected in. No engine, no Taxes Payable account, a zero
+        balance, or a payment date outside this interval -> nothing to do."""
         tax_engine = self._parameters.tax_engine
         if tax_engine is None:
             return
@@ -434,15 +430,15 @@ class Period:
         return
 
     def _prepay_income_tax_estimate( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Prepay this year's income tax as a safe-harbor estimate -- in-year, before funding, so most
-        income tax leaves as it is earned rather than floating the whole bill to next April, and the
-        funding draw sees the reduced cash. The engine caps the estimate (see `estimate_income_tax`),
-        so a one-time spike or the funding draws' own gains float past it; the year-end settlement then
-        accrues the full true tax to Taxes Payable, which nets this prepayment and leaves only the
-        balance owed next year. Booked as a prepayment against the payable (DR Taxes Payable / CR
-        cash), midpoint-dated like the wages it estimates; the true tax is the expense, recognized at
-        settlement. Only at a full tax-year close, like settlement; no engine means nothing to
-        prepay."""
+        """Prepay this year's income tax as a safe-harbor estimate, so most of it leaves cash within
+        the year it is earned rather than the whole bill floating to next April. Booked as a prepayment
+        against the payable (DR Taxes Payable / CR cash), so the year-end settlement books the full true
+        tax and nets this prepayment, leaving only the balance owed; the engine caps the estimate (see
+        `estimate_income_tax`), so a spike or the funding draws' own gains float past it. Assessed on
+        pre-funding-draw income -- exactly so at annual granularity, where this is the year's only
+        Period; at finer granularity the single year-close estimate reads a window that already
+        includes earlier draws, which the settlement nets back out (no total is wrong). Only at a full
+        tax-year close, like settlement; no engine means nothing to prepay."""
         if not ( self._is_close_of_tax_year() and self._parameters.full_tax_year ):
             return
         tax_engine = self._parameters.tax_engine

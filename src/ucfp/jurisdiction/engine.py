@@ -70,7 +70,7 @@ class FiscalWindowView( Protocol ):
 @dataclass( frozen = True )
 class TaxCharge:
     """A tax to pay: an amount attributed to an expense tax-class, which the Period
-    posts as a tax expense drawn from cash."""
+    accrues as owed to the tax payable, settled to cash the following year."""
 
     tax_class : ExpenseTaxClass
     amount    : Decimal

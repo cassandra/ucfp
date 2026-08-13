@@ -1,7 +1,7 @@
 """Employee employment tax -- US FICA (`USFederalTaxEngine._employment_tax`): Social Security on each
-worker's wages up to the wage base (capped per worker), Medicare on all wages, plus the Additional Medicare surtax on
-combined wages over the filing-status threshold. Exercised directly with a per-worker wage stub against
-the 2026 rules (SS 6.2% to 184,500; Medicare 1.45%; surtax 0.9% over 200k single / 250k joint)."""
+worker's wages up to the wage base (capped per worker), Medicare on all wages, plus the Additional
+Medicare surtax on combined wages over the filing-status threshold. Exercised directly with a per-worker
+wage stub against the 2026 rules (SS 6.2% to 184,500; Medicare 1.45%; surtax 0.9% over 200k / 250k)."""
 import unittest
 from decimal import Decimal
 

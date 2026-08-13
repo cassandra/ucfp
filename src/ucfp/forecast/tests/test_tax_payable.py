@@ -19,7 +19,8 @@ from ucfp.accounts.enums import (
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
-    AssetParameters, ForecastParameters, IncomeStream, Subject, WindowedAmount )
+    AssetParameters, CashAccountParameters, ExpenseStream, ForecastParameters, IncomeStream,
+    Subject, WindowedAmount )
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
@@ -47,6 +48,30 @@ def _run( wages, end_year = 2028, wage_growth = '0' ):
         economic_outlook = EconomicOutlook.constant(
             EconomicParameters( wage_growth = Rate( _D( wage_growth ) ) ) ),
         income_streams = [ IncomeStream( worker, IncomeTaxClass.WAGES, wages ) ],
+    )
+    return Bookkeeper( Forecast( parameters ).run().books )
+
+
+def _run_drawdown():
+    """A solvent household whose spending plus tax outruns its wages, so it draws from stocks against a
+    cash floor every year -- the tight-cash regime where a year-end tax lump would have punched Cash &
+    Savings below the floor (the #170 negative-savings bug) before tax moved in-year."""
+    worker = Subject( 'Worker', date( 1970, 1, 1 ), 'worker' )
+    parameters = ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( 2030, 12, 31 ),
+        filing_status = FilingStatus.SINGLE,
+        statute       = _US,
+        subjects      = [ worker ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, _D( '30000' ), _D( '30000' ) ),
+            AssetParameters( 'Stocks', AssetClass.STOCKS, _D( '300000' ), _D( '300000' ) ) ],
+        income_streams  = [ IncomeStream(
+            worker, IncomeTaxClass.WAGES, Schedule.constant( WindowedAmount( _D( '100000' ) ) ) ) ],
+        expense_streams = [ ExpenseStream(
+            'Living', ExpenseTaxClass.LIVING, Schedule.constant( WindowedAmount( _D( '110000' ) ) ) ) ],
+        cash_account = CashAccountParameters(
+            cash_floor = _D( '25000' ), draw_order = [ AssetClass.STOCKS ] ),
     )
     return Bookkeeper( Forecast( parameters ).run().books )
 
@@ -134,11 +159,15 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
         # Spike year: the estimate is capped at the prior (ordinary) year, so the bonus tax floats.
         self.assertLess(
             _cash_out( reader, 'Estimated income tax (prepayment)', 2028 ), _income_tax_expense( reader, 2028 ) )
-        self.assertGreater( reader.ledger.natural_balance( payable, through = date( 2028, 12, 31 ) ), _D( '0' ) )
+        owed_2028 = reader.ledger.natural_balance( payable, through = date( 2028, 12, 31 ) )
+        self.assertGreater( owed_2028, _D( '0' ) )
+        # The floated balance is actually paid the next April -- it is not stranded on the payable.
+        self.assertEqual( _cash_out( reader, 'Prior-year tax settlement', 2029 ), owed_2028 )
         # Year after: the anomalously high prior year does NOT over-charge it -- the estimate tracks
-        # 2029's own (ordinary) liability, so its prepayment equals its true tax and it owes ~nothing.
+        # 2029's own (ordinary) liability, so its prepayment equals its true tax and it owes nothing.
         self.assertEqual(
             _cash_out( reader, 'Estimated income tax (prepayment)', 2029 ), _income_tax_expense( reader, 2029 ) )
+        self.assertEqual( reader.ledger.natural_balance( payable, through = date( 2029, 12, 31 ) ), _D( '0' ) )
 
     def test_fica_is_withheld_in_year_not_deferred( self ):
         reader = _run( _CONSTANT )
@@ -146,6 +175,34 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
         self.assertGreater(
             reader.ledger.natural_flow( fica, start = date( 2026, 1, 1 ), end = date( 2026, 12, 31 ) ), _D( '0' ) )
         self.assertGreater( _cash_out( reader, 'FICA withholding', 2026 ), _D( '0' ) )
+
+    def test_solvent_forecast_never_shows_negative_savings( self ):
+        # Regression for the #170 bug: tax lumped at year-end (or floated whole to next April) could
+        # punch a solvent household's Cash & Savings below zero. With tax paid in-year before funding,
+        # the back-dated draw covers it, so cash stays at/above the floor every year the plan survives.
+        reader = _run_drawdown()
+        cash = reader.chart.cash_account()
+        for year in range( 2026, 2031 ):
+            self.assertGreaterEqual(
+                reader.ledger.natural_balance( cash, through = date( year, 12, 31 ) ), _D( '0' ),
+                f'Cash & Savings went negative at {year}-12-31 in a solvent forecast' )
+
+    def test_terminal_year_tax_stands_as_an_unpaid_payable( self ):
+        # The final year's tax accrues at its Dec 31 close, but its settlement date (the next April)
+        # lies beyond the horizon, so it is deliberately left standing as a real liability -- which is
+        # what depresses terminal net worth. Pin that behavior so a future change cannot silently drop
+        # or double-settle it.
+        reader = _run( _CONSTANT, wage_growth = '0.05' )
+        payable = reader.chart.system_account( _PAYABLE )
+        terminal = reader.ledger.natural_balance( payable, through = date( 2028, 12, 31 ) )
+        self.assertGreater( terminal, _D( '0' ) )   # 2028's balance owed, never settled within the run
+        self.assertEqual(
+            [ txn for txn in reader.books.transactions
+              if txn.description == 'Prior-year tax settlement' and txn.transaction_date.year > 2028 ], [] )
+        # Terminal net worth is exactly assets net of that standing payable (the only liability here).
+        self.assertEqual(
+            reader.ledger.net_worth( through = date( 2028, 12, 31 ) ),
+            reader.ledger.type_total( AccountType.ASSET, through = date( 2028, 12, 31 ) ) - terminal )
 
 
 if __name__ == '__main__':
