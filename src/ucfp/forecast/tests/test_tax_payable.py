@@ -21,8 +21,14 @@ from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
     AssetParameters, CashAccountParameters, ExpenseStream, ForecastParameters, IncomeStream,
     Subject, WindowedAmount )
+from ucfp.jurisdiction.context import TaxContext
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
+from ucfp.jurisdiction.engine import ZeroTaxEngine
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
+from ucfp.period.parameters import AssetRates, FundingPolicy, PeriodParameters
+from ucfp.period.period import Period
+from ucfp.period.results import PeriodResult
+from common.date_span import DateSpan
 
 _D          = Decimal
 _US         = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
@@ -72,6 +78,52 @@ def _run_drawdown():
             'Living', ExpenseTaxClass.LIVING, Schedule.constant( WindowedAmount( _D( '110000' ) ) ) ) ],
         cash_account = CashAccountParameters(
             cash_floor = _D( '25000' ), draw_order = [ AssetClass.STOCKS ] ),
+    )
+    return Bookkeeper( Forecast( parameters ).run().books )
+
+
+def _run_gainful_drawdown():
+    """Like `_run_drawdown`, but the drawn stocks carry an embedded gain (basis below value), so each
+    funding draw realizes a capital gain -- income the pre-draw estimate cannot see but the year-end
+    settlement does."""
+    worker = Subject( 'Worker', date( 1970, 1, 1 ), 'worker' )
+    parameters = ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( 2030, 12, 31 ),
+        filing_status = FilingStatus.SINGLE,
+        statute       = _US,
+        subjects      = [ worker ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, _D( '30000' ), _D( '30000' ) ),
+            AssetParameters( 'Stocks', AssetClass.STOCKS, _D( '300000' ), _D( '100000' ) ) ],
+        income_streams  = [ IncomeStream(
+            worker, IncomeTaxClass.WAGES, Schedule.constant( WindowedAmount( _D( '100000' ) ) ) ) ],
+        expense_streams = [ ExpenseStream(
+            'Living', ExpenseTaxClass.LIVING, Schedule.constant( WindowedAmount( _D( '110000' ) ) ) ) ],
+        cash_account = CashAccountParameters(
+            cash_floor = _D( '25000' ), draw_order = [ AssetClass.STOCKS ] ),
+    )
+    return Bookkeeper( Forecast( parameters ).run().books )
+
+
+def _run_retirement_drawdown():
+    """A young household (owner under 59.5) with no wages, spending from a pre-tax retirement account it
+    must draw early -- so every draw incurs the 10% early-withdrawal penalty."""
+    worker = Subject( 'Worker', date( 1990, 1, 1 ), 'worker' )
+    parameters = ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( 2028, 12, 31 ),
+        filing_status = FilingStatus.SINGLE,
+        statute       = _US,
+        subjects      = [ worker ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, _D( '30000' ), _D( '30000' ) ),
+            AssetParameters( 'Pre-Tax Retirement', AssetClass.PRETAX_RETIREMENT, _D( '300000' ), _D( '0' ),
+                             owner_handle = 'worker' ) ],
+        expense_streams = [ ExpenseStream(
+            'Living', ExpenseTaxClass.LIVING, Schedule.constant( WindowedAmount( _D( '50000' ) ) ) ) ],
+        cash_account = CashAccountParameters(
+            cash_floor = _D( '25000' ), draw_order = [ AssetClass.PRETAX_RETIREMENT ] ),
     )
     return Bookkeeper( Forecast( parameters ).run().books )
 
@@ -203,6 +255,61 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
         self.assertEqual(
             reader.ledger.net_worth( through = date( 2028, 12, 31 ) ),
             reader.ledger.type_total( AccountType.ASSET, through = date( 2028, 12, 31 ) ) - terminal )
+
+    def test_a_taxable_funding_draw_defers_its_gain_tax_to_the_payable( self ):
+        # The estimate is assessed pre-draw, the settlement post-draw. When a funding draw realizes a
+        # capital gain, the settlement's tax exceeds what was prepaid, and the difference -- the draw's
+        # own tax -- is what defers to the payable (the loop-break the pre-draw assessment exists for).
+        reader = _run_gainful_drawdown()
+        payable = reader.chart.system_account( _PAYABLE )
+        self.assertLess(
+            _cash_out( reader, 'Estimated income tax (prepayment)', 2027 ),
+            _income_tax_expense( reader, 2027 ) )
+        self.assertGreater( reader.ledger.natural_balance( payable, through = date( 2027, 12, 31 ) ), _D( '0' ) )
+
+    def test_an_early_withdrawal_penalty_rides_the_payable_not_cash( self ):
+        reader = _run_retirement_drawdown()
+        penalty_account = reader.chart.expense_account( ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY )
+        cash = reader.chart.cash_account()
+        payable = reader.chart.system_account( _PAYABLE )
+        # A penalty is incurred (young owner drawing pre-tax) ...
+        self.assertGreater(
+            reader.ledger.natural_flow( penalty_account, start = date( 2026, 1, 1 ), end = date( 2026, 12, 31 ) ),
+            _D( '0' ) )
+        # ... and every penalty charge credits Taxes Payable, never cash -- it defers like the tax,
+        # rather than being a same-year cash outflow.
+        penalty_txns = [ txn for txn in reader.books.transactions
+                         if any( entry.account is penalty_account for entry in txn.entries ) ]
+        self.assertTrue( penalty_txns )
+        for txn in penalty_txns:
+            accounts = { entry.account for entry in txn.entries }
+            self.assertIn( payable, accounts )
+            self.assertNotIn( cash, accounts )
+
+    def test_a_refund_receivable_is_collected_at_settlement( self ):
+        # A refundable credit beyond the tax leaves Taxes Payable negative (a receivable). The
+        # settlement entry is sign-agnostic, so it collects the refund IN (cash rises) rather than
+        # paying out. No forecast input produces a net credit today, so drive the seam directly with a
+        # seeded negative payable.
+        bookkeeper = Bookkeeper()
+        bookkeeper.build_standard_chart()
+        chart = bookkeeper.chart
+        cash = bookkeeper.create_holding( chart.root( AccountType.ASSET ), 'Cash', AssetClass.CASH )
+        taxes_payable = chart.system_account( _PAYABLE )
+        opening = chart.system_account( SystemAccountRole.OPENING_BALANCES )
+        bookkeeper.record( date( 2026, 12, 31 ), [ ( cash, -_D( '10000' ) ), ( opening, _D( '10000' ) ) ] )
+        bookkeeper.record( date( 2026, 12, 31 ), [ ( taxes_payable, -_D( '500' ) ), ( opening, _D( '500' ) ) ] )
+
+        parameters = PeriodParameters(
+            date_span     = DateSpan( date( 2027, 1, 1 ), date( 2027, 12, 31 ) ),
+            tax_context   = TaxContext( FilingStatus.SINGLE ),
+            asset_rates   = AssetRates(),
+            funding_policy = FundingPolicy(),
+            tax_engine    = ZeroTaxEngine() )
+        Period( parameters )._pay_prior_tax_payable( bookkeeper, PeriodResult() )
+
+        self.assertEqual( bookkeeper.ledger.natural_balance( taxes_payable ), _D( '0' ) )   # receivable cleared
+        self.assertEqual( bookkeeper.ledger.natural_balance( cash ), _D( '10500' ) )        # refund collected in
 
 
 if __name__ == '__main__':
