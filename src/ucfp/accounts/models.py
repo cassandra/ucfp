@@ -16,8 +16,9 @@ from decimal import Decimal
 
 from django.db import models
 
+from common.encrypted_fields import EncryptedDecimalField
 from common.labeled_enum import LabeledEnumField, NullableLabeledEnumField
-from common.models import BoundedDecimalField, TimestampedModel
+from common.models import TimestampedModel
 
 from organization.models import Organization
 
@@ -251,7 +252,10 @@ class EntryRecord( TimestampedModel ):
         null = False,
         editable = False,
     )
-    amount = BoundedDecimalField(
+    # Encrypted at rest, so stored as opaque text rather than a DECIMAL column. The
+    # precision and strictly-positive guarantees the column and its CheckConstraint
+    # gave are enforced by the field on write instead (it cannot constrain ciphertext).
+    amount = EncryptedDecimalField(
         'Amount',
         max_digits = MONEY_MAX_DIGITS,
         decimal_places = MONEY_DECIMAL_PLACES,
@@ -271,12 +275,6 @@ class EntryRecord( TimestampedModel ):
     class Meta:
         verbose_name = 'Entry'
         verbose_name_plural = 'Entries'
-        constraints = [
-            models.CheckConstraint(
-                condition = models.Q( amount__gt = 0 ),
-                name = 'entry_amount_strictly_positive',
-            ),
-        ]
 
     def __str__( self ):
         return f'{self.entry_direction.label} {self.amount} {self.account}'

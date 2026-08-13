@@ -7,6 +7,11 @@ from .models import ProjectionRunRecord, PlanningResultRecord
 class ProjectionRunRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
+    # `data` holds the encrypted captured document (it embeds the profile/plans and
+    # figures); keep it out of the admin so the operator debugs runs without decrypting.
+    exclude = (
+        'data',
+    )
     list_display = (
         'label',
         'organization',
@@ -33,6 +38,11 @@ class ProjectionRunRecordAdmin( admin.ModelAdmin ):
 class PlanningResultRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
+    # `data` holds the encrypted result document; keep it out of the admin so the
+    # operator debugs results without decrypting.
+    exclude = (
+        'data',
+    )
     list_display = (
         'label',
         'feature',

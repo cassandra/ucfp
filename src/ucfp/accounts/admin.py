@@ -79,12 +79,16 @@ class TransactionRecordAdmin( admin.ModelAdmin ):
 class EntryRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
+    # `amount` is the sensitive figure, encrypted at rest; keep it out of the admin
+    # so the operator can inspect an entry's structure without seeing user amounts.
+    exclude = (
+        'amount',
+    )
     list_display = (
         'uuid',
         'transaction',
         'account',
         'entry_direction',
-        'amount',
     )
     list_filter = (
         'entry_direction',

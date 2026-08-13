@@ -15,6 +15,7 @@ import uuid
 
 from django.db import models
 
+from common.encrypted_fields import EncryptedJsonDocumentModel
 from common.labeled_enum import LabeledEnumField
 from common.models import JsonDocumentModel, TimestampedModel
 
@@ -23,17 +24,16 @@ from organization.models import Organization
 from .enums import UsageRole
 
 
-class InputRecord( JsonDocumentModel ):
-    """Abstract base for the input records (Profile / Plans / Assumptions / Scenario). Beyond the inherited
-    domain `data`, it carries `acknowledged_sections` -- the guided-interview sections the user has seen for
-    this record, held as opaque section keys. This is workflow metadata kept out of `data`, and the key set
-    is robust to section churn: an unknown or removed key is simply ignored, and a missing key means the
-    section is unacknowledged (so a new or re-keyed section forces a fresh look).
+class InputFields( models.Model ):
+    """The fields and workflow common to every input record, independent of whether its
+    `data` document is stored in the clear or encrypted.
 
-    Every input record is partitioned by `usage_role`: a `WORKING` copy (app-managed in the exploration
-    loop, overwritten as the user tweaks and pruned automatically) or a `SAVED` one (user-managed and
-    retained until deleted). It defaults to `SAVED` -- the Profile is always saved (the single current
-    facts are never a working copy), and any record is retained unless the loop marks it working."""
+    `acknowledged_sections` holds the guided-interview sections the user has seen, as
+    opaque keys: robust to section churn, since an unknown or removed key is ignored and
+    a missing key means unacknowledged (so a new or re-keyed section forces a fresh look).
+    `usage_role` partitions each record into a `WORKING` copy (app-managed in the
+    exploration loop, overwritten as the user tweaks and pruned automatically) or a
+    `SAVED` one (user-managed, retained until deleted); it defaults to `SAVED`."""
 
     acknowledged_sections = models.JSONField( 'Acknowledged Sections', default = list, blank = True )
     usage_role = LabeledEnumField(
@@ -55,7 +55,23 @@ class InputRecord( JsonDocumentModel ):
         self.save( update_fields = [ 'acknowledged_sections', 'updated_datetime' ] )
 
 
-class ProfileRecord( InputRecord ):
+class InputRecord( InputFields, JsonDocumentModel ):
+    """An input record whose `data` document is stored in the clear -- used where the
+    content is low-sensitivity (preset-derived assumptions)."""
+
+    class Meta:
+        abstract = True
+
+
+class EncryptedInputRecord( InputFields, EncryptedJsonDocumentModel ):
+    """An input record whose `data` document is encrypted at rest -- the user's own
+    figures (profile facts and plans)."""
+
+    class Meta:
+        abstract = True
+
+
+class ProfileRecord( EncryptedInputRecord ):
     organization = models.ForeignKey(
         Organization, on_delete = models.CASCADE, related_name = 'profiles' )
     effective_date = models.DateField( 'Effective Date' )
@@ -64,7 +80,7 @@ class ProfileRecord( InputRecord ):
         return f'{self.label} ({self.organization}, {self.effective_date})'
 
 
-class PlansRecord( InputRecord ):
+class PlansRecord( EncryptedInputRecord ):
     organization = models.ForeignKey(
         Organization, on_delete = models.CASCADE, related_name = 'plans' )
 

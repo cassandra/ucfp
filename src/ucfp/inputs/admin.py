@@ -7,6 +7,11 @@ from .models import ProfileRecord, PlansRecord, AssumptionsRecord
 class ProfileRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
+    # `data` holds the encrypted aggregate; keep it out of the admin so the operator
+    # debugs record structure without decrypting the user's figures.
+    exclude = (
+        'data',
+    )
     list_display = (
         'label',
         'organization',
@@ -33,6 +38,11 @@ class ProfileRecordAdmin( admin.ModelAdmin ):
 class PlansRecordAdmin( admin.ModelAdmin ):
     show_full_result_count = False
 
+    # `data` holds the encrypted aggregate; keep it out of the admin so the operator
+    # debugs record structure without decrypting the user's figures.
+    exclude = (
+        'data',
+    )
     list_display = (
         'label',
         'organization',

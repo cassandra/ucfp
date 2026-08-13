@@ -143,6 +143,15 @@ print(''.join(secrets.choice(chars) for _ in range(50)))
 "
 }
 
+# Generate a Fernet key (32 random bytes, url-safe base64) for encrypting
+# sensitive fields at rest.
+generate_field_encryption_key() {
+    python3 -c "
+import base64, os
+print(base64.urlsafe_b64encode(os.urandom(32)).decode())
+"
+}
+
 # Generate memorable admin password
 generate_admin_password() {
     python3 -c "
@@ -197,6 +206,7 @@ create_env_file() {
 
     # Generate secrets
     DJANGO_SECRET_KEY=$(generate_secret_key)
+    FIELD_ENCRYPTION_KEY_VALUE=$(generate_field_encryption_key)
     DJANGO_ADMIN_PASSWORD=$(generate_admin_password)
 
     # Create environment file.
@@ -231,6 +241,9 @@ UCFP_SUPPRESS_AUTHENTICATION=true
 # Public URL obfuscation (optional; set to a UUID on public deployments to
 # hide /admin/ and /env/ behind an unguessable prefix)
 UCFP_SECRET_URL_PREFIX_UUID=
+
+# Data encryption (required; encrypts sensitive fields at rest)
+UCFP_FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY_VALUE}
 
 # Email Settings (disabled for simple setup)
 UCFP_EMAIL_SUBJECT_PREFIX=
