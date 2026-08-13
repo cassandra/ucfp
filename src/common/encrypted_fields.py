@@ -1,4 +1,5 @@
-"""Model fields that encrypt their value at rest.
+"""Model fields that encrypt their value at rest, and a document-model base built
+on them.
 
 An encrypted field stores an opaque token in a text column and (de)serializes a
 typed Python value around a cipher, so the value is unreadable in the stored
@@ -6,6 +7,10 @@ database without the key. Storage is always text -- never a native JSON or
 numeric column -- because the stored form is ciphertext (a native JSON column
 would reject it). An encrypted value therefore cannot be used for lookups,
 ordering, or aggregation: it is only stored and read back whole.
+
+``EncryptedJsonDocumentModel`` is the counterpart to ``JsonDocumentModel``: a
+record subclasses it (rather than ``JsonDocumentModel``) to store its document
+encrypted, so the choice is visible on the class declaration.
 
 The cipher is selected by ``settings.FIELD_ENCRYPTION_CODEC``:
 
@@ -28,7 +33,7 @@ from django.core.validators import DecimalValidator
 from django.db import models
 from django.utils.functional import cached_property
 
-from common.models import build_bound_validators
+from common.models import JsonDocumentModel, build_bound_validators
 
 _FERNET   = 'fernet'
 _IDENTITY = 'identity'
@@ -142,6 +147,16 @@ class EncryptedDecimalField( _EncryptedField ):
         if self.exclusive_max:
             kwargs[ 'exclusive_max' ] = self.exclusive_max
         return name, path, args, kwargs
+
+
+class EncryptedJsonDocumentModel( JsonDocumentModel ):
+    """A JsonDocumentModel whose `data` document is encrypted at rest. A record
+    subclasses this in place of JsonDocumentModel to store its document encrypted."""
+
+    data = EncryptedJSONField( default = dict )
+
+    class Meta:
+        abstract = True
 
 
 # --------------------------------------------------------------------------- #

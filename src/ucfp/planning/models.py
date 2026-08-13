@@ -15,8 +15,8 @@ JSON later. A run's captured inputs, books, and result are immutable once create
 """
 from django.db import models
 
+from common.encrypted_fields import EncryptedJsonDocumentModel
 from common.labeled_enum import LabeledEnumField
-from common.models import JsonDocumentModel
 
 from organization.models import Organization
 
@@ -26,7 +26,7 @@ from ucfp.inputs.enums import UsageRole
 from .enums import PlanningFeature
 
 
-class ProjectionRunRecord( JsonDocumentModel ):
+class ProjectionRunRecord( EncryptedJsonDocumentModel ):
     organization = models.ForeignKey(
         Organization, on_delete = models.CASCADE, related_name = 'projection_runs' )
     # CASCADE (not PROTECT): a run captured its books, and an organization's teardown deletes both,
@@ -42,7 +42,7 @@ class ProjectionRunRecord( JsonDocumentModel ):
         return f'{self.label} ({self.organization})'
 
 
-class PlanningResultRecord( JsonDocumentModel ):
+class PlanningResultRecord( EncryptedJsonDocumentModel ):
     organization = models.ForeignKey(
         Organization, on_delete = models.CASCADE, related_name = 'planning_results' )
     feature = LabeledEnumField( PlanningFeature, verbose_name = 'Feature' )
