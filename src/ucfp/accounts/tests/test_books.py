@@ -77,6 +77,16 @@ class BookkeeperTests( unittest.TestCase ):
         self.assertIsNotNone( chart.valuation_of( stocks ) )   # appreciating -> companion
         self.assertIsNone( chart.valuation_of( cash ) )        # cash -> none
 
+    def test_taxes_payable_is_a_zero_liability_under_the_liability_root( self ):
+        # The standard chart seeds Taxes Payable as a credit-normal liability (not an equity
+        # account like the other system accounts), holding tax owed but not yet paid; it opens empty.
+        bookkeeper, _cash, _stocks, _lt_gains = _seed_books()
+        taxes_payable = bookkeeper.chart.system_account( SystemAccountRole.TAXES_PAYABLE )
+        self.assertIsNotNone( taxes_payable )
+        self.assertEqual( taxes_payable.effective_account_type, AccountType.LIABILITY )
+        self.assertEqual( taxes_payable.account_normal_type, SideType.CREDIT )
+        self.assertEqual( bookkeeper.ledger.natural_balance( taxes_payable ), Decimal( '0' ) )
+
     def test_opening_balance_and_net_worth( self ):
         bookkeeper, _cash, stocks, _lt_gains = _seed_books()
         ledger = bookkeeper.ledger

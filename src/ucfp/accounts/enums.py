@@ -108,6 +108,8 @@ class SystemAccountRole( LabeledEnum ):
         'External Receipts', 'Equity counterpart for non-taxable value received from outside.' )
     EXTERNAL_DISBURSEMENTS = (
         'External Disbursements', 'Equity counterpart for non-deductible value given away.' )
+    TAXES_PAYABLE = (
+        'Taxes Payable', 'Liability for tax assessed this year and paid the following year.' )
 
 
 class AssetClass( LabeledEnum ):
