@@ -351,11 +351,13 @@ class RunDiscardConfirmView( ModalView ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class EnterExploreView( InputGatedMixin, View ):
-    """`/plan/financial-forecast/explore/enter/` -- from the hub, start or resume exploring the chosen saved
-    scenario, then redirect to the workspace. Idempotent: re-entering the scenario already in progress
-    resumes it (tweaks and run history intact); choosing a different one re-seeds the sandbox and anchors to
-    it. The frame rides in the POSTed form and is remembered for the workspace, which lives at the uuid-less
-    `/explore/`. A hard restart of the same scenario is the workspace's own Reset, not a re-entry."""
+    """`/plan/financial-forecast/explore/enter/` -- from the hub, start exploring the chosen saved scenario,
+    then redirect to the workspace. Always starts fresh: it re-seeds the sandbox from the scenario's *current*
+    inputs and clears the prior run history, so an edit to the saved scenario between sessions is always
+    reflected rather than resuming a stale working copy or a run computed before the change. Continuing an
+    in-progress exploration with its tweaks and runs intact is the separate Resume button (a direct link to
+    the workspace). The frame rides in the POSTed form and is remembered for the workspace, which lives at the
+    uuid-less `/explore/`."""
 
     def post( self, request ):
         organization = request.organization
@@ -366,12 +368,10 @@ class EnterExploreView( InputGatedMixin, View ):
             ScenarioRecord, uuid = form.cleaned_data[ 'scenario' ], organization = organization,
             usage_role = UsageRole.SAVED )
         _remember_selection( request, form, scenario_record )
+        # Always start fresh from the chosen scenario's current inputs (re-seed and clear the run history),
+        # so Run & Explore never resumes a stale working copy; Resume is the path that keeps tweaks and runs.
+        start_fresh_exploration( organization, scenario_record )
         exploration = scenario_exploration( organization )
-        # Same anchor already in progress -> resume (keep the tweaks and run history); a new or switched
-        # anchor -> start fresh (re-seed and clear runs). A hard restart of the same anchor is Reset.
-        if exploration is None or exploration.source_id != scenario_record.id:
-            start_fresh_exploration( organization, scenario_record )
-            exploration = scenario_exploration( organization )
         # Record the chosen frame onto the exploration so the workspace projects over it (rather than a
         # session default); the workspace re-runs whenever this diverges from its latest run's frame.
         record_exploration_frame(
