@@ -74,10 +74,10 @@ def reestimate_future_taxes(
     rates leave the books untouched."""
     chart  = bookkeeper.chart
     ledger = bookkeeper.ledger
-    target = quantize_money( sum(
+    target = sum(   # each per-holding estimate is already money-quantized; the booked delta re-quantizes
         ( estimated_future_tax( holding, ledger, ordinary_rate, capital_gains_rate, through = on_date )
           for holding in chart.holdings() ),
-        Decimal( '0' ) ) )
+        Decimal( '0' ) )
     liability = chart.system_account( SystemAccountRole.ESTIMATED_FUTURE_TAXES )
     reserve   = chart.system_account( SystemAccountRole.DEFERRED_TAX_RESERVE )
     current   = ledger.natural_balance( liability, through = on_date )

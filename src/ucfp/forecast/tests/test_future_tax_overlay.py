@@ -8,12 +8,14 @@ from decimal import Decimal
 
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
+from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, AssetClass, ExpenseTaxClass, SystemAccountRole
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
-    AssetParameters, ForecastParameters, LoanParameters, NetWorthCalculation, Subject )
+    AssetParameters, CashAccountParameters, ExpenseStream, ForecastParameters, LoanParameters,
+    NetWorthCalculation, Subject, WindowedAmount )
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
@@ -29,7 +31,8 @@ _MONTHLY   = Duration( 1, TimeUnit.MONTH )
 _MEMO = 'Estimated future tax re-estimate'
 
 
-def _run( *, ordinary_pct = '0', capgains_pct = '0', granularity = _YEARLY, end_year = 2028, loans = None ):
+def _run( *, ordinary_pct = '0', capgains_pct = '0', granularity = _YEARLY, end_year = 2028,
+          loans = None, extra_assets = None ):
     owner = Subject( 'Owner', date( 1980, 1, 1 ), 'owner' )
     parameters = ForecastParameters(
         start_date       = date( 2026, 1, 1 ),
@@ -43,7 +46,7 @@ def _run( *, ordinary_pct = '0', capgains_pct = '0', granularity = _YEARLY, end_
             AssetParameters( 'Cash', AssetClass.CASH, _D( '50000' ), _D( '50000' ) ),
             AssetParameters( 'Brokerage', AssetClass.STOCKS, _D( '200000' ), _D( '120000' ), handle = 'brok' ),
             AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, _D( '300000' ), _D( '0' ),
-                             handle = 'ira', owner_handle = 'owner' ) ],
+                             handle = 'ira', owner_handle = 'owner' ) ] + ( extra_assets or [] ),
         loans = loans or [],
         net_worth_calculation = NetWorthCalculation(
             ordinary_tax_rate      = Rate.percent( _D( ordinary_pct ) ),
@@ -102,6 +105,46 @@ class FutureTaxOverlayTests( unittest.TestCase ):
             for name, granularity in ( ( 'yearly', _YEARLY ), ( 'quarterly', _QUARTERLY ),
                                        ( 'monthly', _MONTHLY ) ) }
         self.assertEqual( len( set( year_ends.values() ) ), 1, f'overlay differs by granularity: {year_ends}' )
+
+    def test_roth_and_underwater_holdings_are_excluded_end_to_end( self ):
+        # A Roth (tax-free) and a taxable holding below its basis (an unrealized loss) must each add
+        # nothing to the overlay through a real run -- so it stays exactly the base figure from the
+        # pre-tax IRA and the gaining brokerage.
+        extra = [
+            AssetParameters( 'Roth', AssetClass.ROTH, _D( '250000' ), _D( '0' ),
+                             handle = 'roth', owner_handle = 'owner' ),
+            AssetParameters( 'Underwater', AssetClass.STOCKS, _D( '80000' ), _D( '120000' ), handle = 'uw' ) ]
+        reader = _run( ordinary_pct = '24', capgains_pct = '15', extra_assets = extra )
+        self.assertEqual( _future_tax( reader, date( 2028, 12, 31 ) ), self._EXPECTED )   # 84000, unchanged
+
+    def test_the_overlay_releases_as_a_pretax_account_draws_down( self ):
+        # Living costs force an annual draw from the pre-tax IRA (no growth, no other income), so its
+        # balance -- and the 24% overlay on it -- must strictly shrink year over year as the engine
+        # re-estimates at each close. Owner is 65: past the early-withdrawal penalty, short of RMD age.
+        owner = Subject( 'Owner', date( 1961, 1, 1 ), 'owner' )
+        parameters = ForecastParameters(
+            start_date       = date( 2026, 1, 1 ),
+            end_date         = date( 2030, 12, 31 ),
+            filing_status    = FilingStatus.SINGLE,
+            statute          = _US,
+            subjects         = [ owner ],
+            economic_outlook = _STATIC,
+            assets = [
+                AssetParameters( 'Cash', AssetClass.CASH, _D( '20000' ), _D( '20000' ) ),
+                AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, _D( '600000' ), _D( '0' ),
+                                 handle = 'ira', owner_handle = 'owner' ) ],
+            expense_streams = [ ExpenseStream(
+                'Living', ExpenseTaxClass.LIVING, Schedule.constant( WindowedAmount( _D( '60000' ) ) ) ) ],
+            cash_account = CashAccountParameters(
+                cash_floor = _D( '20000' ), draw_order = [ AssetClass.PRETAX_RETIREMENT ] ),
+            net_worth_calculation = NetWorthCalculation(
+                ordinary_tax_rate = Rate.percent( _D( '24' ) ), capital_gains_tax_rate = Rate.percent( _D( '15' ) ) ),
+        )
+        reader = Bookkeeper( Forecast( parameters ).run().books )
+        overlays = [ _future_tax( reader, date( year, 12, 31 ) ) for year in range( 2026, 2031 ) ]
+        self.assertEqual( overlays, sorted( overlays, reverse = True ) )   # monotonically non-increasing
+        self.assertGreater( overlays[ 0 ], overlays[ -1 ] )               # and genuinely released
+        reader.assert_balanced()
 
     def test_overlay_flips_a_debt_heavy_household_negative( self ):
         # Gross net worth looks solvent (550k assets - 500k debt = +50k), but the pre-tax IRA cannot be
