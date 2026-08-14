@@ -1,0 +1,47 @@
+{% comment %}
+Wraps the shared run books table with a slim toolbar carrying an in-window "Maximize" toggle. The toggle
+lifts this panel to a fixed, full-viewport overlay (.run-table-panel.is-maximized in css/books_table.css)
+so the table fills the browser window without a page navigation -- covering the app and page chrome by
+z-index rather than hiding each surrounding element, so any page that includes this panel gets the
+behavior for free. The inner #books-table stays the antinode swap target for column operations, and this
+wrapper (with its toggle and script) sits outside it, so it persists across those swaps. Reads whatever
+run_books_table.html reads (`books_table`, `record`). Esc exits the maximized view.
+{% endcomment %}
+{% load icons %}
+<div class="run-table-panel">
+  <div class="run-table-panel-bar d-flex justify-content-end mb-2">
+    <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle" aria-pressed="false"
+            title="Maximize the table to fill the window (Esc to minimize)">
+      <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
+      <span class="bt-maximize-label-close d-none">{% icon 'minimize' size='sm' css_class='mr-1' %}Minimize</span>
+    </button>
+  </div>
+  {% include "planning/pages/run_books_table.html" %}
+</div>
+<script>
+ (function () {
+   if ( window.__btMaximizeReady ) { return; }   // one delegated handler no matter how many panels render
+   window.__btMaximizeReady = true;
+   function setMaximized( panel, on ) {
+     panel.classList.toggle( 'is-maximized', on );
+     document.body.classList.toggle( 'bt-maximized', on );
+     var toggle = panel.querySelector( '.bt-maximize-toggle' );
+     if ( toggle ) {
+       toggle.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+       toggle.querySelector( '.bt-maximize-label-open' ).classList.toggle( 'd-none', on );
+       toggle.querySelector( '.bt-maximize-label-close' ).classList.toggle( 'd-none', !on );
+     }
+   }
+   document.addEventListener( 'click', function ( event ) {
+     var toggle = event.target.closest( '.bt-maximize-toggle' );
+     if ( ! toggle ) { return; }
+     var panel = toggle.closest( '.run-table-panel' );
+     setMaximized( panel, ! panel.classList.contains( 'is-maximized' ) );
+   } );
+   document.addEventListener( 'keydown', function ( event ) {
+     if ( event.key !== 'Escape' ) { return; }
+     var open = document.querySelector( '.run-table-panel.is-maximized' );
+     if ( open ) { setMaximized( open, false ); }
+   } );
+ })();
+</script>

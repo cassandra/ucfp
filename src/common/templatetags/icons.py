@@ -81,6 +81,8 @@ AVAILABLE_ICONS = {
     'lock',
     'magnifying-glass-plus',
     'map-pin',
+    'maximize',
+    'minimize',
     'minus-circle',
     'moon',
     'move',

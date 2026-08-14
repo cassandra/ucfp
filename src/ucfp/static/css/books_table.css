@@ -96,3 +96,27 @@
     color: var( --primary-color );
     background-color: rgba( 0, 0, 0, 0.05 );
 }
+
+
+/* -- Maximize: fill the browser window ---------------------------------------------------------
+   The panel (the shared table plus its toolbar, see run_table_panel.html) lifts out to a fixed,
+   full-viewport overlay so the table gets the whole window without a page navigation. A fixed inset:0
+   pane covers the app and page chrome by z-index -- no per-page hiding of individual elements -- so any
+   page that includes the panel gets this for free. The toggle button and Esc are wired in the partial. */
+.run-table-panel.is-maximized {
+    position: fixed;
+    inset: 0;
+    z-index: 1030;            /* above the static navbar; the column menus inside stack above the table */
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+}
+.run-table-panel.is-maximized .bt-scroll {
+    flex: 1 1 auto;
+    max-height: none;         /* fill the overlay instead of the default 75vh */
+}
+body.bt-maximized {
+    overflow: hidden;         /* lock the page behind the overlay from scrolling */
+}
