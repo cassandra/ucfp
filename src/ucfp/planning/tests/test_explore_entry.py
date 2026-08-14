@@ -1,10 +1,11 @@
-"""EnterExploreView's entry behavior: resume-vs-reseed idempotency and frame capture. Re-entering the
-scenario already in progress resumes it (its tweaks and transient runs intact), while entering a
-*different* scenario re-seeds the sandbox from the new anchor and clears the runs -- guarding intact user
-work across a page refresh or a re-click (a regression that dropped the `source_id` guard would silently
-discard tweaks and run history). Entry also records the chosen projection frame onto the exploration, so
-the workspace projects over it rather than a session default -- the fix for the initial run silently using
-a mid-year start (an untaxed partial first year) when the user chose start-of-year.
+"""EnterExploreView's entry behavior: always-fresh re-seed and frame capture. Run & Explore always re-seeds
+the sandbox from the chosen scenario's *current* inputs and clears the transient runs -- whether the anchor
+is new, switched, or the same -- so a saved-scenario edit between sessions is always reflected rather than
+resuming a stale working copy or a run computed before the change. Keeping tweaks and runs intact is the
+separate Resume button (a direct workspace visit), not a re-entry. Entry also records the chosen projection
+frame onto the exploration, so the workspace projects over it rather than a session default -- the fix for
+the initial run silently using a mid-year start (an untaxed partial first year) when the user chose
+start-of-year.
 """
 from datetime import date
 from decimal import Decimal
@@ -65,17 +66,20 @@ class EnterExploreIdempotencyTest( TestCase ):
         request.session       = {}
         return EnterExploreView().post( request )
 
-    def test_reentering_the_same_scenario_resumes_keeping_tweaks_and_runs( self ):
+    def test_reentering_the_same_scenario_starts_fresh_discarding_tweaks_and_runs( self ):
+        # Run & Explore always re-seeds from the anchor's current inputs and clears the runs -- even for the
+        # same anchor -- so a stale working copy never survives. Resume is the path that keeps tweaks/runs.
         self._enter( self.one )
         run_working_scenario( self.organization, forecast_frame() )
-        tweaked = Scenario( plans = _tweaked_plans(), assumptions = expected_assumptions() )
-        overwrite_working( self.organization, tweaked )
+        overwrite_working(
+            self.organization, Scenario( plans = _tweaked_plans(), assumptions = expected_assumptions() ) )
         self.assertEqual( transient_runs( self.organization ).count(), 1 )
 
         self._enter( self.one )                                       # re-enter the SAME anchor
 
-        self.assertEqual( load_scenario( working_scenario( self.organization ) ), tweaked )   # tweak survived
-        self.assertEqual( transient_runs( self.organization ).count(), 1 )                    # runs intact
+        self.assertEqual(                                            # re-seeded from the anchor (tweak gone)...
+            load_scenario( working_scenario( self.organization ) ), load_scenario( self.one ) )
+        self.assertEqual( transient_runs( self.organization ).count(), 0 )   # ...and the runs cleared
         self.assertEqual( scenario_exploration( self.organization ).source_id, self.one.id )
 
     def test_entering_a_different_scenario_reseeds_and_clears_runs( self ):

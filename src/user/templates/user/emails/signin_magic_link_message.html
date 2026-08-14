@@ -9,8 +9,9 @@
 <p>
   Note that this code will expire after {{ magic_code_lifetime_minutes }} minutes. The code is not case sensitive.
 </p>
+<p>Or sign in directly:</p>
 <p>
-  Or <a href="{{ page_url }}">sign in directly using this link</a>.
+  <a class="email-button" href="{{ page_url }}">Sign in to {% settings_value 'SITE_NAME' %}</a>
 </p>
 <p style="color:#888; font-size:0.85rem">
   You're receiving this because you asked to sign in to {% settings_value 'SITE_NAME' %}.

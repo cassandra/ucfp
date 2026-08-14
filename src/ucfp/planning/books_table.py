@@ -88,6 +88,8 @@ def _operate( definition : BooksTableDefinition, catalog : BooksTableColumnCatal
         return definition.remove( catalog, key )
     if operation == 'restore':
         return definition.restore( key )
+    if operation == 'reveal':
+        return definition.reveal( key )
     if operation == 'move_left':
         return definition.move( catalog, key, -1 )
     if operation == 'move_right':

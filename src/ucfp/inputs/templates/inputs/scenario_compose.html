@@ -31,7 +31,7 @@ select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete
 <div class="alert alert-info" style="max-width: 40rem">
   <h2 class="h6 mb-2">Finish your current scenario first</h2>
   <p class="mb-2">You have a scenario still being set up. Finish it before creating another one.</p>
-  <a href="{% url 'scenarios_home' %}" class="btn btn-primary btn-sm">Go to Scenarios</a>
+  <a href="{% url 'scenarios_home' %}" class="btn btn-cta btn-sm">Go to Scenarios</a>
 </div>
 {% else %}
 
@@ -99,7 +99,7 @@ select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete
             {{ copy_form.name }}
             {% for error in copy_form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
           </div>
-          <button type="submit" class="btn btn-primary">Create scenario</button>
+          <button type="submit" class="btn btn-cta">Create scenario</button>
         </form>
       </div>
     </div>

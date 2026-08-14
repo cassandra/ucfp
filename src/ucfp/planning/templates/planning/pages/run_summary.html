@@ -1,0 +1,27 @@
+{% comment %}
+The shared run-outcome summary: the salient result, then Start and End as two labelled stat blocks
+(year · household ages · net worth). Rendered as the run_table_panel's card header, so the summary reads
+identically wherever a run appears and caps the table it describes. Ending net worth shows only when
+solvent -- a depleted plan's is noise the result line already conveys, shown as an em dash. Reads
+`summary` (from `_run_outcome`) and `currency`.
+{% endcomment %}
+{% load common_tags icons %}
+<div class="run-summary">
+  <p class="h5 mb-2 {% if summary.lasted %}text-success{% elif summary.depleted %}text-danger{% else %}text-muted{% endif %}">
+    {% if summary.lasted %}{% icon 'check' size='sm' css_class='mr-1' %}Money lasted all {{ summary.years }} years
+    {% elif summary.depleted %}{% icon 'warning' size='sm' css_class='mr-1' %}Money ran out after {{ summary.years }} years
+    {% else %}Plan ended after {{ summary.years }} years{% endif %}
+  </p>
+  <div class="d-flex flex-wrap">
+    <div class="run-summary-point mr-5 mb-1">
+      <div class="run-summary-label text-muted text-uppercase small font-weight-bold">Start</div>
+      <div>{{ summary.start.year }}{% if summary.start.ages %} <span class="text-muted">&middot; {{ summary.start.ages }}</span>{% endif %}</div>
+      <div class="font-weight-bold">{{ summary.start.net_worth|money:currency }}</div>
+    </div>
+    <div class="run-summary-point mb-1">
+      <div class="run-summary-label text-muted text-uppercase small font-weight-bold">End</div>
+      <div>{{ summary.end.year }}{% if summary.end.ages %} <span class="text-muted">&middot; {{ summary.end.ages }}</span>{% endif %}</div>
+      <div class="font-weight-bold">{% if summary.end.has_net_worth %}{{ summary.end.net_worth|money:currency }}{% else %}&mdash;{% if summary.depleted %} <span class="text-danger font-weight-normal">(depleted)</span>{% endif %}{% endif %}</div>
+    </div>
+  </div>
+</div>

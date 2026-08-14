@@ -10,28 +10,41 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
 `books_table`.
 {% endcomment %}
 {% load common_tags icons %}
-<div id="books-table" class="bt-scroll">
+<div id="books-table" class="bt-scroll preserve-scroll-bar">
   <table class="table table-sm w-auto">
     <thead>
       <tr>
         <th class="bt-period-head">Period</th>
         {% for col in books_table.columns %}
         {% if col.removed %}
-        <th class="bt-head bt-removed text-center align-bottom px-1">
+        <th class="bt-head bt-removed text-center align-bottom px-0">
           <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
-                data-async="#books-table" class="d-inline">
+                data-async="#books-table" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="op" value="restore">
             <input type="hidden" name="column" value="{{ col.column.key.token }}">
-            <button type="submit" class="btn btn-link btn-sm p-0" title="Show {{ col.column.label }}"
-                    aria-label="Show {{ col.column.label }}">+</button>
+            <button type="submit" class="bt-sliver-toggle" title="Show {{ col.column.label }}"
+                    aria-label="Show {{ col.column.label }}">{% icon 'expand' size='sm' %}</button>
+          </form>
+        </th>
+        {% elif col.empty %}
+        {# An account with no activity this run -- auto-hidden as a sliver, revealed (kept visible) via the eye. #}
+        <th class="bt-head bt-empty text-center align-bottom px-0">
+          <form method="post" action="{% url 'run_books_table' run_uuid=record.uuid %}"
+                data-async="#books-table" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="op" value="reveal">
+            <input type="hidden" name="column" value="{{ col.op_key.token }}">
+            <button type="submit" class="bt-sliver-toggle"
+                    title="Show {{ col.column.label }} (no activity this run)"
+                    aria-label="Show {{ col.column.label }} (no activity this run)">{% icon 'expand' size='sm' %}</button>
           </form>
         </th>
         {% else %}
         <th class="bt-head bt-group-{{ col.group }} bt-depth-{{ col.depth }} text-right">
           <div class="bt-col-heading">
             {% if col.breadcrumb %}
-            <div class="text-muted small text-truncate" title="{{ col.breadcrumb|join:' › ' }}">{{ col.breadcrumb|join:' › ' }} &rsaquo;</div>
+            <div class="text-muted small" title="{{ col.breadcrumb|join:' › ' }}">{{ col.breadcrumb|join:' › ' }} &rsaquo;</div>
             {% endif %}
             {{ col.column.label }}
           </div>
@@ -92,7 +105,7 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
       <tr{% if forloop.first %} class="table-light"{% endif %}>
         <td class="bt-period-cell text-nowrap">{{ row.span.end_date|date:"Y-m-d" }}{% if forloop.first %} <span class="text-muted small">opening</span>{% endif %}</td>
         {% for cell in row.cells %}
-        {% if cell.removed %}
+        {% if cell.removed or cell.empty %}
         <td class="px-1"></td>
         {% else %}
         <td class="text-right">{{ cell.value|money:currency }}</td>

@@ -22,7 +22,7 @@ last step (`is_last`), else "Next".
           action="{% url 'interview_section' section=current_section.key %}"
           data-async="#{{ section_target }}">
       {% csrf_token %}
-      <button type="submit" class="btn btn-primary">{% if is_last %}Finish{% else %}Next{% endif %}</button>
+      <button type="submit" class="btn btn-cta">{% if is_last %}Finish{% else %}Next{% endif %}</button>
     </form>
   </div>
 </div>

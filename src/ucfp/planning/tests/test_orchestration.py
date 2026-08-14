@@ -1,10 +1,10 @@
 """run_and_capture composes the layers into a coherent, persisted run that all reloads -- the
 data-composition spine: materialize -> run -> persist books -> capture the typed package."""
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from common.dataclass_json import from_json_data
 from common.recurrence import Duration, TimeUnit
@@ -16,7 +16,7 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.planning.materialization import ForecastFrame
 from ucfp.planning.models import ProjectionRunRecord
-from ucfp.planning.orchestration import run_and_capture
+from ucfp.planning.orchestration import run_and_capture, run_title
 from ucfp.planning.schemas import ProjectionRun
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
@@ -80,3 +80,12 @@ class RunAndCaptureTest( TestCase ):
         books = BooksOfAccountRepository().load( record.books )
         net_worth = Bookkeeper( books ).ledger.net_worth( through = date( 2026, 12, 31 ) )
         self.assertGreater( net_worth, Decimal( '0' ) )
+
+
+class RunTitleTest( SimpleTestCase ):
+    """The default title carries the scenario plus when it ran, so a run reads as a run rather than as its
+    scenario (the bare scenario name is kept separately as provenance)."""
+
+    def test_names_the_run_by_its_scenario_and_time( self ):
+        title = run_title( 'Default Scenario', datetime( 2026, 8, 14, 15, 42 ) )
+        self.assertEqual( title, 'Default Scenario - Run at Aug 14, 2026, 3:42 p.m.' )

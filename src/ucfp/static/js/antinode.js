@@ -96,7 +96,8 @@
 // ====================
 //
 // Scroll Preservation:
-//   Add class "preserve-scroll-bar" to elements to maintain scroll position
+//   Add class "preserve-scroll-bar" (with an id) to elements to maintain scroll position across an
+//   async swap -- both vertical and horizontal.
 //
 // Loading Indicator:
 //   Automatic loading spinner overlay during async requests
@@ -906,25 +907,31 @@ function addAfterModalRenderFunction( func_name ) {
 // (for both form submissions and click events). Restoring them should come
 // after all async content is rendered.
 //
-let scrollTopMap = {};
+// Saved positions of `.preserve-scroll-bar` elements, keyed by id: both axes, so a wide scroll pane
+// (e.g. the run books table scrolled far to the right) keeps its horizontal place across an async swap,
+// not only its vertical one.
+let scrollPositionMap = {};
 
 function saveScrollBarPositions() {
 
     // Anything marked as needing its scroll bar preserved should have us
     // save the position.
     //
+    scrollPositionMap = {};
     $('.preserve-scroll-bar').each( function( index ) {
         let id = $(this).attr('id');
         if ( id ) {
-            scrollTopMap[id] = $(this).scrollTop();
+            scrollPositionMap[id] = { top: $(this).scrollTop(), left: $(this).scrollLeft() };
         }
     });
-    
+
 };
 
 function restoreScrollBarPositions() {
-    for ( let id in scrollTopMap ) {
-        $('#'+id).scrollTop( scrollTopMap[id] );
+    for ( let id in scrollPositionMap ) {
+        let $element = $('#'+id);
+        $element.scrollTop( scrollPositionMap[id].top );
+        $element.scrollLeft( scrollPositionMap[id].left );
     }
 };
 

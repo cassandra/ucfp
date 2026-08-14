@@ -13,6 +13,7 @@ from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
@@ -40,12 +41,13 @@ from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
 from .explore import delete_runs, run_working_scenario, start_fresh_exploration, transient_runs
 from .explore_diff import describe_changes, value_changes
+from .profile_diff import profile_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
 from .gating import partition_scenarios, scenario_readiness, scenario_started
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
-from .orchestration import run_and_capture
+from .orchestration import run_and_capture, run_title
 from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
@@ -119,16 +121,44 @@ def _saved_run_digest( run_record ):
 
 
 def _run_outcome( run, books ) -> dict:
-    """The results page's headline outcome: the projection's year span and the net worth at the horizon.
-    Net worth is computed live from the already-loaded books -- never cached -- keeping the books the one
-    source of truth for book-derived figures (a captured run is immutable, so the live figure is stable)."""
-    frame = run.frame
+    """The run's headline outcome, shared by every page that shows a run: the salient result and the
+    start->end arc (year, household ages, net worth). A run that stopped early ends at its last computed
+    period, not the horizon; net worth is computed live from the already-loaded books -- never cached --
+    keeping the books the one source of truth (a captured run is immutable, so the live figure is stable)."""
+    frame  = run.frame
+    ledger = Bookkeeper( books ).ledger
+    steps  = run.result.steps
+    lasted = not run.result.stopped_early
+    end_date = frame.end_date if lasted else steps[ -1 ].end_date
+    depleted = ( not lasted ) and steps[ -1 ].is_depleted
+    end_net_worth = ledger.net_worth( through = end_date )
     return {
-        'horizon_start'    : frame.start_date.year,
-        'horizon_end'      : frame.end_date.year,
-        'horizon_years'    : frame.end_date.year - frame.start_date.year + 1,
-        'ending_net_worth' : Bookkeeper( books ).ledger.net_worth( through = frame.end_date ),
-    }
+        'summary' : {
+            'lasted'   : lasted,
+            'depleted' : depleted,
+            # Years the plan ran: the full horizon when it lasted, else through the period it stopped in.
+            'years'    : end_date.year - frame.start_date.year + 1,
+            'start'    : {
+                'year'      : frame.start_date.year,
+                'ages'      : _ages_label( run.profile, frame.start_date.year ),
+                'net_worth' : ledger.net_worth( through = frame.start_date ) },
+            'end'      : {
+                'year'          : end_date.year,
+                'ages'          : _ages_label( run.profile, end_date.year ),
+                # Ending net worth is shown only when solvent; a depleted plan's is noise the result covers.
+                'net_worth'     : end_net_worth,
+                'has_net_worth' : end_net_worth >= 0 } } }
+
+
+def _ages_label( profile, year ) -> str:
+    """The household's ages at `year` -- 'age 65' for one member, 'ages 65 & 63' for a couple, '' for none.
+    Age is the year less the birth year (the whole-year convention the engine uses)."""
+    ages = [ year - subject.birthdate.year for subject in profile.subjects ]
+    if not ages:
+        return ''
+    if len( ages ) == 1:
+        return f'age {ages[ 0 ]}'
+    return 'ages ' + ' & '.join( str( age ) for age in ages )
 
 
 def _remember_selection( request, form, scenario_record ) -> None:
@@ -172,8 +202,9 @@ class FinancialForecastView( InputGatedMixin, View ):
             with transaction.atomic():
                 run = run_and_capture(
                     organization = organization, profile = load_profile( profile_record ),
-                    plans = scenario.plans, assumptions = scenario.assumptions,
-                    frame = frame, label = scenario_record.label )
+                    plans = scenario.plans, assumptions = scenario.assumptions, frame = frame,
+                    label = run_title( scenario_record.label, timezone.localtime() ),
+                    source_label = scenario_record.label )
                 PlanningResultRecord.objects.create(
                     organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
                     run = run, label = run.label )
@@ -351,11 +382,13 @@ class RunDiscardConfirmView( ModalView ):
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class EnterExploreView( InputGatedMixin, View ):
-    """`/plan/financial-forecast/explore/enter/` -- from the hub, start or resume exploring the chosen saved
-    scenario, then redirect to the workspace. Idempotent: re-entering the scenario already in progress
-    resumes it (tweaks and run history intact); choosing a different one re-seeds the sandbox and anchors to
-    it. The frame rides in the POSTed form and is remembered for the workspace, which lives at the uuid-less
-    `/explore/`. A hard restart of the same scenario is the workspace's own Reset, not a re-entry."""
+    """`/plan/financial-forecast/explore/enter/` -- from the hub, start exploring the chosen saved scenario,
+    then redirect to the workspace. Always starts fresh: it re-seeds the sandbox from the scenario's *current*
+    inputs and clears the prior run history, so an edit to the saved scenario between sessions is always
+    reflected rather than resuming a stale working copy or a run computed before the change. Continuing an
+    in-progress exploration with its tweaks and runs intact is the separate Resume button (a direct link to
+    the workspace). The frame rides in the POSTed form and is remembered for the workspace, which lives at the
+    uuid-less `/explore/`."""
 
     def post( self, request ):
         organization = request.organization
@@ -366,12 +399,10 @@ class EnterExploreView( InputGatedMixin, View ):
             ScenarioRecord, uuid = form.cleaned_data[ 'scenario' ], organization = organization,
             usage_role = UsageRole.SAVED )
         _remember_selection( request, form, scenario_record )
+        # Always start fresh from the chosen scenario's current inputs (re-seed and clear the run history),
+        # so Run & Explore never resumes a stale working copy; Resume is the path that keeps tweaks and runs.
+        start_fresh_exploration( organization, scenario_record )
         exploration = scenario_exploration( organization )
-        # Same anchor already in progress -> resume (keep the tweaks and run history); a new or switched
-        # anchor -> start fresh (re-seed and clear runs). A hard restart of the same anchor is Reset.
-        if exploration is None or exploration.source_id != scenario_record.id:
-            start_fresh_exploration( organization, scenario_record )
-            exploration = scenario_exploration( organization )
         # Record the chosen frame onto the exploration so the workspace projects over it (rather than a
         # session default); the workspace re-runs whenever this diverges from its latest run's frame.
         record_exploration_frame(
@@ -402,9 +433,14 @@ class ExploreView( InputGatedMixin, View ):
         # results shown always match the current frame without waiting on an explicit Re-run.
         frame = self._frame( request )
         runs  = list( transient_runs( organization ) )
-        if not runs or _run_frame( runs[ 0 ] ) != frame:
+        profile_drift = self._profile_drift( organization, runs )
+        # Produce a run for a first entry or a changed frame -- but NOT once the Profile has drifted: a new
+        # run would use the updated Profile and could not be compared to the pile below, so new runs pause
+        # until the exploration is re-baselined on the current Profile (Start over with updated profile).
+        if not runs or ( _run_frame( runs[ 0 ] ) != frame and not profile_drift ):
             run_working_scenario( organization, frame )
             runs = list( transient_runs( organization ) )
+            profile_drift = self._profile_drift( organization, runs )
         selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
         working_inputs = load_scenario( working )
         source_inputs  = load_scenario( source )
@@ -418,15 +454,30 @@ class ExploreView( InputGatedMixin, View ):
         drift    = value_changes( source_inputs, working_inputs )
         return render(
             request, self._TEMPLATE,
-            self._context( request, source, runs, selected, forms, drift ) )
+            self._context( request, source, runs, selected, forms, drift, profile_drift ) )
 
     def post( self, request ):                             # Re-run: project the auto-saved working scenario
         organization = request.organization
-        if scenario_exploration( organization ) is not None:   # the dials auto-save; Re-run only re-projects
+        # The dials auto-save; Re-run only re-projects them -- but not while the Profile has drifted (new
+        # runs are paused until re-baselined, mirrored server-side behind the hidden Re-run button).
+        if ( scenario_exploration( organization ) is not None
+             and not self._profile_drift( organization, list( transient_runs( organization ) ) ) ):
             run_working_scenario( organization, self._frame( request ) )
         return redirect( 'explore' )
 
-    def _context( self, request, source, runs, selected, forms, drift ) -> dict:
+    def _profile_drift( self, organization, runs ) -> list:
+        """The household facts that changed since the shown (latest) run was computed -- non-empty when the
+        exploration's runs predate a Profile update (each run embeds the Profile it used). Because new runs
+        are paused once this is non-empty, the pile stays on one Profile, so the latest run represents it."""
+        if not runs:
+            return list()
+        current = latest_profile( organization )
+        if current is None:
+            return list()
+        run_profile = from_json_data( ProjectionRun, runs[ 0 ].run.data ).profile
+        return profile_changes( run_profile, load_profile( current ) )
+
+    def _context( self, request, source, runs, selected, forms, drift, profile_drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
         books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
@@ -438,6 +489,7 @@ class ExploreView( InputGatedMixin, View ):
             'stopped_early'  : run.result.stopped_early,
             'drift'          : drift,                          # curated changes vs the source scenario
             'drift_summary'  : describe_changes( drift ),
+            'profile_drift'  : profile_drift,                  # Profile facts changed since these runs (pauses new runs)
             **forms,
         }
         context.update( _run_outcome( run, books ) )           # horizon + ending net worth for the banner
@@ -466,6 +518,21 @@ class ExploreView( InputGatedMixin, View ):
             start_choice   = exploration.frame_start_from or 'effective',
             duration_years = exploration.frame_duration_years or 40,
             granularity    = GRANULARITY.get( exploration.frame_interval or 'year', GRANULARITY[ 'year' ] ) )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ExploreRestartView( InputGatedMixin, View ):
+    """`/plan/financial-forecast/explore/restart/` -- re-baseline the in-progress exploration on the current
+    Profile: re-seed the working copy from the anchor's current inputs and clear the run history, then let the
+    workspace re-run. The workspace's answer to Profile drift -- the runs were computed against an earlier
+    Profile, so this starts the comparison over on the updated one (the same primitive Run & Explore uses)."""
+
+    def post( self, request ):
+        organization = request.organization
+        exploration = scenario_exploration( organization )
+        if exploration is not None:
+            start_fresh_exploration( organization, exploration.source )
+        return redirect( 'explore' )
 
 
 class _ExploreSectionAutosaveView( InputGatedMixin, View ):

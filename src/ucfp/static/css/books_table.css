@@ -32,6 +32,18 @@
     background-color: hsl( var( --bt-hue, 0 ), var( --bt-sat, 0% ), var( --bt-light, 100% ) );
 }
 
+/* Bound a column's width by its header. A long label or breadcrumb would otherwise stretch the column
+   wide (a breadcrumb especially, as it never wrapped); cap the heading and let it wrap instead. The cap
+   sits on this inner inline-block, not the cell -- max-width on a cell is ignored in an auto-layout table.
+   Inline-block so a short label still shrinks the column; the narrower money cells never drive the width.
+   `overflow-wrap` breaks a single over-long token rather than overflowing the bound. */
+.bt-col-heading {
+    display: inline-block;
+    max-width: 10rem;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
 /* Per-group base hue. One hue per top-level group; saturation kept in a similar band so
    depth lightening reads consistently across groups. */
 .bt-group-net-worth { --bt-hue: 258; --bt-sat: 45%; }
@@ -48,12 +60,40 @@
 .bt-depth-2 { --bt-light: 94%; }
 .bt-depth-3 { --bt-light: 97%; }
 
-/* A removed column: parked out of the group palette as a neutral grey sliver. */
-.bt-head.bt-removed {
+/* A hidden column -- removed by the user or auto-hidden as empty. Which one no longer matters to the
+   reader, so both render identically: a narrow, neutral, de-emphasised slot that recedes rather than a
+   loud bar. Every group tint is light (the depth ramp is 82-97%), so a light fill alone would wash out --
+   findability comes from structure, not colour: thin light side borders delineate the slot against any
+   neighbouring hue, and the expand glyph (muted, the weight of the column gears) marks it, while the pale
+   fill keeps it quiet. */
+.bt-head.bt-removed,
+.bt-head.bt-empty {
     --bt-hue: 0;
     --bt-sat: 0%;
-    --bt-light: 93%;
+    --bt-light: 95%;
     color: var( --muted-color );
+    border-left: 1px solid var( --line-color );
+    border-right: 1px solid var( --line-color );
+}
+
+/* The reveal control on a sliver: an icon button matched in weight to the column-menu gear, but a distinct
+   glyph (outward chevrons = expand this column open), so a hidden column offers an affordance of equal
+   standing that still reads as a different action. It inherits the sliver's muted colour. */
+.bt-sliver-toggle {
+    display: block;
+    width: 100%;
+    padding: 0.3rem 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    line-height: 1;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0.9;
+}
+.bt-sliver-toggle:hover,
+.bt-sliver-toggle:focus {
+    opacity: 1;
 }
 
 /* The leading Period column: sticky on the left as well, so the dates stay in view when a
@@ -95,4 +135,70 @@
 .bt-col-menu-toggle:focus {
     color: var( --primary-color );
     background-color: rgba( 0, 0, 0, 0.05 );
+}
+
+
+/* -- Maximize: fill the browser window ---------------------------------------------------------
+   The panel (the shared table plus its toolbar, see run_table_panel.html) lifts out to a fixed,
+   full-viewport overlay so the table gets the whole window without a page navigation. A fixed inset:0
+   pane covers the app and page chrome by z-index -- no per-page hiding of individual elements -- so any
+   page that includes the panel gets this for free. The toggle button and Esc are wired in the partial. */
+.run-table-panel.is-maximized {
+    position: fixed;
+    inset: 0;
+    z-index: 1030;            /* above the static navbar; the column menus inside stack above the table */
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+}
+.run-table-panel.is-maximized .card-header {
+    display: none;            /* the summary it holds is not shown maximized; the control row becomes the bar */
+}
+
+/* The brand link and run name belong only to the maximized bar -- maximizing covers the real navbar, so
+   they restore branding, a home escape hatch, and which-run orientation; hidden otherwise. */
+.bt-maximized-only {
+    display: none;
+}
+.run-table-panel.is-maximized .bt-maximized-only {
+    display: inline-flex;
+    align-items: center;
+}
+/* The run name centred within the control row -- independent of the left-anchored brand and the
+   right-anchored toggle -- and given a little prominence (primary colour, bold), so it reads as the
+   maximized view's title. The row is the positioning context so the name centres on the row, not the
+   overlay. */
+.run-table-panel.is-maximized .bt-panel-controls {
+    position: relative;
+}
+.run-table-panel.is-maximized .bt-run-name {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate( -50%, -50% );
+    white-space: nowrap;
+}
+.run-table-panel.is-maximized .card-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 0.75rem;
+    overflow: hidden;
+}
+.run-table-panel.is-maximized .bt-scroll {
+    flex: 1 1 auto;
+    max-height: none;         /* fill the overlay instead of the default 75vh */
+}
+.run-table-panel.is-maximized .run-table-hint {
+    display: none;            /* the control row stays as the bar, but its hint text yields to the branding */
+}
+
+/* The start/end stat labels: quiet, tracked-out uppercase caps over their values. */
+.run-summary-label {
+    letter-spacing: 0.04em;
+}
+body.bt-maximized {
+    overflow: hidden;         /* lock the page behind the overlay from scrolling */
 }

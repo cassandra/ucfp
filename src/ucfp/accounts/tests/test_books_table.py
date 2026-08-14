@@ -7,11 +7,17 @@ groups, removals, and the existing order untouched. A synthetic catalog (source 
 shape of income columns) exercises the reveal without a full forecast.
 """
 import unittest
+from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
+from common.date_span import DateSpan
+
+from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.enums import AccountType, AssetClass, SystemAccountRole
 from ucfp.accounts.books_table import (
-    BooksColumnKey, BooksLeafColumn, BooksSummaryColumn, BooksTableColumnCatalog,
-    BooksTableDefinition, _render_columns )
+    BooksColumnKey, BooksDerivedFigure, BooksLeafColumn, BooksSummaryColumn, BooksTableColumn,
+    BooksTableColumnCatalog, BooksTableDefinition, _empty_op_keys, _render_columns, build_books_table )
 
 
 def _summary( token, members, parent = None ):
@@ -286,6 +292,132 @@ class CompressedChainStructuralOpsTest( unittest.TestCase ):
         self.assertNotIn( BooksColumnKey.for_account( _LOAN_UUID ).token, rendered )   # not the loan account
         self.assertEqual( [ c for c in rendered.values() if c.removed ],
                           [ rendered[ 'vehicle-loans' ] ] )                        # exactly one sliver
+
+
+class RevealedKeysTest( unittest.TestCase ):
+    """`revealed_keys`: the opt-out of automatic empty-column hiding. It rides the lens's storage, `adapt`
+    trims keys the run lacks, and every structural op carries it through unchanged."""
+
+    def test_reveal_adds_a_key_and_is_idempotent( self ):
+        lens     = BooksTableDefinition( _keys( 'a', 'b' ) )
+        revealed = lens.reveal( BooksColumnKey( 'a' ) )
+        self.assertEqual( revealed.revealed_keys, _keys( 'a' ) )
+        self.assertIs( revealed.reveal( BooksColumnKey( 'a' ) ), revealed )   # already revealed -> same lens
+
+    def test_storage_round_trips_revealed_keys( self ):
+        lens     = BooksTableDefinition( _keys( 'a', 'b' ), _keys( 'b' ), _keys( 'a' ) )
+        restored = BooksTableDefinition.from_storage( lens.to_storage() )
+        self.assertEqual( restored.revealed_keys, _keys( 'a' ) )
+        self.assertEqual( restored.removed_keys, _keys( 'b' ) )
+
+    def test_a_legacy_lens_without_revealed_reads_as_empty( self ):
+        restored = BooksTableDefinition.from_storage( { 'columns' : [ 'a' ], 'removed' : [] } )
+        self.assertEqual( restored.revealed_keys, () )
+
+    def test_adapt_drops_revealed_keys_the_run_lacks( self ):
+        lens    = BooksTableDefinition( _keys( 'type:INCOME' ),
+                                        revealed_keys = _keys( 'acct:you', 'acct:gone' ) )
+        adapted = lens.adapt( _couple_catalog() )
+        self.assertEqual( adapted.revealed_keys, _keys( 'acct:you' ) )        # 'acct:gone' is not in the run
+
+    def test_structural_ops_carry_revealed_keys_through( self ):
+        catalog  = _couple_catalog()
+        revealed = _keys( 'acct:you' )
+        lens     = BooksTableDefinition( _keys( 'type:INCOME' ), revealed_keys = revealed )
+        expanded = lens.expand( catalog, BooksColumnKey( 'type:INCOME' ) )
+        self.assertEqual( expanded.revealed_keys, revealed )
+        self.assertEqual( expanded.remove( catalog, BooksColumnKey( 'src:ss' ) ).revealed_keys, revealed )
+        self.assertEqual( expanded.collapse( catalog, BooksColumnKey( 'type:INCOME' ) ).revealed_keys,
+                          revealed )
+        self.assertEqual( lens.restore( BooksColumnKey( 'x' ) ).revealed_keys, revealed )
+
+
+def _rendered( column, removed = False ):
+    """A minimal rendered column standing on its own key -- enough for the emptiness test."""
+    return BooksTableColumn( column = column, op_key = column.key, expand_key = column.key,
+                             removed = removed )
+
+
+_ACCT_A = UUID( '00000000-0000-0000-0000-0000000000a1' )
+
+
+class EmptyColumnDetectionTest( unittest.TestCase ):
+    """`_empty_op_keys`: which columns auto-hide. Only an account leaf the user has not revealed whose
+    figure reads as zero (under half a cent) in every period; summaries, derived figures, revealed
+    columns, and columns with any activity stay."""
+
+    def test_an_all_zero_account_leaf_is_hidden( self ):
+        col = _rendered( _account_leaf( _ACCT_A, 'p', 'Idle' ) )
+        self.assertEqual(
+            _empty_op_keys( ( col, ), { col.op_key : ( Decimal( '0' ), Decimal( '0' ) ) }, set() ),
+            { col.op_key } )
+
+    def test_any_period_with_activity_keeps_it( self ):
+        col = _rendered( _account_leaf( _ACCT_A, 'p', 'Active' ) )
+        self.assertEqual(
+            _empty_op_keys( ( col, ), { col.op_key : ( Decimal( '0' ), Decimal( '500' ) ) }, set() ),
+            set() )
+
+    def test_a_sub_cent_residual_still_counts_as_empty( self ):
+        col = _rendered( _account_leaf( _ACCT_A, 'p', 'Residual' ) )
+        self.assertEqual(
+            _empty_op_keys( ( col, ), { col.op_key : ( Decimal( '0' ), Decimal( '0.004' ) ) }, set() ),
+            { col.op_key } )
+
+    def test_a_revealed_account_is_kept( self ):
+        col = _rendered( _account_leaf( _ACCT_A, 'p', 'Idle' ) )
+        self.assertEqual(
+            _empty_op_keys( ( col, ), { col.op_key : ( Decimal( '0' ), ) }, { col.op_key } ), set() )
+
+    def test_a_zero_summary_total_is_not_hidden( self ):
+        col = _rendered( _summary( 'type:ASSET', [ 'a' ] ) )
+        self.assertEqual( _empty_op_keys( ( col, ), { col.op_key : ( Decimal( '0' ), ) }, set() ), set() )
+
+    def test_a_zero_derived_figure_is_not_hidden( self ):
+        col = _rendered( BooksLeafColumn(
+            key = BooksColumnKey.for_derived( BooksDerivedFigure.NET_WORTH ), label = 'Net worth' ) )
+        self.assertEqual( _empty_op_keys( ( col, ), { col.op_key : ( Decimal( '0' ), ) }, set() ), set() )
+
+    def test_a_removed_account_is_left_to_its_removal( self ):
+        col = _rendered( _account_leaf( _ACCT_A, 'p', 'Idle' ), removed = True )
+        self.assertEqual( _empty_op_keys( ( col, ), {}, set() ), set() )   # removed -> not even in the series
+
+
+class BuildBooksTableEmptyColumnsTest( unittest.TestCase ):
+    """End to end through `build_books_table`: a funded-then-idle account keeps its column (its balance
+    persists), an account that never sees activity auto-hides, and revealing it brings it back."""
+
+    def _books( self ):
+        bookkeeper = Bookkeeper()
+        bookkeeper.build_standard_chart()
+        chart      = bookkeeper.chart
+        asset_root = chart.root( AccountType.ASSET )
+        cash       = bookkeeper.create_holding( asset_root, 'Cash', AssetClass.CASH )
+        unused     = bookkeeper.create_holding( asset_root, 'Unused', AssetClass.STOCKS )
+        opening    = chart.system_account( SystemAccountRole.OPENING_BALANCES )
+        # Fund Cash once at t0 and never again; Unused is created but never touched.
+        bookkeeper.record( date( 2026, 1, 1 ),
+                           [ ( cash, Decimal( '-100000' ) ), ( opening, Decimal( '100000' ) ) ],
+                           description = 'Opening' )
+        return bookkeeper, chart, cash, unused
+
+    def test_idle_account_hides_funded_stays_and_reveal_restores( self ):
+        bookkeeper, chart, cash, unused = self._books()
+        catalog    = BooksTableColumnCatalog.build( chart )
+        cash_key   = BooksColumnKey.for_account( cash.account_uuid )
+        unused_key = BooksColumnKey.for_account( unused.account_uuid )
+        definition = BooksTableDefinition( ( cash_key, unused_key ) )
+        spans      = [ DateSpan( date( 2026, 1, 1 ), date( 2026, 12, 31 ) ),
+                       DateSpan( date( 2027, 1, 1 ), date( 2027, 12, 31 ) ) ]
+
+        table = build_books_table( bookkeeper.ledger, chart, spans, definition, catalog )
+        empty = { column.column.label : column.empty for column in table.columns }
+        self.assertFalse( empty[ 'Cash' ] )      # funded once, idle after -> balance persists -> stays
+        self.assertTrue( empty[ 'Unused' ] )     # never any activity -> auto-hidden
+
+        revealed = build_books_table(
+            bookkeeper.ledger, chart, spans, definition.reveal( unused_key ), catalog )
+        self.assertFalse( { c.column.label : c.empty for c in revealed.columns }[ 'Unused' ] )
 
 
 if __name__ == '__main__':

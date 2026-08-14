@@ -17,6 +17,7 @@ from ucfp.accounts.books import Account, Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass
 from ucfp.accounts.exceptions import MissingAccountError
+from ucfp.accounts.money_utils import quantize_money
 
 
 class PeriodEvent:
@@ -106,15 +107,17 @@ class LoanPayoff( PeriodEvent ):
     amortization posts. The balance is read live from the ledger at apply time -- the projected
     amount the engine knows, not a planner-supplied figure -- so a payoff dated after the loan has
     already been retired posts nothing. Mirrors the principal half of a liability service payment,
-    with the full remaining balance and no interest."""
+    with the full remaining balance and no interest. The balance is quantized to cents: a loan already
+    retired -- or amortized down to a sub-cent residual (the quantized payments never sum exactly to the
+    opening balance) -- rounds to zero and posts nothing, so no zero-magnitude entry can reach the books."""
 
     event_date        : date
     liability_account : Account
     cash_account      : Account
 
     def apply( self, bookkeeper : Bookkeeper, description : str = '' ) -> Optional[ Transaction ]:
-        balance = bookkeeper.ledger.natural_balance( self.liability_account )
-        if balance == 0:
+        balance = quantize_money( bookkeeper.ledger.natural_balance( self.liability_account ) )
+        if balance <= 0:
             return None
         return bookkeeper.record(
             self.event_date,

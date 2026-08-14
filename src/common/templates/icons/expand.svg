@@ -1,0 +1,3 @@
+<svg class="{{ class_attr }}" viewBox="0 0 24 24" fill="currentColor" {{ accessibility_attrs }}>
+  <path d="M9 6.5L5 12l4 5.5M15 6.5l4 5.5-4 5.5" stroke="currentColor" stroke-width="2" fill="none"/>
+</svg>

@@ -24,7 +24,7 @@ from typing import Optional
 
 from ucfp.accounts.books import Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import ExpenseTaxClass, SystemAccountRole
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import format_money, quantize_money
 from ucfp.jurisdiction.engine import ContributionKind
@@ -37,6 +37,9 @@ from .results import Notice, NoticeKind, NoticeSeverity, PeriodResult
 
 _QUARTERS_PER_YEAR         = Decimal( 4 )
 _ESTIMATED_INCOME_TAX_MEMO = 'Estimated income tax (prepayment)'
+# A depreciating holding worth less than this already displays as $0.00 (half a cent), so it is written
+# off to exactly zero rather than left decaying toward it asymptotically.
+_DEPRECIATION_WRITEOFF_FLOOR = Decimal( '0.005' )
 
 
 class Period:
@@ -95,7 +98,15 @@ class Period:
                 )
             rate = self._parameters.asset_rates.growth_rate( holding.asset_class )
             opening_market = ledger.market_value( holding, through = opening_through )
-            appreciation = quantize_money( rate.change_on( opening_market ) )
+            # A depreciating holding decays geometrically and never reaches zero. Once it is worth less
+            # than half a displayed cent (it already reads as $0.00), write off the whole remaining value
+            # so it lands on exactly $0.00 rather than lingering as a sub-cent residual. Other holdings
+            # take the normal appreciation for the interval.
+            if ( holding.asset_class == AssetClass.DEPRECIATING
+                 and Decimal( '0' ) < opening_market < _DEPRECIATION_WRITEOFF_FLOOR ):
+                appreciation = -quantize_money( opening_market )
+            else:
+                appreciation = quantize_money( rate.change_on( opening_market ) )
             if appreciation == 0:
                 continue
             if unrealized_gain_account is None:
