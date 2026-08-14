@@ -1,0 +1,27 @@
+{% comment %}
+The self-saving Net Worth form (id=net-worth): the ordinary rate on pre-tax retirement balances and the
+capital-gains rate on unrealized investment gains, both applied by the Estimated Future Taxes overlay.
+The js-autosave form posts each edit to `NetWorthView`, which persists silently and re-renders only on a
+genuine field error. Reads `net_worth_form`.
+{% endcomment %}
+<div id="net-worth">
+  <form method="post" action="{% url 'net_worth' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <div class="assumption-list mt-2">
+      <div class="mb-2">
+        <div class="d-flex justify-content-between align-items-center">
+          {{ net_worth_form.ordinary_rate.label_tag }}
+          <div class="text-nowrap">{{ net_worth_form.ordinary_rate }}{% if net_worth_form.ordinary_rate.errors %}<span class="text-danger small d-block">{{ net_worth_form.ordinary_rate.errors|join:" " }}</span>{% endif %}</div>
+        </div>
+        <div class="text-muted small pl-3">The ordinary-income rate you expect on pre-tax retirement withdrawals; applied to the whole balance.</div>
+      </div>
+      <div class="mb-2">
+        <div class="d-flex justify-content-between align-items-center">
+          {{ net_worth_form.capital_gains_rate.label_tag }}
+          <div class="text-nowrap">{{ net_worth_form.capital_gains_rate }}{% if net_worth_form.capital_gains_rate.errors %}<span class="text-danger small d-block">{{ net_worth_form.capital_gains_rate.errors|join:" " }}</span>{% endif %}</div>
+        </div>
+        <div class="text-muted small pl-3">The capital-gains rate you expect when investment gains are realized; applied to unrealized gains only.</div>
+      </div>
+    </div>
+  </form>
+</div>

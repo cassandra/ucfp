@@ -1,0 +1,13 @@
+{% comment %}
+The Net Worth section pane (Assumptions flow): an intro and the self-saving rates form. The form renders
+outside the section's Next form (a nested form would be invalid HTML) and persists each edit on its own
+through `NetWorthView`. The editor comes from the section wrapper (`form.net_worth_form`); the same
+partial is re-rendered by the view on a field error.
+{% endcomment %}
+<p class="text-muted">Adjust net worth toward what you could actually keep after tax. Leave both at
+  0% to report gross balances (the default). Setting a rate books an <em>estimate</em> of the tax
+  embedded in your accounts &mdash; the ordinary rate on pre-tax retirement balances (taxable in full
+  when withdrawn) and the capital-gains rate on unrealized investment gains &mdash; as a liability, so
+  net worth reflects the realizable amount. It is an estimate, not a forecast of the actual tax you will
+  pay; a primary residence is excluded.</p>
+{% include 'inputs/interview/sections/net_worth_pane.html' with net_worth_form=form.net_worth_form %}

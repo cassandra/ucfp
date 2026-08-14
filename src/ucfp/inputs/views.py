@@ -59,6 +59,7 @@ from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .external_factors import ExternalFactorsForm
 from .cash_plan import DrawdownForm
+from .net_worth import NetWorthForm
 from .transaction_costs import TransactionCostsForm
 from .debt_plan import DebtPlanForm
 from .debts import DebtsForm
@@ -1162,6 +1163,22 @@ class TransactionCostsView( SelfSavingPaneView ):
 
     def build_form( self, request, data = None ):
         return TransactionCostsForm( data, assumptions = _current_assumptions( request ) )
+
+    def persist( self, request, form ):
+        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
+        save_assumptions( current_assumptions_record( request ), assumptions )
+
+
+class NetWorthView( SelfSavingPaneView ):
+    """`/inputs/interview/net-worth/edit/` -- the Net Worth pane of the Assumptions flow. It persists the
+    latent-tax rates the Estimated Future Taxes overlay applies to pre-tax balances and unrealized gains."""
+
+    template     = 'inputs/interview/sections/net_worth_pane.html'
+    target       = 'net-worth'
+    context_name = 'net_worth_form'
+
+    def build_form( self, request, data = None ):
+        return NetWorthForm( data, assumptions = _current_assumptions( request ) )
 
     def persist( self, request, form ):
         _profile, assumptions = form.apply( None, _current_assumptions( request ) )

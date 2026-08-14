@@ -40,6 +40,7 @@ from .debts import DebtsForm
 from .events import EventsForm
 from .external_factors import ExternalFactorsSectionForm
 from .cash_plan import CashPlanSectionForm
+from .net_worth import NetWorthSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
 from .properties import PANES, PossessionsForm, properties_context
@@ -871,6 +872,9 @@ SECTIONS = [
     Section( 'transaction-costs', 'Sales', ( Aggregate.ASSUMPTIONS, ),
              TransactionCostsSectionForm,
              outer_template = 'inputs/interview/sections/transaction_costs.html' ),
+    Section( 'net-worth', 'Net Worth', ( Aggregate.ASSUMPTIONS, ),
+             NetWorthSectionForm,
+             outer_template = 'inputs/interview/sections/net_worth.html' ),
 ]
 
 
