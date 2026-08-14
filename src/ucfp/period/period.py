@@ -18,7 +18,6 @@ The interval is computed in three phases (see `ucfp/FORECAST_ENGINE.md`):
                       year. The payment precedes funding, so cash stays at the floor.
   3. Close         -- finalize ending balances and the stop condition.
 """
-import calendar
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -458,9 +457,9 @@ class Period:
         quarter_ends = self._quarter_ends_in_span()
         if not quarter_ends:
             return
+        annualized_window = AnnualizedFiscalWindow.annualizing( self._parameters.fiscal_window )
         annual_estimate = tax_engine.estimate_income_tax(
-            self._annualized_fiscal_window(), self._parameters.tax_context,
-            self._parameters.opening_tax_state )
+            annualized_window, self._parameters.tax_context, self._parameters.opening_tax_state )
         if annual_estimate <= 0:
             return
         chart = bookkeeper.chart
@@ -483,7 +482,9 @@ class Period:
     def _quarter_ends_in_span( self ) -> list[ tuple[ int, date ] ]:
         """The `(quarter number, quarter-end date)` pairs whose date falls in this interval -- all four
         for a yearly period, one for a quarter, one or none for a month. Periods are calendar-aligned,
-        so the span lies within a single year."""
+        so the span lies within a single year. The quarter-ends are the civil calendar quarters; a
+        jurisdiction on a non-civil tax year would need engine-supplied boundaries (as the year-end
+        and payment dates already are), but the estimate is US-specific and civil-year today."""
         span = self._parameters.date_span
         year = span.start_date.year
         candidates = [ ( 1, date( year, 3, 31 ) ), ( 2, date( year, 6, 30 ) ),
@@ -491,19 +492,12 @@ class Period:
         return [ ( quarter, quarter_end ) for quarter, quarter_end in candidates
                  if span.start_date <= quarter_end <= span.end_date ]
 
-    def _annualized_fiscal_window( self ) -> AnnualizedFiscalWindow:
-        """This interval's fiscal window (year-to-date through the interval's end) grossed up to a
-        full-year rate, so the estimate prices the annualized liability the YTD income implies. The
-        factor is the reciprocal of the window's share of the year (1 for a full year -- a no-op)."""
-        window = self._parameters.fiscal_window
-        year_to_date_days = ( window.span.end_date - window.span.start_date ).days + 1
-        year_days = 366 if calendar.isleap( window.span.start_date.year ) else 365
-        return AnnualizedFiscalWindow( window, Decimal( year_days ) / Decimal( year_to_date_days ) )
-
     def _income_tax_prepaid_earlier_this_year( self, bookkeeper : Bookkeeper ) -> Decimal:
         """The estimated income tax already prepaid in this tax year before this interval -- the cash
         that left on earlier quarters' estimate transactions -- so a later quarter pays only the
-        increment to its cumulative target."""
+        increment to its cumulative target. Identifies those transactions by `_ESTIMATED_INCOME_TAX_MEMO`,
+        which is therefore a load-bearing key here, not merely a display memo: it separates estimate
+        prepayments from the prior-year settlement, which also debits Taxes Payable within this year."""
         tax_year_start = self._parameters.tax_engine.tax_year_bounds(
             self._parameters.date_span.end_date )[ 0 ]
         period_start = self._parameters.date_span.start_date
