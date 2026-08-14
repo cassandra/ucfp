@@ -23,7 +23,7 @@
            data-async="modal" class="btn btn-sm btn-outline-danger">Delete</a>
         {% else %}
         <a href="{% url 'organization_leave_confirm' organization_uuid=row.organization.uuid %}"
-           data-async="modal" class="btn btn-sm btn-outline-secondary">Leave</a>
+           data-async="modal" class="btn btn-sm btn-outline-tertiary">Leave</a>
         {% endif %}
       </li>
       {% endfor %}

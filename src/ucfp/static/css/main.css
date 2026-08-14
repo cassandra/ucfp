@@ -427,6 +427,22 @@ a:hover, a:focus {
     color: var(--on-primary-color);
 }
 
+/* The one accent action ("gold is the verb"). Gold is reserved exclusively for the single primary action
+   of a view -- the one thing the user is here to do (Run, Continue, Save). At most one per view; never
+   chrome, never a status, never destructive. Everything else recedes to primary/outline. This is the only
+   rule that fills an element with --secondary-color. */
+.btn-cta {
+    color: var(--on-secondary-color) !important;
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-highlight-color) !important;
+}
+.btn-cta:hover {
+    filter: brightness( 0.95 );   /* a little affordance for the one action; filled theme buttons are otherwise static */
+}
+.btn-cta:focus {
+    box-shadow: 0 0 0 0.2rem rgba( 245, 185, 69, 0.40 ) !important;
+}
+
 /* info is a status color on its own token (currently equal to primary), kept
    separate so identity (primary) and status (info) can diverge later. */
 .bg-info, .btn-info {
@@ -442,17 +458,20 @@ a:hover, a:focus {
     color: var(--on-info-color);
 }
 
+/* Secondary is now a neutral, muted status -- gold was reclaimed for .btn-cta (the one accent action), so
+   "secondary" no longer wears the accent. It marks a lesser status (in progress, incomplete, coming soon),
+   never a primary action. */
 .bg-secondary, .btn-secondary, .badge-secondary {
-    color: var(--on-secondary-color) !important;
-    background-color: var(--secondary-color) !important;
-    border-color: var(--secondary-highlight-color) !important;
+    color: var(--on-muted-color) !important;
+    background-color: var(--muted-color) !important;
+    border-color: var(--muted-color) !important;
 }
 .bg-secondary a {
-    color: var(--on-secondary-color);
+    color: var(--on-muted-color);
 }
 .bg-secondary a:hover, .bg-secondary a:focus, .bg-secondary a:active {
     opacity: 0.65;
-    color: var(--on-secondary-color);
+    color: var(--on-muted-color);
 }
 
 .bg-tertiary, .btn-tertiary {
@@ -513,21 +532,6 @@ a:hover, a:focus {
 }
 .btn-outline-primary:focus {
     box-shadow: 0 0 0 0.2rem rgba(31, 95, 139, 0.30) !important;
-}
-
-.btn-outline-secondary {
-    color: var(--secondary-color) !important;
-    border-color: var(--secondary-color) !important;
-    background-color: transparent !important;
-}
-.btn-outline-secondary:hover, .btn-outline-secondary:focus,
-.btn-outline-secondary:active, .btn-outline-secondary.active {
-    color: var(--on-secondary-color) !important;
-    background-color: var(--secondary-color) !important;
-    border-color: var(--secondary-highlight-color) !important;
-}
-.btn-outline-secondary:focus {
-    box-shadow: 0 0 0 0.2rem rgba(245, 185, 69, 0.40) !important;
 }
 
 .btn-outline-tertiary {
