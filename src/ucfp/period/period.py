@@ -31,6 +31,7 @@ from ucfp.jurisdiction.engine import ContributionKind
 
 from .events import Realization
 from .fiscal_window import AnnualizedFiscalWindow
+from .future_tax import reestimate_future_taxes
 from .parameters import PeriodParameters
 from .results import Notice, NoticeKind, NoticeSeverity, PeriodResult
 
@@ -403,6 +404,17 @@ class Period:
         self._assess_penalties( bookkeeper, result )
         self._settle_tax( bookkeeper, result )
         self._sweep_to_ceiling( bookkeeper, result )
+        self._reestimate_future_taxes( bookkeeper, result )
+        return
+
+    def _reestimate_future_taxes( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
+        """Re-estimate the Estimated Future Taxes liability to what this interval's closing balances
+        imply, so net worth reflects the latent tax on pre-tax balances and unrealized gains. Runs last,
+        after every real transaction, and reads only balances: it books a liability (and its equity
+        counterpart), never touching cash or the funding/draw logic. Zero rates book nothing."""
+        reestimate_future_taxes(
+            bookkeeper, self._parameters.latent_ordinary_tax_rate,
+            self._parameters.latent_capital_gains_tax_rate, self._parameters.date_span.end_date )
         return
 
     def _pay_prior_tax_payable( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:

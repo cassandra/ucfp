@@ -168,3 +168,7 @@ class PeriodParameters:
     # inputs). Carried as primitives so this myopic slice needs no engine-parameters import.
     property_sale_realtor_fee_rate : Rate    = ZERO_RATE
     property_sale_fixed_cost        : Decimal = Decimal( '0' )
+    # The rates the Estimated Future Taxes overlay applies at each close: ordinary on pre-tax retirement
+    # balances, capital-gains on unrealized investment gains. Zero (the default) books no overlay.
+    latent_ordinary_tax_rate      : Rate = ZERO_RATE
+    latent_capital_gains_tax_rate : Rate = ZERO_RATE

@@ -29,8 +29,8 @@ from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
     ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
     RecurringHoldingPurchase, RecurringLoanOrigination, RecurringRealization, RetirementContribution,
-    ScheduledExternalDisbursement, ScheduledRealization, Subject, SubsidizedHealthCoverage,
-    TransactionCosts, WindowedAmount )
+    NetWorthCalculation, ScheduledExternalDisbursement, ScheduledRealization, Subject,
+    SubsidizedHealthCoverage, TransactionCosts, WindowedAmount )
 
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
@@ -52,7 +52,7 @@ from ucfp.inputs.plans.enums import (
     CreditCardPlanMode, PaymentMethod, VehicleDispositionKind )
 from ucfp.inputs.plans.schemas import (
     CreditCardPlan, LoanRepayment, Plans, RetirementTiming, Vehicle )
-from ucfp.inputs.assumptions.defaults import default_transaction_costs
+from ucfp.inputs.assumptions.defaults import default_net_worth_calculation, default_transaction_costs
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import assert_compatible
 from ucfp.inputs.vehicle_handles import (
@@ -127,6 +127,7 @@ def materialize(
         health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
         property_sale_costs = _property_sale_costs( assumptions ),
+        net_worth_calculation = _net_worth_calculation( assumptions ),
     )
 
 
@@ -998,6 +999,12 @@ def _property_sale_costs( assumptions : Assumptions ) -> TransactionCosts:
     """The selling costs the engine applies to a property sale -- the assumptions' own copy, or the
     shared default when unset."""
     return assumptions.transaction_costs or default_transaction_costs()
+
+
+def _net_worth_calculation( assumptions : Assumptions ) -> NetWorthCalculation:
+    """The net-worth calculation the engine applies -- the latent-tax overlay rates from the
+    assumptions' own copy, or the zero-rate (overlay-off) default when unset."""
+    return assumptions.net_worth or default_net_worth_calculation()
 
 
 def _statute( profile : Profile, assumptions : Assumptions ):

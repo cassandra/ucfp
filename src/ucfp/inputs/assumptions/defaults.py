@@ -15,7 +15,7 @@ from decimal import Decimal
 from common.rate import Rate
 
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.forecast.parameters import TransactionCosts
+from ucfp.forecast.parameters import NetWorthCalculation, TransactionCosts
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.jurisdiction.enums import StatuteForecastType
@@ -54,12 +54,19 @@ def default_transaction_costs() -> TransactionCosts:
         property_sale_fixed_cost       = DEFAULT_SALE_FIXED_COST )
 
 
+def default_net_worth_calculation() -> NetWorthCalculation:
+    """The net-worth calculation a new Assumptions set seeds with -- zero latent-tax rates, so the
+    Estimated Future Taxes overlay stays off until the user opts in by entering rates."""
+    return NetWorthCalculation()
+
+
 def default_assumptions() -> Assumptions:
     """A complete, runnable Assumptions set: the Expected economic outlook, a COLA-indexed tax projection
-    at that outlook's inflation, and default selling costs -- what a freshly minted set (and the form)
-    starts from."""
+    at that outlook's inflation, default selling costs, and a net-worth calculation off by default --
+    what a freshly minted set (and the form) starts from."""
     economics = default_economics()
     return Assumptions(
         economics = economics,
         tax_projection = tax_projection( DEFAULT_TAX_FORECAST_TYPE, economics ),
-        transaction_costs = default_transaction_costs() )
+        transaction_costs = default_transaction_costs(),
+        net_worth = default_net_worth_calculation() )

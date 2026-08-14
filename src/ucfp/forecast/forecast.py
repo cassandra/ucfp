@@ -53,6 +53,7 @@ from ucfp.period.parameters import (
 )
 from ucfp.period.events import LoanOrigination, PeriodEvent
 from ucfp.period.fiscal_window import FiscalWindow
+from ucfp.period.future_tax import reestimate_future_taxes
 from ucfp.period.period import Period
 from ucfp.period.results import Notice, NoticeKind, NoticeSeverity, PeriodResult
 from ucfp.jurisdiction.engine import ContributionKind, TaxEngine, TaxState
@@ -265,6 +266,7 @@ class BaselineBuilder:
         self._resolve_draw_priority( bookkeeper )
         self._resolve_sweep( bookkeeper )
         self._validate_contributions( bookkeeper )
+        self._seed_future_tax_overlay( bookkeeper )
         return ResolvedBaseline(
             bookkeeper        = bookkeeper,
             holding_by_handle = self._holding_by_handle,
@@ -357,6 +359,17 @@ class BaselineBuilder:
                 [ ( loan.account, loan.parameters.opening_balance ) ], opening_balances,
                 f'{loan.account.name} opening balance' )
             continue
+        return
+
+    def _seed_future_tax_overlay( self, bookkeeper : Bookkeeper ) -> None:
+        """Book the opening Estimated Future Taxes at t0 (the opening date), so the opening net-worth
+        snapshot already reflects latent tax -- the same to-target re-estimate each period close repeats.
+        Runs after every opening balance is seeded, so it reads the household's full opening position.
+        Zero rates (the default) book nothing."""
+        net_worth_calculation = self._parameters.net_worth_calculation
+        reestimate_future_taxes(
+            bookkeeper, net_worth_calculation.ordinary_tax_rate,
+            net_worth_calculation.capital_gains_tax_rate, self._parameters.start_date - timedelta( days = 1 ) )
         return
 
     def _record_opening( self, bookkeeper : Bookkeeper, opening_date : date,
@@ -962,6 +975,8 @@ class Forecast:
             property_sale_fixed_cost       = (
                 self._parameters.property_sale_costs.property_sale_fixed_cost
                 * self._inflation_factor( span.start_date.year ) ),
+            latent_ordinary_tax_rate      = self._parameters.net_worth_calculation.ordinary_tax_rate,
+            latent_capital_gains_tax_rate = self._parameters.net_worth_calculation.capital_gains_tax_rate,
         )
 
     def _year_fraction( self, span : DateSpan ) -> Decimal:

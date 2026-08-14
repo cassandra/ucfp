@@ -53,6 +53,17 @@ class TransactionCosts:
 
 
 @dataclass( frozen = True )
+class NetWorthCalculation:
+    """The household's assumptions for adjusting reported net worth toward realizable wealth. Today it
+    holds the two rates the Estimated Future Taxes overlay applies to latent tax -- the ordinary rate on
+    pre-tax retirement balances and the capital-gains rate on unrealized investment gains. Both default
+    to zero, which books no overlay (net worth stays gross). Named for the calculation, not the tax, so
+    other net-worth adjustments can join without renaming the section."""
+    ordinary_tax_rate      : Rate = ZERO_RATE
+    capital_gains_tax_rate : Rate = ZERO_RATE
+
+
+@dataclass( frozen = True )
 class Subject:
     """A person on the forecast -- the invariant kernel (name + birthdate); age is derived
     per interval, and income resolves per subject. `handle` is the planner-minted identity
@@ -652,6 +663,7 @@ class ForecastParameters:
     health_coverage   : Optional[ SubsidizedHealthCoverage ] = None
     subject_removals  : list[ SubjectRemoval ]               = field( default_factory = list )
     property_sale_costs : TransactionCosts                   = field( default_factory = TransactionCosts )
+    net_worth_calculation : NetWorthCalculation              = field( default_factory = NetWorthCalculation )
     initial_tax_state : Optional[ TaxState ]                 = None
 
     def __post_init__( self ) -> None:
