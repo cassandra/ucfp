@@ -4,7 +4,10 @@ The composition point that ties the layers together: materialize the user's Prof
 Assumptions + frame into engine parameters, run the engine, persist the books through the accounts
 repository, and record the inputs and non-books result as a coherent, immutable package.
 """
+from datetime import datetime
 from typing import Optional
+
+from django.utils.dateformat import format as format_datetime
 
 from common.dataclass_json import to_json_data
 
@@ -40,6 +43,14 @@ def run_and_capture(
         organization = organization, books = books_record, label = label,
         source_label = label if source_label is None else source_label,
         data = to_json_data( captured ) )
+
+
+def run_title( source_label: str, run_at: datetime ) -> str:
+    """A captured run's default title: the scenario it came from and when it ran, so it reads as a run
+    rather than as its scenario (a run named just "Default Scenario" is indistinguishable from the
+    scenario). `source_label` stays the bare scenario name -- kept separately as provenance -- and
+    `run_at` is the run's local timestamp, formatted to match how the run list shows it."""
+    return f'{source_label} - Run at {format_datetime( run_at, "M j, Y, g:i a" )}'
 
 
 def _summarize( result ) -> ProjectionResult:

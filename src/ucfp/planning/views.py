@@ -13,6 +13,7 @@ from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
@@ -46,7 +47,7 @@ from .forms import ForecastForm, GRANULARITY, resolve_frame
 from .gating import partition_scenarios, scenario_readiness, scenario_started
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
-from .orchestration import run_and_capture
+from .orchestration import run_and_capture, run_title
 from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
@@ -201,8 +202,9 @@ class FinancialForecastView( InputGatedMixin, View ):
             with transaction.atomic():
                 run = run_and_capture(
                     organization = organization, profile = load_profile( profile_record ),
-                    plans = scenario.plans, assumptions = scenario.assumptions,
-                    frame = frame, label = scenario_record.label )
+                    plans = scenario.plans, assumptions = scenario.assumptions, frame = frame,
+                    label = run_title( scenario_record.label, timezone.localtime() ),
+                    source_label = scenario_record.label )
                 PlanningResultRecord.objects.create(
                     organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
                     run = run, label = run.label )
