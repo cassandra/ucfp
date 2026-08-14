@@ -11,7 +11,8 @@ the money last, ending net worth, horizon), the transient-run history + Keep, th
 via the shared run_books_table partial. Finally a slim sticky bar (only while the working copy differs from
 the anchor) carrying the scenario-level actions: Save scenario changes opens the review-and-save modal, and
 Reset discards the sandbox. Reads `source`, `living_form`/`econ_form`, `drift`/`drift_summary`,
-`transient_runs`, `selected`, `stopped_early`, the `_run_outcome` figures, and the `books_table` context.
+`profile_drift`, `transient_runs`, `selected`, and the shared run_table_panel context (`summary` and the
+`books_table` figures).
 {% endcomment %}
 
 {% block breadcrumb %}
@@ -62,7 +63,7 @@ scenario immediately (js-autosave, silent); the Re-run at the foot of the inputs
   Plans column: Living Expenses -- all expenses; the curated subset shows when collapsed, the gear reveals
   every input with a checkbox to choose which stay.
   {% endcomment %}
-  <div class="col-md-6 mb-3">
+  <div class="col-md-6 mb-2">
     <div class="card h-100 curate-section" id="plans-section"
          data-curate-save="{% url 'explore_curate' %}" data-curate-key="expenses">
       <div class="card-body">
@@ -113,7 +114,7 @@ scenario immediately (js-autosave, silent); the Re-run at the foot of the inputs
   </div>
 
   {# Assumptions column: Economic Assumptions -- all rates; same curate/collapse as Plans. #}
-  <div class="col-md-6 mb-3">
+  <div class="col-md-6 mb-2">
     <div class="card h-100 curate-section" id="assumptions-section"
          data-curate-save="{% url 'explore_curate' %}" data-curate-key="rates">
       <div class="card-body">
@@ -172,44 +173,32 @@ first-time visitor sees the run and this CTA without hunting.
 {% endif %}
 
 {% comment %}
-OUTPUT: the selected run's outcome and table. A compact banner leads with the point of the run -- whether the
-money lasted and the ending net worth -- so it reads before the long table. The run selector (history chips)
-and Keep act on the output and sit with it; Re-run lives with the inputs above.
+OUTPUT: the explore-specific run controls (history chips to switch runs + Keep) sit above the shared
+run_table_panel, which carries the outcome summary and the table -- so the summary reads the same here as on
+a saved run's page. Re-run lives with the inputs above; the selected run is the highlighted chip.
 {% endcomment %}
-<div class="card mb-4">
-  <div class="card-header bg-white">
-    <div class="d-flex flex-wrap align-items-baseline">
-      <span class="h5 mb-0 mr-auto {% if stopped_early %}text-danger{% else %}text-success{% endif %}">
-        {% if stopped_early %}{% icon 'warning' size='sm' css_class='mr-1' %}Money ran out before the horizon{% else %}{% icon 'check' size='sm' css_class='mr-1' %}Money lasted the full horizon{% endif %}</span>
-      <span class="text-nowrap"><span class="text-muted small">Ending net worth</span>
-        <span class="h5 font-weight-bold ml-1">{{ ending_net_worth|money:currency }}</span></span>
+<div class="mb-4">
+  <div class="d-flex flex-wrap align-items-center mb-3 bg-light border rounded px-3 py-2">
+    <div class="d-flex align-items-center flex-wrap my-1 mr-auto">
+      <span class="text-muted small mr-2">Run history</span>
+      {% for result in transient_runs %}
+      <a href="{% url 'explore' %}?run={{ result.run.uuid }}"
+         class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}"
+         title="View this run's output">{{ result.label }}</a>
+      {% endfor %}
+      {% if transient_runs|length == 1 %}
+      {# Only the baseline exists yet, so the history can't compare anything -- point the way to a second run. #}
+      <span class="text-muted small font-italic">Re-run after a tweak to compare.</span>
+      {% endif %}
     </div>
-    <div class="text-muted small">{{ horizon_start }}&ndash;{{ horizon_end }} &middot; {{ horizon_years }} years
-      &middot; showing {{ selected.label }}</div>
+    <form method="post" action="{% url 'explore_keep_run' %}" class="my-1">
+      {% csrf_token %}
+      <input type="hidden" name="run" value="{{ selected.run.uuid }}">
+      <button type="submit" class="btn btn-outline-success btn-sm"
+              title="Save this run's output; the scenario is unaffected">Keep this run</button>
+    </form>
   </div>
-  <div class="card-body">
-    <div class="d-flex flex-wrap align-items-center mb-3">
-      <div class="d-flex align-items-center flex-wrap my-1 mr-auto">
-        <span class="text-muted small mr-2">Run history</span>
-        {% for result in transient_runs %}
-        <a href="{% url 'explore' %}?run={{ result.run.uuid }}"
-           class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}"
-           title="View this run's output">{{ result.label }}</a>
-        {% endfor %}
-        {% if transient_runs|length == 1 %}
-        {# Only the baseline exists yet, so the history can't compare anything -- point the way to a second run. #}
-        <span class="text-muted small font-italic">Re-run after a tweak to compare.</span>
-        {% endif %}
-      </div>
-      <form method="post" action="{% url 'explore_keep_run' %}" class="my-1">
-        {% csrf_token %}
-        <input type="hidden" name="run" value="{{ selected.run.uuid }}">
-        <button type="submit" class="btn btn-outline-success btn-sm"
-                title="Save this run's output; the scenario is unaffected">Keep this run</button>
-      </form>
-    </div>
-    {% include "planning/pages/run_table_panel.html" %}
-  </div>
+  {% include "planning/pages/run_table_panel.html" %}
 </div>
 
 {% comment %}

@@ -120,16 +120,44 @@ def _saved_run_digest( run_record ):
 
 
 def _run_outcome( run, books ) -> dict:
-    """The results page's headline outcome: the projection's year span and the net worth at the horizon.
-    Net worth is computed live from the already-loaded books -- never cached -- keeping the books the one
-    source of truth for book-derived figures (a captured run is immutable, so the live figure is stable)."""
-    frame = run.frame
+    """The run's headline outcome, shared by every page that shows a run: the salient result and the
+    start->end arc (year, household ages, net worth). A run that stopped early ends at its last computed
+    period, not the horizon; net worth is computed live from the already-loaded books -- never cached --
+    keeping the books the one source of truth (a captured run is immutable, so the live figure is stable)."""
+    frame  = run.frame
+    ledger = Bookkeeper( books ).ledger
+    steps  = run.result.steps
+    lasted = not run.result.stopped_early
+    end_date = frame.end_date if lasted else steps[ -1 ].end_date
+    depleted = ( not lasted ) and steps[ -1 ].is_depleted
+    end_net_worth = ledger.net_worth( through = end_date )
     return {
-        'horizon_start'    : frame.start_date.year,
-        'horizon_end'      : frame.end_date.year,
-        'horizon_years'    : frame.end_date.year - frame.start_date.year + 1,
-        'ending_net_worth' : Bookkeeper( books ).ledger.net_worth( through = frame.end_date ),
-    }
+        'summary' : {
+            'lasted'   : lasted,
+            'depleted' : depleted,
+            # Years the plan ran: the full horizon when it lasted, else through the period it stopped in.
+            'years'    : end_date.year - frame.start_date.year + 1,
+            'start'    : {
+                'year'      : frame.start_date.year,
+                'ages'      : _ages_label( run.profile, frame.start_date.year ),
+                'net_worth' : ledger.net_worth( through = frame.start_date ) },
+            'end'      : {
+                'year'          : end_date.year,
+                'ages'          : _ages_label( run.profile, end_date.year ),
+                # Ending net worth is shown only when solvent; a depleted plan's is noise the result covers.
+                'net_worth'     : end_net_worth,
+                'has_net_worth' : end_net_worth >= 0 } } }
+
+
+def _ages_label( profile, year ) -> str:
+    """The household's ages at `year` -- 'age 65' for one member, 'ages 65 & 63' for a couple, '' for none.
+    Age is the year less the birth year (the whole-year convention the engine uses)."""
+    ages = [ year - subject.birthdate.year for subject in profile.subjects ]
+    if not ages:
+        return ''
+    if len( ages ) == 1:
+        return f'age {ages[ 0 ]}'
+    return 'ages ' + ' & '.join( str( age ) for age in ages )
 
 
 def _remember_selection( request, form, scenario_record ) -> None:

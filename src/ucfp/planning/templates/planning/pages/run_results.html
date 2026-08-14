@@ -20,18 +20,11 @@ hub's per-row delete, landing back on the hub. Opens the styled confirm modal.{%
 {% endblock %}
 
 {% block page_meta %}
-{% comment %}Metadata (muted): the scenario this run came from -- only once the title has been renamed away
-from it -- and the projection's horizon.{% endcomment %}
-<p class="text-muted mb-3">
-  {% if record.source_label and record.source_label != record.label %}{{ record.source_label }} &middot; {% endif %}{{ horizon_start }}&ndash;{{ horizon_end }} &middot; {{ horizon_years }} years
-</p>
-{% comment %}The headline result -- the point of the page: whether the money lasted, then the net worth at
-the horizon as the key figure.{% endcomment %}
-<p class="h5 mb-1 {% if stopped_early %}text-danger{% else %}text-success{% endif %}">
-  {% if stopped_early %}Money ran out before the horizon{% else %}Money lasted the full horizon{% endif %}
-</p>
-<p class="mb-3"><span class="text-muted">Ending net worth</span>
-  <span class="h4 font-weight-bold ml-1 align-middle">{{ ending_net_worth|money:currency }}</span></p>
+{% comment %}Metadata (muted): the scenario this run came from, only once the title has been renamed away
+from it. The horizon and the outcome now live in the shared run summary above the table.{% endcomment %}
+{% if record.source_label and record.source_label != record.label %}
+<p class="text-muted mb-3">{{ record.source_label }}</p>
+{% endif %}
 {% endblock %}
 
 {% block page_body %}
@@ -60,10 +53,5 @@ the horizon as the key figure.{% endcomment %}
 </div>
 {% endif %}
 
-<h2 class="h4 mt-4 mb-1">Forecast Results</h2>
-<p class="text-muted small mb-2">
-  {% icon 'gear' size='sm' %}
-  Each column header is a menu &mdash; click it to expand, collapse, reorder, or hide the column.
-</p>
 {% include "planning/pages/run_table_panel.html" %}
 {% endblock %}

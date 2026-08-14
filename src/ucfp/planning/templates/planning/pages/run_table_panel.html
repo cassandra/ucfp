@@ -1,22 +1,31 @@
 {% comment %}
-Wraps the shared run books table with a slim toolbar carrying an in-window "Maximize" toggle. The toggle
-lifts this panel to a fixed, full-viewport overlay (.run-table-panel.is-maximized in css/books_table.css)
-so the table fills the browser window without a page navigation -- covering the app and page chrome by
-z-index rather than hiding each surrounding element, so any page that includes this panel gets the
-behavior for free. The inner #books-table stays the antinode swap target for column operations, and this
-wrapper (with its toggle and script) sits outside it, so it persists across those swaps. Reads whatever
-run_books_table.html reads (`books_table`, `record`). Esc exits the maximized view.
+The shared run-output panel: the outcome summary and a column-menu hint above the run books table, plus an
+in-window "Maximize" toggle. Every page that shows a run includes this, so the summary+table read
+identically everywhere. Maximize lifts the panel to a fixed, full-viewport overlay
+(.run-table-panel.is-maximized in css/books_table.css), covering the app and page chrome by z-index rather
+than hiding each surrounding element; the summary and hint are hidden in that state (first-view
+orientation, not needed while drilling into the table). The toggle sits outside the hideable summary so it
+stays reachable to minimize. The inner #books-table stays the antinode swap target for column operations,
+and this wrapper (its summary, toggle, and script) sits outside it, so it persists across those swaps.
+Reads `summary`, `currency`, and whatever run_books_table.html reads (`books_table`, `record`). Esc exits.
 {% endcomment %}
 {% load icons %}
-<div class="run-table-panel">
-  <div class="run-table-panel-bar d-flex justify-content-end mb-2">
-    <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle" aria-pressed="false"
-            title="Maximize the table to fill the window (Esc to minimize)">
+<div class="run-table-panel card">
+  <div class="card-header d-flex align-items-start">
+    {% include "planning/pages/run_summary.html" %}
+    <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle ml-auto flex-shrink-0"
+            aria-pressed="false" title="Maximize the table to fill the window (Esc to minimize)">
       <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
       <span class="bt-maximize-label-close d-none">{% icon 'minimize' size='sm' css_class='mr-1' %}Minimize</span>
     </button>
   </div>
-  {% include "planning/pages/run_books_table.html" %}
+  <div class="card-body">
+    <p class="run-table-hint text-muted small mb-2">
+      {% icon 'gear' size='sm' %} Each column header is a menu &mdash; click it to expand, collapse,
+      reorder, or hide the column.
+    </p>
+    {% include "planning/pages/run_books_table.html" %}
+  </div>
 </div>
 <script>
  (function () {
