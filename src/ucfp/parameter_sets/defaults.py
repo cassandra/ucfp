@@ -173,7 +173,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Clothes', 'clothes', everyday, 30, '1800', living, yearly, smooth, mo_yr ),
         _expense( 'Grooming', 'grooming', everyday, 40, '960', living, yearly, smooth, mo_yr ),
         # --- Living: discretionary -- smoothed budgets, subscriptions (fixed monthly), discrete events.
-        _expense( 'Vacations', 'vacations', discretionary, 10, '10000', living, yearly, discrete, mo_yr ),
+        _expense( 'Vacations', 'vacations', discretionary, 10, '7500', living, yearly, discrete, mo_yr ),
         _expense( 'Transportation / Travel', 'travel', discretionary, 20, '0', living, quarterly, smooth, mo_yr ),
         _expense( 'Dining Out', 'dining-out', discretionary, 30, '85', living, weekly, smooth, wk_mo ),
         _expense( 'Entertainment', 'entertainment', discretionary, 40, '50', living, weekly, smooth, wk_mo ),
@@ -188,8 +188,8 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Medical Expenses', 'medical-expenses', health, 10, '4500', medical, yearly, smooth, mo_yr ),
         _expense( 'Health Insurance', 'health-insurance', health, 20, '550', medical, monthly, discrete, mo_yr ),
         # --- Living: miscellaneous -- household costs not tied to a single dwelling; discrete annual bills.
-        _expense( 'Umbrella Insurance', 'umbrella-insurance', misc, 10, '500', living, yearly, discrete, mo_yr ),
-        _expense( 'Professional Fees', 'professional-fees', misc, 20, '500', living, yearly, discrete, mo_yr ),
+        _expense( 'Umbrella Insurance', 'umbrella-insurance', misc, 10, '0', living, yearly, discrete, mo_yr ),
+        _expense( 'Professional Fees', 'professional-fees', misc, 20, '0', living, yearly, discrete, mo_yr ),
         # Property rows are one operating-cost set seeded per owned dwelling. Tax class is the PERSONAL
         # class (property tax -> SALT, the rest -> living); materialization swaps it to a rental expense
         # for a rental. `applies_to` scopes each row: owned dwellings, occupied (owned plus a tenant's
