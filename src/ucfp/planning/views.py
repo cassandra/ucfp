@@ -40,6 +40,7 @@ from .books_table import apply_run_books_operation, run_books_table_context
 from .enums import PlanningFeature
 from .explore import delete_runs, run_working_scenario, start_fresh_exploration, transient_runs
 from .explore_diff import describe_changes, value_changes
+from .profile_diff import profile_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
 from .forms import ForecastForm, GRANULARITY, resolve_frame
 from .gating import partition_scenarios, scenario_readiness, scenario_started
@@ -402,9 +403,14 @@ class ExploreView( InputGatedMixin, View ):
         # results shown always match the current frame without waiting on an explicit Re-run.
         frame = self._frame( request )
         runs  = list( transient_runs( organization ) )
-        if not runs or _run_frame( runs[ 0 ] ) != frame:
+        profile_drift = self._profile_drift( organization, runs )
+        # Produce a run for a first entry or a changed frame -- but NOT once the Profile has drifted: a new
+        # run would use the updated Profile and could not be compared to the pile below, so new runs pause
+        # until the exploration is re-baselined on the current Profile (Start over with updated profile).
+        if not runs or ( _run_frame( runs[ 0 ] ) != frame and not profile_drift ):
             run_working_scenario( organization, frame )
             runs = list( transient_runs( organization ) )
+            profile_drift = self._profile_drift( organization, runs )
         selected = self._selected_run( request, runs )     # the run whose results to show (a chip or latest)
         working_inputs = load_scenario( working )
         source_inputs  = load_scenario( source )
@@ -418,15 +424,30 @@ class ExploreView( InputGatedMixin, View ):
         drift    = value_changes( source_inputs, working_inputs )
         return render(
             request, self._TEMPLATE,
-            self._context( request, source, runs, selected, forms, drift ) )
+            self._context( request, source, runs, selected, forms, drift, profile_drift ) )
 
     def post( self, request ):                             # Re-run: project the auto-saved working scenario
         organization = request.organization
-        if scenario_exploration( organization ) is not None:   # the dials auto-save; Re-run only re-projects
+        # The dials auto-save; Re-run only re-projects them -- but not while the Profile has drifted (new
+        # runs are paused until re-baselined, mirrored server-side behind the hidden Re-run button).
+        if ( scenario_exploration( organization ) is not None
+             and not self._profile_drift( organization, list( transient_runs( organization ) ) ) ):
             run_working_scenario( organization, self._frame( request ) )
         return redirect( 'explore' )
 
-    def _context( self, request, source, runs, selected, forms, drift ) -> dict:
+    def _profile_drift( self, organization, runs ) -> list:
+        """The household facts that changed since the shown (latest) run was computed -- non-empty when the
+        exploration's runs predate a Profile update (each run embeds the Profile it used). Because new runs
+        are paused once this is non-empty, the pile stays on one Profile, so the latest run represents it."""
+        if not runs:
+            return list()
+        current = latest_profile( organization )
+        if current is None:
+            return list()
+        run_profile = from_json_data( ProjectionRun, runs[ 0 ].run.data ).profile
+        return profile_changes( run_profile, load_profile( current ) )
+
+    def _context( self, request, source, runs, selected, forms, drift, profile_drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
         books   = BooksOfAccountRepository().load( selected.run.books )
         context = {
@@ -438,6 +459,7 @@ class ExploreView( InputGatedMixin, View ):
             'stopped_early'  : run.result.stopped_early,
             'drift'          : drift,                          # curated changes vs the source scenario
             'drift_summary'  : describe_changes( drift ),
+            'profile_drift'  : profile_drift,                  # Profile facts changed since these runs (pauses new runs)
             **forms,
         }
         context.update( _run_outcome( run, books ) )           # horizon + ending net worth for the banner
@@ -466,6 +488,21 @@ class ExploreView( InputGatedMixin, View ):
             start_choice   = exploration.frame_start_from or 'effective',
             duration_years = exploration.frame_duration_years or 40,
             granularity    = GRANULARITY.get( exploration.frame_interval or 'year', GRANULARITY[ 'year' ] ) )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class ExploreRestartView( InputGatedMixin, View ):
+    """`/plan/financial-forecast/explore/restart/` -- re-baseline the in-progress exploration on the current
+    Profile: re-seed the working copy from the anchor's current inputs and clear the run history, then let the
+    workspace re-run. The workspace's answer to Profile drift -- the runs were computed against an earlier
+    Profile, so this starts the comparison over on the updated one (the same primitive Run & Explore uses)."""
+
+    def post( self, request ):
+        organization = request.organization
+        exploration = scenario_exploration( organization )
+        if exploration is not None:
+            start_fresh_exploration( organization, exploration.source )
+        return redirect( 'explore' )
 
 
 class _ExploreSectionAutosaveView( InputGatedMixin, View ):

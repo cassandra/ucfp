@@ -15,6 +15,7 @@ urlpatterns = [
     # current exploration; `enter/` initialises-or-resumes from the hub's scenario, then redirects here.
     path( 'financial-forecast/explore/', views.ExploreView.as_view(), name = 'explore' ),
     path( 'financial-forecast/explore/enter/', views.EnterExploreView.as_view(), name = 'explore_enter' ),
+    path( 'financial-forecast/explore/restart/', views.ExploreRestartView.as_view(), name = 'explore_restart' ),
     path( 'financial-forecast/explore/plans/', views.ExplorePlansAutosaveView.as_view(),
           name = 'explore_save_plans' ),
     path( 'financial-forecast/explore/assumptions/',
