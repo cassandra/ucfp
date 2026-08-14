@@ -32,6 +32,18 @@
     background-color: hsl( var( --bt-hue, 0 ), var( --bt-sat, 0% ), var( --bt-light, 100% ) );
 }
 
+/* Bound a column's width by its header. A long label or breadcrumb would otherwise stretch the column
+   wide (a breadcrumb especially, as it never wrapped); cap the heading and let it wrap instead. The cap
+   sits on this inner inline-block, not the cell -- max-width on a cell is ignored in an auto-layout table.
+   Inline-block so a short label still shrinks the column; the narrower money cells never drive the width.
+   `overflow-wrap` breaks a single over-long token rather than overflowing the bound. */
+.bt-col-heading {
+    display: inline-block;
+    max-width: 10rem;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
 /* Per-group base hue. One hue per top-level group; saturation kept in a similar band so
    depth lightening reads consistently across groups. */
 .bt-group-net-worth { --bt-hue: 258; --bt-sat: 45%; }

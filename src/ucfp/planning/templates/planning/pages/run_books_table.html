@@ -44,7 +44,7 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
         <th class="bt-head bt-group-{{ col.group }} bt-depth-{{ col.depth }} text-right">
           <div class="bt-col-heading">
             {% if col.breadcrumb %}
-            <div class="text-muted small text-truncate" title="{{ col.breadcrumb|join:' › ' }}">{{ col.breadcrumb|join:' › ' }} &rsaquo;</div>
+            <div class="text-muted small" title="{{ col.breadcrumb|join:' › ' }}">{{ col.breadcrumb|join:' › ' }} &rsaquo;</div>
             {% endif %}
             {{ col.column.label }}
           </div>
