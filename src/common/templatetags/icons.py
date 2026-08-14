@@ -57,6 +57,7 @@ AVAILABLE_ICONS = {
     'edit',
     'exclamation-circle',
     'exclamation-triangle',
+    'expand',
     'eye',
     'eye-off',
     'forecast',

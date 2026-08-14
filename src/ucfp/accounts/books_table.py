@@ -19,7 +19,7 @@ The pieces:
 Cell values honor the stock/flow split: asset/liability/equity (and Net Worth) read as a
 balance at period end (assets at market value); revenue/expense read as a flow over the period.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -256,13 +256,19 @@ class BooksTableDefinition:
     # than dropped, so a removed column holds its spot. A removed column is absorbed when its level is
     # collapsed into a parent that now represents it.
     removed_keys : tuple[ BooksColumnKey, ... ] = ()
+    # Account columns the user chose to keep visible even on a run that leaves them empty -- the opt-out of
+    # the automatic hiding of all-zero account columns (`build_books_table`). Consulted only at render; the
+    # ops carry it through unchanged, and `adapt` drops any key this books does not offer. `removed_keys`
+    # still wins: a revealed column the user then Hides renders as a removed sliver.
+    revealed_keys : tuple[ BooksColumnKey, ... ] = ()
 
     def to_storage( self ) -> dict:
         """This lens as a plain, storable value -- the ordered column tokens and which of them are
         removed. The definition owns its own storage form, so a store (the session) keeps no knowledge
         of column keys."""
-        return { 'columns' : [ key.token for key in self.column_keys ],
-                 'removed' : [ key.token for key in self.removed_keys ] }
+        return { 'columns'  : [ key.token for key in self.column_keys ],
+                 'removed'  : [ key.token for key in self.removed_keys ],
+                 'revealed' : [ key.token for key in self.revealed_keys ] }
 
     @classmethod
     def from_storage( cls, data ) -> Optional[ 'BooksTableDefinition' ]:
@@ -270,7 +276,9 @@ class BooksTableDefinition:
         removed columns were tracked (columns only). Unknown tokens survive parsing and are dropped
         later, when the lens is adapted to a books (`adapt`) -- so a stale token never breaks the read."""
         if isinstance( data, dict ):
-            return cls( _key_tuple( data.get( 'columns' ) ), _key_tuple( data.get( 'removed' ) ) )
+            return cls( _key_tuple( data.get( 'columns' ) ),
+                        _key_tuple( data.get( 'removed' ) ),
+                        _key_tuple( data.get( 'revealed' ) ) )
         if isinstance( data, list ):
             return cls( _key_tuple( data ) )
         return None
@@ -283,11 +291,12 @@ class BooksTableDefinition:
         later edit (e.g. a partner's income once the subject exists) surfaces without the user resetting
         the view. The removed set and the user's order/reordering are preserved, and the stored lens is
         left untouched (adapt-on-read)."""
-        kept    = [ key for key in self.column_keys if key in catalog ]
-        removed = tuple( key for key in self.removed_keys if key in catalog )
+        kept     = [ key for key in self.column_keys if key in catalog ]
+        removed  = tuple( key for key in self.removed_keys if key in catalog )
+        revealed = tuple( key for key in self.revealed_keys if key in catalog )
         if not kept:
             return catalog.default_definition()
-        return BooksTableDefinition( tuple( _reveal_newcomers( catalog, kept ) ), removed )
+        return BooksTableDefinition( tuple( _reveal_newcomers( catalog, kept ) ), removed, revealed )
 
     def expand( self, catalog : 'BooksTableColumnCatalog',
                 key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
@@ -315,7 +324,7 @@ class BooksTableDefinition:
             if frontier_key == anchor:
                 expanded.extend( members )
             continue
-        return BooksTableDefinition( tuple( expanded ), self.removed_keys )
+        return BooksTableDefinition( tuple( expanded ), self.removed_keys, self.revealed_keys )
 
     def collapse( self, catalog : 'BooksTableColumnCatalog',
                   key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
@@ -329,7 +338,8 @@ class BooksTableDefinition:
             tuple( frontier_key for frontier_key in self.column_keys
                    if not catalog.descends_from( frontier_key, key ) ),
             tuple( removed for removed in self.removed_keys
-                   if not catalog.descends_from( removed, key ) ) )
+                   if not catalog.descends_from( removed, key ) ),
+            self.revealed_keys )
 
     def remove( self, catalog : 'BooksTableColumnCatalog',
                 key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
@@ -339,13 +349,24 @@ class BooksTableDefinition:
         if ( key not in self.column_keys ) or ( key in self.removed_keys ):
             return self
         folded = self.collapse( catalog, key )
-        return BooksTableDefinition( folded.column_keys, folded.removed_keys + ( key, ) )
+        return BooksTableDefinition(
+            folded.column_keys, folded.removed_keys + ( key, ), self.revealed_keys )
 
     def restore( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
         """Bring a removed column back into view -- clear it from the removed set, in its place."""
         return BooksTableDefinition(
             self.column_keys,
-            tuple( removed for removed in self.removed_keys if removed != key ) )
+            tuple( removed for removed in self.removed_keys if removed != key ),
+            self.revealed_keys )
+
+    def reveal( self, key : Optional[ BooksColumnKey ] ) -> 'BooksTableDefinition':
+        """Keep an auto-hidden (empty) column visible on this and later runs: add it to the revealed set so
+        `build_books_table` stops hiding it even with no activity. No-op if already revealed. `removed_keys`
+        still wins -- a revealed column the user then Hides renders as a removed sliver."""
+        if ( key is None ) or ( key in self.revealed_keys ):
+            return self
+        return BooksTableDefinition(
+            self.column_keys, self.removed_keys, self.revealed_keys + ( key, ) )
 
     def move( self, catalog : 'BooksTableColumnCatalog',
               key : Optional[ BooksColumnKey ], offset : int ) -> 'BooksTableDefinition':
@@ -364,7 +385,7 @@ class BooksTableDefinition:
         if ( target < 0 ) or ( target >= len( siblings ) ):
             return self
         reordered = _swap_sibling_blocks( catalog, keys, key, siblings[ target ] )
-        return BooksTableDefinition( tuple( reordered ), self.removed_keys )
+        return BooksTableDefinition( tuple( reordered ), self.removed_keys, self.revealed_keys )
 
 
 class BooksTableColumnCatalog:
@@ -518,13 +539,15 @@ class BooksTableColumn:
     single-child chain (a rung whose one member would duplicate its value) the chain's terminal, with the
     absorbed rungs' labels in `breadcrumb`. `op_key` is the key structural ops (move / remove / collapse)
     act on -- the top of the chain -- while `expand_key` is the terminal, so drilling deeper still works.
-    `removed` marks a restore sliver; `can_expand` / `can_collapse` gate those controls;
+    `removed` marks a restore sliver; `empty` marks an auto-hidden sliver (an account with no activity all
+    run -- a reveal sliver, distinct from a user removal); `can_expand` / `can_collapse` gate those controls;
     `depth` / `group` drive the tint; `can_move_*` gate the reorder arrows at a group edge (a reorder is a
     within-group sibling swap)."""
     column         : BooksColumn
     op_key         : BooksColumnKey
     expand_key     : BooksColumnKey
     removed        : bool  = False
+    empty          : bool  = False
     can_expand     : bool  = False
     can_collapse   : bool  = False
     depth          : int   = 0
@@ -537,8 +560,9 @@ class BooksTableColumn:
 @dataclass( frozen = True )
 class BooksTableCell:
     column  : BooksColumn
-    value   : Optional[ Decimal ]   # None for a removed column's sliver -- no figure is shown
+    value   : Optional[ Decimal ]   # None for a removed or auto-hidden (empty) column's sliver -- no figure
     removed : bool = False
+    empty   : bool = False
 
 
 @dataclass( frozen = True )
@@ -666,23 +690,56 @@ def _render_columns( catalog : BooksTableColumnCatalog,
     return tuple( rendered )
 
 
+# A magnitude under half a cent shows as $0.00, so it counts as no activity -- this keeps a sub-quantum
+# amortization residual from holding a dead column open.
+_DISPLAY_ZERO = Decimal( '0.005' )
+
+
+def _is_account_leaf( column : BooksColumn ) -> bool:
+    """A leaf standing for an actual account -- not a derived figure (Net Worth) and not a rollup summary.
+    Only these auto-hide when empty; a zero group total or a zero headline figure is left in place."""
+    return isinstance( column, BooksLeafColumn ) and ( column.account_uuid is not None )
+
+
+def _empty_op_keys( rendered : tuple, series : dict, revealed : set ) -> set:
+    """The op-keys to auto-hide: account-leaf columns the user has not revealed whose figure reads as zero
+    in every period. A forecast often creates a standard set of accounts up front, so a run that never
+    touches one would otherwise show it as a dead all-zero column -- hidden here as a reveal sliver."""
+    return { column.op_key for column in rendered
+             if ( not column.removed )
+             and _is_account_leaf( column.column )
+             and ( column.op_key not in revealed )
+             and all( abs( value ) < _DISPLAY_ZERO for value in series[ column.op_key ] ) }
+
+
 def build_books_table( ledger : Ledger, chart : Chart, spans : list[ DateSpan ],
                        definition : BooksTableDefinition,
                        catalog : BooksTableColumnCatalog ) -> BooksTable:
     """Render `definition` over `spans`: resolve each frontier key to its rendered column and compute its
-    per-period cell -- except a removed column, which renders as a value-less restore sliver."""
-    columns = _render_columns( catalog, definition )
-    rows    = tuple(
+    per-period cell. A removed column renders as a value-less restore sliver; an account column that reads
+    as zero across every period (and the user has not revealed) auto-hides the same way, as an empty
+    reveal sliver, so a standard account a run never touches stays one click from view without cluttering
+    the table. Each shown column's series is computed once and reused for both the emptiness test and the
+    cells."""
+    rendered = _render_columns( catalog, definition )
+    series   = { column.op_key : tuple( _column_value( catalog, column.column, ledger, chart, span )
+                                        for span in spans )
+                 for column in rendered if not column.removed }
+    empty    = _empty_op_keys( rendered, series, set( definition.revealed_keys ) )
+    columns  = tuple( replace( column, empty = True ) if column.op_key in empty else column
+                      for column in rendered )
+    rows     = tuple(
         BooksTableRow(
             span  = span,
             cells = tuple(
                 BooksTableCell(
-                    rendered.column,
-                    None if rendered.removed
-                    else _column_value( catalog, rendered.column, ledger, chart, span ),
-                    rendered.removed )
-                for rendered in columns ) )
-        for span in spans
+                    column.column,
+                    None if ( column.removed or column.op_key in empty )
+                    else series[ column.op_key ][ index ],
+                    removed = column.removed,
+                    empty   = column.op_key in empty )
+                for column in rendered ) )
+        for index, span in enumerate( spans )
     )
     return BooksTable( columns = columns, rows = rows )
 
