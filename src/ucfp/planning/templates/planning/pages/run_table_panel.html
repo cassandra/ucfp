@@ -3,27 +3,40 @@ The shared run-output panel: the outcome summary and a column-menu hint above th
 in-window "Maximize" toggle. Every page that shows a run includes this, so the summary+table read
 identically everywhere. Maximize lifts the panel to a fixed, full-viewport overlay
 (.run-table-panel.is-maximized in css/books_table.css), covering the app and page chrome by z-index rather
-than hiding each surrounding element; the summary and hint are hidden in that state (first-view
-orientation, not needed while drilling into the table). The toggle sits outside the hideable summary so it
-stays reachable to minimize. The inner #books-table stays the antinode swap target for column operations,
-and this wrapper (its summary, toggle, and script) sits outside it, so it persists across those swaps.
+than hiding each surrounding element; the summary (the card header) is hidden in that state (first-view
+orientation, not needed while drilling into the table), and the control row above the table becomes the
+top bar -- brand, run name, and the toggle (now Minimize) on one line. The inner #books-table stays the antinode
+swap target for column operations, and this wrapper (its summary, toggle, and script) sits outside it, so
+it persists across those swaps.
 Reads `summary`, `currency`, and whatever run_books_table.html reads (`books_table`, `record`). Esc exits.
 {% endcomment %}
-{% load icons %}
+{% load static common_tags icons %}
 <div class="run-table-panel card">
-  <div class="card-header d-flex align-items-start">
+  <div class="card-header">
     {% include "planning/pages/run_summary.html" %}
-    <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle ml-auto flex-shrink-0"
-            aria-pressed="false" title="Maximize the table to fill the window (Esc to minimize)">
-      <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
-      <span class="bt-maximize-label-close d-none">{% icon 'minimize' size='sm' css_class='mr-1' %}Minimize</span>
-    </button>
   </div>
   <div class="card-body">
-    <p class="run-table-hint text-muted small mb-2">
-      {% icon 'gear' size='sm' %} Each column header is a menu &mdash; click it to expand, collapse,
-      reorder, or hide the column.
-    </p>
+    {% comment %}One control row above the table. Normally it carries the column-menu hint and the maximize
+    toggle, next to the content that gets maximized (not up in the summary). When maximized the app shell is
+    covered, so this same row becomes the top bar on a single line: it swaps the hint for minimal branding
+    (a home escape hatch) on the left and the run's name -- centred and emphasised -- for orientation,
+    keeping the toggle (now Minimize) on the right. The card header (the summary) is hidden in that state.{% endcomment %}
+    <div class="bt-panel-controls d-flex align-items-center mb-2">
+      <a class="bt-maximized-only mr-3 flex-shrink-0" href="{% url 'home' %}"
+         aria-label="{% settings_value 'SITE_NAME' %} home">
+        <img src="{% static 'img/app-logo-h64.png' %}" height="30" alt="{% settings_value 'SITE_NAME' %}">
+      </a>
+      <p class="run-table-hint text-muted small mb-0">
+        {% icon 'gear' size='sm' %} Each column header is a menu &mdash; click it to expand, collapse,
+        reorder, or hide the column.
+      </p>
+      <span class="bt-maximized-only bt-run-name text-primary font-weight-bold">{{ record.label }}</span>
+      <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle ml-auto flex-shrink-0"
+              aria-pressed="false" title="Maximize the table to fill the window (Esc to minimize)">
+        <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
+        <span class="bt-maximize-label-close d-none">{% icon 'minimize' size='sm' css_class='mr-1' %}Minimize</span>
+      </button>
+    </div>
     {% include "planning/pages/run_books_table.html" %}
   </div>
 </div>

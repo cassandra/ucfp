@@ -114,7 +114,31 @@
     flex-direction: column;
 }
 .run-table-panel.is-maximized .card-header {
-    padding: 0.4rem 0.75rem;  /* a slim bar carrying just the minimize toggle (the summary is hidden below) */
+    display: none;            /* the summary it holds is not shown maximized; the control row becomes the bar */
+}
+
+/* The brand link and run name belong only to the maximized bar -- maximizing covers the real navbar, so
+   they restore branding, a home escape hatch, and which-run orientation; hidden otherwise. */
+.bt-maximized-only {
+    display: none;
+}
+.run-table-panel.is-maximized .bt-maximized-only {
+    display: inline-flex;
+    align-items: center;
+}
+/* The run name centred within the control row -- independent of the left-anchored brand and the
+   right-anchored toggle -- and given a little prominence (primary colour, bold), so it reads as the
+   maximized view's title. The row is the positioning context so the name centres on the row, not the
+   overlay. */
+.run-table-panel.is-maximized .bt-panel-controls {
+    position: relative;
+}
+.run-table-panel.is-maximized .bt-run-name {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate( -50%, -50% );
+    white-space: nowrap;
 }
 .run-table-panel.is-maximized .card-body {
     flex: 1 1 auto;
@@ -127,9 +151,8 @@
     flex: 1 1 auto;
     max-height: none;         /* fill the overlay instead of the default 75vh */
 }
-.run-table-panel.is-maximized .run-summary,
 .run-table-panel.is-maximized .run-table-hint {
-    display: none;            /* first-view orientation -- reclaim the space once drilling into the table */
+    display: none;            /* the control row stays as the bar, but its hint text yields to the branding */
 }
 
 /* The start/end stat labels: quiet, tracked-out uppercase caps over their values. */
