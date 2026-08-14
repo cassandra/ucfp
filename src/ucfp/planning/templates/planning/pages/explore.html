@@ -49,7 +49,7 @@ changed facts.
   </ul>
   <form method="post" action="{% url 'explore_restart' %}" class="mb-0">
     {% csrf_token %}
-    <button type="submit" class="btn btn-primary">Start over with updated profile</button>
+    <button type="submit" class="btn btn-cta">Start over with updated profile</button>
   </form>
 </div>
 {% else %}
@@ -167,7 +167,7 @@ first-time visitor sees the run and this CTA without hunting.
 {% endcomment %}
 <form method="post" action="{% url 'explore' %}" class="d-flex align-items-center mb-4">
   {% csrf_token %}
-  <button type="submit" class="btn btn-primary">{% icon 'rotate' size='sm' css_class='mr-1' %}Re-run</button>
+  <button type="submit" class="btn btn-cta">{% icon 'rotate' size='sm' css_class='mr-1' %}Re-run</button>
   <span class="text-muted small ml-3">Re-run the forecast with your latest changes.</span>
 </form>
 {% endif %}
@@ -194,7 +194,7 @@ a saved run's page. Re-run lives with the inputs above; the selected run is the 
     <form method="post" action="{% url 'explore_keep_run' %}" class="my-1">
       {% csrf_token %}
       <input type="hidden" name="run" value="{{ selected.run.uuid }}">
-      <button type="submit" class="btn btn-outline-success btn-sm"
+      <button type="submit" class="btn btn-outline-primary btn-sm"
               title="Save this run's output; the scenario is unaffected">Keep this run</button>
     </form>
   </div>

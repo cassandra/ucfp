@@ -21,7 +21,7 @@ appends the event and restores the menu; Cancel restores the menu without adding
       <div class="col-sm mb-2">{{ form.date.as_field_group }}</div>
     </div>
     <div class="mt-2">
-      <button type="submit" class="btn btn-sm btn-primary">Add</button>
+      <button type="submit" class="btn btn-sm btn-outline-primary">Add</button>
       <a class="btn btn-sm btn-link" data-async="#events-add"
          href="{% url 'event_add' kind=kind %}?collapse=1">Cancel</a>
     </div>

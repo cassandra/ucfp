@@ -391,7 +391,7 @@ a:hover, a:focus {
    numbers stay aligned in their column (once there is more than one span). */
 .span-changed .input-group-text,
 .span-changed .form-control.js-money {
-    background-color: var(--secondary-highlight-color);
+    background-color: #b8d8f5;   /* light-blue change highlight -- present enough to catch the eye, off gold (the accent's) */
 }
 .span-trend {
     margin-left: 0.3rem;
@@ -414,7 +414,7 @@ a:hover, a:focus {
 }
 
 /* Map Bootstrap contextual backgrounds + buttons to the theme palette. */
-.bg-primary, .btn-primary {
+.bg-primary, .btn-primary, .badge-primary {
     color: var(--on-primary-color) !important;
     background-color: var(--primary-color) !important;
     border-color: var(--primary-highlight-color) !important;
@@ -428,9 +428,10 @@ a:hover, a:focus {
 }
 
 /* The one accent action ("gold is the verb"). Gold is reserved exclusively for the single primary action
-   of a view -- the one thing the user is here to do (Run, Continue, Save). At most one per view; never
-   chrome, never a status, never destructive. Everything else recedes to primary/outline. This is the only
-   rule that fills an element with --secondary-color. */
+   of a view -- the one thing the user is here to do (Run, Continue, Save). At most one per view, or none:
+   when two or more actions carry equal weight (no single focal action), they stay filled .btn-primary and
+   no gold appears. Anything subordinate to a primary recedes to outline/link. Never chrome, never a status,
+   never destructive. This is the only rule that fills an element with --secondary-color. */
 .btn-cta {
     color: var(--on-secondary-color) !important;
     background-color: var(--secondary-color) !important;
