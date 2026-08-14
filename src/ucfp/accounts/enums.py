@@ -110,6 +110,12 @@ class SystemAccountRole( LabeledEnum ):
         'External Disbursements', 'Equity counterpart for non-deductible value given away.' )
     TAXES_PAYABLE = (
         'Taxes Payable', 'Liability for tax assessed this year and paid the following year.' )
+    ESTIMATED_FUTURE_TAXES = (
+        'Estimated Future Taxes',
+        'Liability for the estimated tax embedded in pre-tax balances and unrealized gains.' )
+    DEFERRED_TAX_RESERVE = (
+        'Deferred Tax Reserve',
+        'Equity counterpart for the Estimated Future Taxes provision.' )
 
 
 class AssetClass( LabeledEnum ):
