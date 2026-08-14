@@ -250,6 +250,32 @@ def gig_worker() -> ForecastParameters:
             sweep_allocation = AssetAllocation( ( ( 'brokerage', D( '1' ) ), ) ) ) )
 
 
+def lumpy_income() -> ForecastParameters:
+    """A single earner whose taxable income arrives as one large mid-year lump each year (a Q3
+    commission or distribution) against smooth living costs. The lump lands in Q3, so the quarterly
+    income-tax estimate back-loads onto it at fine granularity while a yearly step splits the same
+    annual estimate flat across the four quarter-ends -- the profile that most stresses the
+    estimate's annualized-installment timing, and the guard that its cross-granularity drift stays
+    within the convergent terminal tolerance. Cash policy is floor-only by design: a sweep would
+    reinvest the lump's surplus into equities, and that first-order compounding-on-a-mid-year-spike
+    effect (a separate granularity concern, exercised by the sweeping profiles) would swamp the
+    second-order estimate-timing drift this profile exists to isolate."""
+    sig = Subject( 'Sig', date( 1980, 1, 1 ), 'sig' )
+    return _base(
+        filing_status = FilingStatus.SINGLE,
+        subjects = [ sig ],
+        assets = [
+            AssetParameters( 'Cash', AssetClass.CASH, D( '80000' ), D( '80000' ) ),
+            AssetParameters( 'Brokerage', AssetClass.STOCKS, D( '150000' ), D( '120000' ), handle = 'brokerage' ) ],
+        income_items = [
+            IncomeItem( sig, IncomeTaxClass.ORDINARY, Schedule.constant( WindowedAmount( D( '150000' ) ) ),
+                        Recurrence( Duration( 1, TimeUnit.YEAR ), offset = Duration( 7, TimeUnit.MONTH ) ) ) ],
+        expense_streams = [ _stream( 'Living', ExpenseTaxClass.LIVING, '80000' ) ],
+        cash_account = CashAccountParameters(
+            cash_floor = D( '20000' ),
+            draw_order = [ AssetClass.STOCKS ] ) )
+
+
 PROFILES = {
     'wage_earner'     : wage_earner,
     'retiree'         : retiree,
@@ -257,6 +283,7 @@ PROFILES = {
     'couple_survivor' : couple_survivor,
     'life_events'     : life_events,
     'gig_worker'      : gig_worker,
+    'lumpy_income'    : lumpy_income,
 }
 
 

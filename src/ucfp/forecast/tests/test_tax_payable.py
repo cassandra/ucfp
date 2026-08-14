@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from common.date_window import DateWindow
 from common.rate import Rate
+from common.recurrence import Duration, TimeUnit
 from common.schedule import Schedule
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import (
@@ -26,7 +27,7 @@ from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForec
 from ucfp.jurisdiction.engine import ZeroTaxEngine
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 from ucfp.period.parameters import AssetRates, FundingPolicy, PeriodParameters
-from ucfp.period.period import Period
+from ucfp.period.period import Period, _ESTIMATED_INCOME_TAX_MEMO
 from ucfp.period.results import PeriodResult
 from common.date_span import DateSpan
 
@@ -39,10 +40,16 @@ _INCOME_TAX = ( ExpenseTaxClass.ORDINARY_INCOME_TAX, ExpenseTaxClass.CAPITAL_GAI
 _CONSTANT   = Schedule.constant( WindowedAmount( _D( '100000' ) ) )
 
 
-def _run( wages, end_year = 2028, wage_growth = '0' ):
+_YEARLY    = Duration( 1, TimeUnit.YEAR )
+_QUARTERLY = Duration( 3, TimeUnit.MONTH )
+_MONTHLY   = Duration( 1, TimeUnit.MONTH )
+
+
+def _run( wages, end_year = 2028, wage_growth = '0', granularity = _YEARLY ):
     """A single earner on `wages`, ample cash (so no funding draw or sweep muddies the tax), over
     2026..end_year. `wage_growth` nominally grows the stream, which makes this year's tax outrun the
-    prior-year cap and leaves a true-up on the payable."""
+    prior-year cap and leaves a true-up on the payable. `granularity` runs the same inputs at a coarser
+    or finer period resolution."""
     worker = Subject( 'Worker', date( 1980, 1, 1 ), 'worker' )
     parameters = ForecastParameters(
         start_date    = date( 2026, 1, 1 ),
@@ -50,12 +57,20 @@ def _run( wages, end_year = 2028, wage_growth = '0' ):
         filing_status = FilingStatus.SINGLE,
         statute       = _US,
         subjects      = [ worker ],
+        granularity   = granularity,
         assets        = [ AssetParameters( 'Cash', AssetClass.CASH, _D( '200000' ), _D( '200000' ) ) ],
         economic_outlook = EconomicOutlook.constant(
             EconomicParameters( wage_growth = Rate( _D( wage_growth ) ) ) ),
         income_streams = [ IncomeStream( worker, IncomeTaxClass.WAGES, wages ) ],
     )
     return Bookkeeper( Forecast( parameters ).run().books )
+
+
+def _estimate_dates( reader, year ):
+    """The dates of the income-tax estimate prepayments booked in `year`."""
+    return sorted( txn.transaction_date for txn in reader.books.transactions
+                   if txn.description == _ESTIMATED_INCOME_TAX_MEMO
+                   and txn.transaction_date.year == year )
 
 
 def _run_drawdown():
@@ -156,7 +171,7 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
     def test_income_tax_is_prepaid_in_year( self ):
         reader = _run( _CONSTANT )
         # Income tax leaves cash mid-year as an estimate, rather than the whole bill floating to April.
-        self.assertGreater( _cash_out( reader, 'Estimated income tax (prepayment)', 2026 ), _D( '0' ) )
+        self.assertGreater( _cash_out( reader, _ESTIMATED_INCOME_TAX_MEMO, 2026 ), _D( '0' ) )
 
     def test_expense_carries_the_full_true_tax_though_prepaid( self ):
         reader = _run( _CONSTANT )
@@ -174,7 +189,7 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
         reader = _run( _CONSTANT, wage_growth = '0.05' )
         payable = reader.chart.system_account( _PAYABLE )
         owed     = reader.ledger.natural_balance( payable, through = date( 2027, 12, 31 ) )
-        prepaid  = _cash_out( reader, 'Estimated income tax (prepayment)', 2027 )
+        prepaid  = _cash_out( reader, _ESTIMATED_INCOME_TAX_MEMO, 2027 )
         true_tax = _income_tax_expense( reader, 2027 )
         self.assertGreater( owed, _D( '0' ) )     # the cap holds the estimate at last year's tax ...
         self.assertLess( owed, true_tax )         # ... so only the year-over-year increase is owed
@@ -198,6 +213,18 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
         self.assertEqual( len( settlements ), 1 )
         self.assertEqual( _cash_out( reader, 'Prior-year tax settlement', 2028 ), owed_2027 )
 
+    def test_prior_year_settlement_pays_only_the_prior_year_end_balance_at_fine_resolution( self ):
+        # Regression for _pay_prior_tax_payable reading the payable *as of the prior tax year's end*,
+        # not its running balance. At sub-annual resolution this year's own Q1 estimate prepayment is
+        # already booked (dated Mar 31) by the April 15 settlement; the settlement must pay exactly last
+        # year's closing balance and not net that fresh prepayment into it. The running-balance bug this
+        # replaces settled a smaller amount at quarterly/monthly than at yearly.
+        reader = _run( _CONSTANT, wage_growth = '0.05', granularity = _QUARTERLY )
+        payable = reader.chart.system_account( _PAYABLE )
+        owed_2027 = reader.ledger.natural_balance( payable, through = date( 2027, 12, 31 ) )
+        self.assertGreater( owed_2027, _D( '0' ) )
+        self.assertEqual( _cash_out( reader, 'Prior-year tax settlement', 2028 ), owed_2027 )
+
     def test_a_spike_year_floats_past_the_cap_without_overcharging_the_next( self ):
         # A one-time bonus in 2028 spikes that year's tax; 2027 and 2029 are ordinary.
         bonus = Schedule( (
@@ -210,7 +237,7 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
         payable = reader.chart.system_account( _PAYABLE )
         # Spike year: the estimate is capped at the prior (ordinary) year, so the bonus tax floats.
         self.assertLess(
-            _cash_out( reader, 'Estimated income tax (prepayment)', 2028 ), _income_tax_expense( reader, 2028 ) )
+            _cash_out( reader, _ESTIMATED_INCOME_TAX_MEMO, 2028 ), _income_tax_expense( reader, 2028 ) )
         owed_2028 = reader.ledger.natural_balance( payable, through = date( 2028, 12, 31 ) )
         self.assertGreater( owed_2028, _D( '0' ) )
         # The floated balance is actually paid the next April -- it is not stranded on the payable.
@@ -218,7 +245,7 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
         # Year after: the anomalously high prior year does NOT over-charge it -- the estimate tracks
         # 2029's own (ordinary) liability, so its prepayment equals its true tax and it owes nothing.
         self.assertEqual(
-            _cash_out( reader, 'Estimated income tax (prepayment)', 2029 ), _income_tax_expense( reader, 2029 ) )
+            _cash_out( reader, _ESTIMATED_INCOME_TAX_MEMO, 2029 ), _income_tax_expense( reader, 2029 ) )
         self.assertEqual( reader.ledger.natural_balance( payable, through = date( 2029, 12, 31 ) ), _D( '0' ) )
 
     def test_fica_is_withheld_in_year_not_deferred( self ):
@@ -263,7 +290,7 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
         reader = _run_gainful_drawdown()
         payable = reader.chart.system_account( _PAYABLE )
         self.assertLess(
-            _cash_out( reader, 'Estimated income tax (prepayment)', 2027 ),
+            _cash_out( reader, _ESTIMATED_INCOME_TAX_MEMO, 2027 ),
             _income_tax_expense( reader, 2027 ) )
         self.assertGreater( reader.ledger.natural_balance( payable, through = date( 2027, 12, 31 ) ), _D( '0' ) )
 
@@ -310,6 +337,52 @@ class IncomeTaxEstimateTests( unittest.TestCase ):
 
         self.assertEqual( bookkeeper.ledger.natural_balance( taxes_payable ), _D( '0' ) )   # receivable cleared
         self.assertEqual( bookkeeper.ledger.natural_balance( cash ), _D( '10500' ) )        # refund collected in
+
+    def test_income_tax_estimate_fires_at_each_quarter_end( self ):
+        reader = _run( _CONSTANT )
+        self.assertEqual(
+            _estimate_dates( reader, 2027 ),
+            [ date( 2027, 3, 31 ), date( 2027, 6, 30 ), date( 2027, 9, 30 ), date( 2027, 12, 31 ) ] )
+
+    def test_estimate_cadence_and_year_end_position_are_invariant_across_granularity( self ):
+        # The estimate fires at every quarter-end regardless of period resolution, and -- because each
+        # resolution's four installments total to the same annual estimate -- the year-end payable and
+        # the year's income-tax expense come out identical whether run yearly, quarterly, or monthly.
+        readers = { name: _run( _CONSTANT, wage_growth = '0.05', granularity = granularity )
+                    for name, granularity in ( ( 'yearly', _YEARLY ), ( 'quarterly', _QUARTERLY ),
+                                               ( 'monthly', _MONTHLY ) ) }
+        payables, expenses = [], []
+        for name, reader in readers.items():
+            self.assertEqual(
+                len( _estimate_dates( reader, 2027 ) ), 4, f'{name}: expected four quarterly estimates' )
+            payable = reader.chart.system_account( _PAYABLE )
+            payables.append( reader.ledger.natural_balance( payable, through = date( 2027, 12, 31 ) ) )
+            expenses.append( _income_tax_expense( reader, 2027 ) )
+        # The income-tax expense (assessed on the raw full-year window) is exactly the same; the payable
+        # matches to within quantization noise (the annualization factor's non-terminating division).
+        self.assertEqual( len( set( expenses ) ), 1, f'income-tax expense differs: {expenses}' )
+        self.assertLess(
+            max( payables ) - min( payables ), _D( '0.01' ), f'year-end payable differs: {payables}' )
+
+    def test_fine_resolution_back_loads_a_lumpy_quarter( self ):
+        # All of year-1 income arrives in Q3 (bootstrap year, so no prior-year cap binds). At quarterly
+        # resolution the estimate prices off actual books: with no income yet, Q1 and Q2 estimate
+        # nothing at all, and the estimate lands only from Q3 -- the annualized-installment behavior, not
+        # a flat split (which would have leaked a quarter of the year's tax into each of Q1 and Q2).
+        q3_only = Schedule( ( WindowedAmount(
+            _D( '120000' ), DateWindow( start = date( 2026, 7, 1 ), end = date( 2026, 9, 30 ) ) ), ) )
+        reader = _run( q3_only, end_year = 2027, granularity = _QUARTERLY )
+        cash = reader.chart.cash_account()
+
+        def _installment( quarter_end ):
+            return sum( ( entry.signed_amount for txn in reader.books.transactions
+                          if txn.description == _ESTIMATED_INCOME_TAX_MEMO
+                          and txn.transaction_date == quarter_end
+                          for entry in txn.entries if entry.account is cash ), _D( '0' ) )
+
+        self.assertEqual( _installment( date( 2026, 3, 31 ) ), _D( '0' ) )     # nothing earned through Q1 ...
+        self.assertEqual( _installment( date( 2026, 6, 30 ) ), _D( '0' ) )     # ... nor Q2
+        self.assertGreater( _installment( date( 2026, 9, 30 ) ), _D( '0' ) )   # the estimate lands on Q3's income
 
 
 if __name__ == '__main__':

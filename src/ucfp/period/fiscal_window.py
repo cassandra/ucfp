@@ -9,6 +9,7 @@ therefore year-spanning, not period-spanning. Tax is assessed only on a *whole* 
 year: the Forecast does not settle tax for a partial year (a mid-year start or a trailing
 year short of December 31), so this window is only ever consumed for a complete year.
 """
+import calendar
 from datetime import timedelta
 from decimal import Decimal
 
@@ -145,3 +146,53 @@ class FiscalWindow:
                 Decimal( '0' ) )
             continue
         return total
+
+
+class AnnualizedFiscalWindow:
+    """A partial-year `FiscalWindow` presented at a full-year rate: every flow it reports -- income,
+    deductible expense, cash contributions and distributions -- is multiplied by `factor`, the
+    reciprocal of the window's share of the year, so a tax engine assessing it prices the *annualized*
+    liability the year-to-date figures imply (the standard deduction and brackets, which the engine
+    supplies, then apply to the grossed-up income -- the annualized-income-installment approach to
+    quarterly estimated tax, simplified to calendar quarters and day-count annualization rather than
+    the statute's fixed periods and factors). Point-in-time facts (the holdings and their opening
+    values) are not flows and pass through unscaled. `factor` is 1 for a full-year window, so this is
+    a no-op there."""
+
+    def __init__( self, window : FiscalWindow, factor : Decimal ):
+        self._window = window
+        self._factor = factor
+
+    @classmethod
+    def annualizing( cls, window : FiscalWindow ) -> 'AnnualizedFiscalWindow':
+        """Wrap `window` at a full-year rate: the factor is the reciprocal of the window's share of
+        the calendar year. Assumes `window` spans from the tax year's start, so its inclusive day
+        count is the year-to-date length -- which the estimate's year-to-date window always is."""
+        year_to_date_days = ( window.span.end_date - window.span.start_date ).days + 1
+        year_days = 366 if calendar.isleap( window.span.start_date.year ) else 365
+        return cls( window, Decimal( year_days ) / Decimal( year_to_date_days ) )
+
+    @property
+    def span( self ) -> DateSpan:
+        return self._window.span
+
+    def income( self, income_tax_class : IncomeTaxClass ) -> Decimal:
+        return self._window.income( income_tax_class ) * self._factor
+
+    def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
+        return [ amount * self._factor for amount in self._window.income_by_account( income_tax_class ) ]
+
+    def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
+        return self._window.expense( expense_tax_class ) * self._factor
+
+    def holdings( self ) -> list[ Account ]:
+        return self._window.holdings()
+
+    def opening_value( self, holding : Account ) -> Decimal:
+        return self._window.opening_value( holding )
+
+    def distributions_to_cash( self, holding : Account ) -> Decimal:
+        return self._window.distributions_to_cash( holding ) * self._factor
+
+    def contributions_from_cash( self, holding : Account ) -> Decimal:
+        return self._window.contributions_from_cash( holding ) * self._factor

@@ -18,7 +18,7 @@ The interval is computed in three phases (see `ucfp/FORECAST_ENGINE.md`):
                       year. The payment precedes funding, so cash stays at the floor.
   3. Close         -- finalize ending balances and the stop condition.
 """
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -30,8 +30,12 @@ from ucfp.accounts.money_utils import format_money, quantize_money
 from ucfp.jurisdiction.engine import ContributionKind
 
 from .events import Realization
+from .fiscal_window import AnnualizedFiscalWindow
 from .parameters import PeriodParameters
 from .results import Notice, NoticeKind, NoticeSeverity, PeriodResult
+
+_QUARTERS_PER_YEAR         = Decimal( 4 )
+_ESTIMATED_INCOME_TAX_MEMO = 'Estimated income tax (prepayment)'
 
 
 class Period:
@@ -405,8 +409,11 @@ class Period:
         """Settle the Taxes Payable carried in from last year's accrual, on the payment date the tax
         law sets (civil default: April 15). One sign-agnostic entry (DR Taxes Payable / CR cash)
         settles either direction: a positive balance is paid out, a negative one -- a refund receivable
-        from credits beyond the tax -- is collected in. No engine, no Taxes Payable account, a zero
-        balance, or a payment date outside this interval -> nothing to do."""
+        from credits beyond the tax -- is collected in. Reads the payable *as of the prior tax year's
+        end*, not its running balance, so this year's own estimate prepayments (already booked at an
+        earlier quarter under sub-annual granularity) are not swept into last year's settlement. No
+        engine, no Taxes Payable account, a zero balance, or a payment date outside this interval ->
+        nothing to do."""
         tax_engine = self._parameters.tax_engine
         if tax_engine is None:
             return
@@ -418,7 +425,8 @@ class Period:
         payment_date = tax_engine.tax_payment_date( span.start_date.year - 1 )
         if not ( span.start_date <= payment_date <= span.end_date ):
             return
-        owed = bookkeeper.ledger.natural_balance( taxes_payable )
+        prior_tax_year_end = tax_engine.tax_year_bounds( span.end_date )[ 0 ] - timedelta( days = 1 )
+        owed = bookkeeper.ledger.natural_balance( taxes_payable, through = prior_tax_year_end )
         if owed == 0:
             return
         cash_account = chart.cash_account()
@@ -430,35 +438,78 @@ class Period:
         return
 
     def _prepay_income_tax_estimate( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Prepay this year's income tax as a safe-harbor estimate, so most of it leaves cash within
-        the year it is earned rather than the whole bill floating to next April. Booked as a prepayment
-        against the payable (DR Taxes Payable / CR cash), so the year-end settlement books the full true
-        tax and nets this prepayment, leaving only the balance owed; the engine caps the estimate (see
-        `estimate_income_tax`), so a spike or the funding draws' own gains float past it. Assessed on
-        pre-funding-draw income -- exactly so at annual granularity, where this is the year's only
-        Period; at finer granularity the single year-close estimate reads a window that already
-        includes earlier draws, which the settlement nets back out (no total is wrong). Only at a full
-        tax-year close, like settlement; no engine means nothing to prepay."""
-        if not ( self._is_close_of_tax_year() and self._parameters.full_tax_year ):
+        """Prepay income tax as safe-harbor estimates on a quarterly cadence: for each quarter-end
+        within this interval, pay the increment that brings the year-to-date prepayment to its
+        cumulative target. The target is the annualized-income-installment estimate -- the period's YTD
+        income grossed up to a full-year rate (`AnnualizedFiscalWindow`), assessed and safe-harbor
+        capped (see `estimate_income_tax`), times the quarter's cumulative share (q/4). One formula for
+        every resolution: at yearly the window is already the full year (grossing-up is a no-op), so the
+        four quarter-ends split the annual estimate flatly; at quarter/month resolution each quarter
+        prices off its own YTD and back-loads to when income landed, and Q4's full-year window trues the
+        total up to the same annual estimate. Prepayment against the payable (DR Taxes Payable / CR
+        cash), which the year-end settlement nets, leaving only the balance owed. Only within a full tax
+        year (partial years are a later step); no engine means nothing to prepay."""
+        if not self._parameters.full_tax_year:
             return
         tax_engine = self._parameters.tax_engine
         if tax_engine is None:
             return
-        estimate = quantize_money( tax_engine.estimate_income_tax(
-            self._parameters.fiscal_window, self._parameters.tax_context,
-            self._parameters.opening_tax_state ) )
-        if estimate <= 0:
+        quarter_ends = self._quarter_ends_in_span()
+        if not quarter_ends:
+            return
+        annualized_window = AnnualizedFiscalWindow.annualizing( self._parameters.fiscal_window )
+        annual_estimate = tax_engine.estimate_income_tax(
+            annualized_window, self._parameters.tax_context, self._parameters.opening_tax_state )
+        if annual_estimate <= 0:
             return
         chart = bookkeeper.chart
         taxes_payable = chart.system_account( SystemAccountRole.TAXES_PAYABLE )
         cash_account = chart.cash_account()
         if taxes_payable is None or cash_account is None:
             raise MissingAccountError( 'No Taxes Payable or cash account to prepay income tax to.' )
-        bookkeeper.record(
-            self._parameters.date_span.midpoint,
-            [ ( taxes_payable, -estimate ), ( cash_account, estimate ) ],
-            description = 'Estimated income tax (prepayment)' )
+        prepaid = self._income_tax_prepaid_earlier_this_year( bookkeeper )
+        for quarter, quarter_end in quarter_ends:
+            cumulative_target = annual_estimate * quarter / _QUARTERS_PER_YEAR
+            increment = quantize_money( cumulative_target - prepaid )
+            if increment == 0:
+                continue
+            bookkeeper.record(
+                quarter_end, [ ( taxes_payable, -increment ), ( cash_account, increment ) ],
+                description = _ESTIMATED_INCOME_TAX_MEMO )
+            prepaid += increment
         return
+
+    def _quarter_ends_in_span( self ) -> list[ tuple[ int, date ] ]:
+        """The `(quarter number, quarter-end date)` pairs whose date falls in this interval -- all four
+        for a yearly period, one for a quarter, one or none for a month. Periods are calendar-aligned,
+        so the span lies within a single year. The quarter-ends are the civil calendar quarters; a
+        jurisdiction on a non-civil tax year would need engine-supplied boundaries (as the year-end
+        and payment dates already are), but the estimate is US-specific and civil-year today."""
+        span = self._parameters.date_span
+        year = span.start_date.year
+        candidates = [ ( 1, date( year, 3, 31 ) ), ( 2, date( year, 6, 30 ) ),
+                       ( 3, date( year, 9, 30 ) ), ( 4, date( year, 12, 31 ) ) ]
+        return [ ( quarter, quarter_end ) for quarter, quarter_end in candidates
+                 if span.start_date <= quarter_end <= span.end_date ]
+
+    def _income_tax_prepaid_earlier_this_year( self, bookkeeper : Bookkeeper ) -> Decimal:
+        """The estimated income tax already prepaid in this tax year before this interval -- the cash
+        that left on earlier quarters' estimate transactions -- so a later quarter pays only the
+        increment to its cumulative target. Identifies those transactions by `_ESTIMATED_INCOME_TAX_MEMO`,
+        which is therefore a load-bearing key here, not merely a display memo: it separates estimate
+        prepayments from the prior-year settlement, which also debits Taxes Payable within this year."""
+        tax_year_start = self._parameters.tax_engine.tax_year_bounds(
+            self._parameters.date_span.end_date )[ 0 ]
+        period_start = self._parameters.date_span.start_date
+        cash_account = bookkeeper.chart.cash_account()
+        total = Decimal( '0' )
+        for transaction in bookkeeper.books.transactions:
+            if ( transaction.description == _ESTIMATED_INCOME_TAX_MEMO
+                 and tax_year_start <= transaction.transaction_date < period_start ):
+                total += sum( ( entry.signed_amount for entry in transaction.entries
+                                if entry.account is cash_account ), Decimal( '0' ) )
+            continue
+        return total
 
     def _is_close_of_tax_year( self ) -> bool:
         """Whether this interval ends a tax year -- the explicit gate for the annual-only tax
