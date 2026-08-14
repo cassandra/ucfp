@@ -145,3 +145,42 @@ class FiscalWindow:
                 Decimal( '0' ) )
             continue
         return total
+
+
+class AnnualizedFiscalWindow:
+    """A partial-year `FiscalWindow` presented at a full-year rate: every flow it reports -- income,
+    deductible expense, cash contributions and distributions -- is multiplied by `factor`, the
+    reciprocal of the window's share of the year, so a tax engine assessing it prices the *annualized*
+    liability the year-to-date figures imply (the standard deduction and brackets, which the engine
+    supplies, then apply to the grossed-up income -- exactly the annualized-income-installment method
+    for quarterly estimated tax). Point-in-time facts (the holdings and their opening values) are not
+    flows and pass through unscaled. `factor` is 1 for a full-year window, so this is a no-op there."""
+
+    def __init__( self, window : FiscalWindow, factor : Decimal ):
+        self._window = window
+        self._factor = factor
+
+    @property
+    def span( self ) -> DateSpan:
+        return self._window.span
+
+    def income( self, income_tax_class : IncomeTaxClass ) -> Decimal:
+        return self._window.income( income_tax_class ) * self._factor
+
+    def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
+        return [ amount * self._factor for amount in self._window.income_by_account( income_tax_class ) ]
+
+    def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
+        return self._window.expense( expense_tax_class ) * self._factor
+
+    def holdings( self ) -> list[ Account ]:
+        return self._window.holdings()
+
+    def opening_value( self, holding : Account ) -> Decimal:
+        return self._window.opening_value( holding )
+
+    def distributions_to_cash( self, holding : Account ) -> Decimal:
+        return self._window.distributions_to_cash( holding ) * self._factor
+
+    def contributions_from_cash( self, holding : Account ) -> Decimal:
+        return self._window.contributions_from_cash( holding ) * self._factor
