@@ -13,14 +13,14 @@ genuine field error. Reads `net_worth_form`.
           {{ net_worth_form.ordinary_rate.label_tag }}
           <div class="text-nowrap">{{ net_worth_form.ordinary_rate }}{% if net_worth_form.ordinary_rate.errors %}<span class="text-danger small d-block">{{ net_worth_form.ordinary_rate.errors|join:" " }}</span>{% endif %}</div>
         </div>
-        <div class="text-muted small pl-3">The ordinary-income rate you expect on pre-tax retirement withdrawals; applied to the whole balance.</div>
+        <div class="text-muted small pl-3">The ordinary rate you expect on withdrawals, applied to the whole balance. <em>e.g., 401(k), Traditional IRA.</em></div>
       </div>
       <div class="mb-2">
         <div class="d-flex justify-content-between align-items-center">
           {{ net_worth_form.capital_gains_rate.label_tag }}
           <div class="text-nowrap">{{ net_worth_form.capital_gains_rate }}{% if net_worth_form.capital_gains_rate.errors %}<span class="text-danger small d-block">{{ net_worth_form.capital_gains_rate.errors|join:" " }}</span>{% endif %}</div>
         </div>
-        <div class="text-muted small pl-3">The capital-gains rate you expect when investment gains are realized; applied to unrealized gains only.</div>
+        <div class="text-muted small pl-3">The capital-gains rate you expect on gains, applied to unrealized gains only. <em>e.g., stocks, bonds, a second home or rental.</em></div>
       </div>
     </div>
   </form>
