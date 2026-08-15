@@ -561,18 +561,37 @@ window.App.Inputs = (function () {
         setMoneyField( $form.find( classSelector( C.VEHICLE_DOWN_CLASS ) ), down );
     }
 
+    // A starting down payment for a financed vehicle: a typical fraction of the price, which doubles as
+    // rolling the outgoing car's trade-in into the purchase. The engine keeps the down a constant fraction
+    // of each inflating replacement price, so this one figure tracks the whole horizon. Seeded ONLY when the
+    // down is empty (a user's own figure is never overwritten) and rounded up to the nearest $1,000, so it
+    // reads as a round starting point to adjust rather than a derived-looking number.
+    const DOWN_PAYMENT_SEED_RATE = 0.12;   // mid the 10-15% band; near a ~10-year trade-in fraction
+    function seedVehicleDownPayment( $form ) {
+        if ( !financesSelected( $form ) ) { return; }
+        const $down = $form.find( classSelector( C.VEHICLE_DOWN_CLASS ) );
+        if ( ( $down.val() || '' ).trim() !== '' ) { return; }   // only when empty; never clobber a set value
+        const price = parseAmount( $form.find( classSelector( C.VEHICLE_PRICE_CLASS ) ).val() );
+        if ( !( price > 0 ) ) { return; }
+        setMoneyField( $down, Math.ceil( price * DOWN_PAYMENT_SEED_RATE / 1000 ) * 1000 );
+    }
+
     function enhanceVehicleFinance( $scope ) {
         // Bound on `input` (not `change` like the sibling enhancers) so the mirror fills live as the user
-        // types; the `change`-driven autosave then serializes the already-filled field.
+        // types; the `change`-driven autosave then serializes the already-filled field. The empty-down seed
+        // runs on `change` -- a committed price, or a switch to LOAN -- so it reads a complete price and
+        // lands just before that same change's autosave persists it.
         ( $scope || $( document.body ) ).find( classSelector( C.VEHICLE_FINANCE_CLASS ) ).each( function () {
             const $form       = $( this );
             const priceOrDown = classSelector( C.VEHICLE_PRICE_CLASS ) + ',' + classSelector( C.VEHICLE_DOWN_CLASS );
             $form.find( priceOrDown ).off( 'input.vehicleFinance' )
                 .on( 'input.vehicleFinance', function () { fillVehicleMonthly( $form ); } );
+            $form.find( classSelector( C.VEHICLE_PRICE_CLASS ) ).off( 'change.vehicleFinance' )
+                .on( 'change.vehicleFinance', function () { seedVehicleDownPayment( $form ); fillVehicleMonthly( $form ); } );
             $form.find( classSelector( C.VEHICLE_MONTHLY_CLASS ) ).off( 'input.vehicleFinance' )
                 .on( 'input.vehicleFinance', function () { fillVehicleDown( $form ); } );
             $form.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).off( 'change.vehicleFinance' )
-                .on( 'change.vehicleFinance', function () { fillVehicleMonthly( $form ); } );
+                .on( 'change.vehicleFinance', function () { seedVehicleDownPayment( $form ); fillVehicleMonthly( $form ); } );
         } );
     }
 
