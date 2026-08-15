@@ -10,7 +10,7 @@ have no standalone management: they are born, edited, and retired through the sc
 
 {% block page_title %}Manage Scenarios{% endblock %}
 {# The one create action, kept at the top so it stays reachable however long the list of scenarios grows. #}
-{% block page_actions %}{% if profile_complete %}<a href="{% url 'scenario_compose' %}" class="btn btn-cta">+ New scenario</a>{% endif %}{% endblock %}
+{% block page_actions %}{% if profile_complete %}<a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary">+ New scenario</a>{% endif %}{% endblock %}
 {% block page_subtitle %}
 <p class="text-muted">
   A <strong>Scenario</strong> pairs a set of <strong>Plans</strong> (the future you're contemplating)

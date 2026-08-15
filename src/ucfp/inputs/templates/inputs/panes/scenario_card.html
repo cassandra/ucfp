@@ -16,7 +16,11 @@ flag, its `drift` notice or None, and per-component `plans_uses`/`assumptions_us
       {% if row.drift %}<span class="badge badge-warning mr-3">needs reconciling</span>{% endif %}
       <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0">
         {% csrf_token %}
-        <button type="submit" class="btn btn-primary btn-sm">{% if row.complete %}Review scenario{% else %}Finish setup{% endif %} &rarr;</button>
+        {% if row.complete %}   
+        <button type="submit" class="btn btn-primary btn-sm">Review scenario &rarr;</button>
+        {% else %}
+        <button type="submit" class="btn btn-cta btn">Finish setup &rarr;</button>
+        {% endif %}
       </form>
     </div>
     {% comment %}Drift is not blocking here (the card keeps every action) -- it names the stale references
