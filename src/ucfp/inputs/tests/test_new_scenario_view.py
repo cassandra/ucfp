@@ -19,6 +19,7 @@ from ucfp.inputs.interview import applicable_sections, first_section_of_flow, fl
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.repository import latest_profile, save_profile
 from ucfp.inputs.profile.schemas import Profile, SubjectProfile
 from ucfp.inputs.scenarios.repository import create_scenario, scenarios_for
@@ -41,7 +42,7 @@ class _NewScenarioBase( TestCase ):
         self.factory      = RequestFactory()
         self.profile = Profile(
             subjects = [ SubjectProfile( 'subject', 'You', date( 1960, 1, 1 ) ) ],
-            filing_status = FilingStatus.SINGLE )
+            filing_status = FilingStatus.SINGLE, home_tenure = HousingTenure.NEITHER )
         save_profile( self.organization, self.profile )
         _acknowledge_flow( latest_profile( self.organization ), self.profile, 'profile' )
 

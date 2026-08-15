@@ -84,23 +84,29 @@ def completed_profile( organization : Organization ) -> Optional[ ProfileRecord 
 
 def profile_is_complete( record : ProfileRecord ) -> bool:
     """Whether `record` is a fully set-up profile: every applicable, live profile-flow section reviewed,
-    and a filing status present (the one profile-level fact a forecast cannot run without)."""
+    plus the profile-level facts a forecast should not silently assume -- a filing status (a person) and a
+    housing choice (own/rent/neither, rather than an unanswered `None` the engine would treat as no housing
+    cost)."""
     profile = load_profile( record )
     return ( flow_reviewed( profile, record, 'profile' )
-             and profile.filing_status is not None )
+             and profile.filing_status is not None
+             and profile.home_tenure is not None )
 
 
 def profile_completion_blockers( record : ProfileRecord ) -> list[ str ]:
     """The hard requirements a *walked* profile still lacks -- shown to explain why it reads incomplete
     once the user has been through every section. Empty while the walk is in progress (the stepper already
-    shows what is left, and half-entered data is not an error yet) and empty once complete. Today the one
-    hard datum is a person: it is what sets the filing status a run cannot run without."""
+    shows what is left, and half-entered data is not an error yet) and empty once complete. The hard data:
+    a person (which sets the filing status a run needs) and a housing choice (own/rent/neither, rather than
+    an unanswered default the run would silently assume)."""
     profile = load_profile( record )
     if not flow_reviewed( profile, record, 'profile' ):
         return []
     blockers : list[ str ] = []
     if not profile.subjects:
         blockers.append( 'Add at least one person.' )
+    if profile.home_tenure is None:
+        blockers.append( 'Choose whether you own or rent your home.' )
     return blockers
 
 

@@ -14,6 +14,7 @@ from organization.models import Organization
 
 from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.profile.repository import save_profile
+from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import Profile, SubjectProfile
 from ucfp.inputs.state import profile_advisories, profile_completion_blockers
 from ucfp.jurisdiction.enums import FilingStatus
@@ -21,10 +22,10 @@ from ucfp.planning.tests.support import forecast_profile
 
 
 def _complete_profile_without_accounts() -> Profile:
-    """A profile that can complete (a person, hence a filing status) but has no funded account."""
+    """A profile that can complete (a person and a housing choice) but has no funded account."""
     return Profile(
         subjects = [ SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1990, 1, 1 ) ) ],
-        filing_status = FilingStatus.SINGLE )
+        filing_status = FilingStatus.SINGLE, home_tenure = HousingTenure.NEITHER )
 
 
 def _mark_all_profile_sections_reviewed( record, profile ):
@@ -49,7 +50,17 @@ class ProfileCompletionBlockersTest( TestCase ):
         profile = Profile()                                   # every section walkable, but no subject added
         record  = save_profile( self.org, profile )
         _mark_all_profile_sections_reviewed( record, profile )
-        self.assertEqual( profile_completion_blockers( record ), [ 'Add at least one person.' ] )
+        self.assertIn( 'Add at least one person.', profile_completion_blockers( record ) )
+
+    def test_walked_without_a_housing_choice_reports_it( self ):
+        # A person is present (so no person blocker), but the own/rent/neither question is unanswered.
+        profile = Profile(
+            subjects = [ SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1990, 1, 1 ) ) ],
+            filing_status = FilingStatus.SINGLE )             # home_tenure defaults to None
+        record  = save_profile( self.org, profile )
+        _mark_all_profile_sections_reviewed( record, profile )
+        self.assertEqual( profile_completion_blockers( record ),
+                          [ 'Choose whether you own or rent your home.' ] )
 
     def test_a_walked_profile_with_a_person_has_no_blockers( self ):
         profile = forecast_profile()                          # carries a subject (and so a filing status)
