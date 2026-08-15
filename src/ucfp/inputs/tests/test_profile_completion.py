@@ -5,7 +5,8 @@ can still be incomplete for want of a required datum. The blockers explain that 
 is done, so they never pre-empt errors while the user is still entering. Today the sole hard requirement
 is a person: it is what sets the filing status a run cannot run without.
 """
-from django.test import TestCase
+from django.template.loader import render_to_string
+from django.test import SimpleTestCase, TestCase
 
 from organization.models import Organization
 
@@ -45,3 +46,33 @@ class ProfileCompletionBlockersTest( TestCase ):
         record  = save_profile( self.org, profile )
         _mark_all_profile_sections_reviewed( record, profile )
         self.assertEqual( profile_completion_blockers( record ), [] )
+
+
+class InterviewStatusRegionTest( SimpleTestCase ):
+    """The `interview_status.html` region -- the badge and blockers antinode re-renders on each section
+    advance. It always carries the id (the replace target), escalates from grey to danger only in the
+    walked-but-blocked state, and is empty for a flow that carries no status."""
+
+    def _render( self, context ):
+        return render_to_string( 'inputs/interview/interview_status.html', context )
+
+    def test_walked_and_blocked_shows_danger_and_the_reason( self ):
+        html = self._render( { 'flow': 'profile', 'profile_complete': False,
+                               'profile_blockers': [ 'Add at least one person.' ] } )
+        self.assertIn( 'id="interview-status"', html )
+        self.assertIn( 'badge-danger', html )
+        self.assertIn( 'Add at least one person.', html )
+
+    def test_complete_shows_success( self ):
+        html = self._render( { 'flow': 'profile', 'profile_complete': True, 'profile_blockers': [] } )
+        self.assertIn( 'badge-success', html )
+        self.assertNotIn( 'badge-danger', html )
+
+    def test_walk_in_progress_stays_neutral_grey( self ):
+        html = self._render( { 'flow': 'profile', 'profile_complete': False, 'profile_blockers': [] } )
+        self.assertIn( 'badge-secondary', html )               # neutral while walking -- not an error yet
+
+    def test_a_non_profile_flow_is_an_empty_region( self ):
+        html = self._render( { 'flow': 'plans' } )
+        self.assertIn( 'id="interview-status"', html )         # present as a no-op replace target...
+        self.assertNotIn( 'badge', html )                      # ...but carries no status today

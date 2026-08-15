@@ -616,8 +616,10 @@ class InterviewView( View ):
     _COMPONENT_TEMPLATE = 'inputs/interview/component_page.html'
     _SECTION_TEMPLATE = 'inputs/interview/section.html'
     _STEPPER_TEMPLATE = 'inputs/interview/stepper.html'
+    _STATUS_TEMPLATE  = 'inputs/interview/interview_status.html'
     _SECTION_TARGET   = 'interview-section'
     _STEPPER_TARGET   = 'interview-stepper'
+    _STATUS_TARGET    = 'interview-status'
 
     def get( self, request, section ):
         current  = self._live_section( section )
@@ -755,10 +757,15 @@ class InterviewView( View ):
 
     def _swap( self, request, sections, section, form ):
         context = self._context( request, sections, section, form )
+        # Refresh the stepper's seen-marks and the header status region alongside the section, so advancing
+        # reflects the now-updated flow at once -- e.g. adding the missing person clears the incomplete
+        # state without a reload. The status region is empty (a no-op replace) for flows that carry none.
         return antinode.response(
             main_content = render_to_string( self._SECTION_TEMPLATE, context, request = request ),
-            replace_map = { self._STEPPER_TARGET: render_to_string(
-                self._STEPPER_TEMPLATE, context, request = request ) },
+            replace_map = {
+                self._STEPPER_TARGET: render_to_string( self._STEPPER_TEMPLATE, context, request = request ),
+                self._STATUS_TARGET : render_to_string( self._STATUS_TEMPLATE, context, request = request ),
+            },
             push_url = reverse( 'interview_section', kwargs = { 'section': section.key } ),
             scroll_to = self._SECTION_TARGET )
 
