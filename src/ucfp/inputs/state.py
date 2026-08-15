@@ -14,7 +14,7 @@ from typing import Optional
 from organization.models import Organization
 
 from ucfp.inputs.assumptions.repository import assumptions_for
-from ucfp.inputs.interview import applicable_sections, flow_of
+from ucfp.inputs.interview import AccountsForm, applicable_sections, flow_of
 from ucfp.inputs.models import ProfileRecord
 from ucfp.inputs.plans.repository import plans_for
 from ucfp.inputs.profile.repository import latest_profile, load_profile, profiles_for
@@ -102,6 +102,27 @@ def profile_completion_blockers( record : ProfileRecord ) -> list[ str ]:
     if not profile.subjects:
         blockers.append( 'Add at least one person.' )
     return blockers
+
+
+def profile_advisories( record : ProfileRecord ) -> list[ str ]:
+    """Gentle, non-blocking notes for a *complete* profile -- quiet "is this what you meant?" observations,
+    not errors and not asks. Gated on completeness, so (like the blockers) nothing shows mid-walk, and it
+    never piles onto a profile that still has a real blocker. Today: a complete household with no funded
+    account, which reads more as an overlooked section than a fact about their finances."""
+    if not profile_is_complete( record ):
+        return []
+    profile = load_profile( record )
+    notes : list[ str ] = []
+    if not _has_funded_account( profile ):
+        notes.append( 'No account balances entered yet.' )
+    return notes
+
+
+def _has_funded_account( profile : Profile ) -> bool:
+    """Whether any financial account (the Accounts section's classes -- cash, investments, retirement) holds
+    a positive balance. Home, vehicles, and possessions are their own sections, so they do not count."""
+    return any( asset.opening_value for asset in profile.assets
+                if asset.asset_class in AccountsForm.ACCOUNT_CLASSES )
 
 
 def completed_plans( profile_record : ProfileRecord, organization : Organization ) -> list:

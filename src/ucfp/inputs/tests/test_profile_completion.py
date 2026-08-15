@@ -5,6 +5,8 @@ can still be incomplete for want of a required datum. The blockers explain that 
 is done, so they never pre-empt errors while the user is still entering. Today the sole hard requirement
 is a person: it is what sets the filing status a run cannot run without.
 """
+from datetime import date
+
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase
 
@@ -12,9 +14,17 @@ from organization.models import Organization
 
 from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.profile.repository import save_profile
-from ucfp.inputs.profile.schemas import Profile
-from ucfp.inputs.state import profile_completion_blockers
+from ucfp.inputs.profile.schemas import Profile, SubjectProfile
+from ucfp.inputs.state import profile_advisories, profile_completion_blockers
+from ucfp.jurisdiction.enums import FilingStatus
 from ucfp.planning.tests.support import forecast_profile
+
+
+def _complete_profile_without_accounts() -> Profile:
+    """A profile that can complete (a person, hence a filing status) but has no funded account."""
+    return Profile(
+        subjects = [ SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1990, 1, 1 ) ) ],
+        filing_status = FilingStatus.SINGLE )
 
 
 def _mark_all_profile_sections_reviewed( record, profile ):
@@ -48,6 +58,33 @@ class ProfileCompletionBlockersTest( TestCase ):
         self.assertEqual( profile_completion_blockers( record ), [] )
 
 
+class ProfileAdvisoriesTest( TestCase ):
+    """profile_advisories: quiet FYIs for a *complete* profile. Today: no funded account. Gated on
+    completeness, so an incomplete (still-blocked) profile shows none."""
+
+    def setUp( self ):
+        self.org = Organization.objects.create( name = 'Advisories' )
+
+    def test_a_complete_profile_with_no_funded_account_is_noted( self ):
+        profile = _complete_profile_without_accounts()
+        record  = save_profile( self.org, profile )
+        _mark_all_profile_sections_reviewed( record, profile )
+        self.assertEqual( profile_advisories( record ), [ 'No account balances entered yet.' ] )
+
+    def test_a_funded_profile_has_no_advisory( self ):
+        profile = forecast_profile()                          # has Cash, so an account is funded
+        record  = save_profile( self.org, profile )
+        _mark_all_profile_sections_reviewed( record, profile )
+        self.assertEqual( profile_advisories( record ), [] )
+
+    def test_an_incomplete_profile_shows_no_advisory( self ):
+        # Gated on completeness: a profile still missing its person shows the blocker, not FYIs.
+        profile = Profile()
+        record  = save_profile( self.org, profile )
+        _mark_all_profile_sections_reviewed( record, profile )
+        self.assertEqual( profile_advisories( record ), [] )
+
+
 class InterviewStatusRegionTest( SimpleTestCase ):
     """The `interview_status.html` region -- the badge and blockers antinode re-renders on each section
     advance. It always carries the id (the replace target), escalates from grey to danger only in the
@@ -76,3 +113,10 @@ class InterviewStatusRegionTest( SimpleTestCase ):
         html = self._render( { 'flow': 'plans' } )
         self.assertIn( 'id="interview-status"', html )         # present as a no-op replace target...
         self.assertNotIn( 'badge', html )                      # ...but carries no status today
+
+    def test_an_advisory_renders_as_an_info_alert( self ):
+        html = self._render( { 'flow': 'profile', 'profile_complete': True, 'profile_blockers': [],
+                               'profile_advisories': [ 'No account balances entered yet.' ] } )
+        self.assertIn( 'No account balances entered yet.', html )
+        self.assertIn( 'alert-info', html )                    # a noticeable info FYI...
+        self.assertNotIn( 'alert-danger', html )               # ...distinct from the error blocker

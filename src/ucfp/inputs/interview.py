@@ -434,7 +434,10 @@ class AccountsForm( forms.Form ):
         ( 'roth', ROTH_ACCOUNT_HANDLE_PREFIX,
           AssetClass.ROTH, JurisdictionConcept.TAX_FREE_RETIREMENT ),
     )
-    _ACCOUNT_CLASSES = frozenset(
+    # The asset classes this section owns -- the household's financial accounts. Public: it is the
+    # canonical "is this a financial account?" set, also read outside the form (e.g. the "no funded
+    # account" advisory in `state`).
+    ACCOUNT_CLASSES = frozenset(
         [ item[ 2 ] for item in _TAXABLE ] + [ item[ 2 ] for item in _RETIREMENT ] )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
@@ -495,7 +498,7 @@ class AccountsForm( forms.Form ):
 
     def apply( self, profile : Profile, plans : Plans ):
         kept = [ asset for asset in profile.assets
-                 if asset.asset_class not in self._ACCOUNT_CLASSES ]
+                 if asset.asset_class not in self.ACCOUNT_CLASSES ]
         return replace( profile, assets = kept + self._accounts() ), plans
 
     def _accounts( self ) -> list:
