@@ -8,9 +8,9 @@ solvent -- a depleted plan's is noise the result line already conveys, shown as 
 {% load common_tags icons %}
 <div class="run-summary">
   <p class="h5 mb-2 {% if summary.lasted %}text-success{% elif summary.depleted %}text-danger{% else %}text-muted{% endif %}">
-    {% if summary.lasted %}{% icon 'check' size='sm' css_class='mr-1' %}Money lasted all {{ summary.years }} years
-    {% elif summary.depleted %}{% icon 'warning' size='sm' css_class='mr-1' %}Money ran out after {{ summary.years }} years
-    {% else %}Plan ended after {{ summary.years }} years{% endif %}
+    {% if summary.lasted %}{% icon 'check' size='sm' css_class='mr-1' %}Money lasted all {{ summary.years }} year{{ summary.years|pluralize }}
+    {% elif summary.depleted %}{% icon 'warning' size='sm' css_class='mr-1' %}Money ran out after {{ summary.years }} year{{ summary.years|pluralize }}
+    {% else %}Plan ended after {{ summary.years }} year{{ summary.years|pluralize }}{% endif %}
   </p>
   <div class="d-flex flex-wrap">
     <div class="run-summary-point mr-5 mb-1">
