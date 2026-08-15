@@ -51,9 +51,11 @@ class TransactionMemoTests( unittest.TestCase ):
 
     def test_distribution_and_growth_memos_name_the_source_rate_and_base( self ):
         # Interest yield on cash and unrealized appreciation on the brokerage: the source, its rate, and
-        # the opening base that produced the amount.
+        # the base that produced the amount. Distributions accrue on the period's average balance (here no
+        # flows, so the average is the opening); growth accrues on the opening.
         self.assertEqual(
-            _memos( self.books, 'distribution' ), [ 'Cash distribution: 3% on $200,000.00' ] )
+            _memos( self.books, 'distribution' ),
+            [ 'Cash distribution: 3% on avg balance $200,000.00' ] )
         self.assertEqual(
             _memos( self.books, 'appreciation' ), [ 'Brokerage appreciation: 5% on $100,000.00' ] )
 

@@ -61,28 +61,28 @@ class Period:
         """Everything whose magnitude is known from the opening books and this
         interval's parameters, independent of the funding decision. Sub-steps run
         at their temporal-POV instants (growth at period start; the rest at the
-        midpoint)."""
-        self._apply_asset_returns( bookkeeper, result )
+        midpoint). Growth runs FIRST -- it mutates the asset, so it must precede
+        any sale so the sale realizes the grown value and no appreciation lands on a
+        holding after it is gone. Distributions run LAST -- they only credit cash, so
+        they can safely read the balance after this interval's flows and accrue on the
+        period's average rather than its opening (the fix for cash drawn down in-year)."""
+        self._apply_growth( bookkeeper, result )
         self._recognize_income( bookkeeper, result )
         self._withhold_employment_tax( bookkeeper, result )
         self._apply_contributions( bookkeeper, result )
         self._service_liabilities( bookkeeper, result )
         self._apply_expenses( bookkeeper, result )
         self._apply_events( bookkeeper, result )
-        return
-
-    def _apply_asset_returns( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Per-asset returns for the interval: growth (unrealized appreciation) and
-        distributions (dividend/interest income)."""
-        self._apply_growth( bookkeeper, result )
         self._apply_distributions( bookkeeper, result )
         return
 
     def _apply_growth( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Accrue each appreciating holding's unrealized appreciation for the
-        interval, on its opening market value (cost + prior valuation), posted at
-        period start as DR valuation / CR Unrealized Gains so net worth (= equity)
-        stays current."""
+        """Accrue each appreciating holding's unrealized appreciation for the interval, on its opening
+        market value (cost + prior valuation), posted at period start as DR valuation / CR Unrealized Gains
+        so net worth (= equity) stays current. Runs *before* the interval's flows: growth mutates the asset,
+        so a holding sold this interval realizes its gain on the grown value, and no appreciation lands on
+        it after it is gone. (Distributions, which only credit cash, instead run last and average -- see
+        `_apply_distributions`.)"""
         chart = bookkeeper.chart
         ledger = bookkeeper.ledger
         unrealized_gain_account = chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
@@ -124,27 +124,36 @@ class Period:
         return
 
     def _apply_distributions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Post each distributing holding's yield (dividend/interest) for the
-        interval, at the midpoint: DR the cash hub / CR the income tax-class
-        account -- landing the cash in savings and recognizing the income."""
+        """Post each distributing holding's yield (dividend/interest) for the interval, at the midpoint: DR
+        the cash hub / CR the income tax-class account -- landing the cash in savings and recognizing the
+        income. Computed on the holding's *average* balance over the interval (opening and closing meaned);
+        running after the interval's flows, cash interest reflects the balance actually carried through the
+        year rather than the opening it started from."""
         chart = bookkeeper.chart
         ledger = bookkeeper.ledger
         cash_account = chart.cash_account()
         opening_through = self._parameters.date_span.day_before_start
+        closing_through = self._parameters.date_span.end_date
         distribution_date = self._parameters.date_span.midpoint
-        for holding in chart.holdings():
+        distributing = [ holding for holding in chart.holdings()
+                         if holding.asset_class.distribution_income_class is not None ]
+        # The average yield-bearing balance per holding, snapshot before crediting any distribution: each
+        # distribution lands in cash, so computing these inline would let one holding's yield inflate the
+        # next holding's basis (notably cash's own).
+        average_value = {
+            holding: ( ledger.market_value( holding, through = opening_through )
+                       + ledger.market_value( holding, through = closing_through ) ) / 2
+            for holding in distributing }
+        for holding in distributing:
             income_class = holding.asset_class.distribution_income_class
-            if income_class is None:
-                continue
             rate = self._parameters.asset_rates.distribution_rate( holding.asset_class )
-            opening_value = ledger.market_value( holding, through = opening_through )
-            # A non-positive opening balance is not a yield-bearing position: a depleted or
-            # overdrawn cash hub is a shortfall, not principal. Applying the distribution rate
-            # to it would book negative "income" and deepen the very hole it reacts to, so no
-            # distribution is recognized until the balance is positive again.
-            if opening_value <= 0:
+            basis = average_value[ holding ]
+            # A non-positive average is not a yield-bearing position: a balance that opened at zero, or was
+            # drawn to zero over the interval, earns nothing. (A depleted or overdrawn cash hub is a
+            # shortfall, not principal -- applying the rate would book negative "income" into the hole.)
+            if basis <= 0:
                 continue
-            distribution = quantize_money( rate.change_on( opening_value ) )
+            distribution = quantize_money( rate.change_on( basis ) )
             if distribution == 0:
                 continue
             if cash_account is None:
@@ -157,7 +166,7 @@ class Period:
             bookkeeper.record(
                 distribution_date,
                 [ ( cash_account, -distribution ), ( income_account, distribution ) ],
-                description = f'{holding.name} distribution: {rate} on {format_money( opening_value )}',
+                description = f'{holding.name} distribution: {rate} on avg balance {format_money( basis )}',
             )
             continue
         return
