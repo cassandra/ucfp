@@ -64,7 +64,9 @@ window.App.Inputs = (function () {
         const birth = birthdateFor( $age );
         const age = parseInt( $age.val(), 10 );
         if ( birth && ! isNaN( age ) ) {
-            $( '#' + $age.attr( dataAttr( C.DATE_FIELD_DATA_ATTR ) ) ).val( atAge( birth, age ) );
+            const $date = $( '#' + $age.attr( dataAttr( C.DATE_FIELD_DATA_ATTR ) ) );
+            $date.val( atAge( birth, age ) );
+            syncPickerToValue( $date );   // the picker keeps its own date model; teach it the new value
         }
     }
 
@@ -198,6 +200,17 @@ window.App.Inputs = (function () {
             $field.datepicker( datepickerOptions( $field.attr( dataAttr( C.DATE_CONTEXT_DATA_ATTR ) ) ) );
             $field.data( ENHANCED_FLAG, true );
         } );
+    }
+
+    // Push a programmatically-set value into an enhanced input's picker. bootstrap-datepicker keeps its
+    // own date model, so a bare `.val()` (as the age->date sync does) leaves the popup on its stale
+    // internal date -- it would open on today and commit today on Enter or a tab-in. `update` re-reads the
+    // input, so the popup instead opens on (and commits) the shown date. A no-op when the picker asset
+    // never loaded or the field is not yet enhanced -- the plain text box already shows the right value.
+    function syncPickerToValue( $date ) {
+        if ( $.fn.datepicker && $date.data( ENHANCED_FLAG ) ) {
+            $date.datepicker( 'update' );
+        }
     }
 
     // Tear down pickers in a subtree about to be removed, so no detached popup is orphaned.
