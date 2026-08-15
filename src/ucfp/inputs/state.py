@@ -90,6 +90,20 @@ def profile_is_complete( record : ProfileRecord ) -> bool:
              and profile.filing_status is not None )
 
 
+def profile_completion_blockers( record : ProfileRecord ) -> list[ str ]:
+    """The hard requirements a *walked* profile still lacks -- shown to explain why it reads incomplete
+    once the user has been through every section. Empty while the walk is in progress (the stepper already
+    shows what is left, and half-entered data is not an error yet) and empty once complete. Today the one
+    hard datum is a person: it is what sets the filing status a run cannot run without."""
+    profile = load_profile( record )
+    if not flow_reviewed( profile, record, 'profile' ):
+        return []
+    blockers : list[ str ] = []
+    if not profile.subjects:
+        blockers.append( 'Add at least one person.' )
+    return blockers
+
+
 def completed_plans( profile_record : ProfileRecord, organization : Organization ) -> list:
     """The organization's Plans sets whose plans-flow sections have all been reviewed -- the ones ready to
     combine into a runnable scenario (pairs with `completed_profile`/`completed_assumptions`).

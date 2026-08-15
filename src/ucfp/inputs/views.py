@@ -47,7 +47,8 @@ from .interview import (
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .state import (
-    completed_assumptions, completed_plans, completed_profile, profile_is_complete )
+    completed_assumptions, completed_plans, completed_profile, profile_completion_blockers,
+    profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_disposition import (
     LeasedVehicleDispositionForm, VehicleDispositionForm, all_dispositions_context )
@@ -824,6 +825,9 @@ class InterviewView( View ):
         return {
             'profile_complete': record is not None and profile_is_complete( record ),
             'profile_updated' : record.updated_datetime if record is not None else None,
+            # Non-empty only once every section is walked but the profile is still incomplete -- the
+            # reasons to show then, and the signal to escalate the badge from neutral to danger.
+            'profile_blockers': profile_completion_blockers( record ) if record is not None else [],
         }
 
     @staticmethod

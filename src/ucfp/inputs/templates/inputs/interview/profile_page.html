@@ -2,17 +2,32 @@
 {% comment %}
 The Profile interview -- a top-level page (its own nav home). Its subtitle shows whether the profile is
 complete and when it was last updated, in place of a breadcrumb; the body is the shared stepping layout.
+Unlike the Plans/Assumptions interviews (which go container-fluid for their wide age-band matrices), this
+keeps the default container width: Profile has no such wide content, so full-width would only add sprawl.
 {% endcomment %}
-{% block main_container_class %}container-fluid{% endblock %}
-{% block header_container %}container{% endblock %}
 
 {% block page_title %}{{ flow_heading }}{% endblock %}
 
 {% block page_subtitle %}
-<p class="mb-4">
-  {% if profile_complete %}<span class="badge badge-success">Profile complete</span>{% else %}<span class="badge badge-secondary">Profile incomplete</span>{% endif %}
+{% load icons %}
+{% comment %}The badge stays a neutral grey "incomplete" while the profile is still being walked; it
+escalates to danger only once every section has been visited but a hard requirement is still unmet
+(`profile_blockers` non-empty), so an in-progress profile is never flagged as an error. The blockers then
+explain what is still missing.{% endcomment %}
+<p class="mb-2">
+  {% if profile_complete %}<span class="badge badge-success">Profile complete</span>
+  {% elif profile_blockers %}<span class="badge badge-danger">Profile incomplete</span>
+  {% else %}<span class="badge badge-secondary">Profile incomplete</span>{% endif %}
   {% if profile_updated %}<span class="text-muted small ml-1">last updated {{ profile_updated|date:"F Y" }}</span>{% endif %}
 </p>
+{% if profile_blockers %}
+<div class="alert alert-danger py-2 px-3 small mb-4" role="alert">
+  {% icon 'exclamation-circle' size='sm' css_class='mr-1' aria_label='Incomplete' %}<strong>Your profile isn't complete yet.</strong>
+  <ul class="mb-0 mt-1">
+    {% for blocker in profile_blockers %}<li>{{ blocker }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block page_body %}{% include "inputs/interview/body.html" %}{% endblock %}
