@@ -96,6 +96,12 @@
     opacity: 1;
 }
 
+/* A column menu re-homed to <body> while open (run_table_panel.html) to escape the scroll pane and card
+   overflow that would otherwise clip it. Lift it above the maximized overlay (z-index 1030). */
+.bt-menu-floating {
+    z-index: 1032;
+}
+
 /* The leading Period column: sticky on the left as well, so the dates stay in view when a
    wide table scrolls sideways. The header cell is the top-left corner -- sticky on both axes
    and above the other sticky headers (hence the raised z-index and matching specificity). */
