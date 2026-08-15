@@ -215,7 +215,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _durable( 'Appliance', 'appliance', upkeep, 70, 3, '2900', 15, living, applies_to = owned ),
         _expense( 'Roof Cost', 'roof-cost', upkeep, 80, '15000', living, every_20y, smooth, n_years, applies_to = owned ),
         # --- Property: rent -- a tenant's rented home only.
-        _expense( 'Rent', 'rent', rent_cat, 10, '1600', living, monthly, discrete, fixed, applies_to = rented_only ),
+        _expense( 'Rent', 'rent', rent_cat, 10, '2000', living, monthly, discrete, fixed, applies_to = rented_only ),
         # Vehicle running costs seed the per-car running costs of the Vehicle Expenses step (applied at
         # materialization to each owned vehicle over its window); the car purchase/financing itself is
         # entered per vehicle, not a catalog item. Insurance is a discrete bill; the rest are smoothed
