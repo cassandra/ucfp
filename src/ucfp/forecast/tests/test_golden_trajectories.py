@@ -23,10 +23,10 @@ _D = Decimal
 # or 2026-parameter change is intended -- a diff here means composed behaviour moved.
 _GOLDEN = {
     'wage_earner': ( None, _D( '985859.89284' ), _D( '681602.23228' ) ),
-    'retiree': ( 2035, _D( '-10098.35873' ), _D( '189994.40200' ) ),
+    'retiree': ( 2035, _D( '-7822.85095' ), _D( '190712.98105' ) ),
     'rental_owner': ( None, _D( '1789578.52462' ), _D( '874528.38332' ) ),
-    'couple_survivor': ( None, _D( '1529437.01018' ), _D( '238241.00899' ) ),
-    'life_events': ( 2044, _D( '-41421.86338' ), _D( '-8417.30330' ) ),
+    'couple_survivor': ( None, _D( '1529957.76816' ), _D( '238303.00153' ) ),
+    'life_events': ( 2044, _D( '-36143.31916' ), _D( '-7945.46672' ) ),
     'gig_worker': ( None, _D( '539139.39912' ), _D( '174505.36504' ) ),
     'lumpy_income': ( None, _D( '1837611.94105' ), _D( '780448.08528' ) ),
 }

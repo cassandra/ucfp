@@ -126,9 +126,9 @@ class Period:
     def _apply_distributions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Post each distributing holding's yield (dividend/interest) for the interval, at the midpoint: DR
         the cash hub / CR the income tax-class account -- landing the cash in savings and recognizing the
-        income. Computed on the holding's *average* balance over the interval (opening and closing meaned);
-        running after the interval's flows, cash interest reflects the balance actually carried through the
-        year rather than the opening it started from."""
+        income. Computed on the holding's *average* balance over the interval (opening and closing meaned),
+        each endpoint floored at zero; running after the interval's flows, cash interest reflects the balance
+        actually carried through the year rather than the opening it started from."""
         chart = bookkeeper.chart
         ledger = bookkeeper.ledger
         cash_account = chart.cash_account()
@@ -137,20 +137,23 @@ class Period:
         distribution_date = self._parameters.date_span.midpoint
         distributing = [ holding for holding in chart.holdings()
                          if holding.asset_class.distribution_income_class is not None ]
-        # The average yield-bearing balance per holding, snapshot before crediting any distribution: each
-        # distribution lands in cash, so computing these inline would let one holding's yield inflate the
-        # next holding's basis (notably cash's own).
-        average_value = {
-            holding: ( ledger.market_value( holding, through = opening_through )
-                       + ledger.market_value( holding, through = closing_through ) ) / 2
-            for holding in distributing }
+        # The yield basis per holding: the mean of its opening and closing balance, each floored at zero.
+        # Because every flow posts at the midpoint the balance is a step -- opening through the first half,
+        # closing through the second -- so each half earns on its own balance, and a half spent overdrawn
+        # earns nothing (floored) rather than a negative close cancelling real first-half interest. Snapshot
+        # before crediting any distribution: each lands in cash, so computing inline would let one holding's
+        # yield inflate the next holding's basis (notably cash's own).
+        yield_basis = {}
+        for holding in distributing:
+            opening_balance = max( ledger.market_value( holding, through = opening_through ), Decimal( '0' ) )
+            closing_balance = max( ledger.market_value( holding, through = closing_through ), Decimal( '0' ) )
+            yield_basis[ holding ] = ( opening_balance + closing_balance ) / 2
         for holding in distributing:
             income_class = holding.asset_class.distribution_income_class
             rate = self._parameters.asset_rates.distribution_rate( holding.asset_class )
-            basis = average_value[ holding ]
-            # A non-positive average is not a yield-bearing position: a balance that opened at zero, or was
-            # drawn to zero over the interval, earns nothing. (A depleted or overdrawn cash hub is a
-            # shortfall, not principal -- applying the rate would book negative "income" into the hole.)
+            basis = yield_basis[ holding ]
+            # Zero basis means no yield-bearing balance at either endpoint (opened at zero and stayed there,
+            # or overdrawn across the whole interval) -- nothing earns, so skip before booking a zero posting.
             if basis <= 0:
                 continue
             distribution = quantize_money( rate.change_on( basis ) )
