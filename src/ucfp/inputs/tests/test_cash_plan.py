@@ -27,7 +27,7 @@ class DefaultDrawdownTests( unittest.TestCase ):
 
     def test_default_is_the_complete_band_waterfall_and_sweep( self ):
         policy = default_drawdown()
-        self.assertEqual( policy.cash_floor, Decimal( '10000' ) )
+        self.assertEqual( policy.cash_floor, Decimal( '0' ) )
         self.assertEqual( policy.cash_ceiling, Decimal( '25000' ) )
         self.assertEqual( tuple( policy.draw_order ), LIQUID_DRAW_CLASSES )
         self.assertEqual( policy.sweep_allocation,
@@ -36,7 +36,7 @@ class DefaultDrawdownTests( unittest.TestCase ):
     def test_unedited_plan_materializes_the_full_default( self ):
         # a plan with no drawdown still gets the sensible band, waterfall, and 50/50 sweep
         cash = _cash_account( Plans() )
-        self.assertEqual( cash.cash_floor, Decimal( '10000' ) )
+        self.assertEqual( cash.cash_floor, Decimal( '0' ) )
         self.assertEqual( cash.cash_ceiling, Decimal( '25000' ) )
         self.assertEqual( tuple( cash.draw_order ), LIQUID_DRAW_CLASSES )
         self.assertEqual( cash.sweep_allocation.weights,

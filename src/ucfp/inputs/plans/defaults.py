@@ -41,14 +41,18 @@ _DEFAULT_SWEEP = [ ( 'stocks', Decimal( '0.5' ) ), ( 'bonds', Decimal( '0.5' ) )
 
 
 def default_drawdown() -> DrawdownPolicy:
-    """The complete cash policy an untouched plan uses: a $10k floor / $25k ceiling band, the liquid
-    draw waterfall, and a 50/50 Stocks/Bonds sweep -- since holding too much idle cash is rarely a
-    good plan. The band is kept modest so a typical surplus is invested rather than left idle in cash;
-    a wider band leaves little to sweep and starves the taxable buffer. The sweep targets (the Stocks
-    and Bonds accounts) are always present, so the ceiling, which the engine requires to come with a
-    sweep destination, is safe to default."""
+    """The complete cash policy an untouched plan uses: no floor, a $25k ceiling, the liquid draw
+    waterfall, and a 50/50 Stocks/Bonds sweep -- since holding too much idle cash is rarely a good plan.
+    The floor defaults to zero deliberately: funding then draws from investments (and, worst case, a
+    penalized early retirement withdrawal) only to pay a real expense, never merely to top a cash buffer
+    back up -- which no rational saver would sell down invested assets to do. The cash-drag reality (some
+    wealth sits in low-yield cash) is instead carried by the ceiling: cash accumulates up to it before the
+    surplus is swept. A floor remains an available input for anyone who wants a modeled reserve (it matters
+    more at fine, near-term granularity). The sweep targets (the Stocks and Bonds accounts) are always
+    present, so the ceiling, which the engine requires to come with a sweep destination, is safe to
+    default."""
     return DrawdownPolicy(
-        cash_floor       = Decimal( '10000' ),
+        cash_floor       = Decimal( '0' ),
         cash_ceiling     = Decimal( '25000' ),
         draw_order       = list( LIQUID_DRAW_CLASSES ),
         sweep_allocation = list( _DEFAULT_SWEEP ) )
