@@ -125,7 +125,16 @@ def profile_advisories( record : ProfileRecord ) -> list[ str ]:
         notes.append( 'No account balances entered yet.' )
     if profile.home_tenure is HousingTenure.OWN and not _has_residence_value( profile ):
         notes.append( 'Home value is not set.' )
+    if not _has_any_income( profile ):
+        notes.append( 'No income sources entered yet.' )
     return notes
+
+
+def _has_any_income( profile : Profile ) -> bool:
+    """Any income of any kind -- a wage or other flow, a pension, or Social Security. Only one is needed (a
+    household on just a pension, or just Social Security, is perfectly normal), so the note fires only when
+    all three are empty."""
+    return bool( profile.income_flows or profile.pensions or profile.government_pension )
 
 
 def _has_funded_account( profile : Profile ) -> bool:

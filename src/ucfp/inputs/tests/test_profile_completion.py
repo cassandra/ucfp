@@ -18,7 +18,8 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.repository import save_profile
-from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
+from ucfp.inputs.profile.schemas import (
+    AssetProfile, GovernmentPensionEntitlement, Profile, SubjectProfile )
 from ucfp.inputs.state import profile_advisories, profile_completion_blockers
 from ucfp.jurisdiction.enums import FilingStatus
 from ucfp.planning.tests.support import forecast_profile
@@ -72,38 +73,35 @@ class ProfileCompletionBlockersTest( TestCase ):
         self.assertEqual( profile_completion_blockers( record ), [] )
 
 
+def _with_income( profile ) -> Profile:
+    """`profile` given a Social Security benefit, so it counts as having income (only one source needed)."""
+    return replace( profile, government_pension = [ GovernmentPensionEntitlement(
+        subject_handle = profile.subjects[ 0 ].handle, monthly_at_normal_age = Decimal( '2000' ) ) ] )
+
+
 class ProfileAdvisoriesTest( TestCase ):
-    """profile_advisories: quiet FYIs for a *complete* profile. Today: no funded account. Gated on
-    completeness, so an incomplete (still-blocked) profile shows none."""
+    """profile_advisories: quiet, independent FYIs for a *complete* profile -- no funded account, an owned
+    home with no value, no income at all. Each is checked on its own (a profile can raise several at once),
+    and all are gated on completeness, so an incomplete profile shows none."""
 
     def setUp( self ):
         self.org = Organization.objects.create( name = 'Advisories' )
 
-    def test_a_complete_profile_with_no_funded_account_is_noted( self ):
-        profile = _complete_profile_without_accounts()
-        record  = save_profile( self.org, profile )
+    def _advisories( self, profile ):
+        record = save_profile( self.org, profile )
         _mark_all_profile_sections_reviewed( record, profile )
-        self.assertEqual( profile_advisories( record ), [ 'No account balances entered yet.' ] )
+        return profile_advisories( record )
 
-    def test_a_funded_profile_has_no_advisory( self ):
-        profile = forecast_profile()                          # has Cash, so an account is funded
-        record  = save_profile( self.org, profile )
-        _mark_all_profile_sections_reviewed( record, profile )
-        self.assertEqual( profile_advisories( record ), [] )
+    def test_no_funded_account_is_noted( self ):
+        self.assertIn( 'No account balances entered yet.',
+                       self._advisories( _complete_profile_without_accounts() ) )
 
-    def test_an_incomplete_profile_shows_no_advisory( self ):
-        # Gated on completeness: a profile still missing its person shows the blocker, not FYIs.
-        profile = Profile()
-        record  = save_profile( self.org, profile )
-        _mark_all_profile_sections_reviewed( record, profile )
-        self.assertEqual( profile_advisories( record ), [] )
+    def test_a_funded_profile_has_no_account_note( self ):
+        self.assertNotIn( 'No account balances entered yet.', self._advisories( forecast_profile() ) )
 
     def test_owning_without_a_home_value_is_noted( self ):
-        # Funded (so no account note); owns a home but never entered its value.
-        profile = replace( forecast_profile(), home_tenure = HousingTenure.OWN )
-        record  = save_profile( self.org, profile )
-        _mark_all_profile_sections_reviewed( record, profile )
-        self.assertEqual( profile_advisories( record ), [ 'Home value is not set.' ] )
+        self.assertIn( 'Home value is not set.',
+                       self._advisories( replace( forecast_profile(), home_tenure = HousingTenure.OWN ) ) )
 
     def test_owning_with_a_home_value_has_no_home_note( self ):
         base    = forecast_profile()
@@ -112,9 +110,18 @@ class ProfileAdvisoriesTest( TestCase ):
             assets = base.assets + [ AssetProfile(
                 handle = 'residence', name = 'Home', asset_class = AssetClass.REAL_ESTATE_RESIDENCE,
                 opening_value = Decimal( '500000' ) ) ] )
-        record  = save_profile( self.org, profile )
-        _mark_all_profile_sections_reviewed( record, profile )
-        self.assertEqual( profile_advisories( record ), [] )
+        self.assertNotIn( 'Home value is not set.', self._advisories( profile ) )
+
+    def test_no_income_is_noted( self ):
+        self.assertIn( 'No income sources entered yet.', self._advisories( forecast_profile() ) )
+
+    def test_income_from_only_social_security_has_no_income_note( self ):
+        self.assertNotIn( 'No income sources entered yet.',
+                          self._advisories( _with_income( forecast_profile() ) ) )
+
+    def test_an_incomplete_profile_shows_no_advisory( self ):
+        # Gated on completeness: a profile still missing its person shows the blocker, not FYIs.
+        self.assertEqual( self._advisories( Profile() ), [] )
 
 
 class InterviewStatusRegionTest( SimpleTestCase ):
