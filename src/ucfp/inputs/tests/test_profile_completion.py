@@ -5,17 +5,20 @@ can still be incomplete for want of a required datum. The blockers explain that 
 is done, so they never pre-empt errors while the user is still entering. Today the sole hard requirement
 is a person: it is what sets the filing status a run cannot run without.
 """
+from dataclasses import replace
 from datetime import date
+from decimal import Decimal
 
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase
 
 from organization.models import Organization
 
+from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.interview import applicable_sections, flow_of
-from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.profile.enums import HousingTenure
-from ucfp.inputs.profile.schemas import Profile, SubjectProfile
+from ucfp.inputs.profile.repository import save_profile
+from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.inputs.state import profile_advisories, profile_completion_blockers
 from ucfp.jurisdiction.enums import FilingStatus
 from ucfp.planning.tests.support import forecast_profile
@@ -91,6 +94,24 @@ class ProfileAdvisoriesTest( TestCase ):
     def test_an_incomplete_profile_shows_no_advisory( self ):
         # Gated on completeness: a profile still missing its person shows the blocker, not FYIs.
         profile = Profile()
+        record  = save_profile( self.org, profile )
+        _mark_all_profile_sections_reviewed( record, profile )
+        self.assertEqual( profile_advisories( record ), [] )
+
+    def test_owning_without_a_home_value_is_noted( self ):
+        # Funded (so no account note); owns a home but never entered its value.
+        profile = replace( forecast_profile(), home_tenure = HousingTenure.OWN )
+        record  = save_profile( self.org, profile )
+        _mark_all_profile_sections_reviewed( record, profile )
+        self.assertEqual( profile_advisories( record ), [ 'Home value is not set.' ] )
+
+    def test_owning_with_a_home_value_has_no_home_note( self ):
+        base    = forecast_profile()
+        profile = replace(
+            base, home_tenure = HousingTenure.OWN,
+            assets = base.assets + [ AssetProfile(
+                handle = 'residence', name = 'Home', asset_class = AssetClass.REAL_ESTATE_RESIDENCE,
+                opening_value = Decimal( '500000' ) ) ] )
         record  = save_profile( self.org, profile )
         _mark_all_profile_sections_reviewed( record, profile )
         self.assertEqual( profile_advisories( record ), [] )

@@ -13,10 +13,12 @@ from typing import Optional
 
 from organization.models import Organization
 
+from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.assumptions.repository import assumptions_for
 from ucfp.inputs.interview import AccountsForm, applicable_sections, flow_of
 from ucfp.inputs.models import ProfileRecord
 from ucfp.inputs.plans.repository import plans_for
+from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.repository import latest_profile, load_profile, profiles_for
 from ucfp.inputs.profile.schemas import Profile
 
@@ -121,6 +123,8 @@ def profile_advisories( record : ProfileRecord ) -> list[ str ]:
     notes : list[ str ] = []
     if not _has_funded_account( profile ):
         notes.append( 'No account balances entered yet.' )
+    if profile.home_tenure is HousingTenure.OWN and not _has_residence_value( profile ):
+        notes.append( 'Home value is not set.' )
     return notes
 
 
@@ -129,6 +133,14 @@ def _has_funded_account( profile : Profile ) -> bool:
     a positive balance. Home, vehicles, and possessions are their own sections, so they do not count."""
     return any( asset.opening_value for asset in profile.assets
                 if asset.asset_class in AccountsForm.ACCOUNT_CLASSES )
+
+
+def _has_residence_value( profile : Profile ) -> bool:
+    """Whether the owned primary residence has a value entered -- the residence asset is written only once
+    valued, so its presence with a positive balance is the signal. Optional for a forecast (a home need not
+    be counted in net worth), hence an advisory rather than a blocker."""
+    return any( asset.opening_value for asset in profile.assets
+                if asset.asset_class is AssetClass.REAL_ESTATE_RESIDENCE )
 
 
 def completed_plans( profile_record : ProfileRecord, organization : Organization ) -> list:

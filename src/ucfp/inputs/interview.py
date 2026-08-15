@@ -818,7 +818,7 @@ SECTIONS = [
     # loan, mirroring a property + mortgage); they carry no income, so they need not precede Income, but
     # they stay grouped with the other holdings. Possessions (the minor tangibles: precious metals,
     # collectibles) are demoted below Debts.
-    Section( 'real-estate' , 'Real Estate', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
+    Section( 'real-estate' , 'Home & Property', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
              outer_template = 'inputs/interview/sections/properties.html' ),
     Section( 'vehicles'    , 'Vehicles', ( Aggregate.PROFILE, Aggregate.PLANS ), VehiclesForm,
              outer_template = 'inputs/interview/sections/vehicles.html' ),
