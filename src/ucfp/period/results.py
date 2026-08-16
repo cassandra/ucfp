@@ -39,10 +39,12 @@ class NoticeKind( LabeledEnum ):
     CONTRIBUTION_CAPPED = (
         'Contribution Capped',
         'A retirement contribution was reduced to its annual limit.' )
-    CASH_SHORTFALL = (
-        'Cash Shortfall', 'The cash balance went negative -- spending outran available cash.' )
-    NET_WORTH_DEPLETED = (
-        'Net Worth Depleted', 'Assets no longer cover liabilities; the forecast stops.' )
+    SAVINGS_DEPLETED = (
+        'Savings Depleted',
+        'The funding waterfall drew every available source and cash is still negative -- spending can no '
+        'longer be met from sellable assets, so the forecast stops. Net worth is deliberately not the test: '
+        'any remaining is illiquid (e.g. a home the household lives in and is not selling), which cannot '
+        'fund spending.' )
     PARTIAL_YEAR_UNTAXED = (
         'Untaxed Partial Year',
         'A partial calendar year (a mid-year start, or a horizon short of December 31): tax is '

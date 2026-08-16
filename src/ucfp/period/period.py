@@ -762,26 +762,22 @@ class Period:
         return
 
     def _close( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Finalize the period: warn on a cash shortfall (the balance went negative) and flag
-        the stop condition when net worth is depleted (assets no longer cover liabilities),
-        which ends the Forecast. Both are constraint outcomes the user did not request, so both
-        raise a WARNING Notice (state-level, with no linked transaction)."""
-        ledger = bookkeeper.ledger
+        """Finalize the period and flag the stop condition. The forecast is depleted when the funding
+        waterfall has drawn every available source and cash is *still* negative -- the household can no
+        longer meet its spending from sellable assets. Net worth is deliberately NOT the test: it counts
+        illiquid holdings (a home the household lives in) that cannot fund spending without being sold, so
+        stopping on net worth would let savings run implausibly negative against unspendable equity. Any net
+        worth remaining at the stop is that illiquid remainder. Recorded as a state-level WARNING Notice
+        (no linked transaction) for the headline."""
         cash_account = bookkeeper.chart.cash_account()
-        if cash_account is not None:
-            cash_balance = ledger.natural_balance( cash_account )
-            if cash_balance < 0:
-                result.notices.append(
-                    Notice(
-                        kind     = NoticeKind.CASH_SHORTFALL,
-                        severity = NoticeSeverity.WARNING,
-                        amount   = cash_balance ) )
-        net_worth = ledger.net_worth()
-        if net_worth <= 0:
+        if cash_account is None:
+            return
+        cash_balance = bookkeeper.ledger.natural_balance( cash_account )
+        if cash_balance < 0:
             result.is_depleted = True
             result.notices.append(
                 Notice(
-                    kind     = NoticeKind.NET_WORTH_DEPLETED,
+                    kind     = NoticeKind.SAVINGS_DEPLETED,
                     severity = NoticeSeverity.WARNING,
-                    amount   = net_worth ) )
+                    amount   = cash_balance ) )
         return

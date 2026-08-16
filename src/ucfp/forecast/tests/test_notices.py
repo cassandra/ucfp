@@ -134,8 +134,10 @@ class NoticeCatalogTests( unittest.TestCase ):
         self.assertEqual( penalty.severity, NoticeSeverity.WARNING )
         self.assertEqual( penalty.amount, Decimal( '6500' ) )   # 10% of the 65k forced draw
 
-    def test_cash_shortfall_and_depletion_raise_state_warnings( self ):
-        # cash 10k, a 50k expense, no other assets: cash goes negative and net worth depletes
+    def test_exhausting_the_drawable_assets_depletes_the_forecast( self ):
+        # cash 10k, a 50k expense, no other draw sources: funding cannot cover it, cash goes negative,
+        # and with nothing left to sell the forecast stops (depletion keys off spendable cash, not net
+        # worth -- here they coincide, since cash is the only asset).
         result = Forecast( ForecastParameters(
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
@@ -146,12 +148,10 @@ class NoticeCatalogTests( unittest.TestCase ):
                 AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
             expense_items = [ _expense( 'Living', '50000' ) ],
         ) ).run()
-        shortfall = _notice( result, NoticeKind.CASH_SHORTFALL )
-        self.assertEqual( shortfall.severity, NoticeSeverity.WARNING )
-        self.assertLess( shortfall.amount, Decimal( '0' ) )
-        self.assertIsNone( shortfall.transaction_uuid )   # a state notice, no linked posting
-        depletion = _notice( result, NoticeKind.NET_WORTH_DEPLETED )
+        depletion = _notice( result, NoticeKind.SAVINGS_DEPLETED )
         self.assertEqual( depletion.severity, NoticeSeverity.WARNING )
+        self.assertLess( depletion.amount, Decimal( '0' ) )       # the unmet cash shortfall
+        self.assertIsNone( depletion.transaction_uuid )           # a state notice, no linked posting
         self.assertTrue( result.stopped_early )
 
     def test_scheduled_event_raises_no_notice( self ):
