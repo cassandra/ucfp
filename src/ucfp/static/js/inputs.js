@@ -827,9 +827,38 @@ window.App.Inputs = (function () {
             const $li = $( this ).closest( 'li' );
             if ( $( this ).hasClass( 'js-draw-up' ) ) { $li.prev( 'li' ).before( $li ); }
             else                                      { $li.next( 'li' ).after( $li ); }
-            $li.closest( 'ul' ).find( '.js-draw-rank' ).each( function ( i ) { $( this ).text( i + 1 ); } );
+            reRankDraw( $li.closest( 'ul' ) );
             saveForm( $li.closest( 'form' ) );
         } );
+
+        // Keep / draw again toggles a source in place within the one list. Retaining enables the row's
+        // `retained` input (so the form posts it, and materialization drops it before the engine) and
+        // mutes the row: its rank clears, the KEPT badge shows, and exclude swaps to restore. Drawing
+        // again reverses it. The rank badges number the enabled rows only, so a retained row shows none
+        // and the numbering stays true to draw priority. Toggling fires no `change`, so save explicitly.
+        function reRankDraw( $drawList ) {
+            let rank = 0;
+            $drawList.find( '.js-draw-source' ).each( function () {
+                const $rank = $( this ).find( '.js-draw-rank' );
+                if ( $( this ).hasClass( 'js-draw-retained' ) ) { $rank.text( '' ); }
+                else { rank += 1; $rank.text( rank ); }
+            } );
+        }
+        function setDrawSourceRetained( button, retained ) {
+            const $li = $( button ).closest( 'li' );
+            $li.toggleClass( 'js-draw-retained', retained );
+            $li.find( 'input[name="retained"]' ).prop( 'disabled', ! retained );
+            $li.find( '.js-draw-rank' ).toggleClass( 'd-none', retained );
+            $li.find( '.js-draw-kept' ).toggleClass( 'd-none', ! retained );
+            $li.find( '.js-draw-disable' ).toggleClass( 'd-none', retained );
+            $li.find( '.js-draw-enable' ).toggleClass( 'd-none', ! retained );
+            // Muted while retained or not yet held; a held source de-mutes when drawn again.
+            $li.find( '.js-draw-label' ).toggleClass( 'text-muted', retained || ! $li.hasClass( 'js-draw-held' ) );
+            reRankDraw( $li.closest( 'ul' ) );
+            saveForm( $li.closest( 'form' ) );
+        }
+        $( 'body' ).on( 'click', '.js-draw-disable', function () { setDrawSourceRetained( this, true  ); } );
+        $( 'body' ).on( 'click', '.js-draw-enable',  function () { setDrawSourceRetained( this, false ); } );
 
         // Sweep table (Cash Plan): add clones the first row (cleared) so a new holding/weight pair
         // joins the form; remove drops a row, but the last row is cleared rather than removed so the

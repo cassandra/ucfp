@@ -365,10 +365,16 @@ class VehiclePlan:
 class DrawdownPolicy:
     """The cash band and how to cover/sweep it -- mirrors the engine `CashAccountParameters`.
     Below the floor the engine draws from `draw_order`; above the ceiling it sweeps surplus
-    into `sweep_allocation` (holding handle -> weight, weights summing to 1)."""
+    into `sweep_allocation` (holding handle -> weight, weights summing to 1).
+
+    `draw_order` is the full ordered list of every draw source; `retained` marks the ones the user
+    has held back (kept, never sold). A retained source keeps its slot in the order -- so re-enabling
+    restores its priority -- but materialization drops it before the engine, which therefore only ever
+    sees the enabled sources and never learns of a retained one."""
     cash_floor: Decimal = Decimal( '0' )
     cash_ceiling: Optional[ Decimal ] = None
     draw_order: list[ AssetClass ] = field( default_factory = list )
+    retained: list[ AssetClass ] = field( default_factory = list )
     sweep_allocation: list[ tuple[ str, Decimal ] ] = field( default_factory = list )
 
 

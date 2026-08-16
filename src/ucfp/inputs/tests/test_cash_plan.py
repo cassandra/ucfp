@@ -30,6 +30,7 @@ class DefaultDrawdownTests( unittest.TestCase ):
         self.assertEqual( policy.cash_floor, Decimal( '0' ) )
         self.assertEqual( policy.cash_ceiling, Decimal( '25000' ) )
         self.assertEqual( tuple( policy.draw_order ), DRAW_SOURCE_CLASSES )   # exhausts every source in turn
+        self.assertEqual( policy.retained, [] )                               # nothing held back by default
         self.assertEqual( policy.sweep_allocation,
                           [ ( 'stocks', Decimal( '0.5' ) ), ( 'bonds', Decimal( '0.5' ) ) ] )
 
@@ -53,29 +54,61 @@ class DefaultDrawdownTests( unittest.TestCase ):
 
 class DrawdownFormTests( unittest.TestCase ):
 
-    def _post( self, floor, order, *, ceiling = '', sweep = () ):
+    def _post( self, floor, order, *, ceiling = '', sweep = (), retained = () ):
         data = QueryDict( mutable = True )
         data[ 'cash_floor' ]   = floor
         data[ 'cash_ceiling' ] = ceiling
         data.setlist( 'draw_order', order )
+        data.setlist( 'retained', list( retained ) )
         data.setlist( 'sweep_handle', [ handle for handle, _weight in sweep ] )
         data.setlist( 'sweep_weight', [ weight for _handle, weight in sweep ] )
         profile = _profile( ( 'stocks', AssetClass.STOCKS ), ( 'bonds', AssetClass.BONDS ) )
         return DrawdownForm( data, profile = profile, plans = Plans() )
 
     def test_apply_writes_the_edited_floor_and_reordered_draw_order( self ):
-        form = self._post(
-            '30000', [ 'STOCKS', 'CDS', 'BONDS', 'DIVIDEND_STOCKS', 'ROTH', 'PRETAX_RETIREMENT' ] )
+        # the pane renders every source; posting the full set with Stocks moved up stores that order
+        order = [ 'STOCKS' ] + [ c.name for c in DRAW_SOURCE_CLASSES if c is not AssetClass.STOCKS ]
+        form  = self._post( '30000', order )
         self.assertTrue( form.is_valid(), form.errors )
         _profile_out, plans = form.apply( None, Plans() )
         self.assertEqual( plans.drawdown.cash_floor, Decimal( '30000' ) )
         self.assertEqual( plans.drawdown.draw_order[ 0 ], AssetClass.STOCKS )   # moved to the top
-        # The pane posts only the liquid rows; the whole-asset sale sources it does not render are
-        # preserved in the stored order after them, so the full source set survives the save.
         self.assertEqual( len( plans.drawdown.draw_order ), len( DRAW_SOURCE_CLASSES ) )
-        whole_asset = [ c for c in DRAW_SOURCE_CLASSES if c not in LIQUID_DRAW_CLASSES ]
-        self.assertEqual( plans.drawdown.draw_order[ len( LIQUID_DRAW_CLASSES ): ], whole_asset )
+        self.assertEqual( plans.drawdown.retained, [] )                         # none retained
         self.assertIsNone( plans.drawdown.cash_ceiling )                        # no ceiling posted -> none kept
+
+    def test_retaining_a_source_keeps_its_slot_disables_its_row_and_drops_it_from_the_engine( self ):
+        # Retaining the residence persists the full order (its slot preserved) plus the retained mark; the
+        # engine's list drops it; its row renders disabled with no rank while the enabled rows stay 1..N-1.
+        order = [ c.name for c in DRAW_SOURCE_CLASSES ]
+        form  = self._post( '25000', order, retained = [ 'REAL_ESTATE_RESIDENCE' ] )
+        self.assertTrue( form.is_valid(), form.errors )
+        _profile_out, plans = form.apply( None, Plans() )
+        self.assertEqual( len( plans.drawdown.draw_order ), len( DRAW_SOURCE_CLASSES ) )   # slot preserved
+        self.assertEqual( plans.drawdown.retained, [ AssetClass.REAL_ESTATE_RESIDENCE ] )
+        engine_order = _cash_account( plans ).draw_order
+        self.assertNotIn( AssetClass.REAL_ESTATE_RESIDENCE, engine_order )                 # engine never sees it
+        self.assertEqual( len( engine_order ), len( DRAW_SOURCE_CLASSES ) - 1 )
+        rows = { row[ 'value' ] : row for row in DrawdownForm( None, plans = plans ).draw_rows }
+        self.assertFalse( rows[ 'REAL_ESTATE_RESIDENCE' ][ 'enabled' ] )
+        self.assertIsNone( rows[ 'REAL_ESTATE_RESIDENCE' ][ 'rank' ] )
+        ranks = [ row[ 'rank' ] for row in DrawdownForm( None, plans = plans ).draw_rows if row[ 'enabled' ] ]
+        self.assertEqual( ranks, list( range( 1, len( DRAW_SOURCE_CLASSES ) ) ) )          # 1..N-1, contiguous
+
+    def test_a_retained_name_outside_the_posted_order_is_dropped( self ):
+        # retained is bounded to the posted order, so a stray mark cannot persist without a matching row
+        form = self._post( '25000', [ c.name for c in LIQUID_DRAW_CLASSES ],
+                           retained = [ 'STOCKS', 'REAL_ESTATE_RESIDENCE' ] )
+        self.assertTrue( form.is_valid(), form.errors )
+        _profile_out, plans = form.apply( None, Plans() )
+        self.assertEqual( plans.drawdown.retained, [ AssetClass.STOCKS ] )   # residence absent from the order
+
+    def test_rows_show_group_labels_not_the_verbose_real_estate_catalog_labels( self ):
+        labels = { row[ 'value' ] : row[ 'label' ] for row in DrawdownForm( None, plans = Plans() ).draw_rows }
+        self.assertEqual( labels[ 'REAL_ESTATE_RESIDENCE' ], 'Residence' )
+        self.assertEqual( labels[ 'REAL_ESTATE_SECOND_HOME' ], 'Second Homes' )   # plural, per the Profile panes
+        self.assertEqual( labels[ 'REAL_ESTATE_RENTAL' ], 'Rentals' )
+        self.assertEqual( labels[ 'PRECIOUS_METALS' ], 'Precious Metals' )        # falls through to the catalog label
 
     def test_apply_normalizes_the_posted_sweep_to_fractions_summing_to_one( self ):
         form = self._post( '25000', [ c.name for c in LIQUID_DRAW_CLASSES ],
@@ -105,14 +138,11 @@ class DrawdownFormTests( unittest.TestCase ):
         self.assertEqual( plans.drawdown.sweep_allocation, [ ( 'stocks', Decimal( '1' ) ) ] )
 
     def test_unknown_draw_order_names_are_ignored( self ):
-        # a stray posted value (not a draw-source class at all) is filtered out; the recognized rows
-        # lead and the unrendered sources are still preserved after them
+        # a stray posted value (not a draw-source class at all) is filtered out
         form = self._post( '25000', [ 'STOCKS', 'NONSENSE', 'BONDS' ] )
         self.assertTrue( form.is_valid(), form.errors )
         _profile_out, plans = form.apply( None, Plans() )
-        self.assertEqual( plans.drawdown.draw_order[ :2 ], [ AssetClass.STOCKS, AssetClass.BONDS ] )
-        self.assertNotIn( 'NONSENSE', [ c.name for c in plans.drawdown.draw_order ] )
-        self.assertEqual( len( plans.drawdown.draw_order ), len( DRAW_SOURCE_CLASSES ) )
+        self.assertEqual( plans.drawdown.draw_order, [ AssetClass.STOCKS, AssetClass.BONDS ] )
 
 
 if __name__ == '__main__':

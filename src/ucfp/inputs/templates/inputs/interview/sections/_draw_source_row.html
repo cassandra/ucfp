@@ -1,0 +1,25 @@
+{% comment %}
+One draw-source row in the single draw-order list. Every row posts its class as `draw_order` (giving
+the full order); a retained row additionally posts it as `retained` -- that pair of posted lists is the
+whole of the state. A row carries the controls for both states with the inactive one hidden (`d-none`),
+so the JS toggles enabled/retained in place without rebuilding markup: it flips the `retained` input's
+`disabled`, the rank/KEPT/exclude/restore visibility, and the muted styling. Enabled rows show a draw
+rank (numbered across enabled rows only); retained rows show no rank and a KEPT badge. Expects `row`
+(value, label, held, enabled, rank).
+{% endcomment %}
+{% load icons %}
+<li class="d-flex align-items-center border rounded p-2 mb-2 bg-white js-draw-source{% if row.held %} js-draw-held{% endif %}{% if not row.enabled %} js-draw-retained{% endif %}">
+  <input type="hidden" name="draw_order" value="{{ row.value }}">
+  <input type="hidden" name="retained" value="{{ row.value }}"{% if row.enabled %} disabled{% endif %}>
+  <span class="badge badge-light border mr-2 js-draw-rank{% if not row.enabled %} d-none{% endif %}">{{ row.rank }}</span>
+  <span class="badge badge-secondary mr-2 js-draw-kept{% if row.enabled %} d-none{% endif %}">KEPT</span>
+  <span class="d-inline-block rounded-circle mr-2 {% if row.held %}bg-success{% else %}bg-light border{% endif %}"
+        style="width:.5rem;height:.5rem" title="{% if row.held %}held{% else %}not held yet{% endif %}"></span>
+  <span class="flex-grow-1 js-draw-label {% if not row.enabled or not row.held %}text-muted{% endif %}">{{ row.label }}</span>
+  <button type="button" class="btn btn-sm btn-light py-0 px-2 mr-1 js-draw-up" aria-label="Move up">&uarr;</button>
+  <button type="button" class="btn btn-sm btn-light py-0 px-2 js-draw-down" aria-label="Move down">&darr;</button>
+  <button type="button" class="btn btn-sm btn-link p-0 ml-2 js-draw-disable{% if not row.enabled %} d-none{% endif %}"
+          aria-label="Keep -- never sell">{% icon "times-circle" size="sm" color="primary" %}</button>
+  <button type="button" class="btn btn-sm btn-link p-0 ml-2 js-draw-enable{% if row.enabled %} d-none{% endif %}"
+          aria-label="Return to the draw order">{% icon "plus-circle" size="sm" color="primary" %}</button>
+</li>

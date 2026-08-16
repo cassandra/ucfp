@@ -94,6 +94,7 @@ AVAILABLE_ICONS = {
     'play',
     'plug',
     'plus',
+    'plus-circle',
     'question-circle',
     'quote-left',
     'rocket',

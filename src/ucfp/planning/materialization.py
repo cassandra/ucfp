@@ -1007,9 +1007,13 @@ def _age_window( start_age, end_age, birthdate : Optional[ date ] ) -> DateWindo
 def _cash_account( plans : Plans ) -> CashAccountParameters:
     drawdown = plans.drawdown or default_drawdown()   # the sensible band applies even for an unedited plan
     sweep = AssetAllocation( tuple( drawdown.sweep_allocation ) ) if drawdown.sweep_allocation else None
+    # Only the enabled sources reach the engine; a retained one is dropped here, so the engine iterates a
+    # waterfall that never mentions it. Retained keeps its slot in `draw_order`, so priority is preserved.
+    retained  = set( drawdown.retained )
+    draw_order = [ source for source in drawdown.draw_order if source not in retained ]
     return CashAccountParameters(
         cash_floor = drawdown.cash_floor, cash_ceiling = drawdown.cash_ceiling,
-        draw_order = list( drawdown.draw_order ), sweep_allocation = sweep )
+        draw_order = draw_order, sweep_allocation = sweep )
 
 
 def _health_coverage( plans : Plans ) -> Optional[ SubsidizedHealthCoverage ]:
