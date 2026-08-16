@@ -32,6 +32,11 @@ class NoticeKind( LabeledEnum ):
     PROPERTY_SALE_COSTS = (
         'Property Sale Costs',
         'Selling costs (realtor fee and fixed costs) were charged on a property sale.' )
+    PROPERTY_SOLD = (
+        'Property Sold',
+        'The liquid sources were exhausted, so a whole property in the draw order was sold to cover the '
+        'cash shortfall (paying off any mortgage it secured); the indivisible proceeds usually overshoot '
+        'and the surplus is swept back into investments.' )
     REQUIRED_MINIMUM_DISTRIBUTION = (
         'Required Minimum Distribution', 'A pre-tax retirement RMD was forced.' )
     EARLY_WITHDRAWAL_PENALTY = (

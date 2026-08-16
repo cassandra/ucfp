@@ -627,12 +627,18 @@ class CashAccountParameters:
     minimum to maintain: a shortfall below it is covered by drawing (realizing) from the
     `draw_order` asset classes in priority. `cash_ceiling` is the maximum: surplus above it is
     swept into the `sweep_allocation` holdings (non-retirement) as investments at cost, so later
-    sales tax only the gain. A None `cash_ceiling` (or `sweep_allocation`) disables sweeping."""
+    sales tax only the gain. A None `cash_ceiling` (or `sweep_allocation`) disables sweeping.
 
-    cash_floor       : Decimal                    = Decimal( '0' )
-    cash_ceiling     : Optional[ Decimal ]        = None
-    draw_order       : list[ AssetClass ]         = field( default_factory = list )
-    sweep_allocation : Optional[ AssetAllocation ] = None
+    `secured_loans` maps a real-estate holding's handle to the account handles of the mortgages it
+    secures, so that when the waterfall sells a whole property to cover a shortfall it can pay those
+    loans off from the proceeds -- the config edge (which loan a property secures) the books do not
+    themselves carry."""
+
+    cash_floor       : Decimal                       = Decimal( '0' )
+    cash_ceiling     : Optional[ Decimal ]           = None
+    draw_order       : list[ AssetClass ]            = field( default_factory = list )
+    sweep_allocation : Optional[ AssetAllocation ]   = None
+    secured_loans    : dict[ str, tuple[ str, ... ] ] = field( default_factory = dict )
 
 
 @dataclass

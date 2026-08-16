@@ -14,6 +14,7 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.cash_plan import DrawdownForm
 from ucfp.inputs.plans.defaults import DRAW_SOURCE_CLASSES, LIQUID_DRAW_CLASSES, default_drawdown
 from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.profile.schemas import Profile
 from ucfp.planning.materialization import _cash_account
 
 
@@ -44,7 +45,7 @@ class DefaultDrawdownTests( unittest.TestCase ):
 
     def test_unedited_plan_materializes_the_full_default( self ):
         # a plan with no drawdown still gets the sensible band, waterfall, and 50/50 sweep
-        cash = _cash_account( Plans() )
+        cash = _cash_account( Profile(), Plans() )
         self.assertEqual( cash.cash_floor, Decimal( '0' ) )
         self.assertEqual( cash.cash_ceiling, Decimal( '25000' ) )
         self.assertEqual( tuple( cash.draw_order ), DRAW_SOURCE_CLASSES )
@@ -86,7 +87,7 @@ class DrawdownFormTests( unittest.TestCase ):
         _profile_out, plans = form.apply( None, Plans() )
         self.assertEqual( len( plans.drawdown.draw_order ), len( DRAW_SOURCE_CLASSES ) )   # slot preserved
         self.assertEqual( plans.drawdown.retained, [ AssetClass.REAL_ESTATE_RESIDENCE ] )
-        engine_order = _cash_account( plans ).draw_order
+        engine_order = _cash_account( Profile(), plans ).draw_order
         self.assertNotIn( AssetClass.REAL_ESTATE_RESIDENCE, engine_order )                 # engine never sees it
         self.assertEqual( len( engine_order ), len( DRAW_SOURCE_CLASSES ) - 1 )
         rows = { row[ 'value' ] : row for row in DrawdownForm( None, plans = plans ).draw_rows }

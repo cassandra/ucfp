@@ -123,7 +123,7 @@ def materialize(
         recurring_holding_purchases = _vehicle_holding_purchases( plans ),
         recurring_loan_originations = _vehicle_loan_originations( plans ),
         events           = scheduled_events,
-        cash_account     = _cash_account( plans ),
+        cash_account     = _cash_account( profile, plans ),
         health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
         property_sale_costs = _property_sale_costs( assumptions ),
@@ -1004,7 +1004,7 @@ def _age_window( start_age, end_age, birthdate : Optional[ date ] ) -> DateWindo
     return DateWindow( start = start, end = end )
 
 
-def _cash_account( plans : Plans ) -> CashAccountParameters:
+def _cash_account( profile : Profile, plans : Plans ) -> CashAccountParameters:
     drawdown = plans.drawdown or default_drawdown()   # the sensible band applies even for an unedited plan
     sweep = AssetAllocation( tuple( drawdown.sweep_allocation ) ) if drawdown.sweep_allocation else None
     # Only the enabled sources reach the engine; a retained one is dropped here, so the engine iterates a
@@ -1013,7 +1013,26 @@ def _cash_account( plans : Plans ) -> CashAccountParameters:
     draw_order = [ source for source in drawdown.draw_order if source not in retained ]
     return CashAccountParameters(
         cash_floor = drawdown.cash_floor, cash_ceiling = drawdown.cash_ceiling,
-        draw_order = draw_order, sweep_allocation = sweep )
+        draw_order = draw_order, sweep_allocation = sweep,
+        secured_loans = _secured_loan_handles( profile, plans ) )
+
+
+def _secured_loan_handles( profile : Profile, plans : Plans ) -> dict:
+    """Each real-estate holding's handle -> the account handles of the mortgages secured against it, so an
+    auto-sale of the property can pay those loans off. Keyed and valued by handle (a real-estate mortgage
+    materializes under its Debt's own handle, per `_loan`), resolved to accounts in the engine at sale
+    time. Matches `_loans`' predicate -- an amortizing, non-vehicle debt with a repayment plan -- so it
+    names only loans that actually reach the books."""
+    repayments  = { repayment.debt_handle for repayment in plans.loan_repayments }
+    real_estate = { asset.handle for asset in profile.assets if asset.asset_class.is_real_estate }
+    secured : dict = dict()
+    for debt in profile.debts:
+        if debt.kind is DebtKind.AUTO or not debt.kind.is_amortizing:
+            continue
+        if debt.secured_asset not in real_estate or debt.handle not in repayments:
+            continue
+        secured.setdefault( str( debt.secured_asset ), list() ).append( str( debt.handle ) )
+    return { handle : tuple( loans ) for handle, loans in secured.items() }
 
 
 def _health_coverage( plans : Plans ) -> Optional[ SubsidizedHealthCoverage ]:

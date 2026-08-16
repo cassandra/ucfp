@@ -133,6 +133,7 @@ class FundingPolicy:
     draw_priority    : list[ Account ] = field( default_factory = list )
     cash_ceiling     : Optional[ Decimal ] = None
     sweep_allocation : tuple[ tuple[ Account, Decimal ], ... ] = ()   # resolved ( holding Account, weight ) pairs for the sweep
+    secured_loans    : dict[ str, tuple[ str, ... ] ] = field( default_factory = dict )   # property handle -> its mortgage account handles
 
 
 @dataclass( frozen = True )

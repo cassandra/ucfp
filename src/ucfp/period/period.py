@@ -22,14 +22,14 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from ucfp.accounts.books import Transaction
+from ucfp.accounts.books import Account, Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import format_money, quantize_money, round_money_up
 from ucfp.jurisdiction.engine import ContributionKind
 
-from .events import Realization
+from .events import LoanPayoff, Realization
 from .fiscal_window import AnnualizedFiscalWindow
 from .future_tax import reestimate_future_taxes
 from .parameters import PeriodParameters
@@ -410,6 +410,47 @@ class Period:
                 transaction_uuid = transaction.transaction_uuid ) )
         return
 
+    def _sell_property_whole(
+            self, bookkeeper : Bookkeeper, result : PeriodResult, holding : Account, on_date : date ) -> None:
+        """Liquidate a whole real-estate holding the funding waterfall has reached: realize its entire
+        value to cash (the gain recognized in its own class, so a residence's §121 exclusion applies),
+        overlay the closing costs, and pay off any mortgage it secures. Indivisible, so the proceeds
+        usually overshoot the shortfall -- the surplus rides the ordinary ceiling sweep. A valueless
+        (already-sold) holding is nothing to liquidate, so a no-op."""
+        chart = bookkeeper.chart
+        cash_account = chart.cash_account()
+        sale_price = bookkeeper.ledger.market_value( holding )
+        if cash_account is None or sale_price <= 0:
+            return
+        sale = Realization( on_date, holding, None, cash_account )
+        transaction = sale.apply(
+            bookkeeper, description = f'Sale of {holding.name} to cover a savings shortfall.' )
+        self._book_property_sale_costs( bookkeeper, result, sale, sale_price )
+        self._pay_off_secured_loans( bookkeeper, holding, cash_account, on_date )
+        result.notices.append(
+            Notice(
+                kind             = NoticeKind.PROPERTY_SOLD,
+                severity         = NoticeSeverity.INFO,
+                amount           = quantize_money( sale_price ),
+                transaction_uuid = transaction.transaction_uuid if transaction is not None else None ) )
+        return
+
+    def _pay_off_secured_loans(
+            self, bookkeeper : Bookkeeper, holding : Account, cash_account : Account, on_date : date ) -> None:
+        """Pay off, from the sale proceeds, each mortgage the sold `holding` secured -- resolved from the
+        funding policy's handle map (the config edge the books do not carry) to the live loan accounts.
+        A loan already retired pays nothing (LoanPayoff reads the balance live), and an unresolved handle
+        is skipped."""
+        chart = bookkeeper.chart
+        handle = None if holding.handle is None else str( holding.handle )
+        for loan_handle in self._parameters.funding_policy.secured_loans.get( handle, () ):
+            loan_account = chart.account( loan_handle )
+            if loan_account is None:
+                continue
+            LoanPayoff( on_date, loan_account, cash_account ).apply(
+                bookkeeper, description = f'Mortgage payoff on the sale of {holding.name}.' )
+        return
+
     def _settle_and_fund( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Pay last year's Taxes Payable, prepay this year's income-tax estimate, then fund cash to the
         floor, then accrue this year's true tax to Taxes Payable (which nets the prepayment, leaving
@@ -692,10 +733,14 @@ class Period:
             shortfall = target - ledger.natural_balance( cash_account )
             if shortfall <= 0:
                 break
-            if source.asset_class is None or not source.asset_class.supports_partial_draw:
-                # An indivisible whole-asset sale source (real estate, possessions): it sells whole
-                # through a dedicated sale handler, not shaved to the shortfall like a liquid holding.
-                # That handler lands in a later step; until then the waterfall passes the source by.
+            if source.asset_class is None:
+                continue
+            if not source.asset_class.supports_partial_draw:
+                # An indivisible whole-asset source sells whole through its handler, not shaved to the
+                # shortfall. The residence handler exists; the second home, rental, and possessions still
+                # wait for theirs, so those are passed by for now.
+                if source.asset_class is AssetClass.REAL_ESTATE_RESIDENCE:
+                    self._sell_property_whole( bookkeeper, result, source, fund_date )
                 continue
             available = ledger.market_value( source )
             # Round the draw UP to the money scale so it fully covers the shortfall and cash lands at (or a

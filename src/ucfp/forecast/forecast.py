@@ -930,7 +930,8 @@ class Forecast:
             cash_floor       = cash.cash_floor * inflation,
             draw_priority    = self._baseline.draw_priority,
             cash_ceiling     = ceiling,
-            sweep_allocation = self._baseline.sweep_allocation )
+            sweep_allocation = self._baseline.sweep_allocation,
+            secured_loans    = cash.secured_loans )
 
     def _cumulative_factor(
             self, target_year : int,
