@@ -110,6 +110,15 @@ class PropertyExpense:
     cost_each: Optional[ Decimal ] = None
     lifespan: Optional[ int ] = None
 
+    @property
+    def tenure_invariant( self ) -> bool:
+        """Whether this expense carries across the primary dwelling's own->rent transition: true iff it
+        applies to both the owned residence and a rented home (utilities -- you pay them either way), so a
+        residence sale that becomes a rental keeps it. Own-only rows (property tax, upkeep) and rent-only
+        rows (rent) do not. Derived from `applies_to` so it cannot drift from the contexts that
+        authoritatively define where the expense applies."""
+        return { PropertyContext.RESIDENCE, PropertyContext.RENTED_HOME }.issubset( self.applies_to )
+
 
 # --- Saving ---------------------------------------------------------------
 
@@ -377,6 +386,10 @@ class PlanEvent:
     date: date
     amount: Optional[ Decimal ] = None
     selections: dict[ str, str ] = field( default_factory = dict )
+    # Event-specific non-entity settings a kind may read (distinct from `selections`, which are entity
+    # handles): a small key->value bag, e.g. a residence sale's 'rent_after'. Absent keys take the kind's
+    # default, so an event stored before a kind grew an option still materializes.
+    options: dict[ str, str ] = field( default_factory = dict )
 
 
 # --- Life events ----------------------------------------------------------

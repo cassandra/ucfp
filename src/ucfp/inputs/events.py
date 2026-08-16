@@ -95,6 +95,20 @@ def _possessions( profile ) -> list:
              if asset.asset_class in _POSSESSION_CLASSES ]
 
 
+def _is_primary_residence( profile, handle : str ) -> bool:
+    """Whether `handle` is the household's owned primary residence -- the only sale that changes where
+    they live (a second home or rental does not), so the only one that offers the rent-after choice."""
+    asset = next( ( a for a in profile.assets if a.handle == handle ), None )
+    return asset is not None and asset.asset_class is AssetClass.REAL_ESTATE_RESIDENCE
+
+
+def _rents_after_sale( event : PlanEvent ) -> bool:
+    """Whether a residence sale converts the household to renting afterward -- the 'rent_after' option,
+    defaulting to yes (you need somewhere to live). No means no housing footprint after the sale (housing
+    provided, or modeled elsewhere), which is the clip-everything behavior."""
+    return event.options.get( 'rent_after', 'yes' ) != 'no'
+
+
 def _secured_loans( profile, asset_handle : str ) -> list:
     """The **account** handles of the loans secured by `asset_handle` -- the loans a sale of that asset
     pays off (a property's mortgage, a vehicle's auto loan). An asset may carry more than one, so this is a
@@ -152,6 +166,10 @@ class EventContributions:
         self.subject_removals = list()
         self.property_sales   = dict()   # property handle -> sale date, for clipping its operating costs
         self.possession_sales = dict()   # possession handle -> sale date, for clipping its running costs
+        # Set when the primary residence is sold and the household rents afterward (the sale's 'rent_after'
+        # option): materialization then carries the residence's invariant costs (utilities) past the sale
+        # and adds rent from that date, rather than clipping all housing to zero.
+        self.residence_rents_after_sale = False
 
 
 # --- The handler base + the kinds -----------------------------------------
@@ -286,6 +304,11 @@ class SellPropertyEvent( EventType ):
         for loan_handle in _secured_loans( profile, property_handle ):
             into.scheduled_events.append( ScheduledLoanPayoff(
                 event_date = event.date, loan = loan_handle ) )
+        # Selling the primary residence and renting after converts the household to a tenant from the sale
+        # date -- materialization carries its utilities forward and adds rent. A non-residence sale (second
+        # home, rental), or renting-after declined, does not change where they live.
+        if _is_primary_residence( profile, property_handle ) and _rents_after_sale( event ):
+            into.residence_rents_after_sale = True
         # A sale needs no income cascade: rental rent is clipped to the sale date at materialize
         # (`_clipped_to_sale`, from this event's `property_sales`), as are the property's operating
         # expenses. Only the mortgage payoff above is contributed here.

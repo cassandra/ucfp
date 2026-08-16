@@ -90,7 +90,7 @@ def materialize(
     events = event_contributions( profile, plans, subjects_by_handle )
     vehicle_disposition_contributions( profile, plans, events )   # derive each disposition's sale
     expense_streams, expense_items = _property_expenses(
-        profile, plans, assets_by_handle, events.property_sales )
+        profile, plans, assets_by_handle, events.property_sales, events.residence_rents_after_sale )
     flow_streams, flow_items = _income_flows(
         profile, plans, subjects_by_handle, events.property_sales )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
@@ -812,8 +812,37 @@ def _property_contexts( profile : Profile ) -> list:
     return result
 
 
+_RENT_HANDLE = 'rent'
+
+
+def _sold_residence( profile : Profile, sale_dates : dict ) -> Optional[ tuple ]:
+    """(handle, sale_date) of the primary residence when it is among the sold properties, else None."""
+    for asset in profile.assets:
+        if asset.asset_class is AssetClass.REAL_ESTATE_RESIDENCE and asset.handle in sale_dates:
+            return ( asset.handle, sale_dates[ asset.handle ] )
+    return None
+
+
+def _post_sale_rent( plans : Plans, sale_date : date ) -> Optional[ ExpenseItem ]:
+    """The rent the household pays after selling its residence: the stored rent row (its class and cadence)
+    at its amount, over the rental window from the sale date. The rent row is seeded into
+    `plans.property_expenses` at the catalog default whenever the household has a home, so its stored
+    `default_amount` is the source -- the user's figure, or the catalog default when untouched. None when
+    there is no rent row or amount (an incomplete plan with no home operating costs -- nothing to charge)."""
+    rent = next( ( e for e in plans.property_expenses if e.handle == _RENT_HANDLE ), None )
+    if rent is None or not rent.default_amount:
+        return None
+    return ExpenseItem(
+        name              = 'Rented Home Rent',
+        handle            = property_expense_handle( _RENT_HANDLE, RENTED_HOME_HANDLE ),
+        expense_tax_class = rent.expense_tax_class,
+        amounts           = Schedule( ( WindowedAmount( rent.default_amount, DateWindow( start = sale_date ) ), ) ),
+        cadence           = Recurrence( rent.interval ) )
+
+
 def _property_expenses( profile : Profile, plans : Plans, assets : dict,
-                        sale_dates : dict ) -> tuple[ list, list ]:
+                        sale_dates : dict,
+                        rents_after_residence_sale : bool = False ) -> tuple[ list, list ]:
     """The Plans' property operating expenses as (streams, items): each expense applied to every property
     its `applies_to` reaches, at that property's override or the shared default (skipped when both are
     blank or zero), with the tax class derived from the property and the amount clipped to the property's
@@ -821,7 +850,12 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
     prefixed with the property) so a rental's cost -- taxed as a rental expense -- stays distinct from
     the residence's same-named cost (taxed as SALT or non-deductible) rather than merging by name into a
     single, mis-classed account. A SMOOTH expense enters as an annualized stream; a DISCRETE one as an
-    item placed at its cadence."""
+    item placed at its cadence.
+
+    When the primary residence is sold and the household rents afterward, its `tenure_invariant` costs
+    (utilities) are *not* clipped -- they carry into the rental -- and a rent stream is added from the sale
+    date; its own-only costs (property tax, upkeep) still clip at the sale."""
+    residence = _sold_residence( profile, sale_dates ) if rents_after_residence_sale else None
     streams, items = list(), list()
     for expense in plans.property_expenses:
         for handle, context, asset in _property_contexts( profile ):
@@ -830,8 +864,11 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
             amount = expense.overrides.get( handle, expense.default_amount )
             if not amount:
                 continue
+            sale_date = sale_dates.get( handle )
+            if residence is not None and handle == residence[ 0 ] and expense.tenure_invariant:
+                sale_date = None                  # invariant: carries into the rental, so not clipped
             tax_class      = _property_expense_tax_class( expense, asset )
-            amounts        = _property_schedule( amount, sale_dates.get( handle ) )
+            amounts        = _property_schedule( amount, sale_date )
             name           = _property_expense_name( asset, expense )
             account_handle = property_expense_handle( expense.handle, handle )
             if expense.realization is Realization.SMOOTH:
@@ -842,6 +879,10 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
                 items.append( ExpenseItem(
                     name = name, handle = account_handle, expense_tax_class = tax_class,
                     amounts = amounts, cadence = Recurrence( expense.interval ) ) )
+    if residence is not None:
+        rent = _post_sale_rent( plans, residence[ 1 ] )
+        if rent is not None:
+            items.append( rent )
     return streams, items
 
 

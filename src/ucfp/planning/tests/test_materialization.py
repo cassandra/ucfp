@@ -98,6 +98,49 @@ class RealizationTests( unittest.TestCase ):
         self.assertEqual( streams[ 0 ].amounts.segments[ 0 ].amount, Decimal( '72000' ) )
 
 
+class ResidenceSaleToRentTests( unittest.TestCase ):
+    """Selling the primary residence and renting after: its tenure-invariant costs (utilities) carry past
+    the sale, its own-only costs (property tax) clip at it, and rent starts from the sale date. Declining
+    to rent (the sale-event option off) clips everything and adds no rent."""
+
+    _SALE = date( 2040, 6, 1 )
+
+    @staticmethod
+    def _pexpense( name, handle, applies_to, amount, interval = Duration( 1, TimeUnit.MONTH ) ):
+        return PropertyExpense(
+            name = name, handle = handle, category = ExpenseCategory.UTILITIES_SERVICES,
+            expense_tax_class = ExpenseTaxClass.LIVING, applies_to = applies_to,
+            realization = Realization.DISCRETE, interval = interval, default_amount = Decimal( amount ) )
+
+    def _items( self, rent_after ):
+        profile = Profile( assets = [ _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ) ] )
+        plans   = Plans( property_expenses = [
+            self._pexpense( 'Electric', 'electric', _OCCUPIED, '150' ),        # tenure-invariant utility
+            self._pexpense( 'Property Tax', 'property-tax', _OWNED, '500' ),   # own-only
+            self._pexpense( 'Rent', 'rent', ( PropertyContext.RENTED_HOME, ), '2000' ) ] )
+        _streams, items = _property_expenses(
+            profile, plans, { 'residence': _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ) },
+            { 'residence': self._SALE }, rents_after_residence_sale = rent_after )
+        return { item.name: item for item in items }
+
+    def _window( self, item ):
+        return item.amounts.segments[ 0 ].window
+
+    def test_renting_after_carries_utilities_clips_own_costs_and_adds_rent( self ):
+        items = self._items( rent_after = True )
+        self.assertIsNone( self._window( items[ 'Residence Electric' ] ).end )        # utility carries past
+        self.assertEqual( self._window( items[ 'Residence Property Tax' ] ).end, self._SALE )   # own clips
+        rent = items[ 'Rented Home Rent' ]
+        self.assertEqual( self._window( rent ).start, self._SALE )                    # rent starts at sale
+        self.assertEqual( rent.amounts.segments[ 0 ].amount, Decimal( '2000' ) )
+
+    def test_not_renting_after_clips_everything_and_adds_no_rent( self ):
+        items = self._items( rent_after = False )
+        self.assertEqual( self._window( items[ 'Residence Electric' ] ).end, self._SALE )
+        self.assertEqual( self._window( items[ 'Residence Property Tax' ] ).end, self._SALE )
+        self.assertNotIn( 'Rented Home Rent', items )
+
+
 def _vehicle( handle, purchase_date, end_date = None, **kwargs ) -> Vehicle:
     return Vehicle( handle = handle, purchase_date = purchase_date, end_date = end_date, **kwargs )
 
