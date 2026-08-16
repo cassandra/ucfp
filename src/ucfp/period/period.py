@@ -692,6 +692,11 @@ class Period:
             shortfall = target - ledger.natural_balance( cash_account )
             if shortfall <= 0:
                 break
+            if source.asset_class is None or not source.asset_class.supports_partial_draw:
+                # An indivisible whole-asset sale source (real estate, possessions): it sells whole
+                # through a dedicated sale handler, not shaved to the shortfall like a liquid holding.
+                # That handler lands in a later step; until then the waterfall passes the source by.
+                continue
             available = ledger.market_value( source )
             # Round the draw UP to the money scale so it fully covers the shortfall and cash lands at (or a
             # sliver above) the floor, never a sub-cent sliver below it -- but never draw more than the

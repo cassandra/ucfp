@@ -14,7 +14,7 @@ from django import forms
 
 from common.forms import MoneyField
 
-from .plans.defaults import LIQUID_DRAW_CLASSES, SWEEP_TARGET_CLASSES, default_drawdown
+from .plans.defaults import DRAW_SOURCE_CLASSES, LIQUID_DRAW_CLASSES, SWEEP_TARGET_CLASSES, default_drawdown
 from .plans.schemas import DrawdownPolicy
 
 
@@ -62,9 +62,13 @@ class DrawdownForm( forms.Form ):
         return [ { 'value' : c.name, 'label' : c.label, 'held' : c in held } for c in order ]
 
     def _submitted_order( self ) -> list:
-        by_name = { c.name : c for c in LIQUID_DRAW_CLASSES }
-        ordered = [ by_name[ name ] for name in self.data.getlist( 'draw_order' ) if name in by_name ]
-        return ordered or list( self._policy.draw_order )
+        by_name   = { c.name : c for c in DRAW_SOURCE_CLASSES }
+        submitted = [ by_name[ name ] for name in self.data.getlist( 'draw_order' ) if name in by_name ]
+        if not submitted:
+            return list( self._policy.draw_order )
+        # The pane renders only the liquid rows for now; preserve any other stored source (the whole-asset
+        # sale sources) after them in its stored order, so a save never silently drops a draw source.
+        return submitted + [ c for c in self._policy.draw_order if c not in submitted ]
 
     # ---- sweep ----
 

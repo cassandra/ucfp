@@ -11,11 +11,10 @@ from ucfp.accounts.enums import AssetClass
 
 from .schemas import DrawdownPolicy
 
-# The liquid asset classes the cash waterfall may sell, in the default priority order (retirement
-# last so it is drawn only as a last resort). Physical goods (precious metals, collectibles) and
-# illiquid holdings (real estate, vehicles) are excluded -- selling a house or a car to cover a
-# small cash dip is not a draw source; cash is the hub itself, not a source. This is also the set
-# the Cash Plan draw-order widget offers (shown even when unheld, so the order survives new holdings).
+# The liquid financial classes the cash waterfall sells a slice of, in default priority order
+# (retirement last so it is drawn only as a last resort). These are the partially-drawable sources
+# (see `AssetClass.supports_partial_draw`); the indivisible whole-asset sale sources are appended in
+# DRAW_SOURCE_CLASSES below. Cash itself is the funded hub, never a draw source.
 LIQUID_DRAW_CLASSES = (
     AssetClass.CDS,
     AssetClass.BONDS,
@@ -23,6 +22,21 @@ LIQUID_DRAW_CLASSES = (
     AssetClass.DIVIDEND_STOCKS,
     AssetClass.ROTH,
     AssetClass.PRETAX_RETIREMENT,
+)
+
+# The full ordered set of cash draw sources: the liquid classes first, then the whole-asset sale
+# sources -- possessions (metals, then collectibles), then the second home, the rental, and the
+# residence last (a residence sale is the last resort and converts the owner to a renter). Real
+# estate and possessions are indivisible, sold whole through a sale handler rather than drawn a slice
+# at a time. A default plan exhausts every source in this order; the Cash Plan lets the user reorder
+# any of them or move any into a "retain" set. Vehicles are deliberately excluded -- a small, needed,
+# fast-depreciating asset is turned over only through replacement, never sold to cover a cash dip.
+DRAW_SOURCE_CLASSES = LIQUID_DRAW_CLASSES + (
+    AssetClass.PRECIOUS_METALS,
+    AssetClass.COLLECTIBLES,
+    AssetClass.REAL_ESTATE_SECOND_HOME,
+    AssetClass.REAL_ESTATE_RENTAL,
+    AssetClass.REAL_ESTATE_RESIDENCE,
 )
 
 # The classes a cash sweep may invest surplus into: the non-retirement liquid holdings. Retirement
@@ -54,5 +68,5 @@ def default_drawdown() -> DrawdownPolicy:
     return DrawdownPolicy(
         cash_floor       = Decimal( '0' ),
         cash_ceiling     = Decimal( '25000' ),
-        draw_order       = list( LIQUID_DRAW_CLASSES ),
+        draw_order       = list( DRAW_SOURCE_CLASSES ),
         sweep_allocation = list( _DEFAULT_SWEEP ) )

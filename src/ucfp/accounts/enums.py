@@ -186,6 +186,15 @@ class AssetClass( LabeledEnum ):
         behavior (depreciation, rental income) keys on `REAL_ESTATE_RENTAL` directly, not on this."""
         return self in _REAL_ESTATE_ASSET_CLASSES
 
+    @property
+    def supports_partial_draw( self ) -> bool:
+        """Whether the cash-funding waterfall may cover a shortfall by selling a slice of a holding of
+        this class -- true for the liquid financial classes (a fraction of a brokerage or retirement
+        balance sells readily). Real estate and possessions are indivisible: they sell whole through a
+        dedicated sale handler, not shaved to the exact shortfall, so they are excluded here and the
+        waterfall routes them to that handler instead of a partial `realize`."""
+        return self in _PARTIALLY_DRAWABLE_ASSET_CLASSES
+
 
 # Cash-like classes carried at face value: their return is distributed as interest
 # income, not accrued as appreciation, so they have no valuation companion.
@@ -204,6 +213,14 @@ _ZERO_BASIS_ASSET_CLASSES = frozenset(
 _REAL_ESTATE_ASSET_CLASSES = frozenset(
     ( AssetClass.REAL_ESTATE_RESIDENCE, AssetClass.REAL_ESTATE_SECOND_HOME,
       AssetClass.REAL_ESTATE_RENTAL ) )
+
+
+# The liquid financial classes a cash shortfall can draw a slice of (see `supports_partial_draw`).
+# Everything outside this set -- real estate, possessions -- is indivisible and sold whole through a
+# sale handler instead. Cash itself is the funded hub, never a draw source, so it is excluded.
+_PARTIALLY_DRAWABLE_ASSET_CLASSES = frozenset(
+    ( AssetClass.CDS, AssetClass.BONDS, AssetClass.STOCKS, AssetClass.DIVIDEND_STOCKS,
+      AssetClass.ROTH, AssetClass.PRETAX_RETIREMENT ) )
 
 
 class RealPropertyType( LabeledEnum ):
