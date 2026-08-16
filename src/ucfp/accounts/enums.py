@@ -74,10 +74,12 @@ class CurrencyType( LabeledEnum ):
     def format( self, amount, with_minor_units : bool = False ) -> str:
         """`amount` as a display string: the symbol, thousands separators, and -- by default --
         whole units (the magnitude planning works in). Pass `with_minor_units` for the currency's
-        fractional digits. A negative amount carries a leading minus before the symbol."""
-        digits = self.minor_unit_digits if with_minor_units else 0
-        sign   = '-' if amount < 0 else ''
-        return f'{sign}{self.symbol}{abs( amount ):,.{digits}f}'
+        fractional digits. A negative amount carries a leading minus before the symbol; a value that
+        rounds to zero at the display precision carries none (no stray '-$0' from a sub-unit negative)."""
+        digits  = self.minor_unit_digits if with_minor_units else 0
+        rounded = round( amount, digits )        # round to display precision, then take the sign from the
+        sign    = '-' if rounded < 0 else ''     # result -- a rounds-to-zero value is not negative
+        return f'{sign}{self.symbol}{abs( rounded ):,.{digits}f}'
 
 
 # Display formatting per currency: (symbol that prefixes the amount, fractional digits). The single

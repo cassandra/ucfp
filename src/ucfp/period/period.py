@@ -26,7 +26,7 @@ from ucfp.accounts.books import Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
-from ucfp.accounts.money_utils import format_money, quantize_money
+from ucfp.accounts.money_utils import format_money, quantize_money, round_money_up
 from ucfp.jurisdiction.engine import ContributionKind
 
 from .events import Realization
@@ -693,7 +693,10 @@ class Period:
             if shortfall <= 0:
                 break
             available = ledger.market_value( source )
-            draw = quantize_money( min( shortfall, available ) )
+            # Round the draw UP to the money scale so it fully covers the shortfall and cash lands at (or a
+            # sliver above) the floor, never a sub-cent sliver below it -- but never draw more than the
+            # source holds (a full liquidation takes its whole balance).
+            draw = min( round_money_up( shortfall ), available )
             if draw <= 0:
                 continue
             income_class = None
@@ -772,6 +775,9 @@ class Period:
         cash_account = bookkeeper.chart.cash_account()
         if cash_account is None:
             return
+        # A negative balance here means the draw sources were exhausted before spending was covered: the
+        # funding waterfall rounds each draw UP (see `_fund_to_target`), so a fully-funded period lands cash
+        # at or above the floor exactly -- no sub-cent sliver below it to trip a false stop.
         cash_balance = bookkeeper.ledger.natural_balance( cash_account )
         if cash_balance < 0:
             result.is_depleted = True
@@ -779,5 +785,5 @@ class Period:
                 Notice(
                     kind     = NoticeKind.SAVINGS_DEPLETED,
                     severity = NoticeSeverity.WARNING,
-                    amount   = cash_balance ) )
+                    amount   = quantize_money( cash_balance ) ) )
         return
