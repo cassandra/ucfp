@@ -64,6 +64,17 @@ class ReferenceSpec:
     choices : Callable[ [ object ], list ]
 
 
+@dataclass( frozen = True )
+class OptionSpec:
+    """A non-entity setting an event kind offers, rendered as a checkbox and stored under `key` in the
+    event's `options` ('yes' when checked, 'no' when not). Distinct from a `ReferenceSpec` (an entity
+    choice); `default` is the initial checked state, `help_text` the note under it."""
+    key       : str
+    label     : str
+    help_text : str  = ''
+    default   : bool = True
+
+
 # --- Candidate sources + display helpers ----------------------------------
 
 def _subjects( profile ) -> list:
@@ -190,6 +201,11 @@ class EventType:
     def references( self, profile ) -> list:
         return list()
 
+    def options( self, profile ) -> list:
+        """The non-entity settings (checkboxes) this kind offers, in reading order -- empty for most
+        kinds. Each `OptionSpec`'s key is a `PlanEvent.options` key its `contribute` reads."""
+        return list()
+
     def offerable( self, profile ) -> bool:
         """Whether this kind can be added to the current plan -- by default, every reference it
         needs has at least one candidate."""
@@ -287,6 +303,20 @@ class SellPropertyEvent( EventType ):
 
     def references( self, profile ) -> list:
         return [ ReferenceSpec( PROPERTY_ROLE, 'Property', _properties ) ]
+
+    def options( self, profile ) -> list:
+        # Offered only to a household that owns a home -- selling the primary residence makes them a
+        # renter. Materialization applies it to the residence sale alone (a second-home/rental sale
+        # ignores it), so it is inert if the chosen property is not the residence.
+        if not any( a.asset_class is AssetClass.REAL_ESTATE_RESIDENCE for a in profile.assets ):
+            return list()
+        return [ OptionSpec(
+            key       = 'rent_after',
+            label     = 'Rent after selling your home',
+            help_text = 'When selling your primary residence, become a renter afterward -- utilities '
+                        'continue and rent begins from the sale. Uncheck if housing is provided or '
+                        'handled elsewhere.',
+            default   = True ) ]
 
     def summary( self, event : PlanEvent, profile ) -> str:
         handle = event.selections.get( PROPERTY_ROLE )
@@ -600,6 +630,10 @@ class EventForm( forms.Form ):
         if event_type.has_amount:
             self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
         self.fields[ 'date' ] = forms.DateField( label = 'Date', widget = IsoDateInput() )
+        for opt in event_type.options( profile ):
+            self.fields[ self._option_field( opt.key ) ] = forms.BooleanField(
+                label = opt.label, required = False, initial = opt.default, help_text = opt.help_text,
+                widget = forms.CheckboxInput( attrs = { 'class' : 'custom-control-input' } ) )
 
     @property
     def reference_fields( self ):
@@ -613,9 +647,20 @@ class EventForm( forms.Form ):
         """The bound amount field, or None for a kind that carries none."""
         return self[ 'amount' ] if 'amount' in self.fields else None
 
+    @property
+    def option_fields( self ):
+        """The kind's option checkboxes as bound fields, in order (empty for most kinds) -- rendered
+        below the date."""
+        return [ self[ self._option_field( opt.key ) ]
+                 for opt in self._event_type.options( self._profile ) ]
+
     @staticmethod
     def _role_field( role : str ) -> str:
         return f'select_{role}'
+
+    @staticmethod
+    def _option_field( key : str ) -> str:
+        return f'option_{key}'
 
     @staticmethod
     def _choices( candidates : list ) -> list:
@@ -641,7 +686,12 @@ class EventForm( forms.Form ):
         return PlanEvent(
             kind = self._event_type.kind, date = self.cleaned_data[ 'date' ],
             amount = self.cleaned_data.get( 'amount' ),
-            selections = self._selections( self.cleaned_data ) )
+            selections = self._selections( self.cleaned_data ),
+            options = self._options( self.cleaned_data ) )
+
+    def _options( self, cleaned : dict ) -> dict:
+        return { opt.key: ( 'yes' if cleaned.get( self._option_field( opt.key ) ) else 'no' )
+                 for opt in self._event_type.options( self._profile ) }
 
 
 class EventsForm:
