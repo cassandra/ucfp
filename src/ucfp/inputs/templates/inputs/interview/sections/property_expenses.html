@@ -40,7 +40,7 @@ property. With a single property the Default column collapses into one value col
           <td class="text-nowrap">{% include 'inputs/components/_cadence.html' with cadence=row.cadence hide_every=True %}</td>
           {% for cell in row.cells %}
           {% if cell %}
-          <td class="text-right">{{ cell }}{% if cell.errors %}<span class="text-danger small d-block">{{ cell.errors|join:" " }}</span>{% endif %}</td>
+          <td class="text-right{% if cell.differs %} {{ AppConst.PROPERTY_DIFFERS_CLASS }}{% endif %}">{{ cell.field }}{% if cell.field.errors %}<span class="text-danger small d-block">{{ cell.field.errors|join:" " }}</span>{% endif %}</td>
           {% else %}
           <td class="text-right text-muted">&mdash;</td>
           {% endif %}

@@ -471,6 +471,15 @@ a.interview-part:hover {
 .span-changed .form-control.js-money {
     background-color: #b8d8f5;   /* light-blue change highlight -- present enough to catch the eye, off gold (the accent's) */
 }
+
+/* Home Expenses: a per-property override that departs from the row's shared Default carries the same
+   light-blue highlight (the class sits on the cell, tinting the whole money control like span-changed).
+   The counterpart of the recurring page's per-band change flag -- it marks where a property's cost
+   diverges from the default every other property inherits. */
+.property-differs .input-group-text,
+.property-differs .form-control.js-money {
+    background-color: #b8d8f5;
+}
 .span-trend {
     margin-left: 0.3rem;
     color: var(--tertiary-highlight-color);

@@ -180,6 +180,15 @@ class PropertyExpensesForm( forms.Form ):
     def _applies( self, expense, handle : str ) -> bool:
         return _property_context( self._profile, handle ) in expense.applies_to
 
+    def _override_differs( self, expense, handle : str ) -> bool:
+        """Whether this property's override departs from the row's Default -- a value is set and it is
+        not the Default it would otherwise inherit (a blank cell inherits, so it never differs; a blank
+        Default reads as zero). Drives the highlight flagging cells that override the shared Default."""
+        override = expense.overrides.get( handle )
+        if override is None:
+            return False
+        return override != ( expense.default_amount or Decimal( 0 ) )
+
     def _any_applicable( self, expense ) -> bool:
         return any( self._applies( expense, handle ) for handle in self._handles )
 
@@ -303,15 +312,9 @@ class PropertyExpensesForm( forms.Form ):
         return f'home-total-{col}'
 
     def _row( self, ri : int, expense ) -> dict:
-        """One displayed expense row: its name, cadence, and a cell per column -- the bound Default field,
-        then each property's override field, or None where the row is N/A for that property. A durable
-        row's Default is directly editable, with an optional `calculator` that fills it on demand."""
+        """One displayed expense row: its name, cadence, and a cell per column. A durable row's Default is
+        directly editable, with an optional `calculator` that fills it on demand."""
         durable = expense.count is not None
-        cells   = [ self[ self._default_key( ri ) ] ]
-        if not self._collapsed:
-            cells += [ self[ self._override_key( ri, hi ) ]
-                       if self._override_key( ri, hi ) in self.fields else None
-                       for hi in range( len( self._handles ) ) ]
         return {
             'name'        : expense.name,
             'calc_id'     : ri,
@@ -320,7 +323,23 @@ class PropertyExpensesForm( forms.Form ):
             'count_entry' : durable,
             'calculator'  : ( calculator_cells( self, ri, per_year( expense.default_amount, expense.interval ) )
                               if durable else None ),
-            'cells'       : cells }
+            'cells'       : self._cells( ri, expense ) }
+
+    def _cells( self, ri : int, expense ) -> list:
+        """One cell per column, each `{ field, differs }`: the Default (a reference, never flagged), then
+        each property's override field -- flagged when it departs from the Default (so the matrix
+        highlights where a property overrides the shared default) -- or None where the row is N/A for
+        that property."""
+        cells = [ { 'field': self[ self._default_key( ri ) ], 'differs': False } ]
+        if self._collapsed:
+            return cells
+        for hi, handle in enumerate( self._handles ):
+            key = self._override_key( ri, hi )
+            if key not in self.fields:
+                cells.append( None )                       # N/A: the row does not apply to this property
+                continue
+            cells.append( { 'field': self[ key ], 'differs': self._override_differs( expense, handle ) } )
+        return cells
 
     def apply( self, profile, plans ):
         edited   = { expense.handle: self._edited( ri, expense )
