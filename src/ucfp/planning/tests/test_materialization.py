@@ -23,8 +23,10 @@ from ucfp.inputs.plans.schemas import (
 from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
+from ucfp.planning.display_placement import property_expense_handle
 from ucfp.planning.materialization import (
-    _assets, _health_coverage, _leased_current_expenses, _property_expenses, _vehicle_expenses,
+    _assets, _health_coverage, _leased_current_expenses, _property_data, _property_expenses,
+    _rent_account_handle, _vehicle_expenses,
     _vehicle_holding_purchases, _vehicle_holdings, _vehicle_loan_originations, _vehicle_running_costs )
 
 _OWNED    = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
@@ -98,47 +100,44 @@ class RealizationTests( unittest.TestCase ):
         self.assertEqual( streams[ 0 ].amounts.segments[ 0 ].amount, Decimal( '72000' ) )
 
 
-class ResidenceSaleToRentTests( unittest.TestCase ):
-    """Selling the primary residence and renting after: its tenure-invariant costs (utilities) carry past
-    the sale, its own-only costs (property tax) clip at it, and rent starts from the sale date. Declining
-    to rent (the sale-event option off) clips everything and adds no rent."""
-
-    _SALE = date( 2040, 6, 1 )
+class ResidenceExpenseMaterializationTests( unittest.TestCase ):
+    """The residence's operating costs materialize full-horizon -- its sale is books-driven, so the forecast
+    ends them (and opens rent) when the sale is reported, not the materializer here. A dormant rent item is
+    added, and `PropertyData` classifies the residence's expense accounts (own-cost vs tenure-invariant) plus
+    naming the rent, the handles the forecast's reconfiguration reaches for."""
 
     @staticmethod
-    def _pexpense( name, handle, applies_to, amount, interval = Duration( 1, TimeUnit.MONTH ) ):
+    def _pexpense( name, handle, applies_to, amount ):
         return PropertyExpense(
             name = name, handle = handle, category = ExpenseCategory.UTILITIES_SERVICES,
             expense_tax_class = ExpenseTaxClass.LIVING, applies_to = applies_to,
-            realization = Realization.DISCRETE, interval = interval, default_amount = Decimal( amount ) )
+            realization = Realization.DISCRETE, interval = Duration( 1, TimeUnit.MONTH ),
+            default_amount = Decimal( amount ) )
 
-    def _items( self, rent_after ):
+    def _profile_plans( self ):
         profile = Profile( assets = [ _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ) ] )
         plans   = Plans( property_expenses = [
             self._pexpense( 'Electric', 'electric', _OCCUPIED, '150' ),        # tenure-invariant utility
             self._pexpense( 'Property Tax', 'property-tax', _OWNED, '500' ),   # own-only
             self._pexpense( 'Rent', 'rent', ( PropertyContext.RENTED_HOME, ), '2000' ) ] )
+        return profile, plans
+
+    def test_residence_costs_are_full_horizon_and_rent_is_dormant( self ):
+        profile, plans = self._profile_plans()
         _streams, items = _property_expenses(
-            profile, plans, { 'residence': _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ) },
-            { 'residence': self._SALE }, rents_after_residence_sale = rent_after )
-        return { item.name: item for item in items }
+            profile, plans, { 'residence': _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ) }, dict() )
+        by_name = { item.name: item for item in items }
+        self.assertIsNone( by_name[ 'Residence Electric' ].window.end )        # not clipped here
+        self.assertIsNone( by_name[ 'Residence Property Tax' ].window.end )    # not clipped here
+        self.assertEqual( by_name[ 'Rented Home Rent' ].window.start, date.max )   # dormant until the sale opens it
+        self.assertEqual( by_name[ 'Rented Home Rent' ].amounts.segments[ 0 ].amount, Decimal( '2000' ) )
 
-    def _window( self, item ):
-        return item.amounts.segments[ 0 ].window
-
-    def test_renting_after_carries_utilities_clips_own_costs_and_adds_rent( self ):
-        items = self._items( rent_after = True )
-        self.assertIsNone( self._window( items[ 'Residence Electric' ] ).end )        # utility carries past
-        self.assertEqual( self._window( items[ 'Residence Property Tax' ] ).end, self._SALE )   # own clips
-        rent = items[ 'Rented Home Rent' ]
-        self.assertEqual( self._window( rent ).start, self._SALE )                    # rent starts at sale
-        self.assertEqual( rent.amounts.segments[ 0 ].amount, Decimal( '2000' ) )
-
-    def test_not_renting_after_clips_everything_and_adds_no_rent( self ):
-        items = self._items( rent_after = False )
-        self.assertEqual( self._window( items[ 'Residence Electric' ] ).end, self._SALE )
-        self.assertEqual( self._window( items[ 'Residence Property Tax' ] ).end, self._SALE )
-        self.assertNotIn( 'Rented Home Rent', items )
+    def test_property_data_classifies_the_residence_expenses( self ):
+        profile, plans = self._profile_plans()
+        data = _property_data( profile, plans )[ 'residence' ]
+        self.assertIn( str( property_expense_handle( 'property-tax', 'residence' ) ), data.ownership_cost_handles )
+        self.assertIn( str( property_expense_handle( 'electric', 'residence' ) ), data.tenure_invariant_handles )
+        self.assertEqual( data.rent_handle, _rent_account_handle( plans ) )
 
 
 def _vehicle( handle, purchase_date, end_date = None, **kwargs ) -> Vehicle:

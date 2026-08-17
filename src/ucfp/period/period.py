@@ -29,7 +29,7 @@ from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import format_money, quantize_money, round_money_up
 from ucfp.jurisdiction.engine import ContributionKind
 
-from .events import LoanPayoff, Realization
+from .events import LoanPayoff, PropertySale, Realization
 from .fiscal_window import AnnualizedFiscalWindow
 from .future_tax import reestimate_future_taxes
 from .parameters import PeriodParameters
@@ -351,29 +351,19 @@ class Period:
         return
 
     def _apply_events( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Apply each scheduled PeriodEvent (transfer, purchase, realization, external
-        receipt/disbursement); each materializes its own balanced transaction. Scheduled events are the
-        user's requested operations, so they raise no Notices -- except a property sale, whose *closing
-        costs* are an automatic consequence worth surfacing, overlaid here after the sale realizes."""
+        """Apply each scheduled PeriodEvent. Scheduled events are the user's requested operations, so they
+        raise no Notices -- except a property sale's *closing costs*, an automatic consequence the shared
+        sale routine surfaces. A `PropertySale` is dispatched to that one routine (the very routine the
+        funding waterfall calls), so a scheduled sale and a shortfall-driven one are identical machinery;
+        every other event applies itself."""
         for event in self._parameters.events:
-            sale_price = self._property_sale_price( bookkeeper, event )
-            event.apply( bookkeeper )
-            if sale_price is not None:
-                self._book_property_sale_costs( bookkeeper, result, event, sale_price )
+            if isinstance( event, PropertySale ):
+                self._sell_property_whole(
+                    bookkeeper, result, event.holding, event.event_date, rent_after = event.rent_after )
+            else:
+                event.apply( bookkeeper )
             continue
         return
-
-    @staticmethod
-    def _property_sale_price( bookkeeper : Bookkeeper, event ) -> Optional[ Decimal ]:
-        """The market value of a real-estate holding about to be sold whole -- the sale price its
-        closing costs scale against -- captured *before* the realize draws it down. None for any other
-        event (a withdrawal, a conversion, a non-real-estate sale) or a valueless holding (no real sale
-        to charge against, mirroring `realize`'s own zero-value guard)."""
-        if not ( isinstance( event, Realization ) and event.amount is None
-                 and event.holding.asset_class.is_real_estate ):
-            return None
-        market = bookkeeper.ledger.market_value( event.holding )
-        return market if market > 0 else None
 
     def _book_property_sale_costs(
             self, bookkeeper : Bookkeeper, result : PeriodResult, event, sale_price : Decimal ) -> None:
@@ -411,29 +401,29 @@ class Period:
         return
 
     def _sell_property_whole(
-            self, bookkeeper : Bookkeeper, result : PeriodResult, holding : Account, on_date : date ) -> None:
-        """Liquidate a whole real-estate holding the funding waterfall has reached: realize its entire
-        value to cash (the gain recognized in its own class, so a residence's §121 exclusion applies),
-        overlay the closing costs, and pay off any mortgage it secures. Indivisible, so the proceeds
-        usually overshoot the shortfall -- the surplus rides the ordinary ceiling sweep. A valueless
-        (already-sold) holding is nothing to liquidate, so a no-op."""
+            self, bookkeeper : Bookkeeper, result : PeriodResult, holding : Account, on_date : date,
+            *, rent_after : bool, description : str = '' ) -> Optional[ Decimal ]:
+        """The whole-property sale -- one routine for every trigger (a scheduled sale event or a funding
+        shortfall). Realize the entire holding to cash (the gain recognized in its own class, so a
+        residence's §121 exclusion applies), overlay the closing costs, and pay off any mortgage it
+        secures. Indivisible, so the proceeds usually overshoot -- the surplus rides the ordinary ceiling
+        sweep. Reports the sale (with `rent_after`) so the Forecast reconfigures the property's forward
+        expenses once, whatever the trigger. `description` is the sale memo (blank lets the realization name
+        itself). Returns the sale price realized, or None when there was nothing to sell (a valueless,
+        already-sold holding) -- so a caller that sold to cover a shortfall can flag it, while a
+        user-scheduled sale simply ignores it."""
         chart = bookkeeper.chart
         cash_account = chart.cash_account()
         sale_price = bookkeeper.ledger.market_value( holding )
         if cash_account is None or sale_price <= 0:
-            return
+            return None
         sale = Realization( on_date, holding, None, cash_account )
-        transaction = sale.apply(
-            bookkeeper, description = f'Sale of {holding.name} to cover a savings shortfall.' )
+        sale.apply( bookkeeper, description = description )
         self._book_property_sale_costs( bookkeeper, result, sale, sale_price )
         self._pay_off_secured_loans( bookkeeper, holding, cash_account, on_date )
-        result.notices.append(
-            Notice(
-                kind             = NoticeKind.PROPERTY_SOLD,
-                severity         = NoticeSeverity.INFO,
-                amount           = quantize_money( sale_price ),
-                transaction_uuid = transaction.transaction_uuid if transaction is not None else None ) )
-        return
+        if holding.handle is not None:
+            result.property_sales.append( ( str( holding.handle ), on_date, rent_after ) )
+        return quantize_money( sale_price )
 
     def _pay_off_secured_loans(
             self, bookkeeper : Bookkeeper, holding : Account, cash_account : Account, on_date : date ) -> None:
@@ -443,7 +433,8 @@ class Period:
         is skipped."""
         chart = bookkeeper.chart
         handle = None if holding.handle is None else str( holding.handle )
-        for loan_handle in self._parameters.funding_policy.secured_loans.get( handle, () ):
+        data = self._parameters.property_data.get( handle )
+        for loan_handle in ( data.mortgage_handles if data is not None else () ):
             loan_account = chart.account( loan_handle )
             if loan_account is None:
                 continue
@@ -740,7 +731,17 @@ class Period:
                 # shortfall. The residence handler exists; the second home, rental, and possessions still
                 # wait for theirs, so those are passed by for now.
                 if source.asset_class is AssetClass.REAL_ESTATE_RESIDENCE:
-                    self._sell_property_whole( bookkeeper, result, source, fund_date )
+                    # An automatic sale to cover the shortfall is worth flagging (a scheduled sale, going
+                    # through the same routine, is the user's own request and raises no notice).
+                    sale_price = self._sell_property_whole(
+                        bookkeeper, result, source, fund_date, rent_after = True,
+                        description = f'Sale of {source.name} to cover a savings shortfall.' )
+                    if sale_price is not None:
+                        result.notices.append(
+                            Notice(
+                                kind     = NoticeKind.PROPERTY_SOLD,
+                                severity = NoticeSeverity.INFO,
+                                amount   = sale_price ) )
                 continue
             available = ledger.market_value( source )
             # Round the draw UP to the money scale so it fully covers the shortfall and cash lands at (or a

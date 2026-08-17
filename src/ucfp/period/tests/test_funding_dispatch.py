@@ -16,7 +16,7 @@ from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, AssetClass, IncomeTaxClass, SystemAccountRole
 from ucfp.jurisdiction.context import TaxContext
 from ucfp.jurisdiction.enums import FilingStatus
-from ucfp.period.parameters import AssetRates, FundingPolicy, PeriodParameters
+from ucfp.period.parameters import AssetRates, FundingPolicy, PeriodParameters, PropertyData
 from ucfp.period.period import Period
 from ucfp.period.results import PeriodResult
 
@@ -45,13 +45,13 @@ class FundingDispatchTests( unittest.TestCase ):
     def _seed_liability( self, bookkeeper, opening, account, balance ):
         bookkeeper.record( date( 2030, 1, 1 ), [ ( account, balance ), ( opening, -balance ) ] )
 
-    def _fund( self, bookkeeper, draw_priority, floor, secured_loans = None ):
+    def _fund( self, bookkeeper, draw_priority, floor, property_data = None ):
         parameters = PeriodParameters(
             date_span      = DateSpan( date( 2030, 1, 1 ), date( 2030, 12, 31 ) ),
             tax_context    = TaxContext( FilingStatus.SINGLE ),
             asset_rates    = AssetRates(),
-            funding_policy = FundingPolicy( cash_floor = floor, draw_priority = draw_priority,
-                                            secured_loans = secured_loans or dict() ) )
+            property_data  = property_data or dict(),
+            funding_policy = FundingPolicy( cash_floor = floor, draw_priority = draw_priority ) )
         Period( parameters )._fund_to_target( bookkeeper, PeriodResult() )
         bookkeeper.assert_balanced()
 
@@ -100,7 +100,8 @@ class FundingDispatchTests( unittest.TestCase ):
             name = 'Mortgage', parent = bookkeeper.chart.root( AccountType.LIABILITY ), handle = 'mortgage' ) )
         self._seed( bookkeeper, opening, home, _D( '400000' ) )
         self._seed_liability( bookkeeper, opening, mortgage, _D( '300000' ) )
-        self._fund( bookkeeper, [ home ], floor = _D( '10000' ), secured_loans = { 'res' : ( 'mortgage', ) } )
+        self._fund( bookkeeper, [ home ], floor = _D( '10000' ),
+                    property_data = { 'res' : PropertyData( mortgage_handles = ( 'mortgage', ) ) } )
         ledger = bookkeeper.ledger
         self.assertEqual( ledger.market_value( home ), _D( '0' ) )
         self.assertEqual( ledger.natural_balance( mortgage ), _D( '0' ) )     # mortgage cleared from the proceeds

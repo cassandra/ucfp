@@ -117,6 +117,31 @@ class LiabilityTerm:
 
 
 @dataclass( frozen = True )
+class PropertyData:
+    """Passive facts about one owned property that a sale of it draws on. Reached by the property's own
+    handle whenever a sale is triggered -- a scheduled sale event or a cash-shortfall drawdown -- and read
+    identically by both engines: it instructs nothing and holds no date, only the data the shared sale
+    routine and the forecast's post-sale reconfiguration consult. Every field is a handle reference, so the
+    whole bundle passes to the period engine's sale method without dragging in higher-layer types.
+
+    `mortgage_handles` are the loan accounts a sale pays off from the proceeds (the property's secured
+    debts) -- read by the sale routine in the period engine.
+
+    The rest name the property's operating-expense accounts so the forecast can reconfigure them once the
+    property is sold: `ownership_cost_handles` are the costs of *owning* (property tax, insurance, upkeep)
+    that end at the sale; `tenure_invariant_handles` are the costs that persist whether owning or renting
+    (utilities) -- carried past a residence sale when the household rents after, ended when it does not;
+    `rent_handle` names the (initially dormant) rent expense the forecast opens if it does (a residence
+    only). A property with no post-sale expense reaction yet -- a second home or rental, until its own
+    handler lands -- carries only its `mortgage_handles` and leaves the rest empty."""
+
+    mortgage_handles         : tuple[ str, ... ] = ()
+    ownership_cost_handles   : tuple[ str, ... ] = ()
+    tenure_invariant_handles : tuple[ str, ... ] = ()
+    rent_handle              : Optional[ str ]   = None
+
+
+@dataclass( frozen = True )
 class FundingPolicy:
     """How the cash hub is kept within its band. Below `cash_floor`, the waterfall draws
     (realizing gains) from `draw_priority` in turn until cash reaches the floor or the sources
@@ -133,7 +158,6 @@ class FundingPolicy:
     draw_priority    : list[ Account ] = field( default_factory = list )
     cash_ceiling     : Optional[ Decimal ] = None
     sweep_allocation : tuple[ tuple[ Account, Decimal ], ... ] = ()   # resolved ( holding Account, weight ) pairs for the sweep
-    secured_loans    : dict[ str, tuple[ str, ... ] ] = field( default_factory = dict )   # property handle -> its mortgage account handles
 
 
 @dataclass( frozen = True )
@@ -160,6 +184,7 @@ class PeriodParameters:
     liability_terms       : list[ LiabilityTerm ]                           = field( default_factory = list )
     contribution_lines    : list[ ContributionLine ]                        = field( default_factory = list )
     events                : list[ PeriodEvent ]                             = field( default_factory = list )
+    property_data         : dict[ str, PropertyData ]                       = field( default_factory = dict )
     tax_engine            : Optional[ TaxEngine ]                           = None
     full_tax_year         : bool                                           = True
     opening_tax_state     : Optional[ TaxState ]                            = None

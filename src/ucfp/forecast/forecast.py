@@ -523,6 +523,17 @@ class BaselineBuilder:
         return
 
 
+def _ended_at( expense, sale_date ):
+    """`expense` (a stream or item) re-windowed to end at `sale_date`, keeping its start -- so the
+    per-period builder stops billing it once the property is sold."""
+    return replace( expense, window = DateWindow( start = expense.window.start, end = sale_date ) )
+
+
+def _opened_at( expense, sale_date ):
+    """A dormant expense (the post-sale rent) re-windowed to begin at `sale_date`."""
+    return replace( expense, window = DateWindow( start = sale_date ) )
+
+
 class Forecast:
     """Runs a `ForecastParameters` to completion (N Period steps); see the module
     docstring for the boundary."""
@@ -581,6 +592,10 @@ class Forecast:
         bookkeeper    = self._baseline.bookkeeper
         result        = ForecastResult( books = bookkeeper.books )
         opening_state = self._parameters.initial_tax_state
+        # A working copy of the smooth/occurrence expenses the per-period builders read: a reported property
+        # sale re-windows it once (see `_apply_property_sales`), so the builders stay sale-agnostic.
+        self._expense_items   = list( self._parameters.expense_items )
+        self._expense_streams = list( self._parameters.expense_streams )
         for span in self._parameters.period_spans():
             if self._parameters.subjects and not self._parameters.active_subjects( span.end_date.year ):
                 result.stopped_early = True
@@ -593,6 +608,7 @@ class Forecast:
             result.steps.append( ForecastStep( span, period_result ) )
             if period_result.closing_tax_state is not None:
                 opening_state = period_result.closing_tax_state
+            self._apply_property_sales( period_result.property_sales )
             if period_result.is_depleted:
                 result.stopped_early = True
                 break
@@ -761,7 +777,7 @@ class Forecast:
         cadence's occurrences in the interval x the per-occurrence amount in effect (inflated
         from the forecast start), posted to the item's account."""
         lines = list()
-        for item in self._parameters.expense_items:
+        for item in self._expense_items:
             clipped = self._clip_to_window( span, item.window )
             if clipped is None:
                 continue
@@ -784,7 +800,7 @@ class Forecast:
         start, and prorate to the interval's share of the year, posting to its account. The
         expense counterpart of `_income_lines_for`."""
         lines = list()
-        for stream in self._parameters.expense_streams:
+        for stream in self._expense_streams:
             if not stream.window.covers( span.start_date ):
                 continue
             windowed_amount = stream.amounts.at( span.start_date )
@@ -796,6 +812,29 @@ class Forecast:
             lines.append( ExpenseLine( account = account, amount = amount ) )
             continue
         return lines
+
+    def _apply_property_sales( self, sales : list ) -> None:
+        """React once to each property sale the period reported, by re-windowing the forward expense working
+        copies: end the property's ownership costs (and its tenure-invariant utilities too when the household
+        does not rent after), and open its dormant rent when it does. The property's expense handles come
+        from its `PropertyData`; a property with none (a second home, a rental) reconfigures nothing. The
+        per-period builders read the re-windowed copies and never learn a sale happened."""
+        for handle, sale_date, rent_after in sales:
+            data = self._parameters.property_data.get( handle )
+            if data is None:
+                continue
+            ended = set( data.ownership_cost_handles )
+            if not rent_after:
+                ended |= set( data.tenure_invariant_handles )
+            self._expense_streams = [ _ended_at( stream, sale_date ) if str( stream.handle ) in ended else stream
+                                      for stream in self._expense_streams ]
+            self._expense_items   = [ _ended_at( item, sale_date ) if str( item.handle ) in ended else item
+                                      for item in self._expense_items ]
+            if rent_after and data.rent_handle is not None:
+                self._expense_items = [ _opened_at( item, sale_date ) if str( item.handle ) == data.rent_handle
+                                        else item for item in self._expense_items ]
+            continue
+        return
 
     def _events_for(
             self, span : DateSpan, year_fraction : Decimal, bookkeeper : Bookkeeper ) -> list[ PeriodEvent ]:
@@ -930,8 +969,7 @@ class Forecast:
             cash_floor       = cash.cash_floor * inflation,
             draw_priority    = self._baseline.draw_priority,
             cash_ceiling     = ceiling,
-            sweep_allocation = self._baseline.sweep_allocation,
-            secured_loans    = cash.secured_loans )
+            sweep_allocation = self._baseline.sweep_allocation )
 
     def _cumulative_factor(
             self, target_year : int,
@@ -967,6 +1005,7 @@ class Forecast:
             liability_terms   = self._liability_terms_for( span, bookkeeper ),
             contribution_lines = self._contribution_lines_for( span, year_fraction, bookkeeper ),
             events            = self._events_for( span, year_fraction, bookkeeper ),
+            property_data     = self._parameters.property_data,
             funding_policy    = self._funding_policy_for( span ),
             tax_engine        = tax_engine,
             full_tax_year     = self._is_full_tax_year( span, tax_engine ),

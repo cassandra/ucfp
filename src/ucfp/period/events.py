@@ -228,3 +228,18 @@ class Realization( PeriodEvent ):
         if self.holding.asset_class in ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ):
             return f'Withdrawal from {self.holding.name}'
         return f'Sale of {self.holding.name}'
+
+
+@dataclass( frozen = True )
+class PropertySale( PeriodEvent ):
+    """A whole-property sale as a thin trigger: the `holding` to sell, the date, and whether the household
+    rents after (the residence choice; a non-residence sale ignores it). Unlike the other events it does
+    not apply itself -- the Period dispatches it to the shared property-sale routine, which reaches the
+    property's `PropertyData` for the mortgage payoff and reports the sale for the forecast's expense
+    reconfiguration. Holding only these three fields (no realize/payoff machinery) keeps a scheduled sale
+    and a shortfall-driven one identical downstream; `apply` is deliberately left to raise, since a sale
+    reaching it unrouted is a wiring error."""
+
+    event_date : date
+    holding    : Account
+    rent_after : bool

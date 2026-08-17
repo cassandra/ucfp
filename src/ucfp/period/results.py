@@ -87,8 +87,14 @@ class PeriodResult:
 
     `closing_tax_state` is the tax engine's updated carryforwards, opaque here (its
     concrete type is the engine's, e.g. the US `TaxState`); None when no engine settled
-    this period -- the Forecast carries the prior opening state forward unchanged then."""
+    this period -- the Forecast carries the prior opening state forward unchanged then.
+
+    `property_sales` are the whole-property sales the period effected this interval, each a
+    `(holding_handle, sale_date, rent_after)` -- the signal the Forecast reacts to once, to reconfigure the
+    property's forward expenses (a residence's own->rent conversion). Whatever triggered the sale (a
+    scheduled event or a shortfall drawdown) reports it the same way."""
 
     notices           : list[ Notice ] = field( default_factory = list )
     is_depleted       : bool = False
     closing_tax_state : Optional[ TaxState ] = None
+    property_sales    : list = field( default_factory = list )

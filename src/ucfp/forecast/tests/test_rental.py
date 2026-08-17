@@ -30,6 +30,7 @@ from ucfp.forecast.parameters import (
     IncomeStream,
     LoanParameters,
     PropertyAttributes,
+    ScheduledPropertySale,
     ScheduledRealization,
     Subject,
     TransactionCosts,
@@ -196,7 +197,9 @@ class PropertySaleClosingCostsTests( unittest.TestCase ):
                         acquisition_date = date( 2010, 1, 1 ), depreciable_basis = Decimal( '0' ),
                         property_type = RealPropertyType.RESIDENTIAL )
                         if asset_class is AssetClass.REAL_ESTATE_RENTAL else None ) ) ],
-            events        = [ ScheduledRealization( sale, 'sold' ) ],   # full sale (no amount)
+            events        = [ ScheduledPropertySale( sale, 'sold', rent_after = False )
+                              if asset_class.is_real_estate                       # a property sale routes to the routine
+                              else ScheduledRealization( sale, 'sold' ) ],        # any other whole sale is a plain realize
             property_sale_costs = costs ) ).run()
 
     def _costs( self ) -> TransactionCosts:

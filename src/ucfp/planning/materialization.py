@@ -32,6 +32,7 @@ from ucfp.forecast.parameters import (
     NetWorthCalculation, ScheduledExternalDisbursement, ScheduledRealization, Subject,
     SubsidizedHealthCoverage, TransactionCosts, WindowedAmount )
 
+from ucfp.period.parameters import PropertyData
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile
 from ucfp.jurisdiction.us.subdivision_tax import state_tax_policy
@@ -90,7 +91,7 @@ def materialize(
     events = event_contributions( profile, plans, subjects_by_handle )
     vehicle_disposition_contributions( profile, plans, events )   # derive each disposition's sale
     expense_streams, expense_items = _property_expenses(
-        profile, plans, assets_by_handle, events.property_sales, events.residence_rents_after_sale )
+        profile, plans, assets_by_handle, events.property_sales )
     flow_streams, flow_items = _income_flows(
         profile, plans, subjects_by_handle, events.property_sales )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
@@ -123,7 +124,8 @@ def materialize(
         recurring_holding_purchases = _vehicle_holding_purchases( plans ),
         recurring_loan_originations = _vehicle_loan_originations( plans ),
         events           = scheduled_events,
-        cash_account     = _cash_account( profile, plans ),
+        property_data    = _property_data( profile, plans ),
+        cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
         subject_removals = events.subject_removals,
         property_sale_costs = _property_sale_costs( assumptions ),
@@ -815,20 +817,28 @@ def _property_contexts( profile : Profile ) -> list:
 _RENT_HANDLE = 'rent'
 
 
-def _sold_residence( profile : Profile, sale_dates : dict ) -> Optional[ tuple ]:
-    """(handle, sale_date) of the primary residence when it is among the sold properties, else None."""
+def _residence_handle( profile : Profile ) -> Optional[ str ]:
+    """The primary residence's handle, or None if the household owns none."""
     for asset in profile.assets:
-        if asset.asset_class is AssetClass.REAL_ESTATE_RESIDENCE and asset.handle in sale_dates:
-            return ( asset.handle, sale_dates[ asset.handle ] )
+        if asset.asset_class is AssetClass.REAL_ESTATE_RESIDENCE:
+            return str( asset.handle )
     return None
 
 
-def _post_sale_rent( plans : Plans, sale_date : date ) -> Optional[ ExpenseItem ]:
-    """The rent the household pays after selling its residence: the stored rent row (its class and cadence)
-    at its amount, over the rental window from the sale date. The rent row is seeded into
-    `plans.property_expenses` at the catalog default whenever the household has a home, so its stored
+def _rent_account_handle( plans : Plans ) -> Optional[ str ]:
+    """The account handle of the post-sale rent, or None when there is no rent row or amount. The rent row
+    is seeded into `plans.property_expenses` at the catalog default whenever the household has a home."""
+    rent = next( ( e for e in plans.property_expenses if e.handle == _RENT_HANDLE ), None )
+    if rent is None or not rent.default_amount:
+        return None
+    return str( property_expense_handle( _RENT_HANDLE, RENTED_HOME_HANDLE ) )
+
+
+def _dormant_rent( plans : Plans ) -> Optional[ ExpenseItem ]:
+    """The post-residence-sale rent as a *dormant* item: the stored rent row's amount, class, and cadence,
+    windowed never to fire until the forecast opens it at the residence sale (however triggered). Its
     `default_amount` is the source -- the user's figure, or the catalog default when untouched. None when
-    there is no rent row or amount (an incomplete plan with no home operating costs -- nothing to charge)."""
+    there is no rent row or amount."""
     rent = next( ( e for e in plans.property_expenses if e.handle == _RENT_HANDLE ), None )
     if rent is None or not rent.default_amount:
         return None
@@ -836,26 +846,41 @@ def _post_sale_rent( plans : Plans, sale_date : date ) -> Optional[ ExpenseItem 
         name              = 'Rented Home Rent',
         handle            = property_expense_handle( _RENT_HANDLE, RENTED_HOME_HANDLE ),
         expense_tax_class = rent.expense_tax_class,
-        amounts           = Schedule( ( WindowedAmount( rent.default_amount, DateWindow( start = sale_date ) ), ) ),
-        cadence           = Recurrence( rent.interval ) )
+        amounts           = Schedule( ( WindowedAmount( rent.default_amount, DateWindow() ), ) ),
+        cadence           = Recurrence( rent.interval ),
+        window            = DateWindow( start = date.max ) )   # dormant until the sale reconfiguration opens it
 
 
-def _property_expenses( profile : Profile, plans : Plans, assets : dict,
-                        sale_dates : dict,
-                        rents_after_residence_sale : bool = False ) -> tuple[ list, list ]:
+def _residence_expense_handles( plans : Plans, residence_handle : str ) -> tuple[ tuple, tuple ]:
+    """(ownership_cost_handles, tenure_invariant_handles) for the residence: the account handles of its
+    materialized property expenses, split by whether each carries into a rental (utilities) or ends with
+    ownership (property tax, upkeep). The handles the forecast ends at a residence sale -- keeping the
+    invariant ones only when the household rents after."""
+    ownership, invariant = list(), list()
+    for expense in plans.property_expenses:
+        if PropertyContext.RESIDENCE not in expense.applies_to:
+            continue
+        if not expense.overrides.get( residence_handle, expense.default_amount ):
+            continue
+        handle = str( property_expense_handle( expense.handle, residence_handle ) )
+        ( invariant if expense.tenure_invariant else ownership ).append( handle )
+    return tuple( ownership ), tuple( invariant )
+
+
+def _property_expenses( profile : Profile, plans : Plans, assets : dict, sale_dates : dict ) -> tuple[ list, list ]:
     """The Plans' property operating expenses as (streams, items): each expense applied to every property
     its `applies_to` reaches, at that property's override or the shared default (skipped when both are
-    blank or zero), with the tax class derived from the property and the amount clipped to the property's
+    blank or zero), with the tax class derived from the property and the amount capped to the property's
     ownership window -- its sale date, when it is sold. Each account is scoped to its property (name
     prefixed with the property) so a rental's cost -- taxed as a rental expense -- stays distinct from
-    the residence's same-named cost (taxed as SALT or non-deductible) rather than merging by name into a
-    single, mis-classed account. A SMOOTH expense enters as an annualized stream; a DISCRETE one as an
+    the residence's same-named cost. A SMOOTH expense enters as an annualized stream; a DISCRETE one as an
     item placed at its cadence.
 
-    When the primary residence is sold and the household rents afterward, its `tenure_invariant` costs
-    (utilities) are *not* clipped -- they carry into the rental -- and a rent stream is added from the sale
-    date; its own-only costs (property tax, upkeep) still clip at the sale."""
-    residence = _sold_residence( profile, sale_dates ) if rents_after_residence_sale else None
+    The primary residence is *not* clipped here: its sale is books-driven, so the forecast ends its costs
+    (and opens the rent) when the sale is reported, however it is triggered. Other sold properties (a second
+    home, a rental) still clip at their fixed sale date. A residence-owning household also gets a dormant
+    rent item -- inactive until that post-sale reconfiguration opens it."""
+    residence_handle = _residence_handle( profile )
     streams, items = list(), list()
     for expense in plans.property_expenses:
         for handle, context, asset in _property_contexts( profile ):
@@ -864,9 +889,7 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
             amount = expense.overrides.get( handle, expense.default_amount )
             if not amount:
                 continue
-            sale_date = sale_dates.get( handle )
-            if residence is not None and handle == residence[ 0 ] and expense.tenure_invariant:
-                sale_date = None                  # invariant: carries into the rental, so not clipped
+            sale_date = None if handle == residence_handle else sale_dates.get( handle )
             tax_class      = _property_expense_tax_class( expense, asset )
             amounts        = _property_schedule( amount, sale_date )
             name           = _property_expense_name( asset, expense )
@@ -879,8 +902,8 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict,
                 items.append( ExpenseItem(
                     name = name, handle = account_handle, expense_tax_class = tax_class,
                     amounts = amounts, cadence = Recurrence( expense.interval ) ) )
-    if residence is not None:
-        rent = _post_sale_rent( plans, residence[ 1 ] )
+    if residence_handle is not None:
+        rent = _dormant_rent( plans )
         if rent is not None:
             items.append( rent )
     return streams, items
@@ -1004,7 +1027,7 @@ def _age_window( start_age, end_age, birthdate : Optional[ date ] ) -> DateWindo
     return DateWindow( start = start, end = end )
 
 
-def _cash_account( profile : Profile, plans : Plans ) -> CashAccountParameters:
+def _cash_account( plans : Plans ) -> CashAccountParameters:
     drawdown = plans.drawdown or default_drawdown()   # the sensible band applies even for an unedited plan
     sweep = AssetAllocation( tuple( drawdown.sweep_allocation ) ) if drawdown.sweep_allocation else None
     # Only the enabled sources reach the engine; a retained one is dropped here, so the engine iterates a
@@ -1013,26 +1036,37 @@ def _cash_account( profile : Profile, plans : Plans ) -> CashAccountParameters:
     draw_order = [ source for source in drawdown.draw_order if source not in retained ]
     return CashAccountParameters(
         cash_floor = drawdown.cash_floor, cash_ceiling = drawdown.cash_ceiling,
-        draw_order = draw_order, sweep_allocation = sweep,
-        secured_loans = _secured_loan_handles( profile, plans ) )
+        draw_order = draw_order, sweep_allocation = sweep )
 
 
-def _secured_loan_handles( profile : Profile, plans : Plans ) -> dict:
-    """Each real-estate holding's handle -> the account handles of the mortgages secured against it, so an
-    auto-sale of the property can pay those loans off. Keyed and valued by handle (a real-estate mortgage
-    materializes under its Debt's own handle, per `_loan`), resolved to accounts in the engine at sale
-    time. Matches `_loans`' predicate -- an amortizing, non-vehicle debt with a repayment plan -- so it
-    names only loans that actually reach the books."""
+def _property_data( profile : Profile, plans : Plans ) -> dict:
+    """One `PropertyData` per owned real-estate property, keyed by the property's handle -- the passive
+    bundle a sale (scheduled or shortfall-driven) reaches. Carries the mortgage account handles the sale
+    pays off: an amortizing, non-vehicle debt with a repayment plan (matching `_loans`), materialized under
+    its Debt's own handle (per `_loan`), so it names only loans that actually reach the books. The post-sale
+    expense fields are populated for the residence in a later step; every property gets an entry so the sale
+    routine always finds one, even a property with no mortgage."""
     repayments  = { repayment.debt_handle for repayment in plans.loan_repayments }
-    real_estate = { asset.handle for asset in profile.assets if asset.asset_class.is_real_estate }
-    secured : dict = dict()
+    real_estate = [ asset.handle for asset in profile.assets if asset.asset_class.is_real_estate ]
+    mortgages : dict = dict()
     for debt in profile.debts:
         if debt.kind is DebtKind.AUTO or not debt.kind.is_amortizing:
             continue
         if debt.secured_asset not in real_estate or debt.handle not in repayments:
             continue
-        secured.setdefault( str( debt.secured_asset ), list() ).append( str( debt.handle ) )
-    return { handle : tuple( loans ) for handle, loans in secured.items() }
+        mortgages.setdefault( str( debt.secured_asset ), list() ).append( str( debt.handle ) )
+    residence_handle = _residence_handle( profile )
+    data : dict = dict()
+    for handle in real_estate:
+        mortgage_handles = tuple( mortgages.get( str( handle ), () ) )
+        if str( handle ) == residence_handle:
+            ownership, invariant = _residence_expense_handles( plans, residence_handle )
+            data[ str( handle ) ] = PropertyData(
+                mortgage_handles = mortgage_handles, ownership_cost_handles = ownership,
+                tenure_invariant_handles = invariant, rent_handle = _rent_account_handle( plans ) )
+        else:
+            data[ str( handle ) ] = PropertyData( mortgage_handles = mortgage_handles )
+    return data
 
 
 def _health_coverage( plans : Plans ) -> Optional[ SubsidizedHealthCoverage ]:

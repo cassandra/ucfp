@@ -25,7 +25,8 @@ from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
-    ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, SubjectRemoval, WindowedAmount )
+    ScheduledLoanPayoff, ScheduledPropertySale, ScheduledRealization, ScheduledTransfer, SubjectRemoval,
+    WindowedAmount )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.profile.enums import DebtKind
@@ -106,13 +107,6 @@ def _possessions( profile ) -> list:
              if asset.asset_class in _POSSESSION_CLASSES ]
 
 
-def _is_primary_residence( profile, handle : str ) -> bool:
-    """Whether `handle` is the household's owned primary residence -- the only sale that changes where
-    they live (a second home or rental does not), so the only one that offers the rent-after choice."""
-    asset = next( ( a for a in profile.assets if a.handle == handle ), None )
-    return asset is not None and asset.asset_class is AssetClass.REAL_ESTATE_RESIDENCE
-
-
 def _rents_after_sale( event : PlanEvent ) -> bool:
     """Whether a residence sale converts the household to renting afterward -- the 'rent_after' option,
     defaulting to yes (you need somewhere to live). No means no housing footprint after the sale (housing
@@ -177,10 +171,6 @@ class EventContributions:
         self.subject_removals = list()
         self.property_sales   = dict()   # property handle -> sale date, for clipping its operating costs
         self.possession_sales = dict()   # possession handle -> sale date, for clipping its running costs
-        # Set when the primary residence is sold and the household rents afterward (the sale's 'rent_after'
-        # option): materialization then carries the residence's invariant costs (utilities) past the sale
-        # and adds rent from that date, rather than clipping all housing to zero.
-        self.residence_rents_after_sale = False
 
 
 # --- The handler base + the kinds -----------------------------------------
@@ -329,19 +319,17 @@ class SellPropertyEvent( EventType ):
         # mortgage secured by it from the proceeds (the engine clears the projected balance).
         property_handle = event.selections[ PROPERTY_ROLE ]
         into.property_sales[ property_handle ] = event.date
-        into.scheduled_events.append( ScheduledRealization(
-            event_date = event.date, holding = property_handle ) )
-        for loan_handle in _secured_loans( profile, property_handle ):
-            into.scheduled_events.append( ScheduledLoanPayoff(
-                event_date = event.date, loan = loan_handle ) )
-        # Selling the primary residence and renting after converts the household to a tenant from the sale
-        # date -- materialization carries its utilities forward and adds rent. A non-residence sale (second
-        # home, rental), or renting-after declined, does not change where they live.
-        if _is_primary_residence( profile, property_handle ) and _rents_after_sale( event ):
-            into.residence_rents_after_sale = True
-        # A sale needs no income cascade: rental rent is clipped to the sale date at materialize
-        # (`_clipped_to_sale`, from this event's `property_sales`), as are the property's operating
-        # expenses. Only the mortgage payoff above is contributed here.
+        # A thin sale trigger: the handle, the date, and the rent-after choice. The engine reaches the
+        # property's `PropertyData` for the realize/costs/mortgage-payoff -- the same routine a shortfall
+        # drawdown calls -- so no realize or payoff machinery is composed here.
+        # The rent-after choice rides the trigger (the residence choice; moot for a non-residence sale) to
+        # the engine, which reports the sale so the forecast reconfigures the residence's forward expenses --
+        # ending its own costs, carrying its utilities, and opening rent -- however the sale is triggered.
+        into.scheduled_events.append( ScheduledPropertySale(
+            event_date = event.date, holding = property_handle, rent_after = _rents_after_sale( event ) ) )
+        # A sale needs no income cascade: a rental's rent is clipped to the sale date at materialize
+        # (`_clipped_to_sale`, from this event's `property_sales`), as are a non-residence property's
+        # operating expenses. The residence's are books-driven, reconfigured by the forecast.
 
 
 def _contribute_possession_sale( profile, possession_handle : str, sale_date, into : EventContributions ):
