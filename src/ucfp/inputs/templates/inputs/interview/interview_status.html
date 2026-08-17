@@ -6,10 +6,11 @@ grey->red as the walk finishes, red->green once the gap is filled).
 
 It stays a neutral grey "incomplete" while the profile is still being walked, escalating to danger only
 once every section has been visited but a hard requirement is still unmet (`profile_blockers` non-empty),
-so an in-progress profile is never flagged as an error. Empty for flows that carry no status today
-(Plans/Assumptions) -- the seam to surface their own attention state here later. The outer id div is the
-element antinode replaces, so it must always render. Reads `flow`, `profile_complete`, `profile_blockers`,
-`profile_updated`.
+so an in-progress profile is never flagged as an error. The Plans and Assumptions flows surface the same
+complete/blocked state (a debt with no repayment plan; the external factors still unset). The outer id div
+is the element antinode replaces, so it must always render. Reads `flow`, `profile_complete`,
+`profile_blockers`, `profile_advisories`, `profile_updated`, `plans_complete`, `plans_blockers`,
+`assumptions_complete`, `assumptions_blockers`.
 {% endcomment %}
 {% load icons %}
 <div id="interview-status">
@@ -34,5 +35,33 @@ element antinode replaces, so it must always render. Reads `flow`, `profile_comp
   {% for note in profile_advisories %}
   <div class="alert alert-info py-2 px-3 small mb-2" role="status">{% icon 'info-circle' size='sm' css_class='mr-1' %}{{ note }}</div>
   {% endfor %}
+  {% elif flow == 'plans' %}
+  <p class="mb-2">
+    {% if plans_complete %}<span class="badge badge-success">Plan complete</span>
+    {% elif plans_blockers %}<span class="badge badge-danger">Plan incomplete</span>
+    {% else %}<span class="badge badge-secondary">Plan incomplete</span>{% endif %}
+  </p>
+  {% if plans_blockers %}
+  <div class="alert alert-danger py-2 px-3 small mb-4" role="alert">
+    {% icon 'exclamation-circle' size='sm' css_class='mr-1' aria_label='Incomplete' %}<strong>This plan isn't complete yet.</strong>
+    <ul class="mb-0 mt-1">
+      {% for blocker in plans_blockers %}<li>{{ blocker }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% elif flow == 'assumptions' %}
+  <p class="mb-2">
+    {% if assumptions_complete %}<span class="badge badge-success">Assumptions complete</span>
+    {% elif assumptions_blockers %}<span class="badge badge-danger">Assumptions incomplete</span>
+    {% else %}<span class="badge badge-secondary">Assumptions incomplete</span>{% endif %}
+  </p>
+  {% if assumptions_blockers %}
+  <div class="alert alert-danger py-2 px-3 small mb-4" role="alert">
+    {% icon 'exclamation-circle' size='sm' css_class='mr-1' aria_label='Incomplete' %}<strong>These assumptions aren't complete yet.</strong>
+    <ul class="mb-0 mt-1">
+      {% for blocker in assumptions_blockers %}<li>{{ blocker }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   {% endif %}
 </div>

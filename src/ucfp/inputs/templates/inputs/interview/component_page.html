@@ -24,4 +24,9 @@ is the shared stepping layout.
 {% endif %}
 {% endblock %}
 
+{% comment %}The status region (badge + completion blockers) sits below the name, mirroring the Profile
+interview's subtitle. It is its own partial so InterviewView._swap can refresh it live on each section
+advance -- without it here, the swap's replace target would be absent on a full page load.{% endcomment %}
+{% block page_meta %}{% include "inputs/interview/interview_status.html" %}{% endblock %}
+
 {% block page_body %}{% include "inputs/interview/body.html" %}{% endblock %}

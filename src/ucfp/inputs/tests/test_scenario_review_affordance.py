@@ -7,26 +7,39 @@ scenario, labelled by state ("Finish setup" / "Review scenario"), and frames eac
 whose Plans and Assumptions are nested parts (each with a quiet Edit), with the component library demoted
 behind a "Manage components" toggle.
 """
+from dataclasses import replace
 from datetime import date
+from decimal import Decimal
 
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from organization.models import Organization
 
+from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.inputs.assumptions.repository import save_assumptions
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.interview import applicable_sections, first_section_of_flow, flow_of
+from ucfp.jurisdiction.enums import StatuteForecastType
+from ucfp.jurisdiction.law import TaxProjection
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
-from ucfp.inputs.profile.enums import HousingTenure
+from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.repository import latest_profile, save_profile
-from ucfp.inputs.profile.schemas import Profile, SubjectProfile
+from ucfp.inputs.profile.schemas import Debt, Profile, SubjectProfile
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.inputs.views import ScenarioEditView, ScenariosHomeView
 from ucfp.jurisdiction.enums import FilingStatus
 from ucfp.session_state import SessionState
+
+
+def _complete_assumptions() -> Assumptions:
+    """A valid Assumptions (economic outlook + tax projection present) so an acknowledged one is complete --
+    the external factors are a completeness requirement now. Built directly, no parameter-set seed needed."""
+    return Assumptions(
+        economics = EconomicParameters(),
+        tax_projection = TaxProjection( forecast_type = StatuteForecastType.CURRENT_LAW ) )
 
 
 def _acknowledge_flow( record, profile, flow ):
@@ -57,7 +70,7 @@ class _ScenariosHomeTestBase( TestCase ):
         plans       = PlansRecord( organization = self.organization, label = f'{label} Plans' )
         assumptions = AssumptionsRecord( organization = self.organization, label = f'{label} Assumptions' )
         save_plans( plans, Plans() )
-        save_assumptions( assumptions, Assumptions() )
+        save_assumptions( assumptions, _complete_assumptions() )
         if complete:
             _acknowledge_flow( plans, self.profile, 'plans' )
             _acknowledge_flow( assumptions, self.profile, 'assumptions' )
@@ -108,6 +121,29 @@ class ScenarioReviewAffordanceTests( _ScenariosHomeTestBase ):
         self.assertNotIn( 'Review scenario', content )
         self.assertIn( 'Finish setup', content )
 
+    def test_a_finished_but_blocked_scenario_reads_incomplete_with_its_reason( self ):
+        # A debt in the profile, a scenario whose Plans is fully walked but sets no repayment -- finished
+        # but blocked (State 1), which must read as danger with the reason, not the neutral "Finish setup".
+        profile = replace( self.profile, debts = [ Debt(
+            handle = 'loan', name = 'Mortgage', kind = DebtKind.MORTGAGE, balance = Decimal( '100000' ) ) ] )
+        save_profile( self.organization, profile )
+        _acknowledge_flow( latest_profile( self.organization ), profile, 'profile' )
+        plans       = PlansRecord( organization = self.organization, label = 'Blocked Plans' )
+        assumptions = AssumptionsRecord( organization = self.organization, label = 'Blocked Assumptions' )
+        save_plans( plans, Plans() )                       # every plans step walked, but no repayment
+        save_assumptions( assumptions, _complete_assumptions() )
+        _acknowledge_flow( plans, profile, 'plans' )
+        _acknowledge_flow( assumptions, profile, 'assumptions' )
+        create_scenario( self.organization, plans, assumptions, label = 'Blocked' )
+
+        content = self._home_content()
+
+        self.assertIn( 'badge-danger', content )                          # State 1, not the grey in-progress
+        self.assertIn( "This scenario can't run yet", content )
+        self.assertIn( 'Set a repayment plan for the Mortgage.', content )
+        # Both unfinished states share the action; the danger badge + alert (asserted above) are the tell.
+        self.assertIn( 'Finish setup', content )
+
 
 class ScenarioHeroLayoutTests( _ScenariosHomeTestBase ):
 
@@ -155,7 +191,7 @@ class ScenarioMultiplicityTests( _ScenariosHomeTestBase ):
     def _component( self, model, label ):
         record = model( organization = self.organization, label = label )
         ( save_plans if model is PlansRecord else save_assumptions )(
-            record, Plans() if model is PlansRecord else Assumptions() )
+            record, Plans() if model is PlansRecord else _complete_assumptions() )
         return record
 
     def test_a_component_backing_several_scenarios_shows_a_shared_indicator( self ):

@@ -47,7 +47,8 @@ from .interview import (
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .state import (
-    completed_assumptions, completed_plans, completed_profile, profile_advisories,
+    assumptions_completion_blockers, assumptions_is_complete, completed_assumptions, completed_plans,
+    completed_profile, plans_completion_blockers, plans_is_complete, profile_advisories,
     profile_completion_blockers, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_disposition import (
@@ -117,15 +118,20 @@ class ScenariosHomeView( View ):
 
     @staticmethod
     def _scenario_rows( scenarios, profile, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
-        """Each saved scenario as a row -- `complete` (both components' flows walked, so an in-progress one
-        can offer to resume setup), its `drift` notice against the current `profile` (None when it fully
-        resolves, else the stale references + reconcile shown on the card), and how many scenarios share
-        each of its components (`plans_uses` / `assumptions_uses`) for the "shared" indicator. `scenarios`
-        and the usage counters are prepared once by the caller so the page makes a single scenarios query."""
+        """Each saved scenario as a row -- `complete` (both components complete), `blockers` (the per-input
+        requirements a *finished* scenario still lacks; non-empty only when finished-but-blocked, so the card
+        tells that apart from a still-unfinished one and can name the reasons), its `drift` notice against the
+        current `profile` (None when it fully resolves, else the stale references + reconcile shown on the
+        card), and how many scenarios share each of its components (`plans_uses` / `assumptions_uses`) for the
+        "shared" indicator. `scenarios` and the usage counters are prepared once by the caller so the page
+        makes a single scenarios query."""
         rows = list()
         for scenario in scenarios:
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
-            rows.append( { 'scenario': scenario, 'complete': complete,
+            blockers = ( plans_completion_blockers( profile, scenario.plans )
+                         + assumptions_completion_blockers( profile, scenario.assumptions )
+                         if profile is not None else list() )
+            rows.append( { 'scenario': scenario, 'complete': complete, 'blockers': blockers,
                            'drift': plans_drift( profile, scenario.plans ) if profile is not None else None,
                            'plans_uses': plans_uses[ scenario.plans_id ],
                            'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
@@ -798,6 +804,8 @@ class InterviewView( View ):
             # The Plans-flow drift banner: these plans reference removed Profile entities (None off Plans).
             'drift'                : self._plans_drift( request, flow ),
             **self._profile_status( request, flow ),
+            **self._plans_status( request, flow ),
+            **self._assumptions_status( request, flow ),
         }
 
     @staticmethod
@@ -838,6 +846,38 @@ class InterviewView( View ):
             # Quiet, non-blocking notes for a complete profile (e.g. no funded account) -- an FYI, not an
             # error; only surfaced once complete, so never alongside a blocker.
             'profile_advisories': profile_advisories( record ) if record is not None else [],
+        }
+
+    @staticmethod
+    def _plans_status( request, flow ) -> dict:
+        """The Plans flow's header status -- whether the current plan is complete and, once walked, the hard
+        requirements it still lacks (an amortizing debt with no repayment plan). Empty for the other flows."""
+        if flow != 'plans':
+            return dict()
+        profile_record = latest_profile( request.organization )
+        record         = current_plans_record( request )
+        if profile_record is None or record is None:
+            return { 'plans_complete': False, 'plans_blockers': [] }
+        profile = load_profile( profile_record )
+        return {
+            'plans_complete': plans_is_complete( profile, record ),
+            'plans_blockers': plans_completion_blockers( profile, record ),
+        }
+
+    @staticmethod
+    def _assumptions_status( request, flow ) -> dict:
+        """The Assumptions flow's header status -- whether the current set is complete and, once walked, the
+        hard requirements it still lacks (the external factors). Empty for the other flows."""
+        if flow != 'assumptions':
+            return dict()
+        profile_record = latest_profile( request.organization )
+        record         = current_assumptions_record( request )
+        if profile_record is None or record is None:
+            return { 'assumptions_complete': False, 'assumptions_blockers': [] }
+        profile = load_profile( profile_record )
+        return {
+            'assumptions_complete': assumptions_is_complete( profile, record ),
+            'assumptions_blockers': assumptions_completion_blockers( profile, record ),
         }
 
     @staticmethod
