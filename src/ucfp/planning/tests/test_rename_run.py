@@ -32,7 +32,7 @@ class RenameRunTests( TestCase ):
         scenario      = load_scenario( create_scenario( self.org, plans, assumptions, 'S' ) )
         self.run      = run_and_capture(
             organization = self.org, profile = profile, plans = scenario.plans,
-            assumptions = scenario.assumptions, frame = forecast_frame(), label = 'Default Scenario' )
+            assumptions = scenario.assumptions, frame = forecast_frame(), label = 'My Scenario' )
         self.factory  = RequestFactory()
 
     def _rename( self, run_uuid, label, organization = None ):
@@ -41,22 +41,22 @@ class RenameRunTests( TestCase ):
         return RenameRunView().post( request, run_uuid = run_uuid )
 
     def test_capture_records_the_scenario_as_the_source_label( self ):
-        self.assertEqual( self.run.source_label, 'Default Scenario' )   # defaults to the run's label
+        self.assertEqual( self.run.source_label, 'My Scenario' )   # defaults to the run's label
 
     def test_rename_updates_the_label_but_keeps_the_source_scenario( self ):
         self._rename( self.run.uuid, 'Baseline 30yr' )
         self.run.refresh_from_db()
         self.assertEqual( self.run.label, 'Baseline 30yr' )
-        self.assertEqual( self.run.source_label, 'Default Scenario' )   # provenance survives the rename
+        self.assertEqual( self.run.source_label, 'My Scenario' )   # provenance survives the rename
 
     def test_a_blank_name_is_ignored( self ):
         self._rename( self.run.uuid, '   ' )
         self.run.refresh_from_db()
-        self.assertEqual( self.run.label, 'Default Scenario' )   # unchanged
+        self.assertEqual( self.run.label, 'My Scenario' )   # unchanged
 
     def test_another_orgs_run_is_not_renamable( self ):
         other = Organization.objects.create( name = 'Other' )
         with self.assertRaises( Http404 ):
             self._rename( self.run.uuid, 'Sneaky', organization = other )
         self.run.refresh_from_db()
-        self.assertEqual( self.run.label, 'Default Scenario' )
+        self.assertEqual( self.run.label, 'My Scenario' )

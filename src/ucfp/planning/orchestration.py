@@ -47,7 +47,7 @@ def run_and_capture(
 
 def run_title( source_label: str, run_at: datetime ) -> str:
     """A captured run's default title: the scenario it came from and when it ran, so it reads as a run
-    rather than as its scenario (a run named just "Default Scenario" is indistinguishable from the
+    rather than as its scenario (a run named just "My Scenario" is indistinguishable from the
     scenario). `source_label` stays the bare scenario name -- kept separately as provenance -- and
     `run_at` is the run's local timestamp, formatted to match how the run list shows it."""
     return f'{source_label} - Run at {format_datetime( run_at, "M j, Y, g:i a" )}'
