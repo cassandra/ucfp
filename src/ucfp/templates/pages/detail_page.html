@@ -5,7 +5,9 @@ Plans/Assumptions component, a new scenario). A breadcrumb back-trail to the par
 the heading, an optional editable Name for the object beneath it, an optional muted meta line, and the
 body. Top-level destinations use `pages/top_page.html` instead. Fill these blocks:
   breadcrumb       -- the parent trail, as <li class="breadcrumb-item"> items (required)
-  page_type        -- the kind of page, e.g. "Forecast Run" or "Plans" (required; the h1)
+  page_type        -- the kind of page, e.g. "Forecast Run" or "Plans" (the default h1 heading)
+  page_heading     -- the whole heading element; defaults to an <h1> of page_type. Override to make the
+                      heading something other than a static type line -- e.g. an editable name (optional)
   page_actions     -- top-right header actions (optional)
   page_name        -- the object's editable name, via pages/editable_name.html (optional)
   page_meta        -- a muted metadata line, as styled markup (optional)
@@ -20,10 +22,10 @@ name is the editable field, so repeating either in the breadcrumb would be redun
 {% block app_content %}
 <div class="{% block header_container %}{% endblock %}">
   <nav aria-label="breadcrumb">
-    <ol class="breadcrumb bg-white border">{% block breadcrumb %}{% endblock %}</ol>
+    <ol class="breadcrumb">{% block breadcrumb %}{% endblock %}</ol>
   </nav>
   <div class="d-flex align-items-start justify-content-between">
-    <h1 class="mb-1">{% block page_type %}{% endblock %}</h1>
+    {% block page_heading %}<h1 class="mb-1">{% block page_type %}{% endblock %}</h1>{% endblock %}
     {% block page_actions %}{% endblock %}
   </div>
   {% block page_name %}{% endblock %}

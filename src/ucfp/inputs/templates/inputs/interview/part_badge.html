@@ -1,0 +1,8 @@
+{% comment %}
+A flow/part completion chip: green once complete, danger once walked-but-blocked (a hard requirement is
+still unmet), grey while still in progress. Reads `status` ('complete' | 'blocked' | 'in_progress'). The
+single completion badge for every interview -- the rail header renders one per part.
+{% endcomment %}
+{% if status == 'complete' %}<span class="badge badge-soft-success">Complete</span>
+{% elif status == 'blocked' %}<span class="badge badge-soft-danger">Incomplete</span>
+{% else %}<span class="badge badge-soft-secondary">In progress</span>{% endif %}

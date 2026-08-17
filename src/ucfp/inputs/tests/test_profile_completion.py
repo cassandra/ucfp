@@ -267,62 +267,63 @@ class AssumptionsCompletionBlockersTest( TestCase ):
         self.assertTrue( assumptions_is_complete( self.profile, record ) )
 
 
-class InterviewStatusRegionTest( SimpleTestCase ):
-    """The `interview_status.html` region -- the badge and blockers antinode re-renders on each section
-    advance. It always carries the id (the replace target), escalates from grey to danger only in the
-    walked-but-blocked state, and is empty for a flow that carries no status."""
+class PartBadgeTest( SimpleTestCase ):
+    """The rail-header completion chip (part_badge.html): green when complete, danger once walked-but-blocked,
+    neutral grey while still in progress -- driven by the `status` the view computes per part."""
+
+    def _render( self, status ):
+        return render_to_string( 'inputs/interview/part_badge.html', { 'status': status } )
+
+    def test_complete_is_success( self ):
+        self.assertIn( 'badge-soft-success', self._render( 'complete' ) )
+
+    def test_blocked_is_danger( self ):
+        self.assertIn( 'badge-soft-danger', self._render( 'blocked' ) )
+
+    def test_in_progress_is_neutral_grey( self ):
+        # Not an error yet, just unfinished -- the quiet neutral chip.
+        self.assertIn( 'badge-soft-secondary', self._render( 'in_progress' ) )
+
+
+class InterviewStatusDetailTest( SimpleTestCase ):
+    """The status detail partial (interview_status_detail.html) -- the blocker/advisory notices below the
+    heading that antinode re-renders on each section advance. It always carries its id (the replace target),
+    shows a danger banner only in the walked-but-blocked state, and is empty for a flow that carries none."""
 
     def _render( self, context ):
-        return render_to_string( 'inputs/interview/interview_status.html', context )
+        return render_to_string( 'inputs/interview/interview_status_detail.html', context )
 
-    def test_walked_and_blocked_shows_danger_and_the_reason( self ):
-        html = self._render( { 'flow': 'profile', 'profile_complete': False,
-                               'profile_blockers': [ 'Add at least one person.' ] } )
-        self.assertIn( 'id="interview-status"', html )
-        self.assertIn( 'badge-danger', html )
+    def test_a_walked_profile_blocker_shows_danger_and_the_reason( self ):
+        html = self._render( { 'flow': 'profile', 'profile_blockers': [ 'Add at least one person.' ] } )
+        self.assertIn( 'id="interview-status-detail"', html )
+        self.assertIn( 'alert-danger', html )
         self.assertIn( 'Add at least one person.', html )
 
-    def test_complete_shows_success( self ):
-        html = self._render( { 'flow': 'profile', 'profile_complete': True, 'profile_blockers': [] } )
-        self.assertIn( 'badge-success', html )
-        self.assertNotIn( 'badge-danger', html )
+    def test_no_blocker_is_an_empty_region( self ):
+        html = self._render( { 'flow': 'profile', 'profile_blockers': [] } )
+        self.assertIn( 'id="interview-status-detail"', html )  # present as a no-op replace target...
+        self.assertNotIn( 'alert', html )                      # ...but shows no banner
 
-    def test_walk_in_progress_stays_neutral_grey( self ):
-        html = self._render( { 'flow': 'profile', 'profile_complete': False, 'profile_blockers': [] } )
-        self.assertIn( 'badge-secondary', html )               # neutral while walking -- not an error yet
-
-    def test_the_assumptions_flow_shows_its_complete_state( self ):
-        html = self._render( { 'flow': 'assumptions', 'assumptions_complete': True,
-                               'assumptions_blockers': [] } )
-        self.assertIn( 'id="interview-status"', html )
-        self.assertIn( 'badge-success', html )
-        self.assertNotIn( 'badge-danger', html )
-
-    def test_the_assumptions_flow_shows_a_walked_but_blocked_set( self ):
-        html = self._render( { 'flow': 'assumptions', 'assumptions_complete': False,
-                               'assumptions_blockers': [ 'Set the external factors (economic outlook and tax projection).' ] } )
-        self.assertIn( 'badge-danger', html )
-        self.assertIn( 'Set the external factors (economic outlook and tax projection).', html )
-
-    def test_an_unrecognized_flow_is_an_empty_region( self ):
-        html = self._render( { 'flow': 'nonesuch' } )
-        self.assertIn( 'id="interview-status"', html )         # present as a no-op replace target...
-        self.assertNotIn( 'badge', html )                      # ...but carries no status
-
-    def test_the_plans_flow_shows_its_complete_state( self ):
-        html = self._render( { 'flow': 'plans', 'plans_complete': True, 'plans_blockers': [] } )
-        self.assertIn( 'badge-success', html )
-        self.assertNotIn( 'badge-danger', html )
-
-    def test_the_plans_flow_shows_a_walked_but_blocked_debt( self ):
-        html = self._render( { 'flow': 'plans', 'plans_complete': False,
+    def test_a_walked_plans_blocker_shows_the_reason( self ):
+        html = self._render( { 'flow': 'plans',
                                'plans_blockers': [ 'Set a repayment plan for the Mortgage.' ] } )
-        self.assertIn( 'badge-danger', html )
+        self.assertIn( 'alert-danger', html )
         self.assertIn( 'Set a repayment plan for the Mortgage.', html )
 
+    def test_a_walked_assumptions_blocker_shows_the_reason( self ):
+        html = self._render( { 'flow': 'assumptions',
+                               'assumptions_blockers': [ 'Set the external factors (economic outlook and tax projection).' ] } )
+        self.assertIn( 'alert-danger', html )
+        self.assertIn( 'Set the external factors (economic outlook and tax projection).', html )
+
     def test_an_advisory_renders_as_an_info_alert( self ):
-        html = self._render( { 'flow': 'profile', 'profile_complete': True, 'profile_blockers': [],
+        html = self._render( { 'flow': 'profile', 'profile_blockers': [],
                                'profile_advisories': [ 'No account balances entered yet.' ] } )
         self.assertIn( 'No account balances entered yet.', html )
         self.assertIn( 'alert-info', html )                    # a noticeable info FYI...
         self.assertNotIn( 'alert-danger', html )               # ...distinct from the error blocker
+
+    def test_an_unrecognized_flow_is_an_empty_region( self ):
+        html = self._render( { 'flow': 'nonesuch' } )
+        self.assertIn( 'id="interview-status-detail"', html )
+        self.assertNotIn( 'alert', html )

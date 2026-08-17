@@ -1,9 +1,12 @@
 {% comment %}
-The interview's stepping body -- the left-hand section stepper and the current section -- shared by the
-Profile and component (Plans/Assumptions) interview pages, which differ only in their header.
+The interview's stepping body -- the left rail (its header plus the section stepper) and the current
+section -- shared by the Profile and component (Plans/Assumptions) interview pages, which differ only in
+their page header. The rail header carries the flow's title(s) and completion badge, and in a scenario
+build the Plans/Assumptions part switch.
 {% endcomment %}
-<div class="d-md-flex">
+<div class="d-md-flex mt-3">
   <div class="interview-stepper mb-4 mr-md-4">
+    {% include "inputs/interview/rail_header.html" %}
     {% include "inputs/interview/stepper.html" %}
   </div>
   <div class="flex-fill">
