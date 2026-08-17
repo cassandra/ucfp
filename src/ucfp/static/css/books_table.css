@@ -102,9 +102,16 @@
     z-index: 1032;
 }
 
-/* The leading Period column: sticky on the left as well, so the dates stay in view when a
-   wide table scrolls sideways. The header cell is the top-left corner -- sticky on both axes
-   and above the other sticky headers (hence the raised z-index and matching specificity). */
+/* The leading Period column (and, on yearly runs, the Age column beside it): sticky on the left as
+   well, so the dates and ages stay in view when a wide table scrolls sideways. The header cells are
+   the top-left corner -- sticky on both axes and above the other sticky headers (hence the raised
+   z-index and matching specificity). Period is fixed to `--bt-period-width` so the Age column can
+   stick immediately to its right at exactly that offset; the two never drift because both read the
+   one variable. Age carries the right border that closes the sticky pair off from the scrolling
+   figures (Period, when it stands alone without Age, carries it instead -- see below). */
+.bt-scroll {
+    --bt-period-width: 6rem;
+}
 .bt-scroll thead th.bt-period-head {
     position: sticky;
     left: 0;
@@ -116,6 +123,42 @@
     left: 0;
     z-index: 1;
     background-color: var( --white );
+}
+.bt-period-head,
+.bt-period-cell {
+    width: var( --bt-period-width );
+    min-width: var( --bt-period-width );
+}
+.bt-scroll thead th.bt-age-head {
+    position: sticky;
+    left: var( --bt-period-width );
+    z-index: 3;
+    background-color: var( --white );
+}
+.bt-age-cell {
+    position: sticky;
+    left: var( --bt-period-width );
+    z-index: 1;
+    background-color: var( --white );
+}
+/* A right divider on each sticky column: between Period and Age it reads as two distinct columns, and
+   on the last sticky one it closes the pair off from the scrolling figures (so Period alone, on a
+   sub-annual run with no Age column, still gets the closing edge). Drawn as an inset box-shadow rather
+   than `border-right`: this is a border-collapse table, where a collapsed cell border is painted by
+   the table layer (not the sticky cell), so it fails to stick and both dividers vanish on horizontal
+   scroll. An inset shadow is painted by the sticky cell itself, so it travels with it and the
+   scrolling figures cannot cover it. */
+.bt-period-head,
+.bt-period-cell,
+.bt-age-head,
+.bt-age-cell {
+    box-shadow: inset -1px 0 0 0 var( --line-color );
+}
+/* Extra breathing room on the trailing edge of the Age column so the scrolling figures do not butt up
+   against it as they slide beneath the sticky pair. */
+.bt-age-head,
+.bt-age-cell {
+    padding-right: 1rem !important;
 }
 
 

@@ -21,6 +21,7 @@ from ucfp.accounts.books_table import (
     build_books_table,
 )
 
+from .materialization import primary_birthdate
 from .schemas import ProjectionRun
 
 
@@ -62,6 +63,17 @@ def _fragment_context( bookkeeper : Bookkeeper, catalog : BooksTableColumnCatalo
     return {
         'books_table' : build_books_table(
             bookkeeper.ledger, bookkeeper.chart, spans, definition, catalog ),
+        **_age_column_context( run ),
+    }
+
+
+def _age_column_context( run : ProjectionRun ) -> dict:
+    """The sticky Age column that rides beside the Period column: the primary subject's birthdate and
+    whether to show age at all. Age is shown only on yearly runs -- it barely moves within a sub-annual
+    step -- and the template reads the birthdate to compute each interval's age from its row span."""
+    return {
+        'age_birthdate' : primary_birthdate( run.profile ),
+        'show_age'      : run.frame.granularity.months() == 12,
     }
 
 

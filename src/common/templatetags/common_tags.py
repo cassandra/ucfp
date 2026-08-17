@@ -7,6 +7,7 @@ from django.conf import settings
 from django.template.loader import get_template
 from django.urls import reverse
 
+from common import datetime_utils
 from common.humanize_utils import get_humanized_secs
 
 register = template.Library()
@@ -26,6 +27,17 @@ def money(amount, currency):
     if (amount is None) or (currency is None):
         return ''
     return currency.format(amount)
+
+
+@register.filter
+def age_on(on_date, birthdate):
+    """Whole-year (true) age on `on_date` for someone born `birthdate`; blank when either is missing.
+
+    Argument order suits template use -- the interval date is filtered and the birthdate is the arg:
+    `{{ span.end_date|age_on:birthdate }}`."""
+    if (on_date is None) or (birthdate is None):
+        return ''
+    return datetime_utils.age_on(birthdate, on_date)
 
 
 @register.filter

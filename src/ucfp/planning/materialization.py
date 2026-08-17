@@ -86,7 +86,7 @@ def materialize(
                            for subject in subjects if subject.handle is not None }
     government_pension = GovernmentPension( statute.jurisdiction_type )
     recurring_streams, recurring_items = _recurring_expenses(
-        plans, _primary_birthdate( profile ), frame )
+        plans, primary_birthdate( profile ), frame )
     assets_by_handle = { asset.handle : asset for asset in profile.assets }
     events = event_contributions( profile, plans, subjects_by_handle )
     vehicle_disposition_contributions( profile, plans, events )   # derive each disposition's sale
@@ -775,7 +775,7 @@ def _at_year( birthdate : date, age : int ) -> date:
         return birthdate.replace( year = birthdate.year + age, day = 28 )
 
 
-def _primary_birthdate( profile : Profile ) -> Optional[ date ]:
+def primary_birthdate( profile : Profile ) -> Optional[ date ]:
     """The primary subject's birthdate (the household's first person), or None if none is set yet --
     the anchor the recurring-expense span ages resolve against."""
     return profile.subjects[ 0 ].birthdate if profile.subjects else None

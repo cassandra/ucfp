@@ -21,6 +21,7 @@ from django.views.generic import TemplateView
 from organization.decorators import ensure_organization
 
 from common import antinode
+from common.datetime_utils import age_on
 from common.async_view import ModalView
 from common.dataclass_json import from_json_data
 
@@ -154,19 +155,12 @@ def _ages_label( profile, on_date ) -> str:
     """The household's ages on `on_date` -- 'age 65' for one member, 'ages 65 & 63' for a couple, '' for
     none. True whole-year age from the birthdate, so a December birthday still reads a year younger through
     a run that starts earlier in the year."""
-    ages = [ _age_on( subject.birthdate, on_date ) for subject in profile.subjects ]
+    ages = [ age_on( subject.birthdate, on_date ) for subject in profile.subjects ]
     if not ages:
         return ''
     if len( ages ) == 1:
         return f'age {ages[ 0 ]}'
     return 'ages ' + ' & '.join( str( age ) for age in ages )
-
-
-def _age_on( birthdate, on_date ) -> int:
-    """Whole years lived by `on_date`: the year difference, less one if the birthday has not yet come round
-    that year."""
-    before_birthday = ( on_date.month, on_date.day ) < ( birthdate.month, birthdate.day )
-    return on_date.year - birthdate.year - ( 1 if before_birthday else 0 )
 
 
 def _remember_selection( request, form, scenario_record ) -> None:

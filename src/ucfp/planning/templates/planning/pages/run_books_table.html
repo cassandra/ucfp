@@ -15,6 +15,7 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
     <thead>
       <tr>
         <th class="bt-period-head">Period</th>
+        {% if show_age %}<th class="bt-age-head text-right">Age</th>{% endif %}
         {% for col in books_table.columns %}
         {% if col.removed %}
         <th class="bt-head bt-removed text-center align-bottom px-0">
@@ -103,7 +104,8 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
     <tbody>
       {% for row in books_table.rows %}
       <tr{% if forloop.first %} class="table-light"{% endif %}>
-        <td class="bt-period-cell text-nowrap">{{ row.span.end_date|date:"Y-m-d" }}{% if forloop.first %} <span class="text-muted small">opening</span>{% endif %}</td>
+        <td class="bt-period-cell text-nowrap">{% if forloop.first %}<span class="text-muted small">opening</span>{% else %}{{ row.span.end_date|date:"Y-m-d" }}{% endif %}</td>
+        {% if show_age %}<td class="bt-age-cell text-right text-nowrap">{{ row.span.end_date|age_on:age_birthdate }}</td>{% endif %}
         {% for cell in row.cells %}
         {% if cell.removed or cell.empty %}
         <td class="px-1"></td>
