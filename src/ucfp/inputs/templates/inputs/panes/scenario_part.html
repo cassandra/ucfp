@@ -1,6 +1,7 @@
 {% comment %}
 A scenario's nested part -- its Plans or its Assumptions -- shown in the scenario's context: the part
-kind, the component's label, a one-line description, and a quiet Edit into just that part's flow. When the
+kind, the component's label, a one-line description, and a quiet Review into just that part's flow (the
+same word as the scenario's own Review action, since opening a part is reviewing/editing it). When the
 same set backs more than one scenario a "shared" indicator flags it (editing here changes every scenario
 that uses it). Renaming a part happens by drilling in, not here. Reads `kind`, `description`, `record`,
 `edit_url` (the already-resolved edit link), and `uses` (how many scenarios pair this set).
@@ -15,6 +16,7 @@ that uses it). Renaming a part happens by drilling in, not here. Reads `kind`, `
               aria-label="Shared with {{ uses|add:'-1' }} other scenario{{ uses|add:'-1'|pluralize }}; editing it changes them all">Shared</span>{% endif %}</div>
       <div class="text-muted small">{{ description }}</div>
     </div>
-    <a href="{{ edit_url }}" class="btn btn-sm btn-link p-0 ml-2 flex-shrink-0">Edit</a>
+    <a href="{{ edit_url }}" class="btn btn-sm btn-link p-0 ml-2 flex-shrink-0"
+       aria-label="Review {{ kind }}">Review</a>
   </div>
 </div>

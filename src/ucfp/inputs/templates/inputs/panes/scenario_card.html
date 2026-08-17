@@ -1,20 +1,20 @@
 {% comment %}
-One scenario as a hero card: its name (inline-renamable) with the prominent action, and its Plans and
-Assumptions shown as nested parts (label + description + a quiet Edit into that part's flow). The scenario
-is the editing context; its parts are reached from it. The badge follows the three states: still being
-walked (grey "in progress"), walked but blocked (danger "incomplete" with the reasons), or complete. The
-action is Review when complete and "Finish setup" otherwise (both unfinished states re-enter the same walk).
-Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice or None, and per-component
+One scenario as a hero card: its name with the prominent action, and its Plans and Assumptions shown as
+nested parts (label + description + a quiet Review into that part's flow). The scenario is the editing
+context; its parts are reached from it. The name is plain text here -- it is renamed on the interview page,
+consistent with the parts, which are not renamed here either. The badge follows the three states: still
+being walked (grey "in progress"), walked but blocked (danger "incomplete" with the reasons), or complete.
+The action is Review when complete and "Finish setup" otherwise (both unfinished states re-enter the same
+walk). Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice or None, and per-component
 `plans_uses`/`assumptions_uses` share counts) and `can_delete_scenario`.
 {% endcomment %}
 {% load icons %}
 <div class="card mb-3">
   <div class="card-body">
     {% comment %}Name and its primary action sit together (not pushed to opposite edges): the scenario's
-    title, sized to hug the name, then the state CTA right beside it.{% endcomment %}
+    title, then the state CTA right beside it.{% endcomment %}
     <div class="d-flex align-items-center flex-wrap mb-3">
-      {% url 'scenario_rename' row.scenario.uuid as rename_url %}
-      {% include 'inputs/panes/inline_rename.html' with kind='scenario' uuid=row.scenario.uuid rename_url=rename_url label=row.scenario.label aria='Scenario name' title=True wrapper_class='mr-3' %}
+      <h2 class="h5 mb-0 mr-3">{{ row.scenario.label }}</h2>
       {% if row.complete %}{% elif row.blockers %}<span class="badge badge-danger mr-3">incomplete</span>{% else %}<span class="badge badge-secondary mr-3">in progress</span>{% endif %}
       {% if row.drift %}<span class="badge badge-warning mr-3">needs reconciling</span>{% endif %}
       <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0">

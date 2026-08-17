@@ -171,17 +171,18 @@ class ScenarioReviewAffordanceTests( _ScenariosHomeTestBase ):
 
 class ScenarioHeroLayoutTests( _ScenariosHomeTestBase ):
 
-    def test_scenario_shows_its_parts_with_edit_links_and_inline_rename( self ):
+    def test_scenario_shows_its_parts_with_review_links( self ):
         scenario = self._scenario( complete = True, label = 'Done' )
         self._keep_list_visible()                                  # a 2nd scenario keeps the list on-screen
 
         content = self._home_content()
 
-        # The scenario's own Plans and Assumptions are nested parts, each reachable via its edit flow.
+        # The scenario's own Plans and Assumptions are nested parts, each reachable via its review flow.
         self.assertIn( reverse( 'plans_edit', args = [ scenario.plans.uuid ] ), content )
         self.assertIn( reverse( 'assumptions_edit', args = [ scenario.assumptions.uuid ] ), content )
-        # The scenario name is inline-renamable (the parts are not).
-        self.assertIn( reverse( 'scenario_rename', args = [ scenario.uuid ] ), content )
+        # The name is plain text here, not an inline rename -- it is renamed on the interview page, like the
+        # parts (which are not renamed on the card either).
+        self.assertNotIn( reverse( 'scenario_rename', args = [ scenario.uuid ] ), content )
 
     def test_new_scenario_creation_is_present( self ):
         self._scenario( complete = True, label = 'Done' )
