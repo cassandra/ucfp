@@ -127,6 +127,19 @@ After the PR is merged:
 4. Delete the branch: `git branch -d feature/42-comment-pagination`
 5. Verify clean: `git status`
 
+**Squash/rebase merges and the `git branch -d` refusal.** When a PR is squash- or
+rebase-merged (see the merge-strategy guidance above), GitHub rewrites the feature
+commits into new ones on staging, so the branch's commits are *not* ancestors of
+`staging`. `git branch -d` may then refuse with "not fully merged" even though the
+work is genuinely merged. This is expected, not a red flag. Before overriding it,
+independently confirm the merge landed — e.g. the PR shows `"state": "MERGED"` and
+the merge commit is present on the base branch
+(`git branch -r --contains <mergeCommit> | grep staging`). Only once that is
+verified, force-delete with `git branch -D feature/42-comment-pagination`. (If your
+local remote-tracking ref `origin/<branch>` still exists and matches the tip, `-d`
+can also succeed on its own by treating that as the merge target — either way,
+verify the merge on staging first.)
+
 ## Related Documentation
 - Release procedures: [Release Process](release-process.md)
 - Rollback procedures: [Rollback Process](rollback-process.md)

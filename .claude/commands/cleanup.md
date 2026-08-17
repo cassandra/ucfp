@@ -55,6 +55,20 @@ Execute safe branch cleanup after a PR merge:
    # Should show: "On branch staging" and "nothing to commit, working tree clean"
    ```
 
+   **If step 6 refuses with "not fully merged":** this is expected for a squash- or
+   rebase-merged PR (GitHub rewrites the feature commits, so they are not ancestors
+   of `staging`) — it is *not* a sign the work was lost. Independently confirm the
+   merge landed, then force-delete:
+
+   ```bash
+   gh pr view --json mergeCommit --jq .mergeCommit.oid           # the squashed merge commit
+   git branch -r --contains <mergeCommit> | grep staging         # confirm it is on staging
+   git branch -D $0                                              # only after that confirms
+   ```
+
+   See the Post-PR Cleanup section of `docs/dev/workflow/workflow-guidelines.md` for
+   the full rationale.
+
 4. **Final verification** - Confirm the environment is ready for the next work:
    - On `staging` with the latest changes
    - Working directory clean
