@@ -40,7 +40,7 @@ def _property_context( profile, handle : str ) -> Optional[ PropertyContext ]:
     return OWNED_PROPERTY_CONTEXT.get( asset.asset_class ) if asset is not None else None
 
 
-def _property_handles_for( profile ) -> list:
+def property_handles_for( profile ) -> list:
     """The property columns in display order: the household's home first -- its owned residence, or,
     when it rents, the rented home -- then second homes and rentals (`owned_property_handles` already
     orders owned holdings)."""
@@ -81,7 +81,7 @@ def merged_property_expenses( profile, plans ) -> list:
     if not has_property( profile ):
         return list()
     existing     = { expense.handle: expense for expense in plans.property_expenses } if plans else dict()
-    live_handles = set( _property_handles_for( profile ) )
+    live_handles = set( property_handles_for( profile ) )
     merged = list()
     for catalog_expense in ordered_catalog():
         if catalog_expense.expense_class is not ExpenseClass.PROPERTY:
@@ -131,7 +131,7 @@ class PropertyExpensesForm( forms.Form ):
         super().__init__( data )
         self._profile   = profile
         self._all       = merged_property_expenses( profile, plans )
-        self._handles   = _property_handles_for( profile )
+        self._handles   = property_handles_for( profile )
         self._rows      = [ expense for expense in self._all if self._any_applicable( expense ) ]
         self._collapsed = len( self._handles ) <= 1
         for ri, expense in enumerate( self._rows ):
