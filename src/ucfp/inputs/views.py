@@ -1005,8 +1005,18 @@ class SelfSavingPaneView( View ):
     def totals_fragments( self, request ) -> dict:
         """Id-keyed HTML fragments re-rendering the pane's live totals after a silent save, for an
         antinode `replace_map`. Empty by default (most panes show no totals); a totals-bearing pane
-        overrides this to recompute from the just-persisted plans."""
+        mixes in `TotalsPaneMixin` to recompute from the just-persisted plans."""
         return {}
+
+
+class TotalsPaneMixin:
+    """A self-saving pane that shows server-computed expense totals. After a silent save it recomputes
+    the totals from the just-persisted plans -- a fresh form, so the figures reflect the edit -- and
+    pushes each as its own antinode replace fragment, leaving the edited row undisturbed. The pane's
+    form exposes the totals as a `totals` list of `ExpenseTotal`s."""
+
+    def totals_fragments( self, request ) -> dict:
+        return expense_totals.rendered( request, self.build_form( request ).totals )
 
     def _pane( self, request, form ) -> str:
         return render_to_string( self.template, { self.context_name: form }, request = request )
@@ -1140,7 +1150,7 @@ class LeasedVehicleDispositionView( _VehicleDispositionView ):
     _form_context_key = 'leased_form'
 
 
-class RecurringExpensesView( SelfSavingPaneView ):
+class RecurringExpensesView( TotalsPaneMixin, SelfSavingPaneView ):
     """`/inputs/interview/living-expenses/edit/` -- the recurring-expenses table of the Living Expenses
     step: the `LIVING`-class expenses over the shared age-span timeline. Auto-saves each edit; a
     structural change (a span added, removed, or re-aged) re-renders the table, a pure amount edit
@@ -1182,7 +1192,7 @@ class PropertyExpensesView( SelfSavingPaneView ):
         save_plans( current_plans_record( request ), plans )
 
 
-class VehicleExpensesView( SelfSavingPaneView ):
+class VehicleExpensesView( TotalsPaneMixin, SelfSavingPaneView ):
     """`/inputs/interview/vehicle-expenses/costs/edit/` -- the per-car running-costs table of the
     Vehicle plan step. Auto-saves each edit onto the vehicle plan's running costs; the row set is
     fixed (the catalog's vehicle costs), so it saves silently and never restructures."""
@@ -1199,10 +1209,6 @@ class VehicleExpensesView( SelfSavingPaneView ):
         profile, plans = _current_profile_and_plans( request )
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
-
-    def totals_fragments( self, request ) -> dict:
-        # Rebuild from the just-persisted plans so the per-vehicle total reflects this edit.
-        return expense_totals.rendered( request, self.build_form( request ).totals )
 
 
 def current_plans_record( request ):

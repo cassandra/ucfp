@@ -18,6 +18,7 @@ from ucfp.inputs.plans.schemas import RecurringExpense
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_calculator_inputs )
+from ucfp.inputs.expense_totals import ExpenseTotal, annualized_sum
 from ucfp.inputs.expenses import grouped_sections, kept_attr, kept_interval, ordered_catalog
 
 
@@ -125,10 +126,57 @@ class RecurringExpensesForm( forms.Form ):
         """The expense rows grouped into ordered category sections (a header per category), in the shared
         deliberate (group, item) order. Each row is its name, cadence, and one amount cell per span; a
         durable row's span amounts are directly editable and may vary by band, with an optional
-        `calculator` that fills them on demand."""
-        return grouped_sections(
+        `calculator` that fills them on demand. Each section also carries its per-span annual
+        `subtotals` (one figure per span column), shown on the category header."""
+        sections = grouped_sections(
             ( expense.category, self._row( ei, expense ) )
             for ei, expense in enumerate( self._expenses ) )
+        for section in sections:
+            section[ 'subtotals' ] = self._subtotals_for( section[ 'category' ] )
+        return sections
+
+    @property
+    def totals_row( self ) -> list:
+        """The per-span page total (every expense), one whole-dollar yearly figure per span column."""
+        return [ ExpenseTotal( self._total_id( si ), self._span_sum( self._expenses, si ) )
+                 for si in range( self.span_count ) ]
+
+    @property
+    def totals( self ) -> list:
+        """Every subtotal and total the pane shows, flattened for the antinode push: each category's
+        per-span subtotals, then the per-span page totals."""
+        flat = list()
+        for category in self._ordered_categories():
+            flat.extend( self._subtotals_for( category ) )
+        flat.extend( self.totals_row )
+        return flat
+
+    def _ordered_categories( self ) -> list:
+        """The distinct expense categories in their shown order (the section order)."""
+        categories = list()
+        for expense in self._expenses:
+            if expense.category not in categories:
+                categories.append( expense.category )
+        return categories
+
+    def _subtotals_for( self, category ) -> list:
+        """A category's per-span annual subtotals -- its expenses summed at each span column."""
+        expenses = [ expense for expense in self._expenses if expense.category is category ]
+        return [ ExpenseTotal( self._subtotal_id( category, si ), self._span_sum( expenses, si ) )
+                 for si in range( self.span_count ) ]
+
+    def _span_sum( self, expenses, si : int ) -> Decimal:
+        """The annual sum of `expenses` at span `si`: each row's shown amount annualized and summed."""
+        return annualized_sum(
+            ( self._span_amount( expense, si ), expense.interval ) for expense in expenses )
+
+    @staticmethod
+    def _subtotal_id( category, si : int ) -> str:
+        return f'living-subtotal-{category.name.lower()}-{si}'
+
+    @staticmethod
+    def _total_id( si : int ) -> str:
+        return f'living-total-{si}'
 
     def _row( self, ei : int, expense ) -> dict:
         durable = expense.count is not None

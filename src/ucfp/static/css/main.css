@@ -416,6 +416,22 @@ a.interview-part:hover {
     }
 }
 
+/* Living / Home expense tables: the server-computed subtotal and total rows (#182). The overall total
+   leads the table -- above its component rows, mirroring how each category subtotal sits on its section
+   header -- and both read as summaries (bold figures) rather than floating numbers. The page total is
+   shaded and ruled top and bottom so it reads as the strongest band, a step above the lighter category
+   subtotals. (The band styling sits on the cells, not the row, so it survives the collapsed borders.) */
+.expense-total-row > th,
+.expense-total-row > td {
+    font-weight: 600;
+    background-color: var(--muted-bg-medium);
+    border-top: 2px solid var(--line-color);
+    border-bottom: 2px solid var(--line-color);
+}
+.expense-subtotal {
+    font-weight: 600;
+}
+
 /* Narrow integer inputs (a cadence count, a calculator's item count / replacement years) and the unit
    select stay inline and compact -- a couple of digits wide -- rather than stacking full-width and
    inflating the row height. */

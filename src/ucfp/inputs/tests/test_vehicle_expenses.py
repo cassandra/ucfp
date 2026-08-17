@@ -54,14 +54,14 @@ class VehicleRunningCostsTotalTest( TestCase ):
         form  = VehicleExpensesForm( plans = _plans_with_every_cost_at( Decimal( '50' ) ) )
         self.assertEqual( form.total.amount, Decimal( '50' ) * 12 * count )   # $600/car/yr per cost
 
-    def test_footer_renders_the_total_under_the_replace_target_id( self ):
+    def test_total_row_renders_under_the_replace_target_id( self ):
         form = VehicleExpensesForm( plans = _plans_with_every_cost_at( Decimal( '50' ) ) )
         html = render_to_string(
             VehicleExpensesView.template,
             { VehicleExpensesView.context_name: form, 'AppConst': AppConst },
             request = RequestFactory().get( '/' ) )
         self.assertIn( f'id="{VehicleExpensesForm.TOTAL_ID}"', html )     # else the replace can't land
-        self.assertIn( 'Total per vehicle', html )
+        self.assertIn( '>Total</th>', html )                              # the total row's leading label
 
 
 class VehicleTotalsPushTest( TestCase ):
