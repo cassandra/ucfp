@@ -17,6 +17,7 @@ from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseClass, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense
+from ucfp.inputs.expense_totals import ExpenseTotal, annualized_sum
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_calculator_inputs )
@@ -230,10 +231,76 @@ class PropertyExpensesForm( forms.Form ):
     def sections( self ) -> list:
         """The displayed expense rows grouped into ordered category sections (a header per property
         sub-group), in the shared deliberate (group, item) order. Each row is its name, cadence, and a
-        cell per column."""
-        return grouped_sections(
+        cell per column. Each section also carries its per-column annual `subtotals` (one figure per
+        matrix column), shown on the category header."""
+        sections = grouped_sections(
             ( expense.category, self._row( ri, expense ) )
             for ri, expense in enumerate( self._rows ) )
+        for section in sections:
+            section[ 'subtotals' ] = self._subtotals_for( section[ 'category' ] )
+        return sections
+
+    @property
+    def totals_row( self ) -> list:
+        """The per-column page total (every displayed row), one whole-dollar yearly figure per matrix
+        column -- the Default (or the lone property when collapsed), then each property."""
+        return [ ExpenseTotal( self._total_id( col ), self._column_sum( self._rows, col ) )
+                 for col in range( self._column_count ) ]
+
+    @property
+    def totals( self ) -> list:
+        """Every subtotal and total the matrix shows, flattened for the antinode push: each category's
+        per-column subtotals, then the per-column page totals."""
+        flat = list()
+        for category in self._ordered_categories():
+            flat.extend( self._subtotals_for( category ) )
+        flat.extend( self.totals_row )
+        return flat
+
+    @property
+    def _column_count( self ) -> int:
+        return 1 if self._collapsed else 1 + len( self._handles )
+
+    def _ordered_categories( self ) -> list:
+        """The distinct expense categories in their shown (section) order."""
+        categories = list()
+        for expense in self._rows:
+            if expense.category not in categories:
+                categories.append( expense.category )
+        return categories
+
+    def _subtotals_for( self, category ) -> list:
+        """A category's per-column annual subtotals -- its rows summed down each matrix column."""
+        expenses = [ expense for expense in self._rows if expense.category is category ]
+        return [ ExpenseTotal( self._subtotal_id( category, col ), self._column_sum( expenses, col ) )
+                 for col in range( self._column_count ) ]
+
+    def _column_sum( self, expenses, col : int ) -> Decimal:
+        """The annual sum down column `col`: each row's amount for that column annualized and summed.
+        An N/A cell reads as None and contributes zero."""
+        return annualized_sum(
+            ( self._column_amount( expense, col ), expense.interval ) for expense in expenses )
+
+    def _column_amount( self, expense, col : int ) -> Optional[ Decimal ]:
+        """The amount that column shows for `expense`: collapsed, the lone property's effective value;
+        else the Default (`col == 0`) or a property's effective value (its override, or the Default it
+        falls back to), or None where the row does not apply to that property."""
+        if self._collapsed:
+            return self._collapsed_value( expense )
+        if col == 0:
+            return expense.default_amount
+        handle = self._handles[ col - 1 ]
+        if not self._applies( expense, handle ):
+            return None
+        return expense.overrides.get( handle, expense.default_amount )
+
+    @staticmethod
+    def _subtotal_id( category, col : int ) -> str:
+        return f'home-subtotal-{category.name.lower()}-{col}'
+
+    @staticmethod
+    def _total_id( col : int ) -> str:
+        return f'home-total-{col}'
 
     def _row( self, ri : int, expense ) -> dict:
         """One displayed expense row: its name, cadence, and a cell per column -- the bound Default field,

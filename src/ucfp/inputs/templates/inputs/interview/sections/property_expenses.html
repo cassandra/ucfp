@@ -19,8 +19,20 @@ property. With a single property the Default column collapses into one value col
         </tr>
       </thead>
       <tbody>
+        <tr class="expense-total-row">
+          <th scope="row" class="text-left">Home Expenses Total</th>
+          <td class="text-center">Year</td>
+          {% for total in property_form.totals_row %}
+          <td class="text-right">{% include 'inputs/interview/sections/_expense_total.html' with id=total.element_id amount=total.amount %}</td>
+          {% endfor %}
+        </tr>
         {% for section in property_form.sections %}
-        <tr class="table-light"><th colspan="{{ property_form.columns|length|add:2 }}">{{ section.label }}</th></tr>
+        <tr class="table-light">
+          <th colspan="2" scope="colgroup">{{ section.label }}</th>
+          {% for subtotal in section.subtotals %}
+          <td class="text-right expense-subtotal">{% include 'inputs/interview/sections/_expense_total.html' with id=subtotal.element_id amount=subtotal.amount %}</td>
+          {% endfor %}
+        </tr>
         {% for row in section.rows %}
         <tr>
           <th scope="row" class="font-weight-normal text-left">{{ row.name }}

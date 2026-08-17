@@ -1172,7 +1172,7 @@ class RecurringExpensesView( TotalsPaneMixin, SelfSavingPaneView ):
         return changed                                     # a span changed -> re-render the table
 
 
-class PropertyExpensesView( SelfSavingPaneView ):
+class PropertyExpensesView( TotalsPaneMixin, SelfSavingPaneView ):
     """`/inputs/interview/home-expenses/edit/` -- the property-expenses matrix of the Home Expenses
     step: the household's per-property operating costs as one shared default with per-property overrides.
     Auto-saves each edit silently; the row and column sets change only when a property is added or
