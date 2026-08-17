@@ -37,6 +37,7 @@ from ucfp.inputs.assumptions.repository import (
 from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
     existing_pairings, rename_scenario, scenarios_for )
+from ucfp.inputs import expense_totals
 from ucfp.inputs.compatibility import plans_reconciled_with_profile
 from ucfp.inputs.drift import plans_drift
 from ucfp.inputs.plans.enums import EventKind
@@ -991,13 +992,21 @@ class SelfSavingPaneView( View ):
             return self._swap( request, form )                 # surface a genuine field error
         if self.persist( request, form ):                      # a row was added or removed
             return self._swap( request, self.build_form( request ) )
-        return antinode.response()                             # silent background save
+        # Silent background save: leave the edited pane untouched, but push any on-page totals the edit
+        # moved (empty for panes without totals -- an empty map is `antinode.response()` unchanged).
+        return antinode.response( replace_map = self.totals_fragments( request ) or None )
 
     def build_form( self, request, data = None ):
         raise NotImplementedError
 
     def persist( self, request, form ):
         raise NotImplementedError
+
+    def totals_fragments( self, request ) -> dict:
+        """Id-keyed HTML fragments re-rendering the pane's live totals after a silent save, for an
+        antinode `replace_map`. Empty by default (most panes show no totals); a totals-bearing pane
+        overrides this to recompute from the just-persisted plans."""
+        return {}
 
     def _pane( self, request, form ) -> str:
         return render_to_string( self.template, { self.context_name: form }, request = request )
@@ -1190,6 +1199,10 @@ class VehicleExpensesView( SelfSavingPaneView ):
         profile, plans = _current_profile_and_plans( request )
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
+
+    def totals_fragments( self, request ) -> dict:
+        # Rebuild from the just-persisted plans so the per-vehicle total reflects this edit.
+        return expense_totals.rendered( request, self.build_form( request ).totals )
 
 
 def current_plans_record( request ):

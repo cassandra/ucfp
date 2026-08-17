@@ -25,6 +25,12 @@ not previewed here. Reads `vehicle_costs_form`.
         </tr>
         {% endfor %}
       </tbody>
+      <tfoot>
+        <tr class="table-light">
+          <th colspan="2" scope="row" class="text-right font-weight-normal">Total per vehicle ($/yr)</th>
+          <td class="text-right">{% include 'inputs/interview/sections/_expense_total.html' with id=vehicle_costs_form.total.element_id amount=vehicle_costs_form.total.amount %}</td>
+        </tr>
+      </tfoot>
     </table>
   </form>
 </div>
