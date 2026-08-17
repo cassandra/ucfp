@@ -17,6 +17,7 @@ from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseClass, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
 from ucfp.inputs.plans.schemas import PropertyExpense
+from ucfp.inputs.expense_totals import ExpenseTotalsMatrix, annualized_sum
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_calculator_inputs )
@@ -39,7 +40,7 @@ def _property_context( profile, handle : str ) -> Optional[ PropertyContext ]:
     return OWNED_PROPERTY_CONTEXT.get( asset.asset_class ) if asset is not None else None
 
 
-def _property_handles_for( profile ) -> list:
+def property_handles_for( profile ) -> list:
     """The property columns in display order: the household's home first -- its owned residence, or,
     when it rents, the rented home -- then second homes and rentals (`owned_property_handles` already
     orders owned holdings)."""
@@ -80,7 +81,7 @@ def merged_property_expenses( profile, plans ) -> list:
     if not has_property( profile ):
         return list()
     existing     = { expense.handle: expense for expense in plans.property_expenses } if plans else dict()
-    live_handles = set( _property_handles_for( profile ) )
+    live_handles = set( property_handles_for( profile ) )
     merged = list()
     for catalog_expense in ordered_catalog():
         if catalog_expense.expense_class is not ExpenseClass.PROPERTY:
@@ -112,7 +113,7 @@ def _live_overrides( prior, profile, catalog_expense, live_handles : set ) -> di
              and _property_context( profile, handle ) in catalog_expense.applies_to }
 
 
-class PropertyExpensesForm( forms.Form ):
+class PropertyExpensesForm( ExpenseTotalsMatrix, forms.Form ):
     """The property-expenses matrix: rows are the property operating-cost types (property tax,
     insurance, ...), columns are the shared Default plus one per property (owned dwellings, then the
     rented home). The Default cell sets the amount every applicable property inherits; a per-property
@@ -130,7 +131,7 @@ class PropertyExpensesForm( forms.Form ):
         super().__init__( data )
         self._profile   = profile
         self._all       = merged_property_expenses( profile, plans )
-        self._handles   = _property_handles_for( profile )
+        self._handles   = property_handles_for( profile )
         self._rows      = [ expense for expense in self._all if self._any_applicable( expense ) ]
         self._collapsed = len( self._handles ) <= 1
         for ri, expense in enumerate( self._rows ):
@@ -178,6 +179,15 @@ class PropertyExpensesForm( forms.Form ):
 
     def _applies( self, expense, handle : str ) -> bool:
         return _property_context( self._profile, handle ) in expense.applies_to
+
+    def _override_differs( self, expense, handle : str ) -> bool:
+        """Whether this property's override departs from the row's Default -- a value is set and it is
+        not the Default it would otherwise inherit (a blank cell inherits, so it never differs; a blank
+        Default reads as zero). Drives the highlight flagging cells that override the shared Default."""
+        override = expense.overrides.get( handle )
+        if override is None:
+            return False
+        return override != ( expense.default_amount or Decimal( 0 ) )
 
     def _any_applicable( self, expense ) -> bool:
         return any( self._applies( expense, handle ) for handle in self._handles )
@@ -230,21 +240,48 @@ class PropertyExpensesForm( forms.Form ):
     def sections( self ) -> list:
         """The displayed expense rows grouped into ordered category sections (a header per property
         sub-group), in the shared deliberate (group, item) order. Each row is its name, cadence, and a
-        cell per column."""
-        return grouped_sections(
+        cell per column. Each section also carries its per-column annual `subtotals` (one figure per
+        matrix column), shown on the category header."""
+        return self.attach_subtotals( grouped_sections(
             ( expense.category, self._row( ri, expense ) )
-            for ri, expense in enumerate( self._rows ) )
+            for ri, expense in enumerate( self._rows ) ) )
+
+    _TOTALS_PREFIX = 'home'
+
+    # -- the totals-matrix primitives: rows are the displayed expenses, columns are Default + properties
+    def _total_rows( self ) -> list:
+        return self._rows
+
+    def _total_columns( self ) -> int:
+        return self._column_count
+
+    @property
+    def _column_count( self ) -> int:
+        return 1 if self._collapsed else 1 + len( self._handles )
+
+    def _column_sum( self, expenses, col : int ) -> Decimal:
+        """The annual sum down column `col`: each row's amount for that column annualized and summed.
+        An N/A cell reads as None and contributes zero."""
+        return annualized_sum(
+            ( self._column_amount( expense, col ), expense.interval ) for expense in expenses )
+
+    def _column_amount( self, expense, col : int ) -> Optional[ Decimal ]:
+        """The amount that column shows for `expense`: collapsed, the lone property's effective value;
+        else the Default (`col == 0`) or a property's effective value (its override, or the Default it
+        falls back to), or None where the row does not apply to that property."""
+        if self._collapsed:
+            return self._collapsed_value( expense )
+        if col == 0:
+            return expense.default_amount
+        handle = self._handles[ col - 1 ]
+        if not self._applies( expense, handle ):
+            return None
+        return expense.overrides.get( handle, expense.default_amount )
 
     def _row( self, ri : int, expense ) -> dict:
-        """One displayed expense row: its name, cadence, and a cell per column -- the bound Default field,
-        then each property's override field, or None where the row is N/A for that property. A durable
-        row's Default is directly editable, with an optional `calculator` that fills it on demand."""
+        """One displayed expense row: its name, cadence, and a cell per column. A durable row's Default is
+        directly editable, with an optional `calculator` that fills it on demand."""
         durable = expense.count is not None
-        cells   = [ self[ self._default_key( ri ) ] ]
-        if not self._collapsed:
-            cells += [ self[ self._override_key( ri, hi ) ]
-                       if self._override_key( ri, hi ) in self.fields else None
-                       for hi in range( len( self._handles ) ) ]
         return {
             'name'        : expense.name,
             'calc_id'     : ri,
@@ -253,7 +290,23 @@ class PropertyExpensesForm( forms.Form ):
             'count_entry' : durable,
             'calculator'  : ( calculator_cells( self, ri, per_year( expense.default_amount, expense.interval ) )
                               if durable else None ),
-            'cells'       : cells }
+            'cells'       : self._cells( ri, expense ) }
+
+    def _cells( self, ri : int, expense ) -> list:
+        """One cell per column, each `{ field, differs }`: the Default (a reference, never flagged), then
+        each property's override field -- flagged when it departs from the Default (so the matrix
+        highlights where a property overrides the shared default) -- or None where the row is N/A for
+        that property."""
+        cells = [ { 'field': self[ self._default_key( ri ) ], 'differs': False } ]
+        if self._collapsed:
+            return cells
+        for hi, handle in enumerate( self._handles ):
+            key = self._override_key( ri, hi )
+            if key not in self.fields:
+                cells.append( None )                       # N/A: the row does not apply to this property
+                continue
+            cells.append( { 'field': self[ key ], 'differs': self._override_differs( expense, handle ) } )
+        return cells
 
     def apply( self, profile, plans ):
         edited   = { expense.handle: self._edited( ri, expense )

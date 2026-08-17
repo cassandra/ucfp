@@ -1,0 +1,7 @@
+{% comment %}
+One on-page expense total: a formatted yearly figure under a stable `id`. Included inline wherever a
+total or subtotal is shown, and re-rendered on its own for an antinode `replace_map` after a silent
+save (the whole span, id included, is replaced). Reads `id` and `amount` (a whole-dollar Decimal).
+{% endcomment %}
+{% load common_tags %}
+<span id="{{ id }}">{{ amount|money:currency }}</span>

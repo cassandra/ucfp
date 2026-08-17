@@ -17,6 +17,11 @@ not previewed here. Reads `vehicle_costs_form`.
         </tr>
       </thead>
       <tbody>
+        <tr class="expense-total-row">
+          <th scope="row" class="text-left">Total</th>
+          <td class="text-center">Year</td>
+          <td class="text-right">{% include 'inputs/interview/sections/_expense_total.html' with id=vehicle_costs_form.total.element_id amount=vehicle_costs_form.total.amount %}</td>
+        </tr>
         {% for row in vehicle_costs_form.rows %}
         <tr>
           <th scope="row" class="font-weight-normal text-left">{{ row.name }}</th>

@@ -15,6 +15,7 @@ from common.forms import MoneyField
 from ucfp.parameter_sets.enums import ExpenseClass
 from ucfp.inputs.plans.schemas import VehiclePlan, VehicleRunningCost
 from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, read_cadence
+from ucfp.inputs.expense_totals import ExpenseTotal, annualized_sum
 from ucfp.inputs.expenses import kept_interval, ordered_catalog
 
 
@@ -61,8 +62,10 @@ class VehicleExpensesForm( forms.Form ):
     per-car amount at its own cadence. Auto-saves each edit onto the vehicle plan's `running_costs`; the
     row set is fixed (the catalog's vehicle costs), so it never restructures. `apply` writes the running
     costs onto the plan, creating one if the household has not begun a vehicle plan yet. The amount is a
-    single per-car figure; materialization applies it to each owned vehicle over its window, so the total
-    tracks the fleet over time and no single scaled total is shown here."""
+    single per-car figure; materialization applies it to each owned vehicle over its window, so the pane
+    footer totals the per-car figures (a per-vehicle yearly total), not a fleet total."""
+
+    TOTAL_ID = 'vehicle-running-costs-total'
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
@@ -90,6 +93,20 @@ class VehicleExpensesForm( forms.Form ):
             'amount'  : self[ self._amount_key( ci ) ],
             'cadence' : cadence_cells( self, self._cad_prefix( ci ), cost.interval, cost.cadence_domain ) }
             for ci, cost in enumerate( self._costs ) ]
+
+    @property
+    def totals( self ) -> list:
+        """The pane's totals -- here a single per-vehicle yearly total, the per-car running costs summed
+        with each row annualized to a yearly figure. A list so the generic pane view renders it the same
+        way as the multi-total spending panes."""
+        return [ ExpenseTotal(
+            element_id = self.TOTAL_ID,
+            amount     = annualized_sum( ( cost.amount, cost.interval ) for cost in self._costs ) ) ]
+
+    @property
+    def total( self ) -> ExpenseTotal:
+        """The single per-vehicle total, for the pane footer."""
+        return self.totals[ 0 ]
 
     def apply( self, profile, plans ):
         costs = [ self._edited( ci, cost ) for ci, cost in enumerate( self._costs ) ]

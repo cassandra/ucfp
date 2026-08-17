@@ -7,13 +7,15 @@ from django.test import SimpleTestCase
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import (
     AssetProfile, Debt, LeasedVehicle, Profile, SubjectProfile )
 from ucfp.inputs.plans.schemas import (
     Contribution, CreditCardPlan, DrawdownPolicy, LeasedVehicleDisposition, LoanPrepayment, LoanRepayment,
-    PlanEvent, Plans, RetirementTiming, RothConversion, VehicleDisposition, VehiclePlan, Withdrawal )
+    PlanEvent, Plans, PropertyExpense, RetirementTiming, RothConversion, VehicleDisposition, VehiclePlan,
+    Withdrawal )
 from ucfp.inputs.plans.enums import (
     CreditCardPlanMode, EventKind, LeaseDispositionKind, VehicleDispositionKind )
 from ucfp.forecast.parameters import ContributionSource
@@ -249,3 +251,53 @@ class ReconcileTests( SimpleTestCase ):
                            debt_handle = 'mortgage', interest_rate = Rate( Decimal( '0.04' ) ),
                            remaining_term = Duration( 25, TimeUnit.YEAR ) ) ] )
         self.assertEqual( plans_reconciled_with_profile( _full_profile(), clean ), clean )
+
+
+class PropertyOverrideDriftTest( SimpleTestCase ):
+    """A home-expense per-property override must resolve against a property the household still has. A
+    deleted property's override is drift -- reported like every other stale reference and pruned by the
+    on-demand reconcile -- so it cannot silently resurrect if the property's handle is later reused. The
+    shared Default (not property-keyed) is never touched."""
+
+    @staticmethod
+    def _profile() -> Profile:
+        return Profile( assets = [ AssetProfile(
+            handle = 'second-home-1', name = 'Cabin', asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
+            opening_value = Decimal( '400000' ) ) ] )
+
+    @staticmethod
+    def _expense( overrides : dict ) -> PropertyExpense:
+        return PropertyExpense(
+            name = 'Property Tax', handle = 'property-tax', category = ExpenseCategory.TAXES_INSURANCE,
+            expense_tax_class = ExpenseTaxClass.SALT, applies_to = ( PropertyContext.SECOND_HOME, ),
+            interval = Duration( 1, TimeUnit.YEAR ), default_amount = Decimal( '1000' ),
+            overrides = overrides )
+
+    def test_a_stale_override_is_reported_and_a_live_one_is_not( self ):
+        plans = Plans( property_expenses = [ self._expense(
+            { 'second-home-1': Decimal( '0' ), 'second-home-2': Decimal( '500' ) } ) ] )
+        issues = compatibility_issues( self._profile(), plans )
+        self.assertEqual( len( issues ), 1 )
+        self.assertIn( 'second-home-2', issues[ 0 ] )       # the deleted property...
+        self.assertNotIn( 'second-home-1', issues[ 0 ] )    # ...not the one still owned
+
+    def test_a_stale_handle_is_reported_once_across_many_expenses( self ):
+        plans = Plans( property_expenses = [
+            self._expense( { 'second-home-2': Decimal( '500' ) } ),
+            self._expense( { 'second-home-2': Decimal( '300' ) } ) ] )
+        self.assertEqual( len( compatibility_issues( self._profile(), plans ) ), 1 )
+
+    def test_reconcile_drops_the_stale_override_and_keeps_the_live_one( self ):
+        plans = Plans( property_expenses = [ self._expense(
+            { 'second-home-1': Decimal( '0' ), 'second-home-2': Decimal( '500' ) } ) ] )
+        reconciled = plans_reconciled_with_profile( self._profile(), plans )
+        expense    = reconciled.property_expenses[ 0 ]
+        self.assertEqual( expense.overrides, { 'second-home-1': Decimal( '0' ) } )   # stale one gone
+        self.assertEqual( expense.default_amount, Decimal( '1000' ) )                # Default untouched
+        self.assertEqual( compatibility_issues( self._profile(), reconciled ), [] )  # now compatible
+
+    def test_reconcile_leaves_an_expense_with_no_stale_override_unchanged( self ):
+        plans    = Plans( property_expenses = [ self._expense( { 'second-home-1': Decimal( '0' ) } ) ] )
+        original = plans.property_expenses[ 0 ]
+        self.assertIs( plans_reconciled_with_profile( self._profile(), plans ).property_expenses[ 0 ],
+                       original )   # same object -- no needless rewrite

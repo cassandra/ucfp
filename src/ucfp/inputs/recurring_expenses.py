@@ -18,6 +18,7 @@ from ucfp.inputs.plans.schemas import RecurringExpense
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
     read_calculator_inputs )
+from ucfp.inputs.expense_totals import ExpenseTotalsMatrix, annualized_sum
 from ucfp.inputs.expenses import grouped_sections, kept_attr, kept_interval, ordered_catalog
 
 
@@ -59,7 +60,7 @@ def _aligned_amounts( prior, default : Decimal, span_count : int ) -> list:
     return amounts[ :span_count ]
 
 
-class RecurringExpensesForm( forms.Form ):
+class RecurringExpensesForm( ExpenseTotalsMatrix, forms.Form ):
     """The recurring-expenses table: rows are the `LIVING`-class expenses grouped by category, columns
     are the spans of the shared timeline. Each span carries an "until age" (the last blank, the
     open "thereafter" span); each cell is an amount at the row's cadence. Filling the open span's age
@@ -120,15 +121,30 @@ class RecurringExpensesForm( forms.Form ):
                               'open': until is None } )
         return headers
 
+    _TOTALS_PREFIX = 'living'
+
     @property
     def sections( self ) -> list:
         """The expense rows grouped into ordered category sections (a header per category), in the shared
         deliberate (group, item) order. Each row is its name, cadence, and one amount cell per span; a
         durable row's span amounts are directly editable and may vary by band, with an optional
-        `calculator` that fills them on demand."""
-        return grouped_sections(
+        `calculator` that fills them on demand. Each section also carries its per-span annual
+        `subtotals` (one figure per span column), shown on the category header."""
+        return self.attach_subtotals( grouped_sections(
             ( expense.category, self._row( ei, expense ) )
-            for ei, expense in enumerate( self._expenses ) )
+            for ei, expense in enumerate( self._expenses ) ) )
+
+    # -- the totals-matrix primitives: rows are the living expenses, columns are the age-span bands ----
+    def _total_rows( self ) -> list:
+        return self._expenses
+
+    def _total_columns( self ) -> int:
+        return self.span_count
+
+    def _column_sum( self, expenses, si : int ) -> Decimal:
+        """The annual sum of `expenses` at span `si`: each row's shown amount annualized and summed."""
+        return annualized_sum(
+            ( self._span_amount( expense, si ), expense.interval ) for expense in expenses )
 
     def _row( self, ei : int, expense ) -> dict:
         durable = expense.count is not None

@@ -797,6 +797,22 @@ window.App.Inputs = (function () {
             .text( direction === 'up' ? C.SPAN_TREND_UP : C.SPAN_TREND_DOWN );
     }
 
+    // Flag each per-property override cell in a row against the row's current Default: a filled cell
+    // whose amount departs from the Default is highlighted; a blank cell inherits the Default, so it is
+    // never flagged. The pane saves silently, so this keeps the highlight current client-side as the
+    // Default or an override is typed.
+    function flagPropertyOverrides( $row ) {
+        const base = parseAmount( $row.find( classSelector( C.PROPERTY_DEFAULT_CLASS ) ).val() ) || 0;
+        $row.find( classSelector( C.PROPERTY_OVERRIDE_CLASS ) ).each( function () {
+            const raw     = ( this.value || '' ).trim();
+            const differs = raw !== '' && ( parseAmount( raw ) || 0 ) !== base;
+            const $cell   = $( this ).closest( 'td' );
+            $cell.toggleClass( C.PROPERTY_DIFFERS_CLASS, differs );
+            if ( differs ) { $cell.attr( 'title', C.PROPERTY_DIFFERS_TITLE ); }
+            else           { $cell.removeAttr( 'title' ); }
+        } );
+    }
+
     $( function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         // The age/date sync must mutate the sibling field BEFORE the form is serialized, so it runs
@@ -953,9 +969,15 @@ window.App.Inputs = (function () {
         // A single-property matrix collapses the Default column, so its row has no override cells and
         // this is a harmless no-op.
         $( 'body' ).on( 'input change', classSelector( C.PROPERTY_DEFAULT_CLASS ), function () {
+            const $row = $( this ).closest( 'tr' );
             const placeholder = ( $( this ).val() || '' ).trim() || '0';
-            $( this ).closest( 'tr' ).find( classSelector( C.PROPERTY_OVERRIDE_CLASS ) )
-                .attr( 'placeholder', placeholder );
+            $row.find( classSelector( C.PROPERTY_OVERRIDE_CLASS ) ).attr( 'placeholder', placeholder );
+            flagPropertyOverrides( $row );   // a changed Default can flip which overrides now differ
+        } );
+
+        // Re-flag a row's overrides as one of them is typed, so the highlight tracks the edit.
+        $( 'body' ).on( 'input change', classSelector( C.PROPERTY_OVERRIDE_CLASS ), function () {
+            flagPropertyOverrides( $( this ).closest( 'tr' ) );
         } );
 
         // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike

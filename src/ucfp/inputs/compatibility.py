@@ -21,6 +21,7 @@ from decimal import Decimal
 
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import Profile
+from ucfp.inputs.property_expenses import property_handles_for
 from ucfp.inputs.vehicle_expenses import plan_has_content
 
 
@@ -45,14 +46,15 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
     subjects = { subject.handle for subject in profile.subjects }
     accounts = { asset.handle for asset in profile.assets }
     debts    = { debt.handle for debt in profile.debts }
-    entities = subjects | accounts | debts
+    entities   = subjects | accounts | debts
+    properties = set( property_handles_for( profile ) )
 
     issues = list()
     for timing in plans.timing:
         if timing.subject_handle not in subjects:
             issues.append( f'retirement timing for an unknown person "{timing.subject_handle}";' )
-    # Property-expense overrides key by property handle, but a removed property's override is pruned on
-    # merge and ignored at materialize, so it needs no drift check here.
+    for handle in _stale_property_handles( plans, properties ):
+        issues.append( f'a home expense set for an unknown property "{handle}";' )
     for contribution in plans.contributions:
         if contribution.account_handle not in accounts:
             issues.append(
@@ -109,11 +111,12 @@ def plans_reconciled_with_profile( profile: Profile, plans: Plans ) -> Plans:
     `compatibility_issues`, mirroring it category for category so report and prune stay in step. This is
     the single on-demand cleanup a run surface offers to reconcile a drifted scenario -- where a stale
     reference in any scenario is resolved, since a Profile edit no longer prunes Plans eagerly."""
-    subjects = { subject.handle for subject in profile.subjects }
-    accounts = { asset.handle for asset in profile.assets }
-    debts    = { debt.handle for debt in profile.debts }
-    leased   = { vehicle.handle for vehicle in profile.leased_vehicles }
-    entities = subjects | accounts | debts
+    subjects   = { subject.handle for subject in profile.subjects }
+    accounts   = { asset.handle for asset in profile.assets }
+    debts      = { debt.handle for debt in profile.debts }
+    leased     = { vehicle.handle for vehicle in profile.leased_vehicles }
+    properties = set( property_handles_for( profile ) )
+    entities   = subjects | accounts | debts
 
     return replace(
         plans,
@@ -124,9 +127,32 @@ def plans_reconciled_with_profile( profile: Profile, plans: Plans ) -> Plans:
         loan_repayments   = [ r for r in plans.loan_repayments if r.debt_handle in debts ],
         prepayments       = [ p for p in plans.prepayments if p.loan_handle in debts ],
         credit_card_plans = [ c for c in plans.credit_card_plans if c.card_handle in debts ],
+        property_expenses = [ _reconciled_property_expense( e, properties )
+                              for e in plans.property_expenses ],
         vehicle_plan      = _reconciled_vehicle_plan( plans.vehicle_plan, accounts, leased ),
         drawdown          = _reconciled_drawdown( plans.drawdown, accounts ),
         events            = [ e for e in plans.events if _event_resolves( e, entities ) ] )
+
+
+def _stale_property_handles( plans: Plans, properties: set ) -> list:
+    """The property handles a home-expense override names that are not among the household's current
+    properties -- each reported once, in first-seen order. These are a deleted property's per-property
+    amounts lingering in the Plans; left in place they would resurrect if the handle were reused."""
+    stale = list()
+    seen  = set()
+    for expense in plans.property_expenses:
+        for handle in expense.overrides:
+            if ( handle not in properties ) and ( handle not in seen ):
+                seen.add( handle )
+                stale.append( handle )
+    return stale
+
+
+def _reconciled_property_expense( expense, properties: set ):
+    """The property expense with any per-property override for a property the household no longer has
+    dropped (the shared Default, not property-keyed, is untouched); the same object when none is stale."""
+    kept = { handle: amount for handle, amount in expense.overrides.items() if handle in properties }
+    return expense if len( kept ) == len( expense.overrides ) else replace( expense, overrides = kept )
 
 
 def _reconciled_vehicle_plan( plan, accounts: set, leased: set ):
