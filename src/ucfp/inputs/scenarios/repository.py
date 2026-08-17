@@ -92,7 +92,7 @@ def default_scenario( organization: Organization ) -> Optional[ ScenarioRecord ]
 
 def ensure_default_scenario( organization: Organization ) -> ScenarioRecord:
     """Guarantee the organization has a scenario for the Profile to bind to. On first profile setup it
-    mints a `Default Plans` and `Default Assumptions` and combines them into a `Default Scenario` -- all
+    mints a `My Plans` and `My Assumptions` and combines them into a `My Scenario` -- all
     incomplete until their flows are walked, so completeness detection still drives the setup. Idempotent:
     returns the existing base scenario when one is already present, so no duplicate Default is created."""
     with transaction.atomic():
@@ -103,9 +103,9 @@ def ensure_default_scenario( organization: Organization ) -> ScenarioRecord:
         base = default_scenario( organization )
         if base is not None:
             return base
-        plans       = rename_plans( create_plans( organization ), 'Default Plans' )
-        assumptions = rename_assumptions( create_assumptions( organization ), 'Default Assumptions' )
-        return create_scenario( organization, plans, assumptions, 'Default Scenario' )
+        plans       = rename_plans( create_plans( organization ), 'My Plans' )
+        assumptions = rename_assumptions( create_assumptions( organization ), 'My Assumptions' )
+        return create_scenario( organization, plans, assumptions, 'My Scenario' )
 
 
 def rename_scenario( record: ScenarioRecord, label: str ) -> ScenarioRecord:

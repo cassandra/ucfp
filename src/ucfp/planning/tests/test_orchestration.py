@@ -87,5 +87,5 @@ class RunTitleTest( SimpleTestCase ):
     scenario (the bare scenario name is kept separately as provenance)."""
 
     def test_names_the_run_by_its_scenario_and_time( self ):
-        title = run_title( 'Default Scenario', datetime( 2026, 8, 14, 15, 42 ) )
-        self.assertEqual( title, 'Default Scenario - Run at Aug 14, 2026, 3:42 p.m.' )
+        title = run_title( 'My Scenario', datetime( 2026, 8, 14, 15, 42 ) )
+        self.assertEqual( title, 'My Scenario - Run at Aug 14, 2026, 3:42 p.m.' )

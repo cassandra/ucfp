@@ -8,6 +8,7 @@ each edit to `CashPlanView`, which persists silently -- an incomplete pair (a ho
 or a maximum with no holding) is simply not saved, never re-rendered from under the typing. Reads
 `drawdown_form`.
 {% endcomment %}
+{% load icons %}
 <div id="cash-plan">
   <form method="post" action="{% url 'cash_plan' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
@@ -23,18 +24,11 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
         <label class="font-weight-normal mb-1">Draw order
           <span class="text-muted small d-block">When cash is low, sell from these in order. A
             <span class="d-inline-block rounded-circle bg-success align-middle" style="width:.5rem;height:.5rem"></span>
-            is held today; the rest wait until you own them.</span></label>
+            is held today; the rest wait until you own them. {% icon "times-circle" size="sm" color="primary" %}
+            keeps a source -- never sold; {% icon "plus-circle" size="sm" color="primary" %} returns it to the order.</span></label>
         <ul class="list-unstyled mb-0 js-draw-order">
           {% for row in drawdown_form.draw_rows %}
-          <li class="d-flex align-items-center border rounded p-2 mb-2 bg-white">
-            <input type="hidden" name="draw_order" value="{{ row.value }}">
-            <span class="badge badge-light border mr-2 js-draw-rank">{{ forloop.counter }}</span>
-            <span class="d-inline-block rounded-circle mr-2 {% if row.held %}bg-success{% else %}bg-light border{% endif %}"
-                  style="width:.5rem;height:.5rem" title="{% if row.held %}held{% else %}not held yet{% endif %}"></span>
-            <span class="flex-grow-1 {% if not row.held %}text-muted{% endif %}">{{ row.label }}</span>
-            <button type="button" class="btn btn-sm btn-light py-0 px-2 mr-1 js-draw-up" aria-label="Move up">&uarr;</button>
-            <button type="button" class="btn btn-sm btn-light py-0 px-2 js-draw-down" aria-label="Move down">&darr;</button>
-          </li>
+          {% include 'inputs/interview/sections/_draw_source_row.html' with row=row %}
           {% endfor %}
         </ul>
       </div>

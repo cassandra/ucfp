@@ -45,11 +45,14 @@
   --error-color: #721817;
   --on-error-color: #ffffff;
   --error-highlight-color: #a01111;
+  --error-bg-light: #f7e4e4;
   --danger-color: var(--error-color);
+  --danger-bg-light: var(--error-bg-light);
 
   --muted-color: #64748b;
   --on-muted-color: #ffffff;
   --muted-bg-light: #f8f9fa;
+  --muted-bg-medium: #eef0f2;
 
   --line-color: #cbd5e1;
 }
@@ -226,6 +229,65 @@ a:hover, a:focus {
     background-color: var(--muted-bg-light);
 }
 
+/* A breadcrumb is a light back-trail, not a card: no fill or border and compact, so a one-crumb parent
+   link does not eat a full padded, framed row above the page heading. */
+.breadcrumb {
+    background-color: transparent;
+    border: 0;
+    padding: 0.25rem 0;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+}
+
+/* The interview rail's header: the flow title(s) + completion badge, above the section stepper. In a
+   scenario build it is a two-part switch (Plans | Assumptions) -- two equal tabs, each a title over its
+   status badge; the active one is coloured and underlined, the other a muted, hover-lit link into that
+   part. Individually (or the Profile) it is a single title + badge. Spaced clear of the stepper below so
+   the part switch and the section list read as distinct. */
+.interview-rail-header {
+    margin-bottom: 1rem;
+}
+.interview-parts {
+    display: flex;
+    border-bottom: 1px solid var(--line-color);
+}
+.interview-part {
+    flex: 1 1 0;
+    min-width: 0;                     /* let equal tabs shrink rather than overflow the narrow rail */
+    text-align: center;
+    padding: 0.4rem 0.35rem 0.5rem;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;              /* sit the active underline over the container's bottom border */
+    color: var(--muted-color);
+}
+a.interview-part:hover {
+    background-color: var(--muted-bg-light);
+    text-decoration: none;
+    color: var(--muted-color);
+}
+.interview-part.active {
+    border-bottom-color: var(--primary-color);
+    color: var(--primary-color);
+}
+.interview-part-title {
+    display: block;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 0.3rem;            /* separate the label from its status chip below */
+}
+.interview-part-single {
+    padding: 0.15rem 0 0.35rem;
+}
+.interview-part-single .interview-part-title {
+    font-size: 1.1rem;
+}
+
+/* Soft status chips for the rail header -- a tinted, low-shout variant of the solid badges, so the part
+   labels stay primary and status reads as a quiet marker rather than a loud block of colour. */
+.badge-soft-success   { color: var(--success-color); background-color: var(--success-bg-light); }
+.badge-soft-danger    { color: var(--danger-color);  background-color: var(--danger-bg-light); }
+.badge-soft-secondary { color: var(--muted-color);   background-color: var(--muted-bg-medium); }
+
 /* While a property (rental / second home) add or edit form is open in its editor slot, hide that
    list's "Add ..." button, so the affordance and the open form are not shown at once. Progressive:
    where :has is unsupported the button simply stays visible. */
@@ -350,7 +412,7 @@ a:hover, a:focus {
 @media (min-width: 768px) {
     .interview-stepper {
         flex: 0 0 auto;
-        width: 13rem;
+        width: 15rem;                 /* room for the two-part switch (Plans | Assumptions) in the header */
     }
 }
 

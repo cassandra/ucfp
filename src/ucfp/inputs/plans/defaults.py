@@ -11,11 +11,10 @@ from ucfp.accounts.enums import AssetClass
 
 from .schemas import DrawdownPolicy
 
-# The liquid asset classes the cash waterfall may sell, in the default priority order (retirement
-# last so it is drawn only as a last resort). Physical goods (precious metals, collectibles) and
-# illiquid holdings (real estate, vehicles) are excluded -- selling a house or a car to cover a
-# small cash dip is not a draw source; cash is the hub itself, not a source. This is also the set
-# the Cash Plan draw-order widget offers (shown even when unheld, so the order survives new holdings).
+# The liquid financial classes the cash waterfall sells a slice of, in default priority order
+# (retirement last so it is drawn only as a last resort). These are the partially-drawable sources
+# (see `AssetClass.supports_partial_draw`); the indivisible whole-asset sale sources are appended in
+# DRAW_SOURCE_CLASSES below. Cash itself is the funded hub, never a draw source.
 LIQUID_DRAW_CLASSES = (
     AssetClass.CDS,
     AssetClass.BONDS,
@@ -23,6 +22,21 @@ LIQUID_DRAW_CLASSES = (
     AssetClass.DIVIDEND_STOCKS,
     AssetClass.ROTH,
     AssetClass.PRETAX_RETIREMENT,
+)
+
+# The full ordered set of cash draw sources: the liquid classes first, then the whole-asset sale
+# sources -- possessions (metals, then collectibles), then the second home, the rental, and the
+# residence last (a residence sale is the last resort and converts the owner to a renter). Real
+# estate and possessions are indivisible, sold whole through a sale handler rather than drawn a slice
+# at a time. A default plan exhausts every source in this order; the Cash Plan lets the user reorder
+# any of them or move any into a "retain" set. Vehicles are deliberately excluded -- a small, needed,
+# fast-depreciating asset is turned over only through replacement, never sold to cover a cash dip.
+DRAW_SOURCE_CLASSES = LIQUID_DRAW_CLASSES + (
+    AssetClass.PRECIOUS_METALS,
+    AssetClass.COLLECTIBLES,
+    AssetClass.REAL_ESTATE_SECOND_HOME,
+    AssetClass.REAL_ESTATE_RENTAL,
+    AssetClass.REAL_ESTATE_RESIDENCE,
 )
 
 # The classes a cash sweep may invest surplus into: the non-retirement liquid holdings. Retirement
@@ -41,12 +55,18 @@ _DEFAULT_SWEEP = [ ( 'stocks', Decimal( '0.5' ) ), ( 'bonds', Decimal( '0.5' ) )
 
 
 def default_drawdown() -> DrawdownPolicy:
-    """The complete cash policy an untouched plan uses: a $25k floor / $50k ceiling band, the liquid
-    draw waterfall, and a 50/50 Stocks/Bonds sweep -- since holding too much idle cash is rarely a
-    good plan. The sweep targets (the Stocks and Bonds accounts) are always present, so the ceiling,
-    which the engine requires to come with a sweep destination, is safe to default."""
+    """The complete cash policy an untouched plan uses: no floor, a $25k ceiling, the liquid draw
+    waterfall, and a 50/50 Stocks/Bonds sweep -- since holding too much idle cash is rarely a good plan.
+    The floor defaults to zero deliberately: funding then draws from investments (and, worst case, a
+    penalized early retirement withdrawal) only to pay a real expense, never merely to top a cash buffer
+    back up -- which no rational saver would sell down invested assets to do. The cash-drag reality (some
+    wealth sits in low-yield cash) is instead carried by the ceiling: cash accumulates up to it before the
+    surplus is swept. A floor remains an available input for anyone who wants a modeled reserve (it matters
+    more at fine, near-term granularity). The sweep targets (the Stocks and Bonds accounts) are always
+    present, so the ceiling, which the engine requires to come with a sweep destination, is safe to
+    default."""
     return DrawdownPolicy(
-        cash_floor       = Decimal( '25000' ),
-        cash_ceiling     = Decimal( '50000' ),
-        draw_order       = list( LIQUID_DRAW_CLASSES ),
+        cash_floor       = Decimal( '0' ),
+        cash_ceiling     = Decimal( '25000' ),
+        draw_order       = list( DRAW_SOURCE_CLASSES ),
         sweep_allocation = list( _DEFAULT_SWEEP ) )

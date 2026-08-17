@@ -7,9 +7,6 @@ scenario is ready when its resolved Plans + Assumptions, judged against the curr
 records' reviewed sections, raise no issues). Splitting drift out from half-built matters because the two
 have different fixes: drift clears with one reconcile, a half-built scenario needs the interview resumed.
 """
-from ucfp.inputs.assumptions.repository import load_assumptions
-from ucfp.inputs.plans.repository import load_plans
-from ucfp.inputs.profile.repository import load_profile
 from ucfp.inputs.scenarios.repository import scenarios_for
 
 from .readiness import readiness_issues
@@ -17,15 +14,10 @@ from .readiness import readiness_issues
 
 def scenario_readiness( profile_record, scenario_record ) -> list:
     """The readiness issues of a scenario's bundle against `profile_record` -- empty when it is runnable.
-    Acknowledgment spans the profile plus the scenario's own Plans and Assumptions, so a step left
-    unreviewed during the build keeps the scenario in-progress."""
-    acknowledged = frozenset(
-        profile_record.acknowledged_section_keys
-        | scenario_record.plans.acknowledged_section_keys
-        | scenario_record.assumptions.acknowledged_section_keys )
-    return readiness_issues(
-        load_profile( profile_record ), load_plans( scenario_record.plans ),
-        load_assumptions( scenario_record.assumptions ), acknowledged )
+    Delegates to `readiness_issues`, which reads the per-input completeness across the profile plus the
+    scenario's own Plans and Assumptions -- so a step left unreviewed keeps it in-progress and a per-input
+    blocker keeps it from running."""
+    return readiness_issues( profile_record, scenario_record.plans, scenario_record.assumptions )
 
 
 def scenario_started( scenario_record ) -> bool:

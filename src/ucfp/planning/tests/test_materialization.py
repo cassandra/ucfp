@@ -23,8 +23,10 @@ from ucfp.inputs.plans.schemas import (
 from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
+from ucfp.planning.display_placement import property_expense_handle
 from ucfp.planning.materialization import (
-    _assets, _health_coverage, _leased_current_expenses, _property_expenses, _vehicle_expenses,
+    _assets, _health_coverage, _leased_current_expenses, _property_data, _property_expenses,
+    _rent_account_handle, _vehicle_expenses,
     _vehicle_holding_purchases, _vehicle_holdings, _vehicle_loan_originations, _vehicle_running_costs )
 
 _OWNED    = ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL )
@@ -96,6 +98,75 @@ class RealizationTests( unittest.TestCase ):
         streams, items = self._residence_plans( Realization.SMOOTH, Duration( 1, TimeUnit.MONTH ) )
         self.assertEqual( items, [] )
         self.assertEqual( streams[ 0 ].amounts.segments[ 0 ].amount, Decimal( '72000' ) )
+
+
+class ResidenceExpenseMaterializationTests( unittest.TestCase ):
+    """The residence's operating costs materialize full-horizon -- its sale is books-driven, so the forecast
+    ends them (and opens rent) when the sale is reported, not the materializer here. A dormant rent item is
+    added, and `PropertyData` classifies the residence's expense accounts (own-cost vs tenure-invariant) plus
+    naming the rent, the handles the forecast's reconfiguration reaches for."""
+
+    @staticmethod
+    def _pexpense( name, handle, applies_to, amount ):
+        return PropertyExpense(
+            name = name, handle = handle, category = ExpenseCategory.UTILITIES_SERVICES,
+            expense_tax_class = ExpenseTaxClass.LIVING, applies_to = applies_to,
+            realization = Realization.DISCRETE, interval = Duration( 1, TimeUnit.MONTH ),
+            default_amount = Decimal( amount ) )
+
+    def _profile_plans( self ):
+        profile = Profile( assets = [ _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ) ] )
+        plans   = Plans( property_expenses = [
+            self._pexpense( 'Electric', 'electric', _OCCUPIED, '150' ),        # tenure-invariant utility
+            self._pexpense( 'Property Tax', 'property-tax', _OWNED, '500' ),   # own-only
+            self._pexpense( 'Rent', 'rent', ( PropertyContext.RENTED_HOME, ), '2000' ) ] )
+        return profile, plans
+
+    def test_residence_costs_are_full_horizon_and_rent_is_dormant( self ):
+        profile, plans = self._profile_plans()
+        _streams, items = _property_expenses(
+            profile, plans, { 'residence': _property( 'residence', AssetClass.REAL_ESTATE_RESIDENCE ) }, dict() )
+        by_name = { item.name: item for item in items }
+        self.assertIsNone( by_name[ 'Residence Electric' ].window.end )        # not clipped here
+        self.assertIsNone( by_name[ 'Residence Property Tax' ].window.end )    # not clipped here
+        self.assertEqual( by_name[ 'Rented Home Rent' ].window.start, date.max )   # dormant until the sale opens it
+        self.assertEqual( by_name[ 'Rented Home Rent' ].amounts.segments[ 0 ].amount, Decimal( '2000' ) )
+
+    def test_property_data_classifies_the_residence_expenses( self ):
+        profile, plans = self._profile_plans()
+        data = _property_data( profile, plans )[ 'residence' ]
+        self.assertIn( str( property_expense_handle( 'property-tax', 'residence' ) ), data.ownership_cost_handles )
+        self.assertIn( str( property_expense_handle( 'electric', 'residence' ) ), data.tenure_invariant_handles )
+        self.assertEqual( data.rent_handle, _rent_account_handle( plans ) )
+
+
+class SecondHomeExpenseMaterializationTests( unittest.TestCase ):
+    """A second home's sale is books-driven too, but with no rent conversion: every operating cost ends at
+    the sale (nothing carries, no rent), so its PropertyData names them all under `ownership_cost_handles`."""
+
+    def _profile_plans( self ):
+        profile = Profile( assets = [ _property( 'second-home', AssetClass.REAL_ESTATE_SECOND_HOME ) ] )
+        plans   = Plans( property_expenses = [
+            ResidenceExpenseMaterializationTests._pexpense( 'Electric', 'electric', _OCCUPIED, '150' ),
+            ResidenceExpenseMaterializationTests._pexpense( 'Property Tax', 'property-tax', _OWNED, '500' ) ] )
+        return profile, plans
+
+    def test_second_home_costs_are_full_horizon_with_no_rent( self ):
+        profile, plans = self._profile_plans()
+        _streams, items = _property_expenses(
+            profile, plans, { 'second-home': _property( 'second-home', AssetClass.REAL_ESTATE_SECOND_HOME ) }, dict() )
+        by_handle = { str( item.handle ): item for item in items }
+        self.assertIsNone( by_handle[ str( property_expense_handle( 'electric', 'second-home' ) ) ].window.end )
+        self.assertNotIn( 'Rented Home Rent', [ item.name for item in items ] )   # no rent for a second home
+
+    def test_property_data_ends_all_second_home_costs_with_no_carry_or_rent( self ):
+        profile, plans = self._profile_plans()
+        data = _property_data( profile, plans )[ 'second-home' ]
+        both = { str( property_expense_handle( 'electric', 'second-home' ) ),
+                 str( property_expense_handle( 'property-tax', 'second-home' ) ) }
+        self.assertEqual( set( data.ownership_cost_handles ), both )   # every cost ends at the sale
+        self.assertEqual( data.tenure_invariant_handles, () )         # nothing carries
+        self.assertIsNone( data.rent_handle )                        # and no rent
 
 
 def _vehicle( handle, purchase_date, end_date = None, **kwargs ) -> Vehicle:

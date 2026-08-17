@@ -13,12 +13,16 @@ from django.urls import reverse
 
 from organization.models import Organization
 
+from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.inputs.assumptions.repository import save_assumptions
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.interview import applicable_sections, first_section_of_flow, flow_of
+from ucfp.jurisdiction.enums import StatuteForecastType
+from ucfp.jurisdiction.law import TaxProjection
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.repository import latest_profile, save_profile
 from ucfp.inputs.profile.schemas import Profile, SubjectProfile
 from ucfp.inputs.scenarios.repository import create_scenario, scenarios_for
@@ -41,7 +45,7 @@ class _NewScenarioBase( TestCase ):
         self.factory      = RequestFactory()
         self.profile = Profile(
             subjects = [ SubjectProfile( 'subject', 'You', date( 1960, 1, 1 ) ) ],
-            filing_status = FilingStatus.SINGLE )
+            filing_status = FilingStatus.SINGLE, home_tenure = HousingTenure.NEITHER )
         save_profile( self.organization, self.profile )
         _acknowledge_flow( latest_profile( self.organization ), self.profile, 'profile' )
 
@@ -54,7 +58,11 @@ class _NewScenarioBase( TestCase ):
 
     def _assumptions( self, label, complete = True ):
         record = AssumptionsRecord( organization = self.organization, label = label )
-        save_assumptions( record, Assumptions() )
+        # Valid assumptions (outlook + tax present) so an acknowledged one is complete -- the external
+        # factors are a completeness requirement now.
+        save_assumptions( record, Assumptions(
+            economics = EconomicParameters(),
+            tax_projection = TaxProjection( forecast_type = StatuteForecastType.CURRENT_LAW ) ) )
         if complete:
             _acknowledge_flow( record, self.profile, 'assumptions' )
         return record

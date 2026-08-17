@@ -1,0 +1,33 @@
+{% comment %}
+The interview rail's header, above the section stepper -- it owns the completion badge for every interview.
+In a scenario build (editing a scenario's Plans/Assumptions) it is a two-part switch: the active part is a
+plain label, the other links to its first section, so the user moves between Plans and Assumptions in either
+direction rather than only via Next at the end of Plans. Otherwise (an individual component edit, or the
+Profile) it is the single flow's title. Each part shows its own status via part_badge.html. One of the swap
+targets InterviewView._swap refreshes on each section advance, so the active part's badge updates live.
+Reads `rail_scenario_mode` and `rail_parts` (each: label, status, url, active).
+{% endcomment %}
+<div id="interview-rail-header" class="interview-rail-header mb-3">
+  {% if rail_scenario_mode %}
+  <div class="interview-parts" role="tablist">
+    {% for part in rail_parts %}
+    {% if part.active %}
+    <span class="interview-part active" aria-current="page">
+      <span class="interview-part-title">{{ part.label }}</span>
+      {% include 'inputs/interview/part_badge.html' with status=part.status %}
+    </span>
+    {% else %}
+    <a class="interview-part" href="{{ part.url }}">
+      <span class="interview-part-title">{{ part.label }}</span>
+      {% include 'inputs/interview/part_badge.html' with status=part.status %}
+    </a>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="interview-part-single">
+    <span class="interview-part-title">{{ rail_parts.0.label }}</span>
+    {% include 'inputs/interview/part_badge.html' with status=rail_parts.0.status %}
+  </div>
+  {% endif %}
+</div>

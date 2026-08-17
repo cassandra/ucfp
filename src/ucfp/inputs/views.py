@@ -47,7 +47,9 @@ from .interview import (
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
 from .state import (
-    completed_assumptions, completed_plans, completed_profile, profile_is_complete )
+    assumptions_completion_blockers, assumptions_is_complete, completed_assumptions, completed_plans,
+    completed_profile, plans_completion_blockers, plans_is_complete, profile_advisories,
+    profile_completion_blockers, profile_is_complete )
 from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
 from .vehicle_disposition import (
     LeasedVehicleDispositionForm, VehicleDispositionForm, all_dispositions_context )
@@ -87,9 +89,15 @@ class ScenariosHomeView( View ):
     def get( self, request ):
         organization   = request.organization
         profile_record = completed_profile( organization )
+        scenarios      = list( scenarios_for( organization ).select_related( 'plans', 'assumptions' ) )
+        # Single-scenario shortcut: with a completed profile and exactly one scenario, reviewing/editing it
+        # is the only useful action here, so enter it directly rather than showing a one-card list (the same
+        # thing the card's "Review scenario" does). The list returns as soon as a second scenario exists;
+        # + New scenario stays reachable from the edit page's header.
+        if profile_record is not None and len( scenarios ) == 1:
+            return _enter_scenario_build( request, scenarios[ 0 ] )
         # One pass over the saved scenarios drives the cards: per-component usage counts feed the "shared"
         # indicator, and the complete-component ids mark each scenario complete-vs-in-progress.
-        scenarios        = list( scenarios_for( organization ).select_related( 'plans', 'assumptions' ) )
         plans_uses       = Counter( scenario.plans_id for scenario in scenarios )
         assumptions_uses = Counter( scenario.assumptions_id for scenario in scenarios )
         complete_ids     = self._complete_component_ids( organization, profile_record )
@@ -116,15 +124,20 @@ class ScenariosHomeView( View ):
 
     @staticmethod
     def _scenario_rows( scenarios, profile, plans_uses, assumptions_uses, plans_ids, assumptions_ids ):
-        """Each saved scenario as a row -- `complete` (both components' flows walked, so an in-progress one
-        can offer to resume setup), its `drift` notice against the current `profile` (None when it fully
-        resolves, else the stale references + reconcile shown on the card), and how many scenarios share
-        each of its components (`plans_uses` / `assumptions_uses`) for the "shared" indicator. `scenarios`
-        and the usage counters are prepared once by the caller so the page makes a single scenarios query."""
+        """Each saved scenario as a row -- `complete` (both components complete), `blockers` (the per-input
+        requirements a *finished* scenario still lacks; non-empty only when finished-but-blocked, so the card
+        tells that apart from a still-unfinished one and can name the reasons), its `drift` notice against the
+        current `profile` (None when it fully resolves, else the stale references + reconcile shown on the
+        card), and how many scenarios share each of its components (`plans_uses` / `assumptions_uses`) for the
+        "shared" indicator. `scenarios` and the usage counters are prepared once by the caller so the page
+        makes a single scenarios query."""
         rows = list()
         for scenario in scenarios:
             complete = scenario.plans_id in plans_ids and scenario.assumptions_id in assumptions_ids
-            rows.append( { 'scenario': scenario, 'complete': complete,
+            blockers = ( plans_completion_blockers( profile, scenario.plans )
+                         + assumptions_completion_blockers( profile, scenario.assumptions )
+                         if profile is not None else list() )
+            rows.append( { 'scenario': scenario, 'complete': complete, 'blockers': blockers,
                            'drift': plans_drift( profile, scenario.plans ) if profile is not None else None,
                            'plans_uses': plans_uses[ scenario.plans_id ],
                            'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
@@ -615,8 +628,15 @@ class InterviewView( View ):
     _COMPONENT_TEMPLATE = 'inputs/interview/component_page.html'
     _SECTION_TEMPLATE = 'inputs/interview/section.html'
     _STEPPER_TEMPLATE = 'inputs/interview/stepper.html'
+    # The status shows in two swap targets: the rail header (the completion badge, plus the Plans/Assumptions
+    # part switch in a scenario build) and the detail notices below the page heading. Both refresh on advance,
+    # so the active part's badge and its blocker alert update together without a reload.
+    _RAIL_TEMPLATE   = 'inputs/interview/rail_header.html'
+    _DETAIL_TEMPLATE = 'inputs/interview/interview_status_detail.html'
     _SECTION_TARGET   = 'interview-section'
     _STEPPER_TARGET   = 'interview-stepper'
+    _RAIL_TARGET      = 'interview-rail-header'
+    _DETAIL_TARGET    = 'interview-status-detail'
 
     def get( self, request, section ):
         current  = self._live_section( section )
@@ -754,10 +774,17 @@ class InterviewView( View ):
 
     def _swap( self, request, sections, section, form ):
         context = self._context( request, sections, section, form )
+        # Refresh the stepper's seen-marks, the rail header (the completion badge / part switch), and the
+        # detail notices alongside the section, so advancing reflects the now-updated flow at once -- e.g.
+        # adding the missing person clears the incomplete state without a reload. The detail is empty (a
+        # no-op replace) for a flow with no notice to show.
         return antinode.response(
             main_content = render_to_string( self._SECTION_TEMPLATE, context, request = request ),
-            replace_map = { self._STEPPER_TARGET: render_to_string(
-                self._STEPPER_TEMPLATE, context, request = request ) },
+            replace_map = {
+                self._STEPPER_TARGET: render_to_string( self._STEPPER_TEMPLATE, context, request = request ),
+                self._RAIL_TARGET   : render_to_string( self._RAIL_TEMPLATE, context, request = request ),
+                self._DETAIL_TARGET : render_to_string( self._DETAIL_TEMPLATE, context, request = request ),
+            },
             push_url = reverse( 'interview_section', kwargs = { 'section': section.key } ),
             scroll_to = self._SECTION_TARGET )
 
@@ -778,6 +805,9 @@ class InterviewView( View ):
             'flow_heading'         : flow_title( flow ),   # the record's own name is the inline rename below
             # The scenario being built (its name), so the component flows breadcrumb it during a build.
             'editing_scenario_name'    : self._editing_scenario_name( request ),
+            # The scenario being built, as an inline rename -- so its name is editable here (the page's
+            # identity in a build); None outside a build, where the component name is the identity instead.
+            'scenario_rename'      : self._scenario_rename( request ),
             # The component being edited, as an inline rename in the header, so its name can be changed
             # here (e.g. straight after a create or clone) rather than only on the Scenarios page.
             'component_rename'     : self._component_rename( request, flow ),
@@ -789,7 +819,12 @@ class InterviewView( View ):
             'stepper_target'       : self._STEPPER_TARGET,
             # The Plans-flow drift banner: these plans reference removed Profile entities (None off Plans).
             'drift'                : self._plans_drift( request, flow ),
+            # The rail header: the completion badge(s) and, in a build, the Plans/Assumptions part switch.
+            **self._rail_header( request, flow ),
+            # The current flow's blocker/advisory notices for the detail banner below the heading.
             **self._profile_status( request, flow ),
+            **self._plans_status( request, flow ),
+            **self._assumptions_status( request, flow ),
         }
 
     @staticmethod
@@ -814,17 +849,93 @@ class InterviewView( View ):
             return False
         return not ( request.session_state.editing_scenario and flow == 'plans' )
 
+    def _rail_header( self, request, flow ) -> dict:
+        """The stepper's header context: the flow's title and completion badge. In a scenario build (editing
+        a scenario's Plans/Assumptions) it is a two-part switch -- both parts, each with its own status, the
+        inactive one linking to its first section -- so the user can move between Plans and Assumptions in
+        either direction. Otherwise (an individual component edit, or the Profile) it is the single active
+        flow. The badge lives here, the one home for status across every interview."""
+        profile_record = latest_profile( request.organization )
+        profile        = load_profile( profile_record ) if profile_record is not None else None
+        scenario_mode  = bool( request.session_state.editing_scenario ) and flow in ( 'plans', 'assumptions' )
+        parts          = [ 'plans', 'assumptions' ] if scenario_mode else [ flow ]
+        entries = [ { 'label' : flow_title( part ),
+                      'status': self._part_status( request, profile, part ),
+                      'url'   : reverse( 'interview_section',
+                                         kwargs = { 'section': first_section_of_flow( part ).key } ),
+                      'active': part == flow }
+                    for part in parts ]
+        return { 'rail_parts': entries, 'rail_scenario_mode': scenario_mode }
+
+    @staticmethod
+    def _part_status( request, profile, flow ) -> str:
+        """A flow's completion state for its rail badge: 'complete', 'blocked' (every section walked but a
+        hard requirement is still unmet), or 'in_progress' (still being walked, or nothing to judge yet).
+        Reads the flow's current record; the blockers are non-empty only once the flow is walked, so a
+        blocked state cannot show mid-walk."""
+        if flow == 'profile':
+            record = latest_profile( request.organization )
+            if record is None:
+                return 'in_progress'
+            if profile_is_complete( record ):
+                return 'complete'
+            return 'blocked' if profile_completion_blockers( record ) else 'in_progress'
+        if flow == 'plans':
+            record = current_plans_record( request )
+            if profile is None or record is None:
+                return 'in_progress'
+            if plans_is_complete( profile, record ):
+                return 'complete'
+            return 'blocked' if plans_completion_blockers( profile, record ) else 'in_progress'
+        record = current_assumptions_record( request )
+        if profile is None or record is None:
+            return 'in_progress'
+        if assumptions_is_complete( profile, record ):
+            return 'complete'
+        return 'blocked' if assumptions_completion_blockers( profile, record ) else 'in_progress'
+
     @staticmethod
     def _profile_status( request, flow ) -> dict:
-        """The Profile flow's header status -- whether the profile is complete and when it was last
-        updated -- so its landing shows setup state. Empty for the component flows."""
+        """The Profile flow's detail notices -- when it was last updated, the blocker reasons (once walked),
+        and the advisories (once complete). Empty for the component flows. The completion badge is the rail
+        header's; this feeds only the detail banner below the heading."""
         if flow != 'profile':
             return dict()
         record = latest_profile( request.organization )
         return {
-            'profile_complete': record is not None and profile_is_complete( record ),
             'profile_updated' : record.updated_datetime if record is not None else None,
+            # Non-empty only once every section is walked but the profile is still incomplete -- the reasons
+            # to show then, in the danger detail banner.
+            'profile_blockers': profile_completion_blockers( record ) if record is not None else [],
+            # Quiet, non-blocking notes for a complete profile (e.g. no funded account) -- an FYI, not an
+            # error; only surfaced once complete, so never alongside a blocker.
+            'profile_advisories': profile_advisories( record ) if record is not None else [],
         }
+
+    @staticmethod
+    def _plans_status( request, flow ) -> dict:
+        """The Plans flow's detail notices -- once walked, the hard requirements it still lacks (an amortizing
+        debt with no repayment plan) for the danger banner. Empty for the other flows."""
+        if flow != 'plans':
+            return dict()
+        profile_record = latest_profile( request.organization )
+        record         = current_plans_record( request )
+        if profile_record is None or record is None:
+            return { 'plans_blockers': [] }
+        return { 'plans_blockers': plans_completion_blockers( load_profile( profile_record ), record ) }
+
+    @staticmethod
+    def _assumptions_status( request, flow ) -> dict:
+        """The Assumptions flow's detail notices -- once walked, the hard requirements it still lacks (the
+        external factors) for the danger banner. Empty for the other flows."""
+        if flow != 'assumptions':
+            return dict()
+        profile_record = latest_profile( request.organization )
+        record         = current_assumptions_record( request )
+        if profile_record is None or record is None:
+            return { 'assumptions_blockers': [] }
+        return { 'assumptions_blockers':
+                 assumptions_completion_blockers( load_profile( profile_record ), record ) }
 
     @staticmethod
     def _component_rename( request, flow ):
@@ -838,6 +949,20 @@ class InterviewView( View ):
             return None
         return { 'kind': kind, 'uuid': record.uuid, 'label': record.label,
                  'rename_url': reverse( route, kwargs = { 'uuid': record.uuid } ) }
+
+    @staticmethod
+    def _scenario_rename( request ):
+        """The scenario being built, as inline-rename fields for the page heading -- so its name is editable
+        right on the interview (its identity during a build), like the components are on their own pages.
+        None outside a build."""
+        uuid = request.session_state.editing_scenario
+        if uuid is None:
+            return None
+        record = ScenarioRecord.objects.filter( uuid = uuid, organization = request.organization ).first()
+        if record is None:
+            return None
+        return { 'kind': 'scenario', 'uuid': record.uuid, 'label': record.label,
+                 'rename_url': reverse( 'scenario_rename', kwargs = { 'uuid': record.uuid } ) }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

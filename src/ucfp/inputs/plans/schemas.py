@@ -110,6 +110,15 @@ class PropertyExpense:
     cost_each: Optional[ Decimal ] = None
     lifespan: Optional[ int ] = None
 
+    @property
+    def tenure_invariant( self ) -> bool:
+        """Whether this expense carries across the primary dwelling's own->rent transition: true iff it
+        applies to both the owned residence and a rented home (utilities -- you pay them either way), so a
+        residence sale that becomes a rental keeps it. Own-only rows (property tax, upkeep) and rent-only
+        rows (rent) do not. Derived from `applies_to` so it cannot drift from the contexts that
+        authoritatively define where the expense applies."""
+        return { PropertyContext.RESIDENCE, PropertyContext.RENTED_HOME }.issubset( self.applies_to )
+
 
 # --- Saving ---------------------------------------------------------------
 
@@ -356,10 +365,16 @@ class VehiclePlan:
 class DrawdownPolicy:
     """The cash band and how to cover/sweep it -- mirrors the engine `CashAccountParameters`.
     Below the floor the engine draws from `draw_order`; above the ceiling it sweeps surplus
-    into `sweep_allocation` (holding handle -> weight, weights summing to 1)."""
+    into `sweep_allocation` (holding handle -> weight, weights summing to 1).
+
+    `draw_order` is the full ordered list of every draw source; `retained` marks the ones the user
+    has held back (kept, never sold). A retained source keeps its slot in the order -- so re-enabling
+    restores its priority -- but materialization drops it before the engine, which therefore only ever
+    sees the enabled sources and never learns of a retained one."""
     cash_floor: Decimal = Decimal( '0' )
     cash_ceiling: Optional[ Decimal ] = None
     draw_order: list[ AssetClass ] = field( default_factory = list )
+    retained: list[ AssetClass ] = field( default_factory = list )
     sweep_allocation: list[ tuple[ str, Decimal ] ] = field( default_factory = list )
 
 
@@ -377,6 +392,10 @@ class PlanEvent:
     date: date
     amount: Optional[ Decimal ] = None
     selections: dict[ str, str ] = field( default_factory = dict )
+    # Event-specific non-entity settings a kind may read (distinct from `selections`, which are entity
+    # handles): a small key->value bag, e.g. a residence sale's 'rent_after'. Absent keys take the kind's
+    # default, so an event stored before a kind grew an option still materializes.
+    options: dict[ str, str ] = field( default_factory = dict )
 
 
 # --- Life events ----------------------------------------------------------

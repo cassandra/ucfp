@@ -66,4 +66,31 @@ Reads `summary`, `currency`, and whatever run_books_table.html reads (`books_tab
      if ( open ) { setMaximized( open, false ); }
    } );
  })();
+
+ (function () {
+   // A column menu opens inside #books-table's scroll pane (overflow:auto) and the panel card
+   // (overflow:hidden), which clip a menu that extends past a short table's top or bottom edge -- it reads
+   // as a cut-off dropdown. While open, re-home the menu to <body> so it escapes both clips (Bootstrap
+   // caches the menu element at construction, so Popper still anchors it to its gear after the move) and
+   // mark it .bt-menu-floating to lift it above the maximized overlay. Delegated on document via Bootstrap's
+   // jQuery dropdown events, so it survives antinode swaps of the table; restored to its cell on hide.
+   var jq = window.jQuery;
+   if ( ! jq || window.__btColMenuReady ) { return; }
+   window.__btColMenuReady = true;
+   jq( document )
+     .on( 'show.bs.dropdown', '.bt-col-menu', function () {
+       var menu = this.querySelector( '.dropdown-menu' );
+       if ( ! menu ) { return; }
+       this._btMenu = menu;
+       this._btMenuHome = menu.parentNode;
+       menu.classList.add( 'bt-menu-floating' );
+       document.body.appendChild( menu );
+     } )
+     .on( 'hide.bs.dropdown', '.bt-col-menu', function () {
+       if ( ! this._btMenu || ! this._btMenuHome ) { return; }
+       this._btMenu.classList.remove( 'bt-menu-floating' );
+       this._btMenuHome.appendChild( this._btMenu );
+       this._btMenu = null;
+     } );
+ })();
 </script>

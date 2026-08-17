@@ -1,27 +1,30 @@
 {% extends "pages/detail_page.html" %}
 {% comment %}
-A scenario component (Plans/Assumptions) interview -- a detail page under Scenarios. The breadcrumb trails
-to the scenario being built (during a build) or back to Scenarios; the page type is the component kind, and
-its editable Name sits beneath, so it can be renamed here (e.g. straight after a create or clone). The body
-is the shared stepping layout.
+A scenario component (Plans/Assumptions) interview -- a detail page under Scenarios. The page header carries
+only the identity: in a scenario build that is the editable SCENARIO name (its two parts and their status
+live in the rail header, so the component names are not repeated); editing a component on its own, it is that
+component's editable name. + New scenario is offered while building, since the single-scenario shortcut skips
+the Scenarios list. The blocker/advisory notices for the current part sit below; the body is the shared
+stepping layout, whose rail header holds the completion badge and the Plans/Assumptions switch.
 {% endcomment %}
 {% block main_container_class %}container-fluid{% endblock %}
 {% block header_container %}container{% endblock %}
 
-{% block breadcrumb %}
-{% if editing_scenario_name %}
-<li class="breadcrumb-item">Scenario: {{ editing_scenario_name }}</li>
-{% else %}
-<li class="breadcrumb-item"><a href="{% url 'scenarios_home' %}">Scenarios</a></li>
+{% block breadcrumb %}<li class="breadcrumb-item"><a href="{% url 'scenarios_home' %}">Scenarios</a></li>{% endblock %}
+
+{% block page_heading %}
+{% if scenario_rename %}
+{% include 'inputs/panes/inline_rename.html' with kind=scenario_rename.kind uuid=scenario_rename.uuid rename_url=scenario_rename.rename_url label=scenario_rename.label aria='Scenario name' title=True %}
+{% elif component_rename %}
+{% include 'inputs/panes/inline_rename.html' with kind=component_rename.kind uuid=component_rename.uuid rename_url=component_rename.rename_url label=component_rename.label aria=flow_title|add:' name' title=True %}
 {% endif %}
 {% endblock %}
 
-{% block page_type %}{{ flow_heading }}{% endblock %}
+{% comment %}+ New scenario lives here because the single-scenario shortcut enters this page directly,
+bypassing the Scenarios list where the create action otherwise lives. Shown only while editing within a
+scenario -- the exact context that shortcut lands in.{% endcomment %}
+{% block page_actions %}{% if editing_scenario_name %}<a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary">+ New scenario</a>{% endif %}{% endblock %}
 
-{% block page_name %}
-{% if component_rename %}
-{% include 'pages/editable_name.html' with kind=component_rename.kind uuid=component_rename.uuid rename_url=component_rename.rename_url label=component_rename.label aria=flow_title|add:' name' %}
-{% endif %}
-{% endblock %}
+{% block page_meta %}{% include "inputs/interview/interview_status_detail.html" %}{% endblock %}
 
 {% block page_body %}{% include "inputs/interview/body.html" %}{% endblock %}

@@ -13,9 +13,25 @@ from decimal import Decimal, InvalidOperation
 from django import forms
 
 from common.forms import MoneyField
+from ucfp.accounts.enums import AssetClass
 
-from .plans.defaults import LIQUID_DRAW_CLASSES, SWEEP_TARGET_CLASSES, default_drawdown
+from .plans.defaults import DRAW_SOURCE_CLASSES, SWEEP_TARGET_CLASSES, default_drawdown
 from .plans.schemas import DrawdownPolicy
+
+
+# Draw-source row labels for the pane. Real-estate classes carry a verbose "Real Estate (...)" catalog
+# label, so the pane shows the shorter group name -- plural where the household may hold several (to
+# match the Profile panes), singular for the one primary residence. Every other source (the liquid
+# classes, the possessions) reads well as its own label, so it falls through to that.
+_DRAW_SOURCE_LABELS = {
+    AssetClass.REAL_ESTATE_RESIDENCE   : 'Residence',
+    AssetClass.REAL_ESTATE_SECOND_HOME : 'Second Homes',
+    AssetClass.REAL_ESTATE_RENTAL      : 'Rentals',
+}
+
+
+def _draw_source_label( asset_class : AssetClass ) -> str:
+    return _DRAW_SOURCE_LABELS.get( asset_class, asset_class.label )
 
 
 def _normalized( rows : list ) -> list:
@@ -51,20 +67,44 @@ class DrawdownForm( forms.Form ):
         self.fields[ 'cash_ceiling' ].initial = self._policy.cash_ceiling
 
     # ---- draw order ----
+    #
+    # One ordered list holds every source; `retained` marks the ones held back. Both persist, so a
+    # retained source keeps its slot (re-enabling restores its priority). The pane posts the full order
+    # (`draw_order`) plus the retained names (`retained`); materialization drops the retained before the
+    # engine, which therefore only ever iterates the enabled sources.
 
     @property
     def draw_rows( self ) -> list:
-        """The draw-order rows for the pane: every liquid class in priority order (the stored order,
-        then any not yet placed), each flagged with whether the household holds it."""
-        held  = { asset.asset_class for asset in ( self._profile.assets if self._profile else () ) }
-        order = [ c for c in self._policy.draw_order if c in LIQUID_DRAW_CLASSES ]
-        order += [ c for c in LIQUID_DRAW_CLASSES if c not in order ]
-        return [ { 'value' : c.name, 'label' : c.label, 'held' : c in held } for c in order ]
+        """Every draw source in priority order: its post value, group label, whether the household holds
+        it, whether it is enabled (drawn) or retained, and its 1-based draw rank -- numbered across the
+        enabled rows only (a retained row has no rank), so the badge always reads as true draw priority.
+        Any source the stored order predates is surfaced at the end, enabled."""
+        held     = { asset.asset_class for asset in ( self._profile.assets if self._profile else () ) }
+        retained = set( self._policy.retained )
+        order    = list( self._policy.draw_order )
+        order   += [ c for c in DRAW_SOURCE_CLASSES if c not in order ]
+        rows     = list()
+        rank     = 0
+        for source in order:
+            enabled = source not in retained
+            rank   += 1 if enabled else 0
+            rows.append( { 'value' : source.name, 'label' : _draw_source_label( source ),
+                           'held' : source in held, 'enabled' : enabled,
+                           'rank' : rank if enabled else None } )
+        return rows
+
+    def _submitted( self, field_name ) -> list:
+        by_name = { c.name : c for c in DRAW_SOURCE_CLASSES }
+        return [ by_name[ name ] for name in self.data.getlist( field_name ) if name in by_name ]
 
     def _submitted_order( self ) -> list:
-        by_name = { c.name : c for c in LIQUID_DRAW_CLASSES }
-        ordered = [ by_name[ name ] for name in self.data.getlist( 'draw_order' ) if name in by_name ]
-        return ordered or list( self._policy.draw_order )
+        return self._submitted( 'draw_order' ) or list( self._policy.draw_order )
+
+    def _submitted_retained( self ) -> list:
+        # Bounded to what the posted order actually contains -- a retained name with no matching row is
+        # meaningless, and dropping it keeps `retained` a clean subset of `draw_order`.
+        order = set( self._submitted_order() )
+        return [ source for source in self._submitted( 'retained' ) if source in order ]
 
     # ---- sweep ----
 
@@ -109,6 +149,7 @@ class DrawdownForm( forms.Form ):
             cash_floor       = self.cleaned_data[ 'cash_floor' ],
             cash_ceiling     = ceiling if sweep else None,   # a ceiling is kept only with a sweep to invest into
             draw_order       = self._submitted_order(),
+            retained         = self._submitted_retained(),
             sweep_allocation = sweep )
         return profile, replace( plans, drawdown = policy )
 

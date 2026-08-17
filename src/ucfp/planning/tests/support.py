@@ -12,6 +12,7 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.assumptions.schemas import Assumptions
+from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
@@ -25,6 +26,7 @@ def forecast_profile() -> Profile:
     return Profile(
         subjects = [ SubjectProfile( handle = 'subject', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
         filing_status = FilingStatus.SINGLE,
+        home_tenure = HousingTenure.NEITHER,       # an explicit housing choice, so the profile is complete
         assets = [
             AssetProfile(
                 handle = 'cash', name = 'Cash', asset_class = AssetClass.CASH,

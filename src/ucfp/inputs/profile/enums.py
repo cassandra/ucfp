@@ -10,7 +10,9 @@ class HousingTenure( LabeledEnum ):
 
     OWN     = ( 'Own', 'The household owns its primary residence.' )
     RENT    = ( 'Rent', 'The household rents the home it occupies.' )
-    NEITHER = ( 'Neither', 'No recurring housing cost (e.g. living rent-free).' )
+    NEITHER = ( 'No housing cost',
+                'No home footprint modeled: no rent, ownership costs, or utilities (housing is provided '
+                'at no cost, or modeled elsewhere). Pick Rent with $0 rent if you pay any home cost.' )
 
 
 class DebtKind( LabeledEnum ):

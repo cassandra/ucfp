@@ -16,19 +16,12 @@ from dataclasses import dataclass, field
 
 from django.urls import reverse
 
-from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.compatibility import DRIFT_LEAD_IN, compatibility_issues
-from ucfp.inputs.interview import (
-    EXTERNAL_FACTORS_STEP, INCOME_STEP, SUBJECTS_STEP, applicable_sections )
-from ucfp.inputs.plans.schemas import Plans
-from ucfp.inputs.profile.schemas import Profile
-
-
-# The interview step each field issue routes to (keys owned by the interview module), so its link lands
-# on the page that resolves it. Drift is not one step -- it keeps a flow-level link.
-_FILING_STEP   = SUBJECTS_STEP
-_CLAIMING_STEP = INCOME_STEP
-_FACTORS_STEP  = EXTERNAL_FACTORS_STEP
+from ucfp.inputs.interview import applicable_sections
+from ucfp.inputs.plans.repository import load_plans
+from ucfp.inputs.profile.repository import load_profile
+from ucfp.inputs.state import (
+    assumptions_completion_blockers, plans_completion_blockers, profile_completion_blockers )
 
 
 @dataclass( frozen = True )
@@ -50,26 +43,46 @@ class ReadinessIssue:
         return reverse( self.fix_route, kwargs = self.fix_route_kwargs )
 
 
-def readiness_issues(
-        profile : Profile, plans : Plans, assumptions : Assumptions,
-        acknowledged_sections : frozenset = frozenset() ) -> list[ ReadinessIssue ]:
+def readiness_issues( profile_record, plans_record, assumptions_record ) -> list[ ReadinessIssue ]:
     """Every reason the bundle is not ready to run, as user-facing issues -- empty when it is ready. The
-    single place that enumerates the run's preconditions, so the run surface need not re-spell them and
-    materialization's raises stay a backstop. `acknowledged_sections` is the union of the chosen bundle's
-    records' seen sections; an unreviewed step gates the run so no section's defaults slip in unseen."""
-    return ( _acknowledgment_issues( profile, acknowledged_sections )
-             + _profile_issues( profile )
-             + _assumptions_issues( assumptions )
-             + _plans_issues( profile, plans ) )
+    single place that enumerates the run's preconditions, and it *delegates*: the per-input completeness
+    lives once in `inputs.state`, so this reads whether each of the Profile, Plans, and Assumptions is
+    complete against the current profile and turns their blockers into flow-linked run issues. It adds only
+    the two genuinely cross-input concerns -- an unreviewed step (State 0), and Plans->Profile drift.
+    Materialization stays the structural backstop that raises at use."""
+    profile = load_profile( profile_record )
+    return ( _not_finished_issues( profile, profile_record, plans_record, assumptions_record )
+             + _blocker_issues( profile_completion_blockers( profile_record ), 'flow_profile' )
+             + _blocker_issues( plans_completion_blockers( profile, plans_record ), 'flow_plans' )
+             + _blocker_issues( assumptions_completion_blockers( profile, assumptions_record ), 'flow_assumptions' )
+             + _drift_issues( profile, load_plans( plans_record ) ) )
 
 
-def _acknowledgment_issues(
-        profile : Profile, acknowledged_sections : frozenset ) -> list[ ReadinessIssue ]:
+# The per-input flow each blocker links to, and its resume-link label -- a blocker is a whole-input concern
+# (the interview stepper points to the exact step within), so it links to the input's flow, not one step.
+_FLOW_LABELS = {
+    'flow_profile'     : 'Finish your situation',
+    'flow_plans'       : 'Finish your plan',
+    'flow_assumptions' : 'Finish your assumptions',
+}
+
+
+def _blocker_issues( blockers : list, flow_route : str ) -> list[ ReadinessIssue ]:
+    """Each per-input completion blocker (from `inputs.state`) as a run issue linked to that input's flow."""
+    return [ ReadinessIssue( message = message, fix_label = _FLOW_LABELS[ flow_route ], fix_route = flow_route )
+             for message in blockers ]
+
+
+def _not_finished_issues(
+        profile, profile_record, plans_record, assumptions_record ) -> list[ ReadinessIssue ]:
     """The first applicable interview step (in Profile -> Plans -> Assumptions order) the user has not yet
-    seen, linking straight to it to resume the guided flow. Only live (form-backed) steps gate -- a
-    declared placeholder is never presented, so it can never be acknowledged."""
+    seen -- State 0, linking straight to it to resume the guided flow. Only live (form-backed) steps gate."""
+    acknowledged = frozenset(
+        profile_record.acknowledged_section_keys
+        | plans_record.acknowledged_section_keys
+        | assumptions_record.acknowledged_section_keys )
     for section in applicable_sections( profile ):
-        if section.form is not None and section.key not in acknowledged_sections:
+        if section.form is not None and section.key not in acknowledged:
             return [ ReadinessIssue(
                 message          = f'"{section.title}" has not been reviewed yet -- continue the '
                                    'interview to finish setup.',
@@ -79,57 +92,15 @@ def _acknowledgment_issues(
     return list()
 
 
-def _profile_issues( profile : Profile ) -> list[ ReadinessIssue ]:
-    if profile.filing_status is None:
-        return [ ReadinessIssue(
-            message          = 'Your situation needs a filing status before a forecast can run.',
-            fix_label        = 'Finish your situation',
-            fix_route        = 'interview_section',
-            fix_route_kwargs = { 'section' : _FILING_STEP } ) ]
-    return list()
-
-
-def _assumptions_issues( assumptions : Assumptions ) -> list[ ReadinessIssue ]:
-    if assumptions.economics is None or assumptions.tax_projection is None:
-        return [ ReadinessIssue(
-            message          = 'These assumptions are missing their external factors (economic outlook '
-                               'and tax projection). Open them to finish setup.',
-            fix_label        = 'Finish your assumptions',
-            fix_route        = 'interview_section',
-            fix_route_kwargs = { 'section' : _FACTORS_STEP } ) ]
-    return list()
-
-
-def _plans_issues( profile : Profile, plans : Plans ) -> list[ ReadinessIssue ]:
-    """Every plans-side reason a run is blocked: drift against the profile, and any government pension
-    left without a claiming date."""
-    issues = list()
+def _drift_issues( profile, plans ) -> list[ ReadinessIssue ]:
+    """Plans->Profile drift (stale references) as one issue -- the cross-input concern this gate owns.
+    `is_drift` lets a selection surface bucket it distinctly (the reconcilable kind, cleared in one click)
+    and render the stale references + fix through the shared `inputs.drift` notice."""
     drift = compatibility_issues( profile, plans )
-    if drift:
-        # `is_drift` lets a selection surface bucket this distinctly (the reconcilable kind) and render
-        # the stale references + one-click fix through the shared `inputs.drift` notice. The bundle-level
-        # message/link here is the fallback for a surface that shows issues generically.
-        issues.append( ReadinessIssue(
-            message   = DRIFT_LEAD_IN + ' ' + ' '.join( drift ),
-            fix_label = 'Review your plans',
-            fix_route = 'flow_plans',
-            is_drift  = True ) )
-    issues.extend( _claiming_issues( profile, plans ) )
-    return issues
-
-
-def _claiming_issues( profile : Profile, plans : Plans ) -> list[ ReadinessIssue ]:
-    """A claiming-date issue for each government pension entitlement whose subject has no claiming date
-    in the plans timing -- the run needs one to place the benefit. Gated on the entitlement existing
-    (only present when a benefit was entered), so no benefit means no requirement."""
-    claimed = { entry.subject_handle for entry in plans.timing
-                if entry.government_pension_claiming_date is not None }
-    names   = { subject.handle : subject.name for subject in profile.subjects }
+    if not drift:
+        return list()
     return [ ReadinessIssue(
-        message          = f'Social Security for {names.get( entitlement.subject_handle, "a person" )} '
-                           'needs a claiming date.',
-        fix_label        = 'Set retirement timing',
-        fix_route        = 'interview_section',
-        fix_route_kwargs = { 'section' : _CLAIMING_STEP } )
-        for entitlement in profile.government_pension
-        if entitlement.subject_handle not in claimed ]
+        message   = DRIFT_LEAD_IN + ' ' + ' '.join( drift ),
+        fix_label = 'Review your plans',
+        fix_route = 'flow_plans',
+        is_drift  = True ) ]

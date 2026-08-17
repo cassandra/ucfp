@@ -64,7 +64,9 @@ window.App.Inputs = (function () {
         const birth = birthdateFor( $age );
         const age = parseInt( $age.val(), 10 );
         if ( birth && ! isNaN( age ) ) {
-            $( '#' + $age.attr( dataAttr( C.DATE_FIELD_DATA_ATTR ) ) ).val( atAge( birth, age ) );
+            const $date = $( '#' + $age.attr( dataAttr( C.DATE_FIELD_DATA_ATTR ) ) );
+            $date.val( atAge( birth, age ) );
+            syncPickerToValue( $date );   // the picker keeps its own date model; teach it the new value
         }
     }
 
@@ -198,6 +200,17 @@ window.App.Inputs = (function () {
             $field.datepicker( datepickerOptions( $field.attr( dataAttr( C.DATE_CONTEXT_DATA_ATTR ) ) ) );
             $field.data( ENHANCED_FLAG, true );
         } );
+    }
+
+    // Push a programmatically-set value into an enhanced input's picker. bootstrap-datepicker keeps its
+    // own date model, so a bare `.val()` (as the age->date sync does) leaves the popup on its stale
+    // internal date -- it would open on today and commit today on Enter or a tab-in. `update` re-reads the
+    // input, so the popup instead opens on (and commits) the shown date. A no-op when the picker asset
+    // never loaded or the field is not yet enhanced -- the plain text box already shows the right value.
+    function syncPickerToValue( $date ) {
+        if ( $.fn.datepicker && $date.data( ENHANCED_FLAG ) ) {
+            $date.datepicker( 'update' );
+        }
     }
 
     // Tear down pickers in a subtree about to be removed, so no detached popup is orphaned.
@@ -548,18 +561,37 @@ window.App.Inputs = (function () {
         setMoneyField( $form.find( classSelector( C.VEHICLE_DOWN_CLASS ) ), down );
     }
 
+    // A starting down payment for a financed vehicle: a typical fraction of the price, which doubles as
+    // rolling the outgoing car's trade-in into the purchase. The engine keeps the down a constant fraction
+    // of each inflating replacement price, so this one figure tracks the whole horizon. Seeded ONLY when the
+    // down is empty (a user's own figure is never overwritten) and rounded up to the nearest $1,000, so it
+    // reads as a round starting point to adjust rather than a derived-looking number.
+    const DOWN_PAYMENT_SEED_RATE = 0.12;   // mid the 10-15% band; near a ~10-year trade-in fraction
+    function seedVehicleDownPayment( $form ) {
+        if ( !financesSelected( $form ) ) { return; }
+        const $down = $form.find( classSelector( C.VEHICLE_DOWN_CLASS ) );
+        if ( ( $down.val() || '' ).trim() !== '' ) { return; }   // only when empty; never clobber a set value
+        const price = parseAmount( $form.find( classSelector( C.VEHICLE_PRICE_CLASS ) ).val() );
+        if ( !( price > 0 ) ) { return; }
+        setMoneyField( $down, Math.ceil( price * DOWN_PAYMENT_SEED_RATE / 1000 ) * 1000 );
+    }
+
     function enhanceVehicleFinance( $scope ) {
         // Bound on `input` (not `change` like the sibling enhancers) so the mirror fills live as the user
-        // types; the `change`-driven autosave then serializes the already-filled field.
+        // types; the `change`-driven autosave then serializes the already-filled field. The empty-down seed
+        // runs on `change` -- a committed price, or a switch to LOAN -- so it reads a complete price and
+        // lands just before that same change's autosave persists it.
         ( $scope || $( document.body ) ).find( classSelector( C.VEHICLE_FINANCE_CLASS ) ).each( function () {
             const $form       = $( this );
             const priceOrDown = classSelector( C.VEHICLE_PRICE_CLASS ) + ',' + classSelector( C.VEHICLE_DOWN_CLASS );
             $form.find( priceOrDown ).off( 'input.vehicleFinance' )
                 .on( 'input.vehicleFinance', function () { fillVehicleMonthly( $form ); } );
+            $form.find( classSelector( C.VEHICLE_PRICE_CLASS ) ).off( 'change.vehicleFinance' )
+                .on( 'change.vehicleFinance', function () { seedVehicleDownPayment( $form ); fillVehicleMonthly( $form ); } );
             $form.find( classSelector( C.VEHICLE_MONTHLY_CLASS ) ).off( 'input.vehicleFinance' )
                 .on( 'input.vehicleFinance', function () { fillVehicleDown( $form ); } );
             $form.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).off( 'change.vehicleFinance' )
-                .on( 'change.vehicleFinance', function () { fillVehicleMonthly( $form ); } );
+                .on( 'change.vehicleFinance', function () { seedVehicleDownPayment( $form ); fillVehicleMonthly( $form ); } );
         } );
     }
 
@@ -795,9 +827,38 @@ window.App.Inputs = (function () {
             const $li = $( this ).closest( 'li' );
             if ( $( this ).hasClass( 'js-draw-up' ) ) { $li.prev( 'li' ).before( $li ); }
             else                                      { $li.next( 'li' ).after( $li ); }
-            $li.closest( 'ul' ).find( '.js-draw-rank' ).each( function ( i ) { $( this ).text( i + 1 ); } );
+            reRankDraw( $li.closest( 'ul' ) );
             saveForm( $li.closest( 'form' ) );
         } );
+
+        // Keep / draw again toggles a source in place within the one list. Retaining enables the row's
+        // `retained` input (so the form posts it, and materialization drops it before the engine) and
+        // mutes the row: its rank clears, the KEPT badge shows, and exclude swaps to restore. Drawing
+        // again reverses it. The rank badges number the enabled rows only, so a retained row shows none
+        // and the numbering stays true to draw priority. Toggling fires no `change`, so save explicitly.
+        function reRankDraw( $drawList ) {
+            let rank = 0;
+            $drawList.find( '.js-draw-source' ).each( function () {
+                const $rank = $( this ).find( '.js-draw-rank' );
+                if ( $( this ).hasClass( 'js-draw-retained' ) ) { $rank.text( '' ); }
+                else { rank += 1; $rank.text( rank ); }
+            } );
+        }
+        function setDrawSourceRetained( button, retained ) {
+            const $li = $( button ).closest( 'li' );
+            $li.toggleClass( 'js-draw-retained', retained );
+            $li.find( 'input[name="retained"]' ).prop( 'disabled', ! retained );
+            $li.find( '.js-draw-rank' ).toggleClass( 'd-none', retained );
+            $li.find( '.js-draw-kept' ).toggleClass( 'd-none', ! retained );
+            $li.find( '.js-draw-disable' ).toggleClass( 'd-none', retained );
+            $li.find( '.js-draw-enable' ).toggleClass( 'd-none', ! retained );
+            // Muted while retained or not yet held; a held source de-mutes when drawn again.
+            $li.find( '.js-draw-label' ).toggleClass( 'text-muted', retained || ! $li.hasClass( 'js-draw-held' ) );
+            reRankDraw( $li.closest( 'ul' ) );
+            saveForm( $li.closest( 'form' ) );
+        }
+        $( 'body' ).on( 'click', '.js-draw-disable', function () { setDrawSourceRetained( this, true  ); } );
+        $( 'body' ).on( 'click', '.js-draw-enable',  function () { setDrawSourceRetained( this, false ); } );
 
         // Sweep table (Cash Plan): add clones the first row (cleared) so a new holding/weight pair
         // joins the form; remove drops a row, but the last row is cleared rather than removed so the

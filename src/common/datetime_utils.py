@@ -148,3 +148,12 @@ def elapsed_months( start_date, end_date ):
     """Whole-calendar-month difference between two dates, ignoring day-of-month.
     e.g. there is one month between April 30 and May 1."""
     return ( end_date.year - start_date.year ) * 12 + ( end_date.month - start_date.month )
+
+
+def age_on( birthdate, on_date ):
+    """Whole years lived by ``on_date``: the year difference, less one if the birthday has not yet
+    come round that year. This is 'true' age -- a December birthday still reads a year younger
+    earlier in the year -- as distinct from the tax convention of age attained during the calendar
+    year (``on_date.year - birthdate.year``)."""
+    before_birthday = ( on_date.month, on_date.day ) < ( birthdate.month, birthdate.day )
+    return on_date.year - birthdate.year - ( 1 if before_birthday else 0 )

@@ -33,8 +33,9 @@ from ucfp.accounts.enums import (
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.schemas import Handle
 from ucfp.period.events import (
-    ExternalDisbursement, ExternalReceipt, LoanPayoff, PeriodEvent, Purchase, Realization,
-    Transfer )
+    ExternalDisbursement, ExternalReceipt, LoanPayoff, PeriodEvent, PropertySale, Purchase,
+    Realization, Transfer )
+from ucfp.period.parameters import PropertyData
 from ucfp.jurisdiction.engine import TaxState
 from ucfp.jurisdiction.law import StatuteProfile
 from ucfp.jurisdiction.enums import FilingStatus
@@ -523,6 +524,21 @@ class ScheduledRealization( ScheduledEvent ):
 
 
 @dataclass( frozen = True )
+class ScheduledPropertySale( ScheduledEvent ):
+    """Sell a whole property (by handle) at a date, renting after or not (the residence choice; moot for a
+    non-residence sale). The thin trigger the planning layer emits for a user-scheduled sale -- it carries
+    no realize/payoff/expense machinery, only the handle, the date, and the choice, and the engine reaches
+    the property's `PropertyData` to effect the sale. Resolves to a period `PropertySale`."""
+
+    event_date : date
+    holding    : Handle
+    rent_after : bool = True
+
+    def to_period_event( self, holdings : dict[ str, Account ], chart : Chart ) -> PeriodEvent:
+        return PropertySale( self.event_date, self._holding( holdings, self.holding ), self.rent_after )
+
+
+@dataclass( frozen = True )
 class ScheduledExternalReceipt( ScheduledEvent ):
     """A one-time receipt of non-taxable value from outside, landing in cash -- a gift, or a US
     inheritance (non-taxable to the recipient, the estate tax being the estate's). Credits the
@@ -629,9 +645,9 @@ class CashAccountParameters:
     swept into the `sweep_allocation` holdings (non-retirement) as investments at cost, so later
     sales tax only the gain. A None `cash_ceiling` (or `sweep_allocation`) disables sweeping."""
 
-    cash_floor       : Decimal                    = Decimal( '0' )
-    cash_ceiling     : Optional[ Decimal ]        = None
-    draw_order       : list[ AssetClass ]         = field( default_factory = list )
+    cash_floor       : Decimal                     = Decimal( '0' )
+    cash_ceiling     : Optional[ Decimal ]         = None
+    draw_order       : list[ AssetClass ]          = field( default_factory = list )
     sweep_allocation : Optional[ AssetAllocation ] = None
 
 
@@ -658,6 +674,7 @@ class ForecastParameters:
     recurring_holding_purchases : list[ RecurringHoldingPurchase ] = field( default_factory = list )
     recurring_loan_originations : list[ RecurringLoanOrigination ] = field( default_factory = list )
     events            : list[ ScheduledEvent ]               = field( default_factory = list )
+    property_data     : dict[ str, PropertyData ]            = field( default_factory = dict )
     cash_account      : CashAccountParameters                = field(
         default_factory = CashAccountParameters )
     health_coverage   : Optional[ SubsidizedHealthCoverage ] = None

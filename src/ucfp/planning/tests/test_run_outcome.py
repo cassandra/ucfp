@@ -24,7 +24,7 @@ _D      = Decimal
 _STATUTE = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 
 
-def _run( frame, *, stopped_early, end_date, is_depleted, birth_year = 1960 ):
+def _run( frame, *, stopped_early, end_date, is_depleted, birthdate = date( 1960, 1, 1 ) ):
     """A minimal ProjectionRun stand-in for `_run_outcome`: its frame, the summarized result (one final
     step carrying the stop year and depletion flag), and a single-subject profile for the ages."""
     return SimpleNamespace(
@@ -32,7 +32,7 @@ def _run( frame, *, stopped_early, end_date, is_depleted, birth_year = 1960 ):
         result  = SimpleNamespace(
             stopped_early = stopped_early,
             steps = [ SimpleNamespace( end_date = end_date, is_depleted = is_depleted ) ] ),
-        profile = SimpleNamespace( subjects = [ SimpleNamespace( birthdate = date( birth_year, 1, 1 ) ) ] ) )
+        profile = SimpleNamespace( subjects = [ SimpleNamespace( birthdate = birthdate ) ] ) )
 
 
 class RunOutcomeTests( unittest.TestCase ):
@@ -57,6 +57,26 @@ class RunOutcomeTests( unittest.TestCase ):
             'lasted': True, 'depleted': False, 'years': 3,
             'start': { 'year': 2026, 'ages': 'age 66', 'net_worth': _D( '500000' ) },
             'end': { 'year': 2028, 'ages': 'age 68', 'net_worth': _D( '500000' ), 'has_net_worth': True } } )
+
+    def test_ages_track_the_dates_not_just_the_year( self ):
+        # Born Dec 22 1990; a run from Aug to Dec 2026 -> 35 at the start (birthday not yet reached in
+        # August), 36 at the end (past the December birthday). A year-only age would show 36 for both.
+        frame  = ForecastFrame(
+            start_date = date( 2026, 8, 1 ), end_date = date( 2026, 12, 31 ),
+            granularity = Duration( 1, TimeUnit.YEAR ) )
+        params = ForecastParameters(
+            start_date = frame.start_date, end_date = frame.end_date, filing_status = FilingStatus.SINGLE,
+            statute = _STATUTE, subjects = [ Subject( 'you', date( 1990, 12, 22 ) ) ],
+            assets = [ AssetParameters( 'Cash', AssetClass.CASH, _D( '100000' ), _D( '100000' ) ) ],
+            economic_outlook = EconomicOutlook.constant( EconomicParameters() ) )
+        books = Forecast( params ).run().books
+
+        outcome = _run_outcome(
+            _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False,
+                  birthdate = date( 1990, 12, 22 ) ), books )
+
+        self.assertEqual( outcome[ 'summary' ][ 'start' ][ 'ages' ], 'age 35' )
+        self.assertEqual( outcome[ 'summary' ][ 'end' ][ 'ages' ], 'age 36' )
 
     def test_a_depleted_run_ends_at_the_stop_year_and_hides_net_worth( self ):
         frame = ForecastFrame(

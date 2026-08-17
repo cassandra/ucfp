@@ -45,7 +45,7 @@ def _economic_outlook_presets() -> dict:
             rental_increase              = _rate( '0.035' ),
         ) ] ),
         EconomicOutlookVariant.EXPECTED: EconomicOutlookSchedule( [ EconomicParameters(
-            inflation                    = _rate( '0.025' ),
+            inflation                    = _rate( '0.03' ),
             medical_inflation            = _rate( '0.045' ),
             wage_growth                  = _rate( '0.03' ),
             savings_interest             = _rate( '0.02' ),
@@ -215,7 +215,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _durable( 'Appliance', 'appliance', upkeep, 70, 3, '2900', 15, living, applies_to = owned ),
         _expense( 'Roof Cost', 'roof-cost', upkeep, 80, '15000', living, every_20y, smooth, n_years, applies_to = owned ),
         # --- Property: rent -- a tenant's rented home only.
-        _expense( 'Rent', 'rent', rent_cat, 10, '1600', living, monthly, discrete, fixed, applies_to = rented_only ),
+        _expense( 'Rent', 'rent', rent_cat, 10, '2000', living, monthly, discrete, fixed, applies_to = rented_only ),
         # Vehicle running costs seed the per-car running costs of the Vehicle Expenses step (applied at
         # materialization to each owned vehicle over its window); the car purchase/financing itself is
         # entered per vehicle, not a catalog item. Insurance is a discrete bill; the rest are smoothed
@@ -224,6 +224,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Maintenance', 'auto-maintenance', vehicle, 20, '300', living, yearly, smooth, mo_yr ),
         _expense( 'Repairs', 'auto-repair', vehicle, 30, '1000', living, yearly, smooth, mo_yr ),
         _expense( 'Fuel', 'gasoline', vehicle, 40, '30', living, weekly, smooth, wk_mo ),
+        _expense( 'Fees/Taxes', 'fees-taxes', vehicle, 50, '100', living, yearly, smooth, mo_yr ),
     ] )
 
 

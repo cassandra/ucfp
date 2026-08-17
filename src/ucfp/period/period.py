@@ -22,14 +22,14 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from ucfp.accounts.books import Transaction
+from ucfp.accounts.books import Account, Transaction
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
-from ucfp.accounts.money_utils import format_money, quantize_money
+from ucfp.accounts.money_utils import format_money, quantize_money, round_money_up
 from ucfp.jurisdiction.engine import ContributionKind
 
-from .events import Realization
+from .events import LoanPayoff, PropertySale, Realization
 from .fiscal_window import AnnualizedFiscalWindow
 from .future_tax import reestimate_future_taxes
 from .parameters import PeriodParameters
@@ -40,6 +40,14 @@ _ESTIMATED_INCOME_TAX_MEMO = 'Estimated income tax (prepayment)'
 # A depreciating holding worth less than this already displays as $0.00 (half a cent), so it is written
 # off to exactly zero rather than left decaying toward it asymptotically.
 _DEPRECIATION_WRITEOFF_FLOOR = Decimal( '0.005' )
+# The whole-asset property classes the funding waterfall can sell itself when cash runs short -- a
+# residence, a second home, a rental -- each through the property-sale routine.
+_AUTO_SALE_PROPERTY_CLASSES = frozenset(
+    ( AssetClass.REAL_ESTATE_RESIDENCE, AssetClass.REAL_ESTATE_SECOND_HOME, AssetClass.REAL_ESTATE_RENTAL ) )
+# The possession classes the waterfall can sell -- a plain whole realize (no mortgage, running costs, or
+# income to reconcile), their gain recognized as collectibles gain.
+_AUTO_SALE_POSSESSION_CLASSES = frozenset(
+    ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES ) )
 
 
 class Period:
@@ -61,28 +69,28 @@ class Period:
         """Everything whose magnitude is known from the opening books and this
         interval's parameters, independent of the funding decision. Sub-steps run
         at their temporal-POV instants (growth at period start; the rest at the
-        midpoint)."""
-        self._apply_asset_returns( bookkeeper, result )
+        midpoint). Growth runs FIRST -- it mutates the asset, so it must precede
+        any sale so the sale realizes the grown value and no appreciation lands on a
+        holding after it is gone. Distributions run LAST -- they only credit cash, so
+        they can safely read the balance after this interval's flows and accrue on the
+        period's average rather than its opening (the fix for cash drawn down in-year)."""
+        self._apply_growth( bookkeeper, result )
         self._recognize_income( bookkeeper, result )
         self._withhold_employment_tax( bookkeeper, result )
         self._apply_contributions( bookkeeper, result )
         self._service_liabilities( bookkeeper, result )
         self._apply_expenses( bookkeeper, result )
         self._apply_events( bookkeeper, result )
-        return
-
-    def _apply_asset_returns( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Per-asset returns for the interval: growth (unrealized appreciation) and
-        distributions (dividend/interest income)."""
-        self._apply_growth( bookkeeper, result )
         self._apply_distributions( bookkeeper, result )
         return
 
     def _apply_growth( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Accrue each appreciating holding's unrealized appreciation for the
-        interval, on its opening market value (cost + prior valuation), posted at
-        period start as DR valuation / CR Unrealized Gains so net worth (= equity)
-        stays current."""
+        """Accrue each appreciating holding's unrealized appreciation for the interval, on its opening
+        market value (cost + prior valuation), posted at period start as DR valuation / CR Unrealized Gains
+        so net worth (= equity) stays current. Runs *before* the interval's flows: growth mutates the asset,
+        so a holding sold this interval realizes its gain on the grown value, and no appreciation lands on
+        it after it is gone. (Distributions, which only credit cash, instead run last and average -- see
+        `_apply_distributions`.)"""
         chart = bookkeeper.chart
         ledger = bookkeeper.ledger
         unrealized_gain_account = chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
@@ -124,27 +132,39 @@ class Period:
         return
 
     def _apply_distributions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Post each distributing holding's yield (dividend/interest) for the
-        interval, at the midpoint: DR the cash hub / CR the income tax-class
-        account -- landing the cash in savings and recognizing the income."""
+        """Post each distributing holding's yield (dividend/interest) for the interval, at the midpoint: DR
+        the cash hub / CR the income tax-class account -- landing the cash in savings and recognizing the
+        income. Computed on the holding's *average* balance over the interval (opening and closing meaned),
+        each endpoint floored at zero; running after the interval's flows, cash interest reflects the balance
+        actually carried through the year rather than the opening it started from."""
         chart = bookkeeper.chart
         ledger = bookkeeper.ledger
         cash_account = chart.cash_account()
         opening_through = self._parameters.date_span.day_before_start
+        closing_through = self._parameters.date_span.end_date
         distribution_date = self._parameters.date_span.midpoint
-        for holding in chart.holdings():
+        distributing = [ holding for holding in chart.holdings()
+                         if holding.asset_class.distribution_income_class is not None ]
+        # The yield basis per holding: the mean of its opening and closing balance, each floored at zero.
+        # Because every flow posts at the midpoint the balance is a step -- opening through the first half,
+        # closing through the second -- so each half earns on its own balance, and a half spent overdrawn
+        # earns nothing (floored) rather than a negative close cancelling real first-half interest. Snapshot
+        # before crediting any distribution: each lands in cash, so computing inline would let one holding's
+        # yield inflate the next holding's basis (notably cash's own).
+        yield_basis = {}
+        for holding in distributing:
+            opening_balance = max( ledger.market_value( holding, through = opening_through ), Decimal( '0' ) )
+            closing_balance = max( ledger.market_value( holding, through = closing_through ), Decimal( '0' ) )
+            yield_basis[ holding ] = ( opening_balance + closing_balance ) / 2
+        for holding in distributing:
             income_class = holding.asset_class.distribution_income_class
-            if income_class is None:
-                continue
             rate = self._parameters.asset_rates.distribution_rate( holding.asset_class )
-            opening_value = ledger.market_value( holding, through = opening_through )
-            # A non-positive opening balance is not a yield-bearing position: a depleted or
-            # overdrawn cash hub is a shortfall, not principal. Applying the distribution rate
-            # to it would book negative "income" and deepen the very hole it reacts to, so no
-            # distribution is recognized until the balance is positive again.
-            if opening_value <= 0:
+            basis = yield_basis[ holding ]
+            # Zero basis means no yield-bearing balance at either endpoint (opened at zero and stayed there,
+            # or overdrawn across the whole interval) -- nothing earns, so skip before booking a zero posting.
+            if basis <= 0:
                 continue
-            distribution = quantize_money( rate.change_on( opening_value ) )
+            distribution = quantize_money( rate.change_on( basis ) )
             if distribution == 0:
                 continue
             if cash_account is None:
@@ -157,7 +177,7 @@ class Period:
             bookkeeper.record(
                 distribution_date,
                 [ ( cash_account, -distribution ), ( income_account, distribution ) ],
-                description = f'{holding.name} distribution: {rate} on {format_money( opening_value )}',
+                description = f'{holding.name} distribution: {rate} on avg balance {format_money( basis )}',
             )
             continue
         return
@@ -339,29 +359,19 @@ class Period:
         return
 
     def _apply_events( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Apply each scheduled PeriodEvent (transfer, purchase, realization, external
-        receipt/disbursement); each materializes its own balanced transaction. Scheduled events are the
-        user's requested operations, so they raise no Notices -- except a property sale, whose *closing
-        costs* are an automatic consequence worth surfacing, overlaid here after the sale realizes."""
+        """Apply each scheduled PeriodEvent. Scheduled events are the user's requested operations, so they
+        raise no Notices -- except a property sale's *closing costs*, an automatic consequence the shared
+        sale routine surfaces. A `PropertySale` is dispatched to that one routine (the very routine the
+        funding waterfall calls), so a scheduled sale and a shortfall-driven one are identical machinery;
+        every other event applies itself."""
         for event in self._parameters.events:
-            sale_price = self._property_sale_price( bookkeeper, event )
-            event.apply( bookkeeper )
-            if sale_price is not None:
-                self._book_property_sale_costs( bookkeeper, result, event, sale_price )
+            if isinstance( event, PropertySale ):
+                self._sell_property_whole(
+                    bookkeeper, result, event.holding, event.event_date, rent_after = event.rent_after )
+            else:
+                event.apply( bookkeeper )
             continue
         return
-
-    @staticmethod
-    def _property_sale_price( bookkeeper : Bookkeeper, event ) -> Optional[ Decimal ]:
-        """The market value of a real-estate holding about to be sold whole -- the sale price its
-        closing costs scale against -- captured *before* the realize draws it down. None for any other
-        event (a withdrawal, a conversion, a non-real-estate sale) or a valueless holding (no real sale
-        to charge against, mirroring `realize`'s own zero-value guard)."""
-        if not ( isinstance( event, Realization ) and event.amount is None
-                 and event.holding.asset_class.is_real_estate ):
-            return None
-        market = bookkeeper.ledger.market_value( event.holding )
-        return market if market > 0 else None
 
     def _book_property_sale_costs(
             self, bookkeeper : Bookkeeper, result : PeriodResult, event, sale_price : Decimal ) -> None:
@@ -396,6 +406,80 @@ class Period:
                 severity         = NoticeSeverity.INFO,
                 amount           = total,
                 transaction_uuid = transaction.transaction_uuid ) )
+        return
+
+    def _sell_property_whole(
+            self, bookkeeper : Bookkeeper, result : PeriodResult, holding : Account, on_date : date,
+            *, rent_after : bool, description : str = '' ) -> Optional[ Decimal ]:
+        """The whole-property sale -- one routine for every trigger (a scheduled sale event or a funding
+        shortfall). Realize the entire holding to cash (the gain recognized in its own class, so a
+        residence's §121 exclusion applies), overlay the closing costs, and pay off any mortgage it
+        secures. Indivisible, so the proceeds usually overshoot -- the surplus rides the ordinary ceiling
+        sweep. Reports the sale (with `rent_after`) so the Forecast reconfigures the property's forward
+        expenses once, whatever the trigger. `description` is the sale memo (blank lets the realization name
+        itself). Returns the sale price realized, or None when there was nothing to sell (a valueless,
+        already-sold holding) -- so a caller that sold to cover a shortfall can flag it, while a
+        user-scheduled sale simply ignores it."""
+        chart = bookkeeper.chart
+        cash_account = chart.cash_account()
+        sale_price = bookkeeper.ledger.market_value( holding )
+        if cash_account is None or sale_price <= 0:
+            return None
+        sale = Realization( on_date, holding, None, cash_account )
+        sale.apply( bookkeeper, description = description )
+        self._book_property_sale_costs( bookkeeper, result, sale, sale_price )
+        self._pay_off_secured_loans( bookkeeper, holding, cash_account, on_date )
+        if holding.handle is not None:
+            result.property_sales.append( ( str( holding.handle ), on_date, rent_after ) )
+        return quantize_money( sale_price )
+
+    def _pay_off_secured_loans(
+            self, bookkeeper : Bookkeeper, holding : Account, cash_account : Account, on_date : date ) -> None:
+        """Pay off, from the sale proceeds, each mortgage the sold `holding` secured -- resolved from the
+        funding policy's handle map (the config edge the books do not carry) to the live loan accounts.
+        A loan already retired pays nothing (LoanPayoff reads the balance live), and an unresolved handle
+        is skipped."""
+        chart = bookkeeper.chart
+        handle = None if holding.handle is None else str( holding.handle )
+        data = self._parameters.property_data.get( handle )
+        for loan_handle in ( data.mortgage_handles if data is not None else () ):
+            loan_account = chart.account( loan_handle )
+            if loan_account is None:
+                continue
+            LoanPayoff( on_date, loan_account, cash_account ).apply(
+                bookkeeper, description = f'Mortgage payoff on the sale of {holding.name}.' )
+        return
+
+    def _auto_sell_property(
+            self, bookkeeper : Bookkeeper, result : PeriodResult, source : Account, on_date : date ) -> None:
+        """Sell a whole property to cover a cash shortfall: the shared sale routine plus the PROPERTY_SOLD
+        notice (an automatic sale is worth flagging; a scheduled sale, through the same routine, is the
+        user's own request and raises none). The residence rents after; a second home does not."""
+        rent_after = source.asset_class is AssetClass.REAL_ESTATE_RESIDENCE
+        sale_price = self._sell_property_whole(
+            bookkeeper, result, source, on_date, rent_after = rent_after,
+            description = f'Sale of {source.name} to cover a savings shortfall.' )
+        if sale_price is not None:
+            result.notices.append(
+                Notice( kind = NoticeKind.PROPERTY_SOLD, severity = NoticeSeverity.INFO, amount = sale_price ) )
+        return
+
+    def _auto_sell_possession(
+            self, bookkeeper : Bookkeeper, result : PeriodResult, source : Account, on_date : date ) -> None:
+        """Sell a whole possession (precious metals, collectibles) to cover a shortfall: realize it to cash
+        (its gain recognized as collectibles gain) and flag the automatic sale. A possession carries no
+        mortgage, running costs, or income to reconcile, so the realize is the whole of it. A valueless
+        holding is nothing to sell, so a no-op."""
+        chart = bookkeeper.chart
+        cash_account = chart.cash_account()
+        sale_price = bookkeeper.ledger.market_value( source )
+        if cash_account is None or sale_price <= 0:
+            return
+        Realization( on_date, source, None, cash_account ).apply(
+            bookkeeper, description = f'Sale of {source.name} to cover a savings shortfall.' )
+        result.notices.append(
+            Notice( kind = NoticeKind.POSSESSION_SOLD, severity = NoticeSeverity.INFO,
+                    amount = quantize_money( sale_price ) ) )
         return
 
     def _settle_and_fund( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
@@ -680,8 +764,22 @@ class Period:
             shortfall = target - ledger.natural_balance( cash_account )
             if shortfall <= 0:
                 break
+            if source.asset_class is None:
+                continue
+            if not source.asset_class.supports_partial_draw:
+                # An indivisible whole-asset source sells whole through its handler, not shaved to the
+                # shortfall: real estate through the property-sale routine, a possession through a plain
+                # whole realize. Any source with no handler is passed by.
+                if source.asset_class in _AUTO_SALE_PROPERTY_CLASSES:
+                    self._auto_sell_property( bookkeeper, result, source, fund_date )
+                elif source.asset_class in _AUTO_SALE_POSSESSION_CLASSES:
+                    self._auto_sell_possession( bookkeeper, result, source, fund_date )
+                continue
             available = ledger.market_value( source )
-            draw = quantize_money( min( shortfall, available ) )
+            # Round the draw UP to the money scale so it fully covers the shortfall and cash lands at (or a
+            # sliver above) the floor, never a sub-cent sliver below it -- but never draw more than the
+            # source holds (a full liquidation takes its whole balance).
+            draw = min( round_money_up( shortfall ), available )
             if draw <= 0:
                 continue
             income_class = None
@@ -750,26 +848,25 @@ class Period:
         return
 
     def _close( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
-        """Finalize the period: warn on a cash shortfall (the balance went negative) and flag
-        the stop condition when net worth is depleted (assets no longer cover liabilities),
-        which ends the Forecast. Both are constraint outcomes the user did not request, so both
-        raise a WARNING Notice (state-level, with no linked transaction)."""
-        ledger = bookkeeper.ledger
+        """Finalize the period and flag the stop condition. The forecast is depleted when the funding
+        waterfall has drawn every available source and cash is *still* negative -- the household can no
+        longer meet its spending from sellable assets. Net worth is deliberately NOT the test: it counts
+        illiquid holdings (a home the household lives in) that cannot fund spending without being sold, so
+        stopping on net worth would let savings run implausibly negative against unspendable equity. Any net
+        worth remaining at the stop is that illiquid remainder. Recorded as a state-level WARNING Notice
+        (no linked transaction) for the headline."""
         cash_account = bookkeeper.chart.cash_account()
-        if cash_account is not None:
-            cash_balance = ledger.natural_balance( cash_account )
-            if cash_balance < 0:
-                result.notices.append(
-                    Notice(
-                        kind     = NoticeKind.CASH_SHORTFALL,
-                        severity = NoticeSeverity.WARNING,
-                        amount   = cash_balance ) )
-        net_worth = ledger.net_worth()
-        if net_worth <= 0:
+        if cash_account is None:
+            return
+        # A negative balance here means the draw sources were exhausted before spending was covered: the
+        # funding waterfall rounds each draw UP (see `_fund_to_target`), so a fully-funded period lands cash
+        # at or above the floor exactly -- no sub-cent sliver below it to trip a false stop.
+        cash_balance = bookkeeper.ledger.natural_balance( cash_account )
+        if cash_balance < 0:
             result.is_depleted = True
             result.notices.append(
                 Notice(
-                    kind     = NoticeKind.NET_WORTH_DEPLETED,
+                    kind     = NoticeKind.SAVINGS_DEPLETED,
                     severity = NoticeSeverity.WARNING,
-                    amount   = net_worth ) )
+                    amount   = quantize_money( cash_balance ) ) )
         return

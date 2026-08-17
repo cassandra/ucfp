@@ -78,7 +78,7 @@ def _sample_profile():
 def _sample_assumptions():
     return Assumptions(
         economics = EconomicParameters(
-            inflation = Rate( Decimal( '0.025' ) ), medical_inflation = Rate( Decimal( '0.045' ) ),
+            inflation = Rate( Decimal( '0.03' ) ), medical_inflation = Rate( Decimal( '0.045' ) ),
             wage_growth = Rate( Decimal( '0.03' ) ), savings_interest = Rate( Decimal( '0.02' ) ),
             cd_interest = Rate( Decimal( '0.03' ) ), bond_interest = Rate( Decimal( '0.04' ) ),
             stock_appreciation = Rate( Decimal( '0.06' ) ), stock_dividend = Rate( Decimal( '0.018' ) ),

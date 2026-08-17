@@ -112,6 +112,24 @@ class ElapsedMonthsTest(TestCase):
         self.assertEqual(dt.elapsed_months(datetime.date(2024, 6, 1), datetime.date(2024, 3, 1)), -3)
 
 
+class AgeOnTest(TestCase):
+
+    def test_after_birthday_counts_the_full_year(self):
+        # Born June 15; on July 1 the birthday has passed, so a whole year is counted.
+        self.assertEqual(dt.age_on(datetime.date(1960, 6, 15), datetime.date(2026, 7, 1)), 66)
+
+    def test_before_birthday_is_a_year_younger(self):
+        # Same person on June 1: the birthday has not come round yet, so one year is dropped.
+        self.assertEqual(dt.age_on(datetime.date(1960, 6, 15), datetime.date(2026, 6, 1)), 65)
+
+    def test_on_the_birthday_counts_the_full_year(self):
+        self.assertEqual(dt.age_on(datetime.date(1960, 6, 15), datetime.date(2026, 6, 15)), 66)
+
+    def test_leap_day_birthday_before_feb_29_in_a_non_leap_year(self):
+        # Feb 28 in a non-leap year is before a Feb 29 birthday, so it reads a year younger.
+        self.assertEqual(dt.age_on(datetime.date(2000, 2, 29), datetime.date(2025, 2, 28)), 24)
+
+
 class TimezoneNameListTest(TestCase):
 
     def test_includes_utc_and_all_resolvable(self):

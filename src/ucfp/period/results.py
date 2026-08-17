@@ -32,6 +32,16 @@ class NoticeKind( LabeledEnum ):
     PROPERTY_SALE_COSTS = (
         'Property Sale Costs',
         'Selling costs (realtor fee and fixed costs) were charged on a property sale.' )
+    PROPERTY_SOLD = (
+        'Property Sold',
+        'The liquid sources were exhausted, so a whole property in the draw order was sold to cover the '
+        'cash shortfall (paying off any mortgage it secured); the indivisible proceeds usually overshoot '
+        'and the surplus is swept back into investments.' )
+    POSSESSION_SOLD = (
+        'Possession Sold',
+        'The liquid sources were exhausted, so a whole possession (precious metals or collectibles) in the '
+        'draw order was sold to cover the cash shortfall; the indivisible proceeds usually overshoot and '
+        'the surplus is swept back into investments.' )
     REQUIRED_MINIMUM_DISTRIBUTION = (
         'Required Minimum Distribution', 'A pre-tax retirement RMD was forced.' )
     EARLY_WITHDRAWAL_PENALTY = (
@@ -39,10 +49,12 @@ class NoticeKind( LabeledEnum ):
     CONTRIBUTION_CAPPED = (
         'Contribution Capped',
         'A retirement contribution was reduced to its annual limit.' )
-    CASH_SHORTFALL = (
-        'Cash Shortfall', 'The cash balance went negative -- spending outran available cash.' )
-    NET_WORTH_DEPLETED = (
-        'Net Worth Depleted', 'Assets no longer cover liabilities; the forecast stops.' )
+    SAVINGS_DEPLETED = (
+        'Savings Depleted',
+        'The funding waterfall drew every available source and cash is still negative -- spending can no '
+        'longer be met from sellable assets, so the forecast stops. Net worth is deliberately not the test: '
+        'any remaining is illiquid (e.g. a home the household lives in and is not selling), which cannot '
+        'fund spending.' )
     PARTIAL_YEAR_UNTAXED = (
         'Untaxed Partial Year',
         'A partial calendar year (a mid-year start, or a horizon short of December 31): tax is '
@@ -80,8 +92,14 @@ class PeriodResult:
 
     `closing_tax_state` is the tax engine's updated carryforwards, opaque here (its
     concrete type is the engine's, e.g. the US `TaxState`); None when no engine settled
-    this period -- the Forecast carries the prior opening state forward unchanged then."""
+    this period -- the Forecast carries the prior opening state forward unchanged then.
+
+    `property_sales` are the whole-property sales the period effected this interval, each a
+    `(holding_handle, sale_date, rent_after)` -- the signal the Forecast reacts to once, to reconfigure the
+    property's forward expenses (a residence's own->rent conversion). Whatever triggered the sale (a
+    scheduled event or a shortfall drawdown) reports it the same way."""
 
     notices           : list[ Notice ] = field( default_factory = list )
     is_depleted       : bool = False
     closing_tax_state : Optional[ TaxState ] = None
+    property_sales    : list = field( default_factory = list )

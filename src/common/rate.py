@@ -42,9 +42,11 @@ class Rate:
         return Rate( -self.fraction )
 
     def __str__( self ) -> str:
-        """A human-readable percent with trailing zeros trimmed, for memos and logs:
-        `Rate( Decimal( '0.021' ) )` renders as '2.1%'."""
-        return f'{( self.fraction * 100 ).normalize():f}%'
+        """A human-readable percent for memos and logs: rounded to four decimal places, then trailing
+        zeros trimmed. `Rate( Decimal( '0.021' ) )` renders as '2.1%'; a long fraction-scaled rate (an
+        annual rate prorated to a partial period) rounds rather than printing to full precision."""
+        percent = ( self.fraction * 100 ).quantize( Decimal( '0.0001' ) )
+        return f'{percent.normalize():f}%'
 
 
 ZERO_RATE = Rate( Decimal( '0' ) )
