@@ -224,6 +224,7 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Maintenance', 'auto-maintenance', vehicle, 20, '300', living, yearly, smooth, mo_yr ),
         _expense( 'Repairs', 'auto-repair', vehicle, 30, '1000', living, yearly, smooth, mo_yr ),
         _expense( 'Fuel', 'gasoline', vehicle, 40, '30', living, weekly, smooth, wk_mo ),
+        _expense( 'Fees/Taxes', 'fees-taxes', vehicle, 50, '100', living, yearly, smooth, mo_yr ),
     ] )
 
 
