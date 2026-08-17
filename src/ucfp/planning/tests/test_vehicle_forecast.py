@@ -52,8 +52,13 @@ def _profile() -> Profile:
 
 
 def _assumptions() -> Assumptions:
+    # Pin inflation to a fixed 2.5% so the price-indexing expectations below (each `x 1.025`) hold
+    # independently of the seeded EXPECTED default, which is free to change. Everything else -- notably
+    # the 18% vehicle depreciation -- is inherited from the seed.
+    economics = replace(
+        economic_parameters( EconomicOutlookVariant.EXPECTED.label ), inflation = Rate( Decimal( '0.025' ) ) )
     return Assumptions(
-        economics = economic_parameters( EconomicOutlookVariant.EXPECTED.label ),
+        economics = economics,
         tax_projection = TaxProjection( forecast_type = StatuteForecastType.CURRENT_LAW ) )
 
 

@@ -84,7 +84,7 @@ class LoadPathTest( TestCase ):
         schedule = load( _ECON, _EXPECTED )
         self.assertEqual( len( schedule.segments ), 1 )
         segment = schedule.segments[ 0 ]
-        self.assertEqual( segment.inflation.fraction, Decimal( '0.025' ) )
+        self.assertEqual( segment.inflation.fraction, Decimal( '0.03' ) )
         # The niche asset rates seed non-zero (they previously fell through to a 0 default).
         self.assertEqual( segment.precious_metals_appreciation.fraction, Decimal( '0.03' ) )
         self.assertEqual( segment.collectibles_appreciation.fraction, Decimal( '0.02' ) )
@@ -151,5 +151,5 @@ class MaterializeFromLibraryTest( TestCase ):
             frame = ForecastFrame( start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ) ) )
         self.assertEqual(
             params.economic_outlook.parameters_at( date( 2026, 1, 1 ) ).inflation.fraction,
-            Decimal( '0.025' ) )
+            Decimal( '0.03' ) )
         self.assertEqual( type( Forecast( params ).run() ).__name__, 'ForecastResult' )

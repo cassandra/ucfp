@@ -45,7 +45,7 @@ def _economic_outlook_presets() -> dict:
             rental_increase              = _rate( '0.035' ),
         ) ] ),
         EconomicOutlookVariant.EXPECTED: EconomicOutlookSchedule( [ EconomicParameters(
-            inflation                    = _rate( '0.025' ),
+            inflation                    = _rate( '0.03' ),
             medical_inflation            = _rate( '0.045' ),
             wage_growth                  = _rate( '0.03' ),
             savings_interest             = _rate( '0.02' ),
