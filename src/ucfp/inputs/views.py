@@ -1006,7 +1006,15 @@ class SelfSavingPaneView( View ):
         """Id-keyed HTML fragments re-rendering the pane's live totals after a silent save, for an
         antinode `replace_map`. Empty by default (most panes show no totals); a totals-bearing pane
         mixes in `TotalsPaneMixin` to recompute from the just-persisted plans."""
-        return {}
+        return dict()
+
+    def _pane( self, request, form ) -> str:
+        return render_to_string( self.template, { self.context_name: form }, request = request )
+
+    def _swap( self, request, form ):
+        # Replace the pane by id (not a data-async target) so the loader-suppressed background POST,
+        # which carries no target, still applies the re-render.
+        return antinode.response( replace_map = { self.target: self._pane( request, form ) } )
 
 
 class TotalsPaneMixin:
@@ -1017,14 +1025,6 @@ class TotalsPaneMixin:
 
     def totals_fragments( self, request ) -> dict:
         return expense_totals.rendered( request, self.build_form( request ).totals )
-
-    def _pane( self, request, form ) -> str:
-        return render_to_string( self.template, { self.context_name: form }, request = request )
-
-    def _swap( self, request, form ):
-        # Replace the pane by id (not a data-async target) so the loader-suppressed background POST,
-        # which carries no target, still applies the re-render.
-        return antinode.response( replace_map = { self.target: self._pane( request, form ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
