@@ -799,14 +799,17 @@ window.App.Inputs = (function () {
 
     // Flag each per-property override cell in a row against the row's current Default: a filled cell
     // whose amount departs from the Default is highlighted; a blank cell inherits the Default, so it is
-    // never flagged. The property-matrix counterpart of updateSpanTrends -- the pane saves silently, so
-    // this keeps the highlight current client-side as the Default or an override is typed.
+    // never flagged. The pane saves silently, so this keeps the highlight current client-side as the
+    // Default or an override is typed.
     function flagPropertyOverrides( $row ) {
         const base = parseAmount( $row.find( classSelector( C.PROPERTY_DEFAULT_CLASS ) ).val() ) || 0;
         $row.find( classSelector( C.PROPERTY_OVERRIDE_CLASS ) ).each( function () {
             const raw     = ( this.value || '' ).trim();
             const differs = raw !== '' && ( parseAmount( raw ) || 0 ) !== base;
-            $( this ).closest( 'td' ).toggleClass( C.PROPERTY_DIFFERS_CLASS, differs );
+            const $cell   = $( this ).closest( 'td' );
+            $cell.toggleClass( C.PROPERTY_DIFFERS_CLASS, differs );
+            if ( differs ) { $cell.attr( 'title', C.PROPERTY_DIFFERS_TITLE ); }
+            else           { $cell.removeAttr( 'title' ); }
         } );
     }
 
@@ -972,8 +975,7 @@ window.App.Inputs = (function () {
             flagPropertyOverrides( $row );   // a changed Default can flip which overrides now differ
         } );
 
-        // Flag a per-property override as it is typed when it departs from the row's Default -- the
-        // property-matrix counterpart of the recurring page's per-band change highlight.
+        // Re-flag a row's overrides as one of them is typed, so the highlight tracks the edit.
         $( 'body' ).on( 'input change', classSelector( C.PROPERTY_OVERRIDE_CLASS ), function () {
             flagPropertyOverrides( $( this ).closest( 'tr' ) );
         } );

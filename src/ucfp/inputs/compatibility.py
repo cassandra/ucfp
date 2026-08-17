@@ -142,7 +142,7 @@ def _stale_property_handles( plans: Plans, properties: set ) -> list:
     seen  = set()
     for expense in plans.property_expenses:
         for handle in expense.overrides:
-            if handle not in properties and handle not in seen:
+            if ( handle not in properties ) and ( handle not in seen ):
                 seen.add( handle )
                 stale.append( handle )
     return stale

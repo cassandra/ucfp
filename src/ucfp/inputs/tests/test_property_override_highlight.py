@@ -73,13 +73,14 @@ class PropertyOverrideHighlightTest( TestCase ):
         cells = _first_row_cells( _form( None, { 'property-1': Decimal( '0' ) } ) )
         self.assertFalse( cells[ 1 ][ 'differs' ] )        # blank Default reads as zero
 
-    def test_a_flagged_cell_renders_the_highlight_class( self ):
+    def test_a_flagged_cell_renders_the_highlight_class_and_tooltip( self ):
         html = render_to_string(
             PropertyExpensesView.template,
             { 'property_form': _form( Decimal( '100' ), { 'property-1': Decimal( '50' ) } ),
               'AppConst': AppConst },
             request = RequestFactory().get( '/' ) )
         self.assertIn( AppConst.PROPERTY_DIFFERS_CLASS, html )
+        self.assertIn( AppConst.PROPERTY_DIFFERS_TITLE, html )   # a non-colour cue for the tint
 
     def test_nothing_differs_renders_no_highlight_class( self ):
         html = render_to_string(

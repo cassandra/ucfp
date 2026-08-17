@@ -184,6 +184,7 @@ class AppConst:
     PROPERTY_DEFAULT_CLASS  = 'js-property-default'   # a row's Default amount input
     PROPERTY_OVERRIDE_CLASS = 'js-property-override'  # a per-property override input in the same row
     PROPERTY_DIFFERS_CLASS  = 'property-differs'      # highlight: an override departing from the Default
+    PROPERTY_DIFFERS_TITLE  = 'Overrides the shared Default'   # its tooltip -- a non-colour cue for the tint
 
     # The People section's state income-tax picker: choosing a state auto-fills its representative rate
     # (each option carries the percent) into the rate input, which stays overridable. The select is

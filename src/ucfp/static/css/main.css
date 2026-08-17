@@ -55,6 +55,8 @@
   --muted-bg-medium: #eef0f2;
 
   --line-color: #cbd5e1;
+
+  --change-highlight-color: #b8d8f5;   /* a value that differs from its reference (age band / Default) */
 }
 
 
@@ -416,11 +418,10 @@ a.interview-part:hover {
     }
 }
 
-/* Living / Home expense tables: the server-computed subtotal and total rows (#182). The overall total
-   leads the table -- above its component rows, mirroring how each category subtotal sits on its section
-   header -- and both read as summaries (bold figures) rather than floating numbers. The page total is
-   shaded and ruled top and bottom so it reads as the strongest band, a step above the lighter category
-   subtotals. (The band styling sits on the cells, not the row, so it survives the collapsed borders.) */
+/* Living / Home expense tables: the server-computed subtotal and total rows. The page total leads the
+   table and each category subtotal leads its section, both bold; the page total is additionally shaded
+   and ruled top and bottom so it reads as the strongest band. (The band styling sits on the cells, not
+   the row, so it survives the table's collapsed borders.) */
 .expense-total-row > th,
 .expense-total-row > td {
     font-weight: 600;
@@ -469,16 +470,15 @@ a.interview-part:hover {
    numbers stay aligned in their column (once there is more than one span). */
 .span-changed .input-group-text,
 .span-changed .form-control.js-money {
-    background-color: #b8d8f5;   /* light-blue change highlight -- present enough to catch the eye, off gold (the accent's) */
+    background-color: var(--change-highlight-color);
 }
 
-/* Home Expenses: a per-property override that departs from the row's shared Default carries the same
-   light-blue highlight (the class sits on the cell, tinting the whole money control like span-changed).
-   The counterpart of the recurring page's per-band change flag -- it marks where a property's cost
-   diverges from the default every other property inherits. */
+/* Home Expenses: a per-property override that departs from the row's shared Default is tinted (the
+   class sits on the cell, so the whole money control is tinted like `.span-changed`), marking where a
+   property's cost diverges from the default every other property inherits. */
 .property-differs .input-group-text,
 .property-differs .form-control.js-money {
-    background-color: #b8d8f5;
+    background-color: var(--change-highlight-color);
 }
 .span-trend {
     margin-left: 0.3rem;

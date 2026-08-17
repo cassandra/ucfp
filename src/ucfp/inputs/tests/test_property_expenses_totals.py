@@ -17,6 +17,7 @@ from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.inputs.property_expenses import PropertyExpensesForm
 from ucfp.inputs.views import PropertyExpensesView
@@ -68,6 +69,22 @@ class PropertyExpenseTotalsTest( TestCase ):
                                 overrides = { 'property-1': Decimal( '40' ) } )
         form  = PropertyExpensesForm( profile = _one_property_profile(), plans = plans )
         self.assertEqual( form.totals_row[ 0 ].amount, Decimal( '40' ) * 12 * len( form._rows ) )
+
+    def test_a_row_not_applying_to_a_column_contributes_zero( self ):
+        # A renting household with a second home: rent applies only to the rented-home column and the
+        # ownership costs only to the second-home column, so each property column omits the rows N/A to
+        # it and totals strictly less than the Default column, which counts every displayed row.
+        profile = Profile(
+            home_tenure = HousingTenure.RENT,
+            assets = [ AssetProfile(
+                handle = 'second-home-1', name = 'Cabin', asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
+                opening_value = Decimal( '400000' ) ) ] )
+        form = PropertyExpensesForm( profile = profile, plans = _uniform_plans( profile, Decimal( '100' ) ) )
+        self.assertFalse( form._collapsed )
+        default_total = form.totals_row[ 0 ].amount
+        self.assertGreater( default_total, Decimal( '0' ) )
+        for col in range( 1, len( form.columns ) ):
+            self.assertLess( form.totals_row[ col ].amount, default_total )
 
     def test_property_column_totals_resolve_overrides_over_the_default( self ):
         profile = _two_property_profile()
