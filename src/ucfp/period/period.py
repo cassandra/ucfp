@@ -40,6 +40,14 @@ _ESTIMATED_INCOME_TAX_MEMO = 'Estimated income tax (prepayment)'
 # A depreciating holding worth less than this already displays as $0.00 (half a cent), so it is written
 # off to exactly zero rather than left decaying toward it asymptotically.
 _DEPRECIATION_WRITEOFF_FLOOR = Decimal( '0.005' )
+# The whole-asset property classes the funding waterfall can sell itself when cash runs short -- a
+# residence, a second home, a rental -- each through the property-sale routine.
+_AUTO_SALE_PROPERTY_CLASSES = frozenset(
+    ( AssetClass.REAL_ESTATE_RESIDENCE, AssetClass.REAL_ESTATE_SECOND_HOME, AssetClass.REAL_ESTATE_RENTAL ) )
+# The possession classes the waterfall can sell -- a plain whole realize (no mortgage, running costs, or
+# income to reconcile), their gain recognized as collectibles gain.
+_AUTO_SALE_POSSESSION_CLASSES = frozenset(
+    ( AssetClass.PRECIOUS_METALS, AssetClass.COLLECTIBLES ) )
 
 
 class Period:
@@ -442,6 +450,38 @@ class Period:
                 bookkeeper, description = f'Mortgage payoff on the sale of {holding.name}.' )
         return
 
+    def _auto_sell_property(
+            self, bookkeeper : Bookkeeper, result : PeriodResult, source : Account, on_date : date ) -> None:
+        """Sell a whole property to cover a cash shortfall: the shared sale routine plus the PROPERTY_SOLD
+        notice (an automatic sale is worth flagging; a scheduled sale, through the same routine, is the
+        user's own request and raises none). The residence rents after; a second home does not."""
+        rent_after = source.asset_class is AssetClass.REAL_ESTATE_RESIDENCE
+        sale_price = self._sell_property_whole(
+            bookkeeper, result, source, on_date, rent_after = rent_after,
+            description = f'Sale of {source.name} to cover a savings shortfall.' )
+        if sale_price is not None:
+            result.notices.append(
+                Notice( kind = NoticeKind.PROPERTY_SOLD, severity = NoticeSeverity.INFO, amount = sale_price ) )
+        return
+
+    def _auto_sell_possession(
+            self, bookkeeper : Bookkeeper, result : PeriodResult, source : Account, on_date : date ) -> None:
+        """Sell a whole possession (precious metals, collectibles) to cover a shortfall: realize it to cash
+        (its gain recognized as collectibles gain) and flag the automatic sale. A possession carries no
+        mortgage, running costs, or income to reconcile, so the realize is the whole of it. A valueless
+        holding is nothing to sell, so a no-op."""
+        chart = bookkeeper.chart
+        cash_account = chart.cash_account()
+        sale_price = bookkeeper.ledger.market_value( source )
+        if cash_account is None or sale_price <= 0:
+            return
+        Realization( on_date, source, None, cash_account ).apply(
+            bookkeeper, description = f'Sale of {source.name} to cover a savings shortfall.' )
+        result.notices.append(
+            Notice( kind = NoticeKind.POSSESSION_SOLD, severity = NoticeSeverity.INFO,
+                    amount = quantize_money( sale_price ) ) )
+        return
+
     def _settle_and_fund( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Pay last year's Taxes Payable, prepay this year's income-tax estimate, then fund cash to the
         floor, then accrue this year's true tax to Taxes Payable (which nets the prepayment, leaving
@@ -728,20 +768,12 @@ class Period:
                 continue
             if not source.asset_class.supports_partial_draw:
                 # An indivisible whole-asset source sells whole through its handler, not shaved to the
-                # shortfall. The residence handler exists; the second home, rental, and possessions still
-                # wait for theirs, so those are passed by for now.
-                if source.asset_class is AssetClass.REAL_ESTATE_RESIDENCE:
-                    # An automatic sale to cover the shortfall is worth flagging (a scheduled sale, going
-                    # through the same routine, is the user's own request and raises no notice).
-                    sale_price = self._sell_property_whole(
-                        bookkeeper, result, source, fund_date, rent_after = True,
-                        description = f'Sale of {source.name} to cover a savings shortfall.' )
-                    if sale_price is not None:
-                        result.notices.append(
-                            Notice(
-                                kind     = NoticeKind.PROPERTY_SOLD,
-                                severity = NoticeSeverity.INFO,
-                                amount   = sale_price ) )
+                # shortfall: real estate through the property-sale routine, a possession through a plain
+                # whole realize. Any source with no handler is passed by.
+                if source.asset_class in _AUTO_SALE_PROPERTY_CLASSES:
+                    self._auto_sell_property( bookkeeper, result, source, fund_date )
+                elif source.asset_class in _AUTO_SALE_POSSESSION_CLASSES:
+                    self._auto_sell_possession( bookkeeper, result, source, fund_date )
                 continue
             available = ledger.market_value( source )
             # Round the draw UP to the money scale so it fully covers the shortfall and cash lands at (or a

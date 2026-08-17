@@ -37,6 +37,11 @@ class NoticeKind( LabeledEnum ):
         'The liquid sources were exhausted, so a whole property in the draw order was sold to cover the '
         'cash shortfall (paying off any mortgage it secured); the indivisible proceeds usually overshoot '
         'and the surplus is swept back into investments.' )
+    POSSESSION_SOLD = (
+        'Possession Sold',
+        'The liquid sources were exhausted, so a whole possession (precious metals or collectibles) in the '
+        'draw order was sold to cover the cash shortfall; the indivisible proceeds usually overshoot and '
+        'the surplus is swept back into investments.' )
     REQUIRED_MINIMUM_DISTRIBUTION = (
         'Required Minimum Distribution', 'A pre-tax retirement RMD was forced.' )
     EARLY_WITHDRAWAL_PENALTY = (

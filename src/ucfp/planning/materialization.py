@@ -92,8 +92,7 @@ def materialize(
     vehicle_disposition_contributions( profile, plans, events )   # derive each disposition's sale
     expense_streams, expense_items = _property_expenses(
         profile, plans, assets_by_handle, events.property_sales )
-    flow_streams, flow_items = _income_flows(
-        profile, plans, subjects_by_handle, events.property_sales )
+    flow_streams, flow_items = _income_flows( profile, plans, subjects_by_handle )
     card_items, card_events = _credit_card_expenses( profile, plans, frame.start_date )
     vehicle_streams, vehicle_items = _vehicle_running_costs(
         profile, plans, events.possession_sales, frame.start_date )
@@ -626,15 +625,13 @@ def _vehicle_running_costs( profile : Profile, plans : Plans, sale_dates : dict,
 # --- Profile: flows (income entitlements) ----------------------------------
 
 def _income_flows(
-        profile : Profile, plans : Plans, subjects_by_handle : dict[ str, Subject ],
-        sale_dates : dict ) -> tuple[ list, list ]:
+        profile : Profile, plans : Plans, subjects_by_handle : dict[ str, Subject ] ) -> tuple[ list, list ]:
     """The profile's income flows as (streams, items): a flow with no interval is a smoothed stream,
     one with an interval an item placed at that cadence (rent is monthly). The flow carries the amount
     (a Profile fact); its active window is a Plans decision (the per-flow `IncomeTiming`, keyed by the
     flow handle). `property_handle` is carried to the engine as the income's `source_handle` (rental
-    income keeps its property link). A property-linked flow is clipped to its property's sale date --
-    when a rental is sold, its rent stops with it (the mirror of how a property's operating expenses are
-    clipped)."""
+    income keeps its property link), so the forecast ends a rental's income when the property is sold --
+    books-driven by that source-handle match, the mirror of how the property's operating costs end."""
     timing = { entry.flow_handle: entry for entry in plans.income_timing }
     streams, items = list(), list()
     for flow in profile.income_flows:
@@ -642,9 +639,7 @@ def _income_flows(
                     if flow.subject_handle is not None else None )   # None -> household income
         entry  = timing.get( flow.handle )
         window = DateWindow( start = entry.start, end = entry.end ) if entry is not None else DateWindow()
-        amounts = _clipped_to_sale(
-            Schedule( ( WindowedAmount( flow.amount, window ), ) ),
-            sale_dates.get( flow.property_handle ) )
+        amounts = Schedule( ( WindowedAmount( flow.amount, window ), ) )
         if flow.interval is None:
             streams.append( IncomeStream(
                 subject = subject, income_tax_class = flow.income_tax_class,
@@ -655,23 +650,6 @@ def _income_flows(
                 amounts = amounts, cadence = Recurrence( flow.interval ),
                 source_handle = flow.property_handle, name = flow.name ) )
     return streams, items
-
-
-def _clipped_to_sale( amounts : Schedule, sale_date : Optional[ date ] ) -> Schedule:
-    """`amounts` with every segment's window pulled in to `sale_date` -- so a rental's income ends when
-    the property is sold. Unchanged when the property is never sold (`sale_date` None)."""
-    if sale_date is None:
-        return amounts
-    return Schedule( tuple(
-        WindowedAmount( segment.amount, _capped_window( segment.window, sale_date ) )
-        for segment in amounts.segments ) )
-
-
-def _capped_window( window : DateWindow, end : date ) -> DateWindow:
-    """`window` with its end pulled in to `end` when it extends past it (or is unbounded)."""
-    if ( window.end is None ) or ( window.end > end ):
-        return DateWindow( start = window.start, end = end )
-    return window
 
 
 def _entitlement_income(
@@ -851,20 +829,27 @@ def _dormant_rent( plans : Plans ) -> Optional[ ExpenseItem ]:
         window            = DateWindow( start = date.max ) )   # dormant until the sale reconfiguration opens it
 
 
-def _residence_expense_handles( plans : Plans, residence_handle : str ) -> tuple[ tuple, tuple ]:
-    """(ownership_cost_handles, tenure_invariant_handles) for the residence: the account handles of its
-    materialized property expenses, split by whether each carries into a rental (utilities) or ends with
-    ownership (property tax, upkeep). The handles the forecast ends at a residence sale -- keeping the
-    invariant ones only when the household rents after."""
-    ownership, invariant = list(), list()
+# The property contexts whose operating costs the forecast ends dynamically at the property's sale (its
+# handler exists), so materialization leaves them full-horizon rather than clipping them at a fixed date.
+_BOOKS_DRIVEN_SALE_CONTEXTS = frozenset(
+    ( PropertyContext.RESIDENCE, PropertyContext.SECOND_HOME, PropertyContext.RENTAL ) )
+
+
+def _property_expense_handles(
+        plans : Plans, property_handle : str, context : PropertyContext, carry_invariant : bool ) -> tuple[ tuple, tuple ]:
+    """(ends_on_sale, carries_past_sale) expense-account handles for a property: the accounts of its
+    materialized property expenses. The residence -- which converts to renting -- carries its
+    tenure-invariant utilities (`carry_invariant`) and ends the rest; every other property ends all of them,
+    having no successor tenancy to carry into."""
+    ends, carries = list(), list()
     for expense in plans.property_expenses:
-        if PropertyContext.RESIDENCE not in expense.applies_to:
+        if context not in expense.applies_to:
             continue
-        if not expense.overrides.get( residence_handle, expense.default_amount ):
+        if not expense.overrides.get( property_handle, expense.default_amount ):
             continue
-        handle = str( property_expense_handle( expense.handle, residence_handle ) )
-        ( invariant if expense.tenure_invariant else ownership ).append( handle )
-    return tuple( ownership ), tuple( invariant )
+        handle = str( property_expense_handle( expense.handle, property_handle ) )
+        ( carries if ( carry_invariant and expense.tenure_invariant ) else ends ).append( handle )
+    return tuple( ends ), tuple( carries )
 
 
 def _property_expenses( profile : Profile, plans : Plans, assets : dict, sale_dates : dict ) -> tuple[ list, list ]:
@@ -876,10 +861,10 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict, sale_da
     the residence's same-named cost. A SMOOTH expense enters as an annualized stream; a DISCRETE one as an
     item placed at its cadence.
 
-    The primary residence is *not* clipped here: its sale is books-driven, so the forecast ends its costs
-    (and opens the rent) when the sale is reported, however it is triggered. Other sold properties (a second
-    home, a rental) still clip at their fixed sale date. A residence-owning household also gets a dormant
-    rent item -- inactive until that post-sale reconfiguration opens it."""
+    No owned property is clipped here: every property sale is books-driven, so the forecast ends the
+    property's costs (and, for the residence, opens the rent) when the sale is reported, however it is
+    triggered. A residence-owning household also gets a dormant rent item -- inactive until that post-sale
+    reconfiguration opens it."""
     residence_handle = _residence_handle( profile )
     streams, items = list(), list()
     for expense in plans.property_expenses:
@@ -889,7 +874,7 @@ def _property_expenses( profile : Profile, plans : Plans, assets : dict, sale_da
             amount = expense.overrides.get( handle, expense.default_amount )
             if not amount:
                 continue
-            sale_date = None if handle == residence_handle else sale_dates.get( handle )
+            sale_date = None if context in _BOOKS_DRIVEN_SALE_CONTEXTS else sale_dates.get( handle )
             tax_class      = _property_expense_tax_class( expense, asset )
             amounts        = _property_schedule( amount, sale_date )
             name           = _property_expense_name( asset, expense )
@@ -1043,9 +1028,10 @@ def _property_data( profile : Profile, plans : Plans ) -> dict:
     """One `PropertyData` per owned real-estate property, keyed by the property's handle -- the passive
     bundle a sale (scheduled or shortfall-driven) reaches. Carries the mortgage account handles the sale
     pays off: an amortizing, non-vehicle debt with a repayment plan (matching `_loans`), materialized under
-    its Debt's own handle (per `_loan`), so it names only loans that actually reach the books. The post-sale
-    expense fields are populated for the residence in a later step; every property gets an entry so the sale
-    routine always finds one, even a property with no mortgage."""
+    its Debt's own handle (per `_loan`), so it names only loans that actually reach the books, plus the
+    post-sale expense fields the forecast ends at the sale (the residence also carrying its utilities and a
+    rent to open). Every property gets an entry so the sale routine always finds one, even one with no
+    mortgage."""
     repayments  = { repayment.debt_handle for repayment in plans.loan_repayments }
     real_estate = [ asset.handle for asset in profile.assets if asset.asset_class.is_real_estate ]
     mortgages : dict = dict()
@@ -1055,17 +1041,23 @@ def _property_data( profile : Profile, plans : Plans ) -> dict:
         if debt.secured_asset not in real_estate or debt.handle not in repayments:
             continue
         mortgages.setdefault( str( debt.secured_asset ), list() ).append( str( debt.handle ) )
-    residence_handle = _residence_handle( profile )
     data : dict = dict()
-    for handle in real_estate:
-        mortgage_handles = tuple( mortgages.get( str( handle ), () ) )
-        if str( handle ) == residence_handle:
-            ownership, invariant = _residence_expense_handles( plans, residence_handle )
-            data[ str( handle ) ] = PropertyData(
-                mortgage_handles = mortgage_handles, ownership_cost_handles = ownership,
-                tenure_invariant_handles = invariant, rent_handle = _rent_account_handle( plans ) )
+    for asset in profile.assets:
+        if not asset.asset_class.is_real_estate:
+            continue
+        handle           = str( asset.handle )
+        mortgage_handles = tuple( mortgages.get( handle, () ) )
+        context          = OWNED_PROPERTY_CONTEXT[ asset.asset_class ]
+        if asset.asset_class is AssetClass.REAL_ESTATE_RESIDENCE:
+            ends, carries = _property_expense_handles( plans, handle, context, carry_invariant = True )
+            data[ handle ] = PropertyData(
+                mortgage_handles = mortgage_handles, ownership_cost_handles = ends,
+                tenure_invariant_handles = carries, rent_handle = _rent_account_handle( plans ) )
         else:
-            data[ str( handle ) ] = PropertyData( mortgage_handles = mortgage_handles )
+            # A second home or a rental: every operating cost ends at the sale, nothing carries, no rent;
+            # a rental's income ends separately, by its source-handle match in the reaction.
+            ends, _carries = _property_expense_handles( plans, handle, context, carry_invariant = False )
+            data[ handle ] = PropertyData( mortgage_handles = mortgage_handles, ownership_cost_handles = ends )
     return data
 
 

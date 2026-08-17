@@ -592,10 +592,12 @@ class Forecast:
         bookkeeper    = self._baseline.bookkeeper
         result        = ForecastResult( books = bookkeeper.books )
         opening_state = self._parameters.initial_tax_state
-        # A working copy of the smooth/occurrence expenses the per-period builders read: a reported property
-        # sale re-windows it once (see `_apply_property_sales`), so the builders stay sale-agnostic.
+        # Working copies of the expenses and income the per-period builders read: a reported property sale
+        # re-windows them once (see `_apply_property_sales`), so the builders stay sale-agnostic.
         self._expense_items   = list( self._parameters.expense_items )
         self._expense_streams = list( self._parameters.expense_streams )
+        self._income_items    = list( self._parameters.income_items )
+        self._income_streams  = list( self._parameters.income_streams )
         for span in self._parameters.period_spans():
             if self._parameters.subjects and not self._parameters.active_subjects( span.end_date.year ):
                 result.stopped_early = True
@@ -697,7 +699,7 @@ class Forecast:
         level then in effect, grow it to nominal by its class rate from the forecast start,
         prorate to the interval's share of the year, and post to its per-(subject, class) account."""
         lines = list()
-        for stream in self._parameters.income_streams:
+        for stream in self._income_streams:
             if not stream.window.covers( span.start_date ):
                 continue
             windowed_amount = stream.amounts.at( span.start_date )
@@ -716,7 +718,7 @@ class Forecast:
         nominal from the forecast start), posted to the per-(subject, class) account. The income
         counterpart of `_expense_item_lines_for` -- a `OneTime` cadence makes it a single receipt."""
         lines = list()
-        for item in self._parameters.income_items:
+        for item in self._income_items:
             clipped = self._clip_to_window( span, item.window )
             if clipped is None:
                 continue
@@ -814,11 +816,12 @@ class Forecast:
         return lines
 
     def _apply_property_sales( self, sales : list ) -> None:
-        """React once to each property sale the period reported, by re-windowing the forward expense working
-        copies: end the property's ownership costs (and its tenure-invariant utilities too when the household
-        does not rent after), and open its dormant rent when it does. The property's expense handles come
-        from its `PropertyData`; a property with none (a second home, a rental) reconfigures nothing. The
-        per-period builders read the re-windowed copies and never learn a sale happened."""
+        """React once to each property sale the period reported, by re-windowing the forward expense and
+        income working copies: end the property's ownership costs (and its tenure-invariant utilities too
+        when the household does not rent after), open its dormant rent when it does, and end any income the
+        property sourced (a rental's rent, matched by `source_handle`). The expense handles come from the
+        property's `PropertyData`. The per-period builders read the re-windowed copies and never learn a
+        sale happened."""
         for handle, sale_date, rent_after in sales:
             data = self._parameters.property_data.get( handle )
             if data is None:
@@ -833,6 +836,10 @@ class Forecast:
             if rent_after and data.rent_handle is not None:
                 self._expense_items = [ _opened_at( item, sale_date ) if str( item.handle ) == data.rent_handle
                                         else item for item in self._expense_items ]
+            self._income_streams = [ _ended_at( stream, sale_date ) if str( stream.source_handle ) == handle else stream
+                                     for stream in self._income_streams ]
+            self._income_items   = [ _ended_at( item, sale_date ) if str( item.source_handle ) == handle else item
+                                     for item in self._income_items ]
             continue
         return
 

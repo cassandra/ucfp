@@ -1,10 +1,11 @@
-"""The cash-funding waterfall's liquidity dispatch and the residence sale handler (draw-order Phase 3).
+"""The cash-funding waterfall's liquidity dispatch and its whole-asset sale handlers (draw-order Phase 3).
 
 The waterfall covers a shortfall by selling a slice of a liquid holding. A whole-asset source is
-indivisible and sells whole through a dedicated handler instead. Step 1 stubbed every whole-asset
-source (passed by, neither partially realized nor allowed to block a liquid source below it); step 3a
-adds the residence handler -- reaching a residence sells it whole, books the proceeds to cash, and pays
-off the mortgage it secures. The other whole-asset sources stay stubbed until their handlers land.
+indivisible and sells whole through a dedicated handler instead: real estate (a residence, a second home,
+a rental) through the property-sale routine -- realizing to cash, booking closing costs, and paying off
+any mortgage -- and a possession (precious metals, collectibles) through a plain whole realize. A class
+with no handler (a depreciating vehicle, never a real draw source) is passed by, neither partially
+realized nor allowed to block a liquid source below it.
 """
 import unittest
 from datetime import date
@@ -37,6 +38,9 @@ class FundingDispatchTests( unittest.TestCase ):
         bookkeeper.add_account( Account(
             name = 'Residence Gain', parent = chart.root( AccountType.REVENUE ),
             income_tax_class = IncomeTaxClass.RESIDENCE_SECTION_121_GAIN ) )
+        bookkeeper.add_account( Account(
+            name = 'Collectibles Gain', parent = chart.root( AccountType.REVENUE ),
+            income_tax_class = IncomeTaxClass.COLLECTIBLES_GAINS ) )
         return bookkeeper, asset_root, opening, cash
 
     def _seed( self, bookkeeper, opening, holding, value ):
@@ -55,12 +59,12 @@ class FundingDispatchTests( unittest.TestCase ):
         Period( parameters )._fund_to_target( bookkeeper, PeriodResult() )
         bookkeeper.assert_balanced()
 
-    # ---- still-stubbed whole-asset sources (no handler yet) ----
+    # ---- a source with no handler (a vehicle -- deliberately not a draw source) is passed by ----
 
     def test_an_unhandled_source_is_passed_by_not_partially_sold( self ):
-        # Possessions have no handler yet, so the waterfall must leave them whole, not shave a slice.
+        # A whole-asset class with no sale handler (a depreciating vehicle) must be left whole, not shaved.
         bookkeeper, asset_root, opening, cash = self._books()
-        coins = bookkeeper.create_holding( asset_root, 'Gold', AssetClass.PRECIOUS_METALS )
+        coins = bookkeeper.create_holding( asset_root, 'Car', AssetClass.DEPRECIATING )
         self._seed( bookkeeper, opening, coins, _D( '400000' ) )
         self._fund( bookkeeper, [ coins ], floor = _D( '10000' ) )
         ledger = bookkeeper.ledger
@@ -68,9 +72,9 @@ class FundingDispatchTests( unittest.TestCase ):
         self.assertEqual( ledger.natural_balance( cash ), _D( '0' ) )       # so the shortfall is left unmet
 
     def test_an_unhandled_source_does_not_block_a_liquid_one_below_it( self ):
-        # The possessions sit ahead of the CDs in priority; passing them by must not stop the CDs funding.
+        # The unhandled source sits ahead of the CDs in priority; passing it by must not stop the CDs funding.
         bookkeeper, asset_root, opening, cash = self._books()
-        coins = bookkeeper.create_holding( asset_root, 'Gold', AssetClass.PRECIOUS_METALS )
+        coins = bookkeeper.create_holding( asset_root, 'Car', AssetClass.DEPRECIATING )
         cds   = bookkeeper.create_holding( asset_root, 'CDs', AssetClass.CDS )
         self._seed( bookkeeper, opening, coins, _D( '400000' ) )
         self._seed( bookkeeper, opening, cds, _D( '50000' ) )
@@ -114,6 +118,18 @@ class FundingDispatchTests( unittest.TestCase ):
             asset_root, 'Home', AssetClass.REAL_ESTATE_RESIDENCE, handle = 'res' )
         self._fund( bookkeeper, [ home ], floor = _D( '10000' ) )   # home seeded to nothing
         self.assertEqual( bookkeeper.ledger.natural_balance( cash ), _D( '0' ) )
+
+    # ---- the possession handler (3c) ----
+
+    def test_a_possession_sells_whole_to_cover_a_shortfall( self ):
+        # Precious metals (a possession) sell whole -- no mortgage, running costs, or income to reconcile.
+        bookkeeper, asset_root, opening, cash = self._books()
+        gold = bookkeeper.create_holding( asset_root, 'Gold', AssetClass.PRECIOUS_METALS, handle = 'gold' )
+        self._seed( bookkeeper, opening, gold, _D( '400000' ) )
+        self._fund( bookkeeper, [ gold ], floor = _D( '10000' ) )
+        ledger = bookkeeper.ledger
+        self.assertEqual( ledger.market_value( gold ), _D( '0' ) )          # liquidated whole
+        self.assertEqual( ledger.natural_balance( cash ), _D( '400000' ) )  # the whole proceeds land in cash
 
 
 if __name__ == '__main__':

@@ -12,9 +12,10 @@ from decimal import Decimal
 from common.date_window import DateWindow
 from common.recurrence import Duration, Recurrence, TimeUnit
 from common.schedule import Schedule
-from ucfp.accounts.enums import ExpenseTaxClass
+from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.forecast import Forecast
-from ucfp.forecast.parameters import ExpenseItem, ForecastParameters, PropertyData, WindowedAmount
+from ucfp.forecast.parameters import (
+    ExpenseItem, ForecastParameters, IncomeStream, PropertyData, WindowedAmount )
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 
@@ -39,6 +40,8 @@ def _forecast( items : list ) -> Forecast:
             ownership_cost_handles = ( 'own', ), tenure_invariant_handles = ( 'util', ), rent_handle = 'rent' ) } ) )
     forecast._expense_items   = list( items )   # run() sets these; the reaction re-windows them
     forecast._expense_streams = list()
+    forecast._income_items    = list()
+    forecast._income_streams  = list()
     return forecast
 
 
@@ -65,6 +68,21 @@ class PropertySaleReactionTests( unittest.TestCase ):
         forecast = _forecast( [ _item( 'own' ) ] )
         forecast._apply_property_sales( [ ( 'unknown', _SALE, True ) ] )
         self.assertIsNone( forecast._expense_items[ 0 ].window.end )   # untouched
+
+    def test_a_property_sale_ends_the_income_it_sourced( self ):
+        forecast = _forecast( [] )
+        forecast._income_streams = [ _income( _HANDLE ), _income( 'other' ) ]   # a rental's rent, and unrelated income
+        forecast._apply_property_sales( [ ( _HANDLE, _SALE, False ) ] )
+        by_source = { str( stream.source_handle ): stream for stream in forecast._income_streams }
+        self.assertEqual( by_source[ _HANDLE ].window.end, _SALE )   # the sold property's income ends
+        self.assertIsNone( by_source[ 'other' ].window.end )         # unrelated income is untouched
+
+
+def _income( source : str ) -> IncomeStream:
+    return IncomeStream(
+        subject = None, income_tax_class = IncomeTaxClass.GROSS_RENTAL,
+        amounts = Schedule( ( WindowedAmount( Decimal( '1000' ), DateWindow() ), ) ),
+        source_handle = source, name = source )
 
 
 if __name__ == '__main__':

@@ -132,8 +132,8 @@ class PropertyData:
     that end at the sale; `tenure_invariant_handles` are the costs that persist whether owning or renting
     (utilities) -- carried past a residence sale when the household rents after, ended when it does not;
     `rent_handle` names the (initially dormant) rent expense the forecast opens if it does (a residence
-    only). A property with no post-sale expense reaction yet -- a second home or rental, until its own
-    handler lands -- carries only its `mortgage_handles` and leaves the rest empty."""
+    only). A second home or rental fills only `ownership_cost_handles` (all its costs end; nothing carries,
+    no rent); a property's income, if any, ends by a separate source-handle match, not named here."""
 
     mortgage_handles         : tuple[ str, ... ] = ()
     ownership_cost_handles   : tuple[ str, ... ] = ()

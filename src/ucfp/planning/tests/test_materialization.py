@@ -140,6 +140,35 @@ class ResidenceExpenseMaterializationTests( unittest.TestCase ):
         self.assertEqual( data.rent_handle, _rent_account_handle( plans ) )
 
 
+class SecondHomeExpenseMaterializationTests( unittest.TestCase ):
+    """A second home's sale is books-driven too, but with no rent conversion: every operating cost ends at
+    the sale (nothing carries, no rent), so its PropertyData names them all under `ownership_cost_handles`."""
+
+    def _profile_plans( self ):
+        profile = Profile( assets = [ _property( 'second-home', AssetClass.REAL_ESTATE_SECOND_HOME ) ] )
+        plans   = Plans( property_expenses = [
+            ResidenceExpenseMaterializationTests._pexpense( 'Electric', 'electric', _OCCUPIED, '150' ),
+            ResidenceExpenseMaterializationTests._pexpense( 'Property Tax', 'property-tax', _OWNED, '500' ) ] )
+        return profile, plans
+
+    def test_second_home_costs_are_full_horizon_with_no_rent( self ):
+        profile, plans = self._profile_plans()
+        _streams, items = _property_expenses(
+            profile, plans, { 'second-home': _property( 'second-home', AssetClass.REAL_ESTATE_SECOND_HOME ) }, dict() )
+        by_handle = { str( item.handle ): item for item in items }
+        self.assertIsNone( by_handle[ str( property_expense_handle( 'electric', 'second-home' ) ) ].window.end )
+        self.assertNotIn( 'Rented Home Rent', [ item.name for item in items ] )   # no rent for a second home
+
+    def test_property_data_ends_all_second_home_costs_with_no_carry_or_rent( self ):
+        profile, plans = self._profile_plans()
+        data = _property_data( profile, plans )[ 'second-home' ]
+        both = { str( property_expense_handle( 'electric', 'second-home' ) ),
+                 str( property_expense_handle( 'property-tax', 'second-home' ) ) }
+        self.assertEqual( set( data.ownership_cost_handles ), both )   # every cost ends at the sale
+        self.assertEqual( data.tenure_invariant_handles, () )         # nothing carries
+        self.assertIsNone( data.rent_handle )                        # and no rent
+
+
 def _vehicle( handle, purchase_date, end_date = None, **kwargs ) -> Vehicle:
     return Vehicle( handle = handle, purchase_date = purchase_date, end_date = end_date, **kwargs )
 
