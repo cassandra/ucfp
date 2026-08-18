@@ -145,7 +145,7 @@ class RentalSaleRecaptureTests( unittest.TestCase ):
                         acquisition_date  = date( 2010, 1, 1 ),
                         depreciable_basis = depreciable_basis,
                         property_type     = RealPropertyType.RESIDENTIAL ) ) ],
-            events        = [ ScheduledRealization( date( 2026, 1, 1 ), 'rental', Decimal( '600000' ) ) ],
+            events        = [ ScheduledPropertySale( date( 2026, 1, 1 ), 'rental', rent_after = True ) ],
         )
 
     def test_sale_mechanics_and_book_gain( self ):
@@ -276,7 +276,7 @@ class BelowCostSaleRecaptureCapTests( unittest.TestCase ):
 
     def _parameters( self, sell ):
         subject = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
-        events  = [ ScheduledRealization( self._SALE, 'rental', None ) ] if sell else []   # a full sale
+        events  = [ ScheduledPropertySale( self._SALE, 'rental', rent_after = True ) ] if sell else []   # a full sale
         return ForecastParameters(
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
@@ -314,7 +314,7 @@ class SuspendedLossReleaseOnSaleTests( unittest.TestCase ):
 
     def _parameters( self, sell ):
         subject = Subject( 'A', date( 1958, 1, 1 ), 'subject-a' )
-        events  = [ ScheduledRealization( date( 2026, 12, 1 ), 'rental', Decimal( '400000' ) ) ] if sell else []
+        events  = [ ScheduledPropertySale( date( 2026, 12, 1 ), 'rental', rent_after = True ) ] if sell else []
         return ForecastParameters(
             start_date    = date( 2026, 1, 1 ),
             end_date      = date( 2026, 12, 31 ),
