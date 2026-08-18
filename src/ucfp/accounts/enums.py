@@ -295,7 +295,11 @@ class IncomeTaxClass( LabeledEnum ):
     COLLECTIBLES_GAINS  = ( 'Collectibles Gains', 'Collectibles; 28% max rate.' )
     SOCIAL_SECURITY     = ( 'Social Security', 'Benefits; partial-inclusion rule.' )
     GROSS_RENTAL        = ( 'Gross Rental', 'Gross rents; netted with expenses in-period.' )
-    TAX_FREE            = ( 'Tax-Free', 'Excluded from tax everywhere (Roth).' )
+    TAX_FREE            = ( 'Tax-Free', 'Excluded from tax everywhere.' )
+    ROTH_EARNINGS       = (
+        'Roth Earnings',
+        'Earnings withdrawn from a Roth: tax-free at/after 59.5, otherwise ordinary income plus the 10% '
+        'early-withdrawal penalty. A Roth basis withdrawal recognizes no income.' )
     TAX_EXEMPT_INTEREST = ( 'Tax-Exempt Interest', 'Untaxed, but counts in SS/ACA MAGI (muni).' )
 
     @property
@@ -308,9 +312,11 @@ class IncomeTaxClass( LabeledEnum ):
 
 
 # Income tax-classes whose asset income is attributed to the owning subject (a per-person revenue
-# account), not the household -- a retirement distribution carries the owner's name; capital gains do
-# not (they are joint on a joint return).
-_OWNER_ATTRIBUTED_INCOME_CLASSES = frozenset( { IncomeTaxClass.RETIREMENT_DISTRIBUTION } )
+# account), not the household -- a retirement distribution and a Roth earnings withdrawal carry the
+# owner's name (the penalty/exclusion turn on that owner's age); capital gains do not (they are joint
+# on a joint return).
+_OWNER_ATTRIBUTED_INCOME_CLASSES = frozenset(
+    { IncomeTaxClass.RETIREMENT_DISTRIBUTION, IncomeTaxClass.ROTH_EARNINGS } )
 
 
 # The income tax-class each distributing asset class credits with its yield
@@ -339,7 +345,7 @@ _REALIZED_GAIN_INCOME_CLASS = {
     AssetClass.REAL_ESTATE_RENTAL      : IncomeTaxClass.RENTAL_SALE_GAIN,
     AssetClass.REAL_ESTATE_SECOND_HOME : IncomeTaxClass.SECOND_HOME_GAIN,
     AssetClass.PRETAX_RETIREMENT       : IncomeTaxClass.RETIREMENT_DISTRIBUTION,
-    AssetClass.ROTH                    : IncomeTaxClass.TAX_FREE,
+    AssetClass.ROTH                    : IncomeTaxClass.ROTH_EARNINGS,
     AssetClass.PRECIOUS_METALS         : IncomeTaxClass.COLLECTIBLES_GAINS,
     AssetClass.COLLECTIBLES            : IncomeTaxClass.COLLECTIBLES_GAINS,
 }

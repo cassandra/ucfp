@@ -1,9 +1,11 @@
 """Roth basis tracking (issue #185).
 
-Phase 2a: a Roth now carries a real basis -- its opening balance is 100% basis -- rather than seeding
-at zero basis like a pre-tax account. Behavior is unchanged this phase: a Roth withdrawal is still
-fully tax-free (later phases tax the earnings above basis when withdrawn before 59.5). These tests pin
-that the basis is seeded and that withdrawals stay tax-free.
+A Roth carries a real basis -- its opening balance is 100% basis, plus contributions and conversions --
+rather than seeding at zero basis like a pre-tax account. A withdrawal draws basis first, and the
+earnings above basis are recognized in the owner's Roth Earnings account. Through phase 3 this is still
+tax-free (the pre-59.5 ordinary tax + 10% penalty on the earnings lands in phase 4); these tests pin the
+basis seeding, basis-first ordering, contribution-to-basis routing, and the owner-scoped earnings
+recognition.
 """
 import unittest
 from datetime import date
@@ -81,8 +83,8 @@ class RothBasisFirstOrderingTests( unittest.TestCase ):
         reader = Bookkeeper( Forecast( _parameters(
             outlook = self._GROWTH_50,
             events  = [ ScheduledRealization( date( 2026, 12, 1 ), 'roth', withdrawal ) ] ) ).run().books )
-        tax_free = reader.chart.income_account( IncomeTaxClass.TAX_FREE )
-        return reader.ledger.natural_balance( tax_free )
+        earnings = reader.chart.income_account( IncomeTaxClass.ROTH_EARNINGS, 'subject-a' )
+        return reader.ledger.natural_balance( earnings )
 
     def test_withdrawal_within_basis_recognizes_no_earnings( self ):
         # drawing exactly the 100k basis (of a 150k balance) realizes no gain -- pro-rata would have
@@ -128,8 +130,26 @@ class RothContributionBuildsBasisTests( unittest.TestCase ):
         # withdrawing the contributed 7000 is entirely basis -> no earnings recognized
         reader   = self._reader(
             events = [ ScheduledRealization( date( 2026, 12, 1 ), 'roth', Decimal( '7000' ) ) ] )
-        tax_free = reader.chart.income_account( IncomeTaxClass.TAX_FREE )
-        self.assertEqual( reader.ledger.natural_balance( tax_free ), Decimal( '0' ) )
+        earnings = reader.chart.income_account( IncomeTaxClass.ROTH_EARNINGS, 'subject-a' )
+        self.assertEqual( reader.ledger.natural_balance( earnings ), Decimal( '0' ) )
+
+
+class RothEarningsRecognitionTests( unittest.TestCase ):
+    """Phase 3: a Roth withdrawal's earnings are recognized in the OWNER's Roth Earnings account (not
+    the household tax-free account), so the engine can read them per owner. Through this phase they are
+    still excluded from tax; phase 4 taxes and penalizes a pre-59.5 earnings withdrawal."""
+
+    _GROWTH_50 = EconomicOutlook.constant(
+        EconomicParameters( retirement_growth = Rate( Decimal( '0.50' ) ) ) )
+
+    def test_pre_59_earnings_are_owner_scoped_but_untaxed_this_phase( self ):
+        # subject is 51 (pre-59.5); withdraw 130k from a 150k Roth (100k basis) -> 30k earnings
+        reader   = Bookkeeper( Forecast( _parameters(
+            outlook = self._GROWTH_50,
+            events  = [ ScheduledRealization( date( 2026, 12, 1 ), 'roth', Decimal( '130000' ) ) ] ) ).run().books )
+        earnings = reader.chart.income_account( IncomeTaxClass.ROTH_EARNINGS, 'subject-a' )
+        self.assertEqual( reader.ledger.natural_balance( earnings ), Decimal( '30000' ) )
+        self.assertEqual( total_income_tax( reader ), Decimal( '0' ) )   # phase 4 makes this nonzero
 
 
 if __name__ == '__main__':
