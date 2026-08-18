@@ -240,12 +240,15 @@ class Period:
 
     def _apply_contributions( self, bookkeeper : Bookkeeper, result : PeriodResult ) -> None:
         """Post the resolved retirement `contribution_lines` at the midpoint (after income, so
-        cash is present): DR the target holding's valuation companion / CR its funding account --
-        cash for an employee contribution (net-worth-neutral), External Receipts equity for an
-        employer match (net-worth-increasing). Each line is first scaled by its (owner, kind)
-        annual-limit factor (see `_contribution_cap_factors`): a contribution that has outgrown
-        what the year's limit still allows is clamped and raises a Notice. An uncapped line is a
-        requested input, so it carries a memo, not a Notice."""
+        cash is present): DR the target holding's cost or valuation / CR its funding account -- cash
+        for an employee contribution (net-worth-neutral), External Receipts equity for an employer
+        match (net-worth-increasing). A contribution to a pre-tax account (zero-basis) builds its
+        valuation companion, so the whole amount is taxed on withdrawal; a contribution to a Roth
+        builds its cost (basis), so it comes out tax-free ahead of earnings. Each line is first scaled
+        by its (owner, kind)
+        annual-limit factor (see `_contribution_cap_factors`): a contribution that has outgrown what the
+        year's limit still allows is clamped and raises a Notice. An uncapped line is a requested input,
+        so it carries a memo, not a Notice."""
         chart = bookkeeper.chart
         contribution_date = self._parameters.date_span.midpoint
         cap_factors = self._contribution_cap_factors( bookkeeper, result )
@@ -254,13 +257,19 @@ class Period:
             amount = quantize_money( line.amount * factor )
             if amount == 0:
                 continue
-            valuation_account = chart.valuation_of( line.holding )
-            if valuation_account is None:
-                raise MissingAccountError(
-                    f'Retirement holding "{line.holding}" has no valuation account to contribute to.' )
+            if line.holding.asset_class.seeds_at_zero_basis:
+                # A pre-tax account: the contribution builds its valuation companion, so the whole
+                # value is taxed on a later withdrawal.
+                target_account = chart.valuation_of( line.holding )
+                if target_account is None:
+                    raise MissingAccountError(
+                        f'Retirement holding "{line.holding}" has no valuation account to contribute to.' )
+            else:
+                # Roth: the contribution is basis -- it builds the holding's cost, tax-free on withdrawal.
+                target_account = line.holding
             bookkeeper.record(
                 contribution_date,
-                [ ( valuation_account, -amount ), ( line.funding_account, amount ) ],
+                [ ( target_account, -amount ), ( line.funding_account, amount ) ],
                 description = line.description,
             )
             continue

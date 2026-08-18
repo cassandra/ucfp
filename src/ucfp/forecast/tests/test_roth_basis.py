@@ -15,7 +15,8 @@ from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
-    AssetParameters, ForecastParameters, ScheduledRealization, Subject )
+    AssetParameters, ContributionSource, ForecastParameters, RetirementContribution,
+    ScheduledRealization, Subject )
 from ucfp.forecast.tests.tax_helpers import total_income_tax
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
@@ -91,6 +92,44 @@ class RothBasisFirstOrderingTests( unittest.TestCase ):
     def test_withdrawal_above_basis_recognizes_only_the_excess( self ):
         # drawing 120k exhausts the 100k basis and recognizes exactly the 20k above it as earnings.
         self.assertEqual( self._realized_earnings( Decimal( '120000' ) ), Decimal( '20000' ) )
+
+
+class RothContributionBuildsBasisTests( unittest.TestCase ):
+    """A Roth contribution is basis: it builds the holding's cost (not its valuation companion, where a
+    pre-tax contribution lands), so the contributed principal comes out tax-free ahead of any earnings."""
+
+    def _reader( self, events = () ):
+        params = ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.SINGLE,
+            statute       = _PROFILE,
+            subjects      = [ _SUBJECT ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '50000' ), Decimal( '50000' ),
+                                 handle = 'cash' ),
+                AssetParameters( 'Roth', AssetClass.ROTH, Decimal( '0' ), Decimal( '0' ),
+                                 handle = 'roth', owner_handle = 'subject-a' ) ],
+            contributions = [
+                RetirementContribution( 'roth', Decimal( '7000' ), ContributionSource.PERSONAL ) ],
+            events        = list( events ),
+            economic_outlook = EconomicOutlook(),
+        )
+        return Bookkeeper( Forecast( params ).run().books )
+
+    def test_contribution_builds_cost_basis( self ):
+        # the 7000 contribution lands in the holding's cost (basis), not the valuation companion
+        reader = self._reader()
+        roth   = reader.chart.account( 'roth' )
+        self.assertEqual( reader.ledger.natural_balance( roth, through = date( 2026, 12, 31 ) ),
+                          Decimal( '7000' ) )
+
+    def test_withdrawing_the_contribution_recognizes_no_earnings( self ):
+        # withdrawing the contributed 7000 is entirely basis -> no earnings recognized
+        reader   = self._reader(
+            events = [ ScheduledRealization( date( 2026, 12, 1 ), 'roth', Decimal( '7000' ) ) ] )
+        tax_free = reader.chart.income_account( IncomeTaxClass.TAX_FREE )
+        self.assertEqual( reader.ledger.natural_balance( tax_free ), Decimal( '0' ) )
 
 
 if __name__ == '__main__':
