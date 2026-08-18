@@ -63,6 +63,20 @@ class FiscalWindow:
             continue
         return amounts
 
+    def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle ) -> Decimal:
+        """The income recognized in `income_tax_class` on the account owned by `owner_handle` over the
+        fiscal year -- the per-owner figure a rule that turns on the owner's age needs (e.g. a Roth
+        earnings withdrawal, taxed and penalized only for an owner under 59-1/2)."""
+        total = Decimal( '0' )
+        for account in self._chart.accounts( account_type = AccountType.REVENUE ):
+            if ( account.income_tax_class != income_tax_class
+                 or str( account.owner_handle ) != str( owner_handle ) ):
+                continue
+            total += self._ledger.flows(
+                account, start = self._span.start_date, end = self._span.end_date )
+            continue
+        return total
+
     def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
         """Total expense booked to `expense_tax_class` over the fiscal year (zero if
         no expense account carries that class). Scoped to the one class, like
@@ -181,6 +195,9 @@ class AnnualizedFiscalWindow:
 
     def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
         return [ amount * self._factor for amount in self._window.income_by_account( income_tax_class ) ]
+
+    def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle ) -> Decimal:
+        return self._window.income_for_owner( income_tax_class, owner_handle ) * self._factor
 
     def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
         return self._window.expense( expense_tax_class ) * self._factor

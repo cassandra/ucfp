@@ -23,7 +23,7 @@ from .enums import AccountType, AssetClass, SideType, SystemAccountRole
 from .exceptions import MissingAccountError, TransactionImbalanceError
 from .journal import Journal
 from .ledger import Ledger
-from .money_utils import quantize_money
+from .money_utils import format_money, quantize_money
 from .schemas import Handle
 
 
@@ -210,6 +210,11 @@ class Bookkeeper:
                     ( unrealized_gain_account, -gain ),
                     ( realized_gain_account, gain ),
                 ]
+        if basis_first and gain != 0:
+            # A basis-first withdrawal that crosses into earnings: name the split so the reader sees why
+            # part of it became income (a Roth's earnings are taxable/penalized before 59-1/2).
+            split = f'{format_money( cost_sold )} basis, {format_money( gain )} earnings'
+            description = f'{description} ({split})' if description else split
         return self.record( on_date, postings, description = description )
 
     # -- invariants and index access -----------------------------------------

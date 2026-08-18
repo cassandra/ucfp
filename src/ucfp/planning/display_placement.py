@@ -125,7 +125,7 @@ _VEHICLES_PANE_ORDER = len( _ASSET_PANES )   # after the class-derived panes
 # its own tax-class rung.
 _INCOME_SOURCES = [
     _Grouping( 'earned', 'Earned Income', ( IncomeTaxClass.WAGES, ) ),
-    _Grouping( 'pension-withdrawals', 'Pension & Withdrawals',
+    _Grouping( 'pension-withdrawals', 'Retirement Income',
                ( IncomeTaxClass.PENSION, IncomeTaxClass.RETIREMENT_DISTRIBUTION,
                  IncomeTaxClass.ROTH_EARNINGS ) ),
     _Grouping( 'social-security', 'Social Security', ( IncomeTaxClass.SOCIAL_SECURITY, ) ),

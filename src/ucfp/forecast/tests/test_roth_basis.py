@@ -13,7 +13,8 @@ from decimal import Decimal
 
 from common.rate import Rate
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.money_utils import format_money
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
@@ -22,6 +23,7 @@ from ucfp.forecast.parameters import (
 from ucfp.forecast.tests.tax_helpers import total_income_tax
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
+from ucfp.period.results import NoticeKind
 
 _PROFILE = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 _SUBJECT = Subject( 'A', date( 1975, 1, 1 ), 'subject-a' )   # age 51 in 2026
@@ -135,21 +137,108 @@ class RothContributionBuildsBasisTests( unittest.TestCase ):
 
 
 class RothEarningsRecognitionTests( unittest.TestCase ):
-    """Phase 3: a Roth withdrawal's earnings are recognized in the OWNER's Roth Earnings account (not
-    the household tax-free account), so the engine can read them per owner. Through this phase they are
-    still excluded from tax; phase 4 taxes and penalizes a pre-59.5 earnings withdrawal."""
+    """A Roth withdrawal's earnings are recognized in the OWNER's Roth Earnings account (not the
+    household tax-free account), so the engine can read them per owner (for the age-based tax/penalty)."""
 
     _GROWTH_50 = EconomicOutlook.constant(
         EconomicParameters( retirement_growth = Rate( Decimal( '0.50' ) ) ) )
 
-    def test_pre_59_earnings_are_owner_scoped_but_untaxed_this_phase( self ):
-        # subject is 51 (pre-59.5); withdraw 130k from a 150k Roth (100k basis) -> 30k earnings
+    def test_earnings_are_recognized_in_the_owner_account( self ):
+        # withdraw 130k from a 150k Roth (100k basis) -> 30k earnings, in subject-a's Roth Earnings
         reader   = Bookkeeper( Forecast( _parameters(
             outlook = self._GROWTH_50,
             events  = [ ScheduledRealization( date( 2026, 12, 1 ), 'roth', Decimal( '130000' ) ) ] ) ).run().books )
         earnings = reader.chart.income_account( IncomeTaxClass.ROTH_EARNINGS, 'subject-a' )
         self.assertEqual( reader.ledger.natural_balance( earnings ), Decimal( '30000' ) )
-        self.assertEqual( total_income_tax( reader ), Decimal( '0' ) )   # phase 4 makes this nonzero
+
+
+class RothEarlyWithdrawalTaxTests( unittest.TestCase ):
+    """Phase 4: Roth earnings withdrawn before 59.5 are ordinary income plus a 10% penalty; at/after
+    59.5 they are tax-free. Basis is always free. A 100k-basis Roth grows 50% to 150k, and a 130k
+    withdrawal draws the 100k basis first, leaving 30k of earnings."""
+
+    _GROWTH_50 = EconomicOutlook.constant(
+        EconomicParameters( retirement_growth = Rate( Decimal( '0.50' ) ) ) )
+
+    def _reader( self, *, birthdate, withdrawal = Decimal( '130000' ) ):
+        subject = Subject( 'A', birthdate, 'subject-a' )
+        params  = ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.SINGLE,
+            statute       = _PROFILE,
+            subjects      = [ subject ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ), handle = 'cash' ),
+                AssetParameters( 'Roth', AssetClass.ROTH, Decimal( '100000' ), Decimal( '100000' ),
+                                 handle = 'roth', owner_handle = 'subject-a' ) ],
+            events        = [ ScheduledRealization( date( 2026, 12, 1 ), 'roth', withdrawal ) ],
+            economic_outlook = self._GROWTH_50,
+        )
+        return Bookkeeper( Forecast( params ).run().books )
+
+    def _penalty( self, reader ):
+        return reader.ledger.natural_balance(
+            reader.chart.expense_account( ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY ) )
+
+    def test_pre_59_earnings_are_taxed_and_penalized( self ):
+        reader = self._reader( birthdate = date( 1975, 1, 1 ) )   # age 51 in 2026
+        self.assertEqual( self._penalty( reader ), Decimal( '3000' ) )        # 10% of the 30k earnings
+        self.assertGreater( total_income_tax( reader ), Decimal( '0' ) )      # 30k earnings taxed as ordinary
+        # the penalty's memo surfaces that the earnings were taxed as income, not merely penalized
+        penalty_acct = reader.chart.expense_account( ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY )
+        memo = next( t.description for t in reader.books.transactions
+                     if any( e.account is penalty_acct for e in t.entries ) )
+        self.assertIn( 'Roth earnings', memo )
+        self.assertIn( 'taxed as ordinary income', memo )
+
+    def test_post_59_earnings_are_tax_free( self ):
+        reader = self._reader( birthdate = date( 1955, 1, 1 ) )   # age 71 in 2026 (>= 59.5)
+        self.assertEqual( self._penalty( reader ), Decimal( '0' ) )
+        self.assertEqual( total_income_tax( reader ), Decimal( '0' ) )
+
+    def test_basis_withdrawal_is_free_even_before_59( self ):
+        # a 90k withdrawal is entirely within the 100k basis -> no earnings, no tax, no penalty
+        reader = self._reader( birthdate = date( 1975, 1, 1 ), withdrawal = Decimal( '90000' ) )
+        self.assertEqual( self._penalty( reader ), Decimal( '0' ) )
+        self.assertEqual( total_income_tax( reader ), Decimal( '0' ) )
+
+    def test_crossover_withdrawal_memo_names_the_basis_and_earnings_split( self ):
+        # the 130k draw (100k basis + 30k earnings) names its split so the income leg is explained
+        reader        = self._reader( birthdate = date( 1975, 1, 1 ) )
+        roth_earnings = reader.chart.income_account( IncomeTaxClass.ROTH_EARNINGS, 'subject-a' )
+        withdrawals   = [ t for t in reader.books.transactions
+                          if any( e.account is roth_earnings for e in t.entries ) ]
+        self.assertEqual( len( withdrawals ), 1 )
+        description = withdrawals[ 0 ].description
+        self.assertIn( f'{format_money( Decimal( "100000" ) )} basis', description )
+        self.assertIn( f'{format_money( Decimal( "30000" ) )} earnings', description )
+
+
+class RothIsNeverRmdTests( unittest.TestCase ):
+    """A Roth is exempt from lifetime RMDs (unlike a pre-tax account), so a Roth held past the RMD age
+    forces no distribution -- confirmed while the surrounding retirement code is in flux (#185)."""
+
+    def test_roth_at_rmd_age_forces_no_distribution( self ):
+        subject = Subject( 'A', date( 1950, 1, 1 ), 'subject-a' )   # age 76 in 2026, past RMD start
+        result  = Forecast( ForecastParameters(
+            start_date    = date( 2026, 1, 1 ),
+            end_date      = date( 2026, 12, 31 ),
+            filing_status = FilingStatus.SINGLE,
+            statute       = _PROFILE,
+            subjects      = [ subject ],
+            assets        = [
+                AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ), handle = 'cash' ),
+                AssetParameters( 'Roth', AssetClass.ROTH, Decimal( '100000' ), Decimal( '100000' ),
+                                 handle = 'roth', owner_handle = 'subject-a' ) ],
+        ) ).run()
+        rmd_notices = [ notice for step in result.steps for notice in step.result.notices
+                        if notice.kind == NoticeKind.REQUIRED_MINIMUM_DISTRIBUTION ]
+        self.assertEqual( rmd_notices, [] )
+        reader = Bookkeeper( result.books )
+        self.assertEqual(
+            reader.ledger.market_value( reader.chart.account( 'roth' ), through = date( 2026, 12, 31 ) ),
+            Decimal( '100000' ) )
 
 
 if __name__ == '__main__':
