@@ -153,11 +153,11 @@ class AssetClass( LabeledEnum ):
 
     @property
     def seeds_at_zero_basis( self ) -> bool:
-        """Whether holdings of this class carry zero tax basis -- a domain rule, not a planner
-        choice: a pre-tax retirement account's contributions were untaxed (the whole
-        withdrawal is ordinary), and a Roth is modeled at zero basis so a withdrawal realizes
-        wholly into the tax-free class. Such a holding's `cost_basis` must be 0 (its whole
-        value seeds as unrealized gain); other classes carry a real basis."""
+        """Whether holdings of this class carry zero tax basis -- a domain rule, not a planner choice:
+        a pre-tax retirement account's contributions were untaxed, so the whole withdrawal is ordinary
+        income and its `cost_basis` must be 0 (its whole value seeds as unrealized gain). Other classes
+        -- including Roth, whose contributions are basis (tax-free) and only whose earnings are taxed --
+        carry a real basis."""
         return self in _ZERO_BASIS_ASSET_CLASSES
 
     @property
@@ -210,11 +210,12 @@ class AssetClass( LabeledEnum ):
 _NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS ) )
 
 
-# Retirement classes that carry zero tax basis (a domain rule): the whole holding value is
-# realized on withdrawal/conversion -- pre-tax as ordinary, Roth as tax-free. Their
-# cost_basis must be 0 (validated on the input), so the whole value seeds as unrealized gain.
+# The class whose holdings carry zero tax basis (a domain rule): a pre-tax retirement account's
+# contributions were untaxed, so its whole value is ordinary income on withdrawal and its cost_basis
+# must be 0 (validated on the input), seeding the whole value as unrealized gain. A Roth is NOT here:
+# it carries a real basis (its contributions, tax-free on withdrawal) and only its earnings are taxed.
 _ZERO_BASIS_ASSET_CLASSES = frozenset(
-    ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
+    ( AssetClass.PRETAX_RETIREMENT, ) )
 
 
 # The contribution-limited retirement classes (pre-tax + Roth) -- the "is this a retirement account?"
