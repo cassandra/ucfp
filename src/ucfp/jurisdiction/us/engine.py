@@ -265,19 +265,36 @@ class USFederalTaxEngine( TaxEngine ):
 
         # Income tax splits into its rate layers, each its own account; NIIT stands apart. Employment
         # tax (FICA) is withheld in-year (see `assess_employment_tax`), not assessed here. The
-        # refundable premium credit offsets the ordinary income tax (its natural home).
+        # refundable premium credit offsets the ordinary income tax (its natural home). Each charge
+        # carries a memo scoped to its own layer's drivers (mirroring `TaxPenalty.reason`), which the
+        # Period posts as the accrual's description so the results drill-down explains the tax.
+        niit_threshold = self._parameters.niit_thresholds[ status ]
+        niit_taxed     = min( net_investment_income, max( _ZERO, figures.niit_magi - niit_threshold ) )
         income_tax_charges = (
-            ( ExpenseTaxClass.ORDINARY_INCOME_TAX, income_tax.ordinary ),
-            ( ExpenseTaxClass.CAPITAL_GAINS_TAX, income_tax.capital_gains ),
-            ( ExpenseTaxClass.SECTION_1250_TAX, income_tax.section_1250 ),
-            ( ExpenseTaxClass.COLLECTIBLES_TAX, income_tax.collectibles ),
-            ( ExpenseTaxClass.NIIT, niit ),
-            ( ExpenseTaxClass.STATE_INCOME_TAX, state_income_tax ) )
-        charges = [ TaxCharge( tax_class, amount )
-                    for tax_class, amount in income_tax_charges if amount > 0 ]
+            ( ExpenseTaxClass.ORDINARY_INCOME_TAX, income_tax.ordinary,
+              f'On {format_money( split.ordinary )} of ordinary taxable income '
+              f'(AGI {format_money( agi )} less {format_money( deduction )} deduction).' ),
+            ( ExpenseTaxClass.CAPITAL_GAINS_TAX, income_tax.capital_gains,
+              f'On {format_money( preferential_income )} of long-term gains and qualified dividends.' ),
+            ( ExpenseTaxClass.SECTION_1250_TAX, income_tax.section_1250,
+              f'Recapture of {format_money( section_1250 )} of accumulated depreciation '
+              'at the 25% §1250 rate.' ),
+            ( ExpenseTaxClass.COLLECTIBLES_TAX, income_tax.collectibles,
+              f'On {format_money( collectibles )} of collectibles gains at the 28% rate.' ),
+            ( ExpenseTaxClass.NIIT, niit,
+              f'{self._parameters.niit_rate:.1%} on {format_money( niit_taxed )} — the lesser of '
+              f'{format_money( net_investment_income )} net investment income and MAGI '
+              f'{format_money( figures.niit_magi )} over the {format_money( niit_threshold )} threshold.' ),
+            ( ExpenseTaxClass.STATE_INCOME_TAX, state_income_tax,
+              f'State income tax on {format_money( agi )} AGI (retirement income partly exempt).' ) )
+        charges = [ TaxCharge( tax_class, amount, detail )
+                    for tax_class, amount, detail in income_tax_charges if amount > 0 ]
         credits = []
         if premium_credit > 0:
-            credits.append( TaxCredit( ExpenseTaxClass.ORDINARY_INCOME_TAX, premium_credit ) )
+            credits.append(
+                TaxCredit(
+                    ExpenseTaxClass.ORDINARY_INCOME_TAX, premium_credit,
+                    f'ACA premium tax credit at {format_money( figures.aca_magi )} MAGI.' ) )
         income_tax_total = self._net_income_tax( charges, credits )
         return TaxAssessment(
             charges           = charges,

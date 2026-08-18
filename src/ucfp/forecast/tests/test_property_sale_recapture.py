@@ -304,6 +304,32 @@ class ResidenceAndSecondHomeGuardTests( unittest.TestCase ):
         self.assertLess( reader.ledger.net_worth( through = date( 2026, 12, 31 ) ), Decimal( '590000' ) )
 
 
+class SectionTwelveFiftyTaxMemoTests( unittest.TestCase ):
+    """The posted §1250 tax accrual carries the engine's per-layer memo: a scheduled rental sale must
+    book a `Section 1250 Tax` transaction whose description names the recaptured depreciation and the
+    25% rate, not the blank memo the accrual used to post. Proves the memo threads engine -> Period ->
+    ledger, not just that the engine builds it."""
+
+    _SALE_DATE = date( 2027, 7, 1 )
+
+    def test_section_1250_tax_transaction_memo_names_the_recapture_and_rate( self ):
+        books = Forecast( _rental_parameters(
+            depreciable_basis = _DEPRECIABLE_BASIS, end_date = date( 2027, 12, 31 ),
+            events = [ ScheduledPropertySale( self._SALE_DATE, 'rental', rent_after = True ) ] ) ).run().books
+        reader        = Bookkeeper( books )
+        section_1250  = reader.chart.expense_account( ExpenseTaxClass.SECTION_1250_TAX )
+        # The single rental recaptures in exactly its sale year, so exactly one transaction touches the
+        # §1250 tax account.
+        memos = [ txn.description for txn in books.transactions
+                  if any( entry.account is section_1250 for entry in txn.entries ) ]
+        self.assertEqual( len( memos ), 1 )
+        memo = memos[ 0 ]
+        self.assertTrue( memo, 'the §1250 tax accrual posted a blank memo' )
+        self.assertIn( 'Recapture', memo )
+        self.assertIn( 'accumulated depreciation', memo )
+        self.assertIn( '25%', memo )
+
+
 def _funding_parameters( big_expense ):
     """A shortfall scenario: 5k cash, a 300k living expense, and the rental as the only draw source, so
     the funding waterfall must sell the whole rental (no sale event) to cover the gap."""

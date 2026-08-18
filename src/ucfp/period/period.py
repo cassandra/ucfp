@@ -655,8 +655,8 @@ class Period:
             fiscal_window, tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
         settlements = (
-            [ ( charge.tax_class, charge.amount ) for charge in assessment.charges ]
-            + [ ( credit.tax_class, -credit.amount ) for credit in assessment.credits ] )
+            [ ( charge.tax_class, charge.amount, charge.detail ) for charge in assessment.charges ]
+            + [ ( credit.tax_class, -credit.amount, credit.detail ) for credit in assessment.credits ] )
         self._accrue_tax_charges( bookkeeper, settlements, self._parameters.date_span.end_date )
         return
 
@@ -686,11 +686,12 @@ class Period:
         return replace( tax_context, properties = tuple( stamped ) )
 
     def _accrue_tax_charges( self, bookkeeper : Bookkeeper,
-                             settlements : list[ tuple[ ExpenseTaxClass, Decimal ] ],
+                             settlements : list[ tuple[ ExpenseTaxClass, Decimal, str ] ],
                              settle_date : date ) -> None:
-        """Accrue each `(tax expense-class, amount)` to Taxes Payable."""
-        for expense_class, amount in settlements:
-            self._accrue_tax_charge( bookkeeper, expense_class, amount, settle_date )
+        """Accrue each `(tax expense-class, amount, detail memo)` to Taxes Payable, posting the
+        engine's per-layer memo as the accrual's description."""
+        for expense_class, amount, detail in settlements:
+            self._accrue_tax_charge( bookkeeper, expense_class, amount, settle_date, description = detail )
             continue
         return
 
