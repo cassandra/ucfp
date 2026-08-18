@@ -60,7 +60,7 @@ from ucfp.jurisdiction.engine import ContributionKind, TaxEngine, TaxState
 from ucfp.jurisdiction.law import Statute
 from ucfp.jurisdiction.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.jurisdiction.context import TaxContext, TaxSubject
-from ucfp.jurisdiction.property import PropertyDisposition, TaxProperty
+from ucfp.jurisdiction.property import TaxProperty
 
 from .economic_outlook import EconomicParameters
 from .parameters import (
@@ -598,6 +598,12 @@ class Forecast:
         self._expense_streams = list( self._parameters.expense_streams )
         self._income_items    = list( self._parameters.income_items )
         self._income_streams  = list( self._parameters.income_streams )
+        # Whole-property sales reported by earlier periods, each ( handle, sale_date, rent_after ). Two
+        # jobs: a rental sold in a prior tax YEAR is dropped from the tax context (it no longer
+        # depreciates), and the sales of the CURRENT tax year that landed in earlier sub-periods are
+        # threaded to the Period so it stamps their disposition at year-close -- so recapture fires the
+        # same at any granularity, whether the sale and the settle share a period (yearly) or not.
+        self._recorded_property_sales = list()
         for span in self._parameters.period_spans():
             if self._parameters.subjects and not self._parameters.active_subjects( span.end_date.year ):
                 result.stopped_early = True
@@ -611,6 +617,7 @@ class Forecast:
             if period_result.closing_tax_state is not None:
                 opening_state = period_result.closing_tax_state
             self._apply_property_sales( period_result.property_sales )
+            self._recorded_property_sales.extend( period_result.property_sales )
             if period_result.is_depleted:
                 result.stopped_early = True
                 break
@@ -1013,6 +1020,7 @@ class Forecast:
             contribution_lines = self._contribution_lines_for( span, year_fraction, bookkeeper ),
             events            = self._events_for( span, year_fraction, bookkeeper ),
             property_data     = self._parameters.property_data,
+            prior_property_sales = tuple( self._recorded_property_sales ),
             funding_policy    = self._funding_policy_for( span ),
             tax_engine        = tax_engine,
             full_tax_year     = self._is_full_tax_year( span, tax_engine ),
@@ -1154,43 +1162,31 @@ class Forecast:
             actual_premium    = coverage.actual_premium )
 
     def _tax_properties_for( self, span : DateSpan ) -> tuple:
-        """The engine's `TaxProperty` for each rental still held this fiscal year: its depreciation
-        attributes (for the annual deduction) plus a disposition marking the sale date when it is
-        sold *within* this fiscal year (driving §1250 recapture, which fires once). A rental sold in
-        a prior year is dropped -- it is no longer held, so it neither depreciates nor recaptures
-        again. Residences need none -- their gain settles through the §121 residence-gains account,
-        not the context."""
+        """The engine's `TaxProperty` for each rental still held this fiscal year -- its depreciation
+        attributes for the annual deduction, with `disposition=None`. A rental sold in a PRIOR tax year
+        is dropped: it is no longer held, so it neither depreciates nor recaptures again. A sale
+        *within* this fiscal year is not marked here -- the Period stamps the disposition from the actual
+        sale it effected (see `Period._disposition_stamped_context`), so both a scheduled and a
+        funding-driven sale drive §1250 recapture identically. Residences need none -- their gain
+        settles through the §121 residence-gains account, not the context."""
         fiscal_year = span.end_date.year
+        sold_before = { handle for handle, sale_date, _rent_after in self._recorded_property_sales
+                        if sale_date.year < fiscal_year }
         properties  = list()
         for asset, holding in self._baseline.asset_holdings:
             attributes = asset.property_attributes
             if ( asset.asset_class != AssetClass.REAL_ESTATE_RENTAL ) or ( attributes is None ):
                 continue
-            sale_date = self._sale_date_of( asset )
-            if ( sale_date is not None ) and ( sale_date.year < fiscal_year ):
-                continue                                   # sold in a prior year -> no longer held
-            disposition = ( PropertyDisposition( sale_date = sale_date )
-                            if ( sale_date is not None ) and ( sale_date.year == fiscal_year )
-                            else None )
+            if ( asset.handle is not None ) and ( str( asset.handle ) in sold_before ):
+                continue                                   # sold in a prior tax year -> no longer held
             properties.append(
                 TaxProperty(
                     holding           = holding,
                     acquisition_date  = attributes.acquisition_date,
                     depreciable_basis = attributes.depreciable_basis,
                     property_type     = attributes.property_type,
-                    disposition       = disposition,
+                    disposition       = None,
                 )
             )
             continue
         return tuple( properties )
-
-    def _sale_date_of( self, asset : AssetParameters ) -> Optional[ date ]:
-        """The date `asset`'s holding is sold -- the earliest scheduled realization of its handle --
-        or None if it is never sold. (The sale date is a scheduled input, so no running state is
-        needed.) A property with no handle cannot be referenced by a sale, so it never disposes."""
-        if asset.handle is None:
-            return None
-        sale_dates = [ event.event_date for event in self._parameters.events
-                       if isinstance( event, ScheduledRealization )
-                       and str( event.holding ) == str( asset.handle ) ]
-        return min( sale_dates ) if sale_dates else None

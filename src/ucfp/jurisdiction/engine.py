@@ -70,20 +70,25 @@ class FiscalWindowView( Protocol ):
 @dataclass( frozen = True )
 class TaxCharge:
     """A tax to pay: an amount attributed to an expense tax-class, which the Period
-    accrues as owed to the tax payable, settled to cash the following year."""
+    accrues as owed to the tax payable, settled to cash the following year. `detail` is a
+    human-readable memo explaining this layer's own drivers (mirroring `TaxPenalty.reason`),
+    which the Period posts as the accrual's description."""
 
     tax_class : ExpenseTaxClass
     amount    : Decimal
+    detail    : str = ''
 
 
 @dataclass( frozen = True )
 class TaxCredit:
     """A refundable credit the Period books against `tax_class` (e.g. the ACA premium
     tax credit against income tax) -- the reverse of a charge, refundable so a credit
-    beyond the matching tax yields a net refund."""
+    beyond the matching tax yields a net refund. `detail` is a human-readable memo
+    explaining the credit's drivers, which the Period posts as the accrual's description."""
 
     tax_class : ExpenseTaxClass
     amount    : Decimal
+    detail    : str = ''
 
 
 @dataclass( frozen = True )

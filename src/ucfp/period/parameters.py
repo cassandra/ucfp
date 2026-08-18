@@ -185,6 +185,12 @@ class PeriodParameters:
     contribution_lines    : list[ ContributionLine ]                        = field( default_factory = list )
     events                : list[ PeriodEvent ]                             = field( default_factory = list )
     property_data         : dict[ str, PropertyData ]                       = field( default_factory = dict )
+    # Whole-property sales the run reported in EARLIER periods, each ( handle, sale_date, rent_after ).
+    # The Period unions these with the sales it effects this interval to stamp each sold rental's
+    # disposition at year-close, so a sale in an earlier sub-period of the SAME tax year still drives
+    # §1250 recapture -- keeping recapture granularity-invariant. Empty at yearly granularity, where a
+    # sale and its year-close settlement always share one period.
+    prior_property_sales  : tuple                                           = ()
     tax_engine            : Optional[ TaxEngine ]                           = None
     full_tax_year         : bool                                           = True
     opening_tax_state     : Optional[ TaxState ]                            = None

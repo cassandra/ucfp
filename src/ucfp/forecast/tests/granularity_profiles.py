@@ -41,7 +41,7 @@ from ucfp.forecast.parameters import (
     RetirementContribution,
     ScheduledExternalDisbursement,
     ScheduledExternalReceipt,
-    ScheduledRealization,
+    ScheduledPropertySale,
     Subject,
     SubjectRemoval,
     SubsidizedHealthCoverage,
@@ -170,7 +170,7 @@ def rental_owner() -> ForecastParameters:
         loans = [ LoanParameters(
             'Mortgage', D( '250000' ), Rate( D( '0.05' ) ), Duration( 30, TimeUnit.YEAR ),
             interest_class = ExpenseTaxClass.RENTAL_EXPENSE ) ],
-        events = [ ScheduledRealization( date( 2040, 6, 1 ), 'rental', D( '800000' ) ) ],
+        events = [ ScheduledPropertySale( date( 2040, 6, 1 ), 'rental', rent_after = True ) ],
         cash_account = CashAccountParameters(
             cash_floor = D( '20000' ), draw_order = [ AssetClass.STOCKS ] ) )
 

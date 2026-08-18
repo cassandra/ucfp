@@ -18,6 +18,7 @@ The interval is computed in three phases (see `ucfp/FORECAST_ENGINE.md`):
                       year. The payment precedes funding, so cash stays at the floor.
   3. Close         -- finalize ending balances and the stop condition.
 """
+from dataclasses import replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -27,7 +28,9 @@ from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, SystemAccountRole
 from ucfp.accounts.exceptions import MissingAccountError
 from ucfp.accounts.money_utils import format_money, quantize_money, round_money_up
+from ucfp.jurisdiction.context import TaxContext
 from ucfp.jurisdiction.engine import ContributionKind
+from ucfp.jurisdiction.property import PropertyDisposition
 
 from .events import LoanPayoff, PropertySale, Realization
 from .fiscal_window import AnnualizedFiscalWindow
@@ -647,21 +650,48 @@ class Period:
         if not ( self._is_close_of_tax_year() and self._parameters.full_tax_year ):
             return
         fiscal_window = self._parameters.fiscal_window
+        tax_context   = self._disposition_stamped_context( result )
         assessment = self._parameters.tax_engine.assess(
-            fiscal_window, self._parameters.tax_context, self._parameters.opening_tax_state )
+            fiscal_window, tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
         settlements = (
-            [ ( charge.tax_class, charge.amount ) for charge in assessment.charges ]
-            + [ ( credit.tax_class, -credit.amount ) for credit in assessment.credits ] )
+            [ ( charge.tax_class, charge.amount, charge.detail ) for charge in assessment.charges ]
+            + [ ( credit.tax_class, -credit.amount, credit.detail ) for credit in assessment.credits ] )
         self._accrue_tax_charges( bookkeeper, settlements, self._parameters.date_span.end_date )
         return
 
+    def _disposition_stamped_context( self, result : PeriodResult ) -> TaxContext:
+        """The tax context with each rental sold this tax year stamped with its `PropertyDisposition`,
+        so the engine accrues §1250 recapture and prorates the sale-year depreciation from the ACTUAL
+        sale -- scheduled or funding-driven, both reported through the one `_sell_property_whole`
+        routine. The sales considered are those this interval effected (`result.property_sales`) plus
+        the run's `prior_property_sales` from earlier sub-periods of the same tax year, so recapture
+        fires the same whether the sale and this year-close settlement share a period (yearly
+        granularity) or not. A property still held keeps its `disposition=None` (a rental keeps
+        depreciating); a non-rental sale (a residence, a second home) has no `TaxProperty` here to
+        stamp and is unaffected -- its gain settles through its own booked-gain account. Rentals sold
+        in a prior tax year are already dropped from the context upstream."""
+        tax_context = self._parameters.tax_context
+        sales       = list( self._parameters.prior_property_sales ) + list( result.property_sales )
+        sale_dates  = { handle : sale_date for handle, sale_date, _rent_after in sales }
+        stamped     = list()
+        for tax_property in tax_context.properties:
+            sale_date = sale_dates.get( str( tax_property.holding.handle ) )
+            if sale_date is None:
+                stamped.append( tax_property )
+            else:
+                stamped.append(
+                    replace( tax_property, disposition = PropertyDisposition( sale_date = sale_date ) ) )
+            continue
+        return replace( tax_context, properties = tuple( stamped ) )
+
     def _accrue_tax_charges( self, bookkeeper : Bookkeeper,
-                             settlements : list[ tuple[ ExpenseTaxClass, Decimal ] ],
+                             settlements : list[ tuple[ ExpenseTaxClass, Decimal, str ] ],
                              settle_date : date ) -> None:
-        """Accrue each `(tax expense-class, amount)` to Taxes Payable."""
-        for expense_class, amount in settlements:
-            self._accrue_tax_charge( bookkeeper, expense_class, amount, settle_date )
+        """Accrue each `(tax expense-class, amount, detail memo)` to Taxes Payable, posting the
+        engine's per-layer memo as the accrual's description."""
+        for expense_class, amount, detail in settlements:
+            self._accrue_tax_charge( bookkeeper, expense_class, amount, settle_date, description = detail )
             continue
         return
 
