@@ -170,6 +170,15 @@ class AssetClass( LabeledEnum ):
         return self in _RETIREMENT_ASSET_CLASSES
 
     @property
+    def withdraws_basis_first( self ) -> bool:
+        """Whether a withdrawal draws this class's cost (basis) before its valuation (earnings), rather
+        than the default pro-rata split. True for a Roth: its contributions come out tax-free before any
+        earnings are touched (the favorable real-world ordering). A taxable holding realizes gains
+        pro-rata (you cannot choose to sell only basis), and a pre-tax account's basis is zero, so both
+        keep the pro-rata default."""
+        return self in _BASIS_FIRST_WITHDRAWAL_CLASSES
+
+    @property
     def distribution_income_class( self ):
         """The income tax-class a yield distribution (dividend/interest) credits,
         or None for classes that distribute no yield. Rental income is amount-based
@@ -223,6 +232,13 @@ _ZERO_BASIS_ASSET_CLASSES = frozenset(
 # coincide today, so decoupling Roth's basis cannot silently change the retirement-account checks.
 _RETIREMENT_ASSET_CLASSES = frozenset(
     ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
+
+
+# The classes whose withdrawals draw basis (cost) before earnings (valuation) -- the favorable Roth
+# ordering, so contributions come out tax-free before any earnings are touched. Every other class keeps
+# the pro-rata default (a taxable holding cannot choose to sell only basis; pre-tax basis is zero).
+_BASIS_FIRST_WITHDRAWAL_CLASSES = frozenset(
+    ( AssetClass.ROTH, ) )
 
 
 # The real-property classes (see `is_real_estate`) -- a residence, a second home, or a rental. Grouped

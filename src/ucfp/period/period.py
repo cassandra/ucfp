@@ -831,6 +831,8 @@ class Period:
                 proceeds_account = cash_account,
                 realized_gain_account = realized_gain_account,
                 on_date = fund_date,
+                basis_first = ( source.asset_class is not None
+                                and source.asset_class.withdraws_basis_first ),
                 description = f'Funding draw from {source} to cover a savings shortfall.',
             )
             if transaction is not None:

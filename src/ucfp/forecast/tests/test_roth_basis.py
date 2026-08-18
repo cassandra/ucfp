@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from common.rate import Rate
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AssetClass
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
 from ucfp.forecast.parameters import (
@@ -66,6 +66,31 @@ class RothWithdrawalStaysTaxFreeTests( unittest.TestCase ):
             outlook = self._GROWTH,
             events  = [ ScheduledRealization( date( 2026, 12, 1 ), 'roth', Decimal( '40000' ) ) ] ) ).run().books )
         self.assertEqual( total_income_tax( reader ), Decimal( '0' ) )
+
+
+class RothBasisFirstOrderingTests( unittest.TestCase ):
+    """A Roth withdrawal draws basis (cost) before earnings (valuation): a withdrawal within basis
+    realizes no gain, and only the excess above basis is recognized as earnings. Opening 100k basis
+    grows 50% to 150k (50k earnings)."""
+
+    _GROWTH_50 = EconomicOutlook.constant(
+        EconomicParameters( retirement_growth = Rate( Decimal( '0.50' ) ) ) )
+
+    def _realized_earnings( self, withdrawal ):
+        reader = Bookkeeper( Forecast( _parameters(
+            outlook = self._GROWTH_50,
+            events  = [ ScheduledRealization( date( 2026, 12, 1 ), 'roth', withdrawal ) ] ) ).run().books )
+        tax_free = reader.chart.income_account( IncomeTaxClass.TAX_FREE )
+        return reader.ledger.natural_balance( tax_free )
+
+    def test_withdrawal_within_basis_recognizes_no_earnings( self ):
+        # drawing exactly the 100k basis (of a 150k balance) realizes no gain -- pro-rata would have
+        # recognized 100k * 50k/150k = 33,333 of earnings.
+        self.assertEqual( self._realized_earnings( Decimal( '100000' ) ), Decimal( '0' ) )
+
+    def test_withdrawal_above_basis_recognizes_only_the_excess( self ):
+        # drawing 120k exhausts the 100k basis and recognizes exactly the 20k above it as earnings.
+        self.assertEqual( self._realized_earnings( Decimal( '120000' ) ), Decimal( '20000' ) )
 
 
 if __name__ == '__main__':
