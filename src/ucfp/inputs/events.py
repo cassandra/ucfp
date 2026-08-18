@@ -69,11 +69,17 @@ class ReferenceSpec:
 class OptionSpec:
     """A non-entity setting an event kind offers, rendered as a checkbox and stored under `key` in the
     event's `options` ('yes' when checked, 'no' when not). Distinct from a `ReferenceSpec` (an entity
-    choice); `default` is the initial checked state, `help_text` the note under it."""
-    key       : str
-    label     : str
-    help_text : str  = ''
-    default   : bool = True
+    choice); `default` is the initial checked state, `help_text` the note under it.
+
+    `requires_residence` marks an option that applies only to selling the primary residence (see
+    `SellPropertyEvent.options`): the add form shows it only while the chosen property is the residence
+    and hides it otherwise. Cosmetic -- materialization already ignores such an option for a
+    non-residence sale -- so the gate is a display convenience, not a correctness guard."""
+    key                : str
+    label              : str
+    help_text          : str  = ''
+    default            : bool = True
+    requires_residence : bool = False
 
 
 # --- Candidate sources + display helpers ----------------------------------
@@ -301,12 +307,13 @@ class SellPropertyEvent( EventType ):
         if not any( a.asset_class is AssetClass.REAL_ESTATE_RESIDENCE for a in profile.assets ):
             return list()
         return [ OptionSpec(
-            key       = 'rent_after',
-            label     = 'Rent after selling your home',
-            help_text = 'When selling your primary residence, become a renter afterward -- utilities '
-                        'continue and rent begins from the sale. Uncheck if housing is provided or '
-                        'handled elsewhere.',
-            default   = True ) ]
+            key                = 'rent_after',
+            label              = 'Rent after selling your home',
+            help_text          = 'When selling your primary residence, become a renter afterward -- '
+                                 'utilities continue and rent begins from the sale. Uncheck if housing is '
+                                 'provided or handled elsewhere.',
+            default            = True,
+            requires_residence = True ) ]   # shown only while the chosen property is the residence
 
     def summary( self, event : PlanEvent, profile ) -> str:
         handle = event.selections.get( PROPERTY_ROLE )
@@ -600,6 +607,15 @@ def events_context( profile, plans ) -> list:
 
 # --- Forms ----------------------------------------------------------------
 
+@dataclass( frozen = True )
+class BoundOption:
+    """One option checkbox for the template: its bound `field` paired with whether it is residence-gated
+    (shown only when the chosen property is the primary residence). Pairing the flag with the field here
+    keeps the domain rule out of the template -- it renders the marker, not the logic."""
+    field              : object
+    requires_residence : bool
+
+
 class EventForm( forms.Form ):
     """The add form for one event kind, built from its `EventType`: a picker per reference, an amount
     (when the kind carries one), and a date -- in that reading order. A single candidate is shown
@@ -637,10 +653,25 @@ class EventForm( forms.Form ):
 
     @property
     def option_fields( self ):
-        """The kind's option checkboxes as bound fields, in order (empty for most kinds) -- rendered
-        below the date."""
-        return [ self[ self._option_field( opt.key ) ]
+        """The kind's option checkboxes, in order (empty for most kinds) -- each a `BoundOption` pairing
+        the bound field with its residence gate, rendered below the date."""
+        return [ BoundOption( field = self[ self._option_field( opt.key ) ],
+                              requires_residence = opt.requires_residence )
                  for opt in self._event_type.options( self._profile ) ]
+
+    @property
+    def gates_residence_option( self ) -> bool:
+        """Whether the kind offers a residence-gated option -- so the template marks the form with the
+        residence handles the property picker's value is matched against, to show or hide that option."""
+        return any( opt.requires_residence for opt in self._event_type.options( self._profile ) )
+
+    @property
+    def residence_handles( self ) -> list:
+        """The handle(s) of the profile's primary residence -- the values a residence-gated option is
+        shown for (at most one, but treated as a set for safety). The property picker's value is checked
+        against these client-side to reveal or hide such an option."""
+        return [ asset.handle for asset in self._profile.assets
+                 if asset.asset_class is AssetClass.REAL_ESTATE_RESIDENCE ]
 
     @staticmethod
     def _role_field( role : str ) -> str:

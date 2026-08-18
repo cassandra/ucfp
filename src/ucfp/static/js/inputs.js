@@ -306,6 +306,40 @@ window.App.Inputs = (function () {
             .each( function () { applySwitch( $( this ) ); } );
     }
 
+    // ----- ResidenceOption: reveal a residence-only sale option for a residence sale -----
+    //
+    // The "Sell a property" add form offers a "Rent after selling your home" option that applies only to
+    // selling the primary residence (a second-home/rental sale ignores it). The form carries the
+    // residence handle(s) and marks that option's container residence-gated; this shows the container
+    // only while the property picker's value is one of those handles, and hides it otherwise. Presentation
+    // only -- materialization already ignores the option for a non-residence sale -- so no submit-value
+    // handling is needed. (Re)applied on load and after each render, plus live on the picker's change.
+    // A residence handle is a property handle, so the property picker is the only select whose value can
+    // match; scanning the form's selects therefore needs no marker to single it out.
+
+    function residenceHandles( $form ) {
+        return ( $form.attr( dataAttr( C.RESIDENCE_HANDLES_DATA_ATTR ) ) || '' ).split( /\s+/ ).filter( Boolean );
+    }
+
+    function residenceIsChosen( $form, handles ) {
+        let chosen = false;
+        $form.find( 'select' ).each( function () {
+            if ( handles.indexOf( $( this ).val() ) !== -1 ) { chosen = true; }
+        } );
+        return chosen;
+    }
+
+    function applyResidenceOptions( $form ) {
+        const shown = residenceIsChosen( $form, residenceHandles( $form ) );
+        $form.find( '[' + dataAttr( C.REQUIRES_RESIDENCE_DATA_ATTR ) + ']' ).prop( 'hidden', ! shown );
+    }
+
+    function enhanceResidenceOptions( $scope ) {
+        const sel = '[' + dataAttr( C.RESIDENCE_HANDLES_DATA_ATTR ) + ']';
+        ( $scope || $( document.body ) ).find( sel ).addBack( sel )
+            .each( function () { applyResidenceOptions( $( this ) ); } );
+    }
+
     // ----- StateTaxAutofill: fill the state income-tax rate from the chosen state -----
     // Picking a state copies that option's representative rate (a data attribute on the option) into
     // the rate input, which the user may then override. Bound directly on the select so it fires in
@@ -918,6 +952,12 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'change', classSelector( C.SWITCH_CLASS ) + ' ' + classSelector( C.SWITCH_CONTROL_CLASS ),
             function () { applySwitch( $( this ).closest( classSelector( C.SWITCH_CLASS ) ) ); } );
 
+        // Reveal the residence-only sale option (Sell a property) as the property picker changes -- shown
+        // only while the chosen property is the primary residence.
+        $( 'body' ).on( 'change', '[' + dataAttr( C.RESIDENCE_HANDLES_DATA_ATTR ) + '] select', function () {
+            applyResidenceOptions( $( this ).closest( '[' + dataAttr( C.RESIDENCE_HANDLES_DATA_ATTR ) + ']' ) );
+        } );
+
         // Group a money input's thousands as it is typed (money fields are text inputs, so a comma is a
         // valid character); the MoneyField strips it back to a bare number on the server.
         $( 'body' ).on( 'input', classSelector( C.MONEY_INPUT_CLASS ), function () {
@@ -987,6 +1027,7 @@ window.App.Inputs = (function () {
         enhanceDates( $( document.body ) );
         enhanceOptionalSections( $( document.body ) );
         enhanceSwitches( $( document.body ) );
+        enhanceResidenceOptions( $( document.body ) );
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
         enhanceVehicleFinance( $( document.body ) );
@@ -1000,6 +1041,7 @@ window.App.Inputs = (function () {
                 enhanceDates( $( document.body ) );
                 enhanceOptionalSections( $( document.body ) );
                 enhanceSwitches( $( document.body ) );
+                enhanceResidenceOptions( $( document.body ) );
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
                 enhanceVehicleFinance( $( document.body ) );
@@ -1019,6 +1061,7 @@ window.App.Inputs = (function () {
         enhanceDates            : enhanceDates,
         enhanceOptionalSections : enhanceOptionalSections,
         enhanceSwitches         : enhanceSwitches,
+        enhanceResidenceOptions : enhanceResidenceOptions,
         enhanceCreditCards      : enhanceCreditCards,
     };
 } )();

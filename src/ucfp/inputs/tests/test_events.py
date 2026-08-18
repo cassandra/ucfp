@@ -15,8 +15,9 @@ from types import SimpleNamespace
 from ucfp.accounts.enums import AssetClass
 from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer
 from ucfp.inputs.events import (
-    EventContributions, POSSESSION_ROLE, PROPERTY_ROLE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent,
-    SellPropertyEvent, TransferEvent, _payoff_loan_handle, vehicle_disposition_contributions )
+    BoundOption, EventContributions, EventForm, POSSESSION_ROLE, PROPERTY_ROLE, SOURCE_ROLE, TARGET_ROLE,
+    SellPossessionEvent, SellPropertyEvent, TransferEvent, _payoff_loan_handle,
+    vehicle_disposition_contributions )
 from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
 from ucfp.inputs.profile.enums import DebtKind
@@ -261,6 +262,51 @@ class PayoffLoanHandleTests( unittest.TestCase ):
 
     def test_an_unknown_debt_handle_passes_through( self ):
         self.assertEqual( _payoff_loan_handle( SimpleNamespace( debts = [] ), 'gone' ), 'gone' )
+
+
+class SellPropertyOptionFormTests( unittest.TestCase ):
+    """The 'Sell a property' add form exposes the residence gate the client reads to show the rent-after
+    option only for a primary-residence sale: the profile's residence handle(s) and which option field is
+    residence-gated. The gate is offered only to a household that owns a residence, so a rental-only
+    profile exposes neither the option nor a handle -- what would otherwise let the client mark a form with
+    no option to reveal."""
+
+    @staticmethod
+    def _profile( *assets ):
+        """A stand-in profile from `(handle, asset_class, name)` real-estate holdings."""
+        return SimpleNamespace(
+            assets = [ SimpleNamespace( handle = h, asset_class = k, name = n ) for h, k, n in assets ] )
+
+    def _form( self, profile ):
+        return EventForm( event_type = SellPropertyEvent(), profile = profile )
+
+    def test_residence_handles_are_only_the_residence_holdings( self ):
+        # A residence is the gated option's target; a second home or rental is not, so only the residence
+        # handle rides to the client (at most one, but returned as a list).
+        profile = self._profile(
+            ( 'residence', AssetClass.REAL_ESTATE_RESIDENCE, 'Home' ),
+            ( 'property-1', AssetClass.REAL_ESTATE_RENTAL, 'Duplex' ),
+            ( 'property-2', AssetClass.REAL_ESTATE_SECOND_HOME, 'Cabin' ) )
+        self.assertEqual( self._form( profile ).residence_handles, [ 'residence' ] )
+
+    def test_a_residence_owning_profile_gates_a_residence_only_option( self ):
+        profile = self._profile( ( 'residence', AssetClass.REAL_ESTATE_RESIDENCE, 'Home' ) )
+        form    = self._form( profile )
+        self.assertTrue( form.gates_residence_option )
+        options = form.option_fields
+        self.assertEqual( len( options ), 1 )
+        self.assertIsInstance( options[ 0 ], BoundOption )
+        self.assertTrue( options[ 0 ].requires_residence )
+        self.assertEqual( options[ 0 ].field.name, 'option_rent_after' )
+
+    def test_a_residence_less_profile_offers_no_gated_option_and_no_handles( self ):
+        # Only a rental: the property is sellable, but selling it never makes the household a renter, so
+        # there is no rent-after option to gate and no residence handle to mark the form with.
+        profile = self._profile( ( 'property-1', AssetClass.REAL_ESTATE_RENTAL, 'Duplex' ) )
+        form    = self._form( profile )
+        self.assertFalse( form.gates_residence_option )
+        self.assertEqual( form.option_fields, [] )
+        self.assertEqual( form.residence_handles, [] )
 
 
 if __name__ == '__main__':
