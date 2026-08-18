@@ -163,6 +163,16 @@ class AppConst:
     # (via `window.AppConst`) and the server's no-JS back-solve, so the ceiling has one source.
     MAX_PLAUSIBLE_LOAN_APR_PERCENT = 30
 
+    # Plans > Money Movements, the "Sell a property" add form: the "Rent after selling your home" option
+    # applies only to selling the primary residence, so it is shown only while the chosen property is the
+    # residence and hidden otherwise. The form carries the primary-residence handle(s); the option's
+    # container is marked residence-gated. inputs.js toggles that container live as the property picker
+    # changes (and on each render). A residence handle is a property handle, so the property picker is the
+    # only select whose value can match. Cosmetic -- materialization ignores the option for a
+    # non-residence sale -- so no submit-value handling is needed.
+    RESIDENCE_HANDLES_DATA_ATTR  = 'residence-handles'   # on the form: the primary-residence handle(s)
+    REQUIRES_RESIDENCE_DATA_ATTR = 'requires-residence'  # marks an option shown only for a residence sale
+
     # The recurring-expenses table's per-column delete: the x stamps its span index into the form's
     # hidden `delete_span` field, then triggers the autosave, so the server drops that span.
     RECURRING_DELETE_CLASS  = 'js-recurring-delete'  # the per-column x control (carries data-span)

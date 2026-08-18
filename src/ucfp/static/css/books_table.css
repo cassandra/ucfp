@@ -186,6 +186,18 @@
     background-color: rgba( 0, 0, 0, 0.05 );
 }
 
+/* The opening row is the t0 starting position, not a period-end like the projection rows below it. It
+   reads as a baseline annotation -- italic and muted -- rather than another data row, so the eye starts
+   there and reads down. Forced to plain white so the zebra stripe never tints it (it is row 1, which
+   table-striped would otherwise shade); a typographic cue alone keeps it distinct without competing with
+   the per-column header tints. The sticky Period/Age cells already paint --white, so no override needed. */
+#books-table tbody tr.bt-opening td,
+#books-table tbody tr.bt-opening th {
+    font-style: italic;
+    color: var( --muted-color );
+    background-color: var( --white );
+}
+
 
 /* -- Maximize: fill the browser window ---------------------------------------------------------
    The panel (the shared table plus its toolbar, see run_table_panel.html) lifts out to a fixed,
