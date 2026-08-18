@@ -161,6 +161,15 @@ class AssetClass( LabeledEnum ):
         return self in _ZERO_BASIS_ASSET_CLASSES
 
     @property
+    def is_retirement_account( self ) -> bool:
+        """Whether this class is a contribution-limited retirement account (pre-tax or Roth) -- the
+        concept several call sites actually need: an owner whose age drives the early-withdrawal
+        penalty and RMDs, a holding a sweep may not target, a holding a contribution must. Distinct
+        from `seeds_at_zero_basis` (a tax-basis fact); the two coincide only because both retirement
+        classes seed at zero basis today, a coincidence that ends once Roth carries a real basis."""
+        return self in _RETIREMENT_ASSET_CLASSES
+
+    @property
     def distribution_income_class( self ):
         """The income tax-class a yield distribution (dividend/interest) credits,
         or None for classes that distribute no yield. Rental income is amount-based
@@ -205,6 +214,13 @@ _NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS )
 # realized on withdrawal/conversion -- pre-tax as ordinary, Roth as tax-free. Their
 # cost_basis must be 0 (validated on the input), so the whole value seeds as unrealized gain.
 _ZERO_BASIS_ASSET_CLASSES = frozenset(
+    ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
+
+
+# The contribution-limited retirement classes (pre-tax + Roth) -- the "is this a retirement account?"
+# concept, kept distinct from `_ZERO_BASIS_ASSET_CLASSES` (a tax-basis fact) even though the two sets
+# coincide today, so decoupling Roth's basis cannot silently change the retirement-account checks.
+_RETIREMENT_ASSET_CLASSES = frozenset(
     ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
 
 

@@ -120,16 +120,16 @@ class AssetParameters:
     owner_handle        : Optional[ Handle ]             = None
 
     def __post_init__( self ) -> None:
-        """Enforce the retirement-account domain rules: zero cost basis (the engine realizes
-        its whole value, so a mis-stated basis -- which would silently under-tax withdrawals
-        -- is rejected) and a known owner (whose age drives the penalty and RMDs)."""
-        if not self.asset_class.seeds_at_zero_basis:
-            return
-        if self.cost_basis != 0:
+        """Enforce two distinct domain rules that happen to coincide today: a zero-basis class must
+        state `cost_basis == 0` (the engine realizes its whole value, so a mis-stated basis would
+        silently under-tax withdrawals), and a retirement account must name an owner (whose age drives
+        the early-withdrawal penalty and RMDs). Checked separately -- not off one predicate -- so that
+        decoupling Roth's basis leaves the owner requirement intact."""
+        if self.asset_class.seeds_at_zero_basis and self.cost_basis != 0:
             raise ValueError(
                 f'{self.asset_class.label} holdings carry zero tax basis; '
                 f'cost_basis must be 0, not {self.cost_basis}.' )
-        if self.owner_handle is None:
+        if self.asset_class.is_retirement_account and self.owner_handle is None:
             raise ValueError(
                 f'{self.asset_class.label} holdings require an owner handle (the owner age '
                 'drives the early-withdrawal penalty and RMDs).' )

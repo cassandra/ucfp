@@ -181,6 +181,18 @@ class CashSweepValidationTests( unittest.TestCase ):
                 CashAccountParameters( cash_ceiling = Decimal( '50000' ), sweep_allocation = _to( '401k' ) ),
                 assets )
 
+    def test_sweep_into_a_roth_is_rejected( self ):
+        # A Roth is a contribution-limited retirement account, so it is rejected as a sweep destination
+        # like a pre-tax account -- keyed on the account type (`is_retirement_account`), not the tax
+        # basis, so the rejection survives Roth carrying a real basis.
+        assets = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ),
+                   AssetParameters( 'Roth', AssetClass.ROTH, Decimal( '0' ), Decimal( '0' ),
+                                    handle = 'roth', owner_handle = 'subject-a' ) ]
+        with self.assertRaises( ValueError ):
+            self._run(
+                CashAccountParameters( cash_ceiling = Decimal( '50000' ), sweep_allocation = _to( 'roth' ) ),
+                assets )
+
 
 if __name__ == '__main__':
     unittest.main()

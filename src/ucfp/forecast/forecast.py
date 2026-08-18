@@ -282,10 +282,9 @@ class BaselineBuilder:
         """Check each contribution's target is a retirement holding, and that an employer match
         lands in a pre-tax account (Roth employer match is deferred) -- rejected at build so a
         mis-targeted contribution cannot silently mismodel."""
-        retirement = ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH )
         for contribution in self._parameters.contributions:
             holding = self._holding_by_handle.get( str( contribution.account ) )
-            if ( holding is None ) or ( holding.asset_class not in retirement ):
+            if ( holding is None ) or ( not holding.asset_class.is_retirement_account ):
                 raise MissingAccountError(
                     f'Contribution targets "{contribution.account}", which is not a retirement '
                     'holding.' )
@@ -511,7 +510,7 @@ class BaselineBuilder:
             holding = self._holding_by_handle.get( str( handle ) )
             if ( holding is None ) or ( holding.asset_class is None ):
                 raise MissingAccountError( f'Sweep destination "{handle}" is not a holding.' )
-            if holding.asset_class.seeds_at_zero_basis:
+            if holding.asset_class.is_retirement_account:
                 raise ValueError(
                     f'Sweep destination "{handle}" is a retirement account; the sweep must invest '
                     'in taxable holdings (contribution limits are not modeled).' )
