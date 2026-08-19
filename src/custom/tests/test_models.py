@@ -1,5 +1,76 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
+
+from custom.user_state import UserState, is_known, user_state
+
+
+class AccountStateTestCase(TestCase):
+
+    def setUp(self):
+        self.User = get_user_model()
+        return
+
+    def test_account_state_derives_from_email_fields(self):
+
+        guest = self.User.objects.create_guest()
+        unverified = self.User.objects.create_guest()
+        unverified.attach_pending_email( 'claimed@example.com' )
+        verified = self.User.objects.create_user( email = 'verified@example.com' )
+
+        test_data = [
+            ( guest      , UserState.GUEST      , 'is_guest'      ),
+            ( unverified , UserState.UNVERIFIED , 'is_unverified' ),
+            ( verified   , UserState.VERIFIED   , 'is_verified'   ),
+        ]
+
+        for user, expected_state, predicate in test_data:
+            self.assertEqual( expected_state, user.account_state )
+            self.assertEqual( expected_state, user_state( user ) )
+            self.assertTrue( is_known( user ) )
+            self.assertTrue( getattr( user, predicate ) )
+            continue
+        return
+
+    def test_pending_claim_alongside_verified_email_stays_verified(self):
+        # An in-flight address *change*: a verified account with a pending new address
+        # is still Verified until the change is confirmed.
+        user = self.User.objects.create_user( email = 'current@example.com' )
+        user.pending_email = 'new@example.com'
+        self.assertEqual( UserState.VERIFIED, user.account_state )
+        return
+
+    def test_anonymous_user_is_anonymous_and_not_known(self):
+        anonymous = AnonymousUser()
+        self.assertEqual( UserState.ANONYMOUS, user_state( anonymous ) )
+        self.assertFalse( is_known( anonymous ) )
+        return
+
+    def test_attach_pending_email_canonicalizes_and_moves_to_unverified(self):
+        user = self.User.objects.create_guest()
+        user.attach_pending_email( '  Mixed.Case@Example.COM ' )
+        user.refresh_from_db()
+        self.assertEqual( 'mixed.case@example.com', user.pending_email )
+        self.assertIsNone( user.email )
+        self.assertTrue( user.is_unverified )
+        return
+
+    def test_verify_pending_email_promotes_into_verified_slot(self):
+        user = self.User.objects.create_guest()
+        user.attach_pending_email( 'claimed@example.com' )
+        user.verify_pending_email()
+        user.refresh_from_db()
+        self.assertEqual( 'claimed@example.com', user.email )
+        self.assertTrue( user.email_verified )
+        self.assertIsNone( user.pending_email )
+        self.assertTrue( user.is_verified )
+        return
+
+    def test_verify_without_pending_email_raises(self):
+        user = self.User.objects.create_guest()
+        with self.assertRaises( ValueError ):
+            user.verify_pending_email()
+        return
 
 
 class CustomUserDisplayNameTestCase(TestCase):
