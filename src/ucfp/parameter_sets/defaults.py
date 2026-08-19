@@ -100,11 +100,12 @@ _CLASS_BY_CATEGORY = {
 
 
 def _expense( name : str, handle : str, category, order : int, amount : str, tax_class, interval,
-              realization, domain, applies_to : tuple = () ) -> ExpenseType:
+              realization, domain, applies_to : tuple = (), tenant_paid : bool = False ) -> ExpenseType:
     return ExpenseType(
         name = name, handle = handle, expense_class = _CLASS_BY_CATEGORY[ category ], category = category,
         order = order, expense_tax_class = tax_class, default_amount = Decimal( amount ),
-        interval = interval, realization = realization, cadence_domain = domain, applies_to = applies_to )
+        interval = interval, realization = realization, cadence_domain = domain, applies_to = applies_to,
+        tenant_paid = tenant_paid )
 
 
 def _durable( name : str, handle : str, category, order : int, count : int, cost_each : str,
@@ -199,11 +200,14 @@ def _general_expense_catalog() -> ExpenseCatalog:
         _expense( 'Property Insurance', 'property-insurance', taxes, 20, '2500', living, yearly, discrete, mo_yr, applies_to = owned ),
         _expense( 'HOA / Coop Fee', 'hoa-fee', taxes, 30, '0', living, monthly, discrete, fixed, applies_to = owned ),
         # --- Property: utilities & services -- fixed monthly bills; utilities also seed a rented home.
-        _expense( 'Water / Wastewater', 'water', utilities, 10, '90', living, monthly, discrete, fixed, applies_to = occupied ),
-        _expense( 'Electric', 'electric', utilities, 20, '150', living, monthly, discrete, fixed, applies_to = occupied ),
-        _expense( 'Gas Utility', 'gas-utility', utilities, 30, '80', living, monthly, discrete, fixed, applies_to = occupied ),
-        _expense( 'Phone Service', 'phone-service', utilities, 40, '100', living, monthly, discrete, fixed, applies_to = occupied ),
-        _expense( 'Internet', 'internet', utilities, 50, '80', living, monthly, discrete, fixed, applies_to = occupied ),
+        # The tenant-paid rows (utilities a tenant ordinarily pays) default to $0 for a rental; property
+        # management is the landlord's own cost and is not tenant-paid.
+        _expense( 'Water / Wastewater', 'water', utilities, 10, '90', living, monthly, discrete, fixed, applies_to = occupied, tenant_paid = True ),
+        _expense( 'Trash / Garbage', 'trash', utilities, 15, '35', living, monthly, discrete, fixed, applies_to = occupied, tenant_paid = True ),
+        _expense( 'Electric', 'electric', utilities, 20, '150', living, monthly, discrete, fixed, applies_to = occupied, tenant_paid = True ),
+        _expense( 'Gas Utility', 'gas-utility', utilities, 30, '80', living, monthly, discrete, fixed, applies_to = occupied, tenant_paid = True ),
+        _expense( 'Phone Service', 'phone-service', utilities, 40, '100', living, monthly, discrete, fixed, applies_to = occupied, tenant_paid = True ),
+        _expense( 'Internet', 'internet', utilities, 50, '80', living, monthly, discrete, fixed, applies_to = occupied, tenant_paid = True ),
         _expense( 'Property Management', 'property-management', utilities, 60, '240', rental_expense, monthly, discrete, fixed, applies_to = rental_only ),
         # --- Property: maintenance & repair -- ongoing upkeep, then the capital replacements (durables).
         _expense( 'Maintenance / Repair', 'maintenance-repair', upkeep, 10, '250', living, monthly, smooth, mo_yr, applies_to = owned ),

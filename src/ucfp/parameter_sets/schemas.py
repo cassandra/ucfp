@@ -58,6 +58,10 @@ class ExpenseType:
     realization: Realization
     cadence_domain: CadenceDomain
     applies_to: tuple[ PropertyContext, ... ] = ()
+    # A tenant-paid property row (utilities the tenant, not the landlord, ordinarily pays): its per-rental
+    # cell defaults to $0 so a rental does not carry the residence utility amount (see the property-
+    # expenses merge). False for landlord-borne and non-property rows.
+    tenant_paid: bool = False
     # A "durable" expense the user enters as `count` items at `cost_each` replaced every `lifespan`
     # years; a calculator fills the amount = count x cost_each / lifespan (its annualized cost). All
     # None for a normal expense entered as a single amount.

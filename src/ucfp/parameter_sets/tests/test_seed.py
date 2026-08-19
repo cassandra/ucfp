@@ -95,7 +95,7 @@ class LoadPathTest( TestCase ):
         catalog = load( ParameterSetKind.EXPENSE_CATALOG, CatalogScope.GENERAL.label )
         # A deliberate tripwire -- bump this when the catalog gains or loses an expense, so an
         # accidental change to the seeded set is caught.
-        self.assertEqual( len( catalog.expenses ), 42 )
+        self.assertEqual( len( catalog.expenses ), 43 )
         food = next( expense for expense in catalog.expenses if expense.name == 'Food' )
         self.assertEqual( food.default_amount, Decimal( '170' ) )
         # Two groupings place a row: its applicability class (which surface) and its visual category
