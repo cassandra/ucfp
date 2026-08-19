@@ -37,8 +37,8 @@ def _active_membership_or_404( request, organization_uuid ) -> OrganizationMembe
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class OrganizationSettingsView( View ):
-    """`/organization/settings/` -- edit the current organization's household-level settings
-    (currency today). Operates on `request.organization`, resolved by `ensure_organization`."""
+    """`/organization/settings/` -- edit the current organization's household-level display settings
+    (currency and timezone). Operates on `request.organization`, resolved by `ensure_organization`."""
 
     def get( self, request ):
         form = OrganizationSettingsForm( organization = request.organization )
