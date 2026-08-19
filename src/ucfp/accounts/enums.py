@@ -153,12 +153,30 @@ class AssetClass( LabeledEnum ):
 
     @property
     def seeds_at_zero_basis( self ) -> bool:
-        """Whether holdings of this class carry zero tax basis -- a domain rule, not a planner
-        choice: a pre-tax retirement account's contributions were untaxed (the whole
-        withdrawal is ordinary), and a Roth is modeled at zero basis so a withdrawal realizes
-        wholly into the tax-free class. Such a holding's `cost_basis` must be 0 (its whole
-        value seeds as unrealized gain); other classes carry a real basis."""
+        """Whether holdings of this class carry zero tax basis -- a domain rule, not a planner choice:
+        a pre-tax retirement account's contributions were untaxed, so the whole withdrawal is ordinary
+        income and its `cost_basis` must be 0 (its whole value seeds as unrealized gain). Other classes
+        -- including Roth, whose contributions are basis (tax-free) and only whose earnings are taxed --
+        carry a real basis."""
         return self in _ZERO_BASIS_ASSET_CLASSES
+
+    @property
+    def is_retirement_account( self ) -> bool:
+        """Whether this class is a contribution-limited retirement account (pre-tax or Roth) -- the
+        concept several call sites actually need: an owner whose age drives the early-withdrawal
+        penalty and RMDs, a holding a sweep may not target, a holding a contribution must. Distinct
+        from `seeds_at_zero_basis` (a tax-basis fact): a Roth is a retirement account yet carries a real
+        basis, so the two predicates are deliberately separate and do not share a class set."""
+        return self in _RETIREMENT_ASSET_CLASSES
+
+    @property
+    def withdraws_basis_first( self ) -> bool:
+        """Whether a withdrawal draws this class's cost (basis) before its valuation (earnings), rather
+        than the default pro-rata split. True for a Roth: its contributions come out tax-free before any
+        earnings are touched (the favorable real-world ordering). A taxable holding realizes gains
+        pro-rata (you cannot choose to sell only basis), and a pre-tax account's basis is zero, so both
+        keep the pro-rata default."""
+        return self in _BASIS_FIRST_WITHDRAWAL_CLASSES
 
     @property
     def distribution_income_class( self ):
@@ -201,11 +219,27 @@ class AssetClass( LabeledEnum ):
 _NON_APPRECIATING_ASSET_CLASSES = frozenset( ( AssetClass.CASH, AssetClass.CDS ) )
 
 
-# Retirement classes that carry zero tax basis (a domain rule): the whole holding value is
-# realized on withdrawal/conversion -- pre-tax as ordinary, Roth as tax-free. Their
-# cost_basis must be 0 (validated on the input), so the whole value seeds as unrealized gain.
+# The class whose holdings carry zero tax basis (a domain rule): a pre-tax retirement account's
+# contributions were untaxed, so its whole value is ordinary income on withdrawal and its cost_basis
+# must be 0 (validated on the input), seeding the whole value as unrealized gain. A Roth is NOT here:
+# it carries a real basis (its contributions, tax-free on withdrawal) and only its earnings are taxed.
 _ZERO_BASIS_ASSET_CLASSES = frozenset(
+    ( AssetClass.PRETAX_RETIREMENT, ) )
+
+
+# The contribution-limited retirement classes (pre-tax + Roth) -- the "is this a retirement account?"
+# concept, kept distinct from `_ZERO_BASIS_ASSET_CLASSES` (a tax-basis fact): a Roth is a retirement
+# account but not zero-basis, so the two sets genuinely differ and the retirement-account checks are
+# unaffected by Roth carrying a real basis.
+_RETIREMENT_ASSET_CLASSES = frozenset(
     ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
+
+
+# The classes whose withdrawals draw basis (cost) before earnings (valuation) -- the favorable Roth
+# ordering, so contributions come out tax-free before any earnings are touched. Every other class keeps
+# the pro-rata default (a taxable holding cannot choose to sell only basis; pre-tax basis is zero).
+_BASIS_FIRST_WITHDRAWAL_CLASSES = frozenset(
+    ( AssetClass.ROTH, ) )
 
 
 # The real-property classes (see `is_real_estate`) -- a residence, a second home, or a rental. Grouped
@@ -262,7 +296,11 @@ class IncomeTaxClass( LabeledEnum ):
     COLLECTIBLES_GAINS  = ( 'Collectibles Gains', 'Collectibles; 28% max rate.' )
     SOCIAL_SECURITY     = ( 'Social Security', 'Benefits; partial-inclusion rule.' )
     GROSS_RENTAL        = ( 'Gross Rental', 'Gross rents; netted with expenses in-period.' )
-    TAX_FREE            = ( 'Tax-Free', 'Excluded from tax everywhere (Roth).' )
+    TAX_FREE            = ( 'Tax-Free', 'Excluded from tax everywhere.' )
+    ROTH_EARNINGS       = (
+        'Roth Earnings',
+        'Earnings withdrawn from a Roth: tax-free at/after 59-1/2, otherwise ordinary income plus the '
+        '10% early-withdrawal penalty. A Roth basis withdrawal recognizes no income.' )
     TAX_EXEMPT_INTEREST = ( 'Tax-Exempt Interest', 'Untaxed, but counts in SS/ACA MAGI (muni).' )
 
     @property
@@ -275,9 +313,11 @@ class IncomeTaxClass( LabeledEnum ):
 
 
 # Income tax-classes whose asset income is attributed to the owning subject (a per-person revenue
-# account), not the household -- a retirement distribution carries the owner's name; capital gains do
-# not (they are joint on a joint return).
-_OWNER_ATTRIBUTED_INCOME_CLASSES = frozenset( { IncomeTaxClass.RETIREMENT_DISTRIBUTION } )
+# account), not the household -- a retirement distribution and a Roth earnings withdrawal carry the
+# owner's name (the penalty/exclusion turn on that owner's age); capital gains do not (they are joint
+# on a joint return).
+_OWNER_ATTRIBUTED_INCOME_CLASSES = frozenset(
+    { IncomeTaxClass.RETIREMENT_DISTRIBUTION, IncomeTaxClass.ROTH_EARNINGS } )
 
 
 # The income tax-class each distributing asset class credits with its yield
@@ -306,7 +346,7 @@ _REALIZED_GAIN_INCOME_CLASS = {
     AssetClass.REAL_ESTATE_RENTAL      : IncomeTaxClass.RENTAL_SALE_GAIN,
     AssetClass.REAL_ESTATE_SECOND_HOME : IncomeTaxClass.SECOND_HOME_GAIN,
     AssetClass.PRETAX_RETIREMENT       : IncomeTaxClass.RETIREMENT_DISTRIBUTION,
-    AssetClass.ROTH                    : IncomeTaxClass.TAX_FREE,
+    AssetClass.ROTH                    : IncomeTaxClass.ROTH_EARNINGS,
     AssetClass.PRECIOUS_METALS         : IncomeTaxClass.COLLECTIBLES_GAINS,
     AssetClass.COLLECTIBLES            : IncomeTaxClass.COLLECTIBLES_GAINS,
 }

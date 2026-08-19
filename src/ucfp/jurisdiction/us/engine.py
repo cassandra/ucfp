@@ -172,9 +172,12 @@ class USFederalTaxEngine( TaxEngine ):
         wages               = fiscal_window.income( IncomeTaxClass.WAGES )
         # Pensions and retirement distributions (RMDs, pre-tax withdrawals) are their own income lines
         # for the books but tax exactly as ordinary income, so they fold in here.
+        # Roth earnings withdrawn before 59-1/2 are ordinary income (basis withdrawals and earnings at
+        # 59-1/2+ are tax-free, so excluded); they also draw the 10% penalty in `assess_penalties`.
         ordinary_other      = ( fiscal_window.income( IncomeTaxClass.ORDINARY )
                                 + fiscal_window.income( IncomeTaxClass.PENSION )
-                                + fiscal_window.income( IncomeTaxClass.RETIREMENT_DISTRIBUTION ) )
+                                + fiscal_window.income( IncomeTaxClass.RETIREMENT_DISTRIBUTION )
+                                + self._roth_early_earnings( fiscal_window, tax_context ) )
         taxable_interest    = fiscal_window.income( IncomeTaxClass.TAXABLE_INTEREST )
         tax_exempt_interest = fiscal_window.income( IncomeTaxClass.TAX_EXEMPT_INTEREST )
         qualified_dividends = fiscal_window.income( IncomeTaxClass.QUALIFIED_DIVIDENDS )
@@ -367,10 +370,19 @@ class USFederalTaxEngine( TaxEngine ):
 
     def assess_penalties( self, fiscal_window : FiscalWindowView,
                           tax_context : TaxContext ) -> list[ TaxPenalty ]:
-        """The early-withdrawal penalty: 10% of the year's pre-tax distributions to cash for an
-        owner under 59-1/2. Read from the books view -- `distributions_to_cash` already excludes
-        conversions to Roth (which pay no cash) -- so any cash distribution, scheduled or a
-        funding draw, is caught. A missing owner age raises, never a silent exemption."""
+        """The early-withdrawal penalties for an owner under 59-1/2. Pre-tax and Roth are computed
+        separately because their base differs -- the whole distribution for a pre-tax account (all
+        ordinary) versus only the earnings above basis for a Roth (its basis comes out free) -- though
+        both are the same 10% rate and penalty class. A missing owner age raises, never a silent
+        exemption."""
+        return ( self._pretax_early_withdrawal_penalties( fiscal_window, tax_context )
+                 + self._roth_early_withdrawal_penalties( fiscal_window, tax_context ) )
+
+    def _pretax_early_withdrawal_penalties( self, fiscal_window : FiscalWindowView,
+                                            tax_context : TaxContext ) -> list[ TaxPenalty ]:
+        """10% of the year's pre-tax distributions to cash for an owner under 59-1/2. Read from the
+        books view -- `distributions_to_cash` already excludes conversions to Roth (which pay no cash)
+        -- so any cash distribution, scheduled or a funding draw, is caught."""
         rate      = self._parameters.early_withdrawal_rate
         age_limit = self._parameters.early_withdrawal_age
         penalties = list()
@@ -390,6 +402,52 @@ class USFederalTaxEngine( TaxEngine ):
             )
             continue
         return penalties
+
+    def _roth_early_earnings_by_owner( self, fiscal_window : FiscalWindowView, tax_context : TaxContext ):
+        """Each owner under 59-1/2 paired with the Roth earnings they withdrew this year, for owners with
+        positive earnings. The single base the ordinary-income inclusion and the early-withdrawal penalty
+        both read, so the taxed amount and the penalized amount are the same figure by construction and
+        cannot drift apart. Only the earnings above basis appear (a Roth basis withdrawal is free); the
+        earnings of an owner 59-1/2+ are qualified and excluded."""
+        age_limit = self._parameters.early_withdrawal_age
+        for subject in tax_context.subjects:
+            if ( subject.handle is None ) or ( subject.age >= age_limit ):
+                continue
+            earnings = fiscal_window.income_for_owner( IncomeTaxClass.ROTH_EARNINGS, subject.handle )
+            if earnings > 0:
+                yield subject, earnings
+            continue
+        return
+
+    def _roth_early_withdrawal_penalties( self, fiscal_window : FiscalWindowView,
+                                          tax_context : TaxContext ) -> list[ TaxPenalty ]:
+        """10% of a Roth's withdrawn earnings for an owner under 59-1/2, one penalty per owner. Only the
+        earnings above basis are penalized: a Roth basis withdrawal is always free, so the base is the
+        owner's Roth Earnings income, not the whole distribution."""
+        rate = self._parameters.early_withdrawal_rate
+        return [
+            TaxPenalty(
+                tax_class = ExpenseTaxClass.EARLY_WITHDRAWAL_PENALTY,
+                amount    = rate * earnings,
+                reason    = f'{format_money( earnings )} of Roth earnings withdrawn before 59-1/2: '
+                            f'taxed as ordinary income plus a {rate:.0%} early-withdrawal penalty.',
+            )
+            for _subject, earnings in self._roth_early_earnings_by_owner( fiscal_window, tax_context )
+        ]
+
+    def _roth_early_earnings( self, fiscal_window : FiscalWindowView,
+                              tax_context : TaxContext ) -> Decimal:
+        """The total Roth earnings withdrawn by owners under 59-1/2 -- ordinary income (the earnings of an
+        owner 59-1/2+ are tax-free and excluded). The same base the Roth early-withdrawal penalty hits.
+
+        Approximation (deliberate): the qualified test is age alone. The 5-year holding rules (the
+        account clock and each conversion's clock) are not modeled -- earnings at 59-1/2+ are treated
+        as qualified -- and a conversion is lumped into basis with no 5-year conversion-recapture
+        penalty. Withdrawal ordering is basis-first (contributions/conversions), then earnings."""
+        return sum(
+            ( earnings
+              for _subject, earnings in self._roth_early_earnings_by_owner( fiscal_window, tax_context ) ),
+            _ZERO )
 
     def forced_transactions( self, fiscal_window : FiscalWindowView,
                              tax_context : TaxContext ) -> list[ ForcedTransaction ]:

@@ -23,7 +23,7 @@ from .enums import AccountType, AssetClass, SideType, SystemAccountRole
 from .exceptions import MissingAccountError, TransactionImbalanceError
 from .journal import Journal
 from .ledger import Ledger
-from .money_utils import quantize_money
+from .money_utils import format_money, quantize_money
 from .schemas import Handle
 
 
@@ -166,10 +166,13 @@ class Bookkeeper:
                  proceeds_account      : Account,
                  realized_gain_account : Optional[ Account ],
                  on_date               : date,
+                 basis_first           : bool = False,
                  description           : str = '' ) -> Optional[ Transaction ]:
         """Realize `proceeds` of `holding`'s market value into `proceeds_account`: draw
-        down cost and valuation proportionally, recognize the realized gain (the valuation
-        portion) into `realized_gain_account`, and reverse the Unrealized Gains equity. The
+        down cost and valuation (proportionally, or cost-first when `basis_first`), recognize the
+        realized gain (the valuation portion) into `realized_gain_account`, and reverse the Unrealized
+        Gains equity. `basis_first` (a Roth) draws cost before valuation, so a withdrawal within basis
+        realizes no gain and only the excess above basis is earnings; otherwise the split is pro-rata. The
         gain may be negative -- an underwater holding realizes a loss. Net-worth-neutral --
         the gain just moves from unrealized to realized (taxable). A `realized_gain_account` of
         None recognizes no realized gain (a personal depreciating asset whose class carries none):
@@ -187,6 +190,14 @@ class Bookkeeper:
         if valuation_account is None:
             cost_sold = proceeds
             gain = Decimal( '0' )
+        elif basis_first:
+            # Cost (basis) is drawn first: a withdrawal within basis realizes no gain, and only the
+            # excess above basis draws from valuation (earnings). A full realization, though, closes the
+            # position -- it draws the whole basis and realizes the remaining valuation as gain (or, for
+            # an underwater holding whose basis exceeds market, as a loss), so nothing is left stranded.
+            basis     = ledger.natural_balance( holding )
+            cost_sold = basis if proceeds == market else quantize_money( min( proceeds, basis ) )
+            gain      = proceeds - cost_sold
         else:
             fraction = proceeds / market
             cost_sold = quantize_money( ledger.natural_balance( holding ) * fraction )
@@ -202,6 +213,12 @@ class Bookkeeper:
                     ( unrealized_gain_account, -gain ),
                     ( realized_gain_account, gain ),
                 ]
+        if basis_first and gain > 0:
+            # A basis-first withdrawal that crosses into earnings: name the split so the reader sees why
+            # part of it became income (a Roth's earnings are taxable/penalized before 59-1/2). A realized
+            # loss (a full underwater draw, gain < 0) is not income, so it carries no such annotation.
+            split = f'{format_money( cost_sold )} basis, {format_money( gain )} earnings'
+            description = f'{description} ({split})' if description else split
         return self.record( on_date, postings, description = description )
 
     # -- invariants and index access -----------------------------------------

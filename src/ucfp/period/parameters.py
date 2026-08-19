@@ -80,11 +80,12 @@ class ExpenseLine:
 @dataclass( frozen = True )
 class ContributionLine:
     """One retirement contribution materializing this interval into the target `holding`: the
-    Period debits the holding's zero-basis valuation companion (so the whole amount is taxed on a
-    later withdrawal) and credits its `funding_account` -- the cash hub for an employee
-    contribution (net-worth-neutral) or the External Receipts equity for an employer match
-    (net-worth-increasing). `description` is the posting memo. The Scenario resolves the holding,
-    funding account, and grown amount; the Period posts it after the annual-limit clamp.
+    Period debits the holding's valuation companion for a pre-tax (zero-basis) account (so the whole
+    amount is taxed on a later withdrawal) or its cost for a Roth (basis, tax-free on withdrawal), and
+    credits its `funding_account` -- the cash hub for an employee contribution (net-worth-neutral) or
+    the External Receipts equity for an employer match (net-worth-increasing). `description` is the
+    posting memo. The Scenario resolves the holding, funding account, and grown amount; the Period
+    posts it after the annual-limit clamp.
 
     `holding`'s `owner_handle` plus `kind` group contributions that share one annual limit, which
     the Period clamps each group's year-to-date total to. An employer match counts against no

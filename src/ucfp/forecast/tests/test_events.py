@@ -182,6 +182,12 @@ class ZeroBasisValidationTests( unittest.TestCase ):
         with self.assertRaises( ValueError ):
             AssetParameters( 'IRA', AssetClass.PRETAX_RETIREMENT, Decimal( '40000' ), Decimal( '0' ) )
 
+    def test_roth_account_requires_an_owner( self ):
+        # a Roth is a retirement account too: the owner requirement is keyed on the account type
+        # (`is_retirement_account`), not the zero-basis fact, so it survives Roth carrying a real basis.
+        with self.assertRaises( ValueError ):
+            AssetParameters( 'Roth', AssetClass.ROTH, Decimal( '40000' ), Decimal( '0' ) )
+
 
 class HandleResolutionTests( unittest.TestCase ):
 

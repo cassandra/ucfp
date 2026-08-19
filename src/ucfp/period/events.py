@@ -216,6 +216,7 @@ class Realization( PeriodEvent ):
             proceeds_account = self.destination,
             realized_gain_account = realized_gain_account,
             on_date = self.event_date,
+            basis_first = self.holding.asset_class.withdraws_basis_first,
             description = description or self._describe(),
         )
 
