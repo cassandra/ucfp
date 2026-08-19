@@ -834,10 +834,15 @@ SECTIONS = [
     # async view, so Next just advances.
     Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
              outer_template = 'inputs/interview/sections/possessions_section.html' ),
-    # The Plans flow opens with spending, then the debt repayment plan (another recurring outflow),
-    # then retirement income timing, then the cash orchestration, then one-off events. Living Expenses
-    # opens the flow; Home Expenses shows only when the household has a dwelling with operating costs
-    # (see `applicable_sections`).
+    # The Plans flow opens with Retirement -- the headline concern for a retirement planner, and safe to
+    # lead with because its inputs (income facts, entitlements, retirement-account balances) all come from
+    # the Profile flow above, not from any other Plans step. Then spending, the debt repayment plan
+    # (another recurring outflow), the cash orchestration, and one-off events. Home Expenses shows only
+    # when the household has a dwelling with operating costs (see `applicable_sections`).
+    # When each income runs and each entitlement is claimed -- the timing over the income *facts* declared
+    # in Income (Profile flow). Sits before Cash management, which balances this income against the outflows.
+    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
+             outer_template = 'inputs/interview/sections/retirement.html' ),
     Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
@@ -848,11 +853,6 @@ SECTIONS = [
     # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.
     Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
              outer_template = 'inputs/interview/sections/debt_plan.html' ),
-    # When each income runs and each entitlement is claimed -- the timing over the income *facts*
-    # declared in Income (Profile flow). Sits before Cash management, which balances this income
-    # against the outflows above.
-    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
-             outer_template = 'inputs/interview/sections/retirement.html' ),
     # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set up
     # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
     Section( 'cash-plan'   , 'Cash management', ( Aggregate.PLANS, ), CashPlanSectionForm,
