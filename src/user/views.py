@@ -228,6 +228,22 @@ class UserAccountView( View ):
         return render( request, 'user/pages/account.html', {} )
 
 
+class ConvertToGuestView( View ):
+    """Convert an Anonymous visitor into a Guest: create their email-less Guest account and log
+    them in. The single conversion entry point, invoked by whichever "start using the app" control
+    a page offers, so account creation lives in one place regardless of where it is triggered from.
+
+    POST-only, so an account is created only by a deliberate submission -- a crawled GET never mints
+    one. An already-signed-in visitor is left as-is (no second account); either way the visitor is
+    forwarded on to begin entering data.
+    """
+
+    def post( self, request, *args, **kwargs ):
+        if not request.user.is_authenticated:
+            SigninManager().start_guest_session( request )
+        return HttpResponseRedirect( reverse( 'flow_profile' ) )
+
+
 class UserSignoutView( View ):
     """Sign the current user out and return them to the site root. POST-only so a
     sign-out cannot be triggered by an incidental GET (link prefetch, an <img> src,

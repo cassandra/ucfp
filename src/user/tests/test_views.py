@@ -4,11 +4,12 @@ from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.http import HttpResponse
-from django.test import override_settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from common.redis_client import get_redis_client
 from notify.email_sender import EmailSender
+from organization.models import Organization
 from user.magic_code_generator import MagicCodeStatus, MagicCodeGenerator
 from user.signin_manager import SigninManager
 from testing.view_test_base import SyncViewTestCase
@@ -16,6 +17,54 @@ from testing.view_test_base import SyncViewTestCase
 logging.disable(logging.CRITICAL)
 
 User = get_user_model()
+
+
+@override_settings(SUPPRESS_AUTHENTICATION=False)
+class ConvertToGuestViewTest(TestCase):
+    """The Anonymous -> Guest conversion, on a cloud deployment (where Anonymous visitors exist)."""
+
+    def test_post_converts_anonymous_visitor_to_a_single_guest(self):
+        response = self.client.post( reverse( 'convert_to_guest' ) )
+
+        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
+        self.assertEqual( 1, User.objects.count() )
+        self.assertTrue( User.objects.get().is_guest )
+
+    def test_get_does_not_convert_and_is_rejected(self):
+        # POST-only, so a crawled GET can never mint an account.
+        response = self.client.get( reverse( 'convert_to_guest' ) )
+
+        self.assertEqual( 405, response.status_code )
+        self.assertEqual( 0, User.objects.count() )
+
+    def test_already_signed_in_visitor_gets_no_second_account(self):
+        existing = User.objects.create_user( email = 'has@example.com' )
+        self.client.force_login( existing )
+
+        response = self.client.post( reverse( 'convert_to_guest' ) )
+
+        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
+        self.assertEqual( 1, User.objects.count() )
+
+
+@override_settings(SUPPRESS_AUTHENTICATION=False)
+class OnboardingPagesAnonymousTest(TestCase):
+    """The onboarding pages a visitor with no account reaches without signing in or writing data."""
+
+    def test_explain_and_preview_are_reachable_and_write_nothing(self):
+        for name in [ 'explain', 'preview' ]:
+            with self.subTest( page = name ):
+                self.assertEqual( 200, self.client.get( reverse( name ) ).status_code )
+        self.assertEqual( 0, User.objects.count() )
+        self.assertEqual( 0, Organization.objects.count() )
+
+    def test_marketing_home_funnels_to_explain(self):
+        # The anonymous cloud visitor's site root is the marketing page, whose CTA now leads into
+        # the onboarding flow (Explain) rather than straight to sign-in.
+        response = self.client.get( reverse( 'home' ) )
+
+        self.assertEqual( 200, response.status_code )
+        self.assertContains( response, reverse( 'explain' ) )
 
 
 class TestUserSigninView(SyncViewTestCase):

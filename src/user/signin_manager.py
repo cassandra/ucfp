@@ -1,5 +1,6 @@
 import logging
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth import login as django_login
 from django.http import HttpRequest
 from django.urls import reverse
@@ -50,6 +51,15 @@ class SigninManager( Singleton ):
 
         EmailSender( data = email_sender_data ).send()
         return True
+
+    def start_guest_session( self, request : HttpRequest ):
+        """Convert an Anonymous visitor into a Guest: create an email-less Guest account and log
+        them in. The single mechanism behind every "start using the app" entry point, so account
+        creation happens in exactly one place -- callers decide *when* (a deliberate action), not
+        *how*. Returns the new Guest."""
+        request.user = get_user_model().objects.create_guest()
+        self.do_login( request = request )
+        return request.user
 
     def do_login( self, request, verified_email : bool = False ):
         django_login( request, request.user )

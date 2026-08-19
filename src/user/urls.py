@@ -10,6 +10,10 @@ urlpatterns = [
           views.UserAccountView.as_view(),
           name = 'user_account' ),
 
+    path( 'convert-to-guest',
+          views.ConvertToGuestView.as_view(),
+          name = 'convert_to_guest' ),
+
     path( 'signout',
           views.UserSignoutView.as_view(),
           name = 'user_signout' ),
