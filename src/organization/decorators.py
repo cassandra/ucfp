@@ -2,6 +2,7 @@
 import functools
 
 from django.http import Http404
+from django.utils import timezone
 
 from .models import Organization, OrganizationMember
 
@@ -41,7 +42,15 @@ def ensure_organization( view_func ):
     @functools.wraps( view_func )
     def wrapped( request, *args, **kwargs ):
         request.organization = _resolve_current_organization( request )
-        return view_func( request, *args, **kwargs )
+        # Render this request's datetimes in the household's timezone: activating it here means the
+        # template `date` filter and `timezone.localtime()` (the run timestamps and the default run name)
+        # all read the household's zone without threading it through each call site. Scoped to the view
+        # (these views render eagerly) and always cleared, so it never leaks to another request's thread.
+        timezone.activate( request.organization.tzinfo )
+        try:
+            return view_func( request, *args, **kwargs )
+        finally:
+            timezone.deactivate()
     return wrapped
 
 

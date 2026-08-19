@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.http import Http404
 from django.test import RequestFactory, TestCase
+from django.utils import timezone
 
 from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
@@ -20,6 +21,11 @@ _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
 @ensure_organization
 def _organization_view( request ):
     return request.organization
+
+
+@ensure_organization
+def _active_timezone_view( request ):
+    return timezone.get_current_timezone_name()
 
 
 @require_authenticated_user
@@ -58,6 +64,23 @@ class EnsureOrganizationTest( TestCase ):
         self.assertEqual( organization, existing )
         self.assertEqual(
             Organization.objects.filter( members__user = user ).distinct().count(), 1 )
+
+    def test_activates_the_households_display_timezone_for_the_request( self ):
+        user = self._user()
+        organization = Organization.objects.create_for_owner( user, 'Household' )
+        organization.display_timezone = 'America/New_York'
+        organization.save( update_fields = [ 'display_timezone' ] )
+        self.assertEqual( _active_timezone_view( _request_for( user ) ), 'America/New_York' )
+
+    def test_deactivates_the_timezone_after_the_request( self ):
+        # The activation is scoped to the view, so the worker thread is left on the project default
+        # rather than leaking the household zone to a later request that shares the thread.
+        user = self._user()
+        organization = Organization.objects.create_for_owner( user, 'Household' )
+        organization.display_timezone = 'America/New_York'
+        organization.save( update_fields = [ 'display_timezone' ] )
+        _active_timezone_view( _request_for( user ) )
+        self.assertEqual( timezone.get_current_timezone_name(), settings.TIME_ZONE )
 
     def test_reprovisions_when_session_points_at_a_deleted_organization( self ):
         # After deleting their last household, the session still references the now-

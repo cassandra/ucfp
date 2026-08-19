@@ -166,10 +166,12 @@ class SubjectsForm( StyledFormMixin, forms.Form ):
     def apply( self, profile : Profile, plans : Plans ):
         subjects = self._subjects()
         assets   = _synced_taxable_accounts( _synced_retirement_accounts( profile.assets, subjects ) )
+        income_flows, pensions, government_pension = _facts_owned_by_current_subjects( profile, subjects )
         updated  = replace(
             profile, subjects = subjects, filing_status = self._filing_status( subjects ),
             assets = assets, us_state = self._us_state(),
-            state_income_tax_rate = self._state_income_tax_rate() )
+            state_income_tax_rate = self._state_income_tax_rate(),
+            income_flows = income_flows, pensions = pensions, government_pension = government_pension )
         # Plans are left untouched: a contribution/conversion/withdrawal left keyed to a departed
         # subject's removed account is reconciled on demand at the run surface, not eagerly here.
         return updated, plans
@@ -567,6 +569,25 @@ def _synced_taxable_accounts( assets : list ) -> list:
     return kept + provisioned
 
 
+def _facts_owned_by_current_subjects( profile : Profile, subjects : list ) -> tuple:
+    """The profile's per-subject facts -- income flows, pension entitlements, and government-pension
+    (Social Security) entitlements -- with any owned by a person who is no longer a subject dropped, as
+    `(income_flows, pensions, government_pension)`. Household income (a flow with no `subject_handle`, e.g.
+    rent) is kept. This mirrors `_synced_retirement_accounts` for the per-subject accounts, so removing a
+    household member leaves none of their facts lurking: a stale fact would otherwise resurrect on
+    re-adding the person, and an orphaned entitlement whose claiming date has been reconciled away reads
+    as a permanently incomplete plan. Plans that reference a departed subject are pruned separately, on
+    demand, at the run surface -- not here."""
+    handles            = { subject.handle for subject in subjects }
+    income_flows       = [ flow for flow in profile.income_flows
+                           if flow.subject_handle is None or flow.subject_handle in handles ]
+    pensions           = [ pension for pension in profile.pensions
+                           if pension.subject_handle in handles ]
+    government_pension = [ entitlement for entitlement in profile.government_pension
+                           if entitlement.subject_handle in handles ]
+    return income_flows, pensions, government_pension
+
+
 class AccountsSectionForm:
     """§4 section wrapper. The Accounts pane self-saves through `AccountsView`, so this section form
     only carries the flow: it always validates and its `apply` is a no-op, leaving Next to advance
@@ -834,10 +855,15 @@ SECTIONS = [
     # async view, so Next just advances.
     Section( 'possessions' , 'Possessions', ( Aggregate.PROFILE, ), PossessionsSectionForm,
              outer_template = 'inputs/interview/sections/possessions_section.html' ),
-    # The Plans flow opens with spending, then the debt repayment plan (another recurring outflow),
-    # then retirement income timing, then the cash orchestration, then one-off events. Living Expenses
-    # opens the flow; Home Expenses shows only when the household has a dwelling with operating costs
-    # (see `applicable_sections`).
+    # The Plans flow opens with Retirement -- the headline concern for a retirement planner, and safe to
+    # lead with because its inputs (income facts, entitlements, retirement-account balances) all come from
+    # the Profile flow above, not from any other Plans step. Then spending, the debt repayment plan
+    # (another recurring outflow), the cash orchestration, and one-off events. Home Expenses shows only
+    # when the household has a dwelling with operating costs (see `applicable_sections`).
+    # When each income runs and each entitlement is claimed -- the timing over the income *facts* declared
+    # in Income (Profile flow). Sits before Cash management, which balances this income against the outflows.
+    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
+             outer_template = 'inputs/interview/sections/retirement.html' ),
     Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
@@ -848,11 +874,6 @@ SECTIONS = [
     # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.
     Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
              outer_template = 'inputs/interview/sections/debt_plan.html' ),
-    # When each income runs and each entitlement is claimed -- the timing over the income *facts*
-    # declared in Income (Profile flow). Sits before Cash management, which balances this income
-    # against the outflows above.
-    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
-             outer_template = 'inputs/interview/sections/retirement.html' ),
     # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set up
     # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
     Section( 'cash-plan'   , 'Cash management', ( Aggregate.PLANS, ), CashPlanSectionForm,

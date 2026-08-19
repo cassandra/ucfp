@@ -1,10 +1,12 @@
 """run_and_capture composes the layers into a coherent, persisted run that all reloads -- the
 data-composition spine: materialize -> run -> persist books -> capture the typed package."""
-from datetime import date, datetime
+from datetime import date, datetime, timezone as dt_timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
 from common.dataclass_json import from_json_data
 from common.recurrence import Duration, TimeUnit
@@ -88,4 +90,15 @@ class RunTitleTest( SimpleTestCase ):
 
     def test_names_the_run_by_its_scenario_and_time( self ):
         title = run_title( 'My Scenario', datetime( 2026, 8, 14, 15, 42 ) )
+        self.assertEqual( title, 'My Scenario - Run at Aug 14, 2026, 3:42 p.m.' )
+
+    def test_names_the_run_in_the_active_household_timezone( self ):
+        # The capture view passes `timezone.localtime()`, so the same UTC instant names the run in the
+        # household's zone (activated by `ensure_organization`): 20:42 UTC is 3:42 p.m. US Central.
+        utc_moment = datetime( 2026, 8, 14, 20, 42, tzinfo = dt_timezone.utc )
+        timezone.activate( ZoneInfo( 'America/Chicago' ) )
+        try:
+            title = run_title( 'My Scenario', timezone.localtime( utc_moment ) )
+        finally:
+            timezone.deactivate()
         self.assertEqual( title, 'My Scenario - Run at Aug 14, 2026, 3:42 p.m.' )
