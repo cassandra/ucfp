@@ -1,7 +1,6 @@
 from django.contrib import auth
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.base_user import BaseUserManager
-from django.db import IntegrityError
 
 
 class CustomUserManager(BaseUserManager):
@@ -50,27 +49,6 @@ class CustomUserManager(BaseUserManager):
         if canonical_email is None:
             return None
         return self.filter( email = canonical_email ).first()
-
-    def get_or_create_by_email( self, email ):
-        """
-        Return (user, created) for the canonicalized email, creating a
-        password-less account the first time an address is seen. This is the
-        entry point for passwordless sign-in: an unknown email becomes a new
-        account rather than a dead end.
-        """
-        canonical_email = self.canonicalize_email( email )
-        if canonical_email is None:
-            raise ValueError( 'Cannot get or create a user without an email.' )
-
-        existing_user = self.filter( email = canonical_email ).first()
-        if existing_user is not None:
-            return existing_user, False
-        try:
-            return self.create_user( email = canonical_email ), True
-        except IntegrityError:
-            # A concurrent request created this account between our check and
-            # our insert; the unique constraint caught it, so re-fetch.
-            return self.get( email = canonical_email ), False
 
     def create_user(self, email=None, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", False)

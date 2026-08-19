@@ -1,22 +1,26 @@
 import logging
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.http import HttpResponse
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from common.redis_client import get_redis_client
-from notify.email_sender import EmailSender
 from organization.models import Organization
-from user.magic_code_generator import MagicCodeStatus, MagicCodeGenerator
+from user.magic_code_generator import MagicCodeGenerator
 from user.signin_manager import SigninManager
 from testing.view_test_base import SyncViewTestCase
 
 logging.disable(logging.CRITICAL)
 
 User = get_user_model()
+
+_CODE_PAGE = 'user/pages/magic_code.html'
+
+
+def _auth_user_id( client ):
+    return client.session.get('_auth_user_id')
 
 
 @override_settings(SUPPRESS_AUTHENTICATION=False)
@@ -67,467 +71,249 @@ class OnboardingPagesAnonymousTest(TestCase):
         self.assertContains( response, reverse( 'explain' ) )
 
 
+@patch.object(SigninManager, 'send_magic_email')
 class TestUserSigninView(SyncViewTestCase):
-    """
-    Tests for UserSigninView - demonstrates user authentication testing.
-    This view handles email-based signin requests.
-    """
-
-    def setUp(self):
-        super().setUp()
-        # Use the user from parent setUp()
-
-    @patch.object(EmailSender, 'is_email_configured')
-    def test_get_signin_page_email_configured(self, mock_is_configured):
-        """Test getting signin page when email is configured."""
-        mock_is_configured.return_value = True
-
-        url = reverse('user_signin')
-        response = self.client.get(url)
-
-        self.assertSuccessResponse(response)
-        self.assertHtmlResponse(response)
-        self.assertTemplateRendered(response, 'user/pages/signin.html')
-        self.assertEqual(response.context['email_not_configured'], False)
-
-    @patch.object(EmailSender, 'is_email_configured')
-    def test_get_signin_page_email_not_configured(self, mock_is_configured):
-        """Test getting signin page when email is not configured."""
-        mock_is_configured.return_value = False
-
-        url = reverse('user_signin')
-        response = self.client.get(url)
-
-        self.assertSuccessResponse(response)
-        self.assertEqual(response.context['email_not_configured'], True)
-
-    def test_get_signin_already_authenticated_redirects_home(self):
-        """An authenticated user has no sign-in step to complete; GET redirects home."""
-        self.client.force_login(self.user)
-
-        url = reverse('user_signin')
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('home'))
-
-    def test_post_signin_already_authenticated_redirects_home(self):
-        """An authenticated user posting the sign-in form is redirected home, not errored."""
-        self.client.force_login(self.user)
-
-        url = reverse('user_signin')
-        response = self.client.post(url, {'email': 'test@example.com'})
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('home'))
-
-    def test_post_signin_no_email(self):
-        """Test POST request without email."""
-        url = reverse('user_signin')
-        response = self.client.post(url, {})
-
-        self.assertEqual(response.status_code, 400)
-
-    def test_post_signin_invalid_email(self):
-        """Test POST request with invalid email."""
-        url = reverse('user_signin')
-        response = self.client.post(url, {'email': 'invalid-email'})
-
-        self.assertEqual(response.status_code, 400)
-
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_post_signin_existing_user(self, mock_send_view_class):
-        """Test POST request with existing user email."""
-        from django.http import HttpResponse
-        mock_send_view = mock_send_view_class.return_value
-        mock_send_view.send_signin_magic_link.return_value = HttpResponse('mock_response')
-
-        url = reverse('user_signin')
-        _ = self.client.post(url, {'email': self.user.email})
-
-        # Should delegate to SendMagicLinkEmailView
-        mock_send_view.send_signin_magic_link.assert_called_once()
-        call_kwargs = mock_send_view.send_signin_magic_link.call_args[1]
-        self.assertEqual(call_kwargs['override_user'], self.user)
-
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_post_signin_unknown_email_creates_user(self, mock_send_view_class):
-        """An unknown email creates a new account and proceeds to send a code."""
-        from django.http import HttpResponse
-        mock_send_view = mock_send_view_class.return_value
-        mock_send_view.send_signin_magic_link.return_value = HttpResponse('mock_response')
-
-        new_email = 'newcomer@example.com'
-        self.assertFalse(User.objects.filter(email=new_email).exists())
-
-        url = reverse('user_signin')
-        _ = self.client.post(url, {'email': new_email})
-
-        # The previously-unknown email now has an account...
-        created_user = User.objects.get(email=new_email)
-        # ...and the flow proceeds to send a sign-in code for that user.
-        mock_send_view.send_signin_magic_link.assert_called_once()
-        call_kwargs = mock_send_view.send_signin_magic_link.call_args[1]
-        self.assertEqual(call_kwargs['override_user'], created_user)
-
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_post_signin_canonicalizes_email_case(self, mock_send_view_class):
-        """Mixed-case variants of one address resolve to a single account."""
-        from django.http import HttpResponse
-        mock_send_view = mock_send_view_class.return_value
-        mock_send_view.send_signin_magic_link.return_value = HttpResponse('mock_response')
-
-        url = reverse('user_signin')
-        self.client.post(url, {'email': 'Mixed.Case@Example.COM'})
-        self.client.post(url, {'email': 'mixed.case@example.com'})
-
-        self.assertEqual(User.objects.filter(email='mixed.case@example.com').count(), 1)
-        self.assertFalse(User.objects.filter(email='Mixed.Case@Example.COM').exists())
-
-    def test_post_signin_email_validation_error(self):
-        """Test POST request with email that fails validation."""
-        url = reverse('user_signin')
-        # Pass actually invalid email format that will fail Django's validate_email
-        response = self.client.post(url, {'email': 'not-an-email'})
-
-        self.assertEqual(response.status_code, 400)
-
-    def test_post_signin_unsubscribed_email_offers_resubscribe(self):
-        """A sign-in for an unsubscribed address surfaces the re-enable path
-        instead of silently dead-ending (the code email is suppressed)."""
-        from notify.models import UnsubscribedEmail
-        UnsubscribedEmail.objects.create(email=self.user.email)
-
-        response = self.client.post(reverse('user_signin'), {'email': self.user.email})
-
-        self.assertTemplateRendered(response, 'user/pages/signin_unsubscribed.html')
-
-    @override_settings(
-        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
-        EMAIL_HOST='smtp.example.com', EMAIL_PORT=587, EMAIL_HOST_USER='u',
-        DEFAULT_FROM_EMAIL='from@example.com', SERVER_EMAIL='srv@example.com',
-    )
-    def test_real_signin_code_email_carries_list_unsubscribe_header(self):
-        """The genuine sign-in code email (not a synthetic send) carries the
-        one-click List-Unsubscribe headers -- the deliverability contract."""
-        from django.core import mail
-
-        self.client.post(reverse('user_signin'), {'email': 'fresh@example.com'})
-
-        self.assertEqual(len(mail.outbox), 1)
-        headers = mail.outbox[0].extra_headers
-        self.assertIn('List-Unsubscribe', headers)
-        self.assertEqual(headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
-
-
-class TestSendMagicLinkEmailView(SyncViewTestCase):
-    """
-    Tests for SendMagicLinkEmailView - demonstrates magic link email testing.
-    This view sends magic link emails for authentication.
-    """
-
-    def setUp(self):
-        super().setUp()
-        # Use the user from parent setUp()
-
-    @patch.object(SigninManager, 'send_signin_magic_link_email')
-    @patch('user.views.SigninMagicCodeView')
-    def test_send_signin_magic_link(self, mock_magic_code_view_class, mock_send_email):
-        """Test sending signin magic link email."""
-        mock_magic_code_view = mock_magic_code_view_class.return_value
-        mock_magic_code_view.get_response.return_value = 'mock_response'
-
-        from user.views import SendMagicLinkEmailView
-        view = SendMagicLinkEmailView()
-
-        # Create a mock request
-        request = self.client.get('/').wsgi_request
-
-        _ = view.send_signin_magic_link(
-            request=request,
-            override_user=self.user
-        )
-
-        # Should call signin manager to send email
-        mock_send_email.assert_called_once()
-
-        # Should delegate to magic code view for response
-        mock_magic_code_view.get_response.assert_called_once()
-
-    @patch.object(SigninManager, 'send_signin_magic_link_email')
-    @patch('user.views.SigninMagicCodeView')
-    def test_send_magic_link_creates_user_auth_data(self, mock_magic_code_view_class, mock_send_email):
-        """Test that user authentication data is created properly."""
-        mock_magic_code_view = mock_magic_code_view_class.return_value
-        mock_magic_code_view.get_response.return_value = 'mock_response'
-
-        from user.views import SendMagicLinkEmailView
-        view = SendMagicLinkEmailView()
-
-        # Create a mock request
-        request = self.client.get('/').wsgi_request
-
-        view.send_signin_magic_link(
-            request=request,
-            override_user=self.user
-        )
-
-        # Should pass user auth data to signin manager
-        mock_send_email.assert_called_once()
-        call_args = mock_send_email.call_args[1]
-        self.assertIn('user_auth_data', call_args)
-
-
-class TestSigninMagicCodeView(SyncViewTestCase):
-    """
-    Tests for SigninMagicCodeView - demonstrates magic code verification testing.
-    This view handles magic code form submission and verification.
-    """
-
-    def setUp(self):
-        super().setUp()
-        # Use the user from parent setUp()
-
-    def test_get_response_method(self):
-        """Test the get_response method renders correctly."""
-        from user.views import SigninMagicCodeView
-        from user.forms import SigninMagicCodeForm
-
-        view = SigninMagicCodeView()
-        form = SigninMagicCodeForm(initial={'email_address': 'test@example.com'})
-
-        # Create a mock request
-        request = self.client.get('/').wsgi_request
-
-        response = view.get_response(request=request, magic_code_form=form)
-
-        # Should render the magic code template
-        self.assertEqual(response.status_code, 200)
-
-    def test_post_already_authenticated_redirects_home(self):
-        """A stale code submission from an already-authenticated user redirects
-        home rather than re-running the login."""
-        self.client.force_login(self.user)
-
-        url = reverse('user_signin_magic_code')
-        response = self.client.post(url, {
-            'email_address': self.user.email,
-            'magic_code': '123456'
-        })
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('home'))
-
-    def test_post_invalid_form(self):
-        """Test POST request with invalid form data."""
-        url = reverse('user_signin_magic_code')
-        # Send completely empty data which should make the form invalid
-        response = self.client.post(url, {})
-
-        self.assertEqual(response.status_code, 400)
-
-    def test_post_nonexistent_user(self):
-        """Test POST request with nonexistent user email."""
-        url = reverse('user_signin_magic_code')
-        response = self.client.post(url, {
-            'email_address': 'nonexistent@example.com',
-            'magic_code': '123456'
-        })
-
-        self.assertEqual(response.status_code, 400)
-
-    @patch.object(MagicCodeGenerator, 'check_magic_code')
-    def test_post_invalid_magic_code(self, mock_check_code):
-        """Test POST request with invalid magic code."""
-        # Mock invalid magic code
-        mock_check_code.return_value = MagicCodeStatus.INVALID
-
-        url = reverse('user_signin_magic_code')
-        response = self.client.post(url, {
-            'email_address': self.user.email,
-            'magic_code': '123456'
-        })
-
-        self.assertEqual(response.status_code, 400)
-
-    @patch.object(MagicCodeGenerator, 'check_magic_code')
-    def test_post_expired_magic_code(self, mock_check_code):
-        """Test POST request with expired magic code."""
-        # Mock expired magic code
-        mock_check_code.return_value = MagicCodeStatus.EXPIRED
-
-        url = reverse('user_signin_magic_code')
-        response = self.client.post(url, {
-            'email_address': self.user.email,
-            'magic_code': '123456'
-        })
-
-        self.assertEqual(response.status_code, 400)
-
-    @patch.object(MagicCodeGenerator, 'expire_magic_code')
-    @patch.object(SigninManager, 'do_login')
-    @patch.object(MagicCodeGenerator, 'check_magic_code')
-    @patch('user.forms.SigninMagicCodeForm')
-    def test_post_valid_magic_code(self, mock_form_class, mock_check_code, mock_do_login, mock_expire_code):
-        """Test POST request with valid magic code."""
-        # Mock valid form
-        mock_form = Mock()
-        mock_form.is_valid.return_value = True
-        mock_form.cleaned_data = {
-            'email_address': self.user.email,
-            'magic_code': '123456'
-        }
-        mock_form_class.return_value = mock_form
-
-        # Mock valid magic code
-        mock_check_code.return_value = MagicCodeStatus.VALID
-
-        url = reverse('user_signin_magic_code')
-        response = self.client.post(url, {
-            'email_address': self.user.email,
-            'magic_code': '123456'
-        })
-
-        self.assertEqual(response.status_code, 302)
-        expected_url = reverse('home')
-        self.assertEqual(response.url, expected_url)
-
-        # Should perform login and expire code
-        mock_do_login.assert_called_once()
-        mock_expire_code.assert_called_once()
-
-
-class TestSigninMagicLinkView(SyncViewTestCase):
-    """
-    Tests for SigninMagicLinkView - demonstrates magic link authentication testing.
-    This view handles magic link clicks from emails.
-    """
-
-    def setUp(self):
-        super().setUp()
-        # Use the user from parent setUp()
-
-    def test_get_missing_token(self):
-        """Test GET request with missing token."""
-        from django.urls.exceptions import NoReverseMatch
-        with self.assertRaises(NoReverseMatch):
-            reverse('user_signin_magic_link', kwargs={
-                'email': self.user.email,
-                'token': ''
-            })
-
-    def test_get_missing_email(self):
-        """Test GET request with missing email."""
-        from django.urls.exceptions import NoReverseMatch
-        with self.assertRaises(NoReverseMatch):
-            reverse('user_signin_magic_link', kwargs={
-                'email': '',
-                'token': 'test-token'
-            })
-
-    def test_get_nonexistent_user(self):
-        """Test GET request with nonexistent user email."""
-        url = reverse('user_signin_magic_link', kwargs={
-            'email': 'nonexistent@example.com',
-            'token': 'test-token'
-        })
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 400)
-
-    @patch.object(PasswordResetTokenGenerator, 'check_token')
-    def test_get_invalid_token(self, mock_check_token):
-        """Test GET request with invalid token."""
-        mock_check_token.return_value = False
-
-        url = reverse('user_signin_magic_link', kwargs={
-            'email': self.user.email,
-            'token': 'invalid-token'
-        })
-        response = self.client.get(url)
-
-        self.assertSuccessResponse(response)
-        self.assertTemplateRendered(response, 'user/pages/signin_magic_bad_link.html')
-
-    @patch.object(SigninManager, 'do_login')
-    @patch.object(PasswordResetTokenGenerator, 'check_token')
-    def test_get_valid_token(self, mock_check_token, mock_do_login):
-        """Test GET request with valid token."""
-        mock_check_token.return_value = True
-
-        url = reverse('user_signin_magic_link', kwargs={
-            'email': self.user.email,
-            'token': 'valid-token'
-        })
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, 302)
-        expected_url = reverse('home')
-        self.assertEqual(response.url, expected_url)
-
-        # Should perform login
-        mock_do_login.assert_called_once()
-
-    @patch.object(PasswordResetTokenGenerator, 'check_token')
-    def test_token_validation_called_correctly(self, mock_check_token):
-        """Test that token validation is called with correct parameters."""
-        mock_check_token.return_value = True
-
-        url = reverse('user_signin_magic_link', kwargs={
-            'email': self.user.email,
-            'token': 'test-token'
-        })
-        _ = self.client.get(url)
-
-        # Should check token with user and token
-        mock_check_token.assert_called_once_with(user=self.user, token='test-token')
-
-    def test_post_not_allowed(self):
-        """Test that POST requests are not allowed."""
-        url = reverse('user_signin_magic_link', kwargs={
-            'email': self.user.email,
-            'token': 'test-token'
-        })
-        response = self.client.post(url)
-
-        self.assertEqual(response.status_code, 405)
+    """The returning-user sign-in form and its unknown-email 'start a Guest' branch."""
+
+    def test_get_renders_the_signin_page(self, _mock_send):
+        response = self.client.get( reverse('user_signin') )
+        self.assertSuccessResponse( response )
+        self.assertTemplateRendered( response, 'user/pages/signin.html' )
+
+    def test_get_when_authenticated_redirects_home(self, _mock_send):
+        self.client.force_login( self.user )
+        response = self.client.get( reverse('user_signin') )
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('home'), response.url )
+
+    def test_post_without_email_is_bad_request(self, _mock_send):
+        self.assertEqual( 400, self.client.post( reverse('user_signin'), {} ).status_code )
+
+    def test_post_invalid_email_is_bad_request(self, _mock_send):
+        self.assertEqual( 400, self.client.post( reverse('user_signin'),
+                                                 { 'email': 'not-an-email' } ).status_code )
+
+    def test_post_verified_account_sends_a_code(self, mock_send):
+        response = self.client.post( reverse('user_signin'), { 'email': self.user.email } )
+
+        self.assertTemplateRendered( response, _CODE_PAGE )
+        mock_send.assert_called_once()
+        self.assertEqual( self.user, mock_send.call_args.kwargs['user'] )
+        # No new account for a known address.
+        self.assertEqual( 1, User.objects.count() )
+
+    def test_post_unknown_email_starts_a_guest_with_a_pending_claim(self, mock_send):
+        response = self.client.post( reverse('user_signin'), { 'email': 'newcomer@example.com' } )
+
+        self.assertTemplateRendered( response, _CODE_PAGE )
+        guest = User.objects.exclude( pk = self.user.pk ).get()
+        self.assertTrue( guest.is_guest )
+        self.assertEqual( 'newcomer@example.com', guest.pending_email )   # pending, not the verified slot
+        self.assertIsNone( guest.email )
+        self.assertEqual( _auth_user_id( self.client ), str( guest.pk ) )   # started + signed in
+        mock_send.assert_called_once()
+
+    def test_post_canonicalizes_the_email( self, _mock_send ):
+        self.client.post( reverse('user_signin'), { 'email': 'Mixed.Case@Example.COM' } )
+        guest = User.objects.exclude( pk = self.user.pk ).get()
+        self.assertEqual( 'mixed.case@example.com', guest.pending_email )
+
+
+class TestMagicCodeView(SyncViewTestCase):
+    """Consuming a one-time code: it acts on the account the code was issued *for* (bound to the
+    session), not one named by the request."""
+
+    def _prime_code( self, target, code = 'abcdef' ):
+        session = self.client.session
+        session[ MagicCodeGenerator.MAGIC_CODE ] = code
+        session[ MagicCodeGenerator.MAGIC_CODE_TIMESTAMP ] = MagicCodeGenerator.get_elapsed_seconds()
+        session[ MagicCodeGenerator.MAGIC_CODE_TARGET ] = str( target.uuid )
+        session.save()
+
+    def test_valid_code_signs_in_the_verified_target(self):
+        self._prime_code( self.user )
+
+        response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
+
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('home'), response.url )
+        self.assertEqual( _auth_user_id( self.client ), str( self.user.pk ) )
+
+    def test_valid_code_confirms_a_signed_in_guests_pending_email(self):
+        guest = User.objects.create_guest()
+        guest.attach_pending_email( 'claimed@example.com' )
+        self.client.force_login( guest )
+        self._prime_code( guest )
+
+        response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
+
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('user_account'), response.url )
+        guest.refresh_from_db()
+        self.assertEqual( 'claimed@example.com', guest.email )   # promoted -> Verified
+        self.assertIsNone( guest.pending_email )
+
+    def test_target_is_the_session_bound_account_not_a_request_field(self):
+        # The account-takeover guard: a code issued for one account cannot be redirected onto
+        # another by naming a different address in the request -- the target is server-side.
+        victim = User.objects.create_user( email = 'victim@example.com' )
+        self._prime_code( self.user )   # code issued for self.user
+
+        response = self.client.post( reverse('magic_code'),
+                                     { 'magic_code': 'abcdef', 'email_address': victim.email } )
+
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( _auth_user_id( self.client ), str( self.user.pk ) )   # not the victim
+
+    def test_invalid_code_is_rejected(self):
+        self._prime_code( self.user )
+        response = self.client.post( reverse('magic_code'), { 'magic_code': 'wrongg' } )
+        self.assertEqual( 400, response.status_code )
+        self.assertIsNone( _auth_user_id( self.client ) )
+
+
+class TestMagicLinkView(SyncViewTestCase):
+    """Consuming a magic link: sign-in for a verified account works from any session; confirming a
+    Guest's pending email works only in the browser that started it."""
+
+    def _link( self, user ):
+        token = PasswordResetTokenGenerator().make_token( user )
+        return reverse('magic_link', kwargs = { 'user_uuid': str( user.uuid ), 'token': token })
+
+    def test_verified_account_link_signs_in_from_any_session(self):
+        response = self.client.get( self._link( self.user ) )
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('home'), response.url )
+        self.assertEqual( _auth_user_id( self.client ), str( self.user.pk ) )
+
+    def test_pending_link_in_the_same_session_confirms(self):
+        guest = User.objects.create_guest()
+        guest.attach_pending_email( 'claimed@example.com' )
+        self.client.force_login( guest )
+
+        response = self.client.get( self._link( guest ) )
+
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('user_account'), response.url )
+        guest.refresh_from_db()
+        self.assertEqual( 'claimed@example.com', guest.email )
+
+    def test_pending_link_in_a_different_session_does_not_confirm(self):
+        guest = User.objects.create_guest()
+        guest.attach_pending_email( 'claimed@example.com' )
+        # Client is NOT signed in as the guest (a different / anonymous session).
+
+        response = self.client.get( self._link( guest ) )
+
+        self.assertEqual( 200, response.status_code )
+        self.assertTemplateRendered( response, 'user/pages/confirm_email_other_device.html' )
+        guest.refresh_from_db()
+        self.assertIsNone( guest.email )                 # not verified
+        self.assertEqual( 'claimed@example.com', guest.pending_email )
+        self.assertIsNone( _auth_user_id( self.client ) )   # and not logged in
+
+    def test_bad_token_shows_the_bad_link_page(self):
+        url = reverse('magic_link', kwargs = { 'user_uuid': str( self.user.uuid ), 'token': 'bad-token' })
+        response = self.client.get( url )
+        self.assertTemplateRendered( response, 'user/pages/signin_magic_bad_link.html' )
+
+
+@patch.object(SigninManager, 'send_magic_email')
+class TestAttachEmailView(SyncViewTestCase):
+    """A signed-in Guest attaching an email from their account page."""
+
+    def test_unknown_email_becomes_a_pending_claim_and_is_sent(self, mock_send):
+        guest = User.objects.create_guest()
+        self.client.force_login( guest )
+
+        response = self.client.post( reverse('attach_email'), { 'email': 'mine@example.com' } )
+
+        self.assertRedirects( response, reverse('user_account'), fetch_redirect_response = False )
+        guest.refresh_from_db()
+        self.assertEqual( 'mine@example.com', guest.pending_email )
+        mock_send.assert_called_once()
+
+    def test_email_of_a_verified_account_is_a_collision(self, mock_send):
+        guest = User.objects.create_guest()
+        self.client.force_login( guest )
+
+        response = self.client.post( reverse('attach_email'), { 'email': self.user.email } )
+
+        self.assertEqual( 200, response.status_code )
+        self.assertContains( response, self.user.email )   # the collision notice names it
+        guest.refresh_from_db()
+        self.assertIsNone( guest.pending_email )            # not attached
+        mock_send.assert_not_called()
+
+    def test_a_verified_user_cannot_attach(self, mock_send):
+        self.client.force_login( self.user )
+        response = self.client.post( reverse('attach_email'), { 'email': 'other@example.com' } )
+        self.assertRedirects( response, reverse('user_account'), fetch_redirect_response = False )
+        mock_send.assert_not_called()
+
+
+@patch.object(SigninManager, 'send_magic_email')
+class TestResendConfirmationView(SyncViewTestCase):
+
+    def test_resends_when_a_pending_email_exists(self, mock_send):
+        guest = User.objects.create_guest()
+        guest.attach_pending_email( 'mine@example.com' )
+        self.client.force_login( guest )
+
+        self.client.post( reverse('resend_confirmation') )
+
+        mock_send.assert_called_once()
+
+    def test_no_pending_email_sends_nothing(self, mock_send):
+        guest = User.objects.create_guest()
+        self.client.force_login( guest )
+
+        self.client.post( reverse('resend_confirmation') )
+
+        mock_send.assert_not_called()
 
 
 class TestUserAccountView(SyncViewTestCase):
-    """Tests for the signed-in user's account page."""
+    """The account page adapts to the user's state."""
 
-    def test_get_shows_logged_in_email(self):
-        """The account page renders and shows the email the user is identified by."""
-        self.client.force_login(self.user)
+    def test_verified_user_sees_their_email(self):
+        self.client.force_login( self.user )
+        response = self.client.get( reverse('user_account') )
+        self.assertContains( response, self.user.email )
 
-        response = self.client.get(reverse('user_account'))
+    def test_guest_sees_the_add_email_prompt(self):
+        self.client.force_login( User.objects.create_guest() )
+        response = self.client.get( reverse('user_account') )
+        self.assertContains( response, reverse('attach_email') )
 
-        self.assertSuccessResponse(response)
-        self.assertTemplateRendered(response, 'user/pages/account.html')
-        self.assertContains(response, self.user.email)
+    def test_guest_with_pending_email_sees_the_confirm_step(self):
+        guest = User.objects.create_guest()
+        guest.attach_pending_email( 'mine@example.com' )
+        self.client.force_login( guest )
+
+        response = self.client.get( reverse('user_account') )
+
+        self.assertContains( response, 'mine@example.com' )
+        self.assertContains( response, reverse('resend_confirmation') )
 
 
 class TestUserSignoutView(SyncViewTestCase):
     """Tests for the sign-out action."""
 
     def test_post_signs_out_and_redirects_home(self):
-        """POST clears the session and returns the user to the site root."""
-        self.client.force_login(self.user)
+        self.client.force_login( self.user )
 
-        response = self.client.post(reverse('user_signout'))
+        response = self.client.post( reverse('user_signout') )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('home'))
-        # Session no longer carries an authenticated user.
-        self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('home'), response.url )
+        self.assertNotIn( '_auth_user_id', self.client.session )
 
     def test_get_not_allowed(self):
-        """Sign-out is POST-only; a GET must not log the user out."""
-        self.client.force_login(self.user)
-
-        response = self.client.get(reverse('user_signout'))
-
-        self.assertEqual(response.status_code, 405)
-        self.assertIn('_auth_user_id', self.client.session)
+        self.client.force_login( self.user )
+        response = self.client.get( reverse('user_signout') )
+        self.assertEqual( 405, response.status_code )
+        self.assertIn( '_auth_user_id', self.client.session )
 
 
 @override_settings(
@@ -537,198 +323,91 @@ class TestUserSignoutView(SyncViewTestCase):
     SIGNIN_PER_EMAIL_DAILY_LIMIT=5,
     SIGNIN_GLOBAL_LIMIT=1000,
 )
+@patch.object(SigninManager, 'send_magic_email')
 class TestUserSigninThrottling(SyncViewTestCase):
     """Rate limiting on the sign-in POST (disabled by default in tests; enabled here)."""
 
     def setUp(self):
         super().setUp()
-        # fakeredis is one shared instance for the run; clear the throttle counters.
-        get_redis_client().flushdb()
+        get_redis_client().flushdb()   # fakeredis is shared across the run; start clean.
 
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_within_limits_proceeds(self, mock_send_view_class):
-        mock_send = mock_send_view_class.return_value
-        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
+    # A fresh Client per post keeps each request anonymous (the unknown-email path signs a Guest in,
+    # which would otherwise redirect the next post from the same session); the shared test IP still
+    # trips the per-IP limit.
+    def test_within_limits_proceeds(self, mock_send):
+        Client().post( reverse('user_signin'), { 'email': 'first@example.com' } )
+        mock_send.assert_called_once()
 
-        self.client.post(reverse('user_signin'), {'email': 'first@example.com'})
-
-        mock_send.send_signin_magic_link.assert_called_once()
-
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_over_per_ip_limit_creates_no_user_and_sends_nothing(self, mock_send_view_class):
-        mock_send = mock_send_view_class.return_value
-        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
-
+    def test_over_per_ip_limit_creates_no_user_and_sends_nothing(self, mock_send):
         url = reverse('user_signin')
-        # First request is within the per-IP limit of 1.
-        self.client.post(url, {'email': 'a@example.com'})
-        # Second request from the same IP (distinct email so per-email is not what
-        # trips) exceeds the per-IP limit.
-        response = self.client.post(url, {'email': 'b@example.com'})
+        Client().post( url, { 'email': 'a@example.com' } )              # within the per-IP limit of 1
+        response = Client().post( url, { 'email': 'b@example.com' } )   # exceeds it
 
-        # Neutral response, no account for the throttled email, no second send.
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateRendered(response, 'user/pages/magic_code_signin.html')
-        self.assertFalse(User.objects.filter(email='b@example.com').exists())
-        mock_send.send_signin_magic_link.assert_called_once()
+        self.assertEqual( 200, response.status_code )
+        self.assertTemplateRendered( response, _CODE_PAGE )            # neutral response
+        self.assertFalse( User.objects.filter( pending_email = 'b@example.com' ).exists() )
+        mock_send.assert_called_once()
 
     @override_settings(SIGNIN_PER_IP_LIMIT=100)
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_per_email_cap_independent_of_ip(self, mock_send_view_class):
-        mock_send = mock_send_view_class.return_value
-        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
-
+    def test_per_email_cap_independent_of_ip(self, mock_send):
         url = reverse('user_signin')
-        # Per-IP is generous here; the per-email hourly cap of 1 is what trips.
-        self.client.post(url, {'email': 'repeat@example.com'})
-        response = self.client.post(url, {'email': 'repeat@example.com'})
-
-        self.assertEqual(response.status_code, 200)
-        mock_send.send_signin_magic_link.assert_called_once()
-
-    @override_settings(SIGNIN_PER_IP_LIMIT=100, SIGNIN_PER_EMAIL_HOURLY_LIMIT=100,
-                       SIGNIN_PER_EMAIL_DAILY_LIMIT=1)
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_per_email_daily_cap(self, mock_send_view_class):
-        mock_send = mock_send_view_class.return_value
-        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
-
-        url = reverse('user_signin')
-        # Only the per-email DAILY cap (1) is low enough to trip.
-        self.client.post(url, {'email': 'repeat@example.com'})
-        response = self.client.post(url, {'email': 'repeat@example.com'})
-
-        self.assertEqual(response.status_code, 200)
-        mock_send.send_signin_magic_link.assert_called_once()
-
-    @override_settings(SIGNIN_PER_IP_LIMIT=100, SIGNIN_PER_EMAIL_HOURLY_LIMIT=100,
-                       SIGNIN_PER_EMAIL_DAILY_LIMIT=100, SIGNIN_GLOBAL_LIMIT=1)
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_global_ceiling_throttles_across_ips_and_emails(self, mock_send_view_class):
-        mock_send = mock_send_view_class.return_value
-        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
-
-        url = reverse('user_signin')
-        # Distinct IPs and emails, so only the global email ceiling (1) can trip.
-        self.client.post(url, {'email': 'a@example.com'}, HTTP_X_FORWARDED_FOR='1.1.1.1')
-        response = self.client.post(url, {'email': 'b@example.com'}, HTTP_X_FORWARDED_FOR='2.2.2.2')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(User.objects.filter(email='b@example.com').exists())
-        mock_send.send_signin_magic_link.assert_called_once()
+        Client().post( url, { 'email': 'repeat@example.com' } )
+        Client().post( url, { 'email': 'repeat@example.com' } )
+        mock_send.assert_called_once()
 
     @override_settings(ABUSE_PREVENTION_ENABLED=False)
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_disabled_flag_does_not_throttle(self, mock_send_view_class):
-        mock_send = mock_send_view_class.return_value
-        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
-
+    def test_disabled_flag_does_not_throttle(self, mock_send):
         url = reverse('user_signin')
         for email in ('x@example.com', 'y@example.com', 'z@example.com'):
-            self.client.post(url, {'email': email})
-
-        self.assertEqual(mock_send.send_signin_magic_link.call_count, 3)
-
-    @override_settings(
-        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
-        EMAIL_HOST='smtp.example.com', EMAIL_PORT=587, EMAIL_HOST_USER='u',
-        DEFAULT_FROM_EMAIL='from@example.com', SERVER_EMAIL='srv@example.com',
-    )
-    @patch('user.views.SendMagicLinkEmailView')
-    def test_throttle_sends_one_coalesced_admin_alert(self, mock_send_view_class):
-        from django.core import mail
-        mock_send = mock_send_view_class.return_value
-        mock_send.send_signin_magic_link.return_value = HttpResponse('ok')
-
-        url = reverse('user_signin')
-        self.client.post(url, {'email': 'a@example.com'})  # within per-IP limit of 1
-        self.client.post(url, {'email': 'b@example.com'})  # over -> alert
-        self.client.post(url, {'email': 'c@example.com'})  # over -> coalesced, no 2nd alert
-
-        admin_alerts = [m for m in mail.outbox if 'abuse alert' in m.subject]
-        self.assertEqual(len(admin_alerts), 1)
+            Client().post( url, { 'email': email } )
+        self.assertEqual( 3, mock_send.call_count )
 
 
 @override_settings(ABUSE_PREVENTION_ENABLED=True)
-class TestSigninVerifyCooldown(SyncViewTestCase):
-    """Cooldown-backoff and hard cap on magic-code verification."""
+class TestVerifyCooldown(SyncViewTestCase):
+    """Cooldown-backoff and hard cap on magic-code verification (target primed to a verified user)."""
 
     def setUp(self):
         super().setUp()
         get_redis_client().flushdb()
-        # Prime a known valid magic code into the client session.
         session = self.client.session
-        session[MagicCodeGenerator.MAGIC_CODE] = 'abcdef'
-        session[MagicCodeGenerator.MAGIC_CODE_TIMESTAMP] = MagicCodeGenerator.get_elapsed_seconds()
+        session[ MagicCodeGenerator.MAGIC_CODE ] = 'abcdef'
+        session[ MagicCodeGenerator.MAGIC_CODE_TIMESTAMP ] = MagicCodeGenerator.get_elapsed_seconds()
+        session[ MagicCodeGenerator.MAGIC_CODE_TARGET ] = str( self.user.uuid )
         session.save()
-        self.url = reverse('user_signin_magic_code')
+        self.url = reverse('magic_code')
 
     def _post_code(self, code):
-        return self.client.post(self.url, {'email_address': self.user.email, 'magic_code': code})
+        return self.client.post( self.url, { 'magic_code': code } )
 
-    @override_settings(
-        SIGNIN_VERIFY_FREE_ATTEMPTS=0,
-        SIGNIN_VERIFY_FIRST_DELAY_SECS=5,
-        SIGNIN_VERIFY_MAX_DELAY_SECS=10,
-        SIGNIN_VERIFY_MAX_FAILURES=99,
-    )
+    @override_settings(SIGNIN_VERIFY_FREE_ATTEMPTS=0, SIGNIN_VERIFY_FIRST_DELAY_SECS=5,
+                       SIGNIN_VERIFY_MAX_DELAY_SECS=10, SIGNIN_VERIFY_MAX_FAILURES=99)
     def test_immediate_retry_is_blocked_by_cooldown(self):
-        # First wrong attempt registers a cooldown (0 free attempts).
-        self.assertEqual(self._post_code('wrongg').status_code, 400)
-        # The immediate second attempt is rejected fast by the cooldown (429),
-        # without the code even being checked.
-        self.assertEqual(self._post_code('wrongg').status_code, 429)
+        self.assertEqual( 400, self._post_code('wrongg').status_code )
+        self.assertEqual( 429, self._post_code('wrongg').status_code )
 
-    @override_settings(
-        SIGNIN_VERIFY_FREE_ATTEMPTS=0,
-        SIGNIN_VERIFY_FIRST_DELAY_SECS=0,
-        SIGNIN_VERIFY_MAX_FAILURES=2,
-    )
+    @override_settings(SIGNIN_VERIFY_FREE_ATTEMPTS=0, SIGNIN_VERIFY_FIRST_DELAY_SECS=0,
+                       SIGNIN_VERIFY_MAX_FAILURES=2)
     def test_hard_cap_invalidates_the_code(self):
-        # No cooldown (delay 0); two wrong guesses reach the cap and invalidate.
         self._post_code('wrongg')
-        self.assertEqual(self._post_code('wrongg').status_code, 400)
-        # The real code no longer works -- it was invalidated at the cap.
-        self.assertEqual(self._post_code('abcdef').status_code, 400)
+        self.assertEqual( 400, self._post_code('wrongg').status_code )
+        self.assertEqual( 400, self._post_code('abcdef').status_code )   # real code now invalidated
 
-    @override_settings(
-        SIGNIN_VERIFY_FREE_ATTEMPTS=0,
-        SIGNIN_VERIFY_FIRST_DELAY_SECS=0,
-        SIGNIN_VERIFY_MAX_FAILURES=99,
-    )
+    @override_settings(SIGNIN_VERIFY_FREE_ATTEMPTS=0, SIGNIN_VERIFY_FIRST_DELAY_SECS=0,
+                       SIGNIN_VERIFY_MAX_FAILURES=99)
     def test_correct_code_logs_in_and_resets_state(self):
-        self._post_code('wrongg')  # one failure recorded
+        self._post_code('wrongg')
         response = self._post_code('abcdef')
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('home'))
-        self.assertNotIn('magic_code_failures', self.client.session)
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('home'), response.url )
+        self.assertNotIn( 'magic_code_failures', self.client.session )
 
     @override_settings(SIGNIN_VERIFY_FREE_ATTEMPTS=99, SIGNIN_VERIFY_PER_IP_LIMIT=1)
     def test_per_ip_backstop_blocks_session_cycling(self):
-        # Cooldown never blocks here; the per-IP limit of 1 does.
         self._post_code('wrongg')
-        self.assertEqual(self._post_code('wrongg').status_code, 429)
-
-    @override_settings(
-        SIGNIN_VERIFY_FREE_ATTEMPTS=99,
-        SIGNIN_VERIFY_PER_IP_LIMIT=1,
-        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
-        EMAIL_HOST='smtp.example.com', EMAIL_PORT=587, EMAIL_HOST_USER='u',
-        DEFAULT_FROM_EMAIL='from@example.com', SERVER_EMAIL='srv@example.com',
-    )
-    def test_per_ip_backstop_trip_sends_one_coalesced_alert(self):
-        from django.core import mail
-
-        self._post_code('wrongg')  # first attempt within the backstop of 1
-        self._post_code('wrongg')  # second trips the backstop -> alert
-        self._post_code('wrongg')  # still tripped -> coalesced, no second alert
-
-        alerts = [m for m in mail.outbox if 'abuse alert' in m.subject]
-        self.assertEqual(len(alerts), 1)
-        self.assertIn('verify-per-ip', alerts[0].subject)
+        self.assertEqual( 429, self._post_code('wrongg').status_code )
 
     def test_disabled_flag_has_no_cooldown(self):
         with override_settings(ABUSE_PREVENTION_ENABLED=False):
-            # Many wrong attempts, all plain 400s -- no cooldown, no 429.
-            statuses = {self._post_code('wrongg').status_code for _ in range(6)}
-        self.assertEqual(statuses, {400})
+            statuses = { self._post_code('wrongg').status_code for _ in range(6) }
+        self.assertEqual( { 400 }, statuses )

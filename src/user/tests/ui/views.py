@@ -10,7 +10,6 @@ from notify.email_sender import EmailSender
 from testing.ui.email_test_views import EmailPreviewView
 
 from user.signin_manager import SigninManager
-from user.schemas import UserAuthenticationData
 
 
 class TestUiUserHomeView( View ):
@@ -58,15 +57,7 @@ class TestUiSendSigninEmailView( View ):
 
         email_type = kwargs.get('email_type')
         if email_type == 'signin_magic_link':
-            user_auth_data = UserAuthenticationData(
-                request = request,
-                override_user = user,
-                override_email = email_address,
-            )
-            SigninManager().send_signin_magic_link_email(
-                request = request,
-                user_auth_data = user_auth_data,
-            )
+            SigninManager().send_magic_email( request = request, user = user )
         else:
             raise BadRequest( f'Sending email type "{email_type}" not implemented.' )
 

@@ -1,11 +1,10 @@
 import logging
 
 from django.contrib.auth import get_user_model, logout
-from django.contrib.auth.models import User as UserType
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import BadRequest, ValidationError
 from django.core.validators import validate_email
-from django.http import HttpRequest, HttpResponseRedirect
+from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.generic import View
@@ -18,17 +17,46 @@ from . import signin_cooldown
 from . import signin_throttle
 from .magic_code_generator import MagicCodeStatus, MagicCodeGenerator
 from .signin_manager import SigninManager
-from .schemas import UserAuthenticationData
 
 logger = logging.getLogger(__name__)
 
+_CODE_ENTRY_TEMPLATE = 'user/pages/magic_code.html'
+
+
+def _render_code_entry( request, magic_code_form, status = 200 ):
+    """Render the one-time-code entry page (shared by every flow that sends a code)."""
+    response = render( request, _CODE_ENTRY_TEMPLATE, { 'magic_code_form': magic_code_form } )
+    response.status_code = status
+    return response
+
+
+def _send_magic_email_or_unsubscribed( request, user, email_address ):
+    """Send `user` their magic email, or -- if the address unsubscribed -- return the
+    re-enable page instead of dead-ending. Returns None when the send succeeded."""
+    try:
+        SigninManager().send_magic_email( request = request, user = user )
+    except UnsubscribedEmailError:
+        return render( request, 'user/pages/signin_unsubscribed.html', {
+            'email': email_address,
+            'resubscribe_url': resubscribe_url_for( email_address ),
+        } )
+    return None
+
+
+def _account_context( request, collision_email = None ):
+    """Context for the account page: it branches on the user's state (Guest with or without a
+    pending email, or Verified) via `request.user`, plus whether email sending is configured and
+    an optional `collision_email` to report."""
+    return {
+        'email_not_configured': not EmailSender.is_email_configured(),
+        'collision_email': collision_email,
+    }
+
 
 class RedirectAuthenticatedUserMixin:
-    """Send an already-authenticated user to the home page instead of showing a
-    sign-in step they don't need. Applied to the interactive entry points of the
-    flow (the sign-in form and the code page); the internal, non-dispatched calls
-    that render the code page mid-flow are unaffected.
-    """
+    """Send an already-authenticated user to the home page instead of showing the sign-in form
+    they don't need. A Guest counts as authenticated, so it applies here: a Guest adds an email
+    through their account page, not the returning-user sign-in form."""
 
     def dispatch( self, request, *args, **kwargs ):
         if request.user.is_authenticated:
@@ -37,6 +65,12 @@ class RedirectAuthenticatedUserMixin:
 
 
 class UserSigninView( RedirectAuthenticatedUserMixin, View ):
+    """The returning-user sign-in form: enter an email to receive a one-time code/link.
+
+    A verified account is sent a sign-in code. An unknown address is not a dead end -- it starts a
+    Guest carrying that address as a pending claim, so a new visitor can begin from the sign-in page
+    too; the address becomes their identity only once confirmed, never before.
+    """
 
     def get(self, request, *args, **kwargs):
         context = {
@@ -57,175 +91,192 @@ class UserSigninView( RedirectAuthenticatedUserMixin, View ):
         User = get_user_model()
         canonical_email = User.objects.canonicalize_email( email_address )
 
-        # Abuse prevention: a throttled request neither creates an account nor
-        # sends a code, and returns the same neutral "check your email" response
-        # so it leaks no signal about the limit (or the email) to an attacker.
+        # Abuse prevention: a throttled request neither touches an account nor sends a code, and
+        # returns the same neutral code-entry page so it leaks no signal about the limit or the email.
         if not signin_throttle.is_signin_request_allowed( request, canonical_email ):
-            return SigninMagicCodeView().get_response(
-                request = request,
-                magic_code_form = forms.SigninMagicCodeForm(
-                    initial = { 'email_address': canonical_email }
-                ),
-            )
+            return _render_code_entry( request, forms.MagicCodeForm() )
 
-        # Sign-in is passwordless and account creation happens here: an unknown
-        # email becomes a new account rather than a dead end, since the email is
-        # simply the stable identifier we tie a person's plan to.
-        user, created = User.objects.get_or_create_by_email( canonical_email )
-        logger.debug( f'{"Created" if created else "Found"} user with email: {user.email}' )
-        return SendMagicLinkEmailView().send_signin_magic_link(
-            request = request,
-            override_user = user,
-        )
+        existing = User.objects.verified_account_for_email( canonical_email )
+        if existing is None:
+            # Unknown address: start a Guest tied to it (pending), so the sign-in page is a valid
+            # place to begin rather than a dead end. Confirmation promotes it into a real identity.
+            existing = SigninManager().start_guest_session( request )
+            existing.attach_pending_email( canonical_email )
+
+        unsubscribed = _send_magic_email_or_unsubscribed( request, existing, canonical_email )
+        if unsubscribed is not None:
+            return unsubscribed
+        return _render_code_entry( request, forms.MagicCodeForm() )
 
 
-class SendMagicLinkEmailView( View ):
-
-    def send_signin_magic_link( self,
-                                request        : HttpRequest,
-                                override_user  : UserType      = None ):
-
-        user_auth_data = UserAuthenticationData(
-            request = request,
-            override_user = override_user,
-        )
-        try:
-            SigninManager().send_signin_magic_link_email(
-                request = request,
-                user_auth_data = user_auth_data,
-            )
-        except UnsubscribedEmailError:
-            # The code email is suppressed because this address unsubscribed.
-            # Don't dead-end silently: offer the (victim-controlled) re-enable path.
-            return render( request, 'user/pages/signin_unsubscribed.html', {
-                'email': user_auth_data.email_address,
-                'resubscribe_url': resubscribe_url_for( user_auth_data.email_address ),
-            } )
-        return SigninMagicCodeView().get_response(
-            request = request,
-            magic_code_form = user_auth_data.magic_code_form,
-        )
-
-
-class SigninMagicCodeView( RedirectAuthenticatedUserMixin, View ):
-
-    TEMPLATE_NAME = 'user/pages/magic_code_signin.html'
-
-    def get_response( self,
-                      request          : HttpRequest,
-                      magic_code_form  : forms.SigninMagicCodeForm,
-                      status           : int                           = 200 ):
-        context = {
-            'magic_code_form': magic_code_form,
-        }
-        response = render( request, self.TEMPLATE_NAME, context )
-        response.status_code = status
-        return response
+class MagicCodeView( View ):
+    """Consume a one-time code. The code lives in the session, so a valid entry proves the same
+    browser that requested it, and the target account is the one the code was issued for (bound to
+    the session, not the form): a pending address is confirmed (Guest -> Verified), a verified one
+    is signed in. Not redirect-guarded for authenticated users, since a confirming Guest is
+    authenticated."""
 
     def post( self, request, *args, **kwargs ):
 
-        magic_code_form = forms.SigninMagicCodeForm( request.POST )
+        magic_code_form = forms.MagicCodeForm( request.POST )
         if not magic_code_form.is_valid():
-            return self.get_response( request, magic_code_form = magic_code_form, status = 400 )
+            return _render_code_entry( request, magic_code_form, status = 400 )
 
-        email_address = magic_code_form.cleaned_data.get('email_address')
         magic_code = magic_code_form.cleaned_data.get('magic_code')
-
-        User = get_user_model()
-        canonical_email = User.objects.canonicalize_email( email_address )
-        try:
-            existing_user = User.objects.get( email = canonical_email )
-        except User.DoesNotExist:
-            raise BadRequest( 'Email is invalid.' )
-
         magic_code_generator = MagicCodeGenerator()
 
-        # Abuse prevention: slow and cap code brute-forcing. Reject fast while
-        # inside the escalating per-session cooldown (checked first -- session
-        # only, no Redis), then apply the per-IP backstop against session cycling.
+        # Abuse prevention: slow and cap code brute-forcing. Reject fast while inside the escalating
+        # per-session cooldown (session only, no Redis), then the per-IP backstop against session cycling.
         if signin_cooldown.is_enabled():
             if signin_cooldown.seconds_until_allowed( request ) > 0:
                 magic_code_form.add_error(
                     'magic_code', 'Too many attempts. Please wait a few seconds and try again.' )
-                return self.get_response( request, magic_code_form = magic_code_form, status = 429 )
+                return _render_code_entry( request, magic_code_form, status = 429 )
             if not signin_cooldown.is_per_ip_backstop_ok( request ):
                 magic_code_form.add_error(
                     'magic_code', 'Too many attempts. Please try again later.' )
-                return self.get_response( request, magic_code_form = magic_code_form, status = 429 )
+                return _render_code_entry( request, magic_code_form, status = 429 )
 
         magic_code_status = magic_code_generator.check_magic_code( request, magic_code = magic_code )
-        logger.debug( f'Signin Magic: Email={email_address}, Status={magic_code_status}' )
 
         if magic_code_status == MagicCodeStatus.VALID:
             signin_cooldown.reset( request )
-            request.user = existing_user
-            SigninManager().do_login( request = request, verified_email = True )
+            target_uuid = magic_code_generator.magic_code_target( request )
             magic_code_generator.expire_magic_code( request )
-            return HttpResponseRedirect( reverse( 'home' ) )
+            return self._on_valid_code( request, target_uuid )
 
         if magic_code_status == MagicCodeStatus.EXPIRED:
-            error_message = 'Sign-in code has expired.'
+            error_message = 'Code has expired.'
         elif magic_code_status == MagicCodeStatus.INVALID:
-            error_message = 'Invalid sign-in code.'
+            error_message = 'Invalid code.'
         else:
-            error_message = 'Sign-in code generated an unexpected error.'
+            error_message = 'Code generated an unexpected error.'
 
-        # Count only a genuine wrong guess (INVALID) toward the cooldown/cap; an
-        # EXPIRED code is a timeout, not a brute-force attempt. At the hard cap,
-        # invalidate the code so the attacker must start a fresh sign-in.
+        # Count only a genuine wrong guess (INVALID) toward the cooldown/cap; an EXPIRED code is a
+        # timeout, not a brute-force attempt. At the hard cap, invalidate the code so the attacker
+        # must start over.
         if signin_cooldown.is_enabled() and magic_code_status == MagicCodeStatus.INVALID:
             failure_count = signin_cooldown.register_failure( request )
             if signin_cooldown.is_over_max_failures( failure_count ):
                 magic_code_generator.expire_magic_code( request )
                 signin_cooldown.reset( request )
-                error_message = 'Too many attempts. Please start a new sign-in.'
+                error_message = 'Too many attempts. Please start over.'
 
         magic_code_form.add_error( 'magic_code', error_message )
-        return self.get_response( request, magic_code_form = magic_code_form, status = 400 )
+        return _render_code_entry( request, magic_code_form, status = 400 )
+
+    def _on_valid_code( self, request, target_uuid ):
+        # The target was bound to the session when the code was issued (never a client field), so a
+        # valid code acts only on the account it was sent for. Its state names the intent: a pending
+        # address is a Guest confirming its email (already signed in); a verified email is a returning
+        # account to sign in.
+        User = get_user_model()
+        target = User.objects.filter( uuid = target_uuid ).first()
+        if target is None:
+            raise BadRequest( 'Sign-in code is no longer valid.' )
+
+        if target.pending_email:
+            target.verify_pending_email()
+            return HttpResponseRedirect( reverse( 'user_account' ) )
+
+        request.user = target
+        SigninManager().do_login( request = request )
+        return HttpResponseRedirect( reverse( 'home' ) )
 
 
-class SigninMagicLinkView( View ):
-    """ This is the view for the links we include in emails for logging in. """
+class MagicLinkView( View ):
+    """Consume a magic link (the one-click alternative to the code). It resolves the target account
+    by uuid and validates the token, then acts by intent, read from that account's state:
 
-    def get( self, request, *args, **kwargs ):
+      - a **pending** address is a Guest confirming its email -- verified only in the *same* browser
+        that started the attach (else a "confirm on your original device" message), so a link that
+        lands in someone else's session cannot silently hand them the account;
+      - a **verified** email is a returning account -- signed in, which is safe on a valid link since
+        the account is theirs by construction.
+    """
 
-        token = kwargs.get('token')
-        email_address = kwargs.get('email')
+    def get( self, request, user_uuid, token, *args, **kwargs ):
+        User = get_user_model()
+        user = User.objects.filter( uuid = user_uuid ).first()
+        if user is None:
+            return render( request, 'user/pages/signin_magic_bad_link.html' )
+        if not PasswordResetTokenGenerator().check_token( user = user, token = token ):
+            return render( request, 'user/pages/signin_magic_bad_link.html' )
 
-        if not token or not email_address:
-            raise BadRequest( 'Malformed request.' )
+        if user.pending_email:
+            same_session = request.user.is_authenticated and ( request.user.pk == user.pk )
+            if same_session:
+                user.verify_pending_email()
+                return HttpResponseRedirect( reverse( 'user_account' ) )
+            return render( request, 'user/pages/confirm_email_other_device.html',
+                           { 'email': user.pending_email } )
+
+        if user.email:
+            request.user = user
+            SigninManager().do_login( request = request )
+            return HttpResponseRedirect( reverse( 'home' ) )
+
+        return render( request, 'user/pages/signin_magic_bad_link.html' )
+
+
+class AttachEmailView( View ):
+    """Attach an email to the signed-in Guest so they can recover their plan. It claims the address
+    as a pending (unconfirmed) one and emails a confirmation; the address becomes the account's
+    verified identity only once confirmed. Login-gated (a Guest is authenticated).
+
+    If the address already belongs to a *verified* account, that is a genuine collision -- for now we
+    stop and point the user at signing in (the keep/discard resolution is a later step)."""
+
+    def post( self, request, *args, **kwargs ):
+        if request.user.is_verified:
+            return HttpResponseRedirect( reverse( 'user_account' ) )
+
+        email_address = request.POST.get('email')
+        if not email_address:
+            raise BadRequest( 'No email provided' )
+        try:
+            validate_email( email_address )
+        except ValidationError:
+            raise BadRequest( 'Invalid email provided' )
 
         User = get_user_model()
         canonical_email = User.objects.canonicalize_email( email_address )
-        try:
-            existing_user = User.objects.get( email = canonical_email )
-        except User.DoesNotExist:
-            raise BadRequest( 'Email is not valid.' )
 
-        # We re-purpose the clever way tokens are used for password resets in Django.
-        token_generator = PasswordResetTokenGenerator()
-        is_valid = token_generator.check_token( user = existing_user, token = token )
+        existing = User.objects.verified_account_for_email( canonical_email )
+        if existing is not None and existing.pk != request.user.pk:
+            return render( request, 'user/pages/account.html',
+                           _account_context( request, collision_email = canonical_email ) )
 
-        logger.debug( f'Signin Magic Link: EMAIL = {email_address}, VALID = {is_valid}' )
+        # Record the claim regardless; only send when the throttle allows (a throttled send is silent,
+        # and the user can resend from the account page).
+        request.user.attach_pending_email( canonical_email )
+        if signin_throttle.is_signin_request_allowed( request, canonical_email ):
+            unsubscribed = _send_magic_email_or_unsubscribed( request, request.user, canonical_email )
+            if unsubscribed is not None:
+                return unsubscribed
+        return HttpResponseRedirect( reverse( 'user_account' ) )
 
-        if not is_valid:
-            return render( request, 'user/pages/signin_magic_bad_link.html' )
 
-        request.user = existing_user
-        SigninManager().do_login( request = request, verified_email = True )
+class ResendConfirmationView( View ):
+    """Re-send the confirmation for the signed-in Guest's pending email. Login-gated; a no-op
+    (redirect) when there is no pending address to confirm."""
 
-        url = reverse( 'home' )
-        return HttpResponseRedirect( url )
+    def post( self, request, *args, **kwargs ):
+        pending_email = request.user.pending_email if request.user.is_authenticated else None
+        if pending_email and signin_throttle.is_signin_request_allowed( request, pending_email ):
+            unsubscribed = _send_magic_email_or_unsubscribed( request, request.user, pending_email )
+            if unsubscribed is not None:
+                return unsubscribed
+        return HttpResponseRedirect( reverse( 'user_account' ) )
 
 
 class UserAccountView( View ):
-    """The signed-in user's account page. Minimal for now -- it shows the email we
-    identify them by; it is the future home for data export/deletion and other
-    account controls. Login-gated by AuthenticationMiddleware (not on the public
-    allow-list), so it always has an authenticated ``request.user``."""
+    """The signed-in user's account page: it shows their state and the matching control -- add an
+    email (Guest), confirm a pending one (Guest mid-confirmation), or the verified email. Login-gated
+    by AuthenticationMiddleware, so it always has an authenticated ``request.user``."""
 
     def get( self, request, *args, **kwargs ):
-        return render( request, 'user/pages/account.html', {} )
+        return render( request, 'user/pages/account.html', _account_context( request ) )
 
 
 class ConvertToGuestView( View ):

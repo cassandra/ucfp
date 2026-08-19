@@ -1,0 +1,13 @@
+{% extends "pages/interstitial_page.html" %}
+
+{% block interstitial_content %}
+<div class="h3">Finish on your original device</div>
+<div class="my-3">
+  This confirmation link for <strong>{{ email }}</strong> was opened in a different browser from the
+  one where you added the address. To finish confirming it, open this link (or enter the one-time
+  code from the same email) in the browser where you started.
+</div>
+<div class="text-muted my-4">
+  This keeps a confirmation from being completed by anyone but you, on the device you began from.
+</div>
+{% endblock %}

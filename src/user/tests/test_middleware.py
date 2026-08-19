@@ -84,8 +84,8 @@ class TestAuthenticationMiddleware(BaseTestCase):
             'preview',
             'convert_to_guest',
             'user_signin',
-            'user_signin_magic_code',
-            'user_signin_magic_link',
+            'magic_code',
+            'magic_link',
             'bad_request',
             'not_authorized',
             'page_not_found',
@@ -142,8 +142,8 @@ class TestAuthenticationMiddleware(BaseTestCase):
         """Test middleware allows access to exempt signin URLs."""
         exempt_urls = [
             'user_signin',
-            'user_signin_magic_code',
-            'user_signin_magic_link'
+            'magic_code',
+            'magic_link'
         ]
 
         for url_name in exempt_urls:
@@ -242,8 +242,8 @@ class TestAuthenticationMiddleware(BaseTestCase):
 
         # Verify critical authentication URLs are exempt
         self.assertIn('user_signin', exempt_urls)
-        self.assertIn('user_signin_magic_code', exempt_urls)
-        self.assertIn('user_signin_magic_link', exempt_urls)
+        self.assertIn('magic_code', exempt_urls)
+        self.assertIn('magic_link', exempt_urls)
         # The login-free unsubscribe and health endpoints must remain reachable.
         self.assertIn('notify_email_unsubscribe', exempt_urls)
         self.assertIn('health', exempt_urls)
