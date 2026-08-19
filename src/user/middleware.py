@@ -1,7 +1,35 @@
 from django.conf import settings
 from django.urls import Resolver404, resolve
 
+from organization.models import Organization
+
+from .signin_manager import SigninManager
 from .views import UserSigninView
+
+
+class SelfHostedIdentityMiddleware:
+    """Give the self-hosted single-user deployment a real (Guest) identity.
+
+    When ``SUPPRESS_AUTHENTICATION`` is set there is no sign-in; rather than run each request
+    as an anonymous user on a special shared organization, we log the request in as the
+    singleton self-hosted Guest (created on first use). Downstream code then sees a normal
+    authenticated user owning a normal organization -- one identity model instead of an
+    anonymous special case. Inert when authentication is enforced (the cloud deployment).
+
+    Ordered after Django's ``AuthenticationMiddleware`` (which populates ``request.user`` from
+    the session) and before ``AuthenticationMiddleware`` below (the sign-in gate), so by the
+    time the gate runs the self-hosted request already carries its user.
+    """
+
+    def __init__( self, get_response ):
+        self.get_response = get_response
+        return
+
+    def __call__( self, request ):
+        if settings.SUPPRESS_AUTHENTICATION and not request.user.is_authenticated:
+            request.user = Organization.objects.get_or_create_self_hosted_owner()
+            SigninManager().do_login( request = request )
+        return self.get_response( request )
 
 
 class AuthenticationMiddleware:

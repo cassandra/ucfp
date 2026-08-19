@@ -1,16 +1,48 @@
 import logging
 from unittest.mock import Mock, patch
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from custom.models import CustomUser
 from django.http import HttpResponse
-from django.test import RequestFactory, override_settings
-from django.urls import ResolverMatch
+from django.test import Client, RequestFactory, TestCase, override_settings
+from django.urls import ResolverMatch, reverse
 
+from organization.models import Organization
 from user.middleware import AuthenticationMiddleware
 from testing.base_test_case import BaseTestCase
 
 logging.disable(logging.CRITICAL)
+
+
+@override_settings(SUPPRESS_AUTHENTICATION=True)
+class SelfHostedIdentityMiddlewareTest(TestCase):
+    """Under SUPPRESS_AUTHENTICATION, a request is logged in as the singleton self-hosted
+    Guest -- a real account owning a real organization -- rather than run anonymously."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        return
+
+    def test_first_request_provisions_a_single_guest_owning_one_organization(self):
+        self.client.get( reverse( 'home' ) )
+
+        self.assertEqual( 1, self.User.objects.count() )
+        guest = self.User.objects.get()
+        self.assertTrue( guest.is_guest )
+        self.assertEqual( 1, Organization.objects.count() )
+        self.assertEqual( 1, guest.organization_members.filter( is_active = True ).count() )
+        return
+
+    def test_singleton_is_reused_across_independent_sessions(self):
+        # Each fresh client is a new session, so the identity middleware runs cold both
+        # times; it must find the existing singleton rather than mint a second.
+        Client().get( reverse( 'home' ) )
+        Client().get( reverse( 'home' ) )
+
+        self.assertEqual( 1, self.User.objects.count() )
+        self.assertEqual( 1, Organization.objects.count() )
+        return
 
 
 class TestAuthenticationMiddleware(BaseTestCase):

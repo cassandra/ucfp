@@ -114,6 +114,9 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Logs the self-hosted singleton Guest in under SUPPRESS_AUTHENTICATION, so the request
+    # carries a real user before the sign-in gate (and every downstream view) runs.
+    'user.middleware.SelfHostedIdentityMiddleware',
     'user.middleware.AuthenticationMiddleware',
     # Attaches request.show_privacy_banner -- after the auth middleware, whose
     # request.user it reads (and after SessionStateMiddleware above).

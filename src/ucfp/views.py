@@ -1,7 +1,6 @@
 import json
 from typing import Dict
 
-from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.generic import View
@@ -161,14 +160,15 @@ class PrivacyAcceptView( View ):
 class HomeView( InputGatedMixin, View ):
     """The site root, serving one of two pages by audience:
 
-    - the public marketing page for an anonymous visitor on an auth-enforced (cloud) deployment,
-      rendered directly without the organization/input gating a signed-in page needs; and
-    - the signed-in dashboard otherwise (a real user, or any self-host/dev run where
-      SUPPRESS_AUTHENTICATION collapses everyone to "in"), which points at the planning features.
+    - the public marketing page for a visitor with no account (only possible on an auth-enforced
+      cloud deployment), rendered directly without the organization/input gating a signed-in page
+      needs; and
+    - the signed-in dashboard otherwise (a cloud account, or the self-hosted singleton Guest that
+      `SelfHostedIdentityMiddleware` logs in), which points at the planning features.
     """
 
     def dispatch( self, request, *args, **kwargs ):
-        if not settings.SUPPRESS_AUTHENTICATION and not request.user.is_authenticated:
+        if not request.user.is_authenticated:
             return render( request, 'pages/marketing.html', {} )
         return super().dispatch( request, *args, **kwargs )
 

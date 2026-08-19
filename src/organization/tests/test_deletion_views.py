@@ -1,5 +1,4 @@
 import logging
-import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
@@ -206,8 +205,7 @@ class DangerSectionTagTest(TestCase):
         self.assertEqual( household_danger_section( AnonymousUser() ), { 'show': False } )
 
     def test_authenticated_but_memberless_user_is_inert(self):
-        # E.g. under suppressed authentication, where the shared organization has
-        # no members; there is nothing to delete or leave, so show nothing.
+        # A user with no active membership has nothing to delete or leave, so show nothing.
         user = _user( 'a@x.test' )
         self.assertEqual( household_danger_section( user ), { 'show': False } )
 
@@ -319,39 +317,44 @@ class ConfirmModalViewTest(TestCase):
 
 @override_settings(SUPPRESS_AUTHENTICATION=True)
 class SuppressedAuthDeletionTest(TestCase):
-    """With no authenticated user, every deletion endpoint must reject cleanly (404)
-    rather than act on the anonymous user and raise."""
+    """Under suppressed authentication the request carries the self-hosted singleton Guest
+    (see SelfHostedIdentityMiddleware), so the deletion endpoints operate on that real
+    account -- a legitimate "reset all my data", after which the next request re-provisions
+    a fresh household."""
 
-    def _org_uuid(self):
-        # A syntactically valid uuid is all the URL needs: the auth guard runs on
-        # dispatch, before any membership lookup, so no real org is required.
-        return uuid.uuid4()
-
-    def test_account_delete_confirm_is_not_found(self):
+    def test_account_delete_confirm_is_reachable(self):
         response = self.client.get( reverse( 'account_delete_confirm' ) )
-        self.assertEqual( response.status_code, 404 )
+        self.assertEqual( response.status_code, 200 )
 
-    def test_account_delete_is_not_found(self):
+    def test_account_delete_resets_and_reprovisions(self):
+        # The first request provisions the singleton Guest; deleting removes it and its data.
+        self.client.get( reverse( 'account_delete_confirm' ) )
+        guest = User.objects.get()
+
         response = self.client.post( reverse( 'account_delete' ), { 'confirm': 'delete' } )
-        self.assertEqual( response.status_code, 404 )
 
-    def test_household_endpoints_are_not_found(self):
-        organization_uuid = self._org_uuid()
-        routes = [
-            ( 'get', 'organization_delete_confirm' ),
-            ( 'post', 'organization_delete' ),
-            ( 'get', 'organization_leave_confirm' ),
-            ( 'post', 'organization_leave' ),
-        ]
-        for method, name in routes:
-            with self.subTest( route = name ):
-                url = reverse( name, kwargs = { 'organization_uuid': organization_uuid } )
-                response = getattr( self.client, method )( url )
-                self.assertEqual( response.status_code, 404 )
+        self.assertEqual( response.status_code, 302 )
+        self.assertFalse( User.objects.filter( pk = guest.pk ).exists() )
+        # Self-healing: the next request re-provisions a fresh singleton Guest.
+        self.client.get( reverse( 'account_delete_confirm' ) )
+        self.assertEqual( 1, User.objects.count() )
+        self.assertNotEqual( guest.pk, User.objects.get().pk )
 
-    def test_a_signed_in_user_can_still_delete(self):
-        # The gate is the absence of a user, not the setting: a real user who signs
-        # in even under suppressed authentication may still delete their account.
+    def test_household_endpoints_are_reachable(self):
+        # No longer auth-gated to 404: the endpoints reach the view and answer on the merits.
+        # The Guest solely owns its one household, so delete applies (renders) while leave is
+        # refused as the last-owner rule (400) -- both a reached view, neither a 404.
+        self.client.get( reverse( 'account_delete_confirm' ) )   # provision the Guest + household
+        organization_uuid = Organization.objects.get().uuid
+
+        delete_url = reverse( 'organization_delete_confirm', kwargs = { 'organization_uuid': organization_uuid } )
+        leave_url = reverse( 'organization_leave_confirm', kwargs = { 'organization_uuid': organization_uuid } )
+        self.assertEqual( 200, self.client.get( delete_url ).status_code )
+        self.assertEqual( 400, self.client.get( leave_url ).status_code )
+
+    def test_a_specific_signed_in_user_can_delete(self):
+        # A real user who is explicitly logged in is used as-is (the identity middleware only
+        # provisions the singleton when the request has no user), and may delete their account.
         user = _user( 'a@x.test' )
         Organization.objects.create_for_owner( user, 'A' )
         self.client.force_login( user )

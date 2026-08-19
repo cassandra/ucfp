@@ -15,11 +15,12 @@ register = template.Library()
 def household_danger_section(user):
     """Render the Account page "Danger" section for ``user``.
 
-    Inert (renders nothing) when there is no authenticated user with memberships
-    -- e.g. under suppressed authentication, where the shared organization is
-    memberless. Otherwise it classifies each active membership so the template
-    can offer the right control (delete the household, or leave it) and disclose
-    exactly what deleting the account would destroy versus leave.
+    Inert (renders nothing) when there is no authenticated user with memberships.
+    Otherwise it classifies each active membership so the template can offer the
+    right control (delete the household, or leave it) and disclose exactly what
+    deleting the account would destroy versus leave. The self-hosted Guest is a
+    normal owner here, so it too sees the delete control -- a legitimate "reset all
+    my data" (the identity middleware re-provisions a fresh household afterward).
     """
     if ( user is None ) or ( not user.is_authenticated ):
         return { 'show': False }
