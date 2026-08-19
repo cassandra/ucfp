@@ -103,8 +103,9 @@ class AssetParameters:
     recognizes the gain from the true basis, not from t0. A real-estate holding also carries
     `property_attributes` (the tax facts behind §121/§1250); None for any other asset.
     `cost_basis` is required (no defaulting -- an important distinction belongs upstream): a
-    retirement account passes 0 (its whole value is taxable/withdrawable on the way out), a
-    freshly-valued holding passes `opening_value` (cost = market). `handle` is the planner's
+    zero-basis (pre-tax) retirement account passes 0 (its whole value is taxable/withdrawable on the
+    way out), while a freshly-valued holding -- including a Roth, whose opening balance is basis --
+    passes `opening_value` (cost = market). `handle` is the planner's
     stable identity for this holding's account (distinct from the display `name`), needed for a
     scheduled event to reference it or for result drill-down; None for a holding neither
     references. `owner_handle` is the handle of the *subject* who owns it (matching that
@@ -120,11 +121,11 @@ class AssetParameters:
     owner_handle        : Optional[ Handle ]             = None
 
     def __post_init__( self ) -> None:
-        """Enforce two distinct domain rules that happen to coincide today: a zero-basis class must
-        state `cost_basis == 0` (the engine realizes its whole value, so a mis-stated basis would
-        silently under-tax withdrawals), and a retirement account must name an owner (whose age drives
-        the early-withdrawal penalty and RMDs). Checked separately -- not off one predicate -- so that
-        decoupling Roth's basis leaves the owner requirement intact."""
+        """Enforce two distinct domain rules: a zero-basis class must state `cost_basis == 0` (the
+        engine realizes its whole value, so a mis-stated basis would silently under-tax withdrawals),
+        and a retirement account must name an owner (whose age drives the early-withdrawal penalty and
+        RMDs). Checked off separate predicates -- a Roth is a retirement account yet not zero-basis, so
+        it must satisfy the owner rule without being forced to a zero basis."""
         if self.asset_class.seeds_at_zero_basis and self.cost_basis != 0:
             raise ValueError(
                 f'{self.asset_class.label} holdings carry zero tax basis; '

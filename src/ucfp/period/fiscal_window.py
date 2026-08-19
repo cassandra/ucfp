@@ -17,6 +17,7 @@ from common.date_span import DateSpan
 from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.enums import AccountType, ExpenseTaxClass, IncomeTaxClass, SideType
+from ucfp.accounts.schemas import Handle
 
 
 class FiscalWindow:
@@ -63,7 +64,7 @@ class FiscalWindow:
             continue
         return amounts
 
-    def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle ) -> Decimal:
+    def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle : Handle ) -> Decimal:
         """The income recognized in `income_tax_class` on the account owned by `owner_handle` over the
         fiscal year -- the per-owner figure a rule that turns on the owner's age needs (e.g. a Roth
         earnings withdrawal, taxed and penalized only for an owner under 59-1/2)."""
@@ -196,7 +197,7 @@ class AnnualizedFiscalWindow:
     def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
         return [ amount * self._factor for amount in self._window.income_by_account( income_tax_class ) ]
 
-    def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle ) -> Decimal:
+    def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle : Handle ) -> Decimal:
         return self._window.income_for_owner( income_tax_class, owner_handle ) * self._factor
 
     def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:

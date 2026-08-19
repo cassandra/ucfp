@@ -165,8 +165,8 @@ class AssetClass( LabeledEnum ):
         """Whether this class is a contribution-limited retirement account (pre-tax or Roth) -- the
         concept several call sites actually need: an owner whose age drives the early-withdrawal
         penalty and RMDs, a holding a sweep may not target, a holding a contribution must. Distinct
-        from `seeds_at_zero_basis` (a tax-basis fact); the two coincide only because both retirement
-        classes seed at zero basis today, a coincidence that ends once Roth carries a real basis."""
+        from `seeds_at_zero_basis` (a tax-basis fact): a Roth is a retirement account yet carries a real
+        basis, so the two predicates are deliberately separate and do not share a class set."""
         return self in _RETIREMENT_ASSET_CLASSES
 
     @property
@@ -228,8 +228,9 @@ _ZERO_BASIS_ASSET_CLASSES = frozenset(
 
 
 # The contribution-limited retirement classes (pre-tax + Roth) -- the "is this a retirement account?"
-# concept, kept distinct from `_ZERO_BASIS_ASSET_CLASSES` (a tax-basis fact) even though the two sets
-# coincide today, so decoupling Roth's basis cannot silently change the retirement-account checks.
+# concept, kept distinct from `_ZERO_BASIS_ASSET_CLASSES` (a tax-basis fact): a Roth is a retirement
+# account but not zero-basis, so the two sets genuinely differ and the retirement-account checks are
+# unaffected by Roth carrying a real basis.
 _RETIREMENT_ASSET_CLASSES = frozenset(
     ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH ) )
 
@@ -298,8 +299,8 @@ class IncomeTaxClass( LabeledEnum ):
     TAX_FREE            = ( 'Tax-Free', 'Excluded from tax everywhere.' )
     ROTH_EARNINGS       = (
         'Roth Earnings',
-        'Earnings withdrawn from a Roth: tax-free at/after 59.5, otherwise ordinary income plus the 10% '
-        'early-withdrawal penalty. A Roth basis withdrawal recognizes no income.' )
+        'Earnings withdrawn from a Roth: tax-free at/after 59-1/2, otherwise ordinary income plus the '
+        '10% early-withdrawal penalty. A Roth basis withdrawal recognizes no income.' )
     TAX_EXEMPT_INTEREST = ( 'Tax-Exempt Interest', 'Untaxed, but counts in SS/ACA MAGI (muni).' )
 
     @property

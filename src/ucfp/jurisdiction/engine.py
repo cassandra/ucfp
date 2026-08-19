@@ -17,6 +17,7 @@ from typing import Optional, Protocol
 from common.date_span import DateSpan
 from ucfp.accounts.books import Account
 from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
+from ucfp.accounts.schemas import Handle
 
 from .context import TaxContext
 
@@ -51,7 +52,7 @@ class FiscalWindowView( Protocol ):
     def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
         ...
 
-    def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle ) -> Decimal:
+    def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle : Handle ) -> Decimal:
         ...
 
     def expense( self, expense_tax_class : ExpenseTaxClass ) -> Decimal:
