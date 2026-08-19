@@ -10,23 +10,23 @@ from common.labeled_enum import LabeledEnum
 
 
 class UserState( LabeledEnum ):
-    """The account states, ordered by how durably the user's identity is anchored.
+    """The account states, derived purely from the unique ``email`` field.
 
-    Under the identity model the unique ``email`` field holds only a *verified*
-    address; an in-flight, unconfirmed address lives in ``pending_email``. So a
-    persisted account is one of:
+    The unique ``email`` holds only a *verified* address, so ``email`` being set is
+    exactly what makes an account Verified; an in-flight, unconfirmed address lives in
+    the separate ``pending_email`` and does not change the state. So a persisted account
+    is one of:
 
-      - **Guest** -- a real account with no email at all (bound to the browser session).
-      - **Unverified** -- has claimed an email (pending) but not yet confirmed it.
-      - **Verified** -- owns a confirmed email and can recover access from anywhere.
+      - **Guest** -- no verified email (``email`` is null); may carry a ``pending_email``
+        it is mid-confirming. Bound to the browser session.
+      - **Verified** -- owns a confirmed ``email`` and can recover access from anywhere.
 
     **Anonymous** is the absence of a persisted account.
     """
 
-    ANONYMOUS   = ( 'Anonymous'  , 'No persisted account; identity lives only in the request.' )
-    GUEST       = ( 'Guest'      , 'A persisted account with no email, bound to the browser session.' )
-    UNVERIFIED  = ( 'Unverified' , 'Has claimed an email (pending) that is not yet verified.' )
-    VERIFIED    = ( 'Verified'   , 'Owns a verified email and can recover access.' )
+    ANONYMOUS  = ( 'Anonymous' , 'No persisted account; identity lives only in the request.' )
+    GUEST      = ( 'Guest'     , 'A persisted account with no verified email, bound to the browser session.' )
+    VERIFIED   = ( 'Verified'  , 'Owns a verified email and can recover access.' )
 
 
 def user_state( user ) -> UserState:

@@ -94,70 +94,8 @@ class TestSigninManager(BaseTestCase):
         request.user = self.user
 
         manager = SigninManager()
-        manager.do_login(request, verified_email=False)
+        manager.do_login(request)
 
-        mock_django_login.assert_called_once_with(request, self.user)
-
-    @patch('user.signin_manager.django_login')
-    def test_do_login_sets_email_verified_when_verified_email_true(self, mock_django_login):
-        """Test do_login sets email_verified flag when verified_email=True."""
-        request = Mock()
-        request.user = self.user
-        self.user.email_verified = False
-
-        manager = SigninManager()
-        manager.do_login(request, verified_email=True)
-
-        # Verify email_verified flag is set and user is saved
-        self.assertTrue(self.user.email_verified)
-        mock_django_login.assert_called_once_with(request, self.user)
-
-    @patch('user.signin_manager.django_login')
-    def test_do_login_skips_email_verification_when_already_verified(self, mock_django_login):
-        """Test do_login skips email verification when user already verified."""
-        request = Mock()
-        request.user = self.user
-        self.user.email_verified = True
-        original_save = self.user.save
-        save_call_count = 0
-
-        def count_save(*args, **kwargs):
-            nonlocal save_call_count
-            save_call_count += 1
-            return original_save(*args, **kwargs)
-
-        self.user.save = count_save
-
-        manager = SigninManager()
-        manager.do_login(request, verified_email=True)
-
-        # Verify email_verified remains True and no extra save occurred
-        self.assertTrue(self.user.email_verified)
-        self.assertEqual(save_call_count, 0)  # No save should be called
-        mock_django_login.assert_called_once_with(request, self.user)
-
-    @patch('user.signin_manager.django_login')
-    def test_do_login_skips_email_verification_when_verified_email_false(self, mock_django_login):
-        """Test do_login skips email verification when verified_email=False."""
-        request = Mock()
-        request.user = self.user
-        self.user.email_verified = False
-        original_save = self.user.save
-        save_call_count = 0
-
-        def count_save(*args, **kwargs):
-            nonlocal save_call_count
-            save_call_count += 1
-            return original_save(*args, **kwargs)
-
-        self.user.save = count_save
-
-        manager = SigninManager()
-        manager.do_login(request, verified_email=False)
-
-        # Verify email_verified remains False and no save occurred
-        self.assertFalse(self.user.email_verified)
-        self.assertEqual(save_call_count, 0)  # No save should be called
         mock_django_login.assert_called_once_with(request, self.user)
 
     def test_signin_manager_template_constants_are_strings(self):

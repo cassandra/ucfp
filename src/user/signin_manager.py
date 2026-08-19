@@ -61,12 +61,6 @@ class SigninManager( Singleton ):
         self.do_login( request = request )
         return request.user
 
-    def do_login( self, request, verified_email : bool = False ):
+    def do_login( self, request ):
         django_login( request, request.user )
-        if not verified_email:
-            return
-        if request.user.email_verified:
-            return
-        request.user.email_verified = True
-        request.user.save()
         return

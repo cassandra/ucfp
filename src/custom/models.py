@@ -18,12 +18,12 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
     unique fields and without the username field.
 
     An account carries a ``UserState`` beyond Django's Anonymous/Authenticated split
-    (Guest, Unverified, Verified); ``custom.user_state`` defines and derives it. The
-    field-level invariant those states rest on: the unique ``email`` holds only a
-    *verified* address, while an in-flight, unconfirmed one lives in the non-unique
-    ``pending_email`` until verification promotes it -- so a claimed-but-unverified
-    address never occupies the unique slot, and no one can block an address they do
-    not control.
+    (Guest, Verified); ``custom.user_state`` defines and derives it. The field-level
+    invariant those states rest on: the unique ``email`` holds only a *verified* address
+    -- so its mere presence means Verified -- while an in-flight, unconfirmed one lives in
+    the non-unique ``pending_email`` until verification promotes it. A claimed-but-unverified
+    address therefore never occupies the unique slot, and no one can block an address they
+    do not control.
 
     The UUID field allows us to have a unique, unchanging field for external references to users.
     """
@@ -41,11 +41,6 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
         unique = True,
         null = True,
         blank = True,
-    )
-    email_verified = models.BooleanField(
-        _('email verified'),
-        default = False,
-        help_text = _('Has this email been verified.')
     )
     # An address the user has claimed but not yet verified. Unlike `email` it is not
     # unique and never grants recovery: it holds the in-flight claim until verification
@@ -107,15 +102,11 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
 
     @property
     def account_state(self) -> UserState:
-        """This account's `UserState`. A persisted account is never Anonymous; it is
-        Verified once it owns a verified `email`, Unverified while only a `pending_email`
-        claim exists, and a Guest with neither. A pending claim alongside a verified
-        email (an in-flight address *change*) stays Verified until the change is
-        confirmed."""
+        """This account's `UserState`, derived from the unique `email` slot: Verified once
+        it owns a verified `email`, otherwise a Guest (which may carry a `pending_email` it
+        is mid-confirming). A persisted account is never Anonymous."""
         if self.email:
             return UserState.VERIFIED
-        if self.pending_email:
-            return UserState.UNVERIFIED
         return UserState.GUEST
 
     @property
@@ -123,19 +114,15 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
         return self.account_state is UserState.GUEST
 
     @property
-    def is_unverified(self) -> bool:
-        return self.account_state is UserState.UNVERIFIED
-
-    @property
     def is_verified(self) -> bool:
         return self.account_state is UserState.VERIFIED
 
     def attach_pending_email(self, email):
-        """Claim `email` as this account's pending (unverified) address, moving a Guest
-        to Unverified. It is written to `pending_email`, never the unique `email` slot --
-        only verification promotes an address there. The caller must have ruled out an
-        existing verified account for the address (`objects.verified_account_for_email`)
-        and is responsible for sending the confirmation."""
+        """Claim `email` as this account's pending (unconfirmed) address. It is written to
+        `pending_email`, never the unique `email` slot -- only verification promotes an
+        address there. The caller must have ruled out an existing verified account for the
+        address (`objects.verified_account_for_email`) and is responsible for sending the
+        confirmation."""
         self.pending_email = self.__class__.objects.canonicalize_email(email)
         self.save(update_fields = [ 'pending_email' ])
         return
@@ -147,9 +134,8 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
         if not self.pending_email:
             raise ValueError('No pending email to verify.')
         self.email = self.pending_email
-        self.email_verified = True
         self.pending_email = None
-        self.save(update_fields = [ 'email', 'email_verified', 'pending_email' ])
+        self.save(update_fields = [ 'email', 'pending_email' ])
         return
 
     @property

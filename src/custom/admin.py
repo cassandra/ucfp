@@ -41,7 +41,6 @@ class CustomUserAdmin( UserAdmin ):
             {
                 "fields": (
                     "is_active",
-                    "email_verified",
                     "is_staff",
                     "is_superuser",
                     "groups",
@@ -54,7 +53,7 @@ class CustomUserAdmin( UserAdmin ):
 
     form = CustomUserChangeForm
     add_form = CustomUserCreationForm
-    list_display = ("email", "uuid", "account_state", "first_name", "last_name", "email_verified", "is_staff")
+    list_display = ("email", "uuid", "account_state", "first_name", "last_name", "is_staff")
     list_filter = ("is_staff", "is_superuser", "is_active", "groups")
     search_fields = ( "email", "pending_email", "uuid" )
     readonly_fields = ( "uuid", "account_state" )

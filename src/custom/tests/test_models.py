@@ -11,17 +11,17 @@ class AccountStateTestCase(TestCase):
         self.User = get_user_model()
         return
 
-    def test_account_state_derives_from_email_fields(self):
+    def test_account_state_derives_from_the_verified_email_slot(self):
 
         guest = self.User.objects.create_guest()
-        unverified = self.User.objects.create_guest()
-        unverified.attach_pending_email( 'claimed@example.com' )
+        guest_confirming = self.User.objects.create_guest()
+        guest_confirming.attach_pending_email( 'claimed@example.com' )
         verified = self.User.objects.create_user( email = 'verified@example.com' )
 
         test_data = [
-            ( guest      , UserState.GUEST      , 'is_guest'      ),
-            ( unverified , UserState.UNVERIFIED , 'is_unverified' ),
-            ( verified   , UserState.VERIFIED   , 'is_verified'   ),
+            ( guest           , UserState.GUEST    , 'is_guest'    ),
+            ( guest_confirming , UserState.GUEST    , 'is_guest'    ),   # a pending claim does not change the state
+            ( verified        , UserState.VERIFIED , 'is_verified' ),
         ]
 
         for user, expected_state, predicate in test_data:
@@ -32,27 +32,19 @@ class AccountStateTestCase(TestCase):
             continue
         return
 
-    def test_pending_claim_alongside_verified_email_stays_verified(self):
-        # An in-flight address *change*: a verified account with a pending new address
-        # is still Verified until the change is confirmed.
-        user = self.User.objects.create_user( email = 'current@example.com' )
-        user.pending_email = 'new@example.com'
-        self.assertEqual( UserState.VERIFIED, user.account_state )
-        return
-
     def test_anonymous_user_is_anonymous_and_not_known(self):
         anonymous = AnonymousUser()
         self.assertEqual( UserState.ANONYMOUS, user_state( anonymous ) )
         self.assertFalse( is_known( anonymous ) )
         return
 
-    def test_attach_pending_email_canonicalizes_and_moves_to_unverified(self):
+    def test_attach_pending_email_canonicalizes_and_leaves_a_guest(self):
         user = self.User.objects.create_guest()
         user.attach_pending_email( '  Mixed.Case@Example.COM ' )
         user.refresh_from_db()
         self.assertEqual( 'mixed.case@example.com', user.pending_email )
         self.assertIsNone( user.email )
-        self.assertTrue( user.is_unverified )
+        self.assertTrue( user.is_guest )   # still a Guest -- a pending claim is not yet an identity
         return
 
     def test_verify_pending_email_promotes_into_verified_slot(self):
@@ -61,7 +53,6 @@ class AccountStateTestCase(TestCase):
         user.verify_pending_email()
         user.refresh_from_db()
         self.assertEqual( 'claimed@example.com', user.email )
-        self.assertTrue( user.email_verified )
         self.assertIsNone( user.pending_email )
         self.assertTrue( user.is_verified )
         return
