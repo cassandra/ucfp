@@ -166,10 +166,12 @@ class SubjectsForm( StyledFormMixin, forms.Form ):
     def apply( self, profile : Profile, plans : Plans ):
         subjects = self._subjects()
         assets   = _synced_taxable_accounts( _synced_retirement_accounts( profile.assets, subjects ) )
+        income_flows, pensions, government_pension = _facts_owned_by_current_subjects( profile, subjects )
         updated  = replace(
             profile, subjects = subjects, filing_status = self._filing_status( subjects ),
             assets = assets, us_state = self._us_state(),
-            state_income_tax_rate = self._state_income_tax_rate() )
+            state_income_tax_rate = self._state_income_tax_rate(),
+            income_flows = income_flows, pensions = pensions, government_pension = government_pension )
         # Plans are left untouched: a contribution/conversion/withdrawal left keyed to a departed
         # subject's removed account is reconciled on demand at the run surface, not eagerly here.
         return updated, plans
@@ -565,6 +567,25 @@ def _synced_taxable_accounts( assets : list ) -> list:
             asset_class = asset_class, opening_value = Decimal( '0' ) ) )
     kept = [ asset for asset in assets if asset.asset_class not in taxable_classes ]
     return kept + provisioned
+
+
+def _facts_owned_by_current_subjects( profile : Profile, subjects : list ) -> tuple:
+    """The profile's per-subject facts -- income flows, pension entitlements, and government-pension
+    (Social Security) entitlements -- with any owned by a person who is no longer a subject dropped, as
+    `(income_flows, pensions, government_pension)`. Household income (a flow with no `subject_handle`, e.g.
+    rent) is kept. This mirrors `_synced_retirement_accounts` for the per-subject accounts, so removing a
+    household member leaves none of their facts lurking: a stale fact would otherwise resurrect on
+    re-adding the person, and an orphaned entitlement whose claiming date has been reconciled away reads
+    as a permanently incomplete plan. Plans that reference a departed subject are pruned separately, on
+    demand, at the run surface -- not here."""
+    handles            = { subject.handle for subject in subjects }
+    income_flows       = [ flow for flow in profile.income_flows
+                           if flow.subject_handle is None or flow.subject_handle in handles ]
+    pensions           = [ pension for pension in profile.pensions
+                           if pension.subject_handle in handles ]
+    government_pension = [ entitlement for entitlement in profile.government_pension
+                           if entitlement.subject_handle in handles ]
+    return income_flows, pensions, government_pension
 
 
 class AccountsSectionForm:
