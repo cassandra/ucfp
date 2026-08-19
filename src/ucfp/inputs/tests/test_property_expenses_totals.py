@@ -33,11 +33,13 @@ def _one_property_profile() -> Profile:
 
 
 def _two_property_profile() -> Profile:
-    """Two rentals (same context) -- a real matrix: Default plus a column per property."""
+    """Two second homes (same, owner-paid context) -- a real matrix (Default plus a column per property)
+    whose rows keep their catalog defaults, so the Default-fallback math these tests pin is not perturbed
+    by the rental tenant-paid $0 seeding (#186)."""
     return Profile( assets = [
-        AssetProfile( handle = 'property-1', name = 'Rental A', asset_class = AssetClass.REAL_ESTATE_RENTAL,
+        AssetProfile( handle = 'property-1', name = 'Cabin', asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
                       opening_value = Decimal( '300000' ) ),
-        AssetProfile( handle = 'property-2', name = 'Rental B', asset_class = AssetClass.REAL_ESTATE_RENTAL,
+        AssetProfile( handle = 'property-2', name = 'Lake House', asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
                       opening_value = Decimal( '250000' ) ) ] )
 
 

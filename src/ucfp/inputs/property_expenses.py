@@ -77,7 +77,8 @@ def merged_property_expenses( profile, plans ) -> list:
     """The catalog's PROPERTY expenses as `PropertyExpense`s -- one per catalog row, its structural
     fields (category, personal tax class, cadence, `applies_to`) re-derived each merge; the user's
     `default_amount` and per-property `overrides` preserved, with overrides pruned to the properties
-    that currently exist and that the row applies to. Empty when the household has no property."""
+    that currently exist and that the row applies to, and a $0 default seeded for each rental on a
+    tenant-paid utility row (see `_live_overrides`). Empty when the household has no property."""
     if not has_property( profile ):
         return list()
     existing     = { expense.handle: expense for expense in plans.property_expenses } if plans else dict()
@@ -104,6 +105,14 @@ def merged_property_expenses( profile, plans ) -> list:
 
 
 def _live_overrides( prior, profile, catalog_expense, live_handles : set ) -> dict:
+    """The per-property overrides a merge seeds: the prior expense's own overrides (kept for properties
+    that still exist and that the row applies to), then the tenant-paid $0 defaults layered on for any
+    rental the user has not already set."""
+    kept = _kept_overrides( prior, profile, catalog_expense, live_handles )
+    return _seed_rental_zeros( kept, profile, catalog_expense, live_handles )
+
+
+def _kept_overrides( prior, profile, catalog_expense, live_handles : set ) -> dict:
     """A prior property expense's overrides kept only for properties that still exist and that the row
     applies to; empty when there is no prior expense."""
     if prior is None:
@@ -111,6 +120,21 @@ def _live_overrides( prior, profile, catalog_expense, live_handles : set ) -> di
     return { handle: amount for handle, amount in prior.overrides.items()
              if handle in live_handles
              and _property_context( profile, handle ) in catalog_expense.applies_to }
+
+
+def _seed_rental_zeros( overrides : dict, profile, catalog_expense, live_handles : set ) -> dict:
+    """`overrides` with a $0 default seeded for every rental the user has not already set, on a
+    tenant-paid utility row (one a tenant, not the landlord, ordinarily pays). This is what makes a
+    rental default to $0 for these utilities while a residence keeps its normal amount; the user can
+    still raise a cell for a utilities-included rental. A no-op for landlord-borne and non-rental rows."""
+    if not catalog_expense.tenant_paid or PropertyContext.RENTAL not in catalog_expense.applies_to:
+        return overrides
+    seeded = dict( overrides )
+    for handle in live_handles:
+        is_rental = _property_context( profile, handle ) is PropertyContext.RENTAL
+        if is_rental and handle not in seeded:
+            seeded[ handle ] = Decimal( 0 )
+    return seeded
 
 
 class PropertyExpensesForm( ExpenseTotalsMatrix, forms.Form ):

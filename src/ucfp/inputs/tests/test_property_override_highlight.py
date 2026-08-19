@@ -25,10 +25,13 @@ _MONTHLY = Duration( 1, TimeUnit.MONTH )
 
 
 def _two_property_profile() -> Profile:
+    # Two second homes (owner-paid context) so a plain, override-free matrix carries no differences: the
+    # rental tenant-paid $0 seeding (#186) would itself flag utility cells, which these differ-mechanic
+    # tests are not about.
     return Profile( assets = [
-        AssetProfile( handle = 'property-1', name = 'Rental A', asset_class = AssetClass.REAL_ESTATE_RENTAL,
+        AssetProfile( handle = 'property-1', name = 'Cabin', asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
                       opening_value = Decimal( '300000' ) ),
-        AssetProfile( handle = 'property-2', name = 'Rental B', asset_class = AssetClass.REAL_ESTATE_RENTAL,
+        AssetProfile( handle = 'property-2', name = 'Lake House', asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
                       opening_value = Decimal( '250000' ) ) ] )
 
 
