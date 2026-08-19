@@ -17,14 +17,9 @@
       </dl>
 
     {% else %}
-      {# Guest: offer to add (or confirm) an email so their plan is recoverable. #}
-      {% if collision_email %}
-      <div class="alert alert-warning">
-        <strong>{{ collision_email }}</strong> already has an account. To use it,
-        <a href="{% url 'user_signin' %}">sign in</a> instead.
-      </div>
-      {% endif %}
-
+      {# Guest: offer to add an email so their plan is recoverable. The pending claim is overwritable,
+         so the add-email input always shows (a typo is fixed by simply entering the address again);
+         a confirmation step is shown in addition whenever a claim is in flight. #}
       {% if email_not_configured %}
       <div class="alert alert-danger">
         Email is not configured on this server, so an address cannot be confirmed here.
@@ -32,13 +27,12 @@
       {% endif %}
 
       {% if request.user.pending_email %}
-        {# Mid-confirmation: a code/link was sent to the pending address. #}
         <div class="h5">Confirm your email</div>
         <p class="text-muted">
           We emailed a one-time code to <strong>{{ request.user.pending_email }}</strong>. Enter it
           to finish — it works only in this browser, or use the link in the same email on this device.
         </p>
-        <form method="post" action="{% url 'magic_code' %}" data-synchronous="true" class="mb-3">
+        <form method="post" action="{% url 'magic_code' %}" data-synchronous="true" class="mb-2">
           {% csrf_token %}
           <div class="d-flex input-group">
             <input type="text" name="magic_code" class="form-control" placeholder="one-time code"
@@ -48,31 +42,29 @@
             </div>
           </div>
         </form>
-        <div class="d-flex" style="gap: 0.5rem">
-          <form method="post" action="{% url 'resend_confirmation' %}" data-synchronous="true">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline-secondary btn-sm">Resend the code</button>
-          </form>
-        </div>
-      {% else %}
-        {# No email yet: this is the "don't lose your work" prompt. #}
-        <div class="h5">Add your email to save your plan</div>
-        <p class="text-muted">
-          Right now your plan lives only in this browser. Add an email so you can get back to it from
-          any device. Your email is used only to send a sign-in code and keep your plan safe — no
-          marketing, no data sold, ever.
-        </p>
-        <form method="post" action="{% url 'attach_email' %}" data-synchronous="true">
+        <form method="post" action="{% url 'resend_confirmation' %}" data-synchronous="true" class="mb-4">
           {% csrf_token %}
-          <div class="d-flex input-group input-group-lg">
-            <input type="email" name="email" class="form-control" placeholder="e-mail address"
-                   required="" autofocus="autofocus">
-            <div class="input-group-append">
-              <button type="submit" class="btn btn-cta">Save my plan</button>
-            </div>
-          </div>
+          <button type="submit" class="btn btn-outline-secondary btn-sm">Resend the code</button>
         </form>
       {% endif %}
+
+      <div class="h5">
+        {% if request.user.pending_email %}Use a different email{% else %}Add your email to save your plan{% endif %}
+      </div>
+      <p class="text-muted">
+        Right now your plan lives only in this browser. Add an email so you can get back to it from any
+        device. Your email is used only to send a sign-in code and keep your plan safe — no marketing,
+        no data sold, ever.
+      </p>
+      <form method="post" action="{% url 'attach_email' %}" data-synchronous="true">
+        {% csrf_token %}
+        <div class="d-flex input-group input-group-lg">
+          <input type="email" name="email" class="form-control" placeholder="e-mail address" required="">
+          <div class="input-group-append">
+            <button type="submit" class="btn btn-cta">Save my plan</button>
+          </div>
+        </div>
+      </form>
     {% endif %}
 
   </div>

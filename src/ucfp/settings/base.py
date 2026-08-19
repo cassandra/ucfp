@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     'ucfp.parameter_sets',
     'ucfp.inputs',
     'ucfp.planning',
+    'ucfp.onboarding',
     'ucfp.environment',
 ]
 
@@ -340,6 +341,13 @@ CACHES = {
 
 AUTH_USER_MODEL = "custom.CustomUser"
 SUPPRESS_AUTHENTICATION = ENV.SUPPRESS_AUTHENTICATION
+
+# Host destinations the (app-agnostic) sign-in code hands control to, resolved via `resolve_url`.
+# This is the contract that keeps `user`/`organization`/`custom` from importing host (`ucfp`) code:
+# they read these settings, and the host binds each to one of its own views here.
+LOGIN_REDIRECT_URL = 'home'              # where a signed-in user lands
+GUEST_START_URL = 'flow_profile'         # where a freshly-created Guest goes to start entering data
+SIGNIN_COLLISION_URL = 'signin_collision'   # reconcile entry when a Guest signs into an existing account
 
 # Keys and cipher for the encrypted model fields (see common.encrypted_fields).
 # Empty keys mean "not configured" -- the fields fail closed on first use rather

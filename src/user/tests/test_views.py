@@ -172,6 +172,29 @@ class TestMagicCodeView(SyncViewTestCase):
         self.assertIsNone( _auth_user_id( self.client ) )
 
 
+class TestCollisionHandoff(SyncViewTestCase):
+    """When a signed-in Guest verifies into a *different* existing account, the sign-in code hands off
+    to the reconcile flow rather than silently switching -- it does not sign the target in yet."""
+
+    def _prime_code( self, target ):
+        session = self.client.session
+        session[ MagicCodeGenerator.MAGIC_CODE ] = 'abcdef'
+        session[ MagicCodeGenerator.MAGIC_CODE_TIMESTAMP ] = MagicCodeGenerator.get_elapsed_seconds()
+        session[ MagicCodeGenerator.MAGIC_CODE_TARGET ] = str( target.uuid )
+        session.save()
+
+    def test_guest_verifying_a_different_account_is_handed_to_reconcile(self):
+        guest = User.objects.create_guest()
+        self.client.force_login( guest )
+        self._prime_code( self.user )   # target is a different, verified account
+
+        response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
+
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('signin_collision'), response.url )
+        self.assertEqual( _auth_user_id( self.client ), str( guest.pk ) )   # not switched to the target
+
+
 class TestMagicLinkView(SyncViewTestCase):
     """Consuming a magic link: sign-in for a verified account works from any session; confirming a
     Guest's pending email works only in the browser that started it."""
@@ -233,17 +256,18 @@ class TestAttachEmailView(SyncViewTestCase):
         self.assertEqual( 'mine@example.com', guest.pending_email )
         mock_send.assert_called_once()
 
-    def test_email_of_a_verified_account_is_a_collision(self, mock_send):
+    def test_email_of_a_verified_account_routes_to_confirmation(self, mock_send):
+        # A taken (verified) address is not attached; instead a code is sent to *that* account so the
+        # person can prove ownership, and the code-entry page is shown (reconciliation follows on verify).
         guest = User.objects.create_guest()
         self.client.force_login( guest )
 
         response = self.client.post( reverse('attach_email'), { 'email': self.user.email } )
 
-        self.assertEqual( 200, response.status_code )
-        self.assertContains( response, self.user.email )   # the collision notice names it
+        self.assertTemplateRendered( response, _CODE_PAGE )
         guest.refresh_from_db()
-        self.assertIsNone( guest.pending_email )            # not attached
-        mock_send.assert_not_called()
+        self.assertIsNone( guest.pending_email )                     # not attached to the guest
+        self.assertEqual( self.user, mock_send.call_args.kwargs['user'] )   # code sent to the existing account
 
     def test_a_verified_user_cannot_attach(self, mock_send):
         self.client.force_login( self.user )

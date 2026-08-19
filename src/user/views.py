@@ -1,17 +1,19 @@
 import logging
 
+from django.conf import settings
 from django.contrib.auth import get_user_model, logout
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import BadRequest, ValidationError
 from django.core.validators import validate_email
 from django.http import HttpResponseRedirect
-from django.shortcuts import render
+from django.shortcuts import render, resolve_url
 from django.urls import reverse
 from django.views.generic import View
 
 from notify.email_sender import EmailSender, UnsubscribedEmailError
 from notify.views import resubscribe_url_for
 
+from . import collision
 from . import forms
 from . import signin_cooldown
 from . import signin_throttle
@@ -21,6 +23,20 @@ from .signin_manager import SigninManager
 logger = logging.getLogger(__name__)
 
 _CODE_ENTRY_TEMPLATE = 'user/pages/magic_code.html'
+
+
+def _sign_in_or_collision( request, target ):
+    """Sign `target` in and land on the host's post-login page -- unless the current session is a
+    *different* Guest, in which case hand off to the host's reconcile flow (via
+    ``settings.SIGNIN_COLLISION_URL``) so the Guest's in-progress plan is not silently abandoned. The
+    Guest remains ``request.user`` for the reconcile view to resolve."""
+    current = request.user
+    if current.is_authenticated and current.is_guest and ( current.pk != target.pk ):
+        collision.stash_collision_target( request, target )
+        return HttpResponseRedirect( resolve_url( settings.SIGNIN_COLLISION_URL ) )
+    request.user = target
+    SigninManager().do_login( request = request )
+    return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
 
 
 def _render_code_entry( request, magic_code_form, status = 200 ):
@@ -43,13 +59,11 @@ def _send_magic_email_or_unsubscribed( request, user, email_address ):
     return None
 
 
-def _account_context( request, collision_email = None ):
-    """Context for the account page: it branches on the user's state (Guest with or without a
-    pending email, or Verified) via `request.user`, plus whether email sending is configured and
-    an optional `collision_email` to report."""
+def _account_context( request ):
+    """Context for the account page: it branches on the user's state (Guest, with or without a pending
+    email, or Verified) via `request.user`, plus whether email sending is configured."""
     return {
         'email_not_configured': not EmailSender.is_email_configured(),
-        'collision_email': collision_email,
     }
 
 
@@ -179,9 +193,7 @@ class MagicCodeView( View ):
             target.verify_pending_email()
             return HttpResponseRedirect( reverse( 'user_account' ) )
 
-        request.user = target
-        SigninManager().do_login( request = request )
-        return HttpResponseRedirect( reverse( 'home' ) )
+        return _sign_in_or_collision( request, target )
 
 
 class MagicLinkView( View ):
@@ -212,9 +224,7 @@ class MagicLinkView( View ):
                            { 'email': user.pending_email } )
 
         if user.email:
-            request.user = user
-            SigninManager().do_login( request = request )
-            return HttpResponseRedirect( reverse( 'home' ) )
+            return _sign_in_or_collision( request, user )
 
         return render( request, 'user/pages/signin_magic_bad_link.html' )
 
@@ -224,8 +234,10 @@ class AttachEmailView( View ):
     as a pending (unconfirmed) one and emails a confirmation; the address becomes the account's
     verified identity only once confirmed. Login-gated (a Guest is authenticated).
 
-    If the address already belongs to a *verified* account, that is a genuine collision -- for now we
-    stop and point the user at signing in (the keep/discard resolution is a later step)."""
+    If the address already belongs to a *different* verified account, we send a code to *that* account
+    so the person can prove they own it; confirming it then reconciles their guest plan with it (handled
+    on code verification). The pending claim is overwritable -- re-submitting a different address simply
+    replaces it, so a typo is easily corrected."""
 
     def post( self, request, *args, **kwargs ):
         if request.user.is_verified:
@@ -244,11 +256,16 @@ class AttachEmailView( View ):
 
         existing = User.objects.verified_account_for_email( canonical_email )
         if existing is not None and existing.pk != request.user.pk:
-            return render( request, 'user/pages/account.html',
-                           _account_context( request, collision_email = canonical_email ) )
+            # Taken by another verified account: send the code there so ownership is proven, then the
+            # code-verification path reconciles this guest's plan with it. Nothing is attached here.
+            if signin_throttle.is_signin_request_allowed( request, canonical_email ):
+                unsubscribed = _send_magic_email_or_unsubscribed( request, existing, canonical_email )
+                if unsubscribed is not None:
+                    return unsubscribed
+            return _render_code_entry( request, forms.MagicCodeForm() )
 
-        # Record the claim regardless; only send when the throttle allows (a throttled send is silent,
-        # and the user can resend from the account page).
+        # Record (or overwrite) the claim regardless; only send when the throttle allows (a throttled
+        # send is silent, and the user can resend from the account page).
         request.user.attach_pending_email( canonical_email )
         if signin_throttle.is_signin_request_allowed( request, canonical_email ):
             unsubscribed = _send_magic_email_or_unsubscribed( request, request.user, canonical_email )
@@ -292,7 +309,7 @@ class ConvertToGuestView( View ):
     def post( self, request, *args, **kwargs ):
         if not request.user.is_authenticated:
             SigninManager().start_guest_session( request )
-        return HttpResponseRedirect( reverse( 'flow_profile' ) )
+        return HttpResponseRedirect( resolve_url( settings.GUEST_START_URL ) )
 
 
 class UserSignoutView( View ):

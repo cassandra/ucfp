@@ -49,6 +49,8 @@ urlpatterns = [
 
     path( 'organization/', include( 'organization.urls' )),
 
+    path( 'welcome/', include( 'ucfp.onboarding.urls' )),
+
     path( 'inputs/', include( 'ucfp.inputs.urls' )),
     path( 'plan/', include( 'ucfp.planning.urls' )),
     path( 'run/', include( 'ucfp.planning.run_urls' )),
