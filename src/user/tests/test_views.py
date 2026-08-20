@@ -73,8 +73,20 @@ class OnboardingPagesAnonymousTest(TestCase):
         self.assertContains( response, reverse( 'explain' ) )
 
 
+@override_settings(SUPPRESS_AUTHENTICATION=False)
+class CloudAuthViewTest(SyncViewTestCase):
+    """Base for the sign-in / magic-code / account view tests, pinned to the cloud deployment.
+
+    These behaviors are cloud-only: under SUPPRESS_AUTHENTICATION the self-hosted middleware logs every
+    request in as the singleton Guest, so there is no sign-in (the form redirects home) and the account
+    page shows the self-hosted notice instead of an email prompt. Pinning the mode here keeps the suite
+    deterministic regardless of the ambient UCFP_SUPPRESS_AUTHENTICATION env var -- each test states the
+    deployment it describes rather than inheriting it. Self-hosted behavior is covered separately (with
+    the setting overridden True)."""
+
+
 @patch.object(SigninManager, 'send_magic_email')
-class TestUserSigninView(SyncViewTestCase):
+class TestUserSigninView(CloudAuthViewTest):
     """The returning-user sign-in form and its unknown-email 'start a Guest' branch."""
 
     def test_get_renders_the_signin_page(self, _mock_send):
@@ -123,7 +135,7 @@ class TestUserSigninView(SyncViewTestCase):
 
 # Deliberately NOT mocking send_magic_email: this exercises the real send so the unsubscribe block
 # (EmailSender.send) actually fires and the view's catch is what we are testing.
-class TestUserSigninUnsubscribed(SyncViewTestCase):
+class TestUserSigninUnsubscribed(CloudAuthViewTest):
     """Regression: an unsubscribed address is not dead-ended on sign-in. The unsubscribe list is the
     recipient's off-switch and is honored even for the auth email, so the magic send is blocked; the
     view must surface the re-enable page (with a resubscribe link) rather than the code page. Guards
@@ -140,7 +152,7 @@ class TestUserSigninUnsubscribed(SyncViewTestCase):
         self.assertEqual( 1, User.objects.count() )   # a blocked send mints no account
 
 
-class TestMagicCodeView(SyncViewTestCase):
+class TestMagicCodeView(CloudAuthViewTest):
     """Consuming a one-time code: it acts on the account the code was issued *for* (bound to the
     session), not one named by the request."""
 
@@ -200,7 +212,7 @@ class TestMagicCodeView(SyncViewTestCase):
         self.assertIsNone( _auth_user_id( self.client ) )
 
 
-class TestCollisionHandoff(SyncViewTestCase):
+class TestCollisionHandoff(CloudAuthViewTest):
     """When a signed-in Guest verifies into a *different* existing account, the sign-in code hands off
     to the reconcile flow rather than silently switching -- it does not sign the target in yet."""
 
@@ -223,7 +235,7 @@ class TestCollisionHandoff(SyncViewTestCase):
         self.assertEqual( _auth_user_id( self.client ), str( guest.pk ) )   # not switched to the target
 
 
-class TestPendingEmailClaimedRace(SyncViewTestCase):
+class TestPendingEmailClaimedRace(CloudAuthViewTest):
     """TOCTOU: a Guest's pending address is verified by *another* account between attach and confirm.
     Confirming the code must hand off to the reconcile flow -- the person proved they own the mailbox --
     rather than crash on the unique `email` constraint or silently discard their proof."""
@@ -252,7 +264,7 @@ class TestPendingEmailClaimedRace(SyncViewTestCase):
         self.assertEqual( _auth_user_id( self.client ), str( guest.pk ) )   # still the guest, pending reconcile
 
 
-class TestMagicLinkView(SyncViewTestCase):
+class TestMagicLinkView(CloudAuthViewTest):
     """Consuming a magic link: sign-in for a verified account works from any session; confirming a
     Guest's pending email works only in the browser that started it."""
 
@@ -315,7 +327,7 @@ class TestMagicLinkView(SyncViewTestCase):
 
 
 @patch.object(SigninManager, 'send_magic_email')
-class TestAttachEmailView(SyncViewTestCase):
+class TestAttachEmailView(CloudAuthViewTest):
     """A signed-in Guest attaching an email from their account page."""
 
     def test_unknown_email_becomes_a_pending_claim_and_is_sent(self, mock_send):
@@ -349,7 +361,7 @@ class TestAttachEmailView(SyncViewTestCase):
         mock_send.assert_not_called()
 
 
-class TestUserAccountView(SyncViewTestCase):
+class TestUserAccountView(CloudAuthViewTest):
     """The account page adapts to the user's state."""
 
     def test_verified_user_sees_their_email(self):
@@ -375,7 +387,22 @@ class TestUserAccountView(SyncViewTestCase):
         self.assertNotContains( response, 'mine@example.com' )   # the pending address is not shown
 
 
-class TestUserSignoutView(SyncViewTestCase):
+@override_settings(SUPPRESS_AUTHENTICATION=True)
+class TestUserAccountViewSelfHosted(SyncViewTestCase):
+    """Under self-hosted (SUPPRESS_AUTHENTICATION), the account page never solicits an email: the
+    singleton Guest is the sole owner and there is no sign-in, so the add-email control is replaced by a
+    neutral self-hosted notice."""
+
+    def test_self_hosted_owner_is_not_asked_for_an_email(self):
+        # The self-hosted middleware supplies the singleton-Guest identity on any request, so no
+        # force_login is needed; the account page must show the notice, not the attach-email form.
+        response = self.client.get( reverse('user_account') )
+
+        self.assertContains( response, 'self-hosted deployment' )
+        self.assertNotContains( response, reverse('attach_email') )
+
+
+class TestUserSignoutView(CloudAuthViewTest):
     """Tests for the sign-out action."""
 
     def test_post_signs_out_and_redirects_home(self):
@@ -412,7 +439,7 @@ class TestUserSignoutView(SyncViewTestCase):
     SIGNIN_GLOBAL_LIMIT=1000,
 )
 @patch.object(SigninManager, 'send_magic_email')
-class TestUserSigninThrottling(SyncViewTestCase):
+class TestUserSigninThrottling(CloudAuthViewTest):
     """Rate limiting on the sign-in POST (disabled by default in tests; enabled here)."""
 
     def setUp(self):
@@ -452,7 +479,7 @@ class TestUserSigninThrottling(SyncViewTestCase):
 
 
 @override_settings(ABUSE_PREVENTION_ENABLED=True)
-class TestVerifyCooldown(SyncViewTestCase):
+class TestVerifyCooldown(CloudAuthViewTest):
     """Cooldown-backoff and hard cap on magic-code verification (target primed to a verified user)."""
 
     def setUp(self):
