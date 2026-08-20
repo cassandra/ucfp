@@ -12,16 +12,23 @@ verified account, we must not silently switch accounts and lose their work. This
 It reads a Profile (`ucfp.inputs`) and rewrites organization ownership (`organization`); the view owns
 all HTTP/session/login handling.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from django.contrib.auth.models import User as UserType
 from django.db import transaction
 
 from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 
 from ucfp.inputs.profile.repository import latest_profile, load_profile
+
+if TYPE_CHECKING:
+    # The project's user model, for annotations only -- these accounts are `CustomUser`
+    # (not Django's `User`), which carries the is_guest/verify_pending_email/uuid API this uses.
+    from custom.models import CustomUser as UserType
 
 
 @dataclass
@@ -54,6 +61,10 @@ def sole_organization( user : UserType ) -> Organization:
     """The single organization `user` belongs to. Guests and freshly-verified accounts own exactly
     one; this returns the first active membership's organization."""
     membership = OrganizationMember.objects.for_user( user ).select_related( 'organization' ).first()
+    if membership is None:
+        # The "exactly one organization" invariant is broken -- fail loudly here rather than let a
+        # `None` dereference surface as an opaque AttributeError deep in the reconcile transaction.
+        raise RuntimeError( f'Account {user.pk} belongs to no organization; reconcile assumes exactly one.' )
     return membership.organization
 
 
@@ -73,7 +84,9 @@ def keep_current_discard_previous( guest : UserType, target : UserType ):
 @transaction.atomic
 def discard_current_keep_previous( guest : UserType, target : UserType ):
     """Keep `target`'s existing plan and drop the Guest: the Guest's organization is orphaned
-    (retained, ownerless) and the Guest account removed."""
+    (retained, ownerless) and the Guest account removed. `target` is untouched here (nothing moves onto
+    it) but kept in the signature for symmetry with `keep_current_discard_previous`, so the two
+    resolutions are called the same way."""
     _orphan_organization( sole_organization( guest ) )
     guest.delete()
     return

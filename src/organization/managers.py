@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import uuid as uuid_module
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import User as UserType
 from django.db import models, transaction
 
 from .enums import OrganizationInvitationStatus, OrganizationRole
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
     # Imported only for type annotations; a runtime import would create a
     # managers <-> models cycle (models imports the managers below).
     from .models import Organization, OrganizationInvitation
+    # The project's user model is `custom.CustomUser` (not Django's `User`); annotate as such.
+    from custom.models import CustomUser as UserType
 
 
 # The reserved name of the organization owned by the self-hosted singleton Guest -- the sole account

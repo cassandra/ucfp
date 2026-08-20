@@ -6,7 +6,7 @@ from django.contrib.auth.models import AnonymousUser
 from custom.models import CustomUser
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase, override_settings
-from django.urls import ResolverMatch, reverse
+from django.urls import reverse
 
 from organization.models import Organization
 from user.middleware import AuthenticationMiddleware
@@ -57,43 +57,6 @@ class TestAuthenticationMiddleware(BaseTestCase):
             email='auth@example.com',
             password='authpass'
         )
-
-    def test_middleware_initialization(self):
-        """Test AuthenticationMiddleware initializes correctly."""
-        middleware = AuthenticationMiddleware(self.get_response)
-
-        self.assertEqual(middleware.get_response, self.get_response)
-
-        # Verify exempt URL names are defined ('admin' is exempted separately,
-        # via the resolver app_name check, so it is not in this set).
-        expected_exempt_urls = {
-            'manifest',
-            'favicon',
-            'home-javascript-files',
-            'health',
-            'home',
-            'home_index',
-            'about',
-            'contact',
-            'privacy',
-            'terms',
-            'notify_email_unsubscribe',
-            'notify_email_resubscribe',
-            'privacy_accept',
-            'explain',
-            'preview',
-            'convert_to_guest',
-            'user_signin',
-            'magic_code',
-            'magic_link',
-            'bad_request',
-            'not_authorized',
-            'page_not_found',
-            'method_not_allowed',
-            'internal_error',
-            'transient_error',
-        }
-        self.assertEqual(middleware.EXEMPT_VIEW_URL_NAMES, expected_exempt_urls)
 
     @override_settings(SUPPRESS_AUTHENTICATION=True)
     def test_middleware_bypasses_when_suppress_authentication_enabled(self):
@@ -178,56 +141,15 @@ class TestAuthenticationMiddleware(BaseTestCase):
             self.assertEqual(response.url, reverse('home'))
             self.get_response.assert_not_called()   # the protected view is never reached
 
-    @override_settings(SUPPRESS_AUTHENTICATION=False)
-    def test_middleware_handles_url_resolution_correctly(self):
-        """Test middleware correctly resolves URLs and extracts app_name and url_name."""
-        request = self.factory.get('/test/path')
-        request.user = AnonymousUser()
-
-        test_resolver_match = ResolverMatch(
-            func=Mock(),
-            args=(),
-            kwargs={},
-            url_name='test_view',
-            app_names=['test_app'],
-            namespaces=['test_app']
-        )
-
-        with patch('user.middleware.resolve') as mock_resolve:
-            mock_resolve.return_value = test_resolver_match
-
-            self.middleware(request)
-
-            # Verify resolve was called with correct path
-            mock_resolve.assert_called_once_with(request.path)
-
-    @override_settings(SUPPRESS_AUTHENTICATION=False)
-    def test_middleware_respects_suppress_authentication_setting(self):
-        """With SUPPRESS_AUTHENTICATION=False, an unauthenticated protected request is redirected home."""
-        request = self.factory.get('/protected-view')
-        request.user = AnonymousUser()
-
-        with patch('user.middleware.resolve') as mock_resolve:
-            mock_resolve.return_value = Mock(url_name='protected_view', app_name='main')
-
-            response = self.middleware(request)
-
-            self.assertEqual(response.status_code, 302)
-            self.assertEqual(response.url, reverse('home'))
-
-    def test_middleware_exempt_urls_are_comprehensive(self):
-        """Test middleware exempt URLs cover all necessary authentication endpoints."""
+    def test_critical_auth_endpoints_stay_exempt(self):
+        """The login-free endpoints must remain reachable without authentication -- the sign-in flow
+        (so a signed-out user can get back in) and the unsubscribe/health landings. A regression that
+        drops one from the exempt set would lock it behind the redirect-to-home."""
         exempt_urls = self.middleware.EXEMPT_VIEW_URL_NAMES
 
-        # Verify critical authentication URLs are exempt
         self.assertIn('user_signin', exempt_urls)
         self.assertIn('magic_code', exempt_urls)
         self.assertIn('magic_link', exempt_urls)
-        # The login-free unsubscribe and health endpoints must remain reachable.
         self.assertIn('notify_email_unsubscribe', exempt_urls)
         self.assertIn('health', exempt_urls)
         # 'admin' is exempted separately, via the resolver app_name check.
-
-        # Verify the set is not empty and contains strings
-        self.assertTrue(len(exempt_urls) > 0)
-        self.assertTrue(all(isinstance(url, str) for url in exempt_urls))

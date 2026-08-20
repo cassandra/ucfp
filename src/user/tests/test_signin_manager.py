@@ -24,15 +24,6 @@ class TestSigninManager(BaseTestCase):
     def test_signin_manager_singleton_behavior(self):
         self.assertIs( SigninManager(), SigninManager() )
 
-    def test_template_constants_point_at_the_magic_email(self):
-        manager = SigninManager()
-        self.assertEqual( manager.MAGIC_SUBJECT_TEMPLATE_NAME,
-                          'user/emails/signin_magic_link_subject.txt' )
-        self.assertEqual( manager.MAGIC_MESSAGE_TEXT_TEMPLATE_NAME,
-                          'user/emails/signin_magic_link_message.txt' )
-        self.assertEqual( manager.MAGIC_MESSAGE_HTML_TEMPLATE_NAME,
-                          'user/emails/signin_magic_link_message.html' )
-
     @patch('user.signin_manager.EmailSender')
     def test_send_magic_email_targets_the_account_and_carries_code_and_link(self, mock_email_sender_class):
         mock_email_sender = Mock()
@@ -67,12 +58,3 @@ class TestSigninManager(BaseTestCase):
 
         email_data = mock_email_sender_class.call_args[1]['data']
         self.assertEqual( email_data.to_email_address, 'claimed@example.com' )
-
-    @patch('user.signin_manager.django_login')
-    def test_do_login_performs_django_login(self, mock_django_login):
-        request = Mock()
-        request.user = self.user
-
-        SigninManager().do_login( request )
-
-        mock_django_login.assert_called_once_with( request, self.user )

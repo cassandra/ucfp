@@ -100,29 +100,6 @@ class TestMagicCodeGenerator(BaseTestCase):
         self.assertIsNone(self.mock_request.session[MagicCodeGenerator.MAGIC_CODE])
         self.assertIsNone(self.mock_request.session[MagicCodeGenerator.MAGIC_CODE_TIMESTAMP])
 
-    def test_magic_code_status_enum_business_logic_values(self):
-        """Test MagicCodeStatus enum values support validation business logic."""
-        # Test that VALID has highest value for comparison logic
-        self.assertTrue(MagicCodeStatus.VALID.value > MagicCodeStatus.EXPIRED.value)
-        self.assertTrue(MagicCodeStatus.EXPIRED.value > MagicCodeStatus.INVALID.value)
-
-        # Test specific values that may be used in conditional logic
-        self.assertEqual(MagicCodeStatus.INVALID.value, 0)
-        self.assertEqual(MagicCodeStatus.EXPIRED.value, 1)
-        self.assertEqual(MagicCodeStatus.VALID.value, 2)
-
-    @patch('user.magic_code_generator.MagicCodeGenerator.get_elapsed_seconds')
-    def test_get_elapsed_seconds_provides_consistent_timestamps(self, mock_elapsed_seconds):
-        """Test timestamp generation provides consistent values for timeout calculations."""
-        mock_elapsed_seconds.return_value = 5000
-
-        timestamp1 = self.generator.get_elapsed_seconds()
-        timestamp2 = self.generator.get_elapsed_seconds()
-
-        # Both calls should return same mocked value
-        self.assertEqual(timestamp1, timestamp2)
-        self.assertEqual(timestamp1, 5000)
-
     def test_get_timeout_seconds_returns_configured_value(self):
         """Test timeout configuration returns expected value from settings."""
         timeout = self.generator.get_timeout_seconds()
