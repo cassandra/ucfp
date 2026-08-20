@@ -11,9 +11,16 @@ these same runs itself, and the clear removes only still-present rows, so the tw
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
+from organization.write_guard import connect_write_guard
+
 from ucfp.inputs.models import ScenarioExploration
 
 from .explore import clear_transient_runs
+from .models import PlanningResultRecord, ProjectionRunRecord
+
+# Fail-safe backstop: refuse these organization-scoped records' persistence during a read-only member's
+# request (see organization.write_guard), so a write riding a GET fails toward denied.
+connect_write_guard( ProjectionRunRecord, PlanningResultRecord )
 
 
 @receiver( post_delete, sender = ScenarioExploration )

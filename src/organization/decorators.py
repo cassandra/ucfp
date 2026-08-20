@@ -8,6 +8,7 @@ from django.utils import timezone
 from .capabilities import can_write
 from .models import Organization, OrganizationMember
 from .permissions import OrganizationPermissions
+from .write_guard import writes_permitted
 
 # HTTP methods that only read; they are never gated. Everything else (POST/PUT/PATCH/DELETE) is an
 # unsafe method that a read-only member may not perform on organization data.
@@ -76,7 +77,10 @@ def ensure_organization( view_func ):
         # (these views render eagerly) and always cleared, so it never leaks to another request's thread.
         timezone.activate( request.organization.tzinfo )
         try:
-            return view_func( request, *args, **kwargs )
+            # Backstop: run a read-only member's view with organization-data writes refused, so a write
+            # riding a GET that the method-gate cannot see fails toward denied, not silent change.
+            with writes_permitted( request.organization_can_write ):
+                return view_func( request, *args, **kwargs )
         finally:
             timezone.deactivate()
     return wrapped

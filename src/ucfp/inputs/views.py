@@ -657,7 +657,12 @@ class InterviewView( GuestReminderMixin, View ):
         view a *seeding* section (one whose `apply` is a pure catalog merge) also persists its defaults,
         so what the user sees is already saved (matching the auto-save spirit) and an acknowledged spending
         section is never empty. Both happen only here -- the merge builders are never a source of
-        acknowledgment on their own -- and only on first view, so revisits are inert."""
+        acknowledgment on their own -- and only on first view, so revisits are inert.
+
+        Both are data writes that ride a GET, so they are skipped for a read-only member: the HTTP-method
+        write-gate cannot see them, and a viewer must not mutate the household just by browsing it."""
+        if not getattr( request, 'organization_can_write', True ):
+            return
         record = self._flow_record( request, flow_of( section ) )
         if section.key in record.acknowledged_section_keys:
             return
