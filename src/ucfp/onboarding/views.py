@@ -36,9 +36,13 @@ class SigninCollisionView( View ):
 
         existing = reconciliation_service.organization_summary(
             reconciliation_service.sole_organization( target ) )
+        # Each option is a card the person can pick directly: keeping the current work re-homes it onto
+        # the existing account; keeping the existing account's plan discards the current work.
         return render( request, 'onboarding/signin_collision.html', {
-            'summaries': [ ( 'Your current work', current ),
-                           ( 'Your existing account', existing ) ],
+            'options': [
+                { 'label': 'Your current work', 'summary': current, 'choice': 'keep_current' },
+                { 'label': 'Your existing account', 'summary': existing, 'choice': 'discard_current' },
+            ],
         } )
 
     def post( self, request, *args, **kwargs ):

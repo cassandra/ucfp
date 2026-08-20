@@ -63,7 +63,8 @@
         <div class="d-flex input-group input-group-lg">
           <input type="email" name="email" class="form-control" placeholder="e-mail address" required="">
           <div class="input-group-append">
-            <button type="submit" class="btn btn-cta">Add email</button>
+            {# One btn-cta per page: btn-primary while the "Confirm" action is present, else the sole btn-cta. #}
+            <button type="submit" class="btn {% if request.user.pending_email %}btn-primary{% else %}btn-cta{% endif %}">Add email</button>
           </div>
         </div>
       </form>

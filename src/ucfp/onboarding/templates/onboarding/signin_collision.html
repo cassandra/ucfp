@@ -4,47 +4,46 @@
 {% block interstitial_content %}
 <div class="h3">You already have an account</div>
 <p class="my-3 text-muted">
-  You've been building a plan as a guest, and the email you just confirmed already has a saved plan.
+  You've been working here as a guest, and the email you just confirmed already has its own saved work.
   Which one do you want to keep? We won't delete the other — it's just set aside.
 </p>
 
-<div class="row my-4">
-  {% for label, summary in summaries %}
-  <div class="col-md-6 mb-3">
-    <div class="card h-100">
-      <div class="card-body">
-        <div class="h6 text-uppercase text-muted">{{ label }}</div>
-        {% if summary.subject_names %}
-        <div class="mb-2"><strong>Household:</strong> {{ summary.subject_names|join:", " }}</div>
-        {% endif %}
-        {% if summary.accounts %}
-        <div><strong>Accounts:</strong>
-          <ul class="mb-0 pl-3">
-            {% for name, balance in summary.accounts %}
-            <li>{{ name }} — {{ balance|money:currency }}</li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
-        {% if not summary.subject_names and not summary.accounts %}
-        <div class="text-muted">No names or balances entered yet.</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endfor %}
-</div>
-
 <form method="post" action="{% url 'signin_collision' %}" data-synchronous="true">
   {% csrf_token %}
-  <div class="d-flex flex-wrap" style="gap: 0.5rem">
-    <button type="submit" name="choice" value="keep_current" class="btn btn-cta">
-      Keep my current work
-    </button>
-    <button type="submit" name="choice" value="discard_current" class="btn btn-outline-primary">
-      Keep my existing account's plan
-    </button>
-    <button type="submit" name="choice" value="decide_later" class="btn btn-link">
+  <div class="row my-4">
+    {% for option in options %}
+    <div class="col-md-6 mb-3">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column text-center">
+          <div class="h6 text-uppercase text-muted mb-3">{{ option.label }}</div>
+          <div class="flex-grow-1 text-left">
+            {% if option.summary.subject_names %}
+            <div class="mb-2"><strong>Household:</strong> {{ option.summary.subject_names|join:", " }}</div>
+            {% endif %}
+            {% if option.summary.accounts %}
+            <div><strong>Accounts:</strong>
+              <ul class="mb-0 pl-3">
+                {% for name, balance in option.summary.accounts %}
+                <li>{{ name }} — {{ balance|money:currency }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+            {% if not option.summary.subject_names and not option.summary.accounts %}
+            <div class="text-muted">No names or balances entered yet.</div>
+            {% endif %}
+          </div>
+          <button type="submit" name="choice" value="{{ option.choice }}" class="btn btn-primary btn-block mt-3">
+            Keep this
+          </button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="text-center">
+    <button type="submit" name="choice" value="decide_later" class="btn btn-link text-muted">
       Decide later
     </button>
   </div>
