@@ -163,15 +163,9 @@ class TestAuthenticationMiddleware(BaseTestCase):
                 # Reset mock for next iteration
                 self.get_response.reset_mock()
 
-    @patch('user.middleware.UserSigninView')
     @override_settings(SUPPRESS_AUTHENTICATION=False)
-    def test_middleware_redirects_unauthenticated_non_exempt_requests(self, mock_signin_view_class):
-        """Test middleware redirects unauthenticated users to signin for non-exempt URLs."""
-        mock_signin_view = Mock()
-        mock_signin_response = HttpResponse('signin page')
-        mock_signin_view.get.return_value = mock_signin_response
-        mock_signin_view_class.return_value = mock_signin_view
-
+    def test_middleware_redirects_unauthenticated_non_exempt_requests(self):
+        """An unauthenticated request to a protected view is redirected to the public home page."""
         request = self.factory.get('/protected-view')
         request.user = AnonymousUser()
 
@@ -180,13 +174,9 @@ class TestAuthenticationMiddleware(BaseTestCase):
 
             response = self.middleware(request)
 
-            # Should create UserSigninView and call get method
-            mock_signin_view_class.assert_called_once()
-            mock_signin_view.get.assert_called_once_with(request)
-            self.assertEqual(response, mock_signin_response)
-
-            # Should NOT call the original get_response
-            self.get_response.assert_not_called()
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.url, reverse('home'))
+            self.get_response.assert_not_called()   # the protected view is never reached
 
     @override_settings(SUPPRESS_AUTHENTICATION=False)
     def test_middleware_handles_url_resolution_correctly(self):
@@ -206,35 +196,24 @@ class TestAuthenticationMiddleware(BaseTestCase):
         with patch('user.middleware.resolve') as mock_resolve:
             mock_resolve.return_value = test_resolver_match
 
-            with patch('user.middleware.UserSigninView') as mock_signin_view_class:
-                mock_signin_view = Mock()
-                mock_signin_view.get.return_value = HttpResponse('signin')
-                mock_signin_view_class.return_value = mock_signin_view
+            self.middleware(request)
 
-                self.middleware(request)
-
-                # Verify resolve was called with correct path
-                mock_resolve.assert_called_once_with(request.path)
+            # Verify resolve was called with correct path
+            mock_resolve.assert_called_once_with(request.path)
 
     @override_settings(SUPPRESS_AUTHENTICATION=False)
     def test_middleware_respects_suppress_authentication_setting(self):
-        """Test middleware respects SUPPRESS_AUTHENTICATION setting when False."""
+        """With SUPPRESS_AUTHENTICATION=False, an unauthenticated protected request is redirected home."""
         request = self.factory.get('/protected-view')
         request.user = AnonymousUser()
 
         with patch('user.middleware.resolve') as mock_resolve:
             mock_resolve.return_value = Mock(url_name='protected_view', app_name='main')
 
-            with patch('user.middleware.UserSigninView') as mock_signin_view_class:
-                mock_signin_view = Mock()
-                mock_signin_view.get.return_value = HttpResponse('signin')
-                mock_signin_view_class.return_value = mock_signin_view
+            response = self.middleware(request)
 
-                self.middleware(request)
-
-                # Should redirect to signin when SUPPRESS_AUTHENTICATION=False
-                mock_signin_view_class.assert_called_once()
-                mock_signin_view.get.assert_called_once_with(request)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.url, reverse('home'))
 
     def test_middleware_exempt_urls_are_comprehensive(self):
         """Test middleware exempt URLs cover all necessary authentication endpoints."""

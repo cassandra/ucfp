@@ -1,10 +1,10 @@
 from django.conf import settings
-from django.urls import Resolver404, resolve
+from django.http import HttpResponseRedirect
+from django.urls import Resolver404, resolve, reverse
 
 from organization.models import Organization
 
 from .signin_manager import SigninManager
-from .views import UserSigninView
 
 
 class SelfHostedIdentityMiddleware:
@@ -36,8 +36,10 @@ class AuthenticationMiddleware:
     """
     Requires an authenticated user for all views except a small allow-list of
     public endpoints (the signin flow itself, health, manifest/static helpers,
-    the email unsubscribe landing, and the error pages). Unauthenticated
-    requests to a protected view are answered with the signin page in place.
+    the onboarding pages, the email unsubscribe landing, and the error pages).
+    An unauthenticated request to a protected view is redirected to the public
+    home page -- the funnel into onboarding -- rather than confronted with a
+    sign-in form it did not ask for.
 
     The whole check is bypassed when ``settings.SUPPRESS_AUTHENTICATION`` is
     true -- the env-controlled switch for running with auth turned off.
@@ -89,4 +91,4 @@ class AuthenticationMiddleware:
                 or ( resolver_match.url_name in self.EXEMPT_VIEW_URL_NAMES )):
             return self.get_response( request )
 
-        return UserSigninView().get( request )
+        return HttpResponseRedirect( reverse( 'home' ) )
