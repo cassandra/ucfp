@@ -16,8 +16,10 @@
       <p class="text-muted small mt-3 mb-0">You can sign in with this email from any browser at any time.</p>
 
     {% elif suppress_authentication %}
-      {# Self-hosted single-user deployment: the local Guest is the sole owner and there is no sign-in, so
-         email is never solicited -- the data lives on this server, not bound to a browser session. #}
+      {% comment %}
+      Self-hosted single-user deployment: the local Guest is the sole owner and there is no sign-in, so
+      email is never solicited -- the data lives on this server, not bound to a browser session.
+      {% endcomment %}
       <p class="text-muted mb-0">
         This is a self-hosted deployment — your data lives on this server, so there's no email or sign-in
         to set up.
