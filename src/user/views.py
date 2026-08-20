@@ -13,6 +13,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic import View
 
 from custom.decorators import require_authentication_enabled, require_verified_user
+from organization.decorators import ensure_organization
 from notify.email_sender import EmailSender, UnsubscribedEmailError
 from notify.views import resubscribe_url_for
 
@@ -309,11 +310,14 @@ class AttachEmailView( View ):
         return HttpResponseRedirect( reverse( 'magic_code' ) )
 
 
+@method_decorator( ensure_organization, name = 'dispatch' )
 class UserAccountView( View ):
     """The signed-in user's account page: a Guest is offered a single "add your email" control; a
     Verified user sees the email they sign in with. A pending, unconfirmed claim is deliberately not
     surfaced -- confirmation happens on the code page, not here. Login-gated by AuthenticationMiddleware,
-    so it always has an authenticated ``request.user``."""
+    so it always has an authenticated ``request.user``; `ensure_organization` resolves the current
+    household so the shared app chrome (the navbar's household label) renders here like every other page.
+    """
 
     def get( self, request, *args, **kwargs ):
         return render( request, 'user/pages/account.html', _account_context() )

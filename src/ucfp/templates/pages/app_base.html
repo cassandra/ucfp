@@ -47,15 +47,16 @@
         </li>
       </ul>
       {% comment %} Current household, shown for context -- a subtle link into Settings, where switching
-      between households lives. Display only; not a switching control in the bar. {% endcomment %}
-      {% if request.organization %}
+      between households lives. Display only; not a switching control in the bar. The `mx-auto` list is
+      always rendered (even without a current household) so it keeps pushing the right-hand nav right. {% endcomment %}
       <ul class="navbar-nav mx-auto">
+        {% if request.organization %}
         <li class="nav-item">
           <a class="nav-link current-household" href="{% url 'organization_settings' %}"
              title="Current household &mdash; open Settings">{{ request.organization.display_name }}</a>
         </li>
+        {% endif %}
       </ul>
-      {% endif %}
       <ul class="navbar-nav">
         {% comment %}
         Profile and Scenarios stay lit while editing their flows: the flow editors all resolve to
