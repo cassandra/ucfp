@@ -14,7 +14,6 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
-from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 
 from common.rate import Rate
@@ -34,6 +33,7 @@ from ucfp.inputs.vehicle_handles import is_vehicle_loan_handle, is_vehicle_loan_
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.planning.display_placement import (
     _UNMAPPED_ORDER, _VehicleRung, _vehicle_group, _vehicle_rungs, stamp_display_placements )
@@ -107,7 +107,7 @@ class VehicleRollupPlacementTest( TestCase ):
     current plus every replacement cycle -- each collapse onto a single per-vehicle rung."""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def _run( self ):
         profile = _with_financed_vehicle( _profile(), 'vehicle-1', 'Civic' )
@@ -175,7 +175,7 @@ class MultiVehicleRollupPlacementTest( TestCase ):
     rollup groups a vehicle's own accounts, it does not merge distinct vehicles."""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def test_two_vehicles_get_distinct_rungs_under_one_surface( self ):
         profile = _with_financed_vehicle(
@@ -205,7 +205,7 @@ class NoVehicleBooksTest( TestCase ):
     pane, and every account keeps its ordinary placement."""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def test_the_vehicle_columns_are_absent_without_any_vehicle( self ):
         _books, catalog = _stamped( _profile(), Plans() )       # _profile() has cash/stocks/bonds only

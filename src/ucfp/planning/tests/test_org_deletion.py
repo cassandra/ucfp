@@ -5,7 +5,6 @@ every dependent record with it -- runs, their books (accounts, transactions, ent
 leaving nothing orphaned. This regression guards the `PROTECT`-chain bug (#47) where a captured run's
 `PROTECT` on its books blocked the whole cascade.
 """
-from django.core.management import call_command
 from django.test import TestCase
 
 from organization.models import Organization
@@ -13,6 +12,7 @@ from organization.models import Organization
 from ucfp.accounts.models import (
     AccountRecord, BooksOfAccountRecord, EntryRecord, TransactionRecord )
 from ucfp.inputs.plans.schemas import Plans
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 from ucfp.planning.orchestration import run_and_capture
 
@@ -22,7 +22,7 @@ from .support import expected_assumptions, forecast_frame, forecast_profile
 class OrganizationDeletionTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
 
     def _capture_a_run( self ):

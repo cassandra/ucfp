@@ -3,6 +3,7 @@ materialize -- the non-trivial mechanism that has to behave exactly on re-runs a
 """
 from datetime import date
 from decimal import Decimal
+from io import StringIO
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -12,6 +13,7 @@ from ucfp.forecast.forecast import Forecast
 from ucfp.parameter_sets.enums import (
     CadenceDomain, CatalogScope, EconomicOutlookVariant, ExpenseCategory, ExpenseClass,
     ParameterSetKind, Realization )
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.parameter_sets.models import ParameterSet
 from ucfp.parameter_sets.repository import economic_parameters, load
 from ucfp.planning.materialization import ForecastFrame, materialize
@@ -32,7 +34,7 @@ def _system_set( name ):
 class SeedLifecycleTest( TestCase ):
 
     def test_seed_creates_the_named_presets( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         names = set( ParameterSet.objects.filter(
             kind = _ECON, organization = None ).values_list( 'label', flat = True ) )
         self.assertEqual( names, { variant.label for variant in EconomicOutlookVariant } )
@@ -41,37 +43,37 @@ class SeedLifecycleTest( TestCase ):
         self.assertFalse( record.is_modified )
 
     def test_reseed_is_idempotent( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         count = ParameterSet.objects.count()
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.assertEqual( ParameterSet.objects.count(), count )
 
     def test_reseed_preserves_admin_modifications( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         record = _system_set( _EXPECTED )
         record.data = { 'segments': [] }
         record.save()
         self.assertTrue( record.is_modified )
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         record.refresh_from_db()
         self.assertEqual( record.data, { 'segments': [] } )
 
     def test_reseed_refreshes_an_untouched_but_stale_default( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         record = _system_set( _EXPECTED )
         stale = { 'segments': [] }
         ParameterSet.objects.filter( pk = record.pk ).update( data = stale, seeded_data = stale )
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         record.refresh_from_db()
         self.assertNotEqual( record.data, stale )
         self.assertEqual( record.data, record.seeded_data )
 
     def test_force_refreshes_even_modified_defaults( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         record = _system_set( _EXPECTED )
         record.data = { 'segments': [] }
         record.save()
-        call_command( 'seed_parameter_sets', '--force' )
+        seed_default_parameter_sets( force = True )
         record.refresh_from_db()
         self.assertNotEqual( record.data, { 'segments': [] } )
         self.assertFalse( record.is_modified )
@@ -80,7 +82,7 @@ class SeedLifecycleTest( TestCase ):
 class LoadPathTest( TestCase ):
 
     def test_load_returns_the_typed_schedule( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         schedule = load( _ECON, _EXPECTED )
         self.assertEqual( len( schedule.segments ), 1 )
         segment = schedule.segments[ 0 ]
@@ -91,7 +93,7 @@ class LoadPathTest( TestCase ):
         self.assertEqual( segment.depreciation_rate.fraction, Decimal( '0.18' ) )
 
     def test_load_returns_the_expense_catalog( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         catalog = load( ParameterSetKind.EXPENSE_CATALOG, CatalogScope.GENERAL.label )
         # A deliberate tripwire -- bump this when the catalog gains or loses an expense, so an
         # accidental change to the seeded set is caught.
@@ -124,7 +126,7 @@ class LoadPathTest( TestCase ):
 class MaterializeFromLibraryTest( TestCase ):
 
     def test_materialize_resolves_the_outlook_and_the_engine_runs( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         profile = Profile(
             subjects = [ SubjectProfile(
                 handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
@@ -153,3 +155,20 @@ class MaterializeFromLibraryTest( TestCase ):
             params.economic_outlook.parameters_at( date( 2026, 1, 1 ) ).inflation.fraction,
             Decimal( '0.03' ) )
         self.assertEqual( type( Forecast( params ).run() ).__name__, 'ForecastResult' )
+
+
+class SeedCommandTest( TestCase ):
+    """The management command is a thin wrapper: it seeds via the shared function and prints its
+    summary at the default verbosity, silently under `--verbosity 0` (so a test suite that seeds does
+    not spew the summary -- though tests seed by calling `seed_default_parameter_sets` directly)."""
+
+    def test_command_seeds_and_reports_at_default_verbosity( self ):
+        out = StringIO()
+        call_command( 'seed_parameter_sets', stdout = out )
+        self.assertTrue( ParameterSet.objects.filter( organization = None ).exists() )
+        self.assertIn( 'Parameter-set seed complete', out.getvalue() )
+
+    def test_command_is_silent_at_verbosity_zero( self ):
+        out = StringIO()
+        call_command( 'seed_parameter_sets', verbosity = 0, stdout = out )
+        self.assertEqual( '', out.getvalue() )

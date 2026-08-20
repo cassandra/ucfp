@@ -4,7 +4,6 @@ receiver) and the transient WORKING runs it produced (the planning-side receiver
 carry heavy books, so they must not linger. The teardown must also run cleanly during a whole-organization
 delete, where the org's own cascade removes those runs too.
 """
-from django.core.management import call_command
 from django.test import TestCase
 
 from organization.models import Organization
@@ -18,6 +17,7 @@ from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.scenarios.exploration import enter_exploration
 from ucfp.inputs.scenarios.repository import create_scenario, delete_scenario
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.explore import run_working_scenario
 from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 
@@ -27,7 +27,7 @@ from .support import expected_assumptions, forecast_frame, forecast_profile
 class ExplorationTeardownTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
 
     def _anchor_with_a_running_exploration( self ) -> ScenarioRecord:

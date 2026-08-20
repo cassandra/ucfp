@@ -8,7 +8,6 @@ count the Default, not zero. These pin that resolution, the collapsed one-column
 from dataclasses import replace
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 
@@ -21,6 +20,7 @@ from ucfp.inputs.profile.enums import HousingTenure
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.inputs.property_expenses import PropertyExpensesForm
 from ucfp.inputs.views import PropertyExpensesView
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
 _MONTHLY = Duration( 1, TimeUnit.MONTH )
 
@@ -57,7 +57,7 @@ def _uniform_plans( profile, default : Decimal, overrides = None ) -> Plans:
 class PropertyExpenseTotalsTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def test_collapsed_total_is_every_row_annualized( self ):
         form = PropertyExpensesForm(

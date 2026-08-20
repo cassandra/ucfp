@@ -16,7 +16,6 @@ that a stored column lens survives a fresh run's new UUIDs.
 from datetime import date
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.test import TestCase
 
 from common.recurrence import Duration, TimeUnit
@@ -38,6 +37,7 @@ from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.parameter_sets.repository import economic_parameters
 
 _TAXES_AND_FEES_KEY    = 'class:EXPENSE:taxes-and-fees'
@@ -47,7 +47,7 @@ _INVESTMENT_INCOME_KEY = 'class:REVENUE:investment'
 class EngineColumnPersistenceTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def _profile( self ) -> Profile:
         # Funded Dividend Stocks and Bonds drive several investment-income classes; the two Stocks

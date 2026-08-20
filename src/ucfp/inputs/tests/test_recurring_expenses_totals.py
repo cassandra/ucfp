@@ -8,7 +8,6 @@ from collections import Counter
 from dataclasses import replace
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 
@@ -18,6 +17,7 @@ from ucfp.environment.constants import AppConst
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import Profile
 from ucfp.inputs.recurring_expenses import RecurringExpensesForm
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
 _SECTION_TEMPLATE = 'inputs/interview/sections/recurring_expenses.html'
 _MONTHLY = Duration( 1, TimeUnit.MONTH )
@@ -37,7 +37,7 @@ def _form_with_bands( per_band_amounts : list ) -> RecurringExpensesForm:
 class LivingExpenseTotalsTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def test_page_total_is_every_expense_annualized_at_each_span( self ):
         form  = _form_with_bands( [ Decimal( '10' ), Decimal( '20' ) ] )

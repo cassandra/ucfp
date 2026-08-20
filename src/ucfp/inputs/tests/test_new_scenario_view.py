@@ -7,7 +7,6 @@ record's flow sections; components are built from empty schemas (the minting hel
 """
 from datetime import date
 
-from django.core.management import call_command
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
@@ -28,6 +27,7 @@ from ucfp.inputs.profile.schemas import Profile, SubjectProfile
 from ucfp.inputs.scenarios.repository import create_scenario, scenarios_for
 from ucfp.inputs.views import ScenarioComposeView
 from ucfp.jurisdiction.enums import FilingStatus
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.session_state import SessionState
 
 
@@ -214,7 +214,7 @@ class NewScenarioPairTests( _NewScenarioBase ):
 class NewScenarioStartFreshTests( _NewScenarioBase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )              # start-fresh mints default (seeded) components
+        seed_default_parameter_sets()              # start-fresh mints default (seeded) components
         super().setUp()
 
     def test_start_fresh_mints_a_scenario_and_enters_its_own_build_flow( self ):

@@ -6,7 +6,6 @@ the pane footer under the id the antinode `replace_map` targets after a silent s
 """
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 
@@ -22,6 +21,7 @@ from ucfp.inputs.plans.schemas import Plans, VehiclePlan, VehicleRunningCost
 from ucfp.inputs.vehicle_expenses import VehicleExpensesForm
 from ucfp.inputs.views import VehicleExpensesView
 from ucfp.parameter_sets.enums import ExpenseClass
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.session_state import SessionState
 
 _MONTHLY = Duration( 1, TimeUnit.MONTH )
@@ -47,7 +47,7 @@ def _plans_with_every_cost_at( amount : Decimal ) -> Plans:
 class VehicleRunningCostsTotalTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )       # the vehicle running-cost catalog rows
+        seed_default_parameter_sets()       # the vehicle running-cost catalog rows
 
     def test_total_is_the_annualized_sum_of_the_per_car_costs( self ):
         count = len( _vehicle_catalog_rows() )
@@ -69,7 +69,7 @@ class VehicleTotalsPushTest( TestCase ):
     replace fragment -- the server-computed push that keeps the on-page total live after a silent edit."""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
 
     def _request( self ):

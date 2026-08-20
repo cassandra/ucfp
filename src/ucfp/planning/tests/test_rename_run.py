@@ -3,7 +3,6 @@
 The run record carries the one label the results page and the hub both show, so a rename updates it
 directly. Saves silently; a blank name is ignored; scoped to the org's own runs.
 """
-from django.core.management import call_command
 from django.http import Http404
 from django.test import RequestFactory, TestCase
 
@@ -15,6 +14,7 @@ from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.repository import load_profile, save_profile
 from ucfp.inputs.scenarios.repository import create_scenario, load_scenario
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.orchestration import run_and_capture
 from ucfp.planning.tests.support import expected_assumptions, forecast_frame, forecast_profile
 from ucfp.planning.views import RenameRunView
@@ -23,7 +23,7 @@ from ucfp.planning.views import RenameRunView
 class RenameRunTests( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets', verbosity = 0 )
+        seed_default_parameter_sets()
         self.org      = Organization.objects.create( name = 'Org' )
         profile       = load_profile( save_profile( self.org, forecast_profile() ) )
         plans         = save_plans( PlansRecord( organization = self.org, label = 'P' ), Plans() )

@@ -7,7 +7,6 @@ those inputs only remembered to repopulate the panel.
 from dataclasses import replace
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.http import QueryDict
 from django.test import TestCase
 
@@ -15,6 +14,7 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.inputs.property_expenses import PropertyExpensesForm
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
 
 def _baseline_data( form ) -> QueryDict:
@@ -48,7 +48,7 @@ def _two_property_profile() -> Profile:
 class PropertyDurableAmountAuthoritativeTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     @staticmethod
     def _durable_row( form ) -> int:
