@@ -3,24 +3,24 @@
 
 {% block page_title %}Account{% endblock %}
 
-{% block page_subtitle %}<p class="text-muted">Your account and how you sign back in to your plan.</p>{% endblock %}
-
 {% block page_body %}
 <div class="card" style="max-width: 40rem">
   <div class="card-body">
 
     {% if request.user.is_verified %}
-      {# Verified: the email is the account's confirmed identity. #}
+      {# Verified: the email is the account's confirmed identity and the way back in. #}
       <dl class="row mb-0">
         <dt class="col-sm-3">Email</dt>
         <dd class="col-sm-9 mb-0">{{ request.user.email }}</dd>
       </dl>
+      <p class="text-muted small mt-3 mb-0">You can sign in with this email from any browser at any time.</p>
 
     {% else %}
       {% comment %}
-        Guest: offer to add an email so their plan is recoverable. The pending claim is overwritable,
-        so the add-email input always shows (a typo is fixed by simply entering the address again);
-        a confirmation step is shown in addition whenever a claim is in flight.
+        Guest: offer to add an email so their work is recoverable. The pending claim is overwritable, so
+        the add-email input always shows (a typo is fixed by simply entering the address again); when a
+        claim is in flight, a confirmation step is shown above it and the pitch gives way to a plain
+        "use a different email".
       {% endcomment %}
       {% if email_not_configured %}
       <div class="alert alert-danger">
@@ -48,25 +48,28 @@
           {% csrf_token %}
           <button type="submit" class="btn btn-outline-secondary btn-sm">Resend the code</button>
         </form>
+        <div class="h5">Use a different email</div>
+      {% else %}
+        <div class="h5">Don't lose your work</div>
+        <p class="text-muted">
+          You haven't added an email, so everything you've entered lives only in this browser — clear its
+          data or switch browsers and it's gone. Add your email so you can get back in from any browser at
+          any time.
+        </p>
       {% endif %}
 
-      <div class="h5">
-        {% if request.user.pending_email %}Use a different email{% else %}Add your email to save your plan{% endif %}
-      </div>
-      <p class="text-muted">
-        Right now your plan lives only in this browser. Add an email so you can get back to it from any
-        device. Your email is used only to send a sign-in code and keep your plan safe — no marketing,
-        no data sold, ever.
-      </p>
       <form method="post" action="{% url 'attach_email' %}" data-synchronous="true">
         {% csrf_token %}
         <div class="d-flex input-group input-group-lg">
           <input type="email" name="email" class="form-control" placeholder="e-mail address" required="">
           <div class="input-group-append">
-            <button type="submit" class="btn btn-cta">Save my plan</button>
+            <button type="submit" class="btn btn-cta">Add email</button>
           </div>
         </div>
       </form>
+      <p class="text-muted small mt-2 mb-0">
+        Your email is used only to send sign-in codes — no marketing, no data sold, ever.
+      </p>
     {% endif %}
 
   </div>
