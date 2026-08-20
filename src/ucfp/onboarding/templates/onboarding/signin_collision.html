@@ -47,7 +47,10 @@
   <form method="post" action="{% url 'signin_collision' %}" data-synchronous="true">
     {% csrf_token %}
     <input type="hidden" name="choice" value="decide_later">
-    <button type="submit" class="btn btn-link text-muted">Decide later</button>
+    <button type="submit" class="btn btn-outline-primary">Decide later</button>
   </form>
+  <p class="text-muted small mt-1 mb-0">
+    Stay a guest and keep your current work for now, so you can still switch later.
+  </p>
 </div>
 {% endblock %}
