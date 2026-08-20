@@ -30,11 +30,11 @@ env-drift-check:	fix-permissions
 
 # What should pass before committing / in CI (the dev gate). `test` runs the fast tests only; the
 # longer-running suites are held for less-frequent cadences (see `check-release`).
-check:	lint test env-drift-check
+check:	lint test-auth-modes env-drift-check
 
 # The release / periodic gate: the dev checks plus every held-back suite (the granularity differential
 # suite and the end-to-end forecast smoke). Wire this into nightly / pre-release CI.
-check-release:	lint test test-granularity test-e2e env-drift-check
+check-release:	lint test-auth-modes test-granularity test-e2e env-drift-check
 
 # ----- Python / Django tests --------------------------------------------------
 # Tests are tagged by *what they are* (semantic), not by cost, so cadence is chosen here by which tags
@@ -47,6 +47,17 @@ check-release:	lint test test-granularity test-e2e env-drift-check
 
 test:
 	cd src && ./manage.py test --exclude-tag granularity --exclude-tag e2e
+
+# The dual-deployment gate: the fast suite under BOTH authentication modes. Each leg pins
+# UCFP_SUPPRESS_AUTHENTICATION explicitly, so the pair is exhaustive regardless of the developer's
+# ambient value, and a mode-dependent test that forgot to pin its mode fails one leg here (in `check`)
+# before a push. The echo labels which mode a failure occurred in. (Slow suites stay single-mode -- they
+# exercise the forecast engine, not the auth flow.)
+test-auth-modes:
+	@echo "===== tests: UCFP_SUPPRESS_AUTHENTICATION=false (authentication enabled) ====="
+	cd src && UCFP_SUPPRESS_AUTHENTICATION=false ./manage.py test --exclude-tag granularity --exclude-tag e2e
+	@echo "===== tests: UCFP_SUPPRESS_AUTHENTICATION=true (authentication suppressed) ====="
+	cd src && UCFP_SUPPRESS_AUTHENTICATION=true  ./manage.py test --exclude-tag granularity --exclude-tag e2e
 
 test-granularity:
 	cd src && ./manage.py test --tag granularity
