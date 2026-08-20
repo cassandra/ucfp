@@ -51,8 +51,8 @@ shown below -- it does not use this form.{% endcomment %}
   <div class="card">
     <div class="card-body">
       {% include 'planning/panes/run_frame_fields.html' %}
-      <button type="submit" class="btn btn-primary mr-2">Run once</button>
-      <button type="submit" class="btn btn-primary" formaction="{% url 'explore_enter' %}">Run &amp; Explore</button>
+      <button type="submit" class="btn btn-primary mr-2 edit-only">Run once</button>
+      <button type="submit" class="btn btn-primary edit-only" formaction="{% url 'explore_enter' %}">Run &amp; Explore</button>
     </div>
   </div>
 </form>
@@ -63,7 +63,9 @@ use it. Name the anchor and offer Resume; what has diverged from the anchor is s
 workspace itself, not repeated here.{% endcomment %}
 <div class="alert alert-info d-flex flex-wrap align-items-center mt-3 mb-0">
   <span class="mr-3 my-1">Exploration in progress &mdash; <strong>{{ resume.source.label }}</strong>.</span>
-  <a href="{% url 'explore' %}" class="btn btn-primary btn-sm my-1">Resume</a>
+  {% comment %}Explore is a heavily edit-dependent sandbox; a read-only member is kept out of it (the
+  entry is inert) rather than shown a mostly-disabled workspace.{% endcomment %}
+  <a href="{% url 'explore' %}" class="btn btn-primary btn-sm my-1 edit-only">Resume</a>
 </div>
 {% endif %}
 {% elif not drift_scenarios %}
@@ -88,7 +90,7 @@ workspace itself, not repeated here.{% endcomment %}
       </span>
     </a>
     <a href="{% url 'run_discard_confirm' row.result.run.uuid %}" data-async="modal"
-       class="btn btn-sm btn-link text-danger p-1 ml-3" aria-label="Discard this saved run">
+       class="btn btn-sm btn-link text-danger p-1 ml-3 edit-only" aria-label="Discard this saved run">
       {% icon "delete" size="sm" %}
     </a>
   </div>

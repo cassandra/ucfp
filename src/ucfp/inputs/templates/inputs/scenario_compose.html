@@ -41,7 +41,7 @@ select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete
     yet. Finish one:</div>
   {% for scenario in incomplete_scenarios %}
   {# Each links straight into its build flow (resume setup), so the user needn't go hunting. #}
-  <form method="post" action="{% url 'scenario_edit' scenario.uuid %}" class="d-inline">
+  <form method="post" action="{% url 'scenario_edit' scenario.uuid %}" class="d-inline edit-only">
     {% csrf_token %}
     <button type="submit" class="btn btn-link btn-sm p-0 mr-3">{{ scenario.label }} &rarr;</button>
   </form>
@@ -58,7 +58,7 @@ select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete
         <p class="text-muted small">Start from an existing scenario. For each side, <em>copy</em> it to
           edit an independent version, or <em>reuse</em> it so both scenarios share (and edit) the same
           set.</p>
-        <form method="post" action="{% url 'scenario_compose' %}">
+        <form method="post" action="{% url 'scenario_compose' %}" class="edit-only">
           {% csrf_token %}
           <input type="hidden" name="action" value="copy">
           {% if copy_form.non_field_errors %}<div class="alert alert-warning py-1 px-2 small">{{ copy_form.non_field_errors }}</div>{% endif %}
@@ -112,7 +112,7 @@ select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete
         <h2 class="h6">Start fresh</h2>
         <p class="text-muted small">Begin with a blank Plans and Assumptions and set them up in the
           interview.</p>
-        <form method="post" action="{% url 'scenario_compose' %}">
+        <form method="post" action="{% url 'scenario_compose' %}" class="edit-only">
           {% csrf_token %}
           <input type="hidden" name="action" value="start_fresh">
           <div class="form-group">
@@ -135,7 +135,7 @@ select to not-yet-used combinations). Reads `has_complete_scenario`, `incomplete
     <h2 class="h6">Pair existing components</h2>
     <p class="text-muted small">Less common: combine a Plans set with an Assumptions set you already have,
       in a combination you have not used yet.</p>
-    <form method="post" action="{% url 'scenario_compose' %}">
+    <form method="post" action="{% url 'scenario_compose' %}" class="edit-only">
       {% csrf_token %}
       <input type="hidden" name="action" value="pair">
       {% if pair_form.non_field_errors %}<div class="alert alert-warning py-1 px-2 small">{{ pair_form.non_field_errors }}</div>{% endif %}

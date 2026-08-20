@@ -17,7 +17,7 @@ walk). Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice o
       <h2 class="h5 mb-0 mr-3">{{ row.scenario.label }}</h2>
       {% if row.complete %}{% elif row.blockers %}<span class="badge badge-danger mr-3">incomplete</span>{% else %}<span class="badge badge-secondary mr-3">in progress</span>{% endif %}
       {% if row.drift %}<span class="badge badge-warning mr-3">needs reconciling</span>{% endif %}
-      <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0">
+      <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0 edit-only">
         {% csrf_token %}
         {% comment %}Both unfinished states re-enter the same walk, so they share one action; the badge
         (grey in-progress vs danger incomplete) and the blocker alert below carry the distinction.{% endcomment %}
@@ -59,7 +59,7 @@ walk). Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice o
   {% if can_delete_scenario %}
   <div class="card-footer bg-white border-top-0 py-1 text-right">
     <a href="{% url 'scenario_delete_confirm' row.scenario.uuid %}" data-async="modal"
-       class="btn btn-sm btn-link text-danger p-0">Delete scenario</a>
+       class="btn btn-sm btn-link text-danger p-0 edit-only">Delete scenario</a>
   </div>
   {% endif %}
 </div>

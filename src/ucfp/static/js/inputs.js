@@ -104,11 +104,11 @@ window.App.Inputs = (function () {
         const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
         $root.find( autosaveForm ).addBack( autosaveForm )
             .find( 'input, select, textarea' ).not( '[disabled]' ).prop( 'disabled', true );
-        // Edit-only affordances are muted and pointer-inert via CSS; also cover keyboard/AT here.
+        // Edit-only affordances (and edit-only form regions, e.g. Settings) are muted and pointer-inert
+        // via CSS; disable every control they hold and drop links from the tab order for keyboard/AT.
         const $affordances = $root.find( '.edit-only' ).addBack( '.edit-only' );
         $affordances.attr( 'aria-disabled', 'true' );
-        $affordances.filter( 'button' ).add( $affordances.find( 'button, input[type="submit"]' ) )
-            .prop( 'disabled', true );
+        $affordances.find( ':input' ).addBack( ':input' ).prop( 'disabled', true );
         $affordances.filter( 'a' ).attr( 'tabindex', '-1' );
     }
 
