@@ -97,6 +97,28 @@ class OrganizationSwitchViewTest( TestCase ):
         self.assertEqual( response.status_code, 404 )
         self.assertIsNone( self.client.session.get( _SESSION_KEY ) )
 
+    def test_switching_away_and_back_retains_the_household_context( self ):
+        # End-to-end through the real endpoint + session: a scoped selection under one household
+        # survives switching away and back, rather than being reset.
+        user = _user( 'u@x.test' )
+        org_a = Organization.objects.create_for_owner( user, 'A' )
+        org_b = Organization.objects.create_for_owner( user, 'B' )
+        self.client.force_login( user )
+        session = self.client.session
+        session[ 'current_organization_uuid' ] = str( org_a.uuid )
+        session[ 'organization_contexts' ] = {
+            str( org_a.uuid ): { 'current_scenario_uuid': 'scenario-a' } }
+        session.save()
+
+        self.client.post( self._url( org_b ) )                      # switch away
+        self.client.post( self._url( org_a ) )                      # ...and back
+
+        session = self.client.session
+        self.assertEqual( session[ _SESSION_KEY ], str( org_a.uuid ) )
+        self.assertEqual(
+            session[ 'organization_contexts' ][ str( org_a.uuid ) ][ 'current_scenario_uuid' ],
+            'scenario-a' )
+
     def test_get_is_not_allowed( self ):
         user = _user( 'u@x.test' )
         org = Organization.objects.create_for_owner( user, 'Owned' )

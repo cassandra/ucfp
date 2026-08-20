@@ -53,6 +53,7 @@
         {% if request.organization %}
         <li class="nav-item">
           <a class="nav-link current-household" href="{% url 'organization_settings' %}"
+             aria-label="Current household {{ request.organization.display_name }} &mdash; open Settings"
              title="Current household &mdash; open Settings">{{ request.organization.display_name }}</a>
         </li>
         {% endif %}

@@ -61,7 +61,7 @@
             <form method="post" class="mb-0"
                   action="{% url 'organization_switch' organization_uuid=household.organization.uuid %}">
               {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-primary">Switch</button>
+              <button type="submit" class="btn btn-outline-primary">Switch</button>
             </form>
             {% endif %}
           </li>

@@ -26,11 +26,7 @@ def _is_confirmed( request ) -> bool:
 
 
 def _active_membership_or_404( request, organization_uuid ) -> OrganizationMember:
-    member = OrganizationMember.objects.filter(
-        organization__uuid = organization_uuid,
-        user = request.user,
-        is_active = True,
-    ).select_related( 'organization' ).first()
+    member = OrganizationMember.objects.active_membership_for( request.user, organization_uuid )
     if member is None:
         raise Http404( 'No such household for this user.' )
     return member
@@ -86,10 +82,7 @@ class OrganizationSwitchView( View ):
     """
 
     def post( self, request, organization_uuid ):
-        membership = OrganizationMember.objects.active_membership_for(
-            request.user, organization_uuid )
-        if membership is None:
-            raise Http404( 'No such household for this user.' )
+        membership = _active_membership_or_404( request, organization_uuid )
         state = request.session_state
         state.set_current_organization( str( membership.organization.uuid ) )
         state.to_session( request )

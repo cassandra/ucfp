@@ -121,7 +121,7 @@ class SessionState:
     # shown again this session (see ucfp.privacy_consent).
     cookies_acknowledged : bool = False
 
-    def set_current_organization( self, organization_uuid : Optional[ str ] ):
+    def set_current_organization( self, organization_uuid : Optional[ str ] ) -> None:
         """Make `organization_uuid` the current organization.
 
         Because the scoped selections are held per organization and surfaced for whichever one is

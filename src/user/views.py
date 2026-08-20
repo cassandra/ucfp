@@ -13,9 +13,9 @@ from django.utils.decorators import method_decorator
 from django.views.generic import View
 
 from custom.decorators import require_authentication_enabled, require_verified_user
-from organization.decorators import ensure_organization
 from notify.email_sender import EmailSender, UnsubscribedEmailError
 from notify.views import resubscribe_url_for
+from organization.decorators import ensure_organization
 
 from . import collision
 from . import forms
