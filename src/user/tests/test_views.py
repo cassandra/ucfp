@@ -339,6 +339,16 @@ class TestUserSignoutView(SyncViewTestCase):
         self.assertEqual( 405, response.status_code )
         self.assertIn( '_auth_user_id', self.client.session )
 
+    def test_a_guest_cannot_sign_out(self):
+        # A Guest's session is the only handle to their data, so sign-out is Verified-only.
+        guest = User.objects.create_guest()
+        self.client.force_login( guest )
+
+        response = self.client.post( reverse('user_signout') )
+
+        self.assertEqual( 404, response.status_code )
+        self.assertIn( '_auth_user_id', self.client.session )   # still signed in, data not stranded
+
 
 @override_settings(
     ABUSE_PREVENTION_ENABLED=True,

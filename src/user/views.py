@@ -8,8 +8,10 @@ from django.core.validators import validate_email
 from django.http import HttpResponseRedirect
 from django.shortcuts import render, resolve_url
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.views.generic import View
 
+from custom.decorators import require_verified_user
 from notify.email_sender import EmailSender, UnsubscribedEmailError
 from notify.views import resubscribe_url_for
 
@@ -312,10 +314,12 @@ class ConvertToGuestView( View ):
         return HttpResponseRedirect( resolve_url( settings.GUEST_START_URL ) )
 
 
+@method_decorator( require_verified_user, name = 'dispatch' )
 class UserSignoutView( View ):
-    """Sign the current user out and return them to the site root. POST-only so a
-    sign-out cannot be triggered by an incidental GET (link prefetch, an <img> src,
-    a shared URL)."""
+    """Sign the current user out and return them to the site root. POST-only so a sign-out cannot be
+    triggered by an incidental GET (link prefetch, an <img> src, a shared URL). Verified-only: a Guest's
+    session is the sole handle to their data, so signing out would strand it -- the nav hides the control
+    for a Guest, and this is the backstop against a direct request."""
 
     def post( self, request, *args, **kwargs ):
         logout( request )
