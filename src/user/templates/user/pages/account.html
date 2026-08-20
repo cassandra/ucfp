@@ -3,15 +3,57 @@
 
 {% block page_title %}Account{% endblock %}
 
-{% block page_subtitle %}<p class="text-muted">Your account and the email address we use to identify you.</p>{% endblock %}
-
 {% block page_body %}
 <div class="card" style="max-width: 40rem">
   <div class="card-body">
-    <dl class="row mb-0">
-      <dt class="col-sm-3">Email</dt>
-      <dd class="col-sm-9 mb-0">{{ request.user.email }}</dd>
-    </dl>
+
+    {% if request.user.is_verified %}
+      {# Verified: the email is the account's confirmed identity and the way back in. #}
+      <dl class="row mb-0">
+        <dt class="col-sm-3">Email</dt>
+        <dd class="col-sm-9 mb-0">{{ request.user.email }}</dd>
+      </dl>
+      <p class="text-muted small mt-3 mb-0">You can sign in with this email from any browser at any time.</p>
+
+    {% elif suppress_authentication %}
+      {% comment %}
+      Self-hosted single-user deployment: the local Guest is the sole owner and there is no sign-in, so
+      email is never solicited -- the data lives on this server, not bound to a browser session.
+      {% endcomment %}
+      <p class="text-muted mb-0">
+        This is a self-hosted deployment — your data lives on this server, so there's no email or sign-in
+        to set up.
+      </p>
+
+    {% else %}
+      {# Guest (cloud): a single "add your email" control; a pending unconfirmed claim is not surfaced (re-adding overwrites and resends). #}
+      {% if email_not_configured %}
+      <div class="alert alert-danger">
+        Email is not configured on this server, so an address cannot be confirmed here.
+      </div>
+      {% endif %}
+
+      <div class="h5">Don't lose your work</div>
+      <p class="text-muted">
+        You haven't added an email, so everything you've entered lives only in this browser — clear its
+        data or switch browsers and it's gone. Add your email so you can get back in from any browser at
+        any time.
+      </p>
+      <form method="post" action="{% url 'attach_email' %}" data-synchronous="true">
+        {% csrf_token %}
+        <div class="d-flex input-group input-group-lg">
+          <input type="email" name="email" class="form-control" placeholder="e-mail address" required=""
+                 aria-label="Email address">
+          <div class="input-group-append">
+            <button type="submit" class="btn btn-cta">Add email</button>
+          </div>
+        </div>
+      </form>
+      <p class="text-muted small mt-2 mb-0">
+        Your email is used only to send sign-in codes — no marketing, no data sold, ever.
+      </p>
+    {% endif %}
+
   </div>
 </div>
 

@@ -63,11 +63,17 @@
           <div class="dropdown-menu dropdown-menu-right" aria-labelledby="user-menu">
             <a class="dropdown-item" href="{% url 'user_account' %}">Account</a>
             <a class="dropdown-item" href="{% url 'organization_settings' %}">Household</a>
+            {% comment %}
+              Only a Verified user can sign out: a Guest's session is the sole handle to their data,
+              so signing out would strand it. A Guest adds an email (Account) to become recoverable.
+            {% endcomment %}
+            {% if request.user.is_verified %}
             <div class="dropdown-divider"></div>
             <form method="post" action="{% url 'user_signout' %}" class="mb-0">
               {% csrf_token %}
               <button type="submit" class="dropdown-item">Sign out</button>
             </form>
+            {% endif %}
           </div>
         </li>
       </ul>

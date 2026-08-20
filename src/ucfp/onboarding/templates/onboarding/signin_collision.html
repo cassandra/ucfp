@@ -1,0 +1,56 @@
+{% extends "pages/interstitial_page.html" %}
+{% load common_tags %}
+
+{% block interstitial_content %}
+<div class="h3">You already have an account</div>
+<p class="my-3 text-muted">
+  You've been working here as a guest, and the email you just confirmed already has its own saved work.
+  Which one do you want to keep? We won't delete the other — it's just set aside.
+</p>
+
+<div class="row my-4">
+  {% for option in options %}
+  <div class="col-md-6 mb-3">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column text-center">
+        <div class="h6 text-uppercase text-muted mb-3">{{ option.label }}</div>
+        <div class="flex-grow-1 text-left">
+          {% if option.summary.subject_names %}
+          <div class="mb-2"><strong>Household:</strong> {{ option.summary.subject_names|join:", " }}</div>
+          {% endif %}
+          {% if option.summary.accounts %}
+          <div><strong>Accounts:</strong>
+            <ul class="mb-0 pl-3">
+              {% for name, balance in option.summary.accounts %}
+              <li>{{ name }} — {{ balance|money:currency }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% if not option.summary.subject_names and not option.summary.accounts %}
+          <div class="text-muted">No names or balances entered yet.</div>
+          {% endif %}
+        </div>
+        {# choice rides a hidden input, not the button: the synchronous submit handler disables the button, dropping its value. #}
+        <form method="post" action="{% url 'signin_collision' %}" data-synchronous="true" class="mt-3">
+          {% csrf_token %}
+          <input type="hidden" name="choice" value="{{ option.choice }}">
+          <button type="submit" class="btn btn-primary btn-block">Keep this</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="text-center">
+  <form method="post" action="{% url 'signin_collision' %}" data-synchronous="true">
+    {% csrf_token %}
+    <input type="hidden" name="choice" value="decide_later">
+    <button type="submit" class="btn btn-outline-primary">Decide later</button>
+  </form>
+  <p class="text-muted small mt-1 mb-0">
+    Stay a guest and keep your current work for now, so you can still switch later.
+  </p>
+</div>
+{% endblock %}

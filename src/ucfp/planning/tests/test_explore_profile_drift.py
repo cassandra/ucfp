@@ -4,7 +4,6 @@ surface, and the runs stay viewable -- until the user re-baselines on the curren
 """
 from dataclasses import replace
 
-from django.core.management import call_command
 from django.http import QueryDict
 from django.test import RequestFactory, TestCase
 
@@ -18,6 +17,7 @@ from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.inputs.state import input_state
 from ucfp.jurisdiction.enums import FilingStatus
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.session_state import SessionState
 from ucfp.planning.explore import run_working_scenario, transient_runs
 from ucfp.planning.views import EnterExploreView, ExploreRestartView, ExploreView
@@ -28,7 +28,7 @@ from .support import expected_assumptions, forecast_frame, forecast_profile
 class ExploreProfileDriftTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
         save_profile( self.organization, forecast_profile() )        # the Profile the baseline run will embed
         self.scenario = self._saved_scenario()

@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     'ucfp.parameter_sets',
     'ucfp.inputs',
     'ucfp.planning',
+    'ucfp.onboarding',
     'ucfp.environment',
 ]
 
@@ -114,6 +115,9 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Logs the self-hosted singleton Guest in under SUPPRESS_AUTHENTICATION, so the request
+    # carries a real user before the sign-in gate (and every downstream view) runs.
+    'user.middleware.SelfHostedIdentityMiddleware',
     'user.middleware.AuthenticationMiddleware',
     # Attaches request.show_privacy_banner -- after the auth middleware, whose
     # request.user it reads (and after SessionStateMiddleware above).
@@ -337,6 +341,13 @@ CACHES = {
 
 AUTH_USER_MODEL = "custom.CustomUser"
 SUPPRESS_AUTHENTICATION = ENV.SUPPRESS_AUTHENTICATION
+
+# Host destinations the (app-agnostic) sign-in code hands control to, resolved via `resolve_url`.
+# This is the contract that keeps `user`/`organization`/`custom` from importing host (`ucfp`) code:
+# they read these settings, and the host binds each to one of its own views here.
+LOGIN_REDIRECT_URL = 'home'              # where a signed-in user lands
+GUEST_START_URL = 'flow_profile'         # where a freshly-created Guest goes to start entering data
+SIGNIN_COLLISION_URL = 'signin_collision'   # reconcile entry when a Guest signs into an existing account
 
 # Keys and cipher for the encrypted model fields (see common.encrypted_fields).
 # Empty keys mean "not configured" -- the fields fail closed on first use rather

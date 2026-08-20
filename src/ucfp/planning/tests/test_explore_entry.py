@@ -10,7 +10,6 @@ start-of-year.
 from datetime import date
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.http import QueryDict
 from django.test import RequestFactory, TestCase
 
@@ -23,6 +22,7 @@ from ucfp.inputs.plans.schemas import DrawdownPolicy, Plans
 from ucfp.inputs.profile.repository import latest_profile, save_profile
 from ucfp.inputs.scenarios.exploration import overwrite_working, scenario_exploration, working_scenario
 from ucfp.inputs.scenarios.repository import create_scenario, load_scenario
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.inputs.scenarios.schemas import Scenario
 from ucfp.session_state import SessionState
 from ucfp.planning.explore import run_working_scenario, transient_runs
@@ -40,7 +40,7 @@ def _tweaked_plans() -> Plans:
 class EnterExploreIdempotencyTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
         save_profile( self.organization, forecast_profile() )
         self.one = self._saved( 'One' )

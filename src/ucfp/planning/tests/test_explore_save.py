@@ -6,7 +6,6 @@ test_exploration.
 """
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.http import QueryDict
 from django.test import RequestFactory, TestCase
 
@@ -21,6 +20,7 @@ from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.scenarios.exploration import enter_exploration, overwrite_working
 from ucfp.inputs.scenarios.repository import create_scenario, load_scenario, scenarios_for
 from ucfp.inputs.scenarios.schemas import Scenario
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.session_state import SessionState
 from ucfp.planning.views import SaveView
 
@@ -39,7 +39,7 @@ def _tweaked_plans() -> Plans:
 class SaveViewMappingTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
         save_profile( self.organization, forecast_profile() )
         self.source  = self._saved( 'Source' )

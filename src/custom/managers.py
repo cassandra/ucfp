@@ -1,7 +1,6 @@
 from django.contrib import auth
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.base_user import BaseUserManager
-from django.db import IntegrityError
 
 
 class CustomUserManager(BaseUserManager):
@@ -30,26 +29,26 @@ class CustomUserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def get_or_create_by_email( self, email ):
+    def create_guest( self ):
+        """Create a Guest: a persisted account with no email and no usable password,
+        identified only by its session until an email is later attached. The single
+        entry point for the email-less accounts used by anonymous cloud conversion and
+        the self-hosted singleton alike.
         """
-        Return (user, created) for the canonicalized email, creating a
-        password-less account the first time an address is seen. This is the
-        entry point for passwordless sign-in: an unknown email becomes a new
-        account rather than a dead end.
+        return self.create_user()
+
+    def verified_account_for_email( self, email ):
+        """The existing account that owns `email` as a *verified* address, or None.
+
+        Since the unique `email` field holds only verified addresses, a match here is
+        the collision signal when attaching an email to a Guest. A merely pending
+        (unverified) claim on the same address by another account is deliberately not
+        matched -- it holds no claim on the identity.
         """
         canonical_email = self.canonicalize_email( email )
         if canonical_email is None:
-            raise ValueError( 'Cannot get or create a user without an email.' )
-
-        existing_user = self.filter( email = canonical_email ).first()
-        if existing_user is not None:
-            return existing_user, False
-        try:
-            return self.create_user( email = canonical_email ), True
-        except IntegrityError:
-            # A concurrent request created this account between our check and
-            # our insert; the unique constraint caught it, so re-fetch.
-            return self.get( email = canonical_email ), False
+            return None
+        return self.filter( email = canonical_email ).first()
 
     def create_user(self, email=None, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", False)

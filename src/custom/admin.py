@@ -34,14 +34,13 @@ class CustomUserAdmin( UserAdmin ):
 
     # Fields for the user edit form
     fieldsets = (
-        (None, {"fields": ("email", "password", "uuid")}),
+        (None, {"fields": ("email", "pending_email", "account_state", "password", "uuid")}),
         (_("Personal info"), {"fields": ("first_name", "last_name")}),
         (
             _("Permissions"),
             {
                 "fields": (
                     "is_active",
-                    "email_verified",
                     "is_staff",
                     "is_superuser",
                     "groups",
@@ -54,8 +53,12 @@ class CustomUserAdmin( UserAdmin ):
 
     form = CustomUserChangeForm
     add_form = CustomUserCreationForm
-    list_display = ("email", "uuid", "first_name", "last_name", "email_verified", "is_staff")
+    list_display = ("email", "uuid", "account_state", "first_name", "last_name", "is_staff")
     list_filter = ("is_staff", "is_superuser", "is_active", "groups")
-    search_fields = ( "email", "uuid" )
-    readonly_fields = ( "uuid", )
+    search_fields = ( "email", "pending_email", "uuid" )
+    readonly_fields = ( "uuid", "account_state" )
     ordering = ("id",)
+
+    @admin.display( description = "Account state" )
+    def account_state( self, user ):
+        return user.account_state.label

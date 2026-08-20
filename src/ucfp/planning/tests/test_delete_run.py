@@ -4,7 +4,6 @@ A saved run is a SAVED `PlanningResultRecord` over a captured `ProjectionRunReco
 it must drop the books too (so the list cannot grow unbounded and no orphaned books linger), and must be
 scoped -- only this org's SAVED forecast runs, never a transient/working run or another org's.
 """
-from django.core.management import call_command
 from django.http import Http404
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
@@ -19,6 +18,7 @@ from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.repository import load_profile, save_profile
 from ucfp.inputs.scenarios.repository import create_scenario, load_scenario
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.enums import PlanningFeature
 from ucfp.planning.models import PlanningResultRecord
 from ucfp.planning.orchestration import run_and_capture
@@ -29,7 +29,7 @@ from ucfp.planning.views import DeleteRunView, RunDiscardConfirmView
 class DeleteRunTests( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets', verbosity = 0 )   # expected_assumptions reads a seeded outlook
+        seed_default_parameter_sets()   # expected_assumptions reads a seeded outlook
         self.org     = Organization.objects.create( name = 'Org' )
         self.profile = load_profile( save_profile( self.org, forecast_profile() ) )
         plans        = save_plans( PlansRecord( organization = self.org, label = 'P' ), Plans() )

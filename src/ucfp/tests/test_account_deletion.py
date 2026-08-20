@@ -7,7 +7,6 @@ organization app must not depend on ucfp, but ucfp may depend on organization.
 import logging
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
@@ -19,6 +18,7 @@ from ucfp.accounts.models import (
 from ucfp.inputs.models import ProfileRecord
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.repository import save_profile
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 from ucfp.planning.orchestration import run_and_capture
 from ucfp.planning.tests.support import expected_assumptions, forecast_frame, forecast_profile
@@ -36,7 +36,7 @@ class FinancialDataCascadeTest(TestCase):
 
     def setUp( self ):
         # A real run reads seeded economic parameters (see planning.tests.support).
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def _populate( self, organization ):
         profile = forecast_profile()

@@ -1,5 +1,5 @@
 from django.urls import path
-from django.urls import re_path
+
 
 from . import views
 
@@ -10,6 +10,14 @@ urlpatterns = [
           views.UserAccountView.as_view(),
           name = 'user_account' ),
 
+    path( 'attach-email',
+          views.AttachEmailView.as_view(),
+          name = 'attach_email' ),
+
+    path( 'convert-to-guest',
+          views.ConvertToGuestView.as_view(),
+          name = 'convert_to_guest' ),
+
     path( 'signout',
           views.UserSignoutView.as_view(),
           name = 'user_signout' ),
@@ -18,11 +26,11 @@ urlpatterns = [
           views.UserSigninView.as_view(),
           name = 'user_signin' ),
 
-    path( 'signin/magic/code',
-          views.SigninMagicCodeView.as_view(),
-          name = 'user_signin_magic_code' ),
+    path( 'magic/code',
+          views.MagicCodeView.as_view(),
+          name = 'magic_code' ),
 
-    re_path( r'^signin/magic/link/(?P<token>[\w\-]+)/(?P<email>.+)$',
-             views.SigninMagicLinkView.as_view(),
-             name = 'user_signin_magic_link' ),
+    path( 'magic/link/<uuid:user_uuid>/<str:token>',
+          views.MagicLinkView.as_view(),
+          name = 'magic_link' ),
 ]

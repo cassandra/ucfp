@@ -10,7 +10,6 @@ property. The user can still raise a cell for a utilities-included rental.
 from dataclasses import replace
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.test import TestCase
 
 from ucfp.accounts.enums import AssetClass
@@ -18,6 +17,7 @@ from ucfp.inputs.expenses import ordered_catalog
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.inputs.property_expenses import merged_property_expenses
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
 RESIDENCE = AssetClass.REAL_ESTATE_RESIDENCE
 RENTAL    = AssetClass.REAL_ESTATE_RENTAL
@@ -40,7 +40,7 @@ def _profile( *properties ) -> Profile:
 class RentalUtilityDefaultsTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     @staticmethod
     def _merged( profile, plans = None ) -> dict:

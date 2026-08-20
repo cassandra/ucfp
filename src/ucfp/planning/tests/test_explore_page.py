@@ -4,7 +4,6 @@ rather than buried below the inputs. A full render also guards the template agai
 the `money` filter, the `_run_outcome` figures, and the `currency` context processor.
 """
 from django.contrib.auth.models import AnonymousUser
-from django.core.management import call_command
 from django.test import RequestFactory, TestCase
 
 from organization.models import Organization
@@ -17,6 +16,7 @@ from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.scenarios.exploration import enter_exploration
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.inputs.state import input_state
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.session_state import SessionState
 from ucfp.planning.views import ExploreView
 
@@ -26,7 +26,7 @@ from .support import expected_assumptions, forecast_profile
 class ExplorePageRenderTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets', verbosity = 0 )
+        seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
         save_profile( self.organization, forecast_profile() )
         plans = save_plans( PlansRecord( organization = self.organization, label = 'P' ), Plans() )

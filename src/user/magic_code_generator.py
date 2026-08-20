@@ -37,6 +37,7 @@ class MagicCodeGenerator:
 
     MAGIC_CODE = 'magic_code'
     MAGIC_CODE_TIMESTAMP = 'magic_code_timestamp'
+    MAGIC_CODE_TARGET = 'magic_code_target'
 
     MAGIC_CODE_TIMEOUT_SECS = settings.SIGNIN_CODE_TIMEOUT_SECS
     MAGIC_CODE_CHARS = 'abcdefhkpqrstwxy'
@@ -44,7 +45,7 @@ class MagicCodeGenerator:
 
     BASE_DATETIME = timezone.make_aware( datetime( 2001, 1, 1 ) )
 
-    def make_magic_code( self, request ):
+    def make_magic_code( self, request, target ):
 
         magic_code = get_random_string( length = self.MAGIC_CODE_LENGTH,
                                         allowed_chars = self.MAGIC_CODE_CHARS )
@@ -52,8 +53,16 @@ class MagicCodeGenerator:
 
         request.session[self.MAGIC_CODE] = magic_code
         request.session[self.MAGIC_CODE_TIMESTAMP] = magic_code_origin_timestamp
+        # Bind the code to the account it was issued for, server-side. A valid code then proves access
+        # to *this* account only -- the caller cannot later name a different target (which is how a
+        # code, being a bare session secret, could otherwise be redirected onto another account).
+        request.session[self.MAGIC_CODE_TARGET] = str( target )
 
         return magic_code
+
+    def magic_code_target( self, request ):
+        """The account uuid this session's code was issued for, or None."""
+        return request.session.get( self.MAGIC_CODE_TARGET )
 
     def check_magic_code( self, request, magic_code ) -> MagicCodeStatus:
 
@@ -75,6 +84,7 @@ class MagicCodeGenerator:
     def expire_magic_code( self, request ):
         request.session[self.MAGIC_CODE] = None
         request.session[self.MAGIC_CODE_TIMESTAMP] = None
+        request.session[self.MAGIC_CODE_TARGET] = None
         return
 
     @classmethod

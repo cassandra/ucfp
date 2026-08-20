@@ -16,9 +16,10 @@
          alt="{% settings_value 'SITE_NAME' %}">
     <h1 class="display-4 text-primary font-weight-bold mb-2">Can you retire?</h1>
     <p class="lead text-muted mb-4">Find out for free.</p>
-    <a href="{% url 'user_signin' %}" class="btn btn-cta btn-lg">Get started</a>
-    <p class="small text-muted mt-3 mb-0">No password, no marketing. We email you a one-time sign-in code,
-      and use your address only to keep your plan safe.</p>
+    <a href="{% url 'explain' %}" class="btn btn-cta btn-lg">See how it works</a>
+    <p class="small text-muted mt-3 mb-0">No account needed to look around &mdash; add your email only when
+      you want to save your plan. No password, no marketing.
+      <a href="{% url 'user_signin' %}">Already have an account?</a></p>
   </div>
 </header>
 
@@ -73,7 +74,7 @@
 <section class="text-center py-4 bg-primary text-white">
   <div class="container">
     <h2 class="h3 mb-3">See your number.</h2>
-    <a href="{% url 'user_signin' %}" class="btn btn-cta btn-lg">Get started — it's free</a>
+    <a href="{% url 'explain' %}" class="btn btn-cta btn-lg">See how it works — it's free</a>
     <p class="small mt-3 mb-0">Free, no password to remember. Prefer to keep your data private?
       {% settings_value 'SITE_NAME' %} is source-available:
       <a class="text-white font-weight-bold" target="_blank" href="https://github.com/cassandra/ucfp">self-host your own computer</a>.</p>

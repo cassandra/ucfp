@@ -5,11 +5,12 @@ organization and attaches its `InputState`, so both the view and its template ca
 of the Profile/Plans/Assumptions bundle is set up. A view that does not gate simply does not inherit
 it (and keeps decorating its own dispatch with `ensure_organization`).
 """
+from django.conf import settings
 from django.utils.decorators import method_decorator
 
 from organization.decorators import ensure_organization
 
-from ucfp.inputs.state import input_state
+from ucfp.inputs.state import completed_profile, input_state
 
 
 class InputGatedMixin:
@@ -21,3 +22,26 @@ class InputGatedMixin:
     def dispatch( self, request, *args, **kwargs ):
         request.input_state = input_state( request.organization )
         return super().dispatch( request, *args, **kwargs )
+
+
+class GuestReminderMixin:
+    """Adds the Guest "don't lose your work" reminder to a data-entry view.
+
+    This mixin owns the whole "should the reminder show" decision. It shows only when a Guest with a
+    *complete* profile -- real work invested, yet no email and so no way back to it if the browser session
+    is lost -- is looking at a *completed* flow: never mid-build (where it would compete with an
+    incompleteness message), never for a Verified account, and never under `SUPPRESS_AUTHENTICATION`, where
+    the data is the self-hosted server's rather than browser-bound. The one signal the mixin cannot derive
+    itself, whether the current flow is complete, is passed in by the view (which alone reads the rail). The
+    banner is a swap panel the view refreshes alongside its others (via `GUEST_BANNER_TARGET`/
+    `GUEST_BANNER_TEMPLATE`), so it appears the moment the profile is finished. Requires
+    `request.organization` (an `ensure_organization` view)."""
+
+    GUEST_BANNER_TARGET   = 'guest-email-banner'
+    GUEST_BANNER_TEMPLATE = 'inputs/interview/guest_email_banner.html'
+
+    def show_guest_reminder( self, request, flow_complete ) -> bool:
+        return bool( ( not settings.SUPPRESS_AUTHENTICATION )
+                     and request.user.is_guest
+                     and flow_complete
+                     and completed_profile( request.organization ) )

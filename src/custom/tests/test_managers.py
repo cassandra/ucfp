@@ -25,37 +25,51 @@ class CanonicalizeEmailTestCase(TestCase):
         return
 
 
-class GetOrCreateByEmailTestCase(TestCase):
+class CreateGuestTestCase(TestCase):
 
     def setUp(self):
         self.User = get_user_model()
         return
 
-    def test_creates_passwordless_account_for_unknown_email(self):
-        user, created = self.User.objects.get_or_create_by_email( 'brand.new@example.com' )
-        self.assertTrue( created )
-        self.assertEqual( 'brand.new@example.com', user.email )
-        # Passwordless sign-in: the account must have no usable password.
-        self.assertFalse( user.has_usable_password() )
+    def test_creates_emailless_passwordless_guest(self):
+        guest = self.User.objects.create_guest()
+        self.assertIsNone( guest.email )
+        self.assertIsNone( guest.pending_email )
+        self.assertFalse( guest.has_usable_password() )
+        self.assertTrue( guest.is_guest )
         return
 
-    def test_returns_existing_account_for_known_email(self):
-        first, first_created = self.User.objects.get_or_create_by_email( 'repeat@example.com' )
-        second, second_created = self.User.objects.get_or_create_by_email( 'repeat@example.com' )
-        self.assertTrue( first_created )
-        self.assertFalse( second_created )
-        self.assertEqual( first.pk, second.pk )
+    def test_guests_are_distinct_accounts(self):
+        first = self.User.objects.create_guest()
+        second = self.User.objects.create_guest()
+        self.assertNotEqual( first.pk, second.pk )
         return
 
-    def test_case_variants_map_to_one_account(self):
-        first, _ = self.User.objects.get_or_create_by_email( 'Person@Example.com' )
-        second, second_created = self.User.objects.get_or_create_by_email( 'person@example.com' )
-        self.assertFalse( second_created )
-        self.assertEqual( first.pk, second.pk )
-        self.assertEqual( 1, self.User.objects.filter( email = 'person@example.com' ).count() )
+
+class VerifiedAccountForEmailTestCase(TestCase):
+
+    def setUp(self):
+        self.User = get_user_model()
         return
 
-    def test_blank_email_raises(self):
-        with self.assertRaises( ValueError ):
-            self.User.objects.get_or_create_by_email( '   ' )
+    def test_returns_none_for_unknown_email(self):
+        self.assertIsNone( self.User.objects.verified_account_for_email( 'nobody@example.com' ) )
+        return
+
+    def test_finds_verified_account_case_insensitively(self):
+        user = self.User.objects.create_user( email = 'owner@example.com' )
+        found = self.User.objects.verified_account_for_email( 'Owner@Example.COM' )
+        self.assertEqual( user.pk, found.pk )
+        return
+
+    def test_ignores_a_merely_pending_claim(self):
+        # A Guest holding the address only as a pending (unverified) claim does not
+        # own it: the unique `email` slot is empty, so it is not a collision.
+        guest = self.User.objects.create_guest()
+        guest.attach_pending_email( 'claimed@example.com' )
+        self.assertIsNone( self.User.objects.verified_account_for_email( 'claimed@example.com' ) )
+        return
+
+    def test_returns_none_for_blank_email(self):
+        self.assertIsNone( self.User.objects.verified_account_for_email( '   ' ) )
         return

@@ -47,6 +47,7 @@ from .interview import (
     first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
+from .mixins import GuestReminderMixin
 from .state import (
     assumptions_completion_blockers, assumptions_is_complete, completed_assumptions, completed_plans,
     completed_profile, plans_completion_blockers, plans_is_complete, profile_advisories,
@@ -612,7 +613,7 @@ class AssumptionsRenameView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class InterviewView( View ):
+class InterviewView( GuestReminderMixin, View ):
     """`/inputs/interview/<section>/` -- one section of the interview: an antinode-swapped
     linear flow over the organization's current Profile, Plans, and Assumptions. A full GET renders
     the whole page; an async GET (a stepper revisit) or a POST swaps just the section pane and
@@ -782,16 +783,20 @@ class InterviewView( View ):
         return antinode.response(
             main_content = render_to_string( self._SECTION_TEMPLATE, context, request = request ),
             replace_map = {
-                self._STEPPER_TARGET: render_to_string( self._STEPPER_TEMPLATE, context, request = request ),
-                self._RAIL_TARGET   : render_to_string( self._RAIL_TEMPLATE, context, request = request ),
-                self._DETAIL_TARGET : render_to_string( self._DETAIL_TEMPLATE, context, request = request ),
+                self._STEPPER_TARGET     : render_to_string( self._STEPPER_TEMPLATE, context, request = request ),
+                self._RAIL_TARGET        : render_to_string( self._RAIL_TEMPLATE, context, request = request ),
+                self._DETAIL_TARGET      : render_to_string( self._DETAIL_TEMPLATE, context, request = request ),
+                # Always refreshed (content or empty), like the detail: it must clear if the profile is
+                # edited back to incomplete, or the flow is no longer complete (GuestReminderMixin decides).
+                self.GUEST_BANNER_TARGET : render_to_string( self.GUEST_BANNER_TEMPLATE, context, request = request ),
             },
             push_url = reverse( 'interview_section', kwargs = { 'section': section.key } ),
             scroll_to = self._SECTION_TARGET )
 
     def _context( self, request, sections, section, form ):
         flow = flow_of( section )
-        return {
+        rail = self._rail_header( request, flow )
+        context = {
             'sections'             : sections,
             'current_section'      : section,
             # The current flow's record only -- the stepper shows one flow's steps, so its seen marks are
@@ -821,12 +826,19 @@ class InterviewView( View ):
             # The Plans-flow drift banner: these plans reference removed Profile entities (None off Plans).
             'drift'                : self._plans_drift( request, flow ),
             # The rail header: the completion badge(s) and, in a build, the Plans/Assumptions part switch.
-            **self._rail_header( request, flow ),
+            **rail,
             # The current flow's blocker/advisory notices for the detail banner below the heading.
             **self._profile_status( request, flow ),
             **self._plans_status( request, flow ),
             **self._assumptions_status( request, flow ),
         }
+        # Whether the current flow is complete -- the one signal GuestReminderMixin can't derive itself
+        # (it alone reads the rail). The mixin owns the rest of the "should the reminder show" decision,
+        # incl. keeping it clear mid-build so it never competes with an incompleteness message.
+        current_flow_complete = any( part[ 'active' ] and part[ 'status' ] == 'complete'
+                                     for part in rail[ 'rail_parts' ] )
+        context[ 'show_guest_email_banner' ] = self.show_guest_reminder( request, current_flow_complete )
+        return context
 
     @staticmethod
     def _plans_drift( request, flow ):

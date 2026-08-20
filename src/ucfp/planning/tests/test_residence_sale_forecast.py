@@ -8,7 +8,6 @@ residence's ownership costs, carry its utilities, start rent, clear the mortgage
 from datetime import date
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.test import TestCase
 
 from common.rate import Rate
@@ -26,6 +25,7 @@ from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, SubjectProf
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 from ucfp.parameter_sets.enums import EconomicOutlookVariant, ExpenseCategory, PropertyContext, Realization
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.planning.display_placement import property_expense_handle
 from ucfp.planning.materialization import ForecastFrame, _rent_account_handle, materialize
@@ -98,7 +98,7 @@ def _spent( reader : Bookkeeper, handle : str ) -> Decimal:
 class ResidenceSaleForecastTests( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.sold    = _reader( _plans( sell = True ) )
         self.no_sale = _reader( _plans( sell = False ) )
         self._own    = str( property_expense_handle( 'property-tax', 'residence' ) )

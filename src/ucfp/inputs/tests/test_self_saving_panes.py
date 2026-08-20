@@ -4,12 +4,12 @@
 A regression guard: they once slipped into a mixin, which left the panes that do not use the mixin
 raising `AttributeError` on GET -- invisible to the form-level unit tests. These pin the view layer.
 """
-from django.core.management import call_command
 from django.test import RequestFactory, SimpleTestCase, TestCase
 
 from organization.models import Organization
 
 from ucfp.inputs.views import SelfSavingPaneView, TransactionCostsView
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.session_state import SessionState
 
 
@@ -43,7 +43,7 @@ class NonTotalsPaneRendersTest( TestCase ):
     mixin-placement regression broke. (The totals panes' GET/render is covered by their own tests.)"""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )        # default assumptions load the seeded economic outlook
+        seed_default_parameter_sets()        # default assumptions load the seeded economic outlook
         self.organization = Organization.objects.create( name = 'Org' )
 
     def test_a_non_totals_pane_renders_on_get( self ):

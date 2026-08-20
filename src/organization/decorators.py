@@ -32,9 +32,9 @@ def ensure_organization( view_func ):
     organization already selected in the session, else the user's only one, else -- when they
     have none -- auto-provisions one they own (the `organization` app owns the creation and
     naming policy). Until multi-organization selection exists, a user with several raises rather
-    than guess. An anonymous user -- which reaches a view only when `SUPPRESS_AUTHENTICATION` is
-    set (typically a self-hosted single-user run) -- resolves to the single shared, memberless
-    organization.
+    than guess. Every request that reaches here carries a real user: a cloud account, or the
+    self-hosted singleton Guest that `SelfHostedIdentityMiddleware` logs in under
+    `SUPPRESS_AUTHENTICATION` (a cloud visitor with no account is held at the sign-in gate).
 
     The resolved organization is attached as ``request.organization``; its uuid is stored via
     ``SessionState`` (``request.session_state.current_organization_uuid``).
@@ -68,11 +68,9 @@ def _resolve_current_organization( request ) -> Organization:
 
 
 def _current_organization_for_request( request ) -> Organization:
-    """The organization for the request: an authenticated user's own (auto-provisioned if they
-    have none), or -- for an anonymous user, which reaches here only when `SUPPRESS_AUTHENTICATION`
-    is set -- the single shared, memberless organization."""
-    if not request.user.is_authenticated:
-        return Organization.objects.get_or_create_shared()
+    """The organization for the request's (authenticated) user: their own, auto-provisioned if
+    they have none. Both deployment modes reach here with a real user -- a cloud account, or the
+    self-hosted singleton Guest logged in by `SelfHostedIdentityMiddleware`."""
     return _organization_for_user( request.user )
 
 

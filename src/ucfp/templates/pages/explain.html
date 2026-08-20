@@ -1,0 +1,29 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% comment %}
+  Onboarding "how it works" page for a visitor with no account. STUB: the explanatory content
+  (Profiles, Scenarios, Output) is placeholder copy. Its role in the flow is settled -- it funnels to
+  the read-only preview or to the convert-to-Guest action.
+{% endcomment %}
+
+{% block page_title %}How {% settings_value 'SITE_NAME' %} works{% endblock %}
+
+{% block public_content %}
+<p class="lead text-center text-muted mb-4">See how {% settings_value 'SITE_NAME' %} models your plan
+  &mdash; then explore a live preview, or start your own. No account needed to look around.</p>
+
+<p class="text-muted">A short walkthrough of how you describe your finances (your <strong>Profile</strong>),
+  the <strong>Scenarios</strong> you compare, and the <strong>forecast output</strong> you get back will
+  go here.</p>
+
+<div class="text-center mt-4 mb-3">
+  <a href="{% url 'preview' %}" class="btn btn-outline-primary btn-lg mr-2">View a preview</a>
+  <form method="post" action="{% url 'convert_to_guest' %}" class="d-inline">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-cta btn-lg">Add my data</button>
+  </form>
+</div>
+
+<p class="text-center small text-muted">Already have an account?
+  <a href="{% url 'user_signin' %}">Sign in</a>.</p>
+{% endblock %}

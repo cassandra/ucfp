@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from . import managers
+from .user_state import UserState
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +17,13 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
     """Mostly a copy of Django's AbstractUser code, but with uuid and email as
     unique fields and without the username field.
 
-    Adds additional states of user authentication beyond Django's Anonymous
-    and Autheticated. New states:
-
-        Anonymous - Same as normal Django AnonymousUser with no database entry.
-        User, No Email - Authenticated but no email to enables app functionality before an email.
-        User, Has Email - Authenticated and has set an email, but we have not verified they own that email.
-        User, Has Verified Email - Authenticated, has set an email and we have verified they own that email.
+    An account carries a ``UserState`` beyond Django's Anonymous/Authenticated split
+    (Guest, Verified); ``custom.user_state`` defines and derives it. The field-level
+    invariant those states rest on: the unique ``email`` holds only a *verified* address
+    -- so its mere presence means Verified -- while an in-flight, unconfirmed one lives in
+    the non-unique ``pending_email`` until verification promotes it. A claimed-but-unverified
+    address therefore never occupies the unique slot, and no one can block an address they
+    do not control.
 
     The UUID field allows us to have a unique, unchanging field for external references to users.
     """
@@ -41,10 +42,13 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
         null = True,
         blank = True,
     )
-    email_verified = models.BooleanField(
-        _('email verified'),
-        default = False,
-        help_text = _('Has this email been verified.')
+    # An address the user has claimed but not yet verified. Unlike `email` it is not
+    # unique and never grants recovery: it holds the in-flight claim until verification
+    # promotes it into `email` (see `verify_pending_email`).
+    pending_email = models.EmailField(
+        _('pending email address'),
+        null = True,
+        blank = True,
     )
     first_name = models.CharField(
         _('first name'),
@@ -93,6 +97,55 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
         # passwordless sign-in path: normalized, lowercased, blank collapsed to
         # NULL (which is exempt from the unique constraint; an empty string is not).
         self.email = self.__class__.objects.canonicalize_email(self.email)
+        self.pending_email = self.__class__.objects.canonicalize_email(self.pending_email)
+        return
+
+    @property
+    def account_state(self) -> UserState:
+        """This account's `UserState`, derived from the unique `email` slot: Verified once
+        it owns a verified `email`, otherwise a Guest (which may carry a `pending_email` it
+        is mid-confirming). A persisted account is never Anonymous."""
+        if self.email:
+            return UserState.VERIFIED
+        return UserState.GUEST
+
+    @property
+    def is_guest(self) -> bool:
+        return self.account_state is UserState.GUEST
+
+    @property
+    def is_verified(self) -> bool:
+        return self.account_state is UserState.VERIFIED
+
+    def attach_pending_email(self, email):
+        """Claim `email` as this account's pending (unconfirmed) address. It is written to
+        `pending_email`, never the unique `email` slot -- only verification promotes an
+        address there. The caller must have ruled out an existing verified account for the
+        address (`objects.verified_account_for_email`) and is responsible for sending the
+        confirmation."""
+        self.pending_email = self.__class__.objects.canonicalize_email(email)
+        self.save(update_fields = [ 'pending_email' ])
+        return
+
+    def verify_pending_email(self):
+        """Promote the pending address into the verified `email` slot -- the sole path by
+        which an address enters the unique field -- moving the account to Verified. Raises
+        if there is no pending address to verify. The caller must re-confirm the address is
+        still unclaimed (`objects.verified_account_for_email`): the unique slot may have been
+        taken between attach and verify, in which case the save raises `IntegrityError`."""
+        if not self.pending_email:
+            raise ValueError('No pending email to verify.')
+        self.email = self.pending_email
+        self.pending_email = None
+        self.save(update_fields = [ 'email', 'pending_email' ])
+        return
+
+    def discard_pending_email(self):
+        """Drop this account's pending (unconfirmed) claim, leaving its verified `email` slot
+        untouched. Used when the claim is moot -- e.g. the address was verified by another
+        account first, so this Guest's pending copy can no longer be promoted."""
+        self.pending_email = None
+        self.save(update_fields = [ 'pending_email' ])
         return
 
     @property

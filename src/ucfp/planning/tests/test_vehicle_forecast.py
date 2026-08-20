@@ -11,7 +11,6 @@ from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.test import TestCase
 
 from common.rate import Rate
@@ -30,6 +29,7 @@ from ucfp.inputs.profile.schemas import AssetProfile, Debt, Profile, SubjectProf
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType
 from ucfp.jurisdiction.law import TaxProjection
 from ucfp.parameter_sets.enums import EconomicOutlookVariant, Realization
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.planning.materialization import ForecastFrame, materialize
 
@@ -81,7 +81,7 @@ def _vehicle_plans( method : PaymentMethod, **fields ) -> Plans:
 class CashVehicleForecastTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )        # the EXPECTED outlook (18% depreciation) is seeded
+        seed_default_parameter_sets()        # the EXPECTED outlook (18% depreciation) is seeded
 
     def _reader( self, *, with_vehicle : bool ) -> Bookkeeper:
         return _run( _vehicle_plans( PaymentMethod.CASH ) if with_vehicle else Plans() )
@@ -131,7 +131,7 @@ class FinancedVehicleForecastTest( TestCase ):
     amortizes on the books; each replacement pays off the outgoing loan and originates the next."""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def _reader( self ) -> Bookkeeper:
         # $30k car, $5k down -> a $25k auto-loan each cycle, replaced every 5 years from 2027.
@@ -228,7 +228,7 @@ class CurrentVehicleLoanForecastTest( TestCase ):
     and a Replace keeps the current loan and its successor's recurring loan under distinct handles."""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def test_a_sold_financed_vehicles_loan_amortizes_then_is_paid_off( self ):
         reader = _run_with( _financed_current_profile(), _current_loan_plans( VehicleDisposition(
@@ -270,7 +270,7 @@ class RunningCostAcrossReplacementTest( TestCase ):
     regression guard for the cadence-phase double-count that made a replacement year charge ~1.5x."""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     @staticmethod
     def _insurance() -> VehicleRunningCost:

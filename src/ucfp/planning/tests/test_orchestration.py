@@ -4,7 +4,6 @@ from datetime import date, datetime, timezone as dt_timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
@@ -21,6 +20,7 @@ from ucfp.planning.models import ProjectionRunRecord
 from ucfp.planning.orchestration import run_and_capture, run_title
 from ucfp.planning.schemas import ProjectionRun
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.parameter_sets.repository import economic_parameters
 from ucfp.inputs.profile.schemas import AssetProfile, Profile, SubjectProfile
 from ucfp.inputs.plans.schemas import Plans
@@ -32,7 +32,7 @@ from ucfp.jurisdiction.law import TaxProjection
 class RunAndCaptureTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
 
     def _profile( self ) -> Profile:

@@ -81,7 +81,7 @@ _ENV_SPEC = (
     _EnvVarSpec( 'EMAIL_USE_SSL'            , ENV_PREFIX + 'EMAIL_USE_SSL', bool, False ),
 
     # Application-specific.
-    _EnvVarSpec( 'SUPPRESS_AUTHENTICATION'  , ENV_PREFIX + 'SUPPRESS_AUTHENTICATION', bool, True ),
+    _EnvVarSpec( 'SUPPRESS_AUTHENTICATION'  , ENV_PREFIX + 'SUPPRESS_AUTHENTICATION', bool, False ),
 )
 
 
@@ -131,7 +131,7 @@ class EnvironmentSettings:
     MEDIA_ROOT                 : str           = None
     REDIS_HOST                 : str           = 'localhost'
     REDIS_PORT                 : int           = 6379
-    SUPPRESS_AUTHENTICATION    : bool          = True
+    SUPPRESS_AUTHENTICATION    : bool          = False
     FIELD_ENCRYPTION_KEYS      : Tuple[ str ]  = field( default_factory = tuple )
     SECRET_URL_PREFIX          : str           = ''
     EMAIL_SUBJECT_PREFIX       : str           = ''

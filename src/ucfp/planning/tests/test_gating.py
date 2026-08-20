@@ -10,7 +10,6 @@ import unittest
 from decimal import Decimal
 from types import SimpleNamespace
 
-from django.core.management import call_command
 from django.test import TestCase
 
 from common.rate import Rate
@@ -25,6 +24,7 @@ from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import LoanRepayment, Plans
 from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.scenarios.repository import create_scenario
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.gating import partition_scenarios, scenario_started
 from ucfp.planning.tests.support import expected_assumptions, forecast_profile
 
@@ -69,7 +69,7 @@ class PartitionScenariosTests( TestCase ):
     for stale references), and in-progress -- against the current profile."""
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )        # expected_assumptions reads a seeded outlook
+        seed_default_parameter_sets()        # expected_assumptions reads a seeded outlook
         self.organization = Organization.objects.create( name = 'Org' )
         self.profile      = forecast_profile()
         self.keys         = _reviewed_keys_by_flow( self.profile )

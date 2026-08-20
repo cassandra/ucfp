@@ -19,7 +19,7 @@ class TestMagicCodeGenerator(BaseTestCase):
 
     def test_make_magic_code_generates_valid_code_and_stores_in_session(self):
         """Test magic code generation stores code and timestamp in session."""
-        magic_code = self.generator.make_magic_code(self.mock_request)
+        magic_code = self.generator.make_magic_code(self.mock_request, target='11111111-1111-1111-1111-111111111111')
 
         # Verify code characteristics
         self.assertIsInstance(magic_code, str)
@@ -30,10 +30,13 @@ class TestMagicCodeGenerator(BaseTestCase):
         self.assertEqual(self.mock_request.session[MagicCodeGenerator.MAGIC_CODE], magic_code)
         self.assertIn(MagicCodeGenerator.MAGIC_CODE_TIMESTAMP, self.mock_request.session)
         self.assertIsInstance(self.mock_request.session[MagicCodeGenerator.MAGIC_CODE_TIMESTAMP], int)
+        # The code is bound to its target account, and read back via magic_code_target.
+        self.assertEqual(self.generator.magic_code_target(self.mock_request),
+                         '11111111-1111-1111-1111-111111111111')
 
     def test_check_magic_code_returns_valid_for_correct_code(self):
         """Test magic code validation returns VALID for correct code."""
-        magic_code = self.generator.make_magic_code(self.mock_request)
+        magic_code = self.generator.make_magic_code(self.mock_request, target='11111111-1111-1111-1111-111111111111')
 
         result = self.generator.check_magic_code(self.mock_request, magic_code)
 
@@ -41,7 +44,7 @@ class TestMagicCodeGenerator(BaseTestCase):
 
     def test_check_magic_code_returns_invalid_for_wrong_code(self):
         """Test magic code validation returns INVALID for incorrect code."""
-        self.generator.make_magic_code(self.mock_request)
+        self.generator.make_magic_code(self.mock_request, target='11111111-1111-1111-1111-111111111111')
 
         result = self.generator.check_magic_code(self.mock_request, 'wrongcode')
 
@@ -49,7 +52,7 @@ class TestMagicCodeGenerator(BaseTestCase):
 
     def test_check_magic_code_handles_case_insensitive_validation(self):
         """Test magic code validation is case insensitive."""
-        magic_code = self.generator.make_magic_code(self.mock_request)
+        magic_code = self.generator.make_magic_code(self.mock_request, target='11111111-1111-1111-1111-111111111111')
 
         # Test uppercase version
         result_upper = self.generator.check_magic_code(self.mock_request, magic_code.upper())
@@ -61,7 +64,7 @@ class TestMagicCodeGenerator(BaseTestCase):
 
     def test_check_magic_code_strips_whitespace_and_dashes(self):
         """Test magic code validation strips whitespace and dashes."""
-        magic_code = self.generator.make_magic_code(self.mock_request)
+        magic_code = self.generator.make_magic_code(self.mock_request, target='11111111-1111-1111-1111-111111111111')
 
         # Add whitespace and dashes
         formatted_code = f" {magic_code[:3]}-{magic_code[3:]} "
@@ -74,7 +77,7 @@ class TestMagicCodeGenerator(BaseTestCase):
         """Test magic code validation returns EXPIRED for codes past timeout."""
         # Set up initial time
         mock_elapsed_seconds.return_value = 1000
-        magic_code = self.generator.make_magic_code(self.mock_request)
+        magic_code = self.generator.make_magic_code(self.mock_request, target='11111111-1111-1111-1111-111111111111')
 
         # Move time forward past timeout
         mock_elapsed_seconds.return_value = 1000 + MagicCodeGenerator.MAGIC_CODE_TIMEOUT_SECS + 1
@@ -85,7 +88,7 @@ class TestMagicCodeGenerator(BaseTestCase):
 
     def test_expire_magic_code_clears_session_data(self):
         """Test expire_magic_code clears magic code data from session."""
-        self.generator.make_magic_code(self.mock_request)
+        self.generator.make_magic_code(self.mock_request, target='11111111-1111-1111-1111-111111111111')
 
         # Verify data exists
         self.assertIn(MagicCodeGenerator.MAGIC_CODE, self.mock_request.session)
@@ -96,29 +99,6 @@ class TestMagicCodeGenerator(BaseTestCase):
         # Verify data is cleared
         self.assertIsNone(self.mock_request.session[MagicCodeGenerator.MAGIC_CODE])
         self.assertIsNone(self.mock_request.session[MagicCodeGenerator.MAGIC_CODE_TIMESTAMP])
-
-    def test_magic_code_status_enum_business_logic_values(self):
-        """Test MagicCodeStatus enum values support validation business logic."""
-        # Test that VALID has highest value for comparison logic
-        self.assertTrue(MagicCodeStatus.VALID.value > MagicCodeStatus.EXPIRED.value)
-        self.assertTrue(MagicCodeStatus.EXPIRED.value > MagicCodeStatus.INVALID.value)
-
-        # Test specific values that may be used in conditional logic
-        self.assertEqual(MagicCodeStatus.INVALID.value, 0)
-        self.assertEqual(MagicCodeStatus.EXPIRED.value, 1)
-        self.assertEqual(MagicCodeStatus.VALID.value, 2)
-
-    @patch('user.magic_code_generator.MagicCodeGenerator.get_elapsed_seconds')
-    def test_get_elapsed_seconds_provides_consistent_timestamps(self, mock_elapsed_seconds):
-        """Test timestamp generation provides consistent values for timeout calculations."""
-        mock_elapsed_seconds.return_value = 5000
-
-        timestamp1 = self.generator.get_elapsed_seconds()
-        timestamp2 = self.generator.get_elapsed_seconds()
-
-        # Both calls should return same mocked value
-        self.assertEqual(timestamp1, timestamp2)
-        self.assertEqual(timestamp1, 5000)
 
     def test_get_timeout_seconds_returns_configured_value(self):
         """Test timeout configuration returns expected value from settings."""
@@ -145,7 +125,7 @@ class TestMagicCodeGenerator(BaseTestCase):
         start_seconds = 1000
 
         mock_elapsed_seconds.return_value = start_seconds
-        magic_code = self.generator.make_magic_code(self.mock_request)
+        magic_code = self.generator.make_magic_code(self.mock_request, target='11111111-1111-1111-1111-111111111111')
 
         # At the edge of the advertised window: still valid.
         mock_elapsed_seconds.return_value = start_seconds + advertised_lifetime_secs

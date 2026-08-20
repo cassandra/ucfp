@@ -8,7 +8,6 @@ a value is typed is JavaScript (`flagPropertyOverrides`).
 from dataclasses import replace
 from decimal import Decimal
 
-from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 
@@ -20,6 +19,7 @@ from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.inputs.property_expenses import PropertyExpensesForm
 from ucfp.inputs.views import PropertyExpensesView
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
 _MONTHLY = Duration( 1, TimeUnit.MONTH )
 
@@ -53,7 +53,7 @@ def _first_row_cells( form : PropertyExpensesForm ) -> list:
 class PropertyOverrideHighlightTest( TestCase ):
 
     def setUp( self ):
-        call_command( 'seed_parameter_sets' )
+        seed_default_parameter_sets()
 
     def test_the_default_cell_is_never_flagged( self ):
         self.assertFalse( _first_row_cells( _form( Decimal( '100' ),
