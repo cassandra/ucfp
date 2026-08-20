@@ -252,7 +252,7 @@ class ConfirmModalViewTest(TestCase):
         response = self.client.get( reverse( 'account_delete_confirm' ), **self.AJAX )
 
         self.assertEqual( response.status_code, 200 )
-        self.assertContains( response, 'Untitled household' )
+        self.assertContains( response, 'My Household' )
         self.assertNotContains( response, str( user.uuid ) )   # the meaningless raw name is not shown
 
     def test_account_delete_confirm_co_owned_offers_keep_checkbox(self):

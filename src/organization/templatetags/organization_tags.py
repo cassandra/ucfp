@@ -45,3 +45,31 @@ def household_danger_section(user):
         # "Delete my account and all my data" control.
         'simple': ( len( memberships ) == 1 ) and memberships[ 0 ].is_sole_active_owner,
     }
+
+
+@register.inclusion_tag( 'organization/_switcher.html', takes_context = True )
+def organization_switcher( context ):
+    """Render the navbar's current-household indicator, and a switcher when the user has more
+    than one household.
+
+    Inert (renders nothing) without an authenticated user and a resolved current organization --
+    both are present on every app page (``ensure_organization`` sets ``request.organization``). The
+    current household is always shown for context; the other households the user actively belongs to
+    are offered as switch targets, so the control only becomes a menu once there is somewhere to
+    switch to.
+    """
+    request = context.get( 'request' )
+    user    = getattr( request, 'user', None )
+    current = getattr( request, 'organization', None )
+    if ( request is None ) or ( user is None ) or ( not user.is_authenticated ) or ( current is None ):
+        return { 'show': False }
+
+    memberships = OrganizationMember.objects.for_user( user ).select_related( 'organization' )
+    other_organizations = [ membership.organization for membership in memberships
+                            if membership.organization_id != current.pk ]
+    return {
+        'show'                : True,
+        'current'             : current,
+        'other_organizations' : other_organizations,
+        'has_others'          : bool( other_organizations ),
+    }

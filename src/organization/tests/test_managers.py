@@ -58,7 +58,7 @@ class OrganizationDisplayNameTestCase( BaseTestCase ):
         organization = Organization.objects.create_default_for_user( user )
 
         self.assertEqual( organization.name, f'user-{user.uuid}' )
-        self.assertEqual( organization.display_name, 'Untitled household' )
+        self.assertEqual( organization.display_name, 'My Household' )
 
     def test_user_chosen_name_is_shown_verbatim(self):
         organization = Organization.objects.create( name = 'Our Household' )

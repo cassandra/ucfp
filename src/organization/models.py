@@ -26,8 +26,8 @@ from .managers import (
 )
 
 # Shown in place of an auto-provisioned personal-household name (`user-<uuid>`),
-# which carries no meaning to a person.
-_PLACEHOLDER_ORGANIZATION_NAME = 'Untitled household'
+# which carries no meaning to a person -- a friendly stand-in until they name it.
+_PLACEHOLDER_ORGANIZATION_NAME = 'My Household'
 
 
 class Organization( TimestampedModel ):

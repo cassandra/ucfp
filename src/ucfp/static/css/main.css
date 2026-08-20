@@ -205,6 +205,15 @@ a:hover, a:focus {
     background-color: #e9ecef;
     opacity: 1;
 }
+/* The current (active) menu item -- e.g. the open perspective in the Planning menu -- on the
+   brand blue, not Bootstrap's default #007bff. The item-color override above (three classes) beats
+   Bootstrap's `.dropdown-item.active` text color but leaves its off-theme blue background, so this
+   four-class rule reclaims both to the theme's on-primary pairing. */
+.navbar .dropdown-menu .dropdown-item.active,
+.navbar .dropdown-menu .dropdown-item:active {
+    color: var(--on-primary-color);
+    background-color: var(--primary-color);
+}
 
 .modal-title-image img {
     max-height: 3rem;
