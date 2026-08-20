@@ -148,7 +148,7 @@ class TestMagicCodeView(SyncViewTestCase):
         response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
 
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('user_account'), response.url )
+        self.assertEqual( reverse('home'), response.url )        # lands on the dashboard, not the account page
         guest.refresh_from_db()
         self.assertEqual( 'claimed@example.com', guest.email )   # promoted -> Verified
         self.assertIsNone( guest.pending_email )
@@ -217,7 +217,7 @@ class TestMagicLinkView(SyncViewTestCase):
         response = self.client.get( self._link( guest ) )
 
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('user_account'), response.url )
+        self.assertEqual( reverse('home'), response.url )        # lands on the dashboard, not the account page
         guest.refresh_from_db()
         self.assertEqual( 'claimed@example.com', guest.email )
 

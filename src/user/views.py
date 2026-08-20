@@ -193,7 +193,7 @@ class MagicCodeView( View ):
 
         if target.pending_email:
             target.verify_pending_email()
-            return HttpResponseRedirect( reverse( 'user_account' ) )
+            return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
 
         return _sign_in_or_collision( request, target )
 
@@ -221,7 +221,7 @@ class MagicLinkView( View ):
             same_session = request.user.is_authenticated and ( request.user.pk == user.pk )
             if same_session:
                 user.verify_pending_email()
-                return HttpResponseRedirect( reverse( 'user_account' ) )
+                return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
             return render( request, 'user/pages/confirm_email_other_device.html',
                            { 'email': user.pending_email } )
 
