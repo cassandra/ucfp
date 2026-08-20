@@ -14,10 +14,6 @@ urlpatterns = [
           views.AttachEmailView.as_view(),
           name = 'attach_email' ),
 
-    path( 'resend-confirmation',
-          views.ResendConfirmationView.as_view(),
-          name = 'resend_confirmation' ),
-
     path( 'convert-to-guest',
           views.ConvertToGuestView.as_view(),
           name = 'convert_to_guest' ),

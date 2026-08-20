@@ -108,9 +108,9 @@ class UserSigninView( RedirectAuthenticatedUserMixin, View ):
         canonical_email = User.objects.canonicalize_email( email_address )
 
         # Abuse prevention: a throttled request neither touches an account nor sends a code, and
-        # returns the same neutral code-entry page so it leaks no signal about the limit or the email.
+        # redirects to the same neutral code-entry page so it leaks no signal about the limit or email.
         if not signin_throttle.is_signin_request_allowed( request, canonical_email ):
-            return _render_code_entry( request, forms.MagicCodeForm() )
+            return HttpResponseRedirect( reverse( 'magic_code' ) )
 
         existing = User.objects.verified_account_for_email( canonical_email )
         if existing is None:
@@ -122,15 +122,21 @@ class UserSigninView( RedirectAuthenticatedUserMixin, View ):
         unsubscribed = _send_magic_email_or_unsubscribed( request, existing, canonical_email )
         if unsubscribed is not None:
             return unsubscribed
-        return _render_code_entry( request, forms.MagicCodeForm() )
+        return HttpResponseRedirect( reverse( 'magic_code' ) )
 
 
 class MagicCodeView( View ):
-    """Consume a one-time code. The code lives in the session, so a valid entry proves the same
-    browser that requested it, and the target account is the one the code was issued for (bound to
-    the session, not the form): a pending address is confirmed (Guest -> Verified), a verified one
-    is signed in. Not redirect-guarded for authenticated users, since a confirming Guest is
-    authenticated."""
+    """The one-time-code step. GET renders the entry form (the target and code live in the session,
+    so the sending views redirect here -- Post/Redirect/Get -- rather than render it in place, keeping
+    the URL clean and a reload idempotent). POST consumes the code: a valid entry proves the same
+    browser that requested it, and acts on the account the code was issued *for* (bound to the session,
+    never the form) -- confirming a pending address (Guest -> Verified) or signing a verified one in.
+    Not redirect-guarded for authenticated users, since a confirming Guest is authenticated."""
+
+    def get( self, request, *args, **kwargs ):
+        # Always render the form (no "is a code pending?" guard), so a throttled send and a real one
+        # are indistinguishable here.
+        return _render_code_entry( request, forms.MagicCodeForm() )
 
     def post( self, request, *args, **kwargs ):
 
@@ -232,14 +238,14 @@ class MagicLinkView( View ):
 
 
 class AttachEmailView( View ):
-    """Attach an email to the signed-in Guest so they can recover their plan. It claims the address
-    as a pending (unconfirmed) one and emails a confirmation; the address becomes the account's
-    verified identity only once confirmed. Login-gated (a Guest is authenticated).
+    """Attach an email to the signed-in Guest so they can recover their work, then send a confirmation
+    and forward to the code page (Post/Redirect/Get). The address becomes the account's verified
+    identity only once confirmed. Login-gated (a Guest is authenticated).
 
-    If the address already belongs to a *different* verified account, we send a code to *that* account
-    so the person can prove they own it; confirming it then reconciles their guest plan with it (handled
-    on code verification). The pending claim is overwritable -- re-submitting a different address simply
-    replaces it, so a typo is easily corrected."""
+    If the address already belongs to a *different* verified account, the code is sent to *that* account
+    so the person can prove they own it; confirming it then reconciles their guest work with it (handled
+    on code verification) -- nothing is attached to the guest in that case. Otherwise the address is
+    claimed as the guest's pending email, overwriting any prior claim, so a typo is fixed by re-adding."""
 
     def post( self, request, *args, **kwargs ):
         if request.user.is_verified:
@@ -257,42 +263,26 @@ class AttachEmailView( View ):
         canonical_email = User.objects.canonicalize_email( email_address )
 
         existing = User.objects.verified_account_for_email( canonical_email )
-        if existing is not None and existing.pk != request.user.pk:
-            # Taken by another verified account: send the code there so ownership is proven, then the
-            # code-verification path reconciles this guest's plan with it. Nothing is attached here.
-            if signin_throttle.is_signin_request_allowed( request, canonical_email ):
-                unsubscribed = _send_magic_email_or_unsubscribed( request, existing, canonical_email )
-                if unsubscribed is not None:
-                    return unsubscribed
-            return _render_code_entry( request, forms.MagicCodeForm() )
+        if existing is not None and ( existing.pk != request.user.pk ):
+            target = existing                         # prove ownership of the existing account, then reconcile
+        else:
+            request.user.attach_pending_email( canonical_email )
+            target = request.user
 
-        # Record (or overwrite) the claim regardless; only send when the throttle allows (a throttled
-        # send is silent, and the user can resend from the account page).
-        request.user.attach_pending_email( canonical_email )
+        # Only send within the throttle; either way land on the code page, so a throttled attempt is
+        # indistinguishable from a sent one.
         if signin_throttle.is_signin_request_allowed( request, canonical_email ):
-            unsubscribed = _send_magic_email_or_unsubscribed( request, request.user, canonical_email )
+            unsubscribed = _send_magic_email_or_unsubscribed( request, target, canonical_email )
             if unsubscribed is not None:
                 return unsubscribed
-        return HttpResponseRedirect( reverse( 'user_account' ) )
-
-
-class ResendConfirmationView( View ):
-    """Re-send the confirmation for the signed-in Guest's pending email. Login-gated; a no-op
-    (redirect) when there is no pending address to confirm."""
-
-    def post( self, request, *args, **kwargs ):
-        pending_email = request.user.pending_email if request.user.is_authenticated else None
-        if pending_email and signin_throttle.is_signin_request_allowed( request, pending_email ):
-            unsubscribed = _send_magic_email_or_unsubscribed( request, request.user, pending_email )
-            if unsubscribed is not None:
-                return unsubscribed
-        return HttpResponseRedirect( reverse( 'user_account' ) )
+        return HttpResponseRedirect( reverse( 'magic_code' ) )
 
 
 class UserAccountView( View ):
-    """The signed-in user's account page: it shows their state and the matching control -- add an
-    email (Guest), confirm a pending one (Guest mid-confirmation), or the verified email. Login-gated
-    by AuthenticationMiddleware, so it always has an authenticated ``request.user``."""
+    """The signed-in user's account page: a Guest is offered a single "add your email" control; a
+    Verified user sees the email they sign in with. A pending, unconfirmed claim is deliberately not
+    surfaced -- confirmation happens on the code page, not here. Login-gated by AuthenticationMiddleware,
+    so it always has an authenticated ``request.user``."""
 
     def get( self, request, *args, **kwargs ):
         return render( request, 'user/pages/account.html', _account_context( request ) )

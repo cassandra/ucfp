@@ -96,7 +96,7 @@ class TestUserSigninView(SyncViewTestCase):
     def test_post_verified_account_sends_a_code(self, mock_send):
         response = self.client.post( reverse('user_signin'), { 'email': self.user.email } )
 
-        self.assertTemplateRendered( response, _CODE_PAGE )
+        self.assertRedirects( response, reverse('magic_code'), fetch_redirect_response = False )
         mock_send.assert_called_once()
         self.assertEqual( self.user, mock_send.call_args.kwargs['user'] )
         # No new account for a known address.
@@ -105,7 +105,7 @@ class TestUserSigninView(SyncViewTestCase):
     def test_post_unknown_email_starts_a_guest_with_a_pending_claim(self, mock_send):
         response = self.client.post( reverse('user_signin'), { 'email': 'newcomer@example.com' } )
 
-        self.assertTemplateRendered( response, _CODE_PAGE )
+        self.assertRedirects( response, reverse('magic_code'), fetch_redirect_response = False )
         guest = User.objects.exclude( pk = self.user.pk ).get()
         self.assertTrue( guest.is_guest )
         self.assertEqual( 'newcomer@example.com', guest.pending_email )   # pending, not the verified slot
@@ -129,6 +129,13 @@ class TestMagicCodeView(SyncViewTestCase):
         session[ MagicCodeGenerator.MAGIC_CODE_TIMESTAMP ] = MagicCodeGenerator.get_elapsed_seconds()
         session[ MagicCodeGenerator.MAGIC_CODE_TARGET ] = str( target.uuid )
         session.save()
+
+    def test_get_renders_the_code_entry_page(self):
+        # The sending views redirect here (Post/Redirect/Get), so GET must render the form and a reload
+        # is idempotent -- no re-send.
+        response = self.client.get( reverse('magic_code') )
+        self.assertEqual( 200, response.status_code )
+        self.assertTemplateRendered( response, _CODE_PAGE )
 
     def test_valid_code_signs_in_the_verified_target(self):
         self._prime_code( self.user )
@@ -251,20 +258,20 @@ class TestAttachEmailView(SyncViewTestCase):
 
         response = self.client.post( reverse('attach_email'), { 'email': 'mine@example.com' } )
 
-        self.assertRedirects( response, reverse('user_account'), fetch_redirect_response = False )
+        self.assertRedirects( response, reverse('magic_code'), fetch_redirect_response = False )
         guest.refresh_from_db()
         self.assertEqual( 'mine@example.com', guest.pending_email )
         mock_send.assert_called_once()
 
     def test_email_of_a_verified_account_routes_to_confirmation(self, mock_send):
         # A taken (verified) address is not attached; instead a code is sent to *that* account so the
-        # person can prove ownership, and the code-entry page is shown (reconciliation follows on verify).
+        # person can prove ownership, and the code page is shown (reconciliation follows on verify).
         guest = User.objects.create_guest()
         self.client.force_login( guest )
 
         response = self.client.post( reverse('attach_email'), { 'email': self.user.email } )
 
-        self.assertTemplateRendered( response, _CODE_PAGE )
+        self.assertRedirects( response, reverse('magic_code'), fetch_redirect_response = False )
         guest.refresh_from_db()
         self.assertIsNone( guest.pending_email )                     # not attached to the guest
         self.assertEqual( self.user, mock_send.call_args.kwargs['user'] )   # code sent to the existing account
@@ -273,27 +280,6 @@ class TestAttachEmailView(SyncViewTestCase):
         self.client.force_login( self.user )
         response = self.client.post( reverse('attach_email'), { 'email': 'other@example.com' } )
         self.assertRedirects( response, reverse('user_account'), fetch_redirect_response = False )
-        mock_send.assert_not_called()
-
-
-@patch.object(SigninManager, 'send_magic_email')
-class TestResendConfirmationView(SyncViewTestCase):
-
-    def test_resends_when_a_pending_email_exists(self, mock_send):
-        guest = User.objects.create_guest()
-        guest.attach_pending_email( 'mine@example.com' )
-        self.client.force_login( guest )
-
-        self.client.post( reverse('resend_confirmation') )
-
-        mock_send.assert_called_once()
-
-    def test_no_pending_email_sends_nothing(self, mock_send):
-        guest = User.objects.create_guest()
-        self.client.force_login( guest )
-
-        self.client.post( reverse('resend_confirmation') )
-
         mock_send.assert_not_called()
 
 
@@ -310,15 +296,17 @@ class TestUserAccountView(SyncViewTestCase):
         response = self.client.get( reverse('user_account') )
         self.assertContains( response, reverse('attach_email') )
 
-    def test_guest_with_pending_email_sees_the_confirm_step(self):
+    def test_guest_with_a_pending_claim_still_only_sees_add_email(self):
+        # A pending, unconfirmed claim is not surfaced on the account page -- confirmation happens on
+        # the code page, so the account page shows the same single add-email control.
         guest = User.objects.create_guest()
         guest.attach_pending_email( 'mine@example.com' )
         self.client.force_login( guest )
 
         response = self.client.get( reverse('user_account') )
 
-        self.assertContains( response, 'mine@example.com' )
-        self.assertContains( response, reverse('resend_confirmation') )
+        self.assertContains( response, reverse('attach_email') )
+        self.assertNotContains( response, 'mine@example.com' )   # the pending address is not shown
 
 
 class TestUserSignoutView(SyncViewTestCase):
@@ -377,8 +365,8 @@ class TestUserSigninThrottling(SyncViewTestCase):
         Client().post( url, { 'email': 'a@example.com' } )              # within the per-IP limit of 1
         response = Client().post( url, { 'email': 'b@example.com' } )   # exceeds it
 
-        self.assertEqual( 200, response.status_code )
-        self.assertTemplateRendered( response, _CODE_PAGE )            # neutral response
+        # Neutral: the same redirect to the code page as a real send, so throttling doesn't leak.
+        self.assertRedirects( response, reverse('magic_code'), fetch_redirect_response = False )
         self.assertFalse( User.objects.filter( pending_email = 'b@example.com' ).exists() )
         mock_send.assert_called_once()
 
