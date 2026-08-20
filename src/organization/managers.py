@@ -12,7 +12,7 @@ from .exceptions import AlreadyActiveMemberError, DuplicateInvitationError
 if TYPE_CHECKING:
     # Imported only for type annotations; a runtime import would create a
     # managers <-> models cycle (models imports the managers below).
-    from .models import Organization, OrganizationInvitation
+    from .models import Organization, OrganizationInvitation, OrganizationMember
     # The project's user model is `custom.CustomUser` (not Django's `User`); annotate as such.
     from custom.models import CustomUser as UserType
 
@@ -114,6 +114,43 @@ class OrganizationMemberManager( models.Manager ):
     def for_user( self, user : UserType ) -> models.QuerySet:
         """Active memberships for `user` (the organizations they can access)."""
         return self.filter( user = user, is_active = True )
+
+    def active_membership_for( self,
+                               user              : UserType,
+                               organization_uuid ) -> 'OrganizationMember | None':
+        """The user's active membership of the organization identified by `organization_uuid`,
+        or None when they have no such active membership.
+
+        The membership-scoped lookup that request resolution trusts: it both verifies the user
+        belongs to the selected organization and loads that organization (via `select_related`),
+        so a stale or forged session selection can never resolve to an organization the user has
+        left or never joined.
+        """
+        return self.filter(
+            user = user,
+            is_active = True,
+            organization__uuid = organization_uuid,
+        ).select_related( 'organization' ).first()
+
+    def default_organization_for( self, user : UserType ) -> 'Organization | None':
+        """The organization a user lands in when the session carries no valid selection, or None
+        when they have no active membership.
+
+        Policy: prefer an organization the user owns over one they only belong to, breaking ties by
+        earliest creation -- a stable, predictable landing that keeps a member out of another
+        household by default. Consulted only when nothing is already selected, so switching away
+        from this default always wins.
+        """
+        memberships = list( self.for_user( user ).select_related( 'organization' ) )
+        if not memberships:
+            return None
+
+        def _landing_rank( membership : 'OrganizationMember' ):
+            owns_it = ( membership.organization_role == OrganizationRole.OWNER )
+            return ( 0 if owns_it else 1, membership.organization.created_datetime )
+
+        preferred = min( memberships, key = _landing_rank )
+        return preferred.organization
 
     def active_owners( self, organization : 'Organization' ) -> models.QuerySet:
         """Active OWNER memberships of `organization`."""
