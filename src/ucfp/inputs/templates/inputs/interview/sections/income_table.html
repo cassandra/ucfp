@@ -23,7 +23,7 @@ background; only a genuine input error (a negative amount) re-renders here.
           </td>
           <td>{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
           <td class="text-muted">{{ row.cadence }}</td>
-          <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>
+          <td>{% if row.remove %}<label class="small text-muted edit-only">{{ row.remove }} remove</label>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

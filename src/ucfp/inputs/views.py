@@ -825,6 +825,13 @@ class InterviewView( GuestReminderMixin, View ):
             # The last step of the flow context shows "Finish" rather than "Next" (in a build, the last
             # Plans step chains into Assumptions, so it is not the finish).
             'is_last'              : self._is_last_step( request, sections, section, flow ),
+            # The next section in this flow (None on the last), so a read-only member gets a plain
+            # navigation "Next" -- a sequential reader -- in place of the advance-and-save button.
+            'next_section'         : next_section_after( sections, section.key ),
+            # Where the flow's last step leads, so a read-only member's "Finish" navigates out of the
+            # flow (to the same place the advance-and-save Finish lands) rather than saving.
+            'completion_destination': self._completion_destination(
+                request, flow, request.session_state.editing_scenario ),
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,

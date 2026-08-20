@@ -21,7 +21,7 @@ chosen disposition still missing fields) shows a "Needs details" flag; a finance
         </span>
         <span class="text-nowrap ml-3">
           {% if vehicle.handle == active %}<span class="text-muted small mr-1">editing</span>{% endif %}
-          <a data-async="#vehicle-disposition-form"
+          <a class="edit-only" data-async="#vehicle-disposition-form"
              href="{% url vehicle.edit_route handle=vehicle.handle %}"
              aria-label="Plan for {{ vehicle.name }}">Edit</a>
         </span>

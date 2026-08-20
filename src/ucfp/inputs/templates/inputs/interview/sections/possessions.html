@@ -18,7 +18,7 @@ background; only a row added/removed or a bad value re-renders here. The section
           <td>{{ row.handle }}{{ row.name }}</td>
           <td>{{ row.type }}</td>
           <td>{{ row.value }}{% if row.value.errors %}<span class="text-danger small d-block">{{ row.value.errors|join:" " }}</span>{% endif %}</td>
-          <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>
+          <td>{% if row.remove %}<label class="small text-muted edit-only">{{ row.remove }} remove</label>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

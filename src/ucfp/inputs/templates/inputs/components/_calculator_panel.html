@@ -10,7 +10,7 @@ per_year, autofill) and `calc_id` = the row's calc id (ties the checkbox to its 
 {% endcomment %}
 Buy {{ calc.count }} at {{ calc.cost }} each, replace every {{ calc.lifespan }} yr
 &rarr; &asymp; $<span class="{{ AppConst.CALC_READOUT_CLASS }}">{{ calc.per_year }}</span>/yr
-<label class="ml-2 mb-0 text-nowrap">
+<label class="ml-2 mb-0 text-nowrap edit-only">
   <input type="checkbox" class="{{ AppConst.CALC_AUTOFILL_CLASS }}"
          data-{{ AppConst.CALC_DATA_ATTR }}="{{ calc_id }}"
          aria-label="Auto fill amounts from the calculator"{% if calc.autofill %} checked{% endif %}> Auto fill

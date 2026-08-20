@@ -16,10 +16,10 @@ rank (numbered across enabled rows only); retained rows show no rank and a KEPT 
   <span class="d-inline-block rounded-circle mr-2 {% if row.held %}bg-success{% else %}bg-light border{% endif %}"
         style="width:.5rem;height:.5rem" title="{% if row.held %}held{% else %}not held yet{% endif %}"></span>
   <span class="flex-grow-1 js-draw-label {% if not row.enabled or not row.held %}text-muted{% endif %}">{{ row.label }}</span>
-  <button type="button" class="btn btn-sm btn-light py-0 px-2 mr-1 js-draw-up" aria-label="Move up">&uarr;</button>
-  <button type="button" class="btn btn-sm btn-light py-0 px-2 js-draw-down" aria-label="Move down">&darr;</button>
-  <button type="button" class="btn btn-sm btn-link p-0 ml-2 js-draw-disable{% if not row.enabled %} d-none{% endif %}"
+  <button type="button" class="btn btn-sm btn-light py-0 px-2 mr-1 js-draw-up edit-only" aria-label="Move up">&uarr;</button>
+  <button type="button" class="btn btn-sm btn-light py-0 px-2 js-draw-down edit-only" aria-label="Move down">&darr;</button>
+  <button type="button" class="btn btn-sm btn-link p-0 ml-2 js-draw-disable edit-only{% if not row.enabled %} d-none{% endif %}"
           aria-label="Keep -- never sell">{% icon "times-circle" size="sm" color="primary" %}</button>
-  <button type="button" class="btn btn-sm btn-link p-0 ml-2 js-draw-enable{% if row.enabled %} d-none{% endif %}"
+  <button type="button" class="btn btn-sm btn-link p-0 ml-2 js-draw-enable edit-only{% if row.enabled %} d-none{% endif %}"
           aria-label="Return to the draw order">{% icon "plus-circle" size="sm" color="primary" %}</button>
 </li>

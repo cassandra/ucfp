@@ -14,6 +14,6 @@ view re-renders here when the new name is already taken, reverting the field).
            class="js-rename form-control form-control-sm{% if bold %} font-weight-bold{% endif %}{% if title %} js-rename-title{% endif %}{% if warning %} is-invalid{% endif %}">
     {% if warning %}<div class="invalid-feedback d-block">{{ warning }}</div>{% endif %}
     {# The edit auto-saves with JS; this submit is the no-JS fallback so a rename is still possible. #}
-    <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1">Save name</button></noscript>
+    <noscript><button type="submit" class="btn btn-sm btn-link p-0 mt-1 edit-only">Save name</button></noscript>
   </form>
 </div>

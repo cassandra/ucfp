@@ -4,6 +4,6 @@ its panel and amount target(s) via data-calc (so the panel can live anywhere -- 
 beside the amount). Include with `calc_id` = the row's calc id.
 {% endcomment %}
 {% load icons %}
-<button type="button" class="{{ AppConst.CALC_TOGGLE_CLASS }} btn btn-sm btn-link p-0 ml-1"
+<button type="button" class="{{ AppConst.CALC_TOGGLE_CLASS }} btn btn-sm btn-link p-0 ml-1 edit-only"
         data-{{ AppConst.CALC_DATA_ATTR }}="{{ calc_id }}"
         aria-label="Enter as a count of items">{% icon "calculator" size="sm" %}</button>
