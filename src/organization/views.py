@@ -5,6 +5,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
 from common.async_view import ModalView
@@ -55,21 +56,33 @@ class OrganizationSettingsView( View ):
         return render( request, _SETTINGS_TEMPLATE, {
             'form'         : form,
             'organization' : request.organization,
+            'households'   : self._households( request ),
         } )
+
+    def _households( self, request ):
+        """The user's active households for the switcher on this page: the current one marked, each
+        other one a switch target."""
+        memberships = OrganizationMember.objects.for_user(
+            request.user ).select_related( 'organization' )
+        return [ { 'organization' : membership.organization,
+                   'role_label'   : membership.organization_role.label,
+                   'is_current'   : membership.organization_id == request.organization.pk }
+                 for membership in memberships ]
 
 
 @method_decorator( require_authenticated_user, name = 'dispatch' )
 class OrganizationSwitchView( View ):
     """POST: make `organization_uuid` the user's current organization for later requests.
 
-    Records the selection in the session (`ensure_organization` reads it on the next request),
-    so every org-scoped page that follows is resolved to the chosen household. A user may only
-    switch to an organization they actively belong to; any other target is refused as not-found,
-    mirroring the household delete/leave actions -- so a forged uuid can neither reveal nor select
-    a household that is not theirs.
+    Records the selection in the session (`ensure_organization` reads it on the next request), so
+    every org-scoped page that follows is resolved to the chosen household; the switched-away
+    household's scoped selections are retained per organization (see
+    `SessionState.set_current_organization`). A user may only switch to an organization they actively
+    belong to; any other target is refused as not-found, mirroring the household delete/leave actions
+    -- so a forged uuid can neither reveal nor select a household that is not theirs.
 
-    Redirects to home rather than back to the referring page: that page's URL may embed objects of
-    the *previous* household (e.g. a run uuid), which do not exist under the newly selected one.
+    Reloads the page the switch was triggered from (the household list on Settings today), which keeps
+    the endpoint relocatable rather than tied to a fixed destination.
     """
 
     def post( self, request, organization_uuid ):
@@ -78,8 +91,16 @@ class OrganizationSwitchView( View ):
         if membership is None:
             raise Http404( 'No such household for this user.' )
         state = request.session_state
-        state.current_organization_uuid = str( membership.organization.uuid )
+        state.set_current_organization( str( membership.organization.uuid ) )
         state.to_session( request )
+        return self._reload( request )
+
+    def _reload( self, request ):
+        """Back to the page the switch came from; home is the fallback when the referer is missing or
+        off-site."""
+        referer = request.META.get( 'HTTP_REFERER' )
+        if referer and url_has_allowed_host_and_scheme( referer, allowed_hosts = { request.get_host() } ):
+            return redirect( referer )
         return redirect( reverse( 'home' ) )
 
 

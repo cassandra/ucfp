@@ -215,6 +215,17 @@ a:hover, a:focus {
     background-color: var(--primary-color);
 }
 
+/* The current-household indicator in the navbar: display context with a subtle link into Settings,
+   deliberately quieter than the feature nav so it reads as a label rather than a primary action. */
+.navbar .current-household {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+}
+.navbar .current-household:hover,
+.navbar .current-household:focus {
+    color: rgba(255, 255, 255, 0.85);
+}
+
 .modal-title-image img {
     max-height: 3rem;
 }

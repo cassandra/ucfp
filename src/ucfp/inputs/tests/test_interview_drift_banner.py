@@ -43,7 +43,8 @@ class InterviewDriftBannerTests( TestCase ):
     def _request( self ):
         request = RequestFactory().get( '/inputs/interview/x/' )
         request.organization  = self.org
-        request.session_state = SessionState( current_plans_uuid = str( self.plans.uuid ) )
+        request.session_state = SessionState( current_organization_uuid = str( self.org.uuid ) )
+        request.session_state.current_plans_uuid = str( self.plans.uuid )
         return request
 
     def test_the_plans_flow_surfaces_the_current_plans_drift( self ):

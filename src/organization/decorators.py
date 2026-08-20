@@ -63,7 +63,7 @@ def _resolve_current_organization( request ) -> Organization:
         if membership is not None:
             return membership.organization
     organization = _current_organization_for_request( request )
-    state.current_organization_uuid = str( organization.uuid )
+    state.set_current_organization( str( organization.uuid ) )
     state.to_session( request )
     return organization
 

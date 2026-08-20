@@ -2,7 +2,6 @@
 {% load common_tags %}
 {% load static %}
 {% load icons %}
-{% load organization_tags %}
 {% comment %}
   The shared application shell: the top navbar + a content region, extended by every
   authenticated app page (home, the planning features, the inputs area, settings). Sign-in,
@@ -47,10 +46,16 @@
           </div>
         </li>
       </ul>
-      {% comment %} Current household, centered for prominence; a switcher when the user has several. {% endcomment %}
+      {% comment %} Current household, shown for context -- a subtle link into Settings, where switching
+      between households lives. Display only; not a switching control in the bar. {% endcomment %}
+      {% if request.organization %}
       <ul class="navbar-nav mx-auto">
-        {% organization_switcher %}
+        <li class="nav-item">
+          <a class="nav-link current-household" href="{% url 'organization_settings' %}"
+             title="Current household &mdash; open Settings">{{ request.organization.display_name }}</a>
+        </li>
       </ul>
+      {% endif %}
       <ul class="navbar-nav">
         {% comment %}
         Profile and Scenarios stay lit while editing their flows: the flow editors all resolve to
@@ -72,7 +77,7 @@
           </a>
           <div class="dropdown-menu dropdown-menu-right" aria-labelledby="user-menu">
             <a class="dropdown-item" href="{% url 'user_account' %}">Account</a>
-            <a class="dropdown-item" href="{% url 'organization_settings' %}">Household</a>
+            <a class="dropdown-item" href="{% url 'organization_settings' %}">Settings</a>
             {% comment %}
               Only a Verified user can sign out: a Guest's session is the sole handle to their data,
               so signing out would strand it. A Guest adds an email (Account) to become recoverable.

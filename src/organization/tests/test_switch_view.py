@@ -29,7 +29,7 @@ class OrganizationSwitchViewTest( TestCase ):
     def _url( self, org ):
         return reverse( 'organization_switch', kwargs = { 'organization_uuid': org.uuid } )
 
-    def test_switch_selects_a_joined_organization_and_redirects_home( self ):
+    def test_switch_without_a_referer_selects_org_and_falls_back_to_home( self ):
         user = _user( 'u@x.test' )
         Organization.objects.create_for_owner( user, 'Owned' )
         other = _user( 'host@x.test' )
@@ -42,6 +42,34 @@ class OrganizationSwitchViewTest( TestCase ):
         self.assertEqual( response.status_code, 302 )
         self.assertEqual( response[ 'Location' ], reverse( 'home' ) )
         self.assertEqual( self.client.session.get( _SESSION_KEY ), str( joined.uuid ) )
+
+    def test_switch_reloads_the_referring_page( self ):
+        user = _user( 'u@x.test' )
+        Organization.objects.create_for_owner( user, 'Owned' )
+        other = _user( 'host@x.test' )
+        joined = Organization.objects.create_for_owner( other, 'Joined' )
+        _add_member( joined, user, OrganizationRole.MEMBER )
+        self.client.force_login( user )
+        settings_url = 'http://testserver' + reverse( 'organization_settings' )
+
+        response = self.client.post( self._url( joined ), HTTP_REFERER = settings_url )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertEqual( response[ 'Location' ], settings_url )
+        self.assertEqual( self.client.session.get( _SESSION_KEY ), str( joined.uuid ) )
+
+    def test_switch_ignores_an_offsite_referer( self ):
+        user = _user( 'u@x.test' )
+        Organization.objects.create_for_owner( user, 'Owned' )
+        other = _user( 'host@x.test' )
+        joined = Organization.objects.create_for_owner( other, 'Joined' )
+        _add_member( joined, user, OrganizationRole.MEMBER )
+        self.client.force_login( user )
+
+        response = self.client.post( self._url( joined ), HTTP_REFERER = 'http://evil.example/x' )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertEqual( response[ 'Location' ], reverse( 'home' ) )
 
     def test_cannot_switch_to_an_organization_the_user_does_not_belong_to( self ):
         user = _user( 'u@x.test' )
