@@ -17,9 +17,11 @@
       </dl>
 
     {% else %}
-      {# Guest: offer to add an email so their plan is recoverable. The pending claim is overwritable,
-         so the add-email input always shows (a typo is fixed by simply entering the address again);
-         a confirmation step is shown in addition whenever a claim is in flight. #}
+      {% comment %}
+        Guest: offer to add an email so their plan is recoverable. The pending claim is overwritable,
+        so the add-email input always shows (a typo is fixed by simply entering the address again);
+        a confirmation step is shown in addition whenever a claim is in flight.
+      {% endcomment %}
       {% if email_not_configured %}
       <div class="alert alert-danger">
         Email is not configured on this server, so an address cannot be confirmed here.
