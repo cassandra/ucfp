@@ -25,6 +25,8 @@ bypassing the Scenarios list where the create action otherwise lives. Shown only
 scenario -- the exact context that shortcut lands in.{% endcomment %}
 {% block page_actions %}{% if editing_scenario_name %}<a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary">+ New scenario</a>{% endif %}{% endblock %}
 
-{% block page_meta %}{% include "inputs/interview/interview_status_detail.html" %}{% endblock %}
+{% block page_meta %}{% include "inputs/interview/interview_status_detail.html" %}
+{# The guest "save your work" reminder -- a swap target (InterviewView._swap), so it appears/clears live. #}
+<div id="guest-email-banner">{% include "inputs/interview/guest_email_banner.html" %}</div>{% endblock %}
 
 {% block page_body %}{% include "inputs/interview/body.html" %}{% endblock %}

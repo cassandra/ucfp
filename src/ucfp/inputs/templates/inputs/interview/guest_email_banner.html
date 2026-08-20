@@ -1,0 +1,18 @@
+{% comment %}
+The Guest "save your work" reminder, shown on the interview once the profile is complete (see
+InterviewView / GuestReminderMixin). Empty otherwise -- this is a swap target that must clear when the
+condition no longer holds. The email input is inline so acting takes no extra click; it posts to
+attach_email (which sends the code and forwards to the code page).
+{% endcomment %}
+{% if show_guest_email_banner %}
+<div class="alert alert-info d-md-flex align-items-center mt-3 mb-0" role="status">
+  <span class="mr-md-3 mb-2 mb-md-0">Your work is saved only for this browser — add an email so you don't lose it.</span>
+  <form method="post" action="{% url 'attach_email' %}" data-synchronous="true"
+        class="form-inline ml-md-auto flex-nowrap">
+    {% csrf_token %}
+    <input type="email" name="email" class="form-control form-control-sm mr-2" placeholder="e-mail address"
+           required="" aria-label="Email address">
+    <button type="submit" class="btn btn-primary btn-sm text-nowrap">Add email</button>
+  </form>
+</div>
+{% endif %}

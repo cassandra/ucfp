@@ -14,6 +14,8 @@ refresh them live on section advance, not just on a full page load.{% endcomment
 {% block page_subtitle %}
 {% if profile_updated %}<p class="text-muted small mb-2">last updated {{ profile_updated|date:"F Y" }}</p>{% endif %}
 {% include "inputs/interview/interview_status_detail.html" %}
+{# The guest "save your work" reminder -- a swap target (InterviewView._swap), so it appears/clears live. #}
+<div id="guest-email-banner">{% include "inputs/interview/guest_email_banner.html" %}</div>
 {% endblock %}
 
 {% block page_body %}{% include "inputs/interview/body.html" %}{% endblock %}
