@@ -1,0 +1,79 @@
+"""Tests for the organization switch view (selecting the current household)."""
+import logging
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
+
+from organization.enums import OrganizationRole
+from organization.models import Organization, OrganizationMember
+
+logging.disable( logging.CRITICAL )
+
+User = get_user_model()
+
+_SESSION_KEY = 'current_organization_uuid'
+
+
+def _user( email ):
+    return User.objects.create_user( email = email )
+
+
+def _add_member( org, user, role ):
+    return OrganizationMember.objects.create(
+        organization = org, user = user, organization_role = role )
+
+
+class OrganizationSwitchViewTest( TestCase ):
+
+    def _url( self, org ):
+        return reverse( 'organization_switch', kwargs = { 'organization_uuid': org.uuid } )
+
+    def test_switch_selects_a_joined_organization_and_redirects_home( self ):
+        user = _user( 'u@x.test' )
+        Organization.objects.create_for_owner( user, 'Owned' )
+        other = _user( 'host@x.test' )
+        joined = Organization.objects.create_for_owner( other, 'Joined' )
+        _add_member( joined, user, OrganizationRole.MEMBER )
+        self.client.force_login( user )
+
+        response = self.client.post( self._url( joined ) )
+
+        self.assertEqual( response.status_code, 302 )
+        self.assertEqual( response[ 'Location' ], reverse( 'home' ) )
+        self.assertEqual( self.client.session.get( _SESSION_KEY ), str( joined.uuid ) )
+
+    def test_cannot_switch_to_an_organization_the_user_does_not_belong_to( self ):
+        user = _user( 'u@x.test' )
+        Organization.objects.create_for_owner( user, 'Owned' )
+        stranger = _user( 'stranger@x.test' )
+        foreign = Organization.objects.create_for_owner( stranger, 'Foreign' )
+        self.client.force_login( user )
+
+        response = self.client.post( self._url( foreign ) )
+
+        self.assertEqual( response.status_code, 404 )
+        self.assertIsNone( self.client.session.get( _SESSION_KEY ) )
+
+    def test_cannot_switch_to_an_inactive_membership( self ):
+        user = _user( 'u@x.test' )
+        Organization.objects.create_for_owner( user, 'Owned' )
+        other = _user( 'host@x.test' )
+        left = Organization.objects.create_for_owner( other, 'Left' )
+        membership = _add_member( left, user, OrganizationRole.MEMBER )
+        membership.deactivate()
+        self.client.force_login( user )
+
+        response = self.client.post( self._url( left ) )
+
+        self.assertEqual( response.status_code, 404 )
+        self.assertIsNone( self.client.session.get( _SESSION_KEY ) )
+
+    def test_get_is_not_allowed( self ):
+        user = _user( 'u@x.test' )
+        org = Organization.objects.create_for_owner( user, 'Owned' )
+        self.client.force_login( user )
+
+        response = self.client.get( self._url( org ) )
+
+        self.assertEqual( response.status_code, 405 )

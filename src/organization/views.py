@@ -59,6 +59,31 @@ class OrganizationSettingsView( View ):
 
 
 @method_decorator( require_authenticated_user, name = 'dispatch' )
+class OrganizationSwitchView( View ):
+    """POST: make `organization_uuid` the user's current organization for later requests.
+
+    Records the selection in the session (`ensure_organization` reads it on the next request),
+    so every org-scoped page that follows is resolved to the chosen household. A user may only
+    switch to an organization they actively belong to; any other target is refused as not-found,
+    mirroring the household delete/leave actions -- so a forged uuid can neither reveal nor select
+    a household that is not theirs.
+
+    Redirects to home rather than back to the referring page: that page's URL may embed objects of
+    the *previous* household (e.g. a run uuid), which do not exist under the newly selected one.
+    """
+
+    def post( self, request, organization_uuid ):
+        membership = OrganizationMember.objects.active_membership_for(
+            request.user, organization_uuid )
+        if membership is None:
+            raise Http404( 'No such household for this user.' )
+        state = request.session_state
+        state.current_organization_uuid = str( membership.organization.uuid )
+        state.to_session( request )
+        return redirect( reverse( 'home' ) )
+
+
+@method_decorator( require_authenticated_user, name = 'dispatch' )
 class AccountDeleteConfirmView( ModalView ):
     """The confirm-deletion modal for the whole account, itemizing which
     households will be deleted versus left."""
