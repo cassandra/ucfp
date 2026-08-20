@@ -1,7 +1,7 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from organization.models import Organization, OrganizationMember
@@ -36,8 +36,11 @@ def _give_content( user ):
                                      birthdate = date( 1980, 1, 1 ) ) ] ) )
 
 
+@override_settings(SUPPRESS_AUTHENTICATION=False)
 class SigninCollisionViewTest(TestCase):
-    """Reconciling a signed-in Guest with the existing account they just proved they own."""
+    """Reconciling a signed-in Guest with the existing account they just proved they own. Cloud-only
+    behavior (self-hosted has no sign-in), pinned so it does not inherit the ambient
+    UCFP_SUPPRESS_AUTHENTICATION."""
 
     def _stash_target( self, target ):
         # Use the user-app contract to stash, as the sign-in code would.
@@ -117,3 +120,16 @@ class SigninCollisionViewTest(TestCase):
 
         self.assertTrue( User.objects.filter( pk = guest.pk ).exists() )     # still a Guest
         self.assertEqual( _auth_user_id( self.client ), str( guest.pk ) )     # not switched
+
+
+@override_settings(SUPPRESS_AUTHENTICATION=True)
+class SigninCollisionDisabledSelfHostedTest(TestCase):
+    """The collision reconcile is part of the sign-in flow, so it is rejected with an explanatory 400
+    under self-hosted (SUPPRESS_AUTHENTICATION) -- a single-user deployment never has two accounts to
+    reconcile."""
+
+    def test_collision_is_rejected_self_hosted( self ):
+        response = self.client.get( reverse('signin_collision') )
+
+        self.assertEqual( 400, response.status_code )
+        self.assertContains( response, 'self-hosted', status_code = 400 )

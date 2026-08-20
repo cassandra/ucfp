@@ -2,7 +2,10 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.shortcuts import render, resolve_url
+from django.utils.decorators import method_decorator
 from django.views.generic import View
+
+from custom.decorators import require_authentication_enabled
 
 from user import collision
 from user.signin_manager import SigninManager
@@ -10,6 +13,7 @@ from user.signin_manager import SigninManager
 from . import reconciliation_service
 
 
+@method_decorator( require_authentication_enabled, name = 'dispatch' )
 class SigninCollisionView( View ):
     """Reconcile a signed-in Guest's in-progress plan with an existing account they have just proved
     they own (the sign-in code hands off here via ``settings.SIGNIN_COLLISION_URL``).

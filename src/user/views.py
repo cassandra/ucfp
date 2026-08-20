@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import View
 
-from custom.decorators import require_verified_user
+from custom.decorators import require_authentication_enabled, require_verified_user
 from notify.email_sender import EmailSender, UnsubscribedEmailError
 from notify.views import resubscribe_url_for
 
@@ -109,6 +109,7 @@ class RedirectAuthenticatedUserMixin:
         return super().dispatch( request, *args, **kwargs )
 
 
+@method_decorator( require_authentication_enabled, name = 'dispatch' )
 class UserSigninView( RedirectAuthenticatedUserMixin, View ):
     """The returning-user sign-in form: enter an email to receive a one-time code/link.
 
@@ -154,6 +155,7 @@ class UserSigninView( RedirectAuthenticatedUserMixin, View ):
         return HttpResponseRedirect( reverse( 'magic_code' ) )
 
 
+@method_decorator( require_authentication_enabled, name = 'dispatch' )
 class MagicCodeView( View ):
     """The one-time-code step. GET renders the entry form (the target and code live in the session,
     so the sending views redirect here -- Post/Redirect/Get -- rather than render it in place, keeping
@@ -232,6 +234,7 @@ class MagicCodeView( View ):
         return _sign_in_or_collision( request, target )
 
 
+@method_decorator( require_authentication_enabled, name = 'dispatch' )
 class MagicLinkView( View ):
     """Consume a magic link (the one-click alternative to the code). It resolves the target account
     by uuid and validates the token, then acts by intent, read from that account's state:
@@ -264,6 +267,7 @@ class MagicLinkView( View ):
         return render( request, 'user/pages/signin_magic_bad_link.html' )
 
 
+@method_decorator( require_authentication_enabled, name = 'dispatch' )
 class AttachEmailView( View ):
     """Attach an email to the signed-in Guest so they can recover their work, then send a confirmation
     and forward to the code page (Post/Redirect/Get). The address becomes the account's verified
@@ -315,6 +319,7 @@ class UserAccountView( View ):
         return render( request, 'user/pages/account.html', _account_context() )
 
 
+@method_decorator( require_authentication_enabled, name = 'dispatch' )
 class ConvertToGuestView( View ):
     """Convert an Anonymous visitor into a Guest: create their email-less Guest account and log
     them in. The single conversion entry point, invoked by whichever "start using the app" control

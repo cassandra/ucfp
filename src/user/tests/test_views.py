@@ -402,6 +402,38 @@ class TestUserAccountViewSelfHosted(SyncViewTestCase):
         self.assertNotContains( response, reverse('attach_email') )
 
 
+@override_settings(SUPPRESS_AUTHENTICATION=True)
+class TestAuthEndpointsDisabledSelfHosted(SyncViewTestCase):
+    """Under self-hosted (SUPPRESS_AUTHENTICATION) the sign-in / account-linking endpoints are rejected
+    with an explanatory 400 -- there is no sign-in in a single-user deployment. The guard is on dispatch,
+    so it fires for any method (a GET of a POST-only endpoint is a 400, not a 405) and before the view
+    body runs (so e.g. attach_email never attaches)."""
+
+    def _assert_rejected( self, response ):
+        self.assertEqual( 400, response.status_code )
+        self.assertContains( response, 'self-hosted', status_code = 400 )   # the explanation is shown
+
+    def test_signin_is_rejected( self ):
+        self._assert_rejected( self.client.get( reverse('user_signin') ) )
+
+    def test_magic_code_is_rejected( self ):
+        self._assert_rejected( self.client.get( reverse('magic_code') ) )
+
+    def test_magic_link_is_rejected( self ):
+        url = reverse('magic_link', kwargs = { 'user_uuid': str( self.user.uuid ), 'token': 'x' })
+        self._assert_rejected( self.client.get( url ) )
+
+    def test_convert_to_guest_is_rejected( self ):
+        self._assert_rejected( self.client.post( reverse('convert_to_guest') ) )
+
+    def test_attach_email_is_rejected_before_attaching( self ):
+        response = self.client.post( reverse('attach_email'), { 'email': 'new@example.com' } )
+
+        self._assert_rejected( response )
+        # The dispatch guard fired before the view body, so nothing was claimed.
+        self.assertFalse( User.objects.filter( pending_email = 'new@example.com' ).exists() )
+
+
 class TestUserSignoutView(CloudAuthViewTest):
     """Tests for the sign-out action."""
 
