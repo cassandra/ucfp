@@ -95,3 +95,19 @@ class OrganizationSettingsHouseholdsTest( TestCase ):
         self.assertFalse( by_name[ 'Other'   ][ 'is_current' ] )
         self.assertEqual( by_name[ 'Current' ][ 'role_label' ], OrganizationRole.OWNER.label )
         self.assertEqual( by_name[ 'Other'   ][ 'role_label' ], OrganizationRole.MEMBER.label )
+
+    def test_read_only_member_cannot_save_settings( self ):
+        # End to end: the write-gate refuses a VIEWER's settings POST (403) before the form runs, even
+        # though the page renders (GET) for them.
+        user  = self._user( 'viewer@x.test' )
+        owner = self._user( 'owner@x.test' )
+        organization = Organization.objects.create_for_owner( owner, 'Shared' )
+        OrganizationMember.objects.create(
+            organization = organization, user = user, organization_role = OrganizationRole.VIEWER )
+        self.client.force_login( user )
+        session = self.client.session
+        session[ 'current_organization_uuid' ] = str( organization.uuid )
+        session.save()
+
+        self.assertEqual( self.client.get( reverse( 'organization_settings' ) ).status_code, 200 )
+        self.assertEqual( self.client.post( reverse( 'organization_settings' ), {} ).status_code, 403 )

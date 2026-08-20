@@ -12,6 +12,7 @@ class OrganizationRole( LabeledEnum ):
     OWNER   = ( 'Owner'  , 'Full control of the organization, including membership and ownership.' )
     ADMIN   = ( 'Admin'  , 'Elevated privileges short of ownership.' )
     MEMBER  = ( 'Member' , 'Regular member with no special privileges.' )
+    VIEWER  = ( 'Viewer' , 'Read-only access; cannot modify the organization or its data.' )
 
     @classmethod
     def default(cls):
