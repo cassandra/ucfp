@@ -205,6 +205,28 @@ a:hover, a:focus {
     background-color: #e9ecef;
     opacity: 1;
 }
+/* The current (active) menu item -- e.g. the open perspective in the Planning menu -- on the
+   brand blue, not Bootstrap's default #007bff. The item-color override above (three classes) beats
+   Bootstrap's `.dropdown-item.active` text color but leaves its off-theme blue background, so this
+   four-class rule reclaims both to the theme's on-primary pairing. */
+.navbar .dropdown-menu .dropdown-item.active,
+.navbar .dropdown-menu .dropdown-item:active {
+    color: var(--on-primary-color);
+    background-color: var(--primary-color);
+}
+
+/* The current-household indicator in the navbar: display context with a subtle link into Settings,
+   deliberately quieter than the feature nav so it reads as a label rather than a primary action. */
+.navbar .current-household {
+    /* Quieter than the feature nav (0.85), but kept at 0.75 so it still clears WCAG AA (~4.7:1)
+       on the brand-blue bar -- an interactive link must stay legible. */
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.9rem;
+}
+.navbar .current-household:hover,
+.navbar .current-household:focus {
+    color: rgba(255, 255, 255, 0.85);
+}
 
 .modal-title-image img {
     max-height: 3rem;

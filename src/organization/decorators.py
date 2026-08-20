@@ -29,10 +29,11 @@ def ensure_organization( view_func ):
 
     A user must always belong to at least one organization, so this resolves one for the
     request (and persists it in the session, so later requests skip the work): it uses the
-    organization already selected in the session, else the user's only one, else -- when they
-    have none -- auto-provisions one they own (the `organization` app owns the creation and
-    naming policy). Until multi-organization selection exists, a user with several raises rather
-    than guess. Every request that reaches here carries a real user: a cloud account, or the
+    organization selected in the session when that is still one of the user's active
+    memberships, else a default one (preferring an organization they own; see
+    `OrganizationMemberManager.default_organization_for`), else -- when they have none --
+    auto-provisions one they own (the `organization` app owns the creation and naming policy).
+    Every request that reaches here carries a real user: a cloud account, or the
     self-hosted singleton Guest that `SelfHostedIdentityMiddleware` logs in under
     `SUPPRESS_AUTHENTICATION` (a cloud visitor with no account is held at the sign-in gate).
 
@@ -57,12 +58,12 @@ def ensure_organization( view_func ):
 def _resolve_current_organization( request ) -> Organization:
     state = request.session_state
     if state.current_organization_uuid is not None:
-        selected = Organization.objects.filter(
-            uuid = state.current_organization_uuid ).first()
-        if selected is not None:
-            return selected
+        membership = OrganizationMember.objects.active_membership_for(
+            request.user, state.current_organization_uuid )
+        if membership is not None:
+            return membership.organization
     organization = _current_organization_for_request( request )
-    state.current_organization_uuid = str( organization.uuid )
+    state.set_current_organization( str( organization.uuid ) )
     state.to_session( request )
     return organization
 
@@ -75,11 +76,7 @@ def _current_organization_for_request( request ) -> Organization:
 
 
 def _organization_for_user( user ) -> Organization:
-    organizations = [ membership.organization
-                      for membership in OrganizationMember.objects.for_user( user ) ]
-    if not organizations:
-        return Organization.objects.create_default_for_user( user )
-    if len( organizations ) == 1:
-        return organizations[ 0 ]
-    raise NotImplementedError(
-        'The user belongs to multiple organizations; selection is not yet supported.' )
+    default = OrganizationMember.objects.default_organization_for( user )
+    if default is not None:
+        return default
+    return Organization.objects.create_default_for_user( user )

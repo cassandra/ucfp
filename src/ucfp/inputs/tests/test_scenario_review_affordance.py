@@ -85,7 +85,7 @@ class _ScenariosHomeTestBase( TestCase ):
     def _home_content( self ):
         request = self.factory.get( '/inputs/scenarios/' )
         request.organization  = self.organization
-        request.session_state = SessionState()
+        request.session_state = SessionState( current_organization_uuid = str( self.organization.uuid ) )
         request.session       = dict()
         return ScenariosHomeView().get( request ).content.decode()
 
@@ -96,7 +96,7 @@ class ScenarioReviewAffordanceTests( _ScenariosHomeTestBase ):
         scenario = self._scenario( complete = True, label = 'Done' )
         request  = self.factory.get( '/inputs/scenarios/' )
         request.organization  = self.organization
-        request.session_state = SessionState()
+        request.session_state = SessionState( current_organization_uuid = str( self.organization.uuid ) )
         request.session       = dict()
 
         response = ScenarioEditView().post( request, uuid = scenario.uuid )
@@ -123,7 +123,7 @@ class ScenarioReviewAffordanceTests( _ScenariosHomeTestBase ):
         scenario = self._scenario( complete = True, label = 'Only' )
         request  = self.factory.get( '/inputs/scenarios/' )
         request.organization  = self.organization
-        request.session_state = SessionState()
+        request.session_state = SessionState( current_organization_uuid = str( self.organization.uuid ) )
         request.session       = dict()
 
         response = ScenariosHomeView().get( request )
@@ -243,10 +243,10 @@ class RailHeaderContextTests( _ScenariosHomeTestBase ):
         request = self.factory.get( '/inputs/interview/x/' )
         request.organization  = self.organization
         request.session       = dict()
-        request.session_state = SessionState(
-            current_plans_uuid       = str( scenario.plans.uuid ),
-            current_assumptions_uuid = str( scenario.assumptions.uuid ),
-            editing_scenario         = str( scenario.uuid ) if building else None )
+        request.session_state = SessionState( current_organization_uuid = str( self.organization.uuid ) )
+        request.session_state.current_plans_uuid       = str( scenario.plans.uuid )
+        request.session_state.current_assumptions_uuid = str( scenario.assumptions.uuid )
+        request.session_state.editing_scenario         = str( scenario.uuid ) if building else None
         return request
 
     def test_a_scenario_build_shows_both_parts_with_the_active_one_flagged( self ):

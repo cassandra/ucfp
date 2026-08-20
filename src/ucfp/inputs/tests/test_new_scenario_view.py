@@ -75,7 +75,7 @@ class _NewScenarioBase( TestCase ):
     def _request( self, method, data = None ):
         request = getattr( self.factory, method )( '/inputs/scenarios/compose/', data or {} )
         request.organization  = self.organization
-        request.session_state = SessionState()
+        request.session_state = SessionState( current_organization_uuid = str( self.organization.uuid ) )
         request.session       = dict()
         return request
 

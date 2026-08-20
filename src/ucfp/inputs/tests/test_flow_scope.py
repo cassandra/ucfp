@@ -16,6 +16,7 @@ class FlowEntryScopeTests( TestCase ):
     def test_standalone_plans_entry_clears_stale_build_scope( self ):
         request = RequestFactory().get( '/inputs/plans/' )
         request.session       = dict()
-        request.session_state = SessionState( editing_scenario = 'stale-build-uuid' )
+        request.session_state = SessionState( current_organization_uuid = 'current-org' )
+        request.session_state.editing_scenario = 'stale-build-uuid'
         FlowEntryView( flow = 'plans' ).get( request )
         self.assertIsNone( request.session_state.editing_scenario )

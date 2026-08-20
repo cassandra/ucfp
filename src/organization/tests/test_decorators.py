@@ -105,6 +105,35 @@ class EnsureOrganizationTest( TestCase ):
         organization = _organization_view( request )
         self.assertEqual( organization, existing )
 
+    def test_multiple_memberships_resolve_to_the_owned_default( self ):
+        # Formerly a NotImplementedError: a user in several organizations now lands on the
+        # one they own (per default_organization_for) rather than crashing.
+        user = self._user()
+        host = get_user_model().objects.create_user( email = 'host@example.com' )
+        joined = Organization.objects.create_for_owner( host, 'Joined' )
+        joined.members.create( user = user, organization_role = OrganizationRole.MEMBER )
+        owned = Organization.objects.create_for_owner( user, 'Owned' )
+
+        organization = _organization_view( _request_for( user ) )
+
+        self.assertEqual( organization, owned )
+
+    def test_session_selection_of_a_non_member_organization_is_discarded( self ):
+        # A stale or forged session uuid pointing at an organization the user does not belong
+        # to must never grant access; resolution falls back to their default and re-persists it.
+        user = self._user()
+        host = get_user_model().objects.create_user( email = 'host2@example.com' )
+        owned = Organization.objects.create_for_owner( user, 'Owned' )
+        foreign = Organization.objects.create_for_owner( host, 'Foreign' )
+        request = _request_for( user )
+        request.session_state.current_organization_uuid = str( foreign.uuid )
+
+        organization = _organization_view( request )
+
+        self.assertEqual( organization, owned )
+        self.assertEqual(
+            request.session_state.current_organization_uuid, str( owned.uuid ) )
+
 
 class RequireAuthenticatedUserTest( TestCase ):
 

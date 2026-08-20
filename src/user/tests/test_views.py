@@ -369,6 +369,13 @@ class TestUserAccountView(CloudAuthViewTest):
         response = self.client.get( reverse('user_account') )
         self.assertContains( response, self.user.email )
 
+    def test_navbar_shows_the_current_household_label(self):
+        # The account page resolves the current household (ensure_organization) so the shared navbar
+        # label renders here as on every other app page.
+        self.client.force_login( self.user )
+        response = self.client.get( reverse('user_account') )
+        self.assertContains( response, 'current-household' )
+
     def test_guest_sees_the_add_email_prompt(self):
         self.client.force_login( User.objects.create_guest() )
         response = self.client.get( reverse('user_account') )
