@@ -130,12 +130,22 @@ class CustomUser( AbstractBaseUser, PermissionsMixin ):
     def verify_pending_email(self):
         """Promote the pending address into the verified `email` slot -- the sole path by
         which an address enters the unique field -- moving the account to Verified. Raises
-        if there is no pending address to verify."""
+        if there is no pending address to verify. The caller must re-confirm the address is
+        still unclaimed (`objects.verified_account_for_email`): the unique slot may have been
+        taken between attach and verify, in which case the save raises `IntegrityError`."""
         if not self.pending_email:
             raise ValueError('No pending email to verify.')
         self.email = self.pending_email
         self.pending_email = None
         self.save(update_fields = [ 'email', 'pending_email' ])
+        return
+
+    def discard_pending_email(self):
+        """Drop this account's pending (unconfirmed) claim, leaving its verified `email` slot
+        untouched. Used when the claim is moot -- e.g. the address was verified by another
+        account first, so this Guest's pending copy can no longer be promoted."""
+        self.pending_email = None
+        self.save(update_fields = [ 'pending_email' ])
         return
 
     @property

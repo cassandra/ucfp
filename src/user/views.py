@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model, logout
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import BadRequest, ValidationError
 from django.core.validators import validate_email
+from django.db import IntegrityError
 from django.http import HttpResponseRedirect
 from django.shortcuts import render, resolve_url
 from django.urls import reverse
@@ -41,6 +42,31 @@ def _sign_in_or_collision( request, target ):
     return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
 
 
+def _confirm_pending_or_collision( request, account ):
+    """Confirm `account`'s pending address into its verified identity and land on the post-login page --
+    unless another account has claimed that address in the meantime, in which case hand off to the
+    collision flow instead of crashing on the unique `email` constraint.
+
+    The address's availability was checked when it was attached, but the unique slot can fill before the
+    person confirms: the same address attached from two Guest sessions, or a different account verifying it
+    first. Re-check here. Because reaching this point proves the person controls that mailbox, a now-existing
+    owner is theirs: sign into it and reconcile the guest work (``_sign_in_or_collision``), dropping the moot
+    pending claim -- never 500, never silently discard their proof. The ``IntegrityError`` guard closes the
+    residual race between the re-check and the save."""
+    User = get_user_model()
+    existing = User.objects.verified_account_for_email( account.pending_email )
+    if existing is None:
+        try:
+            account.verify_pending_email()
+            return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
+        except IntegrityError:
+            existing = User.objects.verified_account_for_email( account.pending_email )
+            if existing is None:
+                raise
+    account.discard_pending_email()
+    return _sign_in_or_collision( request, existing )
+
+
 def _render_code_entry( request, magic_code_form, status = 200 ):
     """Render the one-time-code entry page (shared by every flow that sends a code)."""
     response = render( request, _CODE_ENTRY_TEMPLATE, { 'magic_code_form': magic_code_form } )
@@ -61,11 +87,14 @@ def _send_magic_email_or_unsubscribed( request, user, email_address ):
     return None
 
 
-def _account_context( request ):
-    """Context for the account page: it branches on the user's state (Guest, with or without a pending
-    email, or Verified) via `request.user`, plus whether email sending is configured."""
+def _account_context():
+    """Context for the account page. The template branches on `request.user`'s state (Guest, with or
+    without a pending claim, or Verified); this supplies only the two flags it cannot derive there:
+    whether email sending is configured, and whether this is a self-hosted (SUPPRESS_AUTHENTICATION)
+    deployment -- where the local Guest is the sole owner and is not solicited for an email."""
     return {
-        'email_not_configured': not EmailSender.is_email_configured(),
+        'email_not_configured'   : not EmailSender.is_email_configured(),
+        'suppress_authentication': settings.SUPPRESS_AUTHENTICATION,
     }
 
 
@@ -198,8 +227,7 @@ class MagicCodeView( View ):
             raise BadRequest( 'Sign-in code is no longer valid.' )
 
         if target.pending_email:
-            target.verify_pending_email()
-            return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
+            return _confirm_pending_or_collision( request, target )
 
         return _sign_in_or_collision( request, target )
 
@@ -226,8 +254,7 @@ class MagicLinkView( View ):
         if user.pending_email:
             same_session = request.user.is_authenticated and ( request.user.pk == user.pk )
             if same_session:
-                user.verify_pending_email()
-                return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
+                return _confirm_pending_or_collision( request, user )
             return render( request, 'user/pages/confirm_email_other_device.html',
                            { 'email': user.pending_email } )
 
@@ -285,7 +312,7 @@ class UserAccountView( View ):
     so it always has an authenticated ``request.user``."""
 
     def get( self, request, *args, **kwargs ):
-        return render( request, 'user/pages/account.html', _account_context( request ) )
+        return render( request, 'user/pages/account.html', _account_context() )
 
 
 class ConvertToGuestView( View ):

@@ -15,8 +15,16 @@
       </dl>
       <p class="text-muted small mt-3 mb-0">You can sign in with this email from any browser at any time.</p>
 
+    {% elif suppress_authentication %}
+      {# Self-hosted single-user deployment: the local Guest is the sole owner and there is no sign-in, so
+         email is never solicited -- the data lives on this server, not bound to a browser session. #}
+      <p class="text-muted mb-0">
+        This is a self-hosted deployment — your data lives on this server, so there's no email or sign-in
+        to set up.
+      </p>
+
     {% else %}
-      {# Guest: a single "add your email" control; a pending unconfirmed claim is not surfaced (re-adding overwrites and resends). #}
+      {# Guest (cloud): a single "add your email" control; a pending unconfirmed claim is not surfaced (re-adding overwrites and resends). #}
       {% if email_not_configured %}
       <div class="alert alert-danger">
         Email is not configured on this server, so an address cannot be confirmed here.
@@ -32,7 +40,8 @@
       <form method="post" action="{% url 'attach_email' %}" data-synchronous="true">
         {% csrf_token %}
         <div class="d-flex input-group input-group-lg">
-          <input type="email" name="email" class="form-control" placeholder="e-mail address" required="">
+          <input type="email" name="email" class="form-control" placeholder="e-mail address" required=""
+                 aria-label="Email address">
           <div class="input-group-append">
             <button type="submit" class="btn btn-cta">Add email</button>
           </div>

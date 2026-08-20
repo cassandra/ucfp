@@ -7,6 +7,8 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from common.redis_client import get_redis_client
+from notify.models import UnsubscribedEmail
+from notify.views import resubscribe_url_for
 from organization.models import Organization
 from user.magic_code_generator import MagicCodeGenerator
 from user.signin_manager import SigninManager
@@ -119,6 +121,25 @@ class TestUserSigninView(SyncViewTestCase):
         self.assertEqual( 'mixed.case@example.com', guest.pending_email )
 
 
+# Deliberately NOT mocking send_magic_email: this exercises the real send so the unsubscribe block
+# (EmailSender.send) actually fires and the view's catch is what we are testing.
+class TestUserSigninUnsubscribed(SyncViewTestCase):
+    """Regression: an unsubscribed address is not dead-ended on sign-in. The unsubscribe list is the
+    recipient's off-switch and is honored even for the auth email, so the magic send is blocked; the
+    view must surface the re-enable page (with a resubscribe link) rather than the code page. Guards
+    against the send being moved out from behind the wrapper that catches UnsubscribedEmailError."""
+
+    def test_signin_to_an_unsubscribed_address_offers_re_enable_not_a_code( self ):
+        UnsubscribedEmail.objects.create( email = self.user.email )
+
+        response = self.client.post( reverse('user_signin'), { 'email': self.user.email } )
+
+        self.assertEqual( 200, response.status_code )   # the re-enable page, not a 302 to the code page
+        self.assertTemplateRendered( response, 'user/pages/signin_unsubscribed.html' )
+        self.assertContains( response, resubscribe_url_for( self.user.email ) )   # the way back in
+        self.assertEqual( 1, User.objects.count() )   # a blocked send mints no account
+
+
 class TestMagicCodeView(SyncViewTestCase):
     """Consuming a one-time code: it acts on the account the code was issued *for* (bound to the
     session), not one named by the request."""
@@ -202,6 +223,35 @@ class TestCollisionHandoff(SyncViewTestCase):
         self.assertEqual( _auth_user_id( self.client ), str( guest.pk ) )   # not switched to the target
 
 
+class TestPendingEmailClaimedRace(SyncViewTestCase):
+    """TOCTOU: a Guest's pending address is verified by *another* account between attach and confirm.
+    Confirming the code must hand off to the reconcile flow -- the person proved they own the mailbox --
+    rather than crash on the unique `email` constraint or silently discard their proof."""
+
+    def _prime_code( self, target ):
+        session = self.client.session
+        session[ MagicCodeGenerator.MAGIC_CODE ] = 'abcdef'
+        session[ MagicCodeGenerator.MAGIC_CODE_TIMESTAMP ] = MagicCodeGenerator.get_elapsed_seconds()
+        session[ MagicCodeGenerator.MAGIC_CODE_TARGET ] = str( target.uuid )
+        session.save()
+
+    def test_confirming_a_claimed_pending_address_hands_off_to_reconcile(self):
+        guest = User.objects.create_guest()
+        guest.attach_pending_email( 'claimed@example.com' )
+        self.client.force_login( guest )
+        self._prime_code( guest )
+        User.objects.create_user( email = 'claimed@example.com' )   # claimed in the interim
+
+        response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
+
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('signin_collision'), response.url )   # graceful hand-off, not a 500
+        guest.refresh_from_db()
+        self.assertIsNone( guest.email )          # not promoted -- promotion would have collided
+        self.assertIsNone( guest.pending_email )  # the moot claim is dropped
+        self.assertEqual( _auth_user_id( self.client ), str( guest.pk ) )   # still the guest, pending reconcile
+
+
 class TestMagicLinkView(SyncViewTestCase):
     """Consuming a magic link: sign-in for a verified account works from any session; confirming a
     Guest's pending email works only in the browser that started it."""
@@ -227,6 +277,22 @@ class TestMagicLinkView(SyncViewTestCase):
         self.assertEqual( reverse('home'), response.url )        # lands on the dashboard, not the account page
         guest.refresh_from_db()
         self.assertEqual( 'claimed@example.com', guest.email )
+
+    def test_pending_link_claimed_before_confirm_hands_off_to_reconcile(self):
+        # TOCTOU on the link path: the pending address was verified by another account in the interim, so
+        # same-session confirmation hands off to reconcile instead of colliding on the unique constraint.
+        guest = User.objects.create_guest()
+        guest.attach_pending_email( 'claimed@example.com' )
+        self.client.force_login( guest )
+        User.objects.create_user( email = 'claimed@example.com' )   # claimed in the interim
+
+        response = self.client.get( self._link( guest ) )
+
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('signin_collision'), response.url )
+        guest.refresh_from_db()
+        self.assertIsNone( guest.email )
+        self.assertIsNone( guest.pending_email )
 
     def test_pending_link_in_a_different_session_does_not_confirm(self):
         guest = User.objects.create_guest()
