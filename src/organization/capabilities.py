@@ -9,10 +9,8 @@ ucfp -> organization dependency and can back the write-gate in `decorators.py`.
 from .enums import OrganizationRole
 
 
-# Roles permitted to modify an organization's data. Membership in this tuple is tested with `==` (a
-# tuple `in`), so it is robust to how the role field compares. A role absent here -- and None, i.e. no
-# membership -- is read-only; VIEWER is deliberately excluded. This is the default-deny basis the
-# write-gate relies on.
+# Roles permitted to modify an organization's data. Tested with `==` (a tuple `in`), so it is robust to
+# how the role field compares.
 _WRITER_ROLES = ( OrganizationRole.OWNER, OrganizationRole.ADMIN, OrganizationRole.MEMBER )
 
 

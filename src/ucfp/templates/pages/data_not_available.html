@@ -1,5 +1,8 @@
-{% extends "pages/error_base.html" %}
+{% extends "pages/interstitial_page.html" %}
 
-{% block title %}
-<span id="data-not-available-page" >Not Available Yet</span>
+{% comment %}A benign "no data set up yet" state, not an error -- neutral styling (extends the plain
+interstitial page, not the danger-styled error_base), while still rendering the message.{% endcomment %}
+{% block interstitial_content %}
+<h1><span id="data-not-available-page">Not Available Yet</span></h1>
+<div>{{ error_message }}</div>
 {% endblock %}

@@ -7,6 +7,8 @@ shared data.
 """
 from organization.write_guard import connect_write_guard
 
-from .models import BooksOfAccountRecord
+from .models import AccountRecord, BooksOfAccountRecord, EntryRecord, TransactionRecord
 
-connect_write_guard( BooksOfAccountRecord )
+# The books record and its child rows (accounts, transactions, entries) all hang off the organization;
+# guard each directly rather than relying on the parent's guard tripping first within the save.
+connect_write_guard( BooksOfAccountRecord, AccountRecord, TransactionRecord, EntryRecord )

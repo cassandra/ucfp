@@ -1,5 +1,13 @@
-{% extends "modals/error_base.html" %}
+{% extends "modals/action_ok.html" %}
 
+{% comment %}A benign "no data set up yet" state, not an error -- neutral header (extends action_ok, not
+the danger-styled error_base), while still rendering the message.{% endcomment %}
 {% block title_text %}
 Not Available Yet
+{% endblock %}
+
+{% block body %}
+<div>
+  {{ error_message }}
+</div>
 {% endblock %}

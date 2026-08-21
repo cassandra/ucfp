@@ -37,6 +37,12 @@ def writes_permitted( permitted ):
         _writes_permitted.reset( token )
 
 
+def writes_are_permitted() -> bool:
+    """Whether guarded-model writes are currently permitted (True outside any `writes_permitted` block).
+    Exposed so the request path's wiring of the flag can be asserted in tests."""
+    return _writes_permitted.get()
+
+
 def _refuse_forbidden_write( sender, **kwargs ):
     if not _writes_permitted.get():
         raise PermissionDenied(
@@ -44,9 +50,8 @@ def _refuse_forbidden_write( sender, **kwargs ):
 
 
 def connect_write_guard( *models ):
-    """Guard each model's persistence against a read-only member's request -- the fail-safe backstop
-    behind the method write-gate. An app registers its organization-scoped record models from its
-    `signals` module. Idempotent per model (stable `dispatch_uid`)."""
+    """Register the write guard on each model's persistence. An app calls this from its `signals`
+    module for its organization-scoped record models. Idempotent per model (stable `dispatch_uid`)."""
     for model in models:
         uid = f'organization.write_guard:{model.__module__}.{model.__name__}'
         pre_save.connect( _refuse_forbidden_write, sender = model, dispatch_uid = f'{uid}:save' )

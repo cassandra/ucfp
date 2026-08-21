@@ -63,6 +63,40 @@ class ReadonlyInterviewAcknowledgementTest( TestCase ):
 
         self.assertContains( response, 'no Profile data set up yet', status_code = 404 )
 
+    def test_viewer_of_a_household_with_no_plans_is_told_there_is_no_data( self ):
+        # The Plans mint site is guarded like Profile: a read-only member opening the Plans flow on a
+        # household with a Profile but no Plans gets the clear "no Plans data" message.
+        household = Organization.objects.create_for_owner(
+            User.objects.create_user( email = 'po@x.test' ), 'NoPlans' )
+        save_profile( household, Profile() )                    # a Profile exists, but no Plans
+        viewer = User.objects.create_user( email = 'pv@x.test' )
+        OrganizationMember.objects.create(
+            organization = household, user = viewer, organization_role = OrganizationRole.VIEWER )
+        self.client.force_login( viewer )
+        session = self.client.session
+        session[ 'current_organization_uuid' ] = str( household.uuid )
+        session.save()
+
+        response = self.client.get( reverse( 'flow_plans' ), follow = True )
+
+        self.assertContains( response, 'no Plans data set up yet', status_code = 404 )
+
+    def test_read_only_interview_shows_a_navigation_next_not_the_save_button( self ):
+        # The read-only advance is a plain navigation link, not the advance-and-save form.
+        viewer = User.objects.create_user( email = 'nv@x.test' )
+        OrganizationMember.objects.create(
+            organization = self.org, user = viewer, organization_role = OrganizationRole.VIEWER )
+        self.client.force_login( viewer )
+        session = self.client.session
+        session[ 'current_organization_uuid' ] = str( self.org.uuid )
+        session.save()
+
+        response = self.client.get(
+            reverse( 'interview_section', kwargs = { 'section': self.section.key } ) )
+
+        self.assertContains( response, '>Next</a>' )             # a read-only navigation link
+        self.assertNotContains( response, '>Next</button>' )     # not the advance-and-save button
+
     def test_writer_view_still_acknowledges_the_section( self ):
         # The convenience write is unchanged for a member who may write -- the guard is scoped to
         # read-only members, not a behavior change for everyone.

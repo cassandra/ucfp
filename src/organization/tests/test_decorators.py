@@ -20,6 +20,7 @@ from organization.decorators import (
     ensure_organization,
     require_authenticated_user,
 )
+from organization.write_guard import writes_are_permitted
 
 _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
 
@@ -37,6 +38,13 @@ def _active_timezone_view( request ):
 @ensure_organization
 def _write_view( request ):
     return 'wrote'
+
+
+@ensure_organization
+def _writes_permitted_view( request ):
+    # Reports the backstop's per-request flag as seen from inside a decorated view -- so a test can pin
+    # that `ensure_organization` runs the view under `writes_permitted(request.organization_can_write)`.
+    return writes_are_permitted()
 
 
 @require_authenticated_user
@@ -217,3 +225,13 @@ class WriteGateTest( TestCase ):
         request = self._request( user, organization, 'post' )
         request.resolver_match = _resolver_match_for( _ExemptView )
         self.assertEqual( _write_view( request ), 'wrote' )
+
+    def test_read_only_member_runs_the_view_with_writes_refused( self ):
+        # The backstop wiring: `ensure_organization` runs a read-only member's view under
+        # `writes_permitted(False)`, so any guarded-model write during it fails toward denied.
+        user, organization = self._member( OrganizationRole.VIEWER )
+        self.assertFalse( _writes_permitted_view( self._request( user, organization, 'get' ) ) )
+
+    def test_writer_runs_the_view_with_writes_permitted( self ):
+        user, organization = self._member( OrganizationRole.OWNER )
+        self.assertTrue( _writes_permitted_view( self._request( user, organization, 'get' ) ) )

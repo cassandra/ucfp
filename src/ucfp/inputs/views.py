@@ -36,8 +36,8 @@ from ucfp.inputs.assumptions.repository import (
     assumptions_for, create_assumptions, latest_assumptions, load_assumptions, rename_assumptions,
     save_assumptions )
 from ucfp.inputs.scenarios.repository import (
-    clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
-    existing_pairings, rename_scenario, scenarios_for )
+    clone_scenario, create_fresh_scenario, create_scenario, default_scenario, delete_scenario,
+    ensure_default_scenario, existing_pairings, rename_scenario, scenarios_for )
 from ucfp.inputs import expense_totals
 from ucfp.inputs.compatibility import plans_reconciled_with_profile
 from ucfp.inputs.drift import plans_drift
@@ -532,7 +532,7 @@ class FlowEntryView( View ):
             # the empty initial Profile). A read-only member cannot write, so on a household never set up
             # by a writer this would fail with a generic authorization error; say plainly there is no data
             # yet instead. (A near-edge case: a household a writer never touched.)
-            if ( not request.organization_can_write ) and latest_profile( request.organization ) is None:
+            if ( not request.organization_can_write ) and default_scenario( request.organization ) is None:
                 raise DataNotAvailableError( 'This household has no Profile data set up yet.' )
             default = ensure_default_scenario( request.organization )
             _select( request, 'current_plans_uuid', default.plans )
@@ -780,7 +780,9 @@ class InterviewView( GuestReminderMixin, View ):
             f'Section {section.key!r} edits both Plans and Assumptions; the single-other dispatch '
             'supports at most one non-profile aggregate per section.' )
         organization = request.organization
-        profile = load_profile( latest_profile( organization ) or _mint_or_explain( request, create_profile, 'Profile' ) )
+        profile_record = latest_profile( organization ) or _mint_or_explain(
+            request, create_profile, 'Profile' )
+        profile = load_profile( profile_record )
         if Aggregate.PLANS in section.aggregates:
             return profile, load_plans( current_plans_record( request ) )
         if Aggregate.ASSUMPTIONS in section.aggregates:
@@ -1282,13 +1284,15 @@ def current_assumptions_record( request ):
         selected = assumptions_for( organization ).filter( uuid = uuid ).first()
         if selected is not None:
             return selected
-    return latest_assumptions( organization ) or _mint_or_explain( request, create_assumptions, 'Assumptions' )
+    return latest_assumptions( organization ) or _mint_or_explain(
+        request, create_assumptions, 'Assumptions' )
 
 
 def _current_profile( request ):
     """The user's current Profile -- the latest month's, creating one if the org has none yet."""
     organization = request.organization
-    return load_profile( latest_profile( organization ) or _mint_or_explain( request, create_profile, 'Profile' ) )
+    record = latest_profile( organization ) or _mint_or_explain( request, create_profile, 'Profile' )
+    return load_profile( record )
 
 
 def _current_profile_and_plans( request ):
