@@ -16,7 +16,7 @@ area (#vehicles-form); Remove posts to the delete view. An incomplete car (not y
           <span class="text-muted">{{ vehicle.headline }}</span>{% endif %}
           {% if vehicle.incomplete %}<span class="badge badge-warning ml-1">Needs details</span>{% endif %}</span>
         <span class="text-nowrap ml-3">
-          <a class="edit-only" data-async="#vehicles-form"
+          <a data-async="#vehicles-form"
              href="{% url 'vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>
           <form method="post" action="{% url 'vehicle_delete' handle=vehicle.handle %}"
                 data-async="#vehicles-list" class="d-inline edit-only">
@@ -33,6 +33,6 @@ area (#vehicles-form); Remove posts to the delete view. An incomplete car (not y
   {% else %}
   <p class="text-muted mb-2">No vehicles yet.</p>
   {% endif %}
-  <a class="btn btn-sm btn-outline-primary edit-only" data-async="#vehicles-form"
+  <a class="btn btn-sm btn-outline-primary" data-async="#vehicles-form"
      href="{% url 'vehicle_add' %}">Add a vehicle</a>
 </div>

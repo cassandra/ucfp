@@ -17,7 +17,7 @@ delete view. `vehicles` is the list of {handle, name, ownership, value}.
         </span>
         <span class="text-nowrap ml-3">
           {% if vehicle.handle == active %}<span class="text-muted small mr-1">editing</span>{% endif %}
-          <a class="edit-only" data-async="#current-vehicle-form"
+          <a data-async="#current-vehicle-form"
              href="{% url 'current_vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>
           <form method="post" action="{% url 'current_vehicle_delete' handle=vehicle.handle %}"
                 data-async="#current-vehicles-list" class="d-inline edit-only">
@@ -33,6 +33,6 @@ delete view. `vehicles` is the list of {handle, name, ownership, value}.
   {% else %}
   <p class="text-muted mb-2">No vehicles yet.</p>
   {% endif %}
-  <a class="btn btn-sm btn-outline-primary edit-only" data-async="#current-vehicle-form"
+  <a class="btn btn-sm btn-outline-primary" data-async="#current-vehicle-form"
      href="{% url 'current_vehicle_add' %}">Add a vehicle</a>
 </div>

@@ -9,7 +9,7 @@ into this area; the area is restored to this menu after a save or a Cancel.
     <span class="text-muted small text-right flex-shrink-0 mr-2" style="width: 5.5rem">{{ group.group }}</span>
     <div>
       {% for type in group.types %}
-      <a class="btn btn-sm btn-outline-primary mr-1 mb-1 edit-only" data-async="#events-add"
+      <a class="btn btn-sm btn-outline-primary mr-1 mb-1" data-async="#events-add"
          href="{% url 'event_add' kind=type.kind %}">{{ type.label }}</a>
       {% endfor %}
     </div>
