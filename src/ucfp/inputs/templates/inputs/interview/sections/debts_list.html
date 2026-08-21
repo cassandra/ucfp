@@ -18,7 +18,7 @@ reference debts by handle), and its hidden secured link keeps a mortgage tied to
           <td>{{ row.handle }}{{ row.secured }}{{ row.kind }}</td>
           <td>{{ row.name }}</td>
           <td>{{ row.balance }}{% if row.balance.errors %}<span class="text-danger small d-block">{{ row.balance.errors|join:" " }}</span>{% endif %}</td>
-          <td>{% if row.remove %}<label class="small text-muted">{{ row.remove }} remove</label>{% endif %}</td>
+          <td>{% if row.remove %}<label class="small text-muted edit-only">{{ row.remove }} remove</label>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

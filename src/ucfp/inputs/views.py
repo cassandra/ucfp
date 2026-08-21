@@ -24,6 +24,7 @@ from django.views import View
 from organization.decorators import ensure_organization
 
 from common import antinode
+from common.exceptions import DataNotAvailableError
 from common.async_view import ModalView
 from common.request_utils import is_ajax
 
@@ -35,8 +36,8 @@ from ucfp.inputs.assumptions.repository import (
     assumptions_for, create_assumptions, latest_assumptions, load_assumptions, rename_assumptions,
     save_assumptions )
 from ucfp.inputs.scenarios.repository import (
-    clone_scenario, create_fresh_scenario, create_scenario, delete_scenario, ensure_default_scenario,
-    existing_pairings, rename_scenario, scenarios_for )
+    clone_scenario, create_fresh_scenario, create_scenario, default_scenario, delete_scenario,
+    ensure_default_scenario, existing_pairings, rename_scenario, scenarios_for )
 from ucfp.inputs import expense_totals
 from ucfp.inputs.compatibility import plans_reconciled_with_profile
 from ucfp.inputs.drift import plans_drift
@@ -527,6 +528,12 @@ class FlowEntryView( View ):
         request.session_state.editing_scenario = None
         request.session_state.to_session( request )
         if self.flow == 'profile':
+            # Entering the Profile flow sets the household up (its Default Plans/Assumptions/Scenario, and
+            # the empty initial Profile). A read-only member cannot write, so on a household never set up
+            # by a writer this would fail with a generic authorization error; say plainly there is no data
+            # yet instead. (A near-edge case: a household a writer never touched.)
+            if ( not request.organization_can_write ) and default_scenario( request.organization ) is None:
+                raise DataNotAvailableError( 'This household has no Profile data set up yet.' )
             default = ensure_default_scenario( request.organization )
             _select( request, 'current_plans_uuid', default.plans )
             _select( request, 'current_assumptions_uuid', default.assumptions )
@@ -657,7 +664,12 @@ class InterviewView( GuestReminderMixin, View ):
         view a *seeding* section (one whose `apply` is a pure catalog merge) also persists its defaults,
         so what the user sees is already saved (matching the auto-save spirit) and an acknowledged spending
         section is never empty. Both happen only here -- the merge builders are never a source of
-        acknowledgment on their own -- and only on first view, so revisits are inert."""
+        acknowledgment on their own -- and only on first view, so revisits are inert.
+
+        Both are data writes that ride a GET, so they are skipped for a read-only member: the HTTP-method
+        write-gate cannot see them, and a viewer must not mutate the household just by browsing it."""
+        if not getattr( request, 'organization_can_write', True ):
+            return
         record = self._flow_record( request, flow_of( section ) )
         if section.key in record.acknowledged_section_keys:
             return
@@ -676,7 +688,8 @@ class InterviewView( GuestReminderMixin, View ):
             return current_plans_record( request )
         if flow == 'assumptions':
             return current_assumptions_record( request )
-        return latest_profile( request.organization ) or create_profile( request.organization )
+        return latest_profile( request.organization ) or _mint_or_explain(
+            request, create_profile, 'Profile' )
 
     def post( self, request, section ):
         current = self._live_section( section )
@@ -686,12 +699,15 @@ class InterviewView( GuestReminderMixin, View ):
         if not form.is_valid():
             return self._swap( request, self._flow_sections( profile, flow ), current, form )
         profile   = self._store( request, current, form, profile, other )
-        following = next_section_after( self._flow_sections( profile, flow ), current.key )
-        building  = request.session_state.editing_scenario
-        if following is None and building and flow == 'plans':
-            following = first_section_of_flow( 'assumptions' )  # scenario build: chain Plans -> Assumptions
+        following = self._following_section(
+            request, self._flow_sections( profile, flow ), current.key, flow )
         if following is None:                                   # nothing more to present -- this flow ends
-            return antinode.redirect_response( self._completion_destination( request, flow, building ) )
+            building     = request.session_state.editing_scenario
+            destination  = self._completion_destination( request, flow, building )
+            if building:                                        # the two-part build is done: clear its marker
+                request.session_state.editing_scenario = None
+                request.session_state.to_session( request )
+            return antinode.redirect_response( destination )
         self._seed_and_acknowledge( request, following )       # the advanced-to section is now presented
         next_sections = self._flow_sections( profile, flow_of( following ) )
         next_profile, next_other = self._load( request, following )
@@ -699,15 +715,24 @@ class InterviewView( GuestReminderMixin, View ):
         return self._swap( request, next_sections, following, next_form )
 
     @staticmethod
+    def _following_section( request, sections, section_key, flow ):
+        """The section the flow advances to after `section_key`: the next in-flow section, or -- when a
+        whole scenario is being edited (a build), not Plans alone -- the first Assumptions section once
+        Plans ends. None means the flow finishes here. Shared by the advance POST, the read-only 'Next',
+        and `is_last`, so all agree on whether the last Plans step chains into Assumptions or finishes."""
+        following = next_section_after( sections, section_key )
+        if ( following is None ) and request.session_state.editing_scenario and ( flow == 'plans' ):
+            following = first_section_of_flow( 'assumptions' )  # scenario build: chain Plans -> Assumptions
+        return following
+
+    @staticmethod
     def _completion_destination( request, flow, building ) -> str:
-        """Where a completed flow lands. A scenario build (Plans then Assumptions) finishes at the end of
-        Assumptions: clear the in-progress marker and land on the Scenarios page. Finishing the standalone
-        Profile loops back to its first section, where the header now shows it is complete; a standalone
-        component edit likewise ends on the Scenarios page. Features are reached from the nav, so no flow
-        threads a return destination."""
+        """Where a completed flow lands -- a pure URL (the advance POST finalizes the build itself). A
+        scenario build (Plans then Assumptions) finishes at the end of Assumptions on the Scenarios page.
+        Finishing the standalone Profile loops back to its first section, where the header now shows it is
+        complete; a standalone component edit likewise ends on the Scenarios page. Features are reached
+        from the nav, so no flow threads a return destination."""
         if building:                                           # end of the two-part build (Assumptions done)
-            request.session_state.editing_scenario = None
-            request.session_state.to_session( request )
             return reverse( 'scenarios_home' )
         if flow == 'profile':
             first = first_section_of_flow( 'profile' )
@@ -755,7 +780,9 @@ class InterviewView( GuestReminderMixin, View ):
             f'Section {section.key!r} edits both Plans and Assumptions; the single-other dispatch '
             'supports at most one non-profile aggregate per section.' )
         organization = request.organization
-        profile = load_profile( latest_profile( organization ) or create_profile( organization ) )
+        profile_record = latest_profile( organization ) or _mint_or_explain(
+            request, create_profile, 'Profile' )
+        profile = load_profile( profile_record )
         if Aggregate.PLANS in section.aggregates:
             return profile, load_plans( current_plans_record( request ) )
         if Aggregate.ASSUMPTIONS in section.aggregates:
@@ -796,6 +823,7 @@ class InterviewView( GuestReminderMixin, View ):
     def _context( self, request, sections, section, form ):
         flow = flow_of( section )
         rail = self._rail_header( request, flow )
+        following = self._following_section( request, sections, section.key, flow )
         context = {
             'sections'             : sections,
             'current_section'      : section,
@@ -819,7 +847,16 @@ class InterviewView( GuestReminderMixin, View ):
             'component_rename'     : self._component_rename( request, flow ),
             # The last step of the flow context shows "Finish" rather than "Next" (in a build, the last
             # Plans step chains into Assumptions, so it is not the finish).
-            'is_last'              : self._is_last_step( request, sections, section, flow ),
+            # `following` is where the flow advances to (None on the final step) -- shared with the POST
+            # so the read-only "Next" and the editable advance always agree. It drives the editable
+            # Finish/Next label, and in read-only mode is the plain-navigation "Next" target (a sequential
+            # reader) in place of the advance-and-save button.
+            'is_last'              : following is None,
+            'next_section'         : following,
+            # Where the flow's last step leads, so a read-only member's "Finish" navigates out of the flow
+            # (the same place the advance-and-save Finish lands) rather than saving.
+            'completion_destination': self._completion_destination(
+                request, flow, request.session_state.editing_scenario ),
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,
@@ -853,14 +890,6 @@ class InterviewView( GuestReminderMixin, View ):
         if profile_record is None:
             return None
         return plans_drift( load_profile( profile_record ), current_plans_record( request ) )
-
-    @staticmethod
-    def _is_last_step( request, sections, section, flow ) -> bool:
-        """Whether this section is the flow context's final step. False for the last Plans step of a build,
-        which chains into Assumptions rather than finishing."""
-        if next_section_after( sections, section.key ) is not None:
-            return False
-        return not ( request.session_state.editing_scenario and flow == 'plans' )
 
     def _rail_header( self, request, flow ) -> dict:
         """The stepper's header context: the flow's title and completion badge. In a scenario build (editing
@@ -1223,6 +1252,16 @@ class VehicleExpensesView( TotalsPaneMixin, SelfSavingPaneView ):
         save_plans( current_plans_record( request ), plans )
 
 
+def _mint_or_explain( request, mint, label ):
+    """A freshly minted aggregate record for a writer. A read-only member cannot write, so minting one on
+    read would be refused with a generic authorization error -- instead say plainly that the household has
+    no such input yet. A near-edge case: reached only when an input was never created by a writer (so the
+    empty initial record was never written)."""
+    if not getattr( request, 'organization_can_write', True ):
+        raise DataNotAvailableError( f'This household has no {label} data set up yet.' )
+    return mint( request.organization )
+
+
 def current_plans_record( request ):
     """The Plans record the user is editing: the session-selected one (scoped to the org), else the
     latest, minting one if the org has none. The single resolver every plans surface loads and saves
@@ -1233,7 +1272,7 @@ def current_plans_record( request ):
         selected = plans_for( organization ).filter( uuid = uuid ).first()
         if selected is not None:
             return selected
-    return latest_plans( organization ) or create_plans( organization )
+    return latest_plans( organization ) or _mint_or_explain( request, create_plans, 'Plans' )
 
 
 def current_assumptions_record( request ):
@@ -1245,13 +1284,15 @@ def current_assumptions_record( request ):
         selected = assumptions_for( organization ).filter( uuid = uuid ).first()
         if selected is not None:
             return selected
-    return latest_assumptions( organization ) or create_assumptions( organization )
+    return latest_assumptions( organization ) or _mint_or_explain(
+        request, create_assumptions, 'Assumptions' )
 
 
 def _current_profile( request ):
     """The user's current Profile -- the latest month's, creating one if the org has none yet."""
     organization = request.organization
-    return load_profile( latest_profile( organization ) or create_profile( organization ) )
+    record = latest_profile( organization ) or _mint_or_explain( request, create_profile, 'Profile' )
+    return load_profile( record )
 
 
 def _current_profile_and_plans( request ):

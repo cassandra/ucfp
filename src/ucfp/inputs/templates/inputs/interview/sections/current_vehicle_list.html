@@ -20,7 +20,7 @@ delete view. `vehicles` is the list of {handle, name, ownership, value}.
           <a data-async="#current-vehicle-form"
              href="{% url 'current_vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>
           <form method="post" action="{% url 'current_vehicle_delete' handle=vehicle.handle %}"
-                data-async="#current-vehicles-list" class="d-inline">
+                data-async="#current-vehicles-list" class="d-inline edit-only">
             {% csrf_token %}
             <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
                     aria-label="Remove {{ vehicle.name }}">Remove</button>

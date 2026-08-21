@@ -1,10 +1,12 @@
-"""Tests for the organization view decorators (bootstrapping and auth gating)."""
+"""Tests for the organization view decorators (bootstrapping, auth gating, and the write-gate)."""
 import uuid
 from importlib import import_module
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
@@ -13,7 +15,12 @@ from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 from ucfp.session_state import SessionState
 
-from organization.decorators import ensure_organization, require_authenticated_user
+from organization.decorators import (
+    PermitsReadonlyMutation,
+    ensure_organization,
+    require_authenticated_user,
+)
+from organization.write_guard import writes_are_permitted
 
 _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
 
@@ -28,13 +35,34 @@ def _active_timezone_view( request ):
     return timezone.get_current_timezone_name()
 
 
+@ensure_organization
+def _write_view( request ):
+    return 'wrote'
+
+
+@ensure_organization
+def _writes_permitted_view( request ):
+    # Reports the backstop's per-request flag as seen from inside a decorated view -- so a test can pin
+    # that `ensure_organization` runs the view under `writes_permitted(request.organization_can_write)`.
+    return writes_are_permitted()
+
+
 @require_authenticated_user
 def _guarded_view( request ):
     return 'reached'
 
 
-def _request_for( user ):
-    request = RequestFactory().get( '/' )
+class _ExemptView( PermitsReadonlyMutation ):
+    """A view opted out of the write-gate, for the resolver marker path."""
+
+
+def _resolver_match_for( view_class ):
+    """A stand-in `resolver_match` exposing a view's class, as URL resolution would."""
+    return SimpleNamespace( func = SimpleNamespace( view_class = view_class ) )
+
+
+def _request_for( user, method = 'get' ):
+    request = getattr( RequestFactory(), method )( '/' )
     request.user = user
     request.session = _SessionStore()
     request.session_state = SessionState.from_session( request )
@@ -147,3 +175,63 @@ class RequireAuthenticatedUserTest( TestCase ):
         request = RequestFactory().get( '/' )
         request.user = get_user_model().objects.create_user( email = 'u@example.com' )
         self.assertEqual( _guarded_view( request ), 'reached' )
+
+
+class WriteGateTest( TestCase ):
+    """The default-deny write-gate: a read-only member's unsafe request is refused unless the view
+    opts out; a writer's is allowed; safe methods always pass."""
+
+    def _member( self, role ):
+        """A user who is `role` in a shared household (a separate owner keeps the household valid), with
+        that household selected in the session."""
+        user  = get_user_model().objects.create_user( email = f'{role.name.lower()}@example.com' )
+        owner = get_user_model().objects.create_user( email = f'owner-{role.name.lower()}@example.com' )
+        organization = Organization.objects.create_for_owner( owner, 'Shared' )
+        OrganizationMember.objects.create(
+            organization = organization, user = user, organization_role = role )
+        return user, organization
+
+    def _request( self, user, organization, method ):
+        request = _request_for( user, method = method )
+        request.session_state.current_organization_uuid = str( organization.uuid )
+        return request
+
+    def test_viewer_may_read( self ):
+        user, organization = self._member( OrganizationRole.VIEWER )
+        request = self._request( user, organization, 'get' )
+        self.assertEqual( _organization_view( request ), organization )
+        self.assertFalse( request.organization_can_write )
+
+    def test_viewer_may_not_write( self ):
+        user, organization = self._member( OrganizationRole.VIEWER )
+        for method in ( 'post', 'put', 'patch', 'delete' ):
+            request = self._request( user, organization, method )
+            with self.assertRaises( PermissionDenied ):
+                _write_view( request )
+
+    def test_owner_may_write( self ):
+        user, organization = self._member( OrganizationRole.OWNER )
+        request = self._request( user, organization, 'post' )
+        self.assertEqual( _write_view( request ), 'wrote' )
+        self.assertTrue( request.organization_can_write )
+
+    def test_member_may_write( self ):
+        user, organization = self._member( OrganizationRole.MEMBER )
+        request = self._request( user, organization, 'post' )
+        self.assertEqual( _write_view( request ), 'wrote' )
+
+    def test_viewer_may_write_to_a_view_that_opts_out( self ):
+        user, organization = self._member( OrganizationRole.VIEWER )
+        request = self._request( user, organization, 'post' )
+        request.resolver_match = _resolver_match_for( _ExemptView )
+        self.assertEqual( _write_view( request ), 'wrote' )
+
+    def test_read_only_member_runs_the_view_with_writes_refused( self ):
+        # The backstop wiring: `ensure_organization` runs a read-only member's view under
+        # `writes_permitted(False)`, so any guarded-model write during it fails toward denied.
+        user, organization = self._member( OrganizationRole.VIEWER )
+        self.assertFalse( _writes_permitted_view( self._request( user, organization, 'get' ) ) )
+
+    def test_writer_runs_the_view_with_writes_permitted( self ):
+        user, organization = self._member( OrganizationRole.OWNER )
+        self.assertTrue( _writes_permitted_view( self._request( user, organization, 'get' ) ) )

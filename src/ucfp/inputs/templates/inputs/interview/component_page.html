@@ -23,7 +23,7 @@ stepping layout, whose rail header holds the completion badge and the Plans/Assu
 {% comment %}+ New scenario lives here because the single-scenario shortcut enters this page directly,
 bypassing the Scenarios list where the create action otherwise lives. Shown only while editing within a
 scenario -- the exact context that shortcut lands in.{% endcomment %}
-{% block page_actions %}{% if editing_scenario_name %}<a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary">+ New scenario</a>{% endif %}{% endblock %}
+{% block page_actions %}{% if editing_scenario_name %}<a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary edit-only">+ New scenario</a>{% endif %}{% endblock %}
 
 {% block page_meta %}{% include "inputs/interview/interview_status_detail.html" %}
 {# The guest "save your work" reminder -- a swap target (InterviewView._swap), so it appears/clears live; #}

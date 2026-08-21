@@ -85,9 +85,37 @@ window.App.Inputs = (function () {
         else if ( $field.hasClass( C.DATE_FIELD_CLASS ) ) { refreshAgeFromDate( $field ); }
     }
 
+    // ----- Read-only mode -----
+
+    // Whether the member may edit the current organization. The server sets `data-can-edit` on <body>
+    // (see the can_edit_organization context processor); when false the interface is presented read-only.
+    function canEditOrganization() {
+        return $( document.body ).attr( 'data-can-edit' ) !== 'false';
+    }
+
+    // Present the interface read-only: disable the self-saving panes' value controls so they show data
+    // but take no input, and make the edit-only affordances (add/remove/reorder/save) inert -- they stay
+    // visible for context (a true preview), but do nothing. Scoped so navigation (navbar, switcher,
+    // sign-out) stays live. Runs on load and after each async render, like the enhancers, so swapped-in
+    // content is neutralized too. A no-op when the member may edit.
+    function neutralizeReadOnly( $scope ) {
+        if ( canEditOrganization() ) { return; }
+        const $root = $scope || $( document.body );
+        const autosaveForm = 'form' + classSelector( C.AUTOSAVE_CLASS );
+        $root.find( autosaveForm ).addBack( autosaveForm )
+            .find( 'input, select, textarea' ).not( '[disabled]' ).prop( 'disabled', true );
+        // Edit-only affordances (and edit-only form regions, e.g. Settings) are muted and pointer-inert
+        // via CSS; disable every control they hold and drop links from the tab order for keyboard/AT.
+        const $affordances = $root.find( '.edit-only' ).addBack( '.edit-only' );
+        $affordances.attr( 'aria-disabled', 'true' );
+        $affordances.find( ':input' ).addBack( ':input' ).prop( 'disabled', true );
+        $affordances.filter( 'a' ).attr( 'tabindex', '-1' );
+    }
+
     // ----- AutoSave: silent background persistence -----
 
     function saveForm( $form ) {
+        if ( !canEditOrganization() ) { return; }   // a read-only member never persists
         AN.post( $form.attr( 'action' ), $form.serialize(), { suppressLoader: true } );
     }
 
@@ -1036,6 +1064,7 @@ window.App.Inputs = (function () {
         enhanceCopySource( $( document.body ) );
         enhancePairCombine( $( document.body ) );
         enhanceMoneyInputs( $( document.body ) );
+        neutralizeReadOnly( $( document.body ) );       // last: disable the enhanced controls if read-only
         if ( window.AN ) {
             AN.addAfterAsyncRenderFunction( function () {
                 enhanceDates( $( document.body ) );
@@ -1050,6 +1079,7 @@ window.App.Inputs = (function () {
                 enhanceCopySource( $( document.body ) );
                 enhancePairCombine( $( document.body ) );
                 enhanceMoneyInputs( $( document.body ) );
+                neutralizeReadOnly( $( document.body ) );
             } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }

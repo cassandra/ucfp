@@ -11,7 +11,7 @@
 {% comment %}Runs are kept by default; Discard is the prominent way to prune one -- the same removal as the
 hub's per-row delete, landing back on the hub. Opens the styled confirm modal.{% endcomment %}
 <a href="{% url 'run_discard_confirm' record.uuid %}" data-async="modal"
-   class="btn btn-outline-danger flex-shrink-0">{% icon 'delete' size='sm' css_class='mr-1' %}Discard</a>
+   class="btn btn-outline-danger flex-shrink-0 edit-only">{% icon 'delete' size='sm' css_class='mr-1' %}Discard</a>
 {% endblock %}
 
 {% block page_name %}

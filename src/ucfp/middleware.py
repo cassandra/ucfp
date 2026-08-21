@@ -16,7 +16,7 @@ from django.http import (
     HttpResponseServerError,
 )
 
-from common.exceptions import MethodNotAllowedError
+from common.exceptions import DataNotAvailableError, MethodNotAllowedError
 
 from . import views
 from .privacy_consent import PrivacyConsent
@@ -136,6 +136,8 @@ class ExceptionMiddleware:
             return views.page_not_found_response( request, message = str(exception) )
         if isinstance( exception, MethodNotAllowedError ):
             return views.method_not_allowed_response( request, message = str(exception) )
+        if isinstance( exception, DataNotAvailableError ):
+            return views.data_not_available_response( request, message = str(exception) )
 
         logger.exception( f'Exception caught in middleware: {exception}' )
         return views.internal_error_response( request, message = str(exception) )

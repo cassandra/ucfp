@@ -2,6 +2,17 @@
 from ucfp.accounts.enums import CurrencyType
 
 
+def can_edit_organization( request ):
+    """Expose whether the member may edit the current organization's data as ``can_edit_organization``
+    -- the single signal the read-only UI keys off (a `data-can-edit` attribute, hidden edit-only
+    affordances, neutralized inputs).
+
+    Mirrors ``request.organization_can_write`` (set by the ``ensure_organization`` decorator), defaulting
+    to editable when no organization is resolved (e.g. public pages), so templates can branch
+    unconditionally."""
+    return { 'can_edit_organization': getattr( request, 'organization_can_write', True ) }
+
+
 def current_currency( request ):
     """Expose the active organization's display currency to every template as ``currency`` -- the
     argument the ``money`` filter takes. Falls back to the default when no organization is resolved

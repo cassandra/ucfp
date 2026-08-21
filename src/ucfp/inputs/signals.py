@@ -9,7 +9,15 @@ along with its WORKING Plans and Assumptions. A cascade delete bypasses `Model.d
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
-from .models import AssumptionsRecord, PlansRecord, ScenarioExploration, ScenarioRecord
+from organization.write_guard import connect_write_guard
+
+from .models import (
+    AssumptionsRecord, PlansRecord, ProfileRecord, ScenarioExploration, ScenarioRecord )
+
+# Fail-safe backstop: refuse these organization-scoped records' persistence during a read-only member's
+# request (see organization.write_guard), so a write riding a GET fails toward denied.
+connect_write_guard(
+    ProfileRecord, PlansRecord, AssumptionsRecord, ScenarioRecord, ScenarioExploration )
 
 
 @receiver( post_delete, sender = ScenarioExploration )

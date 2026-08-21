@@ -9,7 +9,7 @@ to event_delete, which swaps this list back in.
     <li class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
       <span>{{ event.summary }}</span>
       <form method="post" action="{% url 'event_delete' index=event.index %}"
-            data-async="#events-list" class="d-inline ml-2">
+            data-async="#events-list" class="d-inline ml-2 edit-only">
         {% csrf_token %}
         <button type="submit" class="btn btn-link btn-sm text-danger p-0"
                 aria-label="Remove" title="Remove">&times;</button>

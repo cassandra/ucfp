@@ -19,7 +19,7 @@ area (#vehicles-form); Remove posts to the delete view. An incomplete car (not y
           <a data-async="#vehicles-form"
              href="{% url 'vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>
           <form method="post" action="{% url 'vehicle_delete' handle=vehicle.handle %}"
-                data-async="#vehicles-list" class="d-inline">
+                data-async="#vehicles-list" class="d-inline edit-only">
             {% csrf_token %}
             <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
                     aria-label="Remove {{ vehicle.name }}">Remove</button>

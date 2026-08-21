@@ -16,7 +16,7 @@ delete (both remove the same saved run). CANCEL comes from the shell; the Discar
 {% endblock %}
 
 {% block action_right %}
-<form method="post" action="{% url 'delete_run' record.uuid %}" class="m-0">
+<form method="post" action="{% url 'delete_run' record.uuid %}" class="m-0 edit-only">
   {% csrf_token %}
   <button type="submit" class="btn btn-danger">{% icon "delete" css_class="icon-left" %}Discard</button>
 </form>

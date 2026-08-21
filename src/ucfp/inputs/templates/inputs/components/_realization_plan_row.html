@@ -22,5 +22,5 @@ optional (conversions/withdrawals), `row.cadence_optional` shows a "(blank = onc
     <div class="col-6 text-right">{{ row.start_age.as_field_group }}</div>
     <div class="col-6">{{ row.end_age.as_field_group }}</div>
   </div>
-  {% if row.remove %}<label class="small text-muted mb-0 mt-2 d-block">{{ row.remove }} remove</label>{% endif %}
+  {% if row.remove %}<label class="small text-muted mb-0 mt-2 d-block edit-only">{{ row.remove }} remove</label>{% endif %}
 </div>

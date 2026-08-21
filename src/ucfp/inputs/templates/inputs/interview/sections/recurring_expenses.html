@@ -21,7 +21,7 @@ line up with the amounts above them. Do not remove it.
           {% for header in recurring_form.span_headers %}
           <th scope="col" class="text-right small">Until age {{ header.field }}
             {% if recurring_form.span_count > 1 %}
-            <button type="button" class="{{ AppConst.RECURRING_DELETE_CLASS }} btn btn-sm btn-link text-danger p-0 ml-1"
+            <button type="button" class="{{ AppConst.RECURRING_DELETE_CLASS }} btn btn-sm btn-link text-danger p-0 ml-1 edit-only"
                     data-span="{{ forloop.counter0 }}" aria-label="Delete this span" title="Delete this span">&times;</button>
             {% endif %}
             <span class="text-muted d-block">{% if header.open %}for life{% elif header.year %}reaches {{ header.year }}{% endif %}</span></th>

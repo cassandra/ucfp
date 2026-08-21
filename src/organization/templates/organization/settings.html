@@ -12,7 +12,8 @@
 
       <div class="card mb-3">
         <div class="card-header py-2"><h2 class="h6 mb-0">Display Settings</h2></div>
-        <div class="card-body">
+        {# Read-only members see the settings, inert (edit-only): shown for context, not editable. #}
+        <div class="card-body edit-only">
           <div class="form-group">
             <label for="{{ form.currency.id_for_label }}">Display currency</label>
             {{ form.currency }}
@@ -37,7 +38,7 @@
       </div>
 
       {# One Save for the whole form; new section cards slot in above it. #}
-      <button type="submit" class="btn btn-cta">Save settings</button>
+      <button type="submit" class="btn btn-cta edit-only">Save settings</button>
     </form>
   </div>
 

@@ -119,6 +119,18 @@ def internal_error_response( request, message : str = None, force_json : bool = 
                            context = context )
 
 
+def data_not_available_response( request, message : str = None, force_json : bool = False ):
+    if not message:
+        message = 'This data is not available yet.'
+    context = { 'message': message }
+    return error_response( request = request,
+                           sync_template_name = "pages/data_not_available.html",
+                           async_template_name = "modals/data_not_available.html",
+                           status_code = 404,
+                           force_json = force_json,
+                           context = context )
+
+
 def transient_error_response( request, message : str = None, force_json : bool = False ):
     if not message:
         message = 'Transient error.'

@@ -16,7 +16,7 @@ to the delete view. The pane's DOM ids, URL names, and wording come from its `Pr
          href="{% url edit_url handle=prop.handle %}" aria-label="Edit {{ prop.name }}">Edit</a>
       <span class="text-muted mx-1">·</span>
       <form method="post" action="{% url delete_url handle=prop.handle %}"
-            data-async="#{{ list_id }}" class="d-inline">
+            data-async="#{{ list_id }}" class="d-inline edit-only">
         {% csrf_token %}
         <button type="submit" class="btn btn-link btn-sm text-danger p-0 align-baseline"
                 aria-label="Remove {{ prop.name }}">Remove</button>
