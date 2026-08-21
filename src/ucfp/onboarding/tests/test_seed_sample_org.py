@@ -16,7 +16,9 @@ from django.utils import timezone
 from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 
-from ucfp.inputs.models import ProfileRecord, ScenarioRecord
+from ucfp.accounts.models import BooksOfAccountRecord
+from ucfp.inputs.models import (
+    AssumptionsRecord, PlansRecord, ProfileRecord, ScenarioExploration, ScenarioRecord )
 from ucfp.inputs.profile.repository import latest_profile
 from ucfp.inputs.state import completed_profile
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
@@ -27,7 +29,13 @@ from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 from ucfp.onboarding.constants import (
     SAMPLE_FORECAST_NAME, SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_NAME,
     SAMPLE_SCENARIO_UUID )
-from ucfp.onboarding.seeding import NoSuperuserError, _fixture_matches, _seed_records, seed_sample_org
+from ucfp.onboarding.seeding import (
+    NoSuperuserError, _clear_sample_data, _fixture_matches, _is_current, _seed_records, seed_sample_org )
+
+# Every org-scoped data model the seed creates -- `_clear_sample_data` must leave none of them behind.
+_DATA_MODELS = (
+    ProfileRecord, PlansRecord, AssumptionsRecord, ScenarioRecord,
+    ProjectionRunRecord, PlanningResultRecord, BooksOfAccountRecord, ScenarioExploration )
 
 User = get_user_model()
 
@@ -88,23 +96,41 @@ class FixtureMatchTest( TestCase ):
         plans.save()
         self.assertFalse( _fixture_matches( organization ) )
 
+    def test_matching_records_are_not_current_without_a_captured_forecast( self ):
+        # The F1 gate: records equal to the fixture are still not "current" until the run is captured, so a
+        # re-seed regenerates a run lost to a mid-seed forecast failure instead of reporting 'preserved'.
+        organization = self._seeded_org()
+        self.assertTrue( _fixture_matches( organization ) )
+        self.assertFalse( _is_current( organization ) )
+
+
+class ClearSampleDataTest( TestCase ):
+    """`_clear_sample_data` leaves no org-scoped data behind (a guard so a future model is not missed),
+    while keeping the org and its memberships."""
+
+    def test_clears_every_data_model_but_keeps_the_org_and_memberships( self ):
+        organization = Organization.objects.create(
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        member = User.objects.create_user( email = 'member@x.test' )
+        OrganizationMember.objects.create(
+            organization = organization, user = member, organization_role = OrganizationRole.OWNER )
+        _seed_records( organization )
+
+        _clear_sample_data( organization )
+
+        for model in _DATA_MODELS:
+            self.assertEqual(
+                model.objects.filter( organization = organization ).count(), 0, model.__name__ )
+        self.assertTrue( Organization.objects.filter( uuid = SAMPLE_ORGANIZATION_UUID ).exists() )
+        self.assertTrue( OrganizationMember.objects.filter(
+            organization = organization, user = member ).exists() )
+
 
 class SeedSampleOrgGuardsTest( TestCase ):
-    """The guard/idempotency paths that resolve before the forecast (so these stay fast)."""
+    """The guard paths that resolve before the forecast (so these stay fast)."""
 
     def setUp( self ):
         self.superuser = User.objects.create_superuser( email = 'admin@x.test', password = 'x' )
-
-    def test_re_seed_without_force_is_preserved( self ):
-        organization, _ = Organization.objects.get_or_create(
-            uuid = SAMPLE_ORGANIZATION_UUID, defaults = { 'name': SAMPLE_ORGANIZATION_NAME } )
-        _seed_records( organization )                                   # already seeded (no forecast)
-
-        result = seed_sample_org()                                      # sees the scenario -> preserved
-
-        self.assertEqual( result.action, 'preserved' )
-        self.assertEqual( ScenarioRecord.objects.filter( organization = organization ).count(), 1 )
-        self.assertEqual( ProfileRecord.objects.filter( organization = organization ).count(), 1 )
 
     def test_requires_a_superuser( self ):
         User.objects.filter( is_superuser = True ).delete()
@@ -156,7 +182,38 @@ class SeedSampleOrgForecastTest( TestCase ):
         self.assertTrue( OrganizationMember.objects.filter(                           # viewer kept
             organization = organization, user = viewer ).exists() )
         self.assertFalse( ProjectionRunRecord.objects.filter( pk = first_run.pk ).exists() )  # refreshed
-        self.assertEqual( ProjectionRunRecord.objects.filter( organization = organization ).count(), 1 )
+        # A refresh clears before re-seeding, so nothing accumulates: exactly one of each data record.
+        self.assertEqual( ScenarioExploration.objects.filter( organization = organization ).count(), 0 )
+        for model in ( ProfileRecord, PlansRecord, AssumptionsRecord, ScenarioRecord,
+                       ProjectionRunRecord, PlanningResultRecord, BooksOfAccountRecord ):
+            self.assertEqual(
+                model.objects.filter( organization = organization ).count(), 1, model.__name__ )
+
+    def test_re_seed_when_unchanged_is_preserved( self ):
+        seed_sample_org()
+        organization = _sample_org()
+        run = ProjectionRunRecord.objects.get( organization = organization )
+
+        result = seed_sample_org()                                      # fixture unchanged + run present
+
+        self.assertEqual( result.action, 'preserved' )
+        self.assertEqual( ProjectionRunRecord.objects.get( organization = organization ).pk, run.pk )
+        self.assertEqual( ProfileRecord.objects.filter( organization = organization ).count(), 1 )
+
+    def test_re_seed_regenerates_a_missing_forecast_run( self ):
+        # F1: records still match the fixture but the captured run is gone (a mid-seed forecast failure).
+        # A plain re-seed must self-heal by regenerating it, not report 'preserved'.
+        seed_sample_org()
+        organization = _sample_org()
+        PlanningResultRecord.objects.filter( organization = organization ).delete()
+        ProjectionRunRecord.objects.filter( organization = organization ).delete()
+        self.assertTrue( _fixture_matches( organization ) )            # records untouched
+
+        result = seed_sample_org()
+
+        self.assertEqual( result.action, 'refreshed' )
+        self.assertTrue( PlanningResultRecord.objects.filter(
+            organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST ).exists() )
 
     def test_re_seed_with_changed_data_refreshes_and_replaces_the_run( self ):
         seed_sample_org()

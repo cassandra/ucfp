@@ -3,6 +3,7 @@ to a plaintext fixture, and refuse an incomplete (non-runnable) source."""
 import json
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -15,9 +16,10 @@ from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
-from ucfp.inputs.profile.repository import save_profile
+from ucfp.inputs.profile.repository import latest_profile, save_profile
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
+from ucfp.onboarding.seeding import _fixture_matches, _seed_records
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.tests.support import expected_assumptions, forecast_profile
 
@@ -112,3 +114,27 @@ class DumpSampleOrgTest( TestCase ):
         _runnable_scenario( organization, reviewed = False )  # completed profile, half-built scenario
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises( CommandError ):
             _dump( organization, str( Path( tmp ) / 'out.json' ) )
+
+
+class DumpThenSeedRoundTripTest( TestCase ):
+    """The live-edit loop's contract: what `dump_sample_org` writes, `seed` reads back into matching
+    records. Exercises both halves against each other without a forecast (so it stays in the fast suite)."""
+
+    def setUp( self ):
+        seed_default_parameter_sets()                        # expected_assumptions reads a seeded outlook
+
+    def test_dumping_then_seeding_reproduces_the_source_records( self ):
+        source = Organization.objects.create( name = 'Source' )
+        profile_record, _scenario = _runnable_scenario( source )
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture_path = Path( tmp ) / 'sample_org.json'
+            _dump( source, str( fixture_path ) )
+            target = Organization.objects.create(
+                uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+            with mock.patch( 'ucfp.onboarding.seeding.SAMPLE_FIXTURE_PATH', fixture_path ):
+                _seed_records( target )
+                self.assertTrue( _fixture_matches( target ) )           # seeded records equal the dump
+        seeded_profile = latest_profile( target )                       # and equal the source's payloads
+        self.assertEqual( seeded_profile.data, profile_record.data )
+        self.assertEqual(
+            seeded_profile.acknowledged_sections, profile_record.acknowledged_sections )

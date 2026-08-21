@@ -1,7 +1,7 @@
 """Reserved identity and paths for the read-only sample household (see the seed/dump commands).
 
 The sample organization and its scenario carry fixed UUIDs so the seed recreates them stably and the org
-is identifiable across instances (e.g. #198 auto-joins members to it by UUID). The scenario's FKs reach
+is identifiable across instances (members are auto-joined to it by UUID). The scenario's FKs reach
 its Plans and Assumptions, so only these two ids are reserved; the Profile is the org's latest.
 """
 import uuid

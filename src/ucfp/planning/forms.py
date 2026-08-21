@@ -62,8 +62,6 @@ def resolve_frame(
 
 # The default forecast horizon runs the youngest household member to this age; the small floor only guards
 # the degenerate cases (no subjects, or a youngest already near/past the target) so the frame stays valid.
-# At 10 years the floor engages only for a youngest already 80+, leaving the "can I retire" range ending
-# around the target age rather than over-running past 100.
 FORECAST_THROUGH_AGE = 90
 FORECAST_MIN_YEARS   = 10
 

@@ -2,7 +2,7 @@
 
 Reusable (a thin management command wraps it), idempotent, and portable: the fixture is plaintext, so the
 encrypted `data` fields re-encrypt under the *local* key on save. The sample org and scenario carry the
-reserved UUIDs (`constants`), so the org is stably identifiable (#198 auto-joins members to it).
+reserved UUIDs (`constants`), so the org is stably identifiable (members are auto-joined to it by UUID).
 
 Idempotency is *content-aware*: a re-seed refreshes the data (and re-runs the forecast, replacing the old
 one) exactly when the committed fixture differs from what is stored -- the signal that an admin dumped an
@@ -63,7 +63,7 @@ def seed_sample_org( force : bool = False ) -> SampleOrgResult:
             organization = organization, user = superuser,
             defaults = { 'organization_role': OrganizationRole.OWNER } )
         already_seeded = ScenarioRecord.objects.filter( uuid = SAMPLE_SCENARIO_UUID ).exists()
-        if already_seeded and not force and _fixture_matches( organization ):
+        if already_seeded and not force and _is_current( organization ):
             return SampleOrgResult( organization = organization, action = 'preserved' )
         if already_seeded:                                   # drops the old data + its 'Sample Forecast' run
             _clear_sample_data( organization )
@@ -103,6 +103,19 @@ def _fixture_matches( organization ) -> bool:
 def _payload_matches( record, payload ) -> bool:
     return ( record.data == payload[ 'data' ]
              and record.acknowledged_sections == payload[ 'acknowledged_sections' ] )
+
+
+def _has_captured_forecast( organization ) -> bool:
+    return PlanningResultRecord.objects.filter(
+        organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST ).exists()
+
+
+def _is_current( organization ) -> bool:
+    """Whether the seeded sample is already up to date: its records equal the committed fixture *and* its
+    forecast was captured. The forecast half lets a re-seed self-heal a run lost to a mid-seed forecast
+    failure (the records commit before the forecast) -- which the fixture comparison alone would report as
+    'preserved' indefinitely."""
+    return _fixture_matches( organization ) and _has_captured_forecast( organization )
 
 
 def _clear_sample_data( organization ):
@@ -145,19 +158,21 @@ def _seed_records( organization ):
 
 
 def _generate_forecast( organization, profile_record, scenario ):
-    """Run and capture the Financial Forecast for the seeded scenario (outside the record transaction),
-    mirroring the forecast hub: a `ProjectionRunRecord` plus its `PlanningResultRecord`. The horizon is the
-    shared age-based default -- the same one the hub offers -- so the sample spans the household's life."""
+    """Run and capture the Financial Forecast for the seeded scenario, outside the *record* transaction (it
+    can take seconds) but within its own: the books, the `ProjectionRunRecord`, and its `PlanningResultRecord`
+    commit together, so a mid-capture failure leaves nothing rather than a half-captured, invisible run. The
+    horizon is the shared age-based default, so the sample spans the household's life."""
     profile = load_profile( profile_record )
     frame = resolve_frame(
         effective_date = profile_record.effective_date, start_choice = 'effective',
         duration_years = default_forecast_duration_years( profile, profile_record.effective_date ),
         granularity = GRANULARITY[ 'year' ] )
     scenario_inputs = load_scenario( scenario )
-    run = run_and_capture(
-        organization = organization, profile = profile,
-        plans = scenario_inputs.plans, assumptions = scenario_inputs.assumptions, frame = frame,
-        label = SAMPLE_FORECAST_NAME, source_label = scenario.label )
-    PlanningResultRecord.objects.create(
-        organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
-        run = run, label = run.label )
+    with transaction.atomic():
+        run = run_and_capture(
+            organization = organization, profile = profile,
+            plans = scenario_inputs.plans, assumptions = scenario_inputs.assumptions, frame = frame,
+            label = SAMPLE_FORECAST_NAME, source_label = scenario.label )
+        PlanningResultRecord.objects.create(
+            organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
+            run = run, label = run.label )
