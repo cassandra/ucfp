@@ -1,0 +1,1270 @@
+{
+  "assumptions": {
+    "acknowledged_sections": [
+      "external-factors",
+      "net-worth",
+      "transaction-costs"
+    ],
+    "data": {
+      "economics": {
+        "bond_appreciation": {
+          "fraction": "0"
+        },
+        "bond_interest": {
+          "fraction": "0.04"
+        },
+        "cd_interest": {
+          "fraction": "0.03"
+        },
+        "collectibles_appreciation": {
+          "fraction": "0.02"
+        },
+        "depreciation_rate": {
+          "fraction": "0.18"
+        },
+        "inflation": {
+          "fraction": "0.03"
+        },
+        "medical_inflation": {
+          "fraction": "0.045"
+        },
+        "pension_cola": {
+          "fraction": "0.02"
+        },
+        "precious_metals_appreciation": {
+          "fraction": "0.03"
+        },
+        "real_estate_appreciation": {
+          "fraction": "0.035"
+        },
+        "rental_increase": {
+          "fraction": "0.03"
+        },
+        "retirement_growth": {
+          "fraction": "0.055"
+        },
+        "savings_interest": {
+          "fraction": "0.02"
+        },
+        "social_security_cola": {
+          "fraction": "0.025"
+        },
+        "stock_appreciation": {
+          "fraction": "0.06"
+        },
+        "stock_dividend": {
+          "fraction": "0.018"
+        },
+        "wage_growth": {
+          "fraction": "0.03"
+        },
+        "window": {
+          "end": null,
+          "start": null
+        }
+      },
+      "net_worth": {
+        "capital_gains_tax_rate": {
+          "fraction": "0"
+        },
+        "ordinary_tax_rate": {
+          "fraction": "0"
+        }
+      },
+      "tax_projection": {
+        "forecast_type": "COLA_INDEXED",
+        "projection": {
+          "cola_rate": {
+            "fraction": "0.03"
+          }
+        }
+      },
+      "transaction_costs": {
+        "property_sale_fixed_cost": "10000",
+        "property_sale_realtor_fee_rate": {
+          "fraction": "0.06"
+        }
+      }
+    }
+  },
+  "plans": {
+    "acknowledged_sections": [
+      "cash-plan",
+      "debt-plan",
+      "events",
+      "home-expenses",
+      "living-expenses",
+      "retirement",
+      "tax-planning",
+      "vehicle-expenses"
+    ],
+    "data": {
+      "contributions": [
+        {
+          "account_handle": "pretax-subject",
+          "amount": "1000",
+          "end_age": 67,
+          "handle": "contribution-1",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "source": "WAGE",
+          "start_age": null
+        },
+        {
+          "account_handle": "pretax-partner",
+          "amount": "1200",
+          "end_age": 65,
+          "handle": "contribution-2",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "source": "WAGE",
+          "start_age": null
+        }
+      ],
+      "credit_card_plans": [],
+      "drawdown": null,
+      "events": [],
+      "expense_spans": [
+        null
+      ],
+      "health_coverage": null,
+      "income_timing": [
+        {
+          "end": "2051-06-05",
+          "flow_handle": "income-1",
+          "start": null
+        },
+        {
+          "end": "2055-06-05",
+          "flow_handle": "income-2",
+          "start": null
+        }
+      ],
+      "loan_repayments": [
+        {
+          "debt_handle": "vehicle-1-loan",
+          "interest_rate": {
+            "fraction": "0.04"
+          },
+          "remaining_term": {
+            "count": 5,
+            "unit": "MONTH"
+          }
+        },
+        {
+          "debt_handle": "vehicle-2-loan",
+          "interest_rate": {
+            "fraction": "0.0789"
+          },
+          "remaining_term": {
+            "count": 14,
+            "unit": "MONTH"
+          }
+        },
+        {
+          "debt_handle": "residence-mortgage",
+          "interest_rate": {
+            "fraction": "0.055"
+          },
+          "remaining_term": {
+            "count": 120,
+            "unit": "MONTH"
+          }
+        }
+      ],
+      "prepayments": [],
+      "property_expenses": [
+        {
+          "applies_to": [
+            "RENTED_HOME"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "RENT",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "2000",
+          "expense_tax_class": "LIVING",
+          "handle": "rent",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Rent",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "TAXES_INSURANCE",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "5500",
+          "expense_tax_class": "SALT",
+          "handle": "property-tax",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Property Tax",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "TAXES_INSURANCE",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "2500",
+          "expense_tax_class": "LIVING",
+          "handle": "property-insurance",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Property Insurance",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "TAXES_INSURANCE",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "0",
+          "expense_tax_class": "LIVING",
+          "handle": "hoa-fee",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "HOA / Coop Fee",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL",
+            "RENTED_HOME"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "UTILITIES_SERVICES",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "90",
+          "expense_tax_class": "LIVING",
+          "handle": "water",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Water / Wastewater",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL",
+            "RENTED_HOME"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "UTILITIES_SERVICES",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "35",
+          "expense_tax_class": "LIVING",
+          "handle": "trash",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Trash / Garbage",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL",
+            "RENTED_HOME"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "UTILITIES_SERVICES",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "150",
+          "expense_tax_class": "LIVING",
+          "handle": "electric",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Electric",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL",
+            "RENTED_HOME"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "UTILITIES_SERVICES",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "80",
+          "expense_tax_class": "LIVING",
+          "handle": "gas-utility",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Gas Utility",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL",
+            "RENTED_HOME"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "UTILITIES_SERVICES",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "100",
+          "expense_tax_class": "LIVING",
+          "handle": "phone-service",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Phone Service",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL",
+            "RENTED_HOME"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "UTILITIES_SERVICES",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "80",
+          "expense_tax_class": "LIVING",
+          "handle": "internet",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Internet",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RENTAL"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "UTILITIES_SERVICES",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "240",
+          "expense_tax_class": "RENTAL_EXPENSE",
+          "handle": "property-management",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Property Management",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "MAINTENANCE_REPAIR",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "250",
+          "expense_tax_class": "LIVING",
+          "handle": "maintenance-repair",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Maintenance / Repair",
+          "overrides": {},
+          "realization": "SMOOTH"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "MAINTENANCE_REPAIR",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "110",
+          "expense_tax_class": "LIVING",
+          "handle": "pest-control",
+          "interval": {
+            "count": 3,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Pest Control",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "MAINTENANCE_REPAIR",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "0",
+          "expense_tax_class": "LIVING",
+          "handle": "pool-maintenance",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Pool Maintenance",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "MAINTENANCE_REPAIR",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "0",
+          "expense_tax_class": "LIVING",
+          "handle": "lawn-maintenance",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Lawn Maintenance",
+          "overrides": {},
+          "realization": "DISCRETE"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "MAINTENANCE_REPAIR",
+          "cost_each": "500",
+          "count": 4,
+          "default_amount": "100",
+          "expense_tax_class": "LIVING",
+          "handle": "lawn-tools",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": 20,
+          "name": "Lawn Tools",
+          "overrides": {},
+          "realization": "SMOOTH"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "N_YEARS",
+          "category": "MAINTENANCE_REPAIR",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "9000",
+          "expense_tax_class": "LIVING",
+          "handle": "ac-cost",
+          "interval": {
+            "count": 15,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "A/C Cost",
+          "overrides": {},
+          "realization": "SMOOTH"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "MAINTENANCE_REPAIR",
+          "cost_each": "2900",
+          "count": 3,
+          "default_amount": "580",
+          "expense_tax_class": "LIVING",
+          "handle": "appliance",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": 15,
+          "name": "Appliance",
+          "overrides": {},
+          "realization": "SMOOTH"
+        },
+        {
+          "applies_to": [
+            "RESIDENCE",
+            "SECOND_HOME",
+            "RENTAL"
+          ],
+          "cadence_domain": "N_YEARS",
+          "category": "MAINTENANCE_REPAIR",
+          "cost_each": null,
+          "count": null,
+          "default_amount": "15000",
+          "expense_tax_class": "LIVING",
+          "handle": "roof-cost",
+          "interval": {
+            "count": 20,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Roof Cost",
+          "overrides": {},
+          "realization": "SMOOTH"
+        }
+      ],
+      "recurring_expenses": [
+        {
+          "amounts": [
+            "170"
+          ],
+          "cadence_domain": "WK_MO",
+          "category": "EVERYDAY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "food",
+          "interval": {
+            "count": 1,
+            "unit": "WEEK"
+          },
+          "lifespan": null,
+          "name": "Food",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "28"
+          ],
+          "cadence_domain": "WK_MO",
+          "category": "EVERYDAY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "consumables",
+          "interval": {
+            "count": 1,
+            "unit": "WEEK"
+          },
+          "lifespan": null,
+          "name": "Consumables",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "1800"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "EVERYDAY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "clothes",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Clothes",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "960"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "EVERYDAY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "grooming",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Grooming",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "7500"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "vacations",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Vacations",
+          "realization": "DISCRETE"
+        },
+        {
+          "amounts": [
+            "0"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "travel",
+          "interval": {
+            "count": 3,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Transportation / Travel",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "85"
+          ],
+          "cadence_domain": "WK_MO",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "dining-out",
+          "interval": {
+            "count": 1,
+            "unit": "WEEK"
+          },
+          "lifespan": null,
+          "name": "Dining Out",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "50"
+          ],
+          "cadence_domain": "WK_MO",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "entertainment",
+          "interval": {
+            "count": 1,
+            "unit": "WEEK"
+          },
+          "lifespan": null,
+          "name": "Entertainment",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "100"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "cable-streaming",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Cable TV / Streaming",
+          "realization": "DISCRETE"
+        },
+        {
+          "amounts": [
+            "150"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "hobbies",
+          "interval": {
+            "count": 3,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Hobbies",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "750"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "DISCRETIONARY",
+          "cost_each": "1500",
+          "count": 2,
+          "expense_tax_class": "LIVING",
+          "handle": "computer-purchase",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": 4,
+          "name": "Computer Purchase",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "300"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "computer-services",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Computer Services",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "3000"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "gifts",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Gifts",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "70"
+          ],
+          "cadence_domain": "FIXED",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "health-fitness",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Health & Fitness",
+          "realization": "DISCRETE"
+        },
+        {
+          "amounts": [
+            "700"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "DISCRETIONARY",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "furniture",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Furniture",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "4500"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "HEALTH",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "MEDICAL",
+          "handle": "medical-expenses",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Medical Expenses",
+          "realization": "SMOOTH"
+        },
+        {
+          "amounts": [
+            "550"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "HEALTH",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "MEDICAL",
+          "handle": "health-insurance",
+          "interval": {
+            "count": 1,
+            "unit": "MONTH"
+          },
+          "lifespan": null,
+          "name": "Health Insurance",
+          "realization": "DISCRETE"
+        },
+        {
+          "amounts": [
+            "0"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "MISCELLANEOUS",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "umbrella-insurance",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Umbrella Insurance",
+          "realization": "DISCRETE"
+        },
+        {
+          "amounts": [
+            "0"
+          ],
+          "cadence_domain": "MO_YR",
+          "category": "MISCELLANEOUS",
+          "cost_each": null,
+          "count": null,
+          "expense_tax_class": "LIVING",
+          "handle": "professional-fees",
+          "interval": {
+            "count": 1,
+            "unit": "YEAR"
+          },
+          "lifespan": null,
+          "name": "Professional Fees",
+          "realization": "DISCRETE"
+        }
+      ],
+      "roth_conversions": [],
+      "timing": [
+        {
+          "government_pension_claiming_date": "2051-06-05",
+          "pension_start": null,
+          "subject_handle": "subject"
+        },
+        {
+          "government_pension_claiming_date": "2055-06-05",
+          "pension_start": null,
+          "subject_handle": "partner"
+        }
+      ],
+      "vehicle_plan": {
+        "dispositions": [
+          {
+            "kind": "REPLACE",
+            "replacement": {
+              "down_payment": "5000",
+              "end_date": null,
+              "handle": "",
+              "lease_end_payment": null,
+              "monthly_payment": "701",
+              "name": "His Car",
+              "payment_method": "LOAN",
+              "purchase_date": null,
+              "purchase_price": "40000",
+              "recurrence_years": 12
+            },
+            "sale_date": "2029-07-12",
+            "vehicle_handle": "vehicle-1"
+          },
+          {
+            "kind": "REPLACE",
+            "replacement": {
+              "down_payment": "5000",
+              "end_date": null,
+              "handle": "",
+              "lease_end_payment": null,
+              "monthly_payment": "701",
+              "name": "Her Car",
+              "payment_method": "LOAN",
+              "purchase_date": null,
+              "purchase_price": "40000",
+              "recurrence_years": 12
+            },
+            "sale_date": "2035-07-11",
+            "vehicle_handle": "vehicle-2"
+          }
+        ],
+        "leased_dispositions": [],
+        "running_costs": [
+          {
+            "amount": "850",
+            "cadence_domain": "MO_YR",
+            "expense_tax_class": "LIVING",
+            "handle": "auto-insurance",
+            "interval": {
+              "count": 6,
+              "unit": "MONTH"
+            },
+            "name": "Insurance",
+            "realization": "DISCRETE"
+          },
+          {
+            "amount": "300",
+            "cadence_domain": "MO_YR",
+            "expense_tax_class": "LIVING",
+            "handle": "auto-maintenance",
+            "interval": {
+              "count": 1,
+              "unit": "YEAR"
+            },
+            "name": "Maintenance",
+            "realization": "SMOOTH"
+          },
+          {
+            "amount": "1000",
+            "cadence_domain": "MO_YR",
+            "expense_tax_class": "LIVING",
+            "handle": "auto-repair",
+            "interval": {
+              "count": 1,
+              "unit": "YEAR"
+            },
+            "name": "Repairs",
+            "realization": "SMOOTH"
+          },
+          {
+            "amount": "30",
+            "cadence_domain": "WK_MO",
+            "expense_tax_class": "LIVING",
+            "handle": "gasoline",
+            "interval": {
+              "count": 1,
+              "unit": "WEEK"
+            },
+            "name": "Fuel",
+            "realization": "SMOOTH"
+          },
+          {
+            "amount": "100",
+            "cadence_domain": "MO_YR",
+            "expense_tax_class": "LIVING",
+            "handle": "fees-taxes",
+            "interval": {
+              "count": 1,
+              "unit": "YEAR"
+            },
+            "name": "Fees/Taxes",
+            "realization": "SMOOTH"
+          }
+        ],
+        "vehicles": []
+      },
+      "withdrawals": []
+    }
+  },
+  "profile": {
+    "acknowledged_sections": [
+      "accounts",
+      "debt",
+      "income",
+      "possessions",
+      "real-estate",
+      "subjects",
+      "vehicles"
+    ],
+    "data": {
+      "assets": [
+        {
+          "asset_class": "CASH",
+          "cost_basis": null,
+          "handle": "cash",
+          "name": "Cash & Savings",
+          "opening_value": "100000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "STOCKS",
+          "cost_basis": null,
+          "handle": "stocks",
+          "name": "Stocks",
+          "opening_value": "100000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "DIVIDEND_STOCKS",
+          "cost_basis": null,
+          "handle": "dividend-stocks",
+          "name": "Dividend Stocks",
+          "opening_value": "100000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "BONDS",
+          "cost_basis": null,
+          "handle": "bonds",
+          "name": "Bonds",
+          "opening_value": "50000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "CDS",
+          "cost_basis": null,
+          "handle": "cds",
+          "name": "CDs",
+          "opening_value": "30000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "PRETAX_RETIREMENT",
+          "cost_basis": null,
+          "handle": "pretax-subject",
+          "name": "John Pre-Tax Retirement",
+          "opening_value": "300000",
+          "owner_handle": "subject",
+          "property": null
+        },
+        {
+          "asset_class": "ROTH",
+          "cost_basis": null,
+          "handle": "roth-subject",
+          "name": "John Roth Retirement",
+          "opening_value": "25000",
+          "owner_handle": "subject",
+          "property": null
+        },
+        {
+          "asset_class": "PRETAX_RETIREMENT",
+          "cost_basis": null,
+          "handle": "pretax-partner",
+          "name": "Jane Pre-Tax Retirement",
+          "opening_value": "300000",
+          "owner_handle": "partner",
+          "property": null
+        },
+        {
+          "asset_class": "ROTH",
+          "cost_basis": null,
+          "handle": "roth-partner",
+          "name": "Jane Roth Retirement",
+          "opening_value": "0",
+          "owner_handle": "partner",
+          "property": null
+        },
+        {
+          "asset_class": "REAL_ESTATE_RESIDENCE",
+          "cost_basis": "400000",
+          "handle": "residence",
+          "name": "Home",
+          "opening_value": "500000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "DEPRECIATING",
+          "cost_basis": null,
+          "handle": "vehicle-1",
+          "name": "His Car",
+          "opening_value": "8000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "DEPRECIATING",
+          "cost_basis": null,
+          "handle": "vehicle-2",
+          "name": "Her Car",
+          "opening_value": "17000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "COLLECTIBLES",
+          "cost_basis": null,
+          "handle": "possession-1",
+          "name": "Coin collection",
+          "opening_value": "3000",
+          "owner_handle": null,
+          "property": null
+        }
+      ],
+      "debts": [
+        {
+          "balance": "230000",
+          "handle": "residence-mortgage",
+          "kind": "MORTGAGE",
+          "name": "Mortgage",
+          "secured_asset": "residence"
+        },
+        {
+          "balance": "2000",
+          "handle": "vehicle-1-loan",
+          "kind": "AUTO",
+          "name": "His Car Loan",
+          "secured_asset": "vehicle-1"
+        },
+        {
+          "balance": "8000",
+          "handle": "vehicle-2-loan",
+          "kind": "AUTO",
+          "name": "Her Car Loan",
+          "secured_asset": "vehicle-2"
+        }
+      ],
+      "filing_status": "MARRIED_JOINT",
+      "government_pension": [
+        {
+          "monthly_at_normal_age": "3100",
+          "subject_handle": "subject"
+        },
+        {
+          "monthly_at_normal_age": "3300",
+          "subject_handle": "partner"
+        }
+      ],
+      "home_tenure": "OWN",
+      "income_flows": [
+        {
+          "amount": "90000",
+          "handle": "income-1",
+          "income_tax_class": "WAGES",
+          "interval": null,
+          "name": "Wages",
+          "property_handle": null,
+          "subject_handle": "subject"
+        },
+        {
+          "amount": "123000",
+          "handle": "income-2",
+          "income_tax_class": "WAGES",
+          "interval": null,
+          "name": "Wages",
+          "property_handle": null,
+          "subject_handle": "partner"
+        }
+      ],
+      "jurisdiction_type": "US_FEDERAL",
+      "leased_vehicles": [],
+      "pensions": [],
+      "state_income_tax_rate": {
+        "fraction": "0.044"
+      },
+      "subjects": [
+        {
+          "birthdate": "1984-06-05",
+          "handle": "subject",
+          "name": "John"
+        },
+        {
+          "birthdate": "1990-06-05",
+          "handle": "partner",
+          "name": "Jane"
+        }
+      ],
+      "us_state": "COLORADO"
+    }
+  }
+}
