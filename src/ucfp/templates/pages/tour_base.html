@@ -1,0 +1,30 @@
+{% extends "pages/base.html" %}
+{% load static %}
+{% load common_tags %}
+{% comment %}
+  The tour shell: the layout for the read-only sample-data tour. Like `app_base.html` it exposes an
+  `app_content` region (and the `main_container_class` override), so the real feature pages can render
+  inside it via the swappable base -- but it carries the tour's own chrome (a header, and later the
+  step navigation and the "Take a Tour" exit) instead of the app navbar.
+{% endcomment %}
+
+{% block content %}
+<div class="tour-shell">
+  <header class="tour-header bg-primary text-white py-2">
+    <div class="container d-flex align-items-center justify-content-between">
+      <a class="navbar-brand py-1 m-0" href="{% url 'home' %}">
+        <img src="{% static 'img/app-logo-inverse-h64.png' %}" height="32"
+             alt="{% settings_value 'SITE_NAME' %}">
+      </a>
+      <span class="small text-uppercase">Sample tour</span>
+      {% comment %} Step navigation and the "Add my data" exit land here in a later phase. {% endcomment %}
+    </div>
+  </header>
+
+  <main class="{% block main_container_class %}container{% endblock %} py-4">
+    {% block app_content %}{% endblock %}
+  </main>
+
+  {% include "components/base_footer.html" %}
+</div>
+{% endblock %}

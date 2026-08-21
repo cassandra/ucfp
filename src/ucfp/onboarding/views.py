@@ -5,12 +5,19 @@ from django.shortcuts import render, resolve_url
 from django.utils.decorators import method_decorator
 from django.views.generic import View
 
+from common.exceptions import DataNotAvailableError
+
 from custom.decorators import require_authentication_enabled
+
+from organization.decorators import ensure_organization
 
 from user import collision
 from user.signin_manager import SigninManager
+from user.views import ConvertToGuestView
 
 from . import reconciliation_service
+from .constants import SAMPLE_ORGANIZATION_UUID
+from .membership import join_sample_org, sample_organization
 
 
 @method_decorator( require_authentication_enabled, name = 'dispatch' )
@@ -87,3 +94,36 @@ class SigninCollisionView( View ):
     @staticmethod
     def _done( request ):
         return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
+
+
+class StartTourView( ConvertToGuestView ):
+    """Start the sample-data tour ("Take a Tour"): join the visitor to the sample organization, switch the
+    session to it, and land on the tour. For an anonymous visitor a Guest is minted first (inherited from
+    `ConvertToGuestView`); a signed-in visitor is used as-is -- no conversion and no blocking needed, since
+    the tour pages are just the real org pages under a different wrapper and any read-only-ness comes from
+    the visitor's (VIEWER) membership, not the tour. If the sample org is not seeded there is nothing to
+    tour."""
+
+    def post( self, request, *args, **kwargs ):
+        if sample_organization() is None:
+            raise DataNotAvailableError( 'Tour is currently unavailable' )
+        return super().post( request, *args, **kwargs )
+
+    def after_conversion( self, request, user ):
+        join_sample_org( user )
+        request.session_state.set_current_organization( str( SAMPLE_ORGANIZATION_UUID ) )
+        request.session_state.to_session( request )
+
+    def landing_url( self, request ):
+        return resolve_url( 'tour_home' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class TourHomeView( View ):
+    """Stub landing for the sample-data tour, rendered under the tour base template (no app nav). A
+    placeholder until the real Profile page is wrapped here; it shows whichever organization is current
+    (the sample org, set on entry). Any read-only-ness comes from the visitor's membership role, not the
+    tour itself."""
+
+    def get( self, request, *args, **kwargs ):
+        return render( request, 'onboarding/tour_home.html' )

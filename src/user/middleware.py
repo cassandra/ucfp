@@ -62,6 +62,7 @@ class AuthenticationMiddleware:
         'explain',
         'preview',
         'convert_to_guest',
+        'start_tour',
         'user_signin',
         'magic_code',
         'magic_link',

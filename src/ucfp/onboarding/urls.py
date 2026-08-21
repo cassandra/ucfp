@@ -10,4 +10,7 @@ urlpatterns = [
     path( 'signin-collision',
           views.SigninCollisionView.as_view(),
           name = 'signin_collision' ),
+
+    path( 'start-tour', views.StartTourView.as_view(), name = 'start_tour' ),
+    path( 'tour', views.TourHomeView.as_view(), name = 'tour_home' ),
 ]

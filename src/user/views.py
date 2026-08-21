@@ -325,19 +325,33 @@ class UserAccountView( View ):
 
 @method_decorator( require_authentication_enabled, name = 'dispatch' )
 class ConvertToGuestView( View ):
-    """Convert an Anonymous visitor into a Guest: create their email-less Guest account and log
-    them in. The single conversion entry point, invoked by whichever "start using the app" control
-    a page offers, so account creation lives in one place regardless of where it is triggered from.
+    """Convert an Anonymous visitor into a Guest and forward them into the app: create their email-less
+    Guest account, log them in, then redirect. The single conversion mechanism, so account creation lives
+    in one place regardless of which "start using the app" control triggered it.
 
-    POST-only, so an account is created only by a deliberate submission -- a crawled GET never mints
-    one. An already-signed-in visitor is left as-is (no second account); either way the visitor is
-    forwarded on to begin entering data.
+    POST-only, so an account is created only by a deliberate submission -- a crawled GET never mints one.
+    An already-signed-in visitor is left as-is (no second account). The default forwards a fresh Guest to
+    `settings.GUEST_START_URL` to begin entering their own data; a subclass tailors a different entry (e.g.
+    the sample-data tour) by overriding `after_conversion` and `landing_url`.
     """
 
     def post( self, request, *args, **kwargs ):
-        if not request.user.is_authenticated:
-            SigninManager().start_guest_session( request )
-        return HttpResponseRedirect( resolve_url( settings.GUEST_START_URL ) )
+        user = self._converted_user( request )
+        self.after_conversion( request, user )
+        return HttpResponseRedirect( self.landing_url( request ) )
+
+    def _converted_user( self, request ):
+        """The user to forward: a freshly-minted Guest for an anonymous visitor, else the signed-in one."""
+        if request.user.is_authenticated:
+            return request.user
+        return SigninManager().start_guest_session( request )
+
+    def after_conversion( self, request, user ):
+        """Hook run once the Guest exists and is logged in, before the redirect. Default: nothing."""
+        return
+
+    def landing_url( self, request ):
+        return resolve_url( settings.GUEST_START_URL )
 
 
 @method_decorator( require_verified_user, name = 'dispatch' )
