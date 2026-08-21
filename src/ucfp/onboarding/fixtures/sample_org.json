@@ -23,7 +23,7 @@
           "fraction": "0.18"
         },
         "inflation": {
-          "fraction": "0.03"
+          "fraction": "0.035"
         },
         "medical_inflation": {
           "fraction": "0.045"
@@ -50,7 +50,7 @@
           "fraction": "0.025"
         },
         "stock_appreciation": {
-          "fraction": "0.06"
+          "fraction": "0.05"
         },
         "stock_dividend": {
           "fraction": "0.018"

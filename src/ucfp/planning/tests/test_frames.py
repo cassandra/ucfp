@@ -51,21 +51,29 @@ class ResolveFrameTests( unittest.TestCase ):
 
 
 class DefaultForecastDurationTests( unittest.TestCase ):
-    """`default_forecast_duration_years`: run the oldest member to the target age, with a small floor."""
+    """`default_forecast_duration_years`: run the youngest (likely last-surviving) member to the target
+    age, with a small floor -- so the window covers the surviving spouse's later years."""
 
     def _profile( self, *birth_years ):
         return SimpleNamespace( subjects = [
             SubjectProfile( handle = str( year ), name = str( year ), birthdate = date( year, 1, 1 ) )
             for year in birth_years ] )
 
-    def test_runs_the_oldest_member_to_the_target_age( self ):
-        # Oldest born 1990 -> 36 on 2026-01-01 -> project through age 90 = 54 years.
+    def test_runs_the_youngest_member_to_the_target_age( self ):
+        # Youngest born 1990 -> 36 on 2026-01-01 -> project through age 90 = 54 years.
         self.assertEqual(
-            default_forecast_duration_years( self._profile( 1990, 1996 ), date( 2026, 1, 1 ) ),
+            default_forecast_duration_years( self._profile( 1990 ), date( 2026, 1, 1 ) ),
+            FORECAST_THROUGH_AGE - 36 )
+
+    def test_uses_the_youngest_even_when_the_primary_is_older( self ):
+        # Primary 38 (born 1988), younger partner 36 (born 1990): anchor to the younger, so 54 years (not
+        # 52), covering the surviving spouse rather than stopping at their 88.
+        self.assertEqual(
+            default_forecast_duration_years( self._profile( 1988, 1990 ), date( 2026, 1, 1 ) ),
             FORECAST_THROUGH_AGE - 36 )
 
     def test_floor_guards_an_already_old_household( self ):
-        # Oldest born 1944 -> 82 -> only 8 years to 90, clamped up to the floor.
+        # Youngest born 1944 -> 82 -> only 8 years to 90, clamped up to the floor.
         self.assertEqual(
             default_forecast_duration_years( self._profile( 1944 ), date( 2026, 1, 1 ) ), FORECAST_MIN_YEARS )
 

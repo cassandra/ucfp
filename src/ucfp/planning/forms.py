@@ -60,23 +60,25 @@ def resolve_frame(
         start_date = start, end_date = date( naive_end.year, 12, 31 ), granularity = granularity )
 
 
-# The default forecast horizon runs the oldest household member to this age; the small floor only guards
-# the degenerate cases (no subjects, or an oldest already near/past the target) so the frame stays valid.
-# At 10 years the floor engages only for an oldest already 80+, leaving the "can I retire" range ending
+# The default forecast horizon runs the youngest household member to this age; the small floor only guards
+# the degenerate cases (no subjects, or a youngest already near/past the target) so the frame stays valid.
+# At 10 years the floor engages only for a youngest already 80+, leaving the "can I retire" range ending
 # around the target age rather than over-running past 100.
 FORECAST_THROUGH_AGE = 90
 FORECAST_MIN_YEARS   = 10
 
 
 def default_forecast_duration_years( profile, start_date : date ) -> int:
-    """The default run length: enough years for the oldest household member to reach `FORECAST_THROUGH_AGE`
-    as of `start_date`, floored at `FORECAST_MIN_YEARS`. Drives the hub's first-time duration default and
-    the sample seed's horizon -- a young household gets a long projection, a near-retirement one ends
-    around the target age, rather than over- or under-shooting a fixed length."""
+    """The default run length: enough years for the *youngest* household member to reach
+    `FORECAST_THROUGH_AGE` as of `start_date`, floored at `FORECAST_MIN_YEARS`. Drives the hub's first-time
+    duration default and the sample seed's horizon. The youngest anchors it because they are the likely
+    last survivor, so the window covers the surviving spouse's later years -- the crux of "can I retire".
+    (The oldest would cut those years off; modeled death events handle the older member's absence inside
+    the window, so this stays a pure age formula.)"""
     ages = [ age_on( subject.birthdate, start_date ) for subject in profile.subjects ]
     if not ages:
         return FORECAST_MIN_YEARS
-    return max( FORECAST_MIN_YEARS, FORECAST_THROUGH_AGE - max( ages ) )
+    return max( FORECAST_MIN_YEARS, FORECAST_THROUGH_AGE - min( ages ) )
 
 
 class FrameForm( StyledFormMixin, forms.Form ):
