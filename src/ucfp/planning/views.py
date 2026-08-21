@@ -18,7 +18,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
 
-from organization.decorators import ensure_organization
+from organization.decorators import PermitsReadonlyMutation, ensure_organization
 
 from common import antinode
 from common.datetime_utils import age_on
@@ -684,9 +684,13 @@ class DeleteRunView( InputGatedMixin, View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class ProjectionRunBooksTableView( View ):
+class ProjectionRunBooksTableView( PermitsReadonlyMutation, View ):
     """`/run/<uuid>/books/` -- apply a column operation to the user's BooksTable lens
-    (expand/collapse/hide/add/move), persist it, and swap the re-rendered table fragment."""
+    (expand/collapse/hide/add/move), persist it, and swap the re-rendered table fragment.
+
+    Opted out of the read-only write-gate: the column operation persists only the member's own
+    per-user session lens (`books_table_definition`), never organization data, so a read-only member
+    may reshape and drill into their view of the results like anyone else."""
 
     def post( self, request, run_uuid ):
         record = get_object_or_404(
