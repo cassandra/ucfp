@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from common.recurrence import Duration, TimeUnit
 from ucfp.inputs.profile.schemas import SubjectProfile
-from ucfp.planning.forms import (
+from ucfp.planning.frames import (
     FORECAST_MIN_YEARS, FORECAST_THROUGH_AGE, default_forecast_duration_years, resolve_frame )
 
 _YEARLY = Duration( 1, TimeUnit.YEAR )

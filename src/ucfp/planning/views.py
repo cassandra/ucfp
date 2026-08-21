@@ -44,8 +44,8 @@ from .explore import delete_runs, run_working_scenario, start_fresh_exploration,
 from .explore_diff import describe_changes, value_changes
 from .profile_diff import profile_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
-from .forms import (
-    FORECAST_MIN_YEARS, ForecastForm, GRANULARITY, default_forecast_duration_years, resolve_frame )
+from .forms import ForecastForm
+from .frames import FORECAST_MIN_YEARS, GRANULARITY, default_forecast_duration_years, resolve_frame
 from .gating import partition_scenarios, scenario_readiness, scenario_started
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord

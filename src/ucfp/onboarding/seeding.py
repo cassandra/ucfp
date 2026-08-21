@@ -31,7 +31,7 @@ from ucfp.inputs.models import (
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.scenarios.repository import load_scenario
 from ucfp.planning.enums import PlanningFeature
-from ucfp.planning.forms import GRANULARITY, default_forecast_duration_years, resolve_frame
+from ucfp.planning.frames import GRANULARITY, default_forecast_duration_years, resolve_frame
 from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 from ucfp.planning.orchestration import run_and_capture
 

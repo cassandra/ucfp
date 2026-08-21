@@ -26,7 +26,7 @@ from ucfp.inputs.scenarios.exploration import enter_exploration, scenario_explor
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.inputs.state import completed_profile
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
-from ucfp.planning.forms import FORECAST_MIN_YEARS, default_forecast_duration_years
+from ucfp.planning.frames import FORECAST_MIN_YEARS, default_forecast_duration_years
 from ucfp.planning.tests.support import expected_assumptions, forecast_profile
 from ucfp.planning.views import FinancialForecastView
 
