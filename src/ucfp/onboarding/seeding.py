@@ -2,9 +2,16 @@
 
 Reusable (a thin management command wraps it), idempotent, and portable: the fixture is plaintext, so the
 encrypted `data` fields re-encrypt under the *local* key on save. The sample org and scenario carry the
-reserved UUIDs (`constants`), so the org is stably identifiable (#198 auto-joins members to it). A re-seed
-preserves the org and its memberships; `force` refreshes only the data records. The forecast runs outside
-the record transaction (it can take seconds -- no reason to hold a write lock).
+reserved UUIDs (`constants`), so the org is stably identifiable (#198 auto-joins members to it).
+
+Idempotency is *content-aware*: a re-seed refreshes the data (and re-runs the forecast, replacing the old
+one) exactly when the committed fixture differs from what is stored -- the signal that an admin dumped an
+edited sample. An unchanged fixture is a no-op, so the deploy entrypoint can run this on every start. We
+compare the stored records against the fixture payloads directly (`data` + `acknowledged_sections`): that
+catches *any* edit -- structural, value, or review-state -- whereas the Explore diff routines summarise
+only value dials. A re-seed always preserves the org and its memberships; `force` refreshes unconditionally
+(e.g. to re-run after an engine change with an unchanged fixture). The forecast runs outside the record
+transaction (it can take seconds -- no reason to hold a write lock).
 """
 import json
 from dataclasses import dataclass
@@ -21,7 +28,7 @@ from ucfp.accounts.models import BooksOfAccountRecord
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.models import (
     AssumptionsRecord, PlansRecord, ProfileRecord, ScenarioExploration, ScenarioRecord )
-from ucfp.inputs.profile.repository import load_profile
+from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.scenarios.repository import load_scenario
 from ucfp.planning.enums import PlanningFeature
 from ucfp.planning.forms import GRANULARITY, resolve_frame
@@ -45,8 +52,9 @@ class SampleOrgResult:
 
 def seed_sample_org( force : bool = False ) -> SampleOrgResult:
     """Ensure the sample household exists (owned by the superuser) and holds a runnable scenario with a
-    captured forecast. Idempotent: an already-seeded sample is left untouched unless `force`, which
-    refreshes the data records (preserving the org and its memberships)."""
+    captured forecast. Content-aware idempotency: an already-seeded sample is refreshed only when the
+    committed fixture differs from what is stored (or `force`); an unchanged fixture is left untouched. A
+    refresh preserves the org and its memberships and replaces the captured forecast."""
     superuser = _superuser()
     with transaction.atomic():
         organization, _ = Organization.objects.get_or_create(
@@ -55,9 +63,9 @@ def seed_sample_org( force : bool = False ) -> SampleOrgResult:
             organization = organization, user = superuser,
             defaults = { 'organization_role': OrganizationRole.OWNER } )
         already_seeded = ScenarioRecord.objects.filter( uuid = SAMPLE_SCENARIO_UUID ).exists()
-        if already_seeded and not force:
+        if already_seeded and not force and _fixture_matches( organization ):
             return SampleOrgResult( organization = organization, action = 'preserved' )
-        if already_seeded:
+        if already_seeded:                                   # drops the old data + its 'Sample Forecast' run
             _clear_sample_data( organization )
         profile_record, scenario = _seed_records( organization )
     _generate_forecast( organization, profile_record, scenario )
@@ -70,6 +78,31 @@ def _superuser():
     if superuser is None:
         raise NoSuperuserError( 'No superuser exists to own the sample household; run `bootstrap` first.' )
     return superuser
+
+
+def _load_fixture():
+    return json.loads( SAMPLE_FIXTURE_PATH.read_text() )
+
+
+def _fixture_matches( organization ) -> bool:
+    """Whether the org's seeded records already equal the committed fixture -- so a re-seed would change
+    nothing. Compares only what the fixture carries (each record's `data` + `acknowledged_sections`); the
+    Profile's `effective_date` is derived at seed time and deliberately excluded. A raw payload comparison
+    (rather than the Explore value-diff) is intentional: it catches every kind of edit -- structural, value,
+    or review-state."""
+    scenario = ScenarioRecord.objects.filter( uuid = SAMPLE_SCENARIO_UUID ).first()
+    profile  = latest_profile( organization )
+    if ( scenario is None ) or ( profile is None ):
+        return False
+    fixture = _load_fixture()
+    return ( _payload_matches( profile, fixture[ 'profile' ] )
+             and _payload_matches( scenario.plans, fixture[ 'plans' ] )
+             and _payload_matches( scenario.assumptions, fixture[ 'assumptions' ] ) )
+
+
+def _payload_matches( record, payload ) -> bool:
+    return ( record.data == payload[ 'data' ]
+             and record.acknowledged_sections == payload[ 'acknowledged_sections' ] )
 
 
 def _clear_sample_data( organization ):
@@ -89,7 +122,7 @@ def _seed_records( organization ):
     """Create the SAVED Profile / Plans / Assumptions / Scenario from the fixture's plaintext payloads.
     Encrypted fields re-encrypt on save. The Profile starts on January 1 of the current year, so the run
     begins on a full-year boundary."""
-    fixture = json.loads( SAMPLE_FIXTURE_PATH.read_text() )
+    fixture = _load_fixture()
     effective = date( timezone.localdate().year, 1, 1 )
 
     profile_record = ProfileRecord.objects.create(

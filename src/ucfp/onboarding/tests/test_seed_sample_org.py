@@ -27,7 +27,7 @@ from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 from ucfp.onboarding.constants import (
     SAMPLE_FORECAST_NAME, SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_NAME,
     SAMPLE_SCENARIO_UUID )
-from ucfp.onboarding.seeding import NoSuperuserError, _seed_records, seed_sample_org
+from ucfp.onboarding.seeding import NoSuperuserError, _fixture_matches, _seed_records, seed_sample_org
 
 User = get_user_model()
 
@@ -54,6 +54,39 @@ class SeedRecordsFromFixtureTest( TestCase ):
         # The whole scenario is runnable now (profile + plans + assumptions complete, no drift).
         complete, _drift, _in_progress = partition_scenarios( organization, profile_record )
         self.assertIn( scenario.uuid, [ runnable.uuid for runnable in complete ] )
+
+
+class FixtureMatchTest( TestCase ):
+    """The content-aware refresh signal: seeded records match the fixture until something drifts."""
+
+    def _seeded_org( self ):
+        organization = Organization.objects.create(
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        _seed_records( organization )
+        return organization
+
+    def test_a_fresh_seed_matches_the_fixture( self ):
+        self.assertTrue( _fixture_matches( self._seeded_org() ) )
+
+    def test_missing_records_do_not_match( self ):
+        organization = Organization.objects.create(
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )  # no records seeded
+        self.assertFalse( _fixture_matches( organization ) )
+
+    def test_drifted_review_state_no_longer_matches( self ):
+        organization = self._seeded_org()
+        profile = latest_profile( organization )
+        profile.acknowledged_sections = []                   # an edit the value-diff would not even see
+        profile.save()
+        self.assertFalse( _fixture_matches( organization ) )
+
+    def test_drifted_data_no_longer_matches( self ):
+        organization = self._seeded_org()
+        scenario = ScenarioRecord.objects.get( uuid = SAMPLE_SCENARIO_UUID )
+        plans = scenario.plans
+        plans.data = { **plans.data, '_edited': True }       # any structural/value change trips the compare
+        plans.save()
+        self.assertFalse( _fixture_matches( organization ) )
 
 
 class SeedSampleOrgGuardsTest( TestCase ):
@@ -124,6 +157,23 @@ class SeedSampleOrgForecastTest( TestCase ):
             organization = organization, user = viewer ).exists() )
         self.assertFalse( ProjectionRunRecord.objects.filter( pk = first_run.pk ).exists() )  # refreshed
         self.assertEqual( ProjectionRunRecord.objects.filter( organization = organization ).count(), 1 )
+
+    def test_re_seed_with_changed_data_refreshes_and_replaces_the_run( self ):
+        seed_sample_org()
+        organization = _sample_org()
+        old_run = ProjectionRunRecord.objects.get( organization = organization )
+        # Make the stored profile drift from the fixture, standing in for a newer dumped fixture; a plain
+        # re-seed (no --force) should detect the delta, rebuild, and replace the run.
+        profile = latest_profile( organization )
+        profile.acknowledged_sections = []
+        profile.save()
+
+        result = seed_sample_org()
+
+        self.assertEqual( result.action, 'refreshed' )
+        self.assertFalse( ProjectionRunRecord.objects.filter( pk = old_run.pk ).exists() )  # old run gone
+        run = ProjectionRunRecord.objects.get( organization = organization )                # exactly one
+        self.assertEqual( run.label, SAMPLE_FORECAST_NAME )
 
     def test_command_seeds_the_sample_household( self ):
         call_command( 'seed_sample_org', verbosity = 0 )
