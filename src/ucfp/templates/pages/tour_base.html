@@ -16,8 +16,17 @@
         <img src="{% static 'img/app-logo-inverse-h64.png' %}" height="32"
              alt="{% settings_value 'SITE_NAME' %}">
       </a>
-      <span class="small text-uppercase">Sample tour</span>
-      {% comment %} Step navigation and the "Add my data" exit land here in a later phase. {% endcomment %}
+      {% comment %}
+      Placeholder step nav -- to be restyled into the four numbered cards (mirrored on the explain page).
+      Each step becomes a link once its tour page exists; the not-yet-built ones are inert, so the other
+      three tour pages can be added incrementally. (The Profile section key is hardcoded for now.)
+      {% endcomment %}
+      <nav class="tour-steps small">
+        <a class="text-white mr-3" href="{% url 'tour_profile' section='subjects' %}">1. Profile</a>
+        <span class="text-white-50 mr-3">2. Plans</span>
+        <span class="text-white-50 mr-3">3. Assumptions</span>
+        <span class="text-white-50">4. Forecast</span>
+      </nav>
     </div>
   </header>
 
