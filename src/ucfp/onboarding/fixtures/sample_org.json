@@ -134,12 +134,12 @@
       "health_coverage": null,
       "income_timing": [
         {
-          "end": "2051-06-05",
+          "end": "2057-12-22",
           "flow_handle": "income-1",
           "start": null
         },
         {
-          "end": "2055-06-05",
+          "end": "2053-02-08",
           "flow_handle": "income-2",
           "start": null
         }
@@ -946,12 +946,12 @@
       "roth_conversions": [],
       "timing": [
         {
-          "government_pension_claiming_date": "2051-06-05",
+          "government_pension_claiming_date": "2057-12-22",
           "pension_start": null,
           "subject_handle": "subject"
         },
         {
-          "government_pension_claiming_date": "2055-06-05",
+          "government_pension_claiming_date": "2053-02-08",
           "pension_start": null,
           "subject_handle": "partner"
         }
@@ -1074,87 +1074,6 @@
     "data": {
       "assets": [
         {
-          "asset_class": "CASH",
-          "cost_basis": null,
-          "handle": "cash",
-          "name": "Cash & Savings",
-          "opening_value": "100000",
-          "owner_handle": null,
-          "property": null
-        },
-        {
-          "asset_class": "STOCKS",
-          "cost_basis": null,
-          "handle": "stocks",
-          "name": "Stocks",
-          "opening_value": "100000",
-          "owner_handle": null,
-          "property": null
-        },
-        {
-          "asset_class": "DIVIDEND_STOCKS",
-          "cost_basis": null,
-          "handle": "dividend-stocks",
-          "name": "Dividend Stocks",
-          "opening_value": "100000",
-          "owner_handle": null,
-          "property": null
-        },
-        {
-          "asset_class": "BONDS",
-          "cost_basis": null,
-          "handle": "bonds",
-          "name": "Bonds",
-          "opening_value": "50000",
-          "owner_handle": null,
-          "property": null
-        },
-        {
-          "asset_class": "CDS",
-          "cost_basis": null,
-          "handle": "cds",
-          "name": "CDs",
-          "opening_value": "30000",
-          "owner_handle": null,
-          "property": null
-        },
-        {
-          "asset_class": "PRETAX_RETIREMENT",
-          "cost_basis": null,
-          "handle": "pretax-subject",
-          "name": "John Pre-Tax Retirement",
-          "opening_value": "300000",
-          "owner_handle": "subject",
-          "property": null
-        },
-        {
-          "asset_class": "ROTH",
-          "cost_basis": null,
-          "handle": "roth-subject",
-          "name": "John Roth Retirement",
-          "opening_value": "25000",
-          "owner_handle": "subject",
-          "property": null
-        },
-        {
-          "asset_class": "PRETAX_RETIREMENT",
-          "cost_basis": null,
-          "handle": "pretax-partner",
-          "name": "Jane Pre-Tax Retirement",
-          "opening_value": "300000",
-          "owner_handle": "partner",
-          "property": null
-        },
-        {
-          "asset_class": "ROTH",
-          "cost_basis": null,
-          "handle": "roth-partner",
-          "name": "Jane Roth Retirement",
-          "opening_value": "0",
-          "owner_handle": "partner",
-          "property": null
-        },
-        {
           "asset_class": "REAL_ESTATE_RESIDENCE",
           "cost_basis": "400000",
           "handle": "residence",
@@ -1188,6 +1107,87 @@
           "name": "Coin collection",
           "opening_value": "3000",
           "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "CASH",
+          "cost_basis": null,
+          "handle": "cash",
+          "name": "Cash & Savings",
+          "opening_value": "20000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "STOCKS",
+          "cost_basis": null,
+          "handle": "stocks",
+          "name": "Stocks",
+          "opening_value": "10000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "DIVIDEND_STOCKS",
+          "cost_basis": null,
+          "handle": "dividend-stocks",
+          "name": "Dividend Stocks",
+          "opening_value": "0",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "BONDS",
+          "cost_basis": null,
+          "handle": "bonds",
+          "name": "Bonds",
+          "opening_value": "5000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "CDS",
+          "cost_basis": null,
+          "handle": "cds",
+          "name": "CDs",
+          "opening_value": "3000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "PRETAX_RETIREMENT",
+          "cost_basis": null,
+          "handle": "pretax-subject",
+          "name": "John Pre-Tax Retirement",
+          "opening_value": "97000",
+          "owner_handle": "subject",
+          "property": null
+        },
+        {
+          "asset_class": "ROTH",
+          "cost_basis": null,
+          "handle": "roth-subject",
+          "name": "John Roth Retirement",
+          "opening_value": "12000",
+          "owner_handle": "subject",
+          "property": null
+        },
+        {
+          "asset_class": "PRETAX_RETIREMENT",
+          "cost_basis": null,
+          "handle": "pretax-partner",
+          "name": "Jane Pre-Tax Retirement",
+          "opening_value": "140000",
+          "owner_handle": "partner",
+          "property": null
+        },
+        {
+          "asset_class": "ROTH",
+          "cost_basis": null,
+          "handle": "roth-partner",
+          "name": "Jane Roth Retirement",
+          "opening_value": "0",
+          "owner_handle": "partner",
           "property": null
         }
       ],
@@ -1254,12 +1254,12 @@
       },
       "subjects": [
         {
-          "birthdate": "1984-06-05",
+          "birthdate": "1990-12-22",
           "handle": "subject",
           "name": "John"
         },
         {
-          "birthdate": "1990-06-05",
+          "birthdate": "1988-02-08",
           "handle": "partner",
           "name": "Jane"
         }
