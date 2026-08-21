@@ -7,6 +7,7 @@ so an exploration of a drift-blocked *source* (whose working copy was a clean ol
 Resume alongside the block telling the user to reconcile that very scenario.
 """
 from decimal import Decimal
+from types import SimpleNamespace
 
 from django.test import TestCase
 
@@ -20,11 +21,12 @@ from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import LoanRepayment, Plans
-from ucfp.inputs.profile.repository import save_profile
+from ucfp.inputs.profile.repository import load_profile, save_profile
 from ucfp.inputs.scenarios.exploration import enter_exploration, scenario_exploration
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.inputs.state import completed_profile
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
+from ucfp.planning.forms import FORECAST_MIN_YEARS, default_forecast_duration_years
 from ucfp.planning.tests.support import expected_assumptions, forecast_profile
 from ucfp.planning.views import FinancialForecastView
 
@@ -70,3 +72,45 @@ class LiveResumeTests( TestCase ):
             debt_handle = 'gone', interest_rate = Rate( Decimal( '0.04' ) ),
             remaining_term = Duration( 25, TimeUnit.YEAR ) ) ] ) )
         self.assertIsNone( self._resume() )
+
+
+class SelectionDefaultsTests( TestCase ):
+    """`_selection_defaults`: the hub's first-time duration is the age-based horizon, but a duration the
+    user already chose this session always wins -- the computed one never overrides it."""
+
+    def setUp( self ):
+        seed_default_parameter_sets()
+        self.org = Organization.objects.create( name = 'Org' )
+        profile  = forecast_profile()
+        keys     = { 'profile': [], 'plans': [], 'assumptions': [] }
+        for section in applicable_sections( profile ):
+            if section.form is not None:
+                keys[ flow_of( section ) ].append( section.key )
+        record = save_profile( self.org, profile )
+        record.acknowledged_sections = keys[ 'profile' ]
+        record.save()
+        self.profile_record = completed_profile( self.org )
+
+    @staticmethod
+    def _request( **session ):
+        state = SimpleNamespace(
+            current_scenario_uuid = None, forecast_start_from = None,
+            forecast_duration_years = None, forecast_interval = None )
+        for key, value in session.items():
+            setattr( state, key, value )
+        return SimpleNamespace( session_state = state )
+
+    def test_first_time_duration_is_the_age_based_horizon( self ):
+        defaults = FinancialForecastView._selection_defaults( self._request(), self.profile_record )
+        expected = default_forecast_duration_years(
+            load_profile( self.profile_record ), self.profile_record.effective_date )
+        self.assertEqual( defaults[ 'duration_years' ], expected )
+
+    def test_a_stored_duration_is_not_overridden( self ):
+        request  = self._request( forecast_duration_years = 12 )
+        defaults = FinancialForecastView._selection_defaults( request, self.profile_record )
+        self.assertEqual( defaults[ 'duration_years' ], 12 )
+
+    def test_without_a_complete_profile_it_falls_back_to_the_floor( self ):
+        defaults = FinancialForecastView._selection_defaults( self._request(), None )
+        self.assertEqual( defaults[ 'duration_years' ], FORECAST_MIN_YEARS )

@@ -31,7 +31,7 @@ from ucfp.inputs.models import (
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.scenarios.repository import load_scenario
 from ucfp.planning.enums import PlanningFeature
-from ucfp.planning.forms import GRANULARITY, resolve_frame
+from ucfp.planning.forms import GRANULARITY, default_forecast_duration_years, resolve_frame
 from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 from ucfp.planning.orchestration import run_and_capture
 
@@ -146,13 +146,16 @@ def _seed_records( organization ):
 
 def _generate_forecast( organization, profile_record, scenario ):
     """Run and capture the Financial Forecast for the seeded scenario (outside the record transaction),
-    mirroring the forecast hub: a `ProjectionRunRecord` plus its `PlanningResultRecord`."""
+    mirroring the forecast hub: a `ProjectionRunRecord` plus its `PlanningResultRecord`. The horizon is the
+    shared age-based default -- the same one the hub offers -- so the sample spans the household's life."""
+    profile = load_profile( profile_record )
     frame = resolve_frame(
         effective_date = profile_record.effective_date, start_choice = 'effective',
-        duration_years = 40, granularity = GRANULARITY[ 'year' ] )
+        duration_years = default_forecast_duration_years( profile, profile_record.effective_date ),
+        granularity = GRANULARITY[ 'year' ] )
     scenario_inputs = load_scenario( scenario )
     run = run_and_capture(
-        organization = organization, profile = load_profile( profile_record ),
+        organization = organization, profile = profile,
         plans = scenario_inputs.plans, assumptions = scenario_inputs.assumptions, frame = frame,
         label = SAMPLE_FORECAST_NAME, source_label = scenario.label )
     PlanningResultRecord.objects.create(

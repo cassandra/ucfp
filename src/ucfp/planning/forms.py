@@ -9,6 +9,7 @@ from datetime import date, timedelta
 
 from django import forms
 
+from common.datetime_utils import age_on
 from common.forms import StyledFormMixin
 from common.recurrence import Duration, TimeUnit
 
@@ -59,6 +60,25 @@ def resolve_frame(
         start_date = start, end_date = date( naive_end.year, 12, 31 ), granularity = granularity )
 
 
+# The default forecast horizon runs the oldest household member to this age; the small floor only guards
+# the degenerate cases (no subjects, or an oldest already near/past the target) so the frame stays valid.
+# At 10 years the floor engages only for an oldest already 80+, leaving the "can I retire" range ending
+# around the target age rather than over-running past 100.
+FORECAST_THROUGH_AGE = 90
+FORECAST_MIN_YEARS   = 10
+
+
+def default_forecast_duration_years( profile, start_date : date ) -> int:
+    """The default run length: enough years for the oldest household member to reach `FORECAST_THROUGH_AGE`
+    as of `start_date`, floored at `FORECAST_MIN_YEARS`. Drives the hub's first-time duration default and
+    the sample seed's horizon -- a young household gets a long projection, a near-retirement one ends
+    around the target age, rather than over- or under-shooting a fixed length."""
+    ages = [ age_on( subject.birthdate, start_date ) for subject in profile.subjects ]
+    if not ages:
+        return FORECAST_MIN_YEARS
+    return max( FORECAST_MIN_YEARS, FORECAST_THROUGH_AGE - max( ages ) )
+
+
 class FrameForm( StyledFormMixin, forms.Form ):
     """The run frame's when-controls, shared by the hub forms: where the run starts relative to the
     profile's effective date, how many years it spans, and its granularity."""
@@ -66,7 +86,8 @@ class FrameForm( StyledFormMixin, forms.Form ):
     start_from     = forms.ChoiceField(
         label = 'Start from', choices = _START_CHOICES, initial = _START_EFFECTIVE,
         help_text = "Defaults to your profile's date; a year-aligned start is approximate." )
-    duration_years = forms.IntegerField( label = 'Duration (years)', min_value = 1, initial = 40 )
+    # No static default: the hub injects an age-based one per profile (see `default_forecast_duration_years`).
+    duration_years = forms.IntegerField( label = 'Duration (years)', min_value = 1 )
     interval       = forms.ChoiceField(
         label = 'Interval', choices = _INTERVAL_CHOICES, initial = 'year' )
 

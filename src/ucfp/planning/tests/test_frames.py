@@ -5,9 +5,12 @@ duration and then rounds up to a full final calendar year. These are the non-tri
 rounding, and the year-aligned overrides), so they earn a committed test."""
 import unittest
 from datetime import date
+from types import SimpleNamespace
 
 from common.recurrence import Duration, TimeUnit
-from ucfp.planning.forms import resolve_frame
+from ucfp.inputs.profile.schemas import SubjectProfile
+from ucfp.planning.forms import (
+    FORECAST_MIN_YEARS, FORECAST_THROUGH_AGE, default_forecast_duration_years, resolve_frame )
 
 _YEARLY = Duration( 1, TimeUnit.YEAR )
 
@@ -45,6 +48,31 @@ class ResolveFrameTests( unittest.TestCase ):
         monthly = Duration( 1, TimeUnit.MONTH )
         frame = resolve_frame( date( 2026, 1, 1 ), 'effective', 10, monthly )
         self.assertEqual( frame.granularity, monthly )
+
+
+class DefaultForecastDurationTests( unittest.TestCase ):
+    """`default_forecast_duration_years`: run the oldest member to the target age, with a small floor."""
+
+    def _profile( self, *birth_years ):
+        return SimpleNamespace( subjects = [
+            SubjectProfile( handle = str( year ), name = str( year ), birthdate = date( year, 1, 1 ) )
+            for year in birth_years ] )
+
+    def test_runs_the_oldest_member_to_the_target_age( self ):
+        # Oldest born 1990 -> 36 on 2026-01-01 -> project through age 90 = 54 years.
+        self.assertEqual(
+            default_forecast_duration_years( self._profile( 1990, 1996 ), date( 2026, 1, 1 ) ),
+            FORECAST_THROUGH_AGE - 36 )
+
+    def test_floor_guards_an_already_old_household( self ):
+        # Oldest born 1944 -> 82 -> only 8 years to 90, clamped up to the floor.
+        self.assertEqual(
+            default_forecast_duration_years( self._profile( 1944 ), date( 2026, 1, 1 ) ), FORECAST_MIN_YEARS )
+
+    def test_no_subjects_falls_back_to_the_floor( self ):
+        self.assertEqual(
+            default_forecast_duration_years( SimpleNamespace( subjects = [] ), date( 2026, 1, 1 ) ),
+            FORECAST_MIN_YEARS )
 
 
 if __name__ == '__main__':
