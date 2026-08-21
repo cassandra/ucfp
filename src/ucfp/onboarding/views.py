@@ -9,11 +9,12 @@ from common.exceptions import DataNotAvailableError
 
 from custom.decorators import require_authentication_enabled
 
-from organization.decorators import ensure_organization
-
 from user import collision
 from user.signin_manager import SigninManager
 from user.views import ConvertToGuestView
+
+from ucfp.inputs.interview import first_section_of_flow
+from ucfp.inputs.views import InterviewView
 
 from . import reconciliation_service
 from .constants import SAMPLE_ORGANIZATION_UUID
@@ -115,15 +116,16 @@ class StartTourView( ConvertToGuestView ):
         request.session_state.to_session( request )
 
     def landing_url( self, request ):
-        return resolve_url( 'tour_home' )
+        return resolve_url( 'tour_profile', section = first_section_of_flow( 'profile' ).key )
 
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class TourHomeView( View ):
-    """Stub landing for the sample-data tour, rendered under the tour base template (no app nav). A
-    placeholder until the real Profile page is wrapped here; it shows whichever organization is current
-    (the sample org, set on entry). Any read-only-ness comes from the visitor's membership role, not the
-    tour itself."""
+class TourProfileView( InterviewView ):
+    """The Profile step of the sample-data tour: the real Profile interview (`InterviewView`) rendered under
+    the tour shell instead of the app nav. It inherits all the interview mechanics and template context and
+    only swaps the full-page template -- `onboarding/tour/profile.html` composes the same interview body
+    under `tour_base`. Read-only-ness (if any) still comes from the membership role, not the tour."""
 
-    def get( self, request, *args, **kwargs ):
-        return render( request, 'onboarding/tour_home.html' )
+    SECTION_URL_NAME = 'tour_profile'                          # keep every interview nav link inside the tour
+
+    def _page_template( self, section ):
+        return 'onboarding/tour/profile.html'

@@ -20,14 +20,14 @@ last step (`is_last`), else "Next".
   <div class="interview-advance">
     {% if can_edit_organization %}
     <form method="post"
-          action="{% url 'interview_section' section=current_section.key %}"
+          action="{% url section_url_name section=current_section.key %}"
           data-async="#{{ section_target }}">
       {% csrf_token %}
       <button type="submit" class="btn btn-cta">{% if is_last %}Finish{% else %}Next{% endif %}</button>
     </form>
     {% elif next_section %}
     {# Read-only: "Next" is pure navigation to the following section (a sequential reader), never a save. #}
-    <a class="btn btn-cta" href="{% url 'interview_section' section=next_section.key %}"
+    <a class="btn btn-cta" href="{% url section_url_name section=next_section.key %}"
        data-async="#{{ section_target }}">Next</a>
     {% else %}
     {% comment %}Read-only last step: "Finish" leaves the flow (a plain navigation to where the editable

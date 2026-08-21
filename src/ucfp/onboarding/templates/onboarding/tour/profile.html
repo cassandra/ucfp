@@ -1,0 +1,14 @@
+{% extends "pages/tour_base.html" %}
+{% comment %}
+The Profile step of the sample-data tour: the real Profile interview body (`InterviewView` via
+`TourProfileView`) composed under the tour shell instead of the app nav. Reuses the shared
+`inputs/interview/body.html`; the editing-oriented extras (the inline rename, the "save your work" guest
+banner, and the completion blocker/advisory notices) are intentionally omitted -- the tour is a read-only
+walk over sample data, not the visitor's own plan. `InterviewView._swap` still refreshes those omitted
+targets on an async step, but jQuery's replace on a missing id is a no-op, so their absence is harmless.
+{% endcomment %}
+
+{% block app_content %}
+<h1 class="mb-3">{{ flow_heading }}</h1>
+{% include "inputs/interview/body.html" %}
+{% endblock %}

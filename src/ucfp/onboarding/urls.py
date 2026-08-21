@@ -12,5 +12,5 @@ urlpatterns = [
           name = 'signin_collision' ),
 
     path( 'start-tour', views.StartTourView.as_view(), name = 'start_tour' ),
-    path( 'tour', views.TourHomeView.as_view(), name = 'tour_home' ),
+    path( 'tour/profile/<str:section>/', views.TourProfileView.as_view(), name = 'tour_profile' ),
 ]

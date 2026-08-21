@@ -42,7 +42,7 @@ class CompletionDestinationPurityTest( SimpleTestCase ):
 
     def test_computing_the_destination_does_not_finalize_the_build( self ):
         request = _request( building = True )
-        url = InterviewView._completion_destination( request, 'assumptions', building = True )
+        url = InterviewView()._completion_destination( request, 'assumptions', building = True )
         self.assertEqual( url, reverse( 'scenarios_home' ) )
         # The build marker is untouched -- finalization belongs to the POST, not to rendering.
         self.assertEqual( request.session_state.editing_scenario, 'scenario-uuid' )

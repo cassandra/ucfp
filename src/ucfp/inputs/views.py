@@ -637,6 +637,10 @@ class InterviewView( GuestReminderMixin, View ):
     _COMPONENT_TEMPLATE = 'inputs/interview/component_page.html'
     _SECTION_TEMPLATE = 'inputs/interview/section.html'
     _STEPPER_TEMPLATE = 'inputs/interview/stepper.html'
+    # The route this interview is hosted at -- the single source of truth every navigation URL (the stepper
+    # and Next links, the async push_url, and the read-only Finish) derives from. A subclass that hosts the
+    # same interview elsewhere (the sample-data tour) overrides just this, and all its navigation follows.
+    SECTION_URL_NAME  = 'interview_section'
     # The status shows in two swap targets: the rail header (the completion badge, plus the Plans/Assumptions
     # part switch in a scenario build) and the detail notices below the page heading. Both refresh on advance,
     # so the active part's badge and its blocker alert update together without a reload.
@@ -655,9 +659,14 @@ class InterviewView( GuestReminderMixin, View ):
         form     = self._form( current, profile, other )
         if is_ajax( request ):
             return self._swap( request, sections, current, form )
-        template = ( self._PROFILE_TEMPLATE if flow_of( current ) == 'profile'
-                     else self._COMPONENT_TEMPLATE )
-        return render( request, template, self._context( request, sections, current, form ) )
+        return render(
+            request, self._page_template( current ), self._context( request, sections, current, form ) )
+
+    def _page_template( self, section ):
+        """The full-page template for `section`'s flow -- Profile is a top-level page, Plans/Assumptions
+        detail pages. The explicit, overridable seam by which a wrapper (the sample-data tour) renders the
+        same interview under a different shell."""
+        return self._PROFILE_TEMPLATE if flow_of( section ) == 'profile' else self._COMPONENT_TEMPLATE
 
     def _seed_and_acknowledge( self, request, section ):
         """Presenting a section to the user is the acknowledgment that they have seen it. On the first
@@ -725,18 +734,18 @@ class InterviewView( GuestReminderMixin, View ):
             following = first_section_of_flow( 'assumptions' )  # scenario build: chain Plans -> Assumptions
         return following
 
-    @staticmethod
-    def _completion_destination( request, flow, building ) -> str:
+    def _completion_destination( self, request, flow, building ) -> str:
         """Where a completed flow lands -- a pure URL (the advance POST finalizes the build itself). A
         scenario build (Plans then Assumptions) finishes at the end of Assumptions on the Scenarios page.
-        Finishing the standalone Profile loops back to its first section, where the header now shows it is
-        complete; a standalone component edit likewise ends on the Scenarios page. Features are reached
-        from the nav, so no flow threads a return destination."""
+        Finishing the standalone Profile loops back to its first section (via `SECTION_URL_NAME`, so the tour
+        stays in the tour), where the header now shows it is complete; a standalone component edit likewise
+        ends on the Scenarios page. Features are reached from the nav, so no flow threads a return
+        destination."""
         if building:                                           # end of the two-part build (Assumptions done)
             return reverse( 'scenarios_home' )
         if flow == 'profile':
             first = first_section_of_flow( 'profile' )
-            return reverse( 'interview_section', kwargs = { 'section': first.key } )
+            return reverse( self.SECTION_URL_NAME, kwargs = { 'section': first.key } )
         return reverse( 'scenarios_home' )
 
     @staticmethod
@@ -817,7 +826,7 @@ class InterviewView( GuestReminderMixin, View ):
                 # edited back to incomplete, or the flow is no longer complete (GuestReminderMixin decides).
                 self.GUEST_BANNER_TARGET : render_to_string( self.GUEST_BANNER_TEMPLATE, context, request = request ),
             },
-            push_url = reverse( 'interview_section', kwargs = { 'section': section.key } ),
+            push_url = reverse( self.SECTION_URL_NAME, kwargs = { 'section': section.key } ),
             scroll_to = self._SECTION_TARGET )
 
     def _context( self, request, sections, section, form ):
@@ -860,6 +869,9 @@ class InterviewView( GuestReminderMixin, View ):
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,
+            # The route the stepper/Next links point at -- `SECTION_URL_NAME`, so the tour's links stay in
+            # the tour (see the class attribute).
+            'section_url_name'     : self.SECTION_URL_NAME,
             # The Plans-flow drift banner: these plans reference removed Profile entities (None off Plans).
             'drift'                : self._plans_drift( request, flow ),
             # The rail header: the completion badge(s) and, in a build, the Plans/Assumptions part switch.
@@ -903,7 +915,7 @@ class InterviewView( GuestReminderMixin, View ):
         parts          = [ 'plans', 'assumptions' ] if scenario_mode else [ flow ]
         entries = [ { 'label' : flow_title( part ),
                       'status': self._part_status( request, profile, part ),
-                      'url'   : reverse( 'interview_section',
+                      'url'   : reverse( self.SECTION_URL_NAME,
                                          kwargs = { 'section': first_section_of_flow( part ).key } ),
                       'active': part == flow }
                     for part in parts ]
