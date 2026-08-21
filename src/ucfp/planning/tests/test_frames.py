@@ -5,9 +5,12 @@ duration and then rounds up to a full final calendar year. These are the non-tri
 rounding, and the year-aligned overrides), so they earn a committed test."""
 import unittest
 from datetime import date
+from types import SimpleNamespace
 
 from common.recurrence import Duration, TimeUnit
-from ucfp.planning.forms import resolve_frame
+from ucfp.inputs.profile.schemas import SubjectProfile
+from ucfp.planning.frames import (
+    FORECAST_MIN_YEARS, FORECAST_THROUGH_AGE, default_forecast_duration_years, resolve_frame )
 
 _YEARLY = Duration( 1, TimeUnit.YEAR )
 
@@ -45,6 +48,39 @@ class ResolveFrameTests( unittest.TestCase ):
         monthly = Duration( 1, TimeUnit.MONTH )
         frame = resolve_frame( date( 2026, 1, 1 ), 'effective', 10, monthly )
         self.assertEqual( frame.granularity, monthly )
+
+
+class DefaultForecastDurationTests( unittest.TestCase ):
+    """`default_forecast_duration_years`: run the youngest (likely last-surviving) member to the target
+    age, with a small floor -- so the window covers the surviving spouse's later years."""
+
+    def _profile( self, *birth_years ):
+        return SimpleNamespace( subjects = [
+            SubjectProfile( handle = str( year ), name = str( year ), birthdate = date( year, 1, 1 ) )
+            for year in birth_years ] )
+
+    def test_runs_the_youngest_member_to_the_target_age( self ):
+        # Youngest born 1990 -> 36 on 2026-01-01 -> project through age 90 = 54 years.
+        self.assertEqual(
+            default_forecast_duration_years( self._profile( 1990 ), date( 2026, 1, 1 ) ),
+            FORECAST_THROUGH_AGE - 36 )
+
+    def test_uses_the_youngest_even_when_the_primary_is_older( self ):
+        # Primary 38 (born 1988), younger partner 36 (born 1990): anchor to the younger, so 54 years (not
+        # 52), covering the surviving spouse rather than stopping at their 88.
+        self.assertEqual(
+            default_forecast_duration_years( self._profile( 1988, 1990 ), date( 2026, 1, 1 ) ),
+            FORECAST_THROUGH_AGE - 36 )
+
+    def test_floor_guards_an_already_old_household( self ):
+        # Youngest born 1944 -> 82 -> only 8 years to 90, clamped up to the floor.
+        self.assertEqual(
+            default_forecast_duration_years( self._profile( 1944 ), date( 2026, 1, 1 ) ), FORECAST_MIN_YEARS )
+
+    def test_no_subjects_falls_back_to_the_floor( self ):
+        self.assertEqual(
+            default_forecast_duration_years( SimpleNamespace( subjects = [] ), date( 2026, 1, 1 ) ),
+            FORECAST_MIN_YEARS )
 
 
 if __name__ == '__main__':

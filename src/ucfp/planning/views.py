@@ -44,7 +44,8 @@ from .explore import delete_runs, run_working_scenario, start_fresh_exploration,
 from .explore_diff import describe_changes, value_changes
 from .profile_diff import profile_changes
 from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExploreForm
-from .forms import ForecastForm, GRANULARITY, resolve_frame
+from .forms import ForecastForm
+from .frames import FORECAST_MIN_YEARS, GRANULARITY, default_forecast_duration_years, resolve_frame
 from .gating import partition_scenarios, scenario_readiness, scenario_started
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
@@ -163,6 +164,14 @@ def _ages_label( profile, on_date ) -> str:
     return 'ages ' + ' & '.join( str( age ) for age in ages )
 
 
+def _default_duration_years( profile_record ) -> int:
+    """The hub's first-time duration default: the age-based horizon for the current profile, or the bare
+    floor when there is no complete profile (nothing is runnable then, so the value is only cosmetic)."""
+    if profile_record is None:
+        return FORECAST_MIN_YEARS
+    return default_forecast_duration_years( load_profile( profile_record ), profile_record.effective_date )
+
+
 def _remember_selection( request, form, scenario_record ) -> None:
     """Persist the chosen scenario and frame to the session, so the hub chooser defaults to them on the
     next visit and Explore (which reads the frame from the session) projects over the same window."""
@@ -246,7 +255,7 @@ class FinancialForecastView( InputGatedMixin, View ):
             # One setup form; both actions submit it -- Run once (this view's POST) and Run & Explore (the
             # workspace). A run whose submission erred is re-rendered in place with its messages.
             'form'         : form or ForecastForm(
-                scenarios = complete, initial = self._selection_defaults( request ) ),
+                scenarios = complete, initial = self._selection_defaults( request, profile_record ) ),
             'saved_runs'   : self._saved_runs( organization ),
             'error'        : error,
         }
@@ -298,16 +307,21 @@ class FinancialForecastView( InputGatedMixin, View ):
         return { 'source': exploration.source }
 
     @staticmethod
-    def _selection_defaults( request ) -> dict:
-        """The scenario and frame the user last chose, from the session; an unset (or stale) value falls
-        through to the form's own default -- the first scenario, the built-in frame -- rather than blanks."""
-        state = request.session_state
-        return { key: value for key, value in {
-            'scenario'       : state.current_scenario_uuid,
-            'start_from'     : state.forecast_start_from,
-            'duration_years' : state.forecast_duration_years,
-            'interval'       : state.forecast_interval,
+    def _selection_defaults( request, profile_record ) -> dict:
+        """The scenario and frame the user last chose, from the session; an unset value falls through to a
+        sensible default -- the first scenario, the built-in start/interval, and an age-based duration that
+        runs the household to the planning horizon. The stored duration always wins once set, so the
+        computed one is only the first-time default, never an override of a duration already chosen."""
+        state    = request.session_state
+        defaults = { key: value for key, value in {
+            'scenario'   : state.current_scenario_uuid,
+            'start_from' : state.forecast_start_from,
+            'interval'   : state.forecast_interval,
         }.items() if value is not None }
+        stored = state.forecast_duration_years
+        defaults[ 'duration_years' ] = (
+            stored if stored is not None else _default_duration_years( profile_record ) )
+        return defaults
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

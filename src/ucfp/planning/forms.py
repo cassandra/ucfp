@@ -3,60 +3,14 @@
 `FrameForm` holds the run frame's when-controls (start, duration, interval); `ForecastForm` adds the
 saved-scenario chooser and is what the hub submits, driving either a direct run or an Explore entry.
 `RunForm` -- the older profile + plans + assumptions bundle chooser -- also builds on `FrameForm`; its
-choices are the organization's, injected by the view. Frame resolution is shared via `resolve_frame`.
+choices are the organization's, injected by the view. The frame vocabulary and its resolution live in
+`frames.py`; these forms just render fields from it.
 """
-from datetime import date, timedelta
-
 from django import forms
 
 from common.forms import StyledFormMixin
-from common.recurrence import Duration, TimeUnit
 
-from .materialization import ForecastFrame
-
-_INTERVAL_CHOICES = [
-    ( 'year', 'Yearly' ),
-    ( 'quarter', 'Quarterly' ),
-    ( 'month', 'Monthly' ),
-]
-
-# The run frame's granularity per interval choice (each divides 12, as the engine requires).
-GRANULARITY = {
-    'year'    : Duration( 1, TimeUnit.YEAR ),
-    'quarter' : Duration( 3, TimeUnit.MONTH ),
-    'month'   : Duration( 1, TimeUnit.MONTH ),
-}
-
-# Where the forecast starts, relative to the chosen profile's effective date. The default runs
-# from the effective date itself (exact -- the facts hold there); the year-aligned options start
-# at January 1 of the effective date's year or the next, to avoid an untaxed partial first year.
-_START_EFFECTIVE = 'effective'
-_START_THIS_YEAR = 'this_year'
-_START_NEXT_YEAR = 'next_year'
-_START_CHOICES = [
-    ( _START_EFFECTIVE, "The profile's date" ),
-    ( _START_THIS_YEAR, 'Start of this year' ),
-    ( _START_NEXT_YEAR, 'Start of next year' ),
-]
-
-
-def resolve_frame(
-        effective_date : date, start_choice : str, duration_years : int,
-        granularity : Duration ) -> ForecastFrame:
-    """Resolve the run form's when-choices into a `ForecastFrame`. The start is the profile's
-    effective date by default, or January 1 of that year (`this_year`) or the next (`next_year`) --
-    a year-aligned start avoids an untaxed partial first year. The end runs `duration_years` from
-    the start, then rounds up to that year's December 31 so the span always closes on a full
-    calendar year (no untaxed partial trailing year)."""
-    if start_choice == _START_THIS_YEAR:
-        start = date( effective_date.year, 1, 1 )
-    elif start_choice == _START_NEXT_YEAR:
-        start = date( effective_date.year + 1, 1, 1 )
-    else:
-        start = effective_date
-    naive_end = start.replace( year = start.year + duration_years ) - timedelta( days = 1 )
-    return ForecastFrame(
-        start_date = start, end_date = date( naive_end.year, 12, 31 ), granularity = granularity )
+from .frames import INTERVAL_CHOICES, START_CHOICES, START_EFFECTIVE
 
 
 class FrameForm( StyledFormMixin, forms.Form ):
@@ -64,11 +18,12 @@ class FrameForm( StyledFormMixin, forms.Form ):
     profile's effective date, how many years it spans, and its granularity."""
 
     start_from     = forms.ChoiceField(
-        label = 'Start from', choices = _START_CHOICES, initial = _START_EFFECTIVE,
+        label = 'Start from', choices = START_CHOICES, initial = START_EFFECTIVE,
         help_text = "Defaults to your profile's date; a year-aligned start is approximate." )
-    duration_years = forms.IntegerField( label = 'Duration (years)', min_value = 1, initial = 40 )
+    # No static default: the hub injects an age-based one per profile (see `default_forecast_duration_years`).
+    duration_years = forms.IntegerField( label = 'Duration (years)', min_value = 1 )
     interval       = forms.ChoiceField(
-        label = 'Interval', choices = _INTERVAL_CHOICES, initial = 'year' )
+        label = 'Interval', choices = INTERVAL_CHOICES, initial = 'year' )
 
 
 class RunForm( FrameForm ):
