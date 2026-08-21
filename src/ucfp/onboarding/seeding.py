@@ -1,0 +1,127 @@
+"""Seed the read-only sample household from the committed fixture, and generate its forecast.
+
+Reusable (a thin management command wraps it), idempotent, and portable: the fixture is plaintext, so the
+encrypted `data` fields re-encrypt under the *local* key on save. The sample org and scenario carry the
+reserved UUIDs (`constants`), so the org is stably identifiable (#198 auto-joins members to it). A re-seed
+preserves the org and its memberships; `force` refreshes only the data records. The forecast runs outside
+the record transaction (it can take seconds -- no reason to hold a write lock).
+"""
+import json
+from dataclasses import dataclass
+from datetime import date
+
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.utils import timezone
+
+from organization.enums import OrganizationRole
+from organization.models import Organization, OrganizationMember
+
+from ucfp.accounts.models import BooksOfAccountRecord
+from ucfp.inputs.enums import UsageRole
+from ucfp.inputs.models import (
+    AssumptionsRecord, PlansRecord, ProfileRecord, ScenarioExploration, ScenarioRecord )
+from ucfp.inputs.profile.repository import load_profile
+from ucfp.inputs.scenarios.repository import load_scenario
+from ucfp.planning.enums import PlanningFeature
+from ucfp.planning.forms import GRANULARITY, resolve_frame
+from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
+from ucfp.planning.orchestration import run_and_capture, run_title
+
+from ucfp.onboarding.constants import (
+    SAMPLE_ASSUMPTIONS_NAME, SAMPLE_FIXTURE_PATH, SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID,
+    SAMPLE_PLANS_NAME, SAMPLE_SCENARIO_NAME, SAMPLE_SCENARIO_UUID )
+
+
+class NoSuperuserError( Exception ):
+    """No superuser exists to own the sample household -- `bootstrap` must run before this seed."""
+
+
+@dataclass( frozen = True )
+class SampleOrgResult:
+    organization : Organization
+    action       : str                                   # 'created' | 'refreshed' | 'preserved'
+
+
+def seed_sample_org( force : bool = False ) -> SampleOrgResult:
+    """Ensure the sample household exists (owned by the superuser) and holds a runnable scenario with a
+    captured forecast. Idempotent: an already-seeded sample is left untouched unless `force`, which
+    refreshes the data records (preserving the org and its memberships)."""
+    superuser = _superuser()
+    with transaction.atomic():
+        organization, _ = Organization.objects.get_or_create(
+            uuid = SAMPLE_ORGANIZATION_UUID, defaults = { 'name': SAMPLE_ORGANIZATION_NAME } )
+        OrganizationMember.objects.get_or_create(
+            organization = organization, user = superuser,
+            defaults = { 'organization_role': OrganizationRole.OWNER } )
+        already_seeded = ScenarioRecord.objects.filter( uuid = SAMPLE_SCENARIO_UUID ).exists()
+        if already_seeded and not force:
+            return SampleOrgResult( organization = organization, action = 'preserved' )
+        if already_seeded:
+            _clear_sample_data( organization )
+        profile_record, scenario = _seed_records( organization )
+    _generate_forecast( organization, profile_record, scenario )
+    return SampleOrgResult(
+        organization = organization, action = 'refreshed' if already_seeded else 'created' )
+
+
+def _superuser():
+    superuser = get_user_model().objects.filter( is_superuser = True ).order_by( 'pk' ).first()
+    if superuser is None:
+        raise NoSuperuserError( 'No superuser exists to own the sample household; run `bootstrap` first.' )
+    return superuser
+
+
+def _clear_sample_data( organization ):
+    """Drop the sample org's data records (keeping the org and its memberships), most-referencing first,
+    so a `force` re-seed starts clean."""
+    PlanningResultRecord.objects.filter( organization = organization ).delete()
+    ProjectionRunRecord.objects.filter( organization = organization ).delete()
+    BooksOfAccountRecord.objects.filter( organization = organization ).delete()
+    ScenarioExploration.objects.filter( organization = organization ).delete()
+    ScenarioRecord.objects.filter( organization = organization ).delete()
+    PlansRecord.objects.filter( organization = organization ).delete()
+    AssumptionsRecord.objects.filter( organization = organization ).delete()
+    ProfileRecord.objects.filter( organization = organization ).delete()
+
+
+def _seed_records( organization ):
+    """Create the SAVED Profile / Plans / Assumptions / Scenario from the fixture's plaintext payloads.
+    Encrypted fields re-encrypt on save. The Profile starts on January 1 of the current year, so the run
+    begins on a full-year boundary."""
+    fixture = json.loads( SAMPLE_FIXTURE_PATH.read_text() )
+    effective = date( timezone.localdate().year, 1, 1 )
+
+    profile_record = ProfileRecord.objects.create(
+        organization = organization, effective_date = effective, label = effective.strftime( '%B %Y' ),
+        data = fixture[ 'profile' ][ 'data' ],
+        acknowledged_sections = fixture[ 'profile' ][ 'acknowledged_sections' ],
+        usage_role = UsageRole.SAVED )
+    plans_record = PlansRecord.objects.create(
+        organization = organization, label = SAMPLE_PLANS_NAME, data = fixture[ 'plans' ][ 'data' ],
+        acknowledged_sections = fixture[ 'plans' ][ 'acknowledged_sections' ], usage_role = UsageRole.SAVED )
+    assumptions_record = AssumptionsRecord.objects.create(
+        organization = organization, label = SAMPLE_ASSUMPTIONS_NAME,
+        data = fixture[ 'assumptions' ][ 'data' ],
+        acknowledged_sections = fixture[ 'assumptions' ][ 'acknowledged_sections' ],
+        usage_role = UsageRole.SAVED )
+    scenario = ScenarioRecord.objects.create(
+        uuid = SAMPLE_SCENARIO_UUID, organization = organization, label = SAMPLE_SCENARIO_NAME,
+        plans = plans_record, assumptions = assumptions_record, usage_role = UsageRole.SAVED )
+    return profile_record, scenario
+
+
+def _generate_forecast( organization, profile_record, scenario ):
+    """Run and capture the Financial Forecast for the seeded scenario (outside the record transaction),
+    mirroring the forecast hub: a `ProjectionRunRecord` plus its `PlanningResultRecord`."""
+    frame = resolve_frame(
+        effective_date = profile_record.effective_date, start_choice = 'effective',
+        duration_years = 40, granularity = GRANULARITY[ 'year' ] )
+    scenario_inputs = load_scenario( scenario )
+    run = run_and_capture(
+        organization = organization, profile = load_profile( profile_record ),
+        plans = scenario_inputs.plans, assumptions = scenario_inputs.assumptions, frame = frame,
+        label = run_title( scenario.label, timezone.localtime() ), source_label = scenario.label )
+    PlanningResultRecord.objects.create(
+        organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
+        run = run, label = run.label )
