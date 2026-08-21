@@ -24,6 +24,7 @@ from django.views import View
 from organization.decorators import ensure_organization
 
 from common import antinode
+from common.exceptions import DataNotAvailableError
 from common.async_view import ModalView
 from common.request_utils import is_ajax
 
@@ -527,6 +528,12 @@ class FlowEntryView( View ):
         request.session_state.editing_scenario = None
         request.session_state.to_session( request )
         if self.flow == 'profile':
+            # Entering the Profile flow sets the household up (its Default Plans/Assumptions/Scenario, and
+            # the empty initial Profile). A read-only member cannot write, so on a household never set up
+            # by a writer this would fail with a generic authorization error; say plainly there is no data
+            # yet instead. (A near-edge case: a household a writer never touched.)
+            if ( not request.organization_can_write ) and latest_profile( request.organization ) is None:
+                raise DataNotAvailableError( 'This household has no Profile data set up yet.' )
             default = ensure_default_scenario( request.organization )
             _select( request, 'current_plans_uuid', default.plans )
             _select( request, 'current_assumptions_uuid', default.assumptions )
@@ -681,7 +688,8 @@ class InterviewView( GuestReminderMixin, View ):
             return current_plans_record( request )
         if flow == 'assumptions':
             return current_assumptions_record( request )
-        return latest_profile( request.organization ) or create_profile( request.organization )
+        return latest_profile( request.organization ) or _mint_or_explain(
+            request, create_profile, 'Profile' )
 
     def post( self, request, section ):
         current = self._live_section( section )
@@ -772,7 +780,7 @@ class InterviewView( GuestReminderMixin, View ):
             f'Section {section.key!r} edits both Plans and Assumptions; the single-other dispatch '
             'supports at most one non-profile aggregate per section.' )
         organization = request.organization
-        profile = load_profile( latest_profile( organization ) or create_profile( organization ) )
+        profile = load_profile( latest_profile( organization ) or _mint_or_explain( request, create_profile, 'Profile' ) )
         if Aggregate.PLANS in section.aggregates:
             return profile, load_plans( current_plans_record( request ) )
         if Aggregate.ASSUMPTIONS in section.aggregates:
@@ -1242,6 +1250,16 @@ class VehicleExpensesView( TotalsPaneMixin, SelfSavingPaneView ):
         save_plans( current_plans_record( request ), plans )
 
 
+def _mint_or_explain( request, mint, label ):
+    """A freshly minted aggregate record for a writer. A read-only member cannot write, so minting one on
+    read would be refused with a generic authorization error -- instead say plainly that the household has
+    no such input yet. A near-edge case: reached only when an input was never created by a writer (so the
+    empty initial record was never written)."""
+    if not getattr( request, 'organization_can_write', True ):
+        raise DataNotAvailableError( f'This household has no {label} data set up yet.' )
+    return mint( request.organization )
+
+
 def current_plans_record( request ):
     """The Plans record the user is editing: the session-selected one (scoped to the org), else the
     latest, minting one if the org has none. The single resolver every plans surface loads and saves
@@ -1252,7 +1270,7 @@ def current_plans_record( request ):
         selected = plans_for( organization ).filter( uuid = uuid ).first()
         if selected is not None:
             return selected
-    return latest_plans( organization ) or create_plans( organization )
+    return latest_plans( organization ) or _mint_or_explain( request, create_plans, 'Plans' )
 
 
 def current_assumptions_record( request ):
@@ -1264,13 +1282,13 @@ def current_assumptions_record( request ):
         selected = assumptions_for( organization ).filter( uuid = uuid ).first()
         if selected is not None:
             return selected
-    return latest_assumptions( organization ) or create_assumptions( organization )
+    return latest_assumptions( organization ) or _mint_or_explain( request, create_assumptions, 'Assumptions' )
 
 
 def _current_profile( request ):
     """The user's current Profile -- the latest month's, creating one if the org has none yet."""
     organization = request.organization
-    return load_profile( latest_profile( organization ) or create_profile( organization ) )
+    return load_profile( latest_profile( organization ) or _mint_or_explain( request, create_profile, 'Profile' ) )
 
 
 def _current_profile_and_plans( request ):

@@ -45,6 +45,24 @@ class ReadonlyInterviewAcknowledgementTest( TestCase ):
         self.assertNotIn(
             self.section.key, latest_profile( self.org ).acknowledged_section_keys )
 
+    def test_viewer_of_a_household_with_no_profile_is_told_there_is_no_data( self ):
+        # A household a writer never set up has no Profile; entering it would mint one (plus the Default
+        # Plans/Assumptions) -- writes the read-only gate refuses. A viewer must get a clear "no data yet"
+        # message, not a generic authorization error.
+        empty  = Organization.objects.create_for_owner(
+            User.objects.create_user( email = 'owner2@x.test' ), 'Empty' )
+        viewer = User.objects.create_user( email = 'v2@x.test' )
+        OrganizationMember.objects.create(
+            organization = empty, user = viewer, organization_role = OrganizationRole.VIEWER )
+        self.client.force_login( viewer )
+        session = self.client.session
+        session[ 'current_organization_uuid' ] = str( empty.uuid )
+        session.save()
+
+        response = self.client.get( reverse( 'flow_profile' ) )
+
+        self.assertContains( response, 'no Profile data set up yet', status_code = 404 )
+
     def test_writer_view_still_acknowledges_the_section( self ):
         # The convenience write is unchanged for a member who may write -- the guard is scoped to
         # read-only members, not a behavior change for everyone.
