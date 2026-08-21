@@ -14,6 +14,7 @@ SAMPLE_ORGANIZATION_NAME = 'Sample Household'
 SAMPLE_SCENARIO_NAME     = 'Sample Scenario'
 SAMPLE_PLANS_NAME        = 'Sample Plans'
 SAMPLE_ASSUMPTIONS_NAME  = 'Sample Assumptions'
+SAMPLE_FORECAST_NAME     = 'Sample Forecast'      # the captured run's title (scenario stays its provenance)
 
 # The committed plaintext fixture the seed reads and the dump writes.
 SAMPLE_FIXTURE_PATH = Path( __file__ ).resolve().parent / 'fixtures' / 'sample_org.json'

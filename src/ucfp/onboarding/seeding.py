@@ -26,11 +26,11 @@ from ucfp.inputs.scenarios.repository import load_scenario
 from ucfp.planning.enums import PlanningFeature
 from ucfp.planning.forms import GRANULARITY, resolve_frame
 from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
-from ucfp.planning.orchestration import run_and_capture, run_title
+from ucfp.planning.orchestration import run_and_capture
 
 from ucfp.onboarding.constants import (
-    SAMPLE_ASSUMPTIONS_NAME, SAMPLE_FIXTURE_PATH, SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID,
-    SAMPLE_PLANS_NAME, SAMPLE_SCENARIO_NAME, SAMPLE_SCENARIO_UUID )
+    SAMPLE_ASSUMPTIONS_NAME, SAMPLE_FIXTURE_PATH, SAMPLE_FORECAST_NAME, SAMPLE_ORGANIZATION_NAME,
+    SAMPLE_ORGANIZATION_UUID, SAMPLE_PLANS_NAME, SAMPLE_SCENARIO_NAME, SAMPLE_SCENARIO_UUID )
 
 
 class NoSuperuserError( Exception ):
@@ -121,7 +121,7 @@ def _generate_forecast( organization, profile_record, scenario ):
     run = run_and_capture(
         organization = organization, profile = load_profile( profile_record ),
         plans = scenario_inputs.plans, assumptions = scenario_inputs.assumptions, frame = frame,
-        label = run_title( scenario.label, timezone.localtime() ), source_label = scenario.label )
+        label = SAMPLE_FORECAST_NAME, source_label = scenario.label )
     PlanningResultRecord.objects.create(
         organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST,
         run = run, label = run.label )

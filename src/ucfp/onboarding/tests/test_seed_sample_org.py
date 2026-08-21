@@ -25,7 +25,8 @@ from ucfp.planning.gating import partition_scenarios
 from ucfp.planning.models import PlanningResultRecord, ProjectionRunRecord
 
 from ucfp.onboarding.constants import (
-    SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_UUID )
+    SAMPLE_FORECAST_NAME, SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_NAME,
+    SAMPLE_SCENARIO_UUID )
 from ucfp.onboarding.seeding import NoSuperuserError, _seed_records, seed_sample_org
 
 User = get_user_model()
@@ -101,7 +102,9 @@ class SeedSampleOrgForecastTest( TestCase ):
             organization = organization, user = self.superuser,
             organization_role = OrganizationRole.OWNER, is_active = True ).exists() )
         self.assertIsNotNone( completed_profile( organization ) )
-        self.assertTrue( ProjectionRunRecord.objects.filter( organization = organization ).exists() )
+        run = ProjectionRunRecord.objects.get( organization = organization )
+        self.assertEqual( run.label, SAMPLE_FORECAST_NAME )                 # titled, not timestamped
+        self.assertEqual( run.source_label, SAMPLE_SCENARIO_NAME )          # scenario kept as provenance
         self.assertTrue( PlanningResultRecord.objects.filter(
             organization = organization, feature = PlanningFeature.FINANCIAL_FORECAST ).exists() )
 
