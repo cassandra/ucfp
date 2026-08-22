@@ -1,0 +1,12 @@
+{% extends "pages/tour_base.html" %}
+{% comment %}
+The Forecast step of the tour: the captured sample run's outcome summary and books table
+(`RunResultsView` via `TourForecastView`) under the tour shell. Reuses the shared run output panel --
+including the in-window Maximize -- and drops the app-chrome extras (breadcrumb, Discard, rename). The
+books-table column operations (a fragment swap) and Maximize (pure JS) work here unchanged.
+{% endcomment %}
+
+{% block app_content %}
+<h1 class="mb-3">Forecast</h1>
+{% include "planning/pages/run_table_panel.html" %}
+{% endblock %}

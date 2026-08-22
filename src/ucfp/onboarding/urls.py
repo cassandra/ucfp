@@ -14,4 +14,5 @@ urlpatterns = [
     path( 'start-tour', views.StartTourView.as_view(), name = 'start_tour' ),
     path( 'tour/profile/<str:section>/', views.TourProfileView.as_view(), name = 'tour_profile' ),
     path( 'tour/scenario/<str:section>/', views.TourScenarioView.as_view(), name = 'tour_scenario' ),
+    path( 'tour/forecast/', views.TourForecastView.as_view(), name = 'tour_forecast' ),
 ]

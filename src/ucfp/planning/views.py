@@ -330,6 +330,10 @@ class RunResultsView( View ):
     (through the user's column lens), plus the stop condition and notices from the persisted
     result."""
 
+    # The full-page template; overridable so a wrapper (the sample-data tour) can render the same run
+    # output under a different shell.
+    results_template = _RESULTS_TEMPLATE
+
     def get( self, request, run_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
@@ -349,7 +353,7 @@ class RunResultsView( View ):
         }
         context.update( _run_outcome( run, books ) )
         context.update( run_books_table_context( request, run, books ) )
-        return render( request, _RESULTS_TEMPLATE, context )
+        return render( request, self.results_template, context )
 
     @staticmethod
     def _notice_row( year, notice ):

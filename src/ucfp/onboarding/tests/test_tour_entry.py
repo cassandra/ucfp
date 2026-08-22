@@ -3,7 +3,7 @@ and lands on the Profile step -- the *real* interview (`InterviewView`) rendered
 not the app nav. An anonymous visitor is minted a Guest first; a signed-in visitor is used as-is (no
 conversion, no blocking). Unavailable when the sample org is not seeded."""
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 
 from organization.enums import OrganizationRole
@@ -11,7 +11,8 @@ from organization.models import Organization, OrganizationMember
 
 from ucfp.inputs.interview import first_section_of_flow
 from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
-from ucfp.onboarding.seeding import _seed_records
+from ucfp.onboarding.seeding import _seed_records, seed_sample_org
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
 User = get_user_model()
 
@@ -98,8 +99,39 @@ class StartTourTest( TestCase ):
 
         self.assertIsNone( response.context[ 'completion_destination' ] )  # not the app's Scenarios page
 
+    def test_tour_forecast_is_unavailable_without_a_captured_run( self ):
+        _seed_records( self._seed_sample() )                     # records but no forecast run
+        self.client.post( reverse( 'start_tour' ) )
+
+        response = self.client.get( reverse( 'tour_forecast' ) )
+
+        self.assertNotEqual( response.status_code, 200 )         # DataNotAvailableError, not the run page
+
     def test_unseeded_sample_makes_the_tour_unavailable( self ):
         response = self.client.post( reverse( 'start_tour' ) )
 
         self.assertNotEqual( response.status_code, 302 )                          # not forwarded into a tour
         self.assertFalse( User.objects.exists() )                                 # no orphan Guest minted
+
+
+@tag( 'e2e' )
+class TourForecastRenderTest( TestCase ):
+    """The Forecast step renders the sample org's captured run under the tour shell -- needs a real
+    captured run (seed_sample_org runs a forecast), so it is e2e."""
+
+    def setUp( self ):
+        seed_default_parameter_sets()
+        User.objects.create_superuser( email = 'admin@x.test', password = 'x' )
+        seed_sample_org()                                        # sample org + a captured forecast run
+
+    def test_tour_forecast_renders_the_sample_run_under_the_tour_shell( self ):
+        self.client.post( reverse( 'start_tour' ) )              # enter as a VIEWER guest
+
+        response = self.client.get( reverse( 'tour_forecast' ) )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertTemplateUsed( response, 'onboarding/tour/forecast.html' )
+        self.assertTemplateUsed( response, 'pages/tour_base.html' )               # the no-nav tour shell
+        self.assertTemplateUsed( response, 'planning/pages/run_table_panel.html' )  # summary + table
+        self.assertTemplateUsed( response, 'planning/pages/run_books_table.html' )  # the real books table
+        self.assertTemplateNotUsed( response, 'pages/app_base.html' )             # not the app chrome

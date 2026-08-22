@@ -16,6 +16,10 @@ from user.views import ConvertToGuestView
 from ucfp.inputs.interview import first_section_of_flow
 from ucfp.inputs.views import InterviewView
 
+from ucfp.planning.enums import PlanningFeature
+from ucfp.planning.models import PlanningResultRecord
+from ucfp.planning.views import RunResultsView
+
 from . import reconciliation_service
 from .constants import SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_UUID
 from .membership import join_sample_org, sample_organization
@@ -154,3 +158,21 @@ class TourScenarioView( TourInterviewView ):
         request.session_state.editing_scenario = str( SAMPLE_SCENARIO_UUID )
         request.session_state.to_session( request )
         return super().get( request, section )
+
+
+class TourForecastView( RunResultsView ):
+    """The Forecast step of the tour: the captured sample run's outcome summary and books table
+    (`RunResultsView`) rendered under the tour shell. Unlike the run page it needs no run uuid in the URL --
+    it resolves the sample org's Financial Forecast run itself. The books-table column operations and the
+    in-window Maximize keep working unchanged: the column op is a fragment swap (no navigation) and Maximize
+    is pure client-side, so neither escapes the tour."""
+
+    results_template = 'onboarding/tour/forecast.html'
+
+    def get( self, request ):
+        result = PlanningResultRecord.objects.filter(
+            organization = request.organization, feature = PlanningFeature.FINANCIAL_FORECAST
+        ).order_by( '-created_datetime' ).first()
+        if result is None:
+            raise DataNotAvailableError( 'The sample forecast is not available.' )
+        return super().get( request, run_uuid = result.run.uuid )
