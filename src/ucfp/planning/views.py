@@ -353,7 +353,13 @@ class RunResultsView( View ):
         }
         context.update( _run_outcome( run, books ) )
         context.update( run_books_table_context( request, run, books ) )
+        context.update( self._extra_context( request ) )
         return render( request, self.results_template, context )
+
+    def _extra_context( self, request ) -> dict:
+        """Extra template context a wrapper wants merged in (e.g. the sample-data tour marking its active
+        step for the shell's step-nav). Empty by default; overridden alongside `results_template`."""
+        return {}
 
     @staticmethod
     def _notice_row( year, notice ):

@@ -22,7 +22,7 @@
       {% if offer_add_my_data %}
       <form method="post" action="{% url 'add_my_data' %}" class="d-inline ml-2">
         {% csrf_token %}
-        <button type="submit" class="btn btn-cta btn-lg">Add my data</button>
+        <button type="submit" class="btn btn-cta btn-lg">Start planning</button>
       </form>
       {% else %}
       <a href="{% url 'dashboard' %}" class="btn btn-outline-primary btn-lg ml-2">Go to your dashboard</a>

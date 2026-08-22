@@ -113,6 +113,22 @@ class StartTourTest( TestCase ):
         self.assertEqual( 404, response.status_code )                             # DataNotAvailableError
         self.assertFalse( User.objects.exists() )                                 # no orphan Guest minted
 
+    def test_step_nav_lights_the_current_step( self ):
+        # `tour_active_step` drives the shell's four-step nav. The non-trivial case: Plans and Assumptions
+        # are the one `tour_scenario` view, so the active step must follow the section's flow, not the URL.
+        _seed_records( self._seed_sample() )
+        self.client.post( reverse( 'start_tour' ) )
+
+        def step_at( url ):
+            return self.client.get( url ).context[ 'tour_active_step' ]
+
+        self.assertEqual( 1, step_at(
+            reverse( 'tour_profile', kwargs = { 'section': first_section_of_flow( 'profile' ).key } ) ) )
+        self.assertEqual( 2, step_at(
+            reverse( 'tour_scenario', kwargs = { 'section': first_section_of_flow( 'plans' ).key } ) ) )
+        self.assertEqual( 3, step_at(
+            reverse( 'tour_scenario', kwargs = { 'section': first_section_of_flow( 'assumptions' ).key } ) ) )
+
 
 @tag( 'e2e' )
 class TourForecastRenderTest( TestCase ):
@@ -135,6 +151,7 @@ class TourForecastRenderTest( TestCase ):
         self.assertTemplateUsed( response, 'planning/pages/run_table_panel.html' )  # summary + table
         self.assertTemplateUsed( response, 'planning/pages/run_books_table.html' )  # the real books table
         self.assertTemplateNotUsed( response, 'pages/app_base.html' )             # not the app chrome
+        self.assertEqual( 4, response.context[ 'tour_active_step' ] )             # the shell lights Forecast
 
 
 class AddMyDataTest( TestCase ):

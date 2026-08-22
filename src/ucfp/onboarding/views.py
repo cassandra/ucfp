@@ -13,7 +13,7 @@ from user import collision
 from user.signin_manager import SigninManager
 from user.views import ConvertToGuestView
 
-from ucfp.inputs.interview import first_section_of_flow
+from ucfp.inputs.interview import first_section_of_flow, flow_of
 from ucfp.inputs.views import InterviewView
 
 from ucfp.planning.enums import PlanningFeature
@@ -135,6 +135,12 @@ class AddMyDataView( ConvertToGuestView ):
         return
 
 
+# The tour's four-step backbone, numbered for the shell's step-nav (Profile -> Plans -> Assumptions ->
+# Forecast). The three input flows map by name; the Forecast step is supplied by `TourForecastView`.
+_TOUR_STEP_BY_FLOW = { 'profile': 1, 'plans': 2, 'assumptions': 3 }
+_TOUR_STEP_FORECAST = 4
+
+
 class TourInterviewView( InterviewView ):
     """Shared base for tour steps that reuse an interview flow (Profile, and Plans/Assumptions in scenario
     context): render the real interview under the tour shell, and keep navigation inside the tour -- the
@@ -143,6 +149,13 @@ class TourInterviewView( InterviewView ):
 
     def _page_template( self, section ):
         return 'onboarding/tour/interview.html'
+
+    def _context( self, request, sections, section, form ):
+        """Add `tour_active_step` for the shell's step-nav. Derived from the current section's flow, so the
+        one scenario view lights Plans or Assumptions by which flow the visitor is looking at."""
+        context = super()._context( request, sections, section, form )
+        context[ 'tour_active_step' ] = _TOUR_STEP_BY_FLOW[ flow_of( section ) ]
+        return context
 
     def _completion_destination( self, request, flow, building ):
         """The tour has no flow-completion destination: a last section shows no advance control (nothing to
@@ -180,6 +193,9 @@ class TourForecastView( RunResultsView ):
     is pure client-side, so neither escapes the tour."""
 
     results_template = 'onboarding/tour/forecast.html'
+
+    def _extra_context( self, request ):
+        return { 'tour_active_step': _TOUR_STEP_FORECAST }
 
     def get( self, request ):
         result = PlanningResultRecord.objects.filter(

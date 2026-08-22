@@ -16,7 +16,7 @@
   <p class="text-muted">You're exploring the sample data. Add your own to see your real forecast.</p>
   <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
     {% csrf_token %}
-    <button type="submit" class="btn btn-cta btn-lg">Add my data</button>
+    <button type="submit" class="btn btn-cta btn-lg">Start planning</button>
   </form>
 </div>
 {% endif %}
