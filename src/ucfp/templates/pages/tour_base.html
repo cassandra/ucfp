@@ -10,16 +10,16 @@
 
 {% block content %}
 <div class="tour-shell">
-  {# Deliberately unlike the app's primary navbar (light, bordered) so the tour reads as a distinct space.
-     Finer styling -- the four numbered cards, mirrored on the explain page -- is tracked in #203. #}
+  {% comment %}Deliberately unlike the app's primary navbar (light, bordered) so the tour reads as a distinct
+  space. Finer styling -- the four numbered cards, mirrored on the explain page -- is tracked in #203.{% endcomment %}
   <header class="tour-header bg-light border-bottom py-2">
     <div class="container d-flex align-items-center">
       {# The logo is a deliberately subtle escape hatch to the public home; browser-back covers "back". #}
       <a class="navbar-brand py-1 m-0 mr-4" href="{% url 'home' %}">
         <img src="{% static 'img/app-logo-h64.png' %}" height="28" alt="{% settings_value 'SITE_NAME' %}">
       </a>
-      {# Plans and Assumptions both enter the one scenario view (tour_scenario); Forecast resolves the
-         sample run itself. (Section keys hardcoded until the cards land in #203.) #}
+      {% comment %}Plans and Assumptions both enter the one scenario view (tour_scenario); Forecast resolves
+      the sample run itself. (Section keys hardcoded until the cards land in #203.){% endcomment %}
       <nav class="tour-steps small">
         <a class="text-primary mr-3" href="{% url 'tour_profile' section='subjects' %}">1. Profile</a>
         <a class="text-primary mr-3" href="{% url 'tour_scenario' section='retirement' %}">2. Plans</a>
