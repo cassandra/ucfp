@@ -22,10 +22,13 @@ Reads `summary`, `currency`, and whatever run_books_table.html reads (`books_tab
     (a home escape hatch) on the left and the run's name -- centred and emphasised -- for orientation,
     keeping the toggle (now Minimize) on the right. The card header (the summary) is hidden in that state.{% endcomment %}
     <div class="bt-panel-controls d-flex align-items-center mb-2">
-      <a class="bt-maximized-only mr-3 flex-shrink-0" href="{% url 'home' %}"
-         aria-label="{% settings_value 'SITE_NAME' %} home">
+      {% comment %}The brand, shown only while maximized. Clicking it minimizes (same as the toggle and
+      Esc) -- a maximized full-window table has nowhere else to send you, so it is a way back, not a way
+      out.{% endcomment %}
+      <button type="button" class="bt-maximized-only bt-minimize mr-3 flex-shrink-0 border-0 bg-transparent p-0"
+              aria-label="Minimize the table" title="Minimize the table">
         <img src="{% static 'img/app-logo-h64.png' %}" height="30" alt="{% settings_value 'SITE_NAME' %}">
-      </a>
+      </button>
       <p class="run-table-hint text-muted small mb-0">
         {% icon 'gear' size='sm' %} Each column header is a menu &mdash; click it to expand, collapse,
         reorder, or hide the column.
@@ -59,6 +62,12 @@ Reads `summary`, `currency`, and whatever run_books_table.html reads (`books_tab
      if ( ! toggle ) { return; }
      var panel = toggle.closest( '.run-table-panel' );
      setMaximized( panel, ! panel.classList.contains( 'is-maximized' ) );
+   } );
+   document.addEventListener( 'click', function ( event ) {
+     var minimize = event.target.closest( '.bt-minimize' );   // the maximized-only brand: click to minimize
+     if ( ! minimize ) { return; }
+     var panel = minimize.closest( '.run-table-panel' );
+     if ( panel ) { setMaximized( panel, false ); }
    } );
    document.addEventListener( 'keydown', function ( event ) {
      if ( event.key !== 'Escape' ) { return; }
