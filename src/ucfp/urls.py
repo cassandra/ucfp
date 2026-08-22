@@ -25,6 +25,7 @@ urlpatterns = [
 
     path( '', views.HomeView.as_view(), name = 'home' ),
     path( 'index.html', views.HomeView.as_view(), name = 'home_index' ),
+    path( 'dashboard', views.DashboardView.as_view(), name = 'dashboard' ),
     path( 'health', views.HealthView.as_view(), name = 'health' ),
 
     # Onboarding pages for a visitor with no account (login-free). Explain introduces the app and

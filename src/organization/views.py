@@ -89,12 +89,12 @@ class OrganizationSwitchView( View ):
         return self._reload( request )
 
     def _reload( self, request ):
-        """Back to the page the switch came from; home is the fallback when the referer is missing or
-        off-site."""
+        """Back to the page the switch came from; the dashboard is the fallback when the referer is missing
+        or off-site."""
         referer = request.META.get( 'HTTP_REFERER' )
         if referer and url_has_allowed_host_and_scheme( referer, allowed_hosts = { request.get_host() } ):
             return redirect( referer )
-        return redirect( reverse( 'home' ) )
+        return redirect( reverse( 'dashboard' ) )
 
 
 @method_decorator( require_authenticated_user, name = 'dispatch' )
@@ -164,7 +164,7 @@ class OrganizationDeleteView( View ):
         if not _is_confirmed( request ):
             raise BadRequest( 'Deletion was not confirmed.' )
         deletion.delete_organization( member.organization )
-        return redirect( reverse( 'home' ) )
+        return redirect( reverse( 'dashboard' ) )
 
 
 @method_decorator( require_authenticated_user, name = 'dispatch' )
@@ -180,7 +180,7 @@ class OrganizationLeaveView( View ):
         if member.is_sole_active_owner:
             raise BadRequest( 'A sole owner cannot leave; delete the household instead.' )
         deletion.leave_organization( member )
-        return redirect( reverse( 'home' ) )
+        return redirect( reverse( 'dashboard' ) )
 
 
 @method_decorator( require_authenticated_user, name = 'dispatch' )

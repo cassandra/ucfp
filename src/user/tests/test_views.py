@@ -176,7 +176,7 @@ class TestMagicCodeView(CloudAuthViewTest):
         response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
 
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )
+        self.assertEqual( reverse('dashboard'), response.url )
         self.assertEqual( _auth_user_id( self.client ), str( self.user.pk ) )
 
     def test_valid_code_confirms_a_signed_in_guests_pending_email(self):
@@ -188,7 +188,7 @@ class TestMagicCodeView(CloudAuthViewTest):
         response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
 
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )        # lands on the dashboard, not the account page
+        self.assertEqual( reverse('dashboard'), response.url )        # lands on the dashboard, not the account page
         guest.refresh_from_db()
         self.assertEqual( 'claimed@example.com', guest.email )   # promoted -> Verified
         self.assertIsNone( guest.pending_email )
@@ -275,7 +275,7 @@ class TestMagicLinkView(CloudAuthViewTest):
     def test_verified_account_link_signs_in_from_any_session(self):
         response = self.client.get( self._link( self.user ) )
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )
+        self.assertEqual( reverse('dashboard'), response.url )
         self.assertEqual( _auth_user_id( self.client ), str( self.user.pk ) )
 
     def test_pending_link_in_the_same_session_confirms(self):
@@ -286,7 +286,7 @@ class TestMagicLinkView(CloudAuthViewTest):
         response = self.client.get( self._link( guest ) )
 
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )        # lands on the dashboard, not the account page
+        self.assertEqual( reverse('dashboard'), response.url )        # lands on the dashboard, not the account page
         guest.refresh_from_db()
         self.assertEqual( 'claimed@example.com', guest.email )
 
@@ -553,7 +553,7 @@ class TestVerifyCooldown(CloudAuthViewTest):
         self._post_code('wrongg')
         response = self._post_code('abcdef')
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )
+        self.assertEqual( reverse('dashboard'), response.url )
         self.assertNotIn( 'magic_code_failures', self.client.session )
 
     @override_settings(SIGNIN_VERIFY_FREE_ATTEMPTS=99, SIGNIN_VERIFY_PER_IP_LIMIT=1)

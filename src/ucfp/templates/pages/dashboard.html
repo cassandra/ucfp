@@ -1,0 +1,57 @@
+{% extends "pages/app_base.html" %}
+{% load common_tags %}
+{% load icons %}
+{% comment %}
+  The signed-in dashboard (self-host/dev, or a signed-in cloud user -- see HomeView.dispatch): one card
+  per planning feature, mirroring the navbar's feature menu. Each card links where the nav does; visiting
+  a feature threads the user through the Profile / Scenario it needs, so the dashboard stays a simple
+  chooser. Three features are still to come (badged "soon").
+{% endcomment %}
+
+{% block app_content %}
+<div class="text-center mb-4">
+  <h1 class="h3">Your planning perspectives</h1>
+  <p class="text-muted mb-0">Pick where to start &mdash; each guides you through what it needs.</p>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-3 mb-4">
+    <a href="{% url 'financial_forecast' %}" class="card h-100 shadow-sm text-center text-reset text-decoration-none">
+      <div class="card-body">
+        {% icon 'forecast' size='xxxl' color='primary' %}
+        <h2 class="h5 mt-3">Financial Forecast</h2>
+        <p class="text-muted small mb-0">Project your finances across past, present, and future &mdash; and
+          see whether your money lasts.</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6 col-lg-3 mb-4">
+    <a href="{% url 'retirement_timing' %}" class="card h-100 shadow-sm text-center text-reset text-decoration-none">
+      <div class="card-body">
+        {% icon 'clock' size='xxxl' color='primary' %}
+        <h2 class="h5 mt-3">Retirement Timing <span class="badge badge-secondary align-middle">soon</span></h2>
+        <p class="text-muted small mb-0">Compare when you can retire and how much you need to get there.</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6 col-lg-3 mb-4">
+    <a href="{% url 'social_security' %}" class="card h-100 shadow-sm text-center text-reset text-decoration-none">
+      <div class="card-body">
+        {% icon 'shield' size='xxxl' color='primary' %}
+        <h2 class="h5 mt-3">Social Security <span class="badge badge-secondary align-middle">soon</span></h2>
+        <p class="text-muted small mb-0">Find the claiming strategy that pays you the most over your lifetime.</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6 col-lg-3 mb-4">
+    <a href="{% url 'cash_flow_planning' %}" class="card h-100 shadow-sm text-center text-reset text-decoration-none">
+      <div class="card-body">
+        {% icon 'dollar-sign' size='xxxl' color='primary' %}
+        <h2 class="h5 mt-3">Cash Flow <span class="badge badge-secondary align-middle">soon</span></h2>
+        <p class="text-muted small mb-0">Plan the next twelve months at fine granularity, so nothing catches
+          you short.</p>
+      </div>
+    </a>
+  </div>
+</div>
+{% endblock %}
