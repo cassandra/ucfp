@@ -196,6 +196,16 @@ class FeaturePageAddMyDataTest( TestCase ):
         self.assertContains( response, self._CTA_COPY )                   # the "Add my data" prompt
         self.assertNotContains( response, self._EMAIL_COPY )              # email pitch stands down
 
+    def test_forecast_hub_promotes_add_my_data_to_a_sample_only_user( self ):
+        _seed_records( Organization.objects.create(
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME ) )
+        self.client.post( reverse( 'start_tour' ) )              # guest VIEWER, current-org = sample
+
+        response = self.client.get( reverse( 'financial_forecast' ) )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, self._CTA_COPY )
+
     def test_owner_sees_neither_prompt( self ):
         user = User.objects.create_user( email = 'o@x.test' )
         _seed_records( Organization.objects.create_for_owner( user, 'Mine' ) )   # a profile to render
