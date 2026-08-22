@@ -17,7 +17,7 @@ from ucfp.inputs.interview import first_section_of_flow
 from ucfp.inputs.views import InterviewView
 
 from . import reconciliation_service
-from .constants import SAMPLE_ORGANIZATION_UUID
+from .constants import SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_UUID
 from .membership import join_sample_org, sample_organization
 
 
@@ -119,13 +119,39 @@ class StartTourView( ConvertToGuestView ):
         return resolve_url( 'tour_profile', section = first_section_of_flow( 'profile' ).key )
 
 
-class TourProfileView( InterviewView ):
-    """The Profile step of the sample-data tour: the real Profile interview (`InterviewView`) rendered under
-    the tour shell instead of the app nav. It inherits all the interview mechanics and template context and
-    only swaps the full-page template -- `onboarding/tour/profile.html` composes the same interview body
-    under `tour_base`. Read-only-ness (if any) still comes from the membership role, not the tour."""
-
-    SECTION_URL_NAME = 'tour_profile'                          # keep every interview nav link inside the tour
+class TourInterviewView( InterviewView ):
+    """Shared base for tour steps that reuse an interview flow (Profile, and Plans/Assumptions in scenario
+    context): render the real interview under the tour shell, and keep *every* navigation URL inside the
+    tour -- the stepper, Next, the async push_url (via `SECTION_URL_NAME`), and the read-only "Finish"
+    (here). Subclasses declare only the route they are hosted at. Read-only-ness (if any) comes from the
+    membership role, not the tour."""
 
     def _page_template( self, section ):
-        return 'onboarding/tour/profile.html'
+        return 'onboarding/tour/interview.html'
+
+    def _completion_destination( self, request, flow, building ):
+        """A finished flow stays in the tour: loop back to the flow's first section (the four-step header
+        moves between phases), never the real app's Scenarios page -- which is where the base sends a
+        finished build or component edit."""
+        return resolve_url( self.SECTION_URL_NAME, section = first_section_of_flow( flow ).key )
+
+
+class TourProfileView( TourInterviewView ):
+    """The Profile step of the tour."""
+
+    SECTION_URL_NAME = 'tour_profile'
+
+
+class TourScenarioView( TourInterviewView ):
+    """The Plans + Assumptions step of the tour, in *scenario context* -- both parts in the left rail, the
+    way a user meets them by default (rather than either in isolation). It sets the sample scenario as the
+    editing target so the two-part rail shows: a benign session write, since the tour is read-only and the
+    interview's write side is POST, which the VIEWER role blocks. Both the Plans and Assumptions nav entries
+    reach it at each flow's first section; the two-part rail switches between them."""
+
+    SECTION_URL_NAME = 'tour_scenario'
+
+    def get( self, request, section ):
+        request.session_state.editing_scenario = str( SAMPLE_SCENARIO_UUID )
+        request.session_state.to_session( request )
+        return super().get( request, section )

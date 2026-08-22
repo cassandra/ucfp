@@ -18,13 +18,15 @@
       </a>
       {% comment %}
       Placeholder step nav -- to be restyled into the four numbered cards (mirrored on the explain page).
-      Each step becomes a link once its tour page exists; the not-yet-built ones are inert, so the other
-      three tour pages can be added incrementally. (The Profile section key is hardcoded for now.)
+      Each step becomes a link once its tour page exists; the not-yet-built ones are inert, so the tour
+      pages can be added incrementally. Plans and Assumptions both enter the one scenario-context view
+      (`tour_scenario`) at their flow's first section. (Section keys are hardcoded for now.)
       {% endcomment %}
       <nav class="tour-steps small">
         <a class="text-white mr-3" href="{% url 'tour_profile' section='subjects' %}">1. Profile</a>
-        <span class="text-white-50 mr-3">2. Plans</span>
-        <span class="text-white-50 mr-3">3. Assumptions</span>
+        <a class="text-white mr-3" href="{% url 'tour_scenario' section='retirement' %}">2. Plans</a>
+        <a class="text-white mr-3"
+           href="{% url 'tour_scenario' section='external-factors' %}">3. Assumptions</a>
         <span class="text-white-50">4. Forecast</span>
       </nav>
     </div>

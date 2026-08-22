@@ -60,13 +60,42 @@ class StartTourTest( TestCase ):
         response = self.client.get( self._tour_profile_url() )
 
         self.assertEqual( response.status_code, 200 )
-        self.assertTemplateUsed( response, 'onboarding/tour/profile.html' )       # the tour's own page
+        self.assertTemplateUsed( response, 'onboarding/tour/interview.html' )     # the tour's own page
         self.assertTemplateUsed( response, 'pages/tour_base.html' )               # the no-nav tour shell
         self.assertTemplateUsed( response, 'inputs/interview/body.html' )         # the real interview body
         self.assertTemplateNotUsed( response, 'pages/app_base.html' )             # not the app chrome
         # The interview's navigation is retargeted to the tour route, so stepper/Next/Finish stay in the
         # tour (a reload no longer escapes to the real interview page).
         self.assertEqual( response.context[ 'section_url_name' ], 'tour_profile' )
+        self.assertIn( '/tour/profile/', response.context[ 'completion_destination' ] )
+
+    def test_tour_scenario_shows_plans_and_assumptions_in_scenario_context( self ):
+        _seed_records( self._seed_sample() )                     # real Plans/Assumptions + sample scenario
+        self.client.post( reverse( 'start_tour' ) )
+
+        url = reverse( 'tour_scenario', kwargs = { 'section': first_section_of_flow( 'plans' ).key } )
+        response = self.client.get( url )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertTemplateUsed( response, 'onboarding/tour/interview.html' )
+        self.assertTemplateUsed( response, 'pages/tour_base.html' )
+        self.assertEqual( response.context[ 'section_url_name' ], 'tour_scenario' )   # nav stays in the tour
+        # Scenario context: both Plans and Assumptions in the left rail, not one in isolation.
+        self.assertTrue( response.context[ 'rail_scenario_mode' ] )
+        self.assertEqual( len( response.context[ 'rail_parts' ] ), 2 )
+        self.assertIn( '/tour/scenario/', response.context[ 'completion_destination' ] )  # Finish stays in
+
+    def test_finish_stays_in_the_tour_after_a_scenario_visit( self ):
+        # Visiting the scenario sets editing_scenario; that must not make Profile's read-only "Finish"
+        # escape to the app's Scenarios page (the build/component completion branch).
+        _seed_records( self._seed_sample() )
+        self.client.post( reverse( 'start_tour' ) )
+        self.client.get(                                         # sets editing_scenario in the session
+            reverse( 'tour_scenario', kwargs = { 'section': first_section_of_flow( 'assumptions' ).key } ) )
+
+        response = self.client.get(
+            reverse( 'tour_profile', kwargs = { 'section': first_section_of_flow( 'profile' ).key } ) )
+
         self.assertIn( '/tour/profile/', response.context[ 'completion_destination' ] )
 
     def test_unseeded_sample_makes_the_tour_unavailable( self ):
