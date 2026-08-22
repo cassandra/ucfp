@@ -10,25 +10,27 @@
 
 {% block content %}
 <div class="tour-shell">
-  <header class="tour-header bg-primary text-white py-2">
-    <div class="container d-flex align-items-center justify-content-between">
-      <a class="navbar-brand py-1 m-0" href="{% url 'home' %}">
-        <img src="{% static 'img/app-logo-inverse-h64.png' %}" height="32"
-             alt="{% settings_value 'SITE_NAME' %}">
+  {# Deliberately unlike the app's primary navbar (light, bordered) so the tour reads as a distinct space.
+     Finer styling -- the four numbered cards, mirrored on the explain page -- is tracked in #203. #}
+  <header class="tour-header bg-light border-bottom py-2">
+    <div class="container d-flex align-items-center">
+      {# The logo is a deliberately subtle escape hatch to the public home; browser-back covers "back". #}
+      <a class="navbar-brand py-1 m-0 mr-4" href="{% url 'home' %}">
+        <img src="{% static 'img/app-logo-h64.png' %}" height="28" alt="{% settings_value 'SITE_NAME' %}">
       </a>
-      {% comment %}
-      Placeholder step nav -- to be restyled into the four numbered cards (mirrored on the explain page).
-      Plans and Assumptions both enter the one scenario-context view (`tour_scenario`) at their flow's
-      first section; Forecast (`tour_forecast`) resolves the sample org's run itself. (Section keys are
-      hardcoded for now.)
-      {% endcomment %}
+      {# Plans and Assumptions both enter the one scenario view (tour_scenario); Forecast resolves the
+         sample run itself. (Section keys hardcoded until the cards land in #203.) #}
       <nav class="tour-steps small">
-        <a class="text-white mr-3" href="{% url 'tour_profile' section='subjects' %}">1. Profile</a>
-        <a class="text-white mr-3" href="{% url 'tour_scenario' section='retirement' %}">2. Plans</a>
-        <a class="text-white mr-3"
+        <a class="text-primary mr-3" href="{% url 'tour_profile' section='subjects' %}">1. Profile</a>
+        <a class="text-primary mr-3" href="{% url 'tour_scenario' section='retirement' %}">2. Plans</a>
+        <a class="text-primary mr-3"
            href="{% url 'tour_scenario' section='external-factors' %}">3. Assumptions</a>
-        <a class="text-white" href="{% url 'tour_forecast' %}">4. Forecast</a>
+        <a class="text-primary" href="{% url 'tour_forecast' %}">4. Forecast</a>
       </nav>
+      <form method="post" action="{% url 'add_my_data' %}" class="m-0 ml-auto">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-cta btn-sm">Add my data</button>
+      </form>
     </div>
   </header>
 

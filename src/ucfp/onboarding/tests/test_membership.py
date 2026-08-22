@@ -7,7 +7,7 @@ from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 
 from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
-from ucfp.onboarding.membership import join_sample_org, sample_organization
+from ucfp.onboarding.membership import join_sample_org, sample_organization, working_organization
 
 User = get_user_model()
 
@@ -53,3 +53,36 @@ class JoinSampleOrgTest( TestCase ):
         self.assertIsNone( sample_organization() )
         self.assertFalse( join_sample_org( user ) )
         self.assertFalse( OrganizationMember.objects.filter( user = user ).exists() )
+
+
+class WorkingOrganizationTest( TestCase ):
+    """`working_organization`: the user's own org (not the read-only sample), preferring one they own,
+    or None when the sample (or nothing) is all they have."""
+
+    def _seed_sample( self ):
+        return Organization.objects.create(
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+
+    def test_returns_an_owned_org( self ):
+        user = User.objects.create_user( email = 'o@x.test' )
+        own = Organization.objects.create_for_owner( user, 'Mine' )
+
+        self.assertEqual( working_organization( user ), own )
+
+    def test_is_none_when_only_the_sample( self ):
+        self._seed_sample()
+        user = User.objects.create_user( email = 'v@x.test' )
+        join_sample_org( user )                                  # VIEWER of the sample only
+
+        self.assertIsNone( working_organization( user ) )
+
+    def test_is_none_with_no_memberships( self ):
+        self.assertIsNone( working_organization( User.objects.create_user( email = 'n@x.test' ) ) )
+
+    def test_prefers_an_owned_org_over_the_sample( self ):
+        self._seed_sample()
+        user = User.objects.create_user( email = 'o@x.test' )
+        own = Organization.objects.create_for_owner( user, 'Mine' )
+        join_sample_org( user )                                  # also a VIEWER of the sample
+
+        self.assertEqual( working_organization( user ), own )    # the sample is never the working org

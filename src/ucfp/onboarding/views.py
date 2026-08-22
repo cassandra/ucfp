@@ -22,7 +22,7 @@ from ucfp.planning.views import RunResultsView
 
 from . import reconciliation_service
 from .constants import SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_UUID
-from .membership import join_sample_org, sample_organization
+from .membership import ensure_own_organization, join_sample_org, sample_organization
 
 
 @method_decorator( require_authentication_enabled, name = 'dispatch' )
@@ -121,6 +121,16 @@ class StartTourView( ConvertToGuestView ):
 
     def landing_url( self, request ):
         return resolve_url( 'tour_profile', section = first_section_of_flow( 'profile' ).key )
+
+
+class AddMyDataView( ConvertToGuestView ):
+    """"Add My Data": the universal graduation from previewing the sample to owning a plan. From an
+    anonymous visitor it mints a Guest (inherited); then, for anyone, it ensures they are in an
+    organization of their own -- not the read-only sample -- and lands on the Profile (the inherited
+    `GUEST_START_URL`) to start entering data. Offered wherever the sample (or nothing) is all they have."""
+
+    def after_conversion( self, request, user ):
+        ensure_own_organization( request, user )
 
 
 class TourInterviewView( InterviewView ):

@@ -63,6 +63,7 @@ class AuthenticationMiddleware:
         'preview',
         'convert_to_guest',
         'start_tour',
+        'add_my_data',
         'user_signin',
         'magic_code',
         'magic_link',

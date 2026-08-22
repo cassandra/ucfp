@@ -135,3 +135,37 @@ class TourForecastRenderTest( TestCase ):
         self.assertTemplateUsed( response, 'planning/pages/run_table_panel.html' )  # summary + table
         self.assertTemplateUsed( response, 'planning/pages/run_books_table.html' )  # the real books table
         self.assertTemplateNotUsed( response, 'pages/app_base.html' )             # not the app chrome
+
+
+class AddMyDataTest( TestCase ):
+    """`AddMyDataView`: the universal graduation -- mint a Guest if anonymous, then ensure an organization
+    of the user's own (not the sample) and land on the Profile to start entering data."""
+
+    def _own_org( self, user ):
+        return OrganizationMember.objects.get(
+            user = user, organization_role = OrganizationRole.OWNER ).organization
+
+    def test_anonymous_add_my_data_mints_a_guest_in_their_own_org( self ):
+        response = self.client.post( reverse( 'add_my_data' ) )
+
+        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
+        self.assertEqual( User.objects.count(), 1 )
+        own = self._own_org( User.objects.get() )
+        self.assertNotEqual( str( own.uuid ), str( SAMPLE_ORGANIZATION_UUID ) )   # their own, not the sample
+        self.assertEqual( self.client.session.get( 'current_organization_uuid' ), str( own.uuid ) )
+
+    def test_tour_guest_add_my_data_switches_off_the_sample( self ):
+        sample = Organization.objects.create(
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        self.client.post( reverse( 'start_tour' ) )              # guest, VIEWER of sample, current-org=sample
+
+        response = self.client.post( reverse( 'add_my_data' ) )
+
+        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
+        self.assertEqual( User.objects.count(), 1 )              # no second account
+        user = User.objects.get()
+        own = self._own_org( user )                             # a fresh owned org, not the sample
+        self.assertNotEqual( str( own.uuid ), str( SAMPLE_ORGANIZATION_UUID ) )
+        self.assertEqual( self.client.session.get( 'current_organization_uuid' ), str( own.uuid ) )
+        # still a member of the sample -- reachable again via the switcher, just no longer the current org
+        self.assertTrue( OrganizationMember.objects.filter( user = user, organization = sample ).exists() )
