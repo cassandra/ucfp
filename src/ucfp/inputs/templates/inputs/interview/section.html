@@ -29,9 +29,10 @@ last step (`is_last`), else "Next".
     {# Read-only: "Next" is pure navigation to the following section (a sequential reader), never a save. #}
     <a class="btn btn-cta" href="{% url section_url_name section=next_section.key %}"
        data-async="#{{ section_target }}">Next</a>
-    {% else %}
+    {% elif completion_destination %}
     {% comment %}Read-only last step: "Finish" leaves the flow (a plain navigation to where the editable
-    Finish lands), without the save.{% endcomment %}
+    Finish lands), without the save. Shown only when the flow has a completion destination -- the tour has
+    none (nothing to finish while browsing), so it shows no advance control on a last section.{% endcomment %}
     <a class="btn btn-cta" href="{{ completion_destination }}">Finish</a>
     {% endif %}
   </div>

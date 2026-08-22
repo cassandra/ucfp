@@ -121,19 +121,18 @@ class StartTourView( ConvertToGuestView ):
 
 class TourInterviewView( InterviewView ):
     """Shared base for tour steps that reuse an interview flow (Profile, and Plans/Assumptions in scenario
-    context): render the real interview under the tour shell, and keep *every* navigation URL inside the
-    tour -- the stepper, Next, the async push_url (via `SECTION_URL_NAME`), and the read-only "Finish"
-    (here). Subclasses declare only the route they are hosted at. Read-only-ness (if any) comes from the
-    membership role, not the tour."""
+    context): render the real interview under the tour shell, and keep navigation inside the tour -- the
+    stepper, Next, and the async push_url all derive from `SECTION_URL_NAME`, which subclasses declare.
+    Read-only-ness (if any) comes from the membership role, not the tour."""
 
     def _page_template( self, section ):
         return 'onboarding/tour/interview.html'
 
     def _completion_destination( self, request, flow, building ):
-        """A finished flow stays in the tour: loop back to the flow's first section (the four-step header
-        moves between phases), never the real app's Scenarios page -- which is where the base sends a
-        finished build or component edit."""
-        return resolve_url( self.SECTION_URL_NAME, section = first_section_of_flow( flow ).key )
+        """The tour has no flow-completion destination: a last section shows no advance control (nothing to
+        "Finish" while browsing; the four-step header moves between phases). This also keeps the read-only
+        Finish from escaping to the app's Scenarios page, where the base sends a finished build/component."""
+        return None
 
 
 class TourProfileView( TourInterviewView ):

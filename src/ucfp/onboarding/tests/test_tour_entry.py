@@ -64,10 +64,10 @@ class StartTourTest( TestCase ):
         self.assertTemplateUsed( response, 'pages/tour_base.html' )               # the no-nav tour shell
         self.assertTemplateUsed( response, 'inputs/interview/body.html' )         # the real interview body
         self.assertTemplateNotUsed( response, 'pages/app_base.html' )             # not the app chrome
-        # The interview's navigation is retargeted to the tour route, so stepper/Next/Finish stay in the
-        # tour (a reload no longer escapes to the real interview page).
+        # The interview's navigation is retargeted to the tour route (stepper/Next), so a reload no longer
+        # escapes to the real interview page; and a last section has no completion destination -> no Finish.
         self.assertEqual( response.context[ 'section_url_name' ], 'tour_profile' )
-        self.assertIn( '/tour/profile/', response.context[ 'completion_destination' ] )
+        self.assertIsNone( response.context[ 'completion_destination' ] )  # no Finish while browsing
 
     def test_tour_scenario_shows_plans_and_assumptions_in_scenario_context( self ):
         _seed_records( self._seed_sample() )                     # real Plans/Assumptions + sample scenario
@@ -83,11 +83,11 @@ class StartTourTest( TestCase ):
         # Scenario context: both Plans and Assumptions in the left rail, not one in isolation.
         self.assertTrue( response.context[ 'rail_scenario_mode' ] )
         self.assertEqual( len( response.context[ 'rail_parts' ] ), 2 )
-        self.assertIn( '/tour/scenario/', response.context[ 'completion_destination' ] )  # Finish stays in
+        self.assertIsNone( response.context[ 'completion_destination' ] )  # no Finish while browsing
 
-    def test_finish_stays_in_the_tour_after_a_scenario_visit( self ):
-        # Visiting the scenario sets editing_scenario; that must not make Profile's read-only "Finish"
-        # escape to the app's Scenarios page (the build/component completion branch).
+    def test_a_scenario_visit_does_not_reveal_a_finish_escape( self ):
+        # Visiting the scenario sets editing_scenario; that must not give Profile a completion destination
+        # (the app's Scenarios page, via the build/component branch) -- the tour never has one.
         _seed_records( self._seed_sample() )
         self.client.post( reverse( 'start_tour' ) )
         self.client.get(                                         # sets editing_scenario in the session
@@ -96,7 +96,7 @@ class StartTourTest( TestCase ):
         response = self.client.get(
             reverse( 'tour_profile', kwargs = { 'section': first_section_of_flow( 'profile' ).key } ) )
 
-        self.assertIn( '/tour/profile/', response.context[ 'completion_destination' ] )
+        self.assertIsNone( response.context[ 'completion_destination' ] )  # not the app's Scenarios page
 
     def test_unseeded_sample_makes_the_tour_unavailable( self ):
         response = self.client.post( reverse( 'start_tour' ) )
