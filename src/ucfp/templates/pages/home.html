@@ -17,20 +17,24 @@
          alt="{% settings_value 'SITE_NAME' %}">
     <h1 class="display-4 text-primary font-weight-bold mb-2">Can you retire?</h1>
     <p class="lead text-muted mb-4">Find out for free.</p>
+    {% comment %}One gold action per visitor state (see `onboarding.home_cta`): an anonymous visitor is
+    invited to learn how it works; a Guest with only the read-only sample graduates to their own plan; a
+    user with their own org is pointed at their dashboard. "See how it works" recedes to an outline once it
+    is no longer the focal action.{% endcomment %}
+    {% if home_cta == 'anonymous' %}
     <a href="{% url 'explain' %}" class="btn btn-cta btn-lg">See how it works</a>
-    {% if request.user.is_authenticated %}
-      {% if offer_add_my_data %}
-      <form method="post" action="{% url 'add_my_data' %}" class="d-inline ml-2">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-cta btn-lg">Add my data</button>
-      </form>
-      {% else %}
-      <a href="{% url 'dashboard' %}" class="btn btn-outline-primary btn-lg ml-2">Go to your dashboard</a>
-      {% endif %}
-    {% else %}
     <p class="small text-muted mt-3 mb-0">No account needed to look around &mdash; add your email only when
-      you want to save your plan. No password, no marketing.
+      you want to save your work. No password, no marketing.
       <a href="{% url 'user_signin' %}">Already have an account?</a></p>
+    {% elif home_cta == 'sample_only' %}
+    <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-cta btn-lg">Start planning</button>
+    </form>
+    <a href="{% url 'explain' %}" class="btn btn-outline-primary btn-lg ml-2">See how it works</a>
+    {% else %}
+    <a href="{% url 'dashboard' %}" class="btn btn-cta btn-lg">Go to your dashboard</a>
+    <a href="{% url 'explain' %}" class="btn btn-outline-primary btn-lg ml-2">See how it works</a>
     {% endif %}
   </div>
 </header>
@@ -83,6 +87,10 @@
   </div>
 </section>
 
+{% comment %}The closing conversion band is anonymous-visitor marketing (the value pitch, the free/no-password
+reassurance, the self-host option). A signed-in user is past this -- and its gold CTA would be a second gold
+action competing with the hero's -- so it shows only to an anonymous visitor.{% endcomment %}
+{% if home_cta == 'anonymous' %}
 <section class="text-center py-4 bg-primary text-white">
   <div class="container">
     <h2 class="h3 mb-3">See your number.</h2>
@@ -92,6 +100,7 @@
       <a class="text-white font-weight-bold" target="_blank" href="https://github.com/cassandra/ucfp">self-host your own computer</a>.</p>
   </div>
 </section>
+{% endif %}
 
 {% include "components/base_footer.html" %}
 {% endblock %}

@@ -1,32 +1,107 @@
-{% extends "pages/base_public.html" %}
+{% extends "pages/base.html" %}
+{% load static %}
 {% load common_tags %}
 {% comment %}
-  Onboarding "how it works" page for a visitor with no account. STUB: the explanatory content
-  (Profiles, Scenarios, Output) is placeholder copy. Its role in the flow is settled -- it funnels to
-  the read-only sample-data tour or to the convert-to-Guest action.
+  The login-free "How does <SITE_NAME> work?" page (ExplainView). It teaches the app's four-step
+  backbone -- three inputs the visitor provides (Profile, Plans, Assumptions) and the one Forecast the
+  model returns -- as a stepper, then funnels to the sample-data tour ("Take a tour") or the
+  convert-to-Guest graduation ("Try it now"). The two CTAs are co-equal (both .btn-primary, no gold):
+  gold is reserved for the Forecast payoff step, the page's single accent. `tour_available` /
+  `authentication_enabled` (from the view) gate, for a self-hosted instance, the tour CTA (the sample
+  is often unseeded) and the "free, no sign-up" reassurance (a cloud-only concept -- a self-hosted
+  instance is the user's own server).
 {% endcomment %}
 
-{% block page_title %}How {% settings_value 'SITE_NAME' %} works{% endblock %}
+{% block head_title %}How {% settings_value 'SITE_NAME' %} works{% endblock %}
 
-{% block public_content %}
-<p class="lead text-center text-muted mb-4">See how {% settings_value 'SITE_NAME' %} models your plan
-  &mdash; then take a guided tour, or start your own. No account needed to look around.</p>
+{% block content %}
+<div class="explain-page">
+  <header class="explain-hero text-center">
+    <div class="container">
+      <a href="{% url 'home' %}" class="d-inline-block mb-3">
+        <img src="{% static 'img/app-logo-h200.png' %}" style="max-height: 52px"
+             alt="{% settings_value 'SITE_NAME' %}">
+      </a>
+      <h1 class="explain-title">How does {% settings_value 'SITE_NAME' %} work?</h1>
+      <p class="explain-lead">Tell {% settings_value 'SITE_NAME' %} three things &mdash;
+        <strong>who you are</strong>, <strong>what you&rsquo;re planning and spending</strong>, and
+        <strong>what you expect from the economy</strong> &mdash; and it projects your finances year by
+        year, from today into the future.</p>
 
-<p class="text-muted">A short walkthrough of how you describe your finances (your <strong>Profile</strong>),
-  the <strong>Scenarios</strong> you compare, and the <strong>forecast output</strong> you get back will
-  go here.</p>
+      <div class="explain-cta">
+        {% if tour_available %}
+        <form method="post" action="{% url 'start_tour' %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-lg">Take a tour</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-lg">Try it now</button>
+        </form>
+      </div>
 
-<div class="text-center mt-4 mb-3">
-  <form method="post" action="{% url 'start_tour' %}" class="d-inline mr-2">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-outline-primary btn-lg">Take a Tour</button>
-  </form>
-  <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-cta btn-lg">Add my data</button>
-  </form>
+      {% if authentication_enabled %}
+      <p class="explain-signin small text-muted">Free to use &mdash; no sign-up required.</p>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="explain-steps">
+      {% comment %}Three labelled, bordered groups: the Current Facts you hold, the Future Scenario you
+      compose (Plans + Assumptions, the two parts of a Scenario), and What You Get back (the Forecast, the
+      page's single gold accent).{% endcomment %}
+      <div class="explain-box explain-facts">
+        <span class="explain-box-label">Current Facts</span>
+        <div class="explain-step">
+          <span class="explain-node">1</span>
+          <h2 class="explain-step-title">Your profile</h2>
+          <p class="explain-step-desc">Your household and what you own today.</p>
+          <span class="explain-shot">
+            <img src="{% static 'img/explain/step-1-profile.png' %}" alt="Setting up your profile" loading="lazy">
+          </span>
+        </div>
+      </div>
+
+      <div class="explain-box explain-scenario">
+        <span class="explain-box-label">Future Scenario</span>
+        <div class="explain-scenario-steps">
+          <div class="explain-step">
+            <span class="explain-node">2</span>
+            <h2 class="explain-step-title">Your plans</h2>
+            <p class="explain-step-desc">Your spending and the moves you&rsquo;re weighing &mdash; living
+              expenses, retirement age, vehicle replacements, and debt payoff.</p>
+            <span class="explain-shot">
+              <img src="{% static 'img/explain/step-2-plans.png' %}" alt="Choosing your plans" loading="lazy">
+            </span>
+          </div>
+          <div class="explain-step">
+            <span class="explain-node">3</span>
+            <h2 class="explain-step-title">Your assumptions</h2>
+            <p class="explain-step-desc">The economic backdrop the forecast runs against &mdash;
+              inflation, investment returns, and growth.</p>
+            <span class="explain-shot">
+              <img src="{% static 'img/explain/step-3-assumptions.png' %}" alt="Setting your assumptions" loading="lazy">
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="explain-box explain-payoff">
+        <span class="explain-box-label explain-box-label--gold">What You Get</span>
+        <div class="explain-step">
+          <span class="explain-node">4</span>
+          <h2 class="explain-step-title">Your forecast</h2>
+          <p class="explain-step-desc">Your finances year by year, past through future.</p>
+          <span class="explain-shot">
+            <img src="{% static 'img/explain/step-4-forecast.png' %}" alt="Your forecast" loading="lazy">
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<p class="text-center small text-muted">Already have an account?
-  <a href="{% url 'user_signin' %}">Sign in</a>.</p>
+{% include "components/base_footer.html" %}
 {% endblock %}

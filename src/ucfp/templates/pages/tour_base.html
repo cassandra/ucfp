@@ -4,33 +4,87 @@
 {% comment %}
   The tour shell: the layout for the read-only sample-data tour. Like `app_base.html` it exposes an
   `app_content` region (and the `main_container_class` override), so the real feature pages can render
-  inside it via the swappable base -- but it carries the tour's own chrome (a header, and later the
-  step navigation and the "Take a Tour" exit) instead of the app navbar.
+  inside it via the swappable base -- but it carries the tour's own chrome instead of the app navbar. A
+  two-tier header: a top bar (logo escape hatch, a centered "guided tour" marker so the sample context is
+  clear, and the "Start planning" graduation) over a prominent nav that is the tour's main navigation and
+  mirrors the Explain page's three labelled boxes -- Current Facts (Profile), Future Scenario (Plans +
+  Assumptions, the two parts of a Scenario), and What You Get (Forecast). The active step
+  (`tour_active_step`, 1-4, from the view) is lit; the one gold action here is "Start planning".
 {% endcomment %}
 
 {% block content %}
 <div class="tour-shell">
   {% comment %}Deliberately unlike the app's primary navbar (light, bordered) so the tour reads as a distinct
   space.{% endcomment %}
-  <header class="tour-header bg-light border-bottom py-2">
-    <div class="container d-flex align-items-center">
-      {# The logo is a deliberately subtle escape hatch to the public home; browser-back covers "back". #}
-      <a class="navbar-brand py-1 m-0 mr-4" href="{% url 'home' %}">
-        <img src="{% static 'img/app-logo-h64.png' %}" height="28" alt="{% settings_value 'SITE_NAME' %}">
-      </a>
-      {% comment %}Plans and Assumptions both enter the one scenario view (tour_scenario); Forecast resolves
-      the sample run itself.{% endcomment %}
-      <nav class="tour-steps small">
-        <a class="text-primary mr-3" href="{% url 'tour_profile' section='subjects' %}">1. Profile</a>
-        <a class="text-primary mr-3" href="{% url 'tour_scenario' section='retirement' %}">2. Plans</a>
-        <a class="text-primary mr-3"
-           href="{% url 'tour_scenario' section='external-factors' %}">3. Assumptions</a>
-        <a class="text-primary" href="{% url 'tour_forecast' %}">4. Forecast</a>
+  <header class="tour-header bg-light border-bottom">
+    <div class="container">
+      <div class="tour-topbar">
+        {# The logo is a deliberately subtle escape hatch to the public home; browser-back covers "back". #}
+        <a class="navbar-brand py-1 m-0" href="{% url 'home' %}">
+          <img src="{% static 'img/app-logo-h64.png' %}" height="26" alt="{% settings_value 'SITE_NAME' %}">
+        </a>
+        <span class="tour-badge">Guided tour &middot; sample data</span>
+        <form method="post" action="{% url 'add_my_data' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-cta btn-sm">Start planning</button>
+        </form>
+      </div>
+
+      {% comment %}The main tour navigation, mirroring the Explain page's three labelled boxes: Current
+      Facts (Profile), Future Scenario (Plans + Assumptions -- both enter the one tour_scenario view at each
+      flow's first section), and What You Get (Forecast, which resolves the sample run itself). Neutral
+      labels only -- the tour's single gold action is "Start planning". The active chip is lit by
+      `tour_active_step`, so the scenario view lights whichever of Plans/Assumptions is showing.{% endcomment %}
+      <nav class="tour-nav" aria-label="Tour steps">
+        <span class="tour-group tour-group--facts" role="group" aria-label="Current Facts">
+          <span class="tour-group-label">Current Facts</span>
+          <span class="tour-group-steps">
+            <a class="tour-step {% if tour_active_step == 1 %}is-active{% endif %}"
+               href="{% url 'tour_profile' section='subjects' %}"
+               {% if tour_active_step == 1 %}aria-current="step"{% endif %}>
+              <span class="tour-step-num">1</span><span class="tour-step-label">Profile</span></a>
+          </span>
+        </span>
+
+        <span class="tour-group tour-group--scenario" role="group" aria-label="Future Scenario">
+          <span class="tour-group-label">Future Scenario</span>
+          <span class="tour-group-steps">
+            <a class="tour-step {% if tour_active_step == 2 %}is-active{% endif %}"
+               href="{% url 'tour_scenario' section='retirement' %}"
+               {% if tour_active_step == 2 %}aria-current="step"{% endif %}>
+              <span class="tour-step-num">2</span><span class="tour-step-label">Plans</span></a>
+            <a class="tour-step {% if tour_active_step == 3 %}is-active{% endif %}"
+               href="{% url 'tour_scenario' section='external-factors' %}"
+               {% if tour_active_step == 3 %}aria-current="step"{% endif %}>
+              <span class="tour-step-num">3</span><span class="tour-step-label">Assumptions</span></a>
+          </span>
+        </span>
+
+        <span class="tour-group tour-group--payoff" role="group" aria-label="What You Get">
+          <span class="tour-group-label">What You Get</span>
+          <span class="tour-group-steps">
+            <a class="tour-step {% if tour_active_step == 4 %}is-active{% endif %}"
+               href="{% url 'tour_forecast' %}"
+               {% if tour_active_step == 4 %}aria-current="step"{% endif %}>
+              <span class="tour-step-num">4</span><span class="tour-step-label">Forecast</span></a>
+          </span>
+        </span>
       </nav>
-      <form method="post" action="{% url 'add_my_data' %}" class="m-0 ml-auto">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-cta btn-sm">Add my data</button>
-      </form>
+
+      {% if tour_active_step %}
+      <p class="tour-step-desc">
+        {% if tour_active_step == 1 %}The household snapshot the whole forecast is built on &mdash; the
+          people, accounts, and property. This is what you&rsquo;d fill in for yourself.
+        {% elif tour_active_step == 2 %}Part of your Scenario &mdash; your spending and the moves you&rsquo;re
+          weighing: living, home, and vehicle expenses, plus retirement age, vehicle replacements, and debt
+          payoff.
+        {% elif tour_active_step == 3 %}The rest of your Scenario &mdash; the economic assumptions the
+          forecast runs against, like inflation and investment returns.
+        {% elif tour_active_step == 4 %}The forecast this sample produces &mdash; net worth and cash flow year
+          by year. Scroll the table, and use the column controls to change the view.
+        {% endif %}
+      </p>
+      {% endif %}
     </div>
   </header>
 

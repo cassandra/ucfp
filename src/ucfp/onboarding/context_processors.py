@@ -1,13 +1,10 @@
 """Template context for the onboarding surfaces."""
-from ucfp.onboarding.membership import working_organization
+from ucfp.onboarding.home_cta import HomeCtaState, home_cta_state
 
 
 def add_my_data_offer( request ):
-    """Expose `offer_add_my_data` -- whether to promote "Add My Data" -- to every template. True when the
-    user is signed in but has no organization of their own (the read-only sample, or nothing, is all they
-    have), so their next step is to start their own plan. This is the single, encapsulated definition of
-    the "early user" state, so its exact criteria (and any query cost) can be reworked in one place."""
-    user = getattr( request, 'user', None )
-    if ( user is None ) or ( not user.is_authenticated ):
-        return { 'offer_add_my_data': False }
-    return { 'offer_add_my_data': working_organization( user ) is None }
+    """Expose `offer_add_my_data` -- whether to promote "Start planning" -- to every template. True for the
+    early-user state: signed in, but the read-only sample (or nothing) is all they have, so their next step
+    is to start their own plan. Derived from `home_cta_state` (the SAMPLE_ONLY state) so the criterion has a
+    single home."""
+    return { 'offer_add_my_data': home_cta_state( request ) == HomeCtaState.SAMPLE_ONLY }

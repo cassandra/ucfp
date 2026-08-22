@@ -854,3 +854,121 @@ body.has-cookie-notice {
 .marketing-band {
     background-color: #e9ecef;
 }
+
+
+/* =========================================================================
+   Explain page ("How does <SITE_NAME> work?") -- the three-box story
+
+   Teaches the app's shape as three labelled, bordered groups:
+     Current Facts (Profile) -> Future Scenario (Plans + Assumptions) -> What You Get (Forecast).
+   Gold is the single accent, on the "What You Get" payoff box only (the two CTAs
+   are co-equal .btn-primary). Desktop lays the three boxes in an equal-height row;
+   narrow screens stack them. Screenshots render in a uniform 4:3 slot (object-fit:
+   cover, anchored top-left) so the heterogeneous source captures stay tidy.
+   ========================================================================= */
+
+.explain-hero            { padding: 2rem 0 0.5rem; }
+.explain-title           { font-size: 2rem; font-weight: 700; color: var(--tertiary-color); margin-bottom: 0.5rem; }
+.explain-lead            { color: var(--muted-color); max-width: 44rem; margin: 0 auto 1.25rem; }
+.explain-cta             { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+.explain-signin          { margin-top: 0.85rem; margin-bottom: 0; }
+
+/* Shared step atoms. */
+.explain-node            { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center;
+                           justify-content: center; background: var(--primary-color); color: var(--on-primary-color);
+                           font-weight: 700; border: 3px solid var(--white); margin: 0 auto 0.75rem; }
+.explain-step            { text-align: center; }
+.explain-step-title      { font-size: 1rem; margin: 0 0 0.25rem; color: var(--tertiary-color); }
+.explain-step-desc       { font-size: 0.8rem; color: var(--muted-color); margin: 0 0 0.75rem; }
+.explain-shot            { display: block; border: 1px solid var(--line-color); border-radius: 6px;
+                           overflow: hidden; background: var(--white); max-width: 420px; margin: 0 auto; }
+.explain-shot img        { display: block; width: 100%; aspect-ratio: 4 / 3;
+                           object-fit: cover; object-position: top left; }
+
+/* The three labelled boxes, each with a legend-style label on its top border. */
+.explain-box             { position: relative; border: 1px solid var(--line-color); border-radius: 10px;
+                           padding: 1.15rem 0.75rem 0.85rem; background: rgba( 31, 95, 139, 0.03 ); }
+.explain-box-label       { position: absolute; top: -0.62rem; left: 0.9rem; background: var(--white);
+                           padding: 0 0.4rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em;
+                           font-weight: 800; color: var(--muted-color); }
+.explain-box-label--gold { color: #8a5e0d; }   /* a dark gold that reads as gold yet clears AA contrast on white */
+.explain-payoff          { border-color: var(--secondary-highlight-color); background: #fffdf6;
+                           box-shadow: 0 4px 14px rgba( 245, 185, 69, 0.18 ); }
+.explain-payoff .explain-node { background: var(--secondary-color); color: var(--on-secondary-color);
+                           width: 40px; height: 40px; }
+
+/* Stacked by default (narrow); the two Scenario steps stack too. */
+.explain-steps           { display: flex; flex-direction: column; gap: 1.5rem; margin: 1rem 0 2.5rem; }
+.explain-scenario-steps  { display: flex; flex-direction: column; gap: 1.5rem; }
+
+/* ---- Desktop / wide: the three boxes in an equal-height row (>= 768px) ---- */
+@media (min-width: 768px) {
+    .explain-steps         { flex-direction: row; align-items: stretch; gap: 1rem; }
+    .explain-facts         { flex: 1 1 0; }
+    .explain-scenario      { flex: 2 1 0; }
+    .explain-payoff        { flex: 1 1 0; }
+    .explain-scenario-steps { flex-direction: row; gap: 0.6rem; }
+    .explain-scenario-steps .explain-step { flex: 1 1 0; }
+    .explain-step-desc     { min-height: 3.6em; }
+    .explain-shot          { max-width: none; }
+    /* gold "arrow" bridging the gap from the Scenario into the payoff. */
+    .explain-payoff::before { content: "\2192"; position: absolute; top: 1.5rem; left: -0.95rem;
+                             color: var(--secondary-color); font-weight: 800; font-size: 1.4rem; line-height: 1; }
+}
+
+
+/* =========================================================================
+   Sample-data tour chrome (`pages/tour_base.html`)
+
+   A two-tier header: a top bar (logo left, a centered "guided tour" marker, the
+   "Start planning" graduation right) over a prominent nav that is the tour's main
+   navigation. The nav mirrors the Explain page's three labelled boxes -- Current
+   Facts (Profile), Future Scenario (Plans + Assumptions), What You Get (Forecast).
+   It stays in the blue/neutral family: the tour's single gold action is "Start
+   planning", so the nav carries no gold (gold is the verb, never chrome). The
+   active step is lit via `.is-active`.
+   ========================================================================= */
+.tour-topbar        { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+                      gap: 0.75rem; padding: 0.5rem 0 0.6rem; }
+.tour-topbar > :first-child { justify-self: start; }
+.tour-topbar > :last-child  { justify-self: end; }
+.tour-badge         { justify-self: center; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.1em;
+                      font-weight: 800; color: var(--muted-color); background: var(--muted-bg-medium);
+                      border-radius: 20px; padding: 0.28rem 0.7rem; white-space: nowrap; }
+
+/* The prominent step nav: three labelled boxes matching the Explain page. */
+.tour-nav           { display: flex; align-items: stretch; gap: 0.6rem; flex-wrap: wrap; padding-bottom: 0.5rem; }
+
+.tour-step          { display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+                      padding: 0.55rem 0.7rem; border: 1px solid var(--line-color); border-radius: 8px;
+                      background: var(--white); color: var(--muted-color); text-decoration: none;
+                      font-weight: 600; font-size: 0.9rem; line-height: 1.1; }
+.tour-step:hover    { border-color: var(--primary-color); color: var(--primary-color); }
+.tour-step-num      { flex: none; width: 26px; height: 26px; border-radius: 6px; display: flex;
+                      align-items: center; justify-content: center; background: var(--muted-bg-medium);
+                      color: var(--tertiary-color); font-weight: 800; font-size: 0.8rem; }
+.tour-step.is-active { border-color: var(--primary-color); background: var(--info-bg-light);
+                      color: var(--tertiary-color); box-shadow: 0 2px 8px rgba( 31, 95, 139, 0.18 ); }
+.tour-step.is-active .tour-step-num { background: var(--primary-color); color: var(--on-primary-color); }
+
+/* Each nav group is a labelled box (legend-style label on its top border), like Explain. */
+.tour-group         { position: relative; min-width: 0; display: flex; align-items: stretch;
+                      border: 1px solid var(--line-color); border-radius: 9px; padding: 0.85rem 0.5rem 0.5rem;
+                      background: rgba( 31, 95, 139, 0.03 ); }
+.tour-group--facts    { flex: 1 1 0; }
+.tour-group--scenario { flex: 2 1 0; }
+.tour-group--payoff   { flex: 1 1 0; }
+.tour-group-label   { position: absolute; top: -0.62rem; left: 0.7rem; background: var(--muted-bg-light);
+                      padding: 0 0.4rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em;
+                      font-weight: 800; color: var(--muted-color); }
+.tour-group-steps   { display: flex; gap: 0.5rem; flex: 1; min-width: 0; }
+.tour-group-steps .tour-step { flex: 1 1 0; min-width: 0; }
+
+.tour-step-desc     { margin: 0.55rem 0 0.1rem; color: var(--muted-color); font-size: 0.9rem; }
+
+/* Phones: stack the nav boxes and their steps so each stays a full-width tap target. */
+@media (max-width: 575.98px) {
+    .tour-nav          { flex-direction: column; }
+    .tour-group-steps  { flex-direction: column; }
+    .tour-step         { justify-content: flex-start; }
+}
