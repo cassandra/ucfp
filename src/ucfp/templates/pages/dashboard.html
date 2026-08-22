@@ -2,13 +2,25 @@
 {% load common_tags %}
 {% load icons %}
 {% comment %}
-  The signed-in dashboard (self-host/dev, or a signed-in cloud user -- see HomeView.dispatch): one card
-  per planning feature, mirroring the navbar's feature menu. Each card links where the nav does; visiting
-  a feature threads the user through the Profile / Scenario it needs, so the dashboard stays a simple
-  chooser. Three features are still to come (badged "soon").
+  The signed-in dashboard (DashboardView): one card per planning feature, mirroring the navbar's feature
+  menu. Each card links where the nav does; visiting a feature threads the user through the Profile /
+  Scenario it needs, so the dashboard stays a simple chooser. Three features are still to come (badged
+  "soon"). An early user (no organization of their own -- see `offer_add_my_data`) is promoted to start
+  their own plan first, since the features would otherwise run against the read-only sample.
 {% endcomment %}
 
 {% block app_content %}
+{% if offer_add_my_data %}
+<div class="text-center mb-4 p-4 bg-light border rounded">
+  <h1 class="h4">Start your own plan</h1>
+  <p class="text-muted">You're exploring the sample data. Add your own to see your real forecast.</p>
+  <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-cta btn-lg">Add my data</button>
+  </form>
+</div>
+{% endif %}
+
 <div class="text-center mb-4">
   <h1 class="h3">Your planning perspectives</h1>
   <p class="text-muted mb-0">Pick where to start &mdash; each guides you through what it needs.</p>

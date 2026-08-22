@@ -169,3 +169,26 @@ class AddMyDataTest( TestCase ):
         self.assertEqual( self.client.session.get( 'current_organization_uuid' ), str( own.uuid ) )
         # still a member of the sample -- reachable again via the switcher, just no longer the current org
         self.assertTrue( OrganizationMember.objects.filter( user = user, organization = sample ).exists() )
+
+
+class DashboardEarlyUserTest( TestCase ):
+    """The dashboard promotes "Add My Data" to an early user (only the sample org) and not once they have
+    their own org -- driven by the `offer_add_my_data` context flag."""
+
+    def test_promotes_add_my_data_to_an_early_user( self ):
+        Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        self.client.post( reverse( 'start_tour' ) )              # a guest whose only org is the sample
+
+        response = self.client.get( reverse( 'dashboard' ) )
+
+        self.assertTrue( response.context[ 'offer_add_my_data' ] )
+        self.assertContains( response, reverse( 'add_my_data' ) )
+
+    def test_does_not_promote_once_they_own_an_org( self ):
+        user = User.objects.create_user( email = 'o@x.test' )
+        Organization.objects.create_for_owner( user, 'Mine' )
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'dashboard' ) )
+
+        self.assertFalse( response.context[ 'offer_add_my_data' ] )
