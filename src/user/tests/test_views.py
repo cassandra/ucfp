@@ -26,34 +26,6 @@ def _auth_user_id( client ):
 
 
 @override_settings(SUPPRESS_AUTHENTICATION=False)
-class ConvertToGuestViewTest(TestCase):
-    """The Anonymous -> Guest conversion, on a cloud deployment (where Anonymous visitors exist)."""
-
-    def test_post_converts_anonymous_visitor_to_a_single_guest(self):
-        response = self.client.post( reverse( 'convert_to_guest' ) )
-
-        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
-        self.assertEqual( 1, User.objects.count() )
-        self.assertTrue( User.objects.get().is_guest )
-
-    def test_get_does_not_convert_and_is_rejected(self):
-        # POST-only, so a crawled GET can never mint an account.
-        response = self.client.get( reverse( 'convert_to_guest' ) )
-
-        self.assertEqual( 405, response.status_code )
-        self.assertEqual( 0, User.objects.count() )
-
-    def test_already_signed_in_visitor_gets_no_second_account(self):
-        existing = User.objects.create_user( email = 'has@example.com' )
-        self.client.force_login( existing )
-
-        response = self.client.post( reverse( 'convert_to_guest' ) )
-
-        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
-        self.assertEqual( 1, User.objects.count() )
-
-
-@override_settings(SUPPRESS_AUTHENTICATION=False)
 class OnboardingPagesAnonymousTest(TestCase):
     """The onboarding pages a visitor with no account reaches without signing in or writing data."""
 
@@ -428,8 +400,10 @@ class TestAuthEndpointsDisabledSelfHosted(SyncViewTestCase):
         url = reverse('magic_link', kwargs = { 'user_uuid': str( self.user.uuid ), 'token': 'x' })
         self._assert_rejected( self.client.get( url ) )
 
-    def test_convert_to_guest_is_rejected( self ):
-        self._assert_rejected( self.client.post( reverse('convert_to_guest') ) )
+    def test_add_my_data_is_rejected( self ):
+        # The anonymous -> Guest graduation (ConvertToGuestView) is disabled self-hosted, via the
+        # require_authentication_enabled guard the AddMyDataView subclass inherits.
+        self._assert_rejected( self.client.post( reverse('add_my_data') ) )
 
     def test_attach_email_is_rejected_before_attaching( self ):
         response = self.client.post( reverse('attach_email'), { 'email': 'new@example.com' } )
