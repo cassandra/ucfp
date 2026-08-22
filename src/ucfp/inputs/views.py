@@ -734,7 +734,7 @@ class InterviewView( GuestReminderMixin, View ):
             following = first_section_of_flow( 'assumptions' )  # scenario build: chain Plans -> Assumptions
         return following
 
-    def _completion_destination( self, request, flow, building ) -> str:
+    def _completion_destination( self, request, flow, building ) -> 'str | None':
         """Where a completed flow lands -- a pure URL (the advance POST finalizes the build itself). A
         scenario build (Plans then Assumptions) finishes at the end of Assumptions on the Scenarios page.
         Finishing the standalone Profile loops back to its first section (via `SECTION_URL_NAME`, so the tour
@@ -869,8 +869,7 @@ class InterviewView( GuestReminderMixin, View ):
             'form'                 : form,
             'section_target'       : self._SECTION_TARGET,
             'stepper_target'       : self._STEPPER_TARGET,
-            # The route the stepper/Next links point at -- `SECTION_URL_NAME`, so the tour's links stay in
-            # the tour (see the class attribute).
+            # The route the stepper/Next links point at (see the `SECTION_URL_NAME` class attribute).
             'section_url_name'     : self.SECTION_URL_NAME,
             # The Plans-flow drift banner: these plans reference removed Profile entities (None off Plans).
             'drift'                : self._plans_drift( request, flow ),

@@ -115,9 +115,10 @@ class StartTourView( ConvertToGuestView ):
         return super().post( request, *args, **kwargs )
 
     def after_conversion( self, request, user ):
-        join_sample_org( user )
+        join_sample_org( user )                                # availability is guaranteed by post()'s guard
         request.session_state.set_current_organization( str( SAMPLE_ORGANIZATION_UUID ) )
         request.session_state.to_session( request )
+        return
 
     def landing_url( self, request ):
         return resolve_url( 'tour_profile', section = first_section_of_flow( 'profile' ).key )
@@ -131,6 +132,7 @@ class AddMyDataView( ConvertToGuestView ):
 
     def after_conversion( self, request, user ):
         ensure_own_organization( request, user )
+        return
 
 
 class TourInterviewView( InterviewView ):
@@ -182,7 +184,7 @@ class TourForecastView( RunResultsView ):
     def get( self, request ):
         result = PlanningResultRecord.objects.filter(
             organization = request.organization, feature = PlanningFeature.FINANCIAL_FORECAST
-        ).order_by( '-created_datetime' ).first()
+        ).select_related( 'run' ).order_by( '-created_datetime' ).first()
         if result is None:
             raise DataNotAvailableError( 'The sample forecast is not available.' )
         return super().get( request, run_uuid = result.run.uuid )

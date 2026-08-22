@@ -153,8 +153,8 @@ class OrganizationLeaveConfirmView( ModalView ):
 class OrganizationDeleteView( View ):
     """POST: permanently delete a household the user owns, and all its data.
 
-    Redirects to home afterward, which re-provisions a fresh organization if this
-    left the user with none.
+    Redirects to the dashboard afterward, whose input gating re-provisions a fresh
+    organization if this left the user with none.
     """
 
     def post( self, request, organization_uuid ):

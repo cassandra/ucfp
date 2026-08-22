@@ -105,12 +105,12 @@ class StartTourTest( TestCase ):
 
         response = self.client.get( reverse( 'tour_forecast' ) )
 
-        self.assertNotEqual( response.status_code, 200 )         # DataNotAvailableError, not the run page
+        self.assertEqual( 404, response.status_code )            # DataNotAvailableError, not the run page
 
     def test_unseeded_sample_makes_the_tour_unavailable( self ):
         response = self.client.post( reverse( 'start_tour' ) )
 
-        self.assertNotEqual( response.status_code, 302 )                          # not forwarded into a tour
+        self.assertEqual( 404, response.status_code )                             # DataNotAvailableError
         self.assertFalse( User.objects.exists() )                                 # no orphan Guest minted
 
 
@@ -152,6 +152,25 @@ class AddMyDataTest( TestCase ):
         self.assertEqual( User.objects.count(), 1 )
         own = self._own_org( User.objects.get() )
         self.assertNotEqual( str( own.uuid ), str( SAMPLE_ORGANIZATION_UUID ) )   # their own, not the sample
+        self.assertEqual( self.client.session.get( 'current_organization_uuid' ), str( own.uuid ) )
+
+    def test_get_is_rejected_and_mints_no_account( self ):
+        # POST-only (inherited from ConvertToGuestView): a crawled GET must never mint a Guest.
+        response = self.client.get( reverse( 'add_my_data' ) )
+
+        self.assertEqual( 405, response.status_code )
+        self.assertEqual( 0, User.objects.count() )
+
+    def test_existing_owner_switches_without_creating_a_second_org( self ):
+        # The reuse branch of ensure_own_organization: an owner keeps their org (no duplicate).
+        user = User.objects.create_user( email = 'o@x.test' )
+        own = Organization.objects.create_for_owner( user, 'Mine' )
+        self.client.force_login( user )
+
+        response = self.client.post( reverse( 'add_my_data' ) )
+
+        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
+        self.assertEqual( 1, Organization.objects.count() )      # reused, not duplicated
         self.assertEqual( self.client.session.get( 'current_organization_uuid' ), str( own.uuid ) )
 
     def test_tour_guest_add_my_data_switches_off_the_sample( self ):
@@ -216,6 +235,32 @@ class FeaturePageAddMyDataTest( TestCase ):
         self.assertEqual( response.status_code, 200 )
         self.assertFalse( response.context[ 'offer_add_my_data' ] )
         self.assertNotContains( response, self._CTA_COPY )
+
+
+class HomeSignedInCtaTest( TestCase ):
+    """The site root (`/`, HomeView) stays reachable for everyone and routes a signed-in visitor onward:
+    an early user (only the read-only sample org) to "Add my data", an owner to their dashboard."""
+
+    def test_early_user_is_offered_add_my_data( self ):
+        Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        self.client.post( reverse( 'start_tour' ) )              # a guest whose only org is the sample
+
+        response = self.client.get( reverse( 'home' ) )
+
+        self.assertTrue( response.context[ 'offer_add_my_data' ] )
+        self.assertContains( response, reverse( 'add_my_data' ) )
+        self.assertNotContains( response, reverse( 'dashboard' ) )
+
+    def test_owner_is_pointed_to_the_dashboard( self ):
+        user = User.objects.create_user( email = 'o@x.test' )
+        Organization.objects.create_for_owner( user, 'Mine' )
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'home' ) )
+
+        self.assertFalse( response.context[ 'offer_add_my_data' ] )
+        self.assertContains( response, reverse( 'dashboard' ) )
+        self.assertNotContains( response, reverse( 'add_my_data' ) )
 
 
 class DashboardEarlyUserTest( TestCase ):
