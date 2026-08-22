@@ -15,6 +15,12 @@ def sample_organization():
     return Organization.objects.filter( uuid = SAMPLE_ORGANIZATION_UUID ).first()
 
 
+def is_sample_organization( organization ) -> bool:
+    """Whether `organization` is the reserved read-only sample org. Useful where a prompt about *the
+    user's own* data (saving it, adding to it) must not fire while they are merely viewing the sample."""
+    return bool( organization ) and ( str( organization.uuid ) == str( SAMPLE_ORGANIZATION_UUID ) )
+
+
 def join_sample_org( user ) -> bool:
     """Idempotently make `user` a read-only VIEWER of the sample organization. Best-effort: a no-op
     returning False when the sample org is absent. Uses `get_or_create`, so it never duplicates a

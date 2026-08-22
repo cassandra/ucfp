@@ -26,6 +26,7 @@ scenario -- the exact context that shortcut lands in.{% endcomment %}
 {% block page_actions %}{% if editing_scenario_name %}<a href="{% url 'scenario_compose' %}" class="btn btn-outline-primary edit-only">+ New scenario</a>{% endif %}{% endblock %}
 
 {% block page_meta %}{% include "inputs/interview/interview_status_detail.html" %}
+{% include "components/add_my_data_banner.html" %}
 {# The guest "save your work" reminder -- a swap target (InterviewView._swap), so it appears/clears live; #}
 {# it carries its own always-rendered id root, so it is included directly (no wrapper). #}
 {% include "inputs/interview/guest_email_banner.html" %}{% endblock %}

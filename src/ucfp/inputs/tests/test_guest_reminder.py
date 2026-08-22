@@ -11,6 +11,7 @@ from organization.models import Organization
 from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.mixins import GuestReminderMixin
 from ucfp.inputs.profile.repository import latest_profile, save_profile
+from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
 from ucfp.planning.tests.support import forecast_profile
 
 User = get_user_model()
@@ -83,6 +84,16 @@ class GuestReminderPredicateTest( TestCase ):
         # Self-hosted: the data is the server's, not browser-bound, so the reminder does not apply.
         self.assertFalse( self.mixin.show_guest_reminder( self._request_for( self.guest ),
                                                           flow_complete = True ) )
+
+    def test_hidden_on_the_read_only_sample_org( self ):
+        # Viewing the sample: nothing of theirs to save, so the email pitch stands down ("Add my data"
+        # is the prompt there instead), even though the sample profile is complete.
+        sample = Organization.objects.create(
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        _complete_profile( sample )
+        request = self._request_for( self.guest )
+        request.organization = sample
+        self.assertFalse( self.mixin.show_guest_reminder( request, flow_complete = True ) )
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )

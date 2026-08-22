@@ -7,9 +7,27 @@ from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 
 from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
-from ucfp.onboarding.membership import join_sample_org, sample_organization, working_organization
+from ucfp.onboarding.membership import (
+    is_sample_organization, join_sample_org, sample_organization, working_organization )
 
 User = get_user_model()
+
+
+class IsSampleOrganizationTest( TestCase ):
+    """`is_sample_organization`: identifies the reserved sample org so prompts about the user's own data
+    can stand down while they merely view the sample."""
+
+    def test_true_for_the_sample_org( self ):
+        sample = Organization.objects.create(
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        self.assertTrue( is_sample_organization( sample ) )
+
+    def test_false_for_another_org( self ):
+        user = User.objects.create_user( email = 'o@x.test' )
+        self.assertFalse( is_sample_organization( Organization.objects.create_for_owner( user, 'Mine' ) ) )
+
+    def test_false_for_none( self ):
+        self.assertFalse( is_sample_organization( None ) )
 
 
 class JoinSampleOrgTest( TestCase ):

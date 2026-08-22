@@ -171,6 +171,43 @@ class AddMyDataTest( TestCase ):
         self.assertTrue( OrganizationMember.objects.filter( user = user, organization = sample ).exists() )
 
 
+class FeaturePageAddMyDataTest( TestCase ):
+    """The real feature pages (here the Profile interview under the app chrome) promote "Add my data" to a
+    user whose only org is the read-only sample, and suppress the guest "save your work" email banner there
+    -- there is nothing of *theirs* to save yet. Once they own an org, neither prompt shows."""
+
+    _CTA_COPY   = "add your own to build your real plan"
+    _EMAIL_COPY = "add an email so you don't lose it"
+
+    def _profile_url( self ):
+        return reverse( 'interview_section',
+                        kwargs = { 'section': first_section_of_flow( 'profile' ).key } )
+
+    def test_sample_only_user_sees_add_my_data_and_not_the_email_banner( self ):
+        _seed_records( Organization.objects.create(               # a complete sample Profile to render
+            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME ) )
+        self.client.post( reverse( 'start_tour' ) )              # guest VIEWER, current-org = sample
+
+        response = self.client.get( self._profile_url() )        # the REAL interview, app chrome
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertTemplateUsed( response, 'pages/app_base.html' )        # not the tour shell
+        self.assertTrue( response.context[ 'offer_add_my_data' ] )
+        self.assertContains( response, self._CTA_COPY )                   # the "Add my data" prompt
+        self.assertNotContains( response, self._EMAIL_COPY )              # email pitch stands down
+
+    def test_owner_sees_neither_prompt( self ):
+        user = User.objects.create_user( email = 'o@x.test' )
+        _seed_records( Organization.objects.create_for_owner( user, 'Mine' ) )   # a profile to render
+        self.client.force_login( user )
+
+        response = self.client.get( self._profile_url() )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertFalse( response.context[ 'offer_add_my_data' ] )
+        self.assertNotContains( response, self._CTA_COPY )
+
+
 class DashboardEarlyUserTest( TestCase ):
     """The dashboard promotes "Add My Data" to an early user (only the sample org) and not once they have
     their own org -- driven by the `offer_add_my_data` context flag."""

@@ -1,0 +1,16 @@
+{% comment %}
+The "Add my data" prompt, shown on a real feature page (Profile / Plans / Assumptions / Forecast) when the
+signed-in user has only the read-only sample org (`offer_add_my_data` -- see the add_my_data_offer context
+processor). It is the sample-org counterpart to the guest "save your work" email banner, which sits in the
+same slot but stays hidden here (there is no data of *theirs* to save yet). Posting to add_my_data switches
+them into -- or creates -- their own organization and lands on their Profile.
+{% endcomment %}
+{% if offer_add_my_data %}
+<div class="alert alert-info d-md-flex align-items-center mt-3 mb-0" role="status">
+  <span class="mr-md-3 mb-2 mb-md-0">You're exploring the sample data — add your own to build your real plan.</span>
+  <form method="post" action="{% url 'add_my_data' %}" class="ml-md-auto">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary btn-sm text-nowrap">Add my data</button>
+  </form>
+</div>
+{% endif %}
