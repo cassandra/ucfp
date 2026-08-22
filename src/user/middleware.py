@@ -60,7 +60,6 @@ class AuthenticationMiddleware:
         'notify_email_resubscribe',
         'privacy_accept',
         'explain',
-        'preview',
         'convert_to_guest',
         'start_tour',
         'add_my_data',

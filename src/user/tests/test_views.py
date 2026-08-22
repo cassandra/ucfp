@@ -57,10 +57,8 @@ class ConvertToGuestViewTest(TestCase):
 class OnboardingPagesAnonymousTest(TestCase):
     """The onboarding pages a visitor with no account reaches without signing in or writing data."""
 
-    def test_explain_and_preview_are_reachable_and_write_nothing(self):
-        for name in [ 'explain', 'preview' ]:
-            with self.subTest( page = name ):
-                self.assertEqual( 200, self.client.get( reverse( name ) ).status_code )
+    def test_explain_is_reachable_and_writes_nothing(self):
+        self.assertEqual( 200, self.client.get( reverse( 'explain' ) ).status_code )
         self.assertEqual( 0, User.objects.count() )
         self.assertEqual( 0, Organization.objects.count() )
 
