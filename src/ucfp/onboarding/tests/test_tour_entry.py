@@ -11,6 +11,7 @@ from organization.models import Organization, OrganizationMember
 
 from ucfp.inputs.interview import first_section_of_flow
 from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
+from ucfp.onboarding.home_cta import HomeCtaState
 from ucfp.onboarding.seeding import _seed_records, seed_sample_org
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
@@ -279,19 +280,34 @@ class ExplainGatingTest( TestCase ):
         self.assertFalse( response.context[ 'authentication_enabled' ] )  # no sign-up concept self-hosted
 
 
-class HomeSignedInCtaTest( TestCase ):
-    """The site root (`/`, HomeView) stays reachable for everyone and routes a signed-in visitor onward:
-    an early user (only the read-only sample org) to "Add my data", an owner to their dashboard."""
+class HomeCtaStateTest( TestCase ):
+    """The site root (`/`, HomeView) stays reachable for everyone and offers exactly one gold action per
+    visitor state (`onboarding.home_cta`): an anonymous visitor learns how it works, an early user (only the
+    read-only sample) starts their own plan, an owner goes to their dashboard. The self-hosted singleton is
+    always an owner. A signed-in visitor must never see two competing gold actions (the former bug)."""
 
-    def test_early_user_is_offered_add_my_data( self ):
+    @staticmethod
+    def _gold_count( response ):
+        return response.content.decode().count( 'btn-cta' )
+
+    def test_anonymous_visitor_learns_how_it_works( self ):
+        response = self.client.get( reverse( 'home' ) )
+
+        self.assertEqual( HomeCtaState.ANONYMOUS.value, response.context[ 'home_cta' ] )
+        self.assertContains( response, reverse( 'explain' ) )
+        self.assertContains( response, reverse( 'user_signin' ) )        # the "already have an account?" line
+        self.assertNotContains( response, reverse( 'dashboard' ) )
+
+    def test_early_user_starts_planning_with_a_single_gold_action( self ):
         Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
         self.client.post( reverse( 'start_tour' ) )              # a guest whose only org is the sample
 
         response = self.client.get( reverse( 'home' ) )
 
-        self.assertTrue( response.context[ 'offer_add_my_data' ] )
+        self.assertEqual( HomeCtaState.SAMPLE_ONLY.value, response.context[ 'home_cta' ] )
         self.assertContains( response, reverse( 'add_my_data' ) )
         self.assertNotContains( response, reverse( 'dashboard' ) )
+        self.assertEqual( 1, self._gold_count( response ) )             # one gold, not two (the fixed bug)
 
     def test_owner_is_pointed_to_the_dashboard( self ):
         user = User.objects.create_user( email = 'o@x.test' )
@@ -300,9 +316,20 @@ class HomeSignedInCtaTest( TestCase ):
 
         response = self.client.get( reverse( 'home' ) )
 
-        self.assertFalse( response.context[ 'offer_add_my_data' ] )
+        self.assertEqual( HomeCtaState.OWN_ORG.value, response.context[ 'home_cta' ] )
         self.assertContains( response, reverse( 'dashboard' ) )
         self.assertNotContains( response, reverse( 'add_my_data' ) )
+        self.assertEqual( 1, self._gold_count( response ) )
+
+    @override_settings( SUPPRESS_AUTHENTICATION = True )
+    def test_self_hosted_singleton_is_an_owner( self ):
+        # The self-hosted identity middleware signs in a singleton owning its org, so home resolves to
+        # OWN_ORG with no anonymous chrome.
+        response = self.client.get( reverse( 'home' ) )
+
+        self.assertEqual( HomeCtaState.OWN_ORG.value, response.context[ 'home_cta' ] )
+        self.assertContains( response, reverse( 'dashboard' ) )
+        self.assertNotContains( response, reverse( 'user_signin' ) )
 
 
 class DashboardEarlyUserTest( TestCase ):

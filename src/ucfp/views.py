@@ -12,6 +12,7 @@ from common.request_utils import is_ajax
 
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.state import completed_profile
+from ucfp.onboarding.home_cta import home_cta_state
 from ucfp.onboarding.membership import sample_organization
 from ucfp.privacy_consent import PrivacyConsent
 
@@ -179,7 +180,8 @@ class HomeView( View ):
     """
 
     def get( self, request, *args, **kwargs ):
-        return render( request, 'pages/home.html', {} )
+        return render( request, 'pages/home.html', {
+            'home_cta': home_cta_state( request ).value } )
 
 
 class ExplainView( View ):
