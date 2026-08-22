@@ -5,12 +5,24 @@ from django.shortcuts import render, resolve_url
 from django.utils.decorators import method_decorator
 from django.views.generic import View
 
+from common.exceptions import DataNotAvailableError
+
 from custom.decorators import require_authentication_enabled
 
 from user import collision
 from user.signin_manager import SigninManager
+from user.views import ConvertToGuestView
+
+from ucfp.inputs.interview import first_section_of_flow
+from ucfp.inputs.views import InterviewView
+
+from ucfp.planning.enums import PlanningFeature
+from ucfp.planning.models import PlanningResultRecord
+from ucfp.planning.views import RunResultsView
 
 from . import reconciliation_service
+from .constants import SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_UUID
+from .membership import ensure_own_organization, join_sample_org, sample_organization
 
 
 @method_decorator( require_authentication_enabled, name = 'dispatch' )
@@ -87,3 +99,92 @@ class SigninCollisionView( View ):
     @staticmethod
     def _done( request ):
         return HttpResponseRedirect( resolve_url( settings.LOGIN_REDIRECT_URL ) )
+
+
+class StartTourView( ConvertToGuestView ):
+    """Start the sample-data tour ("Take a Tour"): join the visitor to the sample organization, switch the
+    session to it, and land on the tour. For an anonymous visitor a Guest is minted first (inherited from
+    `ConvertToGuestView`); a signed-in visitor is used as-is -- no conversion and no blocking needed, since
+    the tour pages are just the real org pages under a different wrapper and any read-only-ness comes from
+    the visitor's (VIEWER) membership, not the tour. If the sample org is not seeded there is nothing to
+    tour."""
+
+    def post( self, request, *args, **kwargs ):
+        if sample_organization() is None:
+            raise DataNotAvailableError( 'Tour is currently unavailable' )
+        return super().post( request, *args, **kwargs )
+
+    def after_conversion( self, request, user ):
+        join_sample_org( user )                                # availability is guaranteed by post()'s guard
+        request.session_state.set_current_organization( str( SAMPLE_ORGANIZATION_UUID ) )
+        request.session_state.to_session( request )
+        return
+
+    def landing_url( self, request ):
+        return resolve_url( 'tour_profile', section = first_section_of_flow( 'profile' ).key )
+
+
+class AddMyDataView( ConvertToGuestView ):
+    """"Add My Data": the universal graduation from previewing the sample to owning a plan. From an
+    anonymous visitor it mints a Guest (inherited); then, for anyone, it ensures they are in an
+    organization of their own -- not the read-only sample -- and lands on the Profile (the inherited
+    `GUEST_START_URL`) to start entering data. Offered wherever the sample (or nothing) is all they have."""
+
+    def after_conversion( self, request, user ):
+        ensure_own_organization( request, user )
+        return
+
+
+class TourInterviewView( InterviewView ):
+    """Shared base for tour steps that reuse an interview flow (Profile, and Plans/Assumptions in scenario
+    context): render the real interview under the tour shell, and keep navigation inside the tour -- the
+    stepper, Next, and the async push_url all derive from `SECTION_URL_NAME`, which subclasses declare.
+    Read-only-ness (if any) comes from the membership role, not the tour."""
+
+    def _page_template( self, section ):
+        return 'onboarding/tour/interview.html'
+
+    def _completion_destination( self, request, flow, building ):
+        """The tour has no flow-completion destination: a last section shows no advance control (nothing to
+        "Finish" while browsing; the four-step header moves between phases). This also keeps the read-only
+        Finish from escaping to the app's Scenarios page, where the base sends a finished build/component."""
+        return None
+
+
+class TourProfileView( TourInterviewView ):
+    """The Profile step of the tour."""
+
+    SECTION_URL_NAME = 'tour_profile'
+
+
+class TourScenarioView( TourInterviewView ):
+    """The Plans + Assumptions step of the tour, in *scenario context* -- both parts in the left rail, the
+    way a user meets them by default (rather than either in isolation). It sets the sample scenario as the
+    editing target so the two-part rail shows: a benign session write, since the tour is read-only and the
+    interview's write side is POST, which the VIEWER role blocks. Both the Plans and Assumptions nav entries
+    reach it at each flow's first section; the two-part rail switches between them."""
+
+    SECTION_URL_NAME = 'tour_scenario'
+
+    def get( self, request, section ):
+        request.session_state.editing_scenario = str( SAMPLE_SCENARIO_UUID )
+        request.session_state.to_session( request )
+        return super().get( request, section )
+
+
+class TourForecastView( RunResultsView ):
+    """The Forecast step of the tour: the captured sample run's outcome summary and books table
+    (`RunResultsView`) rendered under the tour shell. Unlike the run page it needs no run uuid in the URL --
+    it resolves the sample org's Financial Forecast run itself. The books-table column operations and the
+    in-window Maximize keep working unchanged: the column op is a fragment swap (no navigation) and Maximize
+    is pure client-side, so neither escapes the tour."""
+
+    results_template = 'onboarding/tour/forecast.html'
+
+    def get( self, request ):
+        result = PlanningResultRecord.objects.filter(
+            organization = request.organization, feature = PlanningFeature.FINANCIAL_FORECAST
+        ).select_related( 'run' ).order_by( '-created_datetime' ).first()
+        if result is None:
+            raise DataNotAvailableError( 'The sample forecast is not available.' )
+        return super().get( request, run_uuid = result.run.uuid )

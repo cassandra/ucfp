@@ -25,13 +25,12 @@ urlpatterns = [
 
     path( '', views.HomeView.as_view(), name = 'home' ),
     path( 'index.html', views.HomeView.as_view(), name = 'home_index' ),
+    path( 'dashboard', views.DashboardView.as_view(), name = 'dashboard' ),
     path( 'health', views.HealthView.as_view(), name = 'health' ),
 
-    # Onboarding pages for a visitor with no account (login-free). Explain introduces the app and
-    # funnels to either the read-only preview or the convert-to-Guest action; both are stubs here,
-    # their content filled by follow-up work.
+    # Onboarding page for a visitor with no account (login-free): Explain introduces the app and funnels
+    # into the tour ("Take a Tour") or the convert-to-Guest graduation ("Add my data").
     path( 'explain', TemplateView.as_view( template_name = 'pages/explain.html' ), name = 'explain' ),
-    path( 'preview', TemplateView.as_view( template_name = 'pages/preview.html' ), name = 'preview' ),
 
     # Public content pages (login-free; linked from the shared footer).
     path( 'about', TemplateView.as_view( template_name = 'pages/about.html' ), name = 'about' ),

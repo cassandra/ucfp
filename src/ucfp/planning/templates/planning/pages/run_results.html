@@ -28,6 +28,7 @@ from it. The horizon and the outcome now live in the shared run summary above th
 {% endblock %}
 
 {% block page_body %}
+{% include "components/add_my_data_banner.html" %}
 {% if notices %}
 <p class="mb-2">
   <button class="btn btn-sm notices-toggle notices-toggle--{{ notices_severity }}" type="button"

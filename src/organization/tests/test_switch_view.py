@@ -29,7 +29,7 @@ class OrganizationSwitchViewTest( TestCase ):
     def _url( self, org ):
         return reverse( 'organization_switch', kwargs = { 'organization_uuid': org.uuid } )
 
-    def test_switch_without_a_referer_selects_org_and_falls_back_to_home( self ):
+    def test_switch_without_a_referer_selects_org_and_falls_back_to_dashboard( self ):
         user = _user( 'u@x.test' )
         Organization.objects.create_for_owner( user, 'Owned' )
         other = _user( 'host@x.test' )
@@ -40,7 +40,7 @@ class OrganizationSwitchViewTest( TestCase ):
         response = self.client.post( self._url( joined ) )
 
         self.assertEqual( response.status_code, 302 )
-        self.assertEqual( response[ 'Location' ], reverse( 'home' ) )
+        self.assertEqual( response[ 'Location' ], reverse( 'dashboard' ) )
         self.assertEqual( self.client.session.get( _SESSION_KEY ), str( joined.uuid ) )
 
     def test_switch_reloads_the_referring_page( self ):
@@ -69,7 +69,7 @@ class OrganizationSwitchViewTest( TestCase ):
         response = self.client.post( self._url( joined ), HTTP_REFERER = 'http://evil.example/x' )
 
         self.assertEqual( response.status_code, 302 )
-        self.assertEqual( response[ 'Location' ], reverse( 'home' ) )
+        self.assertEqual( response[ 'Location' ], reverse( 'dashboard' ) )
 
     def test_cannot_switch_to_an_organization_the_user_does_not_belong_to( self ):
         user = _user( 'u@x.test' )

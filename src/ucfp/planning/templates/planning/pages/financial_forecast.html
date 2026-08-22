@@ -5,6 +5,7 @@
 {% block page_subtitle %}{% if has_profile and scenarios %}<p class="text-muted">Project a scenario once, or explore it interactively.</p>{% endif %}{% endblock %}
 
 {% block page_body %}
+{% include "components/add_my_data_banner.html" %}
 {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
 
 {% if drift_scenarios %}

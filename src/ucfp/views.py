@@ -169,23 +169,24 @@ class PrivacyAcceptView( View ):
         return antinode.response( replace_map = { 'privacy-consent-banner': '' } )
 
 
-class HomeView( InputGatedMixin, View ):
-    """The site root, serving one of two pages by audience:
-
-    - the public marketing page for a visitor with no account (only possible on an auth-enforced
-      cloud deployment), rendered directly without the organization/input gating a signed-in page
-      needs; and
-    - the signed-in dashboard otherwise (a cloud account, or the self-hosted singleton Guest that
-      `SelfHostedIdentityMiddleware` logs in), which points at the planning features.
+class HomeView( View ):
+    """The site root (`/`): the public home/landing page, shown to *everyone* regardless of account state
+    -- a marketing intro for a visitor, and (once enriched) onboarding options for an early user. Ungated:
+    it needs no organization, so it stays reachable in every state -- a signed-in user can always return
+    here to keep exploring (the tour, the explanation) -- with an explicit path on to their Dashboard.
     """
 
-    def dispatch( self, request, *args, **kwargs ):
-        if not request.user.is_authenticated:
-            return render( request, 'pages/marketing.html', {} )
-        return super().dispatch( request, *args, **kwargs )
+    def get( self, request, *args, **kwargs ):
+        return render( request, 'pages/home.html', {} )
 
-    def get(self, request, *args, **kwargs):
-        return render( request, 'pages/home.html', {
+
+class DashboardView( InputGatedMixin, View ):
+    """The signed-in dashboard: a known user's home within the app, pointing at the planning features.
+    Input-gated (organization + input state); an anonymous request is redirected to `home` by the auth
+    middleware, so this need not branch on account state."""
+
+    def get( self, request, *args, **kwargs ):
+        return render( request, 'pages/dashboard.html', {
             'profile_complete': completed_profile( request.organization ) is not None } )
 
 

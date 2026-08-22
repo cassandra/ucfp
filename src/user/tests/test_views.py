@@ -26,41 +26,11 @@ def _auth_user_id( client ):
 
 
 @override_settings(SUPPRESS_AUTHENTICATION=False)
-class ConvertToGuestViewTest(TestCase):
-    """The Anonymous -> Guest conversion, on a cloud deployment (where Anonymous visitors exist)."""
-
-    def test_post_converts_anonymous_visitor_to_a_single_guest(self):
-        response = self.client.post( reverse( 'convert_to_guest' ) )
-
-        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
-        self.assertEqual( 1, User.objects.count() )
-        self.assertTrue( User.objects.get().is_guest )
-
-    def test_get_does_not_convert_and_is_rejected(self):
-        # POST-only, so a crawled GET can never mint an account.
-        response = self.client.get( reverse( 'convert_to_guest' ) )
-
-        self.assertEqual( 405, response.status_code )
-        self.assertEqual( 0, User.objects.count() )
-
-    def test_already_signed_in_visitor_gets_no_second_account(self):
-        existing = User.objects.create_user( email = 'has@example.com' )
-        self.client.force_login( existing )
-
-        response = self.client.post( reverse( 'convert_to_guest' ) )
-
-        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
-        self.assertEqual( 1, User.objects.count() )
-
-
-@override_settings(SUPPRESS_AUTHENTICATION=False)
 class OnboardingPagesAnonymousTest(TestCase):
     """The onboarding pages a visitor with no account reaches without signing in or writing data."""
 
-    def test_explain_and_preview_are_reachable_and_write_nothing(self):
-        for name in [ 'explain', 'preview' ]:
-            with self.subTest( page = name ):
-                self.assertEqual( 200, self.client.get( reverse( name ) ).status_code )
+    def test_explain_is_reachable_and_writes_nothing(self):
+        self.assertEqual( 200, self.client.get( reverse( 'explain' ) ).status_code )
         self.assertEqual( 0, User.objects.count() )
         self.assertEqual( 0, Organization.objects.count() )
 
@@ -176,7 +146,7 @@ class TestMagicCodeView(CloudAuthViewTest):
         response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
 
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )
+        self.assertEqual( reverse('dashboard'), response.url )
         self.assertEqual( _auth_user_id( self.client ), str( self.user.pk ) )
 
     def test_valid_code_confirms_a_signed_in_guests_pending_email(self):
@@ -188,7 +158,7 @@ class TestMagicCodeView(CloudAuthViewTest):
         response = self.client.post( reverse('magic_code'), { 'magic_code': 'abcdef' } )
 
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )        # lands on the dashboard, not the account page
+        self.assertEqual( reverse('dashboard'), response.url )        # lands on the dashboard, not the account page
         guest.refresh_from_db()
         self.assertEqual( 'claimed@example.com', guest.email )   # promoted -> Verified
         self.assertIsNone( guest.pending_email )
@@ -275,7 +245,7 @@ class TestMagicLinkView(CloudAuthViewTest):
     def test_verified_account_link_signs_in_from_any_session(self):
         response = self.client.get( self._link( self.user ) )
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )
+        self.assertEqual( reverse('dashboard'), response.url )
         self.assertEqual( _auth_user_id( self.client ), str( self.user.pk ) )
 
     def test_pending_link_in_the_same_session_confirms(self):
@@ -286,7 +256,7 @@ class TestMagicLinkView(CloudAuthViewTest):
         response = self.client.get( self._link( guest ) )
 
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )        # lands on the dashboard, not the account page
+        self.assertEqual( reverse('dashboard'), response.url )        # lands on the dashboard, not the account page
         guest.refresh_from_db()
         self.assertEqual( 'claimed@example.com', guest.email )
 
@@ -430,8 +400,10 @@ class TestAuthEndpointsDisabledSelfHosted(SyncViewTestCase):
         url = reverse('magic_link', kwargs = { 'user_uuid': str( self.user.uuid ), 'token': 'x' })
         self._assert_rejected( self.client.get( url ) )
 
-    def test_convert_to_guest_is_rejected( self ):
-        self._assert_rejected( self.client.post( reverse('convert_to_guest') ) )
+    def test_add_my_data_is_rejected( self ):
+        # The anonymous -> Guest graduation (ConvertToGuestView) is disabled self-hosted, via the
+        # require_authentication_enabled guard the AddMyDataView subclass inherits.
+        self._assert_rejected( self.client.post( reverse('add_my_data') ) )
 
     def test_attach_email_is_rejected_before_attaching( self ):
         response = self.client.post( reverse('attach_email'), { 'email': 'new@example.com' } )
@@ -553,7 +525,7 @@ class TestVerifyCooldown(CloudAuthViewTest):
         self._post_code('wrongg')
         response = self._post_code('abcdef')
         self.assertEqual( 302, response.status_code )
-        self.assertEqual( reverse('home'), response.url )
+        self.assertEqual( reverse('dashboard'), response.url )
         self.assertNotIn( 'magic_code_failures', self.client.session )
 
     @override_settings(SIGNIN_VERIFY_FREE_ATTEMPTS=99, SIGNIN_VERIFY_PER_IP_LIMIT=1)

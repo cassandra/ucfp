@@ -10,6 +10,8 @@ from .enums import OrganizationInvitationStatus, OrganizationRole
 from .exceptions import AlreadyActiveMemberError, DuplicateInvitationError
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     # Imported only for type annotations; a runtime import would create a
     # managers <-> models cycle (models imports the managers below).
     from .models import Organization, OrganizationInvitation, OrganizationMember
@@ -132,16 +134,22 @@ class OrganizationMemberManager( models.Manager ):
             organization__uuid = organization_uuid,
         ).select_related( 'organization' ).first()
 
-    def default_organization_for( self, user : UserType ) -> 'Organization | None':
+    def default_organization_for(
+            self, user : UserType,
+            exclude_uuids : 'Iterable[uuid_module.UUID]' = () ) -> 'Organization | None':
         """The organization a user lands in when the session carries no valid selection, or None
-        when they have no active membership.
+        when they have no (eligible) active membership.
 
         Policy: prefer an organization the user owns over one they only belong to, breaking ties by
         earliest creation -- a stable, predictable landing that keeps a member out of another
         household by default. Consulted only when nothing is already selected, so switching away
-        from this default always wins.
+        from this default always wins. `exclude_uuids` drops organizations from consideration (e.g.
+        the read-only sample org, which a user may belong to but never lands in as a home).
         """
-        memberships = list( self.for_user( user ).select_related( 'organization' ) )
+        memberships = self.for_user( user ).select_related( 'organization' )
+        if exclude_uuids:
+            memberships = memberships.exclude( organization__uuid__in = exclude_uuids )
+        memberships = list( memberships )
         if not memberships:
             return None
 

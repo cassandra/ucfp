@@ -199,3 +199,26 @@ class DefaultOrganizationForTestCase( BaseTestCase ):
         self.assertEqual(
             OrganizationMember.objects.default_organization_for( user ), owned )
         return
+
+    def test_exclude_uuids_drops_an_organization_from_consideration(self):
+        # With the only-owned org excluded, the joined one becomes the landing default.
+        user = self.User.objects.create_user( email = 'excl@example.com' )
+        host = self.User.objects.create_user( email = 'host3@example.com' )
+        joined = Organization.objects.create_for_owner( host, name = 'Joined' )
+        joined.members.create( user = user, organization_role = OrganizationRole.MEMBER )
+        owned = Organization.objects.create_for_owner( user, name = 'Owned' )
+
+        self.assertEqual(
+            OrganizationMember.objects.default_organization_for(
+                user, exclude_uuids = ( owned.uuid, ) ),
+            joined )
+        return
+
+    def test_exclude_uuids_yields_none_when_it_removes_the_last_membership(self):
+        user = self.User.objects.create_user( email = 'onlyone@example.com' )
+        only = Organization.objects.create_for_owner( user, name = 'Only' )
+
+        self.assertIsNone(
+            OrganizationMember.objects.default_organization_for(
+                user, exclude_uuids = ( only.uuid, ) ) )
+        return

@@ -12,7 +12,7 @@ from the view (stepper_target / section_target).
     <span>
       {% if section.form and section.key != current_section.key %}
       <a class="stretched-link" data-async="#{{ section_target }}"
-         href="{% url 'interview_section' section=section.key %}">{{ section.rail_title|default:section.title }}</a>
+         href="{% url section_url_name section=section.key %}">{{ section.rail_title|default:section.title }}</a>
       {% else %}
       {{ section.rail_title|default:section.title }}
       {% endif %}

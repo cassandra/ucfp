@@ -157,6 +157,7 @@ TEMPLATES = [
                 'ucfp.environment.context_processors.shared_constants',
                 'organization.context_processors.current_currency',
                 'organization.context_processors.can_edit_organization',
+                'ucfp.onboarding.context_processors.add_my_data_offer',
             ],
         },
     },
@@ -346,7 +347,7 @@ SUPPRESS_AUTHENTICATION = ENV.SUPPRESS_AUTHENTICATION
 # Host destinations the (app-agnostic) sign-in code hands control to, resolved via `resolve_url`.
 # This is the contract that keeps `user`/`organization`/`custom` from importing host (`ucfp`) code:
 # they read these settings, and the host binds each to one of its own views here.
-LOGIN_REDIRECT_URL = 'home'              # where a signed-in user lands
+LOGIN_REDIRECT_URL = 'dashboard'         # where a signed-in user lands (their app home)
 GUEST_START_URL = 'flow_profile'         # where a freshly-created Guest goes to start entering data
 SIGNIN_COLLISION_URL = 'signin_collision'   # reconcile entry when a Guest signs into an existing account
 
