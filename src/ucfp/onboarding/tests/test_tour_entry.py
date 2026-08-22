@@ -3,7 +3,7 @@ and lands on the Profile step -- the *real* interview (`InterviewView`) rendered
 not the app nav. An anonymous visitor is minted a Guest first; a signed-in visitor is used as-is (no
 conversion, no blocking). Unavailable when the sample org is not seeded."""
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 
 from organization.enums import OrganizationRole
@@ -235,6 +235,31 @@ class FeaturePageAddMyDataTest( TestCase ):
         self.assertEqual( response.status_code, 200 )
         self.assertFalse( response.context[ 'offer_add_my_data' ] )
         self.assertNotContains( response, self._CTA_COPY )
+
+
+class ExplainGatingTest( TestCase ):
+    """`ExplainView` exposes the two deployment-mode flags its template gates cloud-only chrome on:
+    `tour_available` (is the sample org seeded, so "Take a tour" can run) and `authentication_enabled`
+    (is sign-in in play, so the "free, no sign-up" reassurance applies). This tests that contract, not
+    the page's evolving layout/copy."""
+
+    def test_tour_available_reflects_a_seeded_sample_org( self ):
+        response = self.client.get( reverse( 'explain' ) )
+        self.assertFalse( response.context[ 'tour_available' ] )          # no sample seeded -> no tour
+
+        Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+
+        response = self.client.get( reverse( 'explain' ) )
+        self.assertTrue( response.context[ 'tour_available' ] )           # seeded -> tour offered
+
+    def test_authentication_enabled_in_the_cloud_default( self ):
+        response = self.client.get( reverse( 'explain' ) )
+        self.assertTrue( response.context[ 'authentication_enabled' ] )
+
+    @override_settings( SUPPRESS_AUTHENTICATION = True )
+    def test_authentication_disabled_when_self_hosted( self ):
+        response = self.client.get( reverse( 'explain' ) )
+        self.assertFalse( response.context[ 'authentication_enabled' ] )  # no sign-up concept self-hosted
 
 
 class HomeSignedInCtaTest( TestCase ):

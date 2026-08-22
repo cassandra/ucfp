@@ -30,7 +30,7 @@ urlpatterns = [
 
     # Onboarding page for a visitor with no account (login-free): Explain introduces the app and funnels
     # into the tour ("Take a Tour") or the convert-to-Guest graduation ("Add my data").
-    path( 'explain', TemplateView.as_view( template_name = 'pages/explain.html' ), name = 'explain' ),
+    path( 'explain', views.ExplainView.as_view(), name = 'explain' ),
 
     # Public content pages (login-free; linked from the shared footer).
     path( 'about', TemplateView.as_view( template_name = 'pages/about.html' ), name = 'about' ),

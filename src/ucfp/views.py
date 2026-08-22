@@ -1,6 +1,7 @@
 import json
 from typing import Dict
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.generic import View
@@ -11,6 +12,7 @@ from common.request_utils import is_ajax
 
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.state import completed_profile
+from ucfp.onboarding.membership import sample_organization
 from ucfp.privacy_consent import PrivacyConsent
 
 
@@ -178,6 +180,21 @@ class HomeView( View ):
 
     def get( self, request, *args, **kwargs ):
         return render( request, 'pages/home.html', {} )
+
+
+class ExplainView( View ):
+    """The login-free "How does <SITE_NAME> work?" page: the four-step explanation of the app
+    (Profile / Plans / Assumptions -> Forecast) that funnels a visitor into the sample-data tour or the
+    convert-to-Guest graduation. Ungated and shown in both deployment modes, so it exposes the two flags
+    the template gates its cloud-only chrome on: whether authentication applies at all
+    (`authentication_enabled`, false under `SUPPRESS_AUTHENTICATION` -- gates the "free, no sign-up"
+    reassurance) and whether the tour can run (`tour_available`, i.e. the sample org is seeded)."""
+
+    def get( self, request, *args, **kwargs ):
+        return render( request, 'pages/explain.html', {
+            'authentication_enabled' : not settings.SUPPRESS_AUTHENTICATION,
+            'tour_available'         : sample_organization() is not None,
+        } )
 
 
 class DashboardView( InputGatedMixin, View ):
