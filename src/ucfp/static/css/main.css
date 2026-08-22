@@ -891,7 +891,7 @@ body.has-cookie-notice {
 .explain-box-label       { position: absolute; top: -0.62rem; left: 0.9rem; background: var(--white);
                            padding: 0 0.4rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em;
                            font-weight: 800; color: var(--muted-color); }
-.explain-box-label--gold { color: #c78a13; }   /* darker gold: the accent color is too light for text */
+.explain-box-label--gold { color: #8a5e0d; }   /* a dark gold that reads as gold yet clears AA contrast on white */
 .explain-payoff          { border-color: var(--secondary-highlight-color); background: #fffdf6;
                            box-shadow: 0 4px 14px rgba( 245, 185, 69, 0.18 ); }
 .explain-payoff .explain-node { background: var(--secondary-color); color: var(--on-secondary-color);

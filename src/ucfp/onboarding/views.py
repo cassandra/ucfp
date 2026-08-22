@@ -13,7 +13,7 @@ from user import collision
 from user.signin_manager import SigninManager
 from user.views import ConvertToGuestView
 
-from ucfp.inputs.interview import first_section_of_flow, flow_of
+from ucfp.inputs.interview import first_section_of_flow
 from ucfp.inputs.views import InterviewView
 
 from ucfp.planning.enums import PlanningFeature
@@ -151,10 +151,10 @@ class TourInterviewView( InterviewView ):
         return 'onboarding/tour/interview.html'
 
     def _context( self, request, sections, section, form ):
-        """Add `tour_active_step` for the shell's step-nav. Derived from the current section's flow, so the
-        one scenario view lights Plans or Assumptions by which flow the visitor is looking at."""
+        """Add `tour_active_step` for the shell's step-nav. Keyed on the flow the parent already resolved,
+        so the one scenario view lights Plans or Assumptions by which flow the visitor is looking at."""
         context = super()._context( request, sections, section, form )
-        context[ 'tour_active_step' ] = _TOUR_STEP_BY_FLOW[ flow_of( section ) ]
+        context[ 'tour_active_step' ] = _TOUR_STEP_BY_FLOW[ context[ 'flow' ] ]
         return context
 
     def _completion_destination( self, request, flow, building ):
@@ -194,7 +194,7 @@ class TourForecastView( RunResultsView ):
 
     results_template = 'onboarding/tour/forecast.html'
 
-    def _extra_context( self, request ):
+    def _extra_context( self, request ) -> dict:
         return { 'tour_active_step': _TOUR_STEP_FORECAST }
 
     def get( self, request ):

@@ -12,6 +12,7 @@ from organization.models import Organization, OrganizationMember
 from ucfp.inputs.interview import first_section_of_flow
 from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
 from ucfp.onboarding.home_cta import HomeCtaState
+from ucfp.onboarding.membership import join_sample_org
 from ucfp.onboarding.seeding import _seed_records, seed_sample_org
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
@@ -70,6 +71,9 @@ class StartTourTest( TestCase ):
         # escapes to the real interview page; and a last section has no completion destination -> no Finish.
         self.assertEqual( response.context[ 'section_url_name' ], 'tour_profile' )
         self.assertIsNone( response.context[ 'completion_destination' ] )  # no Finish while browsing
+        # Profile is not scenario context, so its title keeps no "Scenario >" qualifier and its nav is
+        # single-step (the flag the shell branches on).
+        self.assertFalse( response.context[ 'rail_scenario_mode' ] )
 
     def test_tour_scenario_shows_plans_and_assumptions_in_scenario_context( self ):
         _seed_records( self._seed_sample() )                     # real Plans/Assumptions + sample scenario
@@ -263,6 +267,7 @@ class ExplainGatingTest( TestCase ):
 
     def test_tour_available_reflects_a_seeded_sample_org( self ):
         response = self.client.get( reverse( 'explain' ) )
+        self.assertEqual( 200, response.status_code )
         self.assertFalse( response.context[ 'tour_available' ] )          # no sample seeded -> no tour
 
         Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
@@ -272,22 +277,27 @@ class ExplainGatingTest( TestCase ):
 
     def test_authentication_enabled_in_the_cloud_default( self ):
         response = self.client.get( reverse( 'explain' ) )
+        self.assertEqual( 200, response.status_code )
         self.assertTrue( response.context[ 'authentication_enabled' ] )
 
     @override_settings( SUPPRESS_AUTHENTICATION = True )
     def test_authentication_disabled_when_self_hosted( self ):
         response = self.client.get( reverse( 'explain' ) )
+        self.assertEqual( 200, response.status_code )
         self.assertFalse( response.context[ 'authentication_enabled' ] )  # no sign-up concept self-hosted
 
 
 class HomeCtaStateTest( TestCase ):
-    """The site root (`/`, HomeView) stays reachable for everyone and offers exactly one gold action per
-    visitor state (`onboarding.home_cta`): an anonymous visitor learns how it works, an early user (only the
-    read-only sample) starts their own plan, an owner goes to their dashboard. The self-hosted singleton is
-    always an owner. A signed-in visitor must never see two competing gold actions (the former bug)."""
+    """The site root (`/`, HomeView) stays reachable for everyone and resolves one of three visitor states
+    (`onboarding.home_cta`): an anonymous visitor learns how it works, an early user (only the read-only
+    sample) starts their own plan, an owner goes to their dashboard. The self-hosted singleton is always an
+    owner. A *signed-in* visitor must never see two competing gold actions (the former bug); an anonymous
+    visitor legitimately sees the same "See how it works" action repeated in the closing marketing band."""
 
     @staticmethod
     def _gold_count( response ):
+        # The gold ("btn-cta") action is the page's single focal action; this encodes that CSS-class
+        # contract to guard the one-gold-per-signed-in-state rule.
         return response.content.decode().count( 'btn-cta' )
 
     def test_anonymous_visitor_learns_how_it_works( self ):
@@ -297,6 +307,7 @@ class HomeCtaStateTest( TestCase ):
         self.assertContains( response, reverse( 'explain' ) )
         self.assertContains( response, reverse( 'user_signin' ) )        # the "already have an account?" line
         self.assertNotContains( response, reverse( 'dashboard' ) )
+        self.assertEqual( 2, self._gold_count( response ) )              # hero + closing band, same action
 
     def test_early_user_starts_planning_with_a_single_gold_action( self ):
         Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
@@ -310,8 +321,12 @@ class HomeCtaStateTest( TestCase ):
         self.assertEqual( 1, self._gold_count( response ) )             # one gold, not two (the fixed bug)
 
     def test_owner_is_pointed_to_the_dashboard( self ):
+        # The realistic owner is also auto-joined to the sample as a VIEWER, so this exercises the
+        # sample-excluding `working_organization` -- they still resolve to OWN_ORG, not SAMPLE_ONLY.
         user = User.objects.create_user( email = 'o@x.test' )
         Organization.objects.create_for_owner( user, 'Mine' )
+        Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        join_sample_org( user )
         self.client.force_login( user )
 
         response = self.client.get( reverse( 'home' ) )
