@@ -98,6 +98,8 @@ class LineChart:
     y_ticks       : Optional[ list[ ChartTick ]] = None
     chrome        : str                          = CHROME_FULL
     include_zero  : bool                         = True
+    y_min         : Optional[ float ]            = None   # override the data-derived y domain
+    y_max         : Optional[ float ]            = None   # (e.g. to snap the axis to nice ticks)
     width         : float                        = DEFAULT_WIDTH
     height        : float                        = DEFAULT_HEIGHT
     stroke_width  : float                        = DEFAULT_STROKE_WIDTH
@@ -289,10 +291,21 @@ def _x_domain( x_values : list[ float ] ):
 def _y_domain( chart : LineChart ):
     bounds = _data_bounds( chart.series )
     if bounds is None:
-        return ( 0.0, 1.0 )
-    data_min, data_max = bounds
-    y_min = min( 0.0, data_min ) if chart.include_zero else data_min
-    y_max = max( 0.0, data_max ) if chart.include_zero else data_max
+        data_min, data_max = ( 0.0, 1.0 )
+    else:
+        data_min, data_max = bounds
+
+    # An explicit override wins per end; otherwise derive from the data (folding in
+    # zero when requested). The override still contains the data, so nothing clips.
+    if chart.y_min is not None:
+        y_min = chart.y_min
+    else:
+        y_min = min( 0.0, data_min ) if chart.include_zero else data_min
+    if chart.y_max is not None:
+        y_max = chart.y_max
+    else:
+        y_max = max( 0.0, data_max ) if chart.include_zero else data_max
+
     if ( y_max - y_min ) < _EPSILON:
         # Flat data (e.g. all zero): pad to a unit range so it draws as a line.
         return ( y_min - 1.0, y_max + 1.0 )

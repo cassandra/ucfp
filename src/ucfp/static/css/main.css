@@ -57,6 +57,21 @@
   --line-color: #cbd5e1;
 
   --change-highlight-color: #b8d8f5;   /* a value that differs from its reference (age band / Default) */
+
+  /* Forecast line-chart palette (common/line_chart.py + {% line_chart %}).
+     Series hues are the CVD-validated categorical set -- kept as literal values
+     so the validated separation holds; restyle only with a re-validated set.
+     Structural chrome maps to the theme's neutral tokens. */
+  --chart-net-worth-color: #2a78d6;
+  --chart-assets-color: #008300;
+  --chart-liabilities-color: #e34948;
+  --chart-income-color: #4a3aa7;
+  --chart-expenses-color: #eb6834;
+
+  --line-chart-axis-color: var(--line-color);
+  --line-chart-grid-color: #e9edf2;
+  --line-chart-zero-color: var(--muted-color);
+  --line-chart-label-color: var(--muted-color);
 }
 
 

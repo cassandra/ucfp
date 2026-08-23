@@ -70,6 +70,16 @@ class ZeroBaselineTestCase( SimpleTestCase ):
         geometry = build_geometry( chart )
         self.assertIsNone( geometry.zero_line_y )
 
+    def test_y_domain_override_sets_axis_extent(self):
+        # With an explicit domain of [-100, 300], value 100 sits halfway up the plot.
+        chart    = LineChart( x = [ 0.0, 1.0 ], series = [ _series([ 100, 100 ]) ],
+                              y_min = -100.0, y_max = 300.0 )
+        geometry = build_geometry( chart )
+        midline  = ( geometry.plot.top + geometry.plot.bottom ) / 2.0
+        (_, y0), (_, y1) = _parse_points( geometry.series[0].points )
+        self.assertAlmostEqual( y0, midline, places = 6 )
+        self.assertAlmostEqual( y1, midline, places = 6 )
+
     def test_include_zero_false_uses_data_bounds(self):
         chart    = LineChart( x = [ 0.0, 1.0 ], series = [ _series([ 10, 20 ]) ],
                               include_zero = False )
