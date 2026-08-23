@@ -1,5 +1,7 @@
 {% extends "pages/top_page.html" %}
+{% load common_tags %}
 
+{% block head_title %}{{ feature_title }} · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% block page_title %}{{ feature_title }} <span class="badge badge-secondary align-middle">Coming soon</span>{% endblock %}
 
 {% block page_subtitle %}<p class="text-muted">{{ feature_pitch }}</p>{% endblock %}

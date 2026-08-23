@@ -1,4 +1,7 @@
 {% extends "pages/top_page.html" %}
+{% load common_tags %}
+
+{% block head_title %}Scenarios · {% settings_value 'SITE_NAME' %}{% endblock %}
 
 {% comment %}
 The Scenarios landing (Manage Scenarios): the review/edit hub for the organization's saved scenarios. Each

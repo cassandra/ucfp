@@ -67,6 +67,7 @@ class DashboardViewTests( TestCase ):
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'set up your profile' )
         self.assertContains( response, 'Overview' )                 # the page heading
+        self.assertContains( response, '<title>Dashboard · Landfall</title>', html = False )
 
     def test_needs_scenario_renders_the_reused_scenario_pane( self ):
         self._complete_profile()

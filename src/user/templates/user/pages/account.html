@@ -1,6 +1,7 @@
 {% extends "pages/top_page.html" %}
-{% load organization_tags %}
+{% load common_tags organization_tags %}
 
+{% block head_title %}Account · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% block page_title %}Account{% endblock %}
 
 {% block page_body %}

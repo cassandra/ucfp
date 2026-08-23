@@ -1,4 +1,6 @@
 {% extends "pages/tour_base.html" %}
+{% load common_tags %}
+{% block head_title %}{{ flow_title }} · Guided Tour · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
 The shared body for a tour step that reuses an interview flow -- the Profile, or Plans/Assumptions in
 scenario context. The real interview body (`InterviewView` via a tour subclass) composed under the tour

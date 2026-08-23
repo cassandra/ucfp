@@ -1,6 +1,8 @@
 {% extends "pages/detail_page.html" %}
 {% load common_tags icons %}
 
+{% block head_title %}Explore Scenarios · {% settings_value 'SITE_NAME' %}{% endblock %}
+
 {% comment %}
 The Explore workspace, for the scenario named by `source`, laid out as Inputs → Re-run → Output so the run
 is visible without scrolling past a wall of controls. INPUTS: two auto-saving columns (Plans | Assumptions),

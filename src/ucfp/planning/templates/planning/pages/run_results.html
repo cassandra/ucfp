@@ -1,6 +1,8 @@
 {% extends "pages/detail_page.html" %}
 {% load common_tags icons %}
 
+{% block head_title %}Forecast Run · {% settings_value 'SITE_NAME' %}{% endblock %}
+
 {% block breadcrumb %}
 <li class="breadcrumb-item"><a href="{% url 'financial_forecast' %}">Financial Forecast</a></li>
 {% endblock %}

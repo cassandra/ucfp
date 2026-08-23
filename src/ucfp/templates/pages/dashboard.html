@@ -1,5 +1,6 @@
 {% extends "pages/app_base.html" %}
-{% load icons %}
+{% load common_tags icons %}
+{% block head_title %}Dashboard · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
   The signed-in dashboard (DashboardView): an overview of the planning features, led by the one built
   feature. The Financial Forecast gets a full-width card that recaps the latest run (or routes to the
