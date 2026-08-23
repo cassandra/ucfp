@@ -1,4 +1,4 @@
-"""_run_outcome: the run's shared headline outcome -- the salient result and the start→end arc (year,
+"""run_outcome: the run's shared headline outcome -- the salient result and the start→end arc (year,
 household ages, net worth), computed live from the already-loaded books (never cached, the books stay the
 source of truth for book-derived figures). A run that stopped early ends at its last computed period, and a
 depleted plan's ending net worth is hidden (the result line already conveys it).
@@ -18,14 +18,14 @@ from ucfp.forecast.parameters import AssetParameters, ForecastParameters, Subjec
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 from ucfp.planning.materialization import ForecastFrame
-from ucfp.planning.views import _run_outcome
+from ucfp.planning.overview import run_outcome
 
 _D      = Decimal
 _STATUTE = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 
 
 def _run( frame, *, stopped_early, end_date, is_depleted, birthdate = date( 1960, 1, 1 ) ):
-    """A minimal ProjectionRun stand-in for `_run_outcome`: its frame, the summarized result (one final
+    """A minimal ProjectionRun stand-in for `run_outcome`: its frame, the summarized result (one final
     step carrying the stop year and depletion flag), and a single-subject profile for the ages."""
     return SimpleNamespace(
         frame   = frame,
@@ -50,7 +50,7 @@ class RunOutcomeTests( unittest.TestCase ):
             economic_outlook = EconomicOutlook.constant( EconomicParameters() ) )
         books = Forecast( params ).run().books
 
-        outcome = _run_outcome(
+        outcome = run_outcome(
             _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False ), books )
 
         self.assertEqual( outcome[ 'summary' ], {
@@ -71,7 +71,7 @@ class RunOutcomeTests( unittest.TestCase ):
             economic_outlook = EconomicOutlook.constant( EconomicParameters() ) )
         books = Forecast( params ).run().books
 
-        outcome = _run_outcome(
+        outcome = run_outcome(
             _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False,
                   birthdate = date( 1990, 12, 22 ) ), books )
 
@@ -91,7 +91,7 @@ class RunOutcomeTests( unittest.TestCase ):
         bookkeeper.record( date( 2026, 1, 1 ), [ ( cash, -_D( '10000' ) ), ( opening, _D( '10000' ) ) ] )
         bookkeeper.record( date( 2026, 1, 1 ), [ ( loan, _D( '50000' ) ), ( opening, -_D( '50000' ) ) ] )
 
-        outcome = _run_outcome(
+        outcome = run_outcome(
             _run( frame, stopped_early = True, end_date = date( 2032, 12, 31 ), is_depleted = True ),
             bookkeeper.books )
 

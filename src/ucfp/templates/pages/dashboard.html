@@ -1,12 +1,12 @@
 {% extends "pages/app_base.html" %}
-{% load common_tags %}
 {% load icons %}
 {% comment %}
-  The signed-in dashboard (DashboardView): one card per planning feature, mirroring the navbar's feature
-  menu. Each card links where the nav does; visiting a feature threads the user through the Profile /
-  Scenario it needs, so the dashboard stays a simple chooser. Three features are still to come (badged
-  "soon"). An early user (no organization of their own -- see `offer_add_my_data`) is promoted to start
-  their own plan first, since the features would otherwise run against the read-only sample.
+  The signed-in dashboard (DashboardView): an overview of the planning features, led by the one built
+  feature. The Financial Forecast gets a full-width card that recaps the latest run (or routes to the
+  precise setup step) -- see planning/panes/forecast_overview_card.html and planning.overview. The three
+  features still to come sit below as inert placeholders (no link yet -- the routes are stubs), reserved
+  for their own summaries once built. An early user exploring the read-only sample (offer_add_my_data) is
+  promoted to start their own plan first.
 {% endcomment %}
 
 {% block app_content %}
@@ -21,49 +21,39 @@
 </div>
 {% endif %}
 
-<div class="text-center mb-4">
-  <h1 class="h3">Your planning perspectives</h1>
-  <p class="text-muted mb-0">Pick where to start &mdash; each guides you through what it needs.</p>
-</div>
+<h1 class="h3 mb-4">Overview</h1>
 
-<div class="row justify-content-center">
-  <div class="col-md-6 col-lg-3 mb-4">
-    <a href="{% url 'financial_forecast' %}" class="card h-100 shadow-sm text-center text-reset text-decoration-none">
+{% include 'planning/panes/forecast_overview_card.html' with overview=forecast_overview %}
+
+<h2 class="overview-soon-heading">More perspectives</h2>
+<div class="row overview-soon-row">
+  <div class="col-md-4 mb-3">
+    <div class="card overview-soon-card h-100">
       <div class="card-body">
-        {% icon 'forecast' size='xxxl' color='primary' %}
-        <h2 class="h5 mt-3">Financial Forecast</h2>
-        <p class="text-muted small mb-0">Project your finances across past, present, and future &mdash; and
-          see whether your money lasts.</p>
-      </div>
-    </a>
-  </div>
-  <div class="col-md-6 col-lg-3 mb-4">
-    <a href="{% url 'retirement_timing' %}" class="card h-100 shadow-sm text-center text-reset text-decoration-none">
-      <div class="card-body">
-        {% icon 'clock' size='xxxl' color='primary' %}
-        <h2 class="h5 mt-3">Retirement Timing <span class="badge badge-secondary align-middle">soon</span></h2>
+        <span class="feature-disc feature-disc--muted">{% icon 'clock' size='lg' %}</span>
+        <h3 class="h6 mb-1">Retirement Timing <span class="badge badge-secondary align-middle">soon</span></h3>
         <p class="text-muted small mb-0">Compare when you can retire and how much you need to get there.</p>
       </div>
-    </a>
+    </div>
   </div>
-  <div class="col-md-6 col-lg-3 mb-4">
-    <a href="{% url 'social_security' %}" class="card h-100 shadow-sm text-center text-reset text-decoration-none">
+  <div class="col-md-4 mb-3">
+    <div class="card overview-soon-card h-100">
       <div class="card-body">
-        {% icon 'shield' size='xxxl' color='primary' %}
-        <h2 class="h5 mt-3">Social Security <span class="badge badge-secondary align-middle">soon</span></h2>
+        <span class="feature-disc feature-disc--muted">{% icon 'shield' size='lg' %}</span>
+        <h3 class="h6 mb-1">Social Security <span class="badge badge-secondary align-middle">soon</span></h3>
         <p class="text-muted small mb-0">Find the claiming strategy that pays you the most over your lifetime.</p>
       </div>
-    </a>
+    </div>
   </div>
-  <div class="col-md-6 col-lg-3 mb-4">
-    <a href="{% url 'cash_flow_planning' %}" class="card h-100 shadow-sm text-center text-reset text-decoration-none">
+  <div class="col-md-4 mb-3">
+    <div class="card overview-soon-card h-100">
       <div class="card-body">
-        {% icon 'dollar-sign' size='xxxl' color='primary' %}
-        <h2 class="h5 mt-3">Cash Flow <span class="badge badge-secondary align-middle">soon</span></h2>
+        <span class="feature-disc feature-disc--muted">{% icon 'dollar-sign' size='lg' %}</span>
+        <h3 class="h6 mb-1">Cash Flow <span class="badge badge-secondary align-middle">soon</span></h3>
         <p class="text-muted small mb-0">Plan the next twelve months at fine granularity, so nothing catches
           you short.</p>
       </div>
-    </a>
+    </div>
   </div>
 </div>
 {% endblock %}

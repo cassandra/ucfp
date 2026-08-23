@@ -1,0 +1,92 @@
+{% comment %}
+The dashboard's Financial Forecast card -- the one built feature, given the full-width lead. Renders one of
+the four `forecast_overview` states (see planning.overview): HAS_RUN recaps the latest saved run as three
+KPIs (horizon, ending net worth, outcome) above a placeholder for the net-worth chart still to come;
+READY_NO_RUNS invites the first run; and the two setup states route to the precise next step -- the profile
+flow, or the shared `scenario_required` pane to build/resume a scenario. Reads `overview` (a
+ForecastOverview) and `currency`.
+{% endcomment %}
+{% load icons common_tags %}
+<div class="card overview-card mb-4">
+  <div class="card-body">
+    <div class="overview-card-head">
+      <span class="feature-disc feature-disc--primary">{% icon 'forecast' size='xl' %}</span>
+      <div class="flex-grow-1">
+        <h2 class="h4 mb-0">Financial Forecast</h2>
+        <p class="text-muted small mb-0">
+          {% if overview.has_run %}Latest run &middot;
+            <span class="text-body font-weight-bold">{{ overview.card.label }}</span> &middot;
+            {% if overview.card.source_label and overview.card.source_label != overview.card.label %}from {{ overview.card.source_label }} &middot; {% endif %}{{ overview.card.created_datetime|date:"M j, Y, g:i a" }}
+          {% else %}Project your finances across past, present, and future &mdash; and see whether your
+            money lasts.{% endif %}
+        </p>
+      </div>
+      <div class="overview-card-actions">
+        {% if overview.has_run %}
+        <a href="{% url 'run_results' overview.card.run_uuid %}" class="btn btn-primary btn-sm">View run</a>
+        {% endif %}
+        <a href="{% url 'financial_forecast' %}" class="btn btn-outline-primary btn-sm">Forecast Hub</a>
+      </div>
+    </div>
+
+    {% if overview.has_run %}
+    <div class="overview-body">
+      <div class="forecast-kpis">
+        <div class="forecast-kpi">
+          <div class="kpi-label">Horizon</div>
+          <div class="kpi-value kpi-value--text">{{ overview.card.start_year }} &rarr; {{ overview.card.end_year }}</div>
+          {% if overview.card.age_span %}<div class="kpi-sub">{{ overview.card.age_span }}</div>{% endif %}
+        </div>
+        <div class="forecast-kpi">
+          <div class="kpi-label">Ending net worth</div>
+          {% if overview.card.has_end_net_worth %}
+          <div class="kpi-value text-success">{{ overview.card.end_net_worth|money:currency }}</div>
+          <div class="kpi-sub">from {{ overview.card.start_net_worth|money:currency }}</div>
+          {% else %}
+          <div class="kpi-value text-danger">Depleted</div>
+          <div class="kpi-sub">from {{ overview.card.start_net_worth|money:currency }}</div>
+          {% endif %}
+        </div>
+        <div class="forecast-kpi">
+          <div class="kpi-label">Outcome</div>
+          {% if overview.card.lasted %}
+          <div class="kpi-value kpi-value--text text-success">Money lasted</div>
+          <div class="kpi-sub">full {{ overview.card.duration_years }} years</div>
+          {% else %}
+          <div class="kpi-value kpi-value--text text-danger">Ran out</div>
+          <div class="kpi-sub">{% if overview.card.ran_out_year %}in {{ overview.card.ran_out_year }}{% else %}before the horizon{% endif %}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% comment %}Placeholder for the net-worth-over-time chart -- the graphing feature lands shortly and
+      fills this in place.{% endcomment %}
+      <div class="forecast-chart-placeholder" role="img"
+           aria-label="Net worth over time -- chart coming soon">
+        {% icon 'forecast' size='xl' color='muted' %}
+        <span>Net worth over time &mdash; chart coming soon</span>
+      </div>
+    </div>
+
+    {% elif overview.ready_no_runs %}
+    <div class="overview-body overview-prompt">
+      <p class="mb-2">You haven't run a forecast yet. Project your scenario to see whether your money lasts.</p>
+      <a href="{% url 'financial_forecast' %}" class="btn btn-cta btn-sm edit-only">Run your first forecast</a>
+    </div>
+
+    {% elif overview.needs_profile %}
+    <div class="overview-body">
+      <div class="alert alert-info mb-0">
+        <h3 class="h6 mb-1">First, set up your profile</h3>
+        <p class="small mb-2">A forecast runs on your <strong>profile</strong> &mdash; who it's for, and your
+          accounts, income, and debts.</p>
+        <a href="{% url 'flow_profile' %}" class="btn btn-cta btn-sm edit-only">Set up your profile</a>
+      </div>
+    </div>
+
+    {% elif overview.needs_scenario %}
+    <div class="overview-body">
+      {% include 'planning/panes/scenario_required.html' with build_scenario=overview.build_scenario build_scenario_started=overview.build_scenario_started %}
+    </div>
+    {% endif %}
+  </div>
+</div>
