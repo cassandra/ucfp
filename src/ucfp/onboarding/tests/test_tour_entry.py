@@ -63,6 +63,7 @@ class StartTourTest( TestCase ):
         response = self.client.get( self._tour_profile_url() )
 
         self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, '<title>Profile · Guided Tour · Landfall</title>', html = False )
         self.assertTemplateUsed( response, 'onboarding/tour/interview.html' )     # the tour's own page
         self.assertTemplateUsed( response, 'pages/tour_base.html' )               # the no-nav tour shell
         self.assertTemplateUsed( response, 'inputs/interview/body.html' )         # the real interview body
@@ -83,6 +84,8 @@ class StartTourTest( TestCase ):
         response = self.client.get( url )
 
         self.assertEqual( response.status_code, 200 )
+        # The two scenario components are distinct pages, so each names its own part in the title.
+        self.assertContains( response, '<title>Plans · Guided Tour · Landfall</title>', html = False )
         self.assertTemplateUsed( response, 'onboarding/tour/interview.html' )
         self.assertTemplateUsed( response, 'pages/tour_base.html' )
         self.assertEqual( response.context[ 'section_url_name' ], 'tour_scenario' )   # nav stays in the tour

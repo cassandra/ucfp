@@ -21,7 +21,6 @@ from django.views.generic import TemplateView
 from organization.decorators import PermitsReadonlyMutation, ensure_organization
 
 from common import antinode
-from common.datetime_utils import age_on
 from common.async_view import ModalView
 from common.dataclass_json import from_json_data
 
@@ -50,6 +49,7 @@ from .gating import partition_scenarios, scenario_readiness, scenario_started
 from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture, run_title
+from .overview import run_outcome
 from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
@@ -120,48 +120,6 @@ def _saved_run_digest( run_record ):
         }
     except ( KeyError, TypeError, ValueError ):
         return None
-
-
-def _run_outcome( run, books ) -> dict:
-    """The run's headline outcome, shared by every page that shows a run: the salient result and the
-    start->end arc (year, household ages, net worth). A run that stopped early ends at its last computed
-    period, not the horizon; net worth is computed live from the already-loaded books -- never cached --
-    keeping the books the one source of truth (a captured run is immutable, so the live figure is stable)."""
-    frame  = run.frame
-    ledger = Bookkeeper( books ).ledger
-    steps  = run.result.steps
-    lasted = not run.result.stopped_early
-    end_date = frame.end_date if lasted else steps[ -1 ].end_date
-    depleted = ( not lasted ) and steps[ -1 ].is_depleted
-    end_net_worth = ledger.net_worth( through = end_date )
-    return {
-        'summary' : {
-            'lasted'   : lasted,
-            'depleted' : depleted,
-            # Years the plan ran: the full horizon when it lasted, else through the period it stopped in.
-            'years'    : end_date.year - frame.start_date.year + 1,
-            'start'    : {
-                'year'      : frame.start_date.year,
-                'ages'      : _ages_label( run.profile, frame.start_date ),
-                'net_worth' : ledger.net_worth( through = frame.start_date ) },
-            'end'      : {
-                'year'          : end_date.year,
-                'ages'          : _ages_label( run.profile, end_date ),
-                # Ending net worth is shown only when solvent; a depleted plan's is noise the result covers.
-                'net_worth'     : end_net_worth,
-                'has_net_worth' : end_net_worth >= 0 } } }
-
-
-def _ages_label( profile, on_date ) -> str:
-    """The household's ages on `on_date` -- 'age 65' for one member, 'ages 65 & 63' for a couple, '' for
-    none. True whole-year age from the birthdate, so a December birthday still reads a year younger through
-    a run that starts earlier in the year."""
-    ages = [ age_on( subject.birthdate, on_date ) for subject in profile.subjects ]
-    if not ages:
-        return ''
-    if len( ages ) == 1:
-        return f'age {ages[ 0 ]}'
-    return 'ages ' + ' & '.join( str( age ) for age in ages )
 
 
 def _default_duration_years( profile_record ) -> int:
@@ -351,7 +309,7 @@ class RunResultsView( View ):
             # The worst severity present tints the collapsed toggle, previewing what is inside.
             'notices_severity' : str( worst_severity ) if worst_severity else None,
         }
-        context.update( _run_outcome( run, books ) )
+        context.update( run_outcome( run, books ) )
         context.update( run_books_table_context( request, run, books ) )
         context.update( self._extra_context( request ) )
         return render( request, self.results_template, context )
@@ -518,7 +476,7 @@ class ExploreView( InputGatedMixin, View ):
             'profile_drift'  : profile_drift,                  # Profile facts changed since these runs (pauses new runs)
             **forms,
         }
-        context.update( _run_outcome( run, books ) )           # horizon + ending net worth for the banner
+        context.update( run_outcome( run, books ) )           # horizon + ending net worth for the banner
         context.update( run_books_table_context( request, run, books ) )
         return context
 

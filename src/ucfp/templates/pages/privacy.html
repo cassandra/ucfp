@@ -1,5 +1,6 @@
 {% extends "pages/base_public.html" %}
 {% load common_tags %}
+{% block head_title %}Privacy · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
   Public privacy page. DRAFT -- review the wording, the effective date, the data-controller/legal entity,
   and the contact with counsel before any public launch. Adapted for a financial-planning app (your

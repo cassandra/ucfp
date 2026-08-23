@@ -1,5 +1,7 @@
 {% extends "pages/top_page.html" %}
+{% load common_tags %}
 
+{% block head_title %}Settings · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% block page_title %}Settings{% endblock %}
 
 {% block page_body %}

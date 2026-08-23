@@ -11,7 +11,7 @@ from common.healthcheck import do_healthcheck
 from common.request_utils import is_ajax
 
 from ucfp.inputs.mixins import InputGatedMixin
-from ucfp.inputs.state import completed_profile
+from ucfp.planning.overview import forecast_overview
 from ucfp.onboarding.home_cta import home_cta_state
 from ucfp.onboarding.membership import sample_organization
 from ucfp.privacy_consent import PrivacyConsent
@@ -200,13 +200,15 @@ class ExplainView( View ):
 
 
 class DashboardView( InputGatedMixin, View ):
-    """The signed-in dashboard: a known user's home within the app, pointing at the planning features.
-    Input-gated (organization + input state); an anonymous request is redirected to `home` by the auth
-    middleware, so this need not branch on account state."""
+    """The signed-in dashboard: a known user's home within the app -- an overview of the planning features,
+    led by the Financial Forecast (the one built feature), with the rest as placeholders. Input-gated
+    (organization + input state); an anonymous request is redirected to `home` by the auth middleware, so
+    this need not branch on account state. The forecast card's whole state is the planning layer's
+    `forecast_overview`, so this view stays a thin caller."""
 
     def get( self, request, *args, **kwargs ):
         return render( request, 'pages/dashboard.html', {
-            'profile_complete': completed_profile( request.organization ) is not None } )
+            'forecast_overview': forecast_overview( request.organization ) } )
 
 
 class ManifestView( View ):

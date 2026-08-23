@@ -1,4 +1,6 @@
 {% extends "pages/detail_page.html" %}
+{% load common_tags %}
+{% block head_title %}{{ flow_title }} · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
 A scenario component (Plans/Assumptions) interview -- a detail page under Scenarios. The page header carries
 only the identity: in a scenario build that is the editable SCENARIO name (its two parts and their status

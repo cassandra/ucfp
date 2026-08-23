@@ -1,4 +1,7 @@
 {% extends "pages/detail_page.html" %}
+{% load common_tags %}
+
+{% block head_title %}New Scenario · {% settings_value 'SITE_NAME' %}{% endblock %}
 
 {% comment %}
 New scenario: two common ways up top -- Copy an existing scenario (per side, copy or reuse) and Start fresh

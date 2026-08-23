@@ -112,7 +112,7 @@ class SessionState:
 
     # The forecast run frame the user last chose on the hub (start-from choice, duration in years, and
     # interval), so the run form's when-controls default to that selection rather than its built-in
-    # defaults. Stored raw (the RunForm re-validates on submit); a stale value simply does not preselect.
+    # defaults. Stored raw (the ForecastForm re-validates on submit); a stale value simply does not preselect.
     forecast_start_from : Optional[ str ] = None
     forecast_duration_years : Optional[ int ] = None
     forecast_interval : Optional[ str ] = None

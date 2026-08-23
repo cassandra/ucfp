@@ -1,4 +1,6 @@
 {% extends "pages/tour_base.html" %}
+{% load common_tags %}
+{% block head_title %}Forecast · Guided Tour · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
 The Forecast step of the tour: the captured sample run's outcome summary and books table
 (`RunResultsView` via `TourForecastView`) under the tour shell. Reuses the shared run output panel --

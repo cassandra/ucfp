@@ -1,4 +1,6 @@
 {% extends "pages/tour_base.html" %}
+{% load common_tags %}
+{% block head_title %}{{ flow_title }} · Guided Tour · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
 The shared body for a tour step that reuses an interview flow -- the Profile, or Plans/Assumptions in
 scenario context. The real interview body (`InterviewView` via a tour subclass) composed under the tour
@@ -11,6 +13,6 @@ replace on a missing id is a no-op, so their absence is harmless.
 {% block app_content %}
 {% comment %}In a scenario step (Plans/Assumptions) the tour qualifies the title so the Scenario context is
 explicit -- the app pages carry this via their own scenario/component heading, so this is tour-only.{% endcomment %}
-<h1 class="mb-3">{% if rail_scenario_mode %}Scenario &rsaquo; {% endif %}{{ flow_heading }}</h1>
+<h1 class="mb-3">{% if rail_scenario_mode %}Scenario &middot; {% endif %}{{ flow_heading }}</h1>
 {% include "inputs/interview/body.html" %}
 {% endblock %}

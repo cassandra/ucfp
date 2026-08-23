@@ -1,7 +1,7 @@
 """The Explore workspace renders its Inputs → Re-run → Output layout: the Re-run CTA and the outcome banner
 (did the money last, the ending net worth, the horizon) appear with the selected run, so the run is visible
 rather than buried below the inputs. A full render also guards the template against context/filter drift --
-the `money` filter, the `_run_outcome` figures, and the `currency` context processor.
+the `money` filter, the `run_outcome` figures, and the `currency` context processor.
 """
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, TestCase

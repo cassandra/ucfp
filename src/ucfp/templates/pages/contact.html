@@ -1,6 +1,7 @@
 {% extends "pages/base_public.html" %}
 {% load common_tags %}
 {% load icons %}
+{% block head_title %}Contact · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
   Public contact page. GitHub issues is the primary channel for bugs and feature requests; a private
   email is offered for account, sign-in, and privacy matters that should not be posted publicly.

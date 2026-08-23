@@ -1,6 +1,8 @@
 {% extends "pages/detail_page.html" %}
 {% load common_tags icons %}
 
+{% block head_title %}Forecast Run · {% settings_value 'SITE_NAME' %}{% endblock %}
+
 {% block breadcrumb %}
 <li class="breadcrumb-item"><a href="{% url 'financial_forecast' %}">Financial Forecast</a></li>
 {% endblock %}
@@ -16,15 +18,17 @@ hub's per-row delete, landing back on the hub. Opens the styled confirm modal.{%
 
 {% block page_name %}
 {% url 'rename_run' record.uuid as rename_url %}
-{% include 'pages/editable_name.html' with kind='run' uuid=record.uuid rename_url=rename_url label=record.label aria='Run name' %}
+<div class="d-flex justify-content-between" >
+  {% include 'pages/editable_name.html' with kind='run' uuid=record.uuid rename_url=rename_url label=record.label aria='Run name' %}
+  {% if record.source_label and record.source_label != record.label %}
+  <p class="text-muted mb-3"><small>Scenario:</small> {{ record.source_label }}</p>
+  {% else %}
+  &nbsp;
+  {% endif %}
+</div>
 {% endblock %}
 
 {% block page_meta %}
-{% comment %}Metadata (muted): the scenario this run came from, only once the title has been renamed away
-from it. The horizon and the outcome now live in the shared run summary above the table.{% endcomment %}
-{% if record.source_label and record.source_label != record.label %}
-<p class="text-muted mb-3">{{ record.source_label }}</p>
-{% endif %}
 {% endblock %}
 
 {% block page_body %}

@@ -1,4 +1,6 @@
 {% extends "pages/top_page.html" %}
+{% load common_tags %}
+{% block head_title %}Profile · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
 The Profile interview -- a top-level page (its own nav home). Its completion badge lives in the rail header
 (the one home for status across every interview, like the Plans/Assumptions parts); the subtitle carries the
