@@ -15,6 +15,7 @@ from typing import Optional
 
 from common.dataclass_json import from_json_data
 from common.datetime_utils import age_on
+from common.line_chart import CHROME_FULL
 
 from organization.models import Organization
 
@@ -26,6 +27,7 @@ from ucfp.inputs.state import completed_profile
 from .enums import PlanningFeature
 from .gating import partition_scenarios, scenario_started
 from .models import PlanningResultRecord
+from .run_charts import net_worth_chart as build_net_worth_chart
 from .schemas import ProjectionRun
 
 
@@ -117,6 +119,7 @@ class ForecastRunCard:
     ran_out_year     : Optional[ int ]
     start_net_worth  : Decimal
     end_net_worth    : Optional[ Decimal ]
+    net_worth_chart  : object            # a LineChart sparkline of net worth over the run
 
     @property
     def has_end_net_worth( self ) -> bool:
@@ -207,4 +210,6 @@ def _run_card( result : PlanningResultRecord ) -> ForecastRunCard:
         # The year the plan ran dry -- only when depleted; the outcome line reads 'Ran out in <year>'.
         ran_out_year     = end[ 'year' ] if summary[ 'depleted' ] else None,
         start_net_worth  = summary[ 'start' ][ 'net_worth' ],
-        end_net_worth    = end[ 'net_worth' ] if end[ 'has_net_worth' ] else None )
+        end_net_worth    = end[ 'net_worth' ] if end[ 'has_net_worth' ] else None,
+        net_worth_chart  = build_net_worth_chart(
+            run, books, chrome = CHROME_FULL, width = 960, height = 220 ) )

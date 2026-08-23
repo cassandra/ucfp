@@ -1022,11 +1022,13 @@ body.has-cookie-notice {
 .kpi-unit            { font-size: 1rem; font-weight: 600; margin-left: 0.2rem; }
 .kpi-sub             { font-size: 0.78rem; color: var(--muted-color); margin-top: 0.1rem; }
 
-.forecast-chart-placeholder { display: flex; flex-direction: column; align-items: center;
-                       justify-content: center; gap: 0.4rem; margin-top: 1rem; padding: 1.75rem 1rem;
-                       border: 1px dashed var(--line-color); border-radius: 0.4rem;
-                       background: var(--muted-bg-light); color: var(--muted-color);
-                       font-size: 0.85rem; text-align: center; }
+/* Net-worth chart under the dashboard KPIs: a wide chart whose height follows its
+   width via the SVG viewBox aspect (so it never letterboxes), capped so it stays a
+   summary strip on very wide screens. */
+.forecast-chart      { margin: 1rem auto 0; max-width: 1200px; }
+.forecast-chart__svg { display: block; width: 100%; height: auto; }
+.forecast-chart__caption { margin-top: 0.35rem; font-size: 0.78rem; color: var(--muted-color);
+                       text-align: center; }
 
 /* The not-yet-built features: a compact icon-beside-text placeholder, dimmed
    to read as inactive. Not links -- the routes are stubs. */

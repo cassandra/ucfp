@@ -165,6 +165,8 @@ class NetWorthChartTestCase( unittest.TestCase ):
         # A sparkline carries no ticks.
         self.assertIsNone( chart.x_ticks )
         self.assertIsNone( chart.y_ticks )
+        # It scales to the data (fills its box) rather than forcing a zero baseline.
+        self.assertFalse( chart.include_zero )
 
     def test_values_match_the_ledger_net_worth( self ):
         chart    = net_worth_chart( self.run, self.books )

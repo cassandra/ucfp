@@ -6,7 +6,7 @@ elements. Structural chrome is coloured via chart-scoped CSS custom properties
 with fallbacks so a theme layer can restyle without code changes; series strokes
 use the explicit colour carried on each series. No width/height attributes are
 set, so the chart scales to its CSS container via the viewBox.
-{% endcomment %}<svg class="line-chart line-chart--{{ chrome }} {{ css_class }}" viewBox="{{ geometry.view_box }}" {{ accessibility_attrs }}>
+{% endcomment %}<svg class="line-chart line-chart--{{ chrome }} {{ css_class }}" viewBox="{{ geometry.view_box }}" preserveAspectRatio="{% if chrome == 'sparkline' %}none{% else %}xMidYMid meet{% endif %}" {{ accessibility_attrs }}>
   {% if title_text %}<title>{{ title_text }}</title>{% endif %}
   {% if geometry.show_axes %}
   {% for y in geometry.gridlines %}
@@ -19,7 +19,7 @@ set, so the chart scales to its CSS container via the viewBox.
   <line class="line-chart__zero-line" x1="{{ geometry.plot.left }}" y1="{{ geometry.zero_line_y }}" x2="{{ geometry.plot.right }}" y2="{{ geometry.zero_line_y }}" stroke="var(--line-chart-zero-color, #94a3b8)" stroke-width="1" />
   {% endif %}
   {% for series in geometry.series %}
-  <polyline class="line-chart__series" points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="{{ geometry.stroke_width }}" stroke-linejoin="round" stroke-linecap="round" />
+  <polyline class="line-chart__series" points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="{{ geometry.stroke_width }}" stroke-linejoin="round" stroke-linecap="round"{% if chrome == 'sparkline' %} vector-effect="non-scaling-stroke"{% endif %} />
   {% endfor %}
   {% if geometry.show_axes %}
   {% for tick in geometry.y_ticks %}

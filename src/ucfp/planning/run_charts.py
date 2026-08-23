@@ -15,6 +15,8 @@ source of truth). Assets and liabilities are end-of-period balances (stock);
 income and expenses are within-period flows -- so the opening span, being
 zero-length, contributes a zero flow and the starting balances.
 """
+from typing import Optional
+
 from common.line_chart import (
     CHROME_FULL,
     CHROME_SPARKLINE,
@@ -50,7 +52,8 @@ _Y_TICK_COUNT = 4
 
 
 def net_worth_chart( run : ProjectionRun, books : BooksOfAccount, *,
-                     chrome : str = CHROME_SPARKLINE ) -> LineChart:
+                     chrome : str = CHROME_SPARKLINE,
+                     width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
     """A single net-worth line over the run's timeline (defaults to a sparkline)."""
     spans  = run_period_spans( run )
     ledger = Bookkeeper( books ).ledger
@@ -58,11 +61,12 @@ def net_worth_chart( run : ProjectionRun, books : BooksOfAccount, *,
         values = [ float( ledger.net_worth( through = span.end_date )) for span in spans ],
         label  = _NET_WORTH_LABEL,
         color  = _NET_WORTH_COLOR ) ]
-    return _chart( spans, series, chrome )
+    return _chart( spans, series, chrome, width = width, height = height )
 
 
 def run_books_chart( run : ProjectionRun, books : BooksOfAccount, *,
-                     chrome : str = CHROME_FULL ) -> LineChart:
+                     chrome : str = CHROME_FULL,
+                     width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
     """Net worth plus the four account-type totals over the run's timeline."""
     spans  = run_period_spans( run )
     ledger = Bookkeeper( books ).ledger
@@ -85,13 +89,22 @@ def run_books_chart( run : ProjectionRun, books : BooksOfAccount, *,
         LineChartSeries( flow( AccountType.REVENUE ), 'Income', _INCOME_COLOR ),
         LineChartSeries( flow( AccountType.EXPENSE ), 'Expenses', _EXPENSES_COLOR ),
     ]
-    return _chart( spans, series, chrome )
+    return _chart( spans, series, chrome, width = width, height = height )
 
 
-def _chart( spans : list, series : list[ LineChartSeries ], chrome : str ) -> LineChart:
-    x = [ _x_position( span.end_date ) for span in spans ]
+def _chart( spans : list, series : list[ LineChartSeries ], chrome : str, *,
+            width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
+    x    = [ _x_position( span.end_date ) for span in spans ]
+    dims = {}
+    if width is not None:
+        dims[ 'width' ] = width
+    if height is not None:
+        dims[ 'height' ] = height
     if chrome != CHROME_FULL:
-        return LineChart( x = x, series = series, chrome = chrome )
+        # A sparkline shows the trajectory shape and fills its box (the surrounding
+        # KPIs carry the absolute figures), so it scales to the data rather than
+        # forcing a zero baseline. A crossing into negative still shows a zero line.
+        return LineChart( x = x, series = series, chrome = chrome, include_zero = False, **dims )
     y_low, y_high, y_ticks = _y_axis( series )
     return LineChart(
         x        = x,
@@ -101,6 +114,7 @@ def _chart( spans : list, series : list[ LineChartSeries ], chrome : str ) -> Li
         y_ticks  = y_ticks,
         y_min    = y_low,
         y_max    = y_high,
+        **dims,
     )
 
 
