@@ -886,6 +886,7 @@ class InterviewView( GuestReminderMixin, View ):
         current_flow_complete = any( part[ 'active' ] and part[ 'status' ] == 'complete'
                                      for part in rail[ 'rail_parts' ] )
         context[ 'show_guest_email_banner' ] = self.show_guest_reminder( request, current_flow_complete )
+        context['current_flow_complete'] = current_flow_complete
         return context
 
     @staticmethod
