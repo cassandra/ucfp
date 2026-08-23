@@ -62,11 +62,11 @@
      Series hues are the CVD-validated categorical set -- kept as literal values
      so the validated separation holds; restyle only with a re-validated set.
      Structural chrome maps to the theme's neutral tokens. */
-  --chart-net-worth-color: #2a78d6;
-  --chart-assets-color: #008300;
-  --chart-liabilities-color: #e34948;
-  --chart-income-color: #4a3aa7;
-  --chart-expenses-color: #eb6834;
+  --chart-net-worth-color: #4a3aa7;    /* violet -- matches the Net Worth column hue (258) */
+  --chart-assets-color: #2a78d6;       /* blue   -- matches the Asset column hue (210) */
+  --chart-liabilities-color: #e34948;  /* red    -- matches the Liability column hue (8) */
+  --chart-income-color: #008300;       /* green  -- matches the Income column hue (145) */
+  --chart-expenses-color: #eb6834;     /* orange -- matches the Expense column hue (35) */
 
   --line-chart-axis-color: var(--line-color);
   --line-chart-grid-color: #e9edf2;
@@ -115,6 +115,7 @@
 .app-modal-600 { max-width: 600px; }
 .app-modal-700 { max-width: 700px; }
 .app-modal-800 { max-width: 800px; }
+.app-modal-wide { max-width: min( 1100px, 95vw ); }   /* the run charts modal */
 
 /* Context integration */
 .btn .icon { vertical-align: text-top; }
@@ -1029,6 +1030,38 @@ body.has-cookie-notice {
 .forecast-chart__svg { display: block; width: 100%; height: auto; }
 .forecast-chart__caption { margin-top: 0.35rem; font-size: 0.78rem; color: var(--muted-color);
                        text-align: center; }
+
+/* =========================================================================
+   Run summary chart: a compact clickable balances thumbnail beside the run's
+   start/end numbers, opening the full charts modal. The table is the primary
+   surface, so the chart stays a modest secondary element.
+   ========================================================================= */
+.run-summary            { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; }
+.run-summary-text       { flex: 1 1 16rem; }
+.run-summary-chart      { position: relative; flex: 1 1 18rem; display: block;
+                       border: 1px solid var(--line-color); border-radius: 0.4rem;
+                       padding: 0.4rem; background: var(--white); text-decoration: none; }
+.run-summary-chart:hover,
+.run-summary-chart:focus-visible { border-color: var(--primary-color);
+                       box-shadow: 0 0 0 2px var(--info-bg-light); }
+.run-summary-chart__svg    { display: block; width: 100%; height: 96px; }
+.run-summary-chart__expand { position: absolute; top: 0.5rem; right: 0.5rem; color: var(--muted-color);
+                       opacity: 0.75; }
+.run-summary-chart:hover .run-summary-chart__expand { color: var(--primary-color); opacity: 1; }
+
+/* Chart legend (charts/legend.html): swatch carries the series colour, label in ink. */
+.chart-legend           { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin: 0.5rem 0 0;
+                       padding: 0; list-style: none; }
+.chart-legend__item     { display: inline-flex; align-items: center; gap: 0.35rem;
+                       font-size: 0.82rem; color: var(--muted-color); }
+.chart-legend__swatch   { width: 0.85rem; height: 0.85rem; border-radius: 2px; flex-shrink: 0; }
+
+/* Charts inside the run charts modal: full-width, aspect-driven height, stacked. */
+.modal-chart            { margin: 0 0 1.5rem; }
+.modal-chart:last-child { margin-bottom: 0; }
+.modal-chart__title     { font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+                       letter-spacing: 0.06em; color: var(--muted-color); margin-bottom: 0.25rem; }
+.modal-chart__svg       { display: block; width: 100%; height: auto; }
 
 /* The not-yet-built features: a compact icon-beside-text placeholder, dimmed
    to read as inactive. Not links -- the routes are stubs. */

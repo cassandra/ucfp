@@ -110,6 +110,16 @@ class ChromeTestCase( SimpleTestCase ):
         self.assertEqual( len( geometry.gridlines ), len( geometry.y_ticks ))
         self.assertEqual( len( geometry.x_ticks ), 2 )   # first and last x
 
+    def test_series_painted_first_on_top(self):
+        # The first-listed series must be drawn last so it sits on top where lines
+        # coincide; geometry paints back-to-front.
+        chart    = LineChart(
+            x = [ 0.0, 1.0 ],
+            series = [ _series([ 1, 2 ], label = 'top', color = '#111111' ),
+                       _series([ 1, 2 ], label = 'bottom', color = '#222222' ) ] )
+        geometry = build_geometry( chart )
+        self.assertEqual( [ one.label for one in geometry.series ], [ 'bottom', 'top' ] )
+
     def test_sparkline_plot_area_smaller_than_full(self):
         base       = dict( x = [ 0.0, 1.0 ], series = [ _series([ 1, 2 ]) ] )
         sparkline  = build_geometry( LineChart( chrome = CHROME_SPARKLINE, **base ))

@@ -30,8 +30,9 @@ from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 from ucfp.planning.books_table import run_period_spans
 from ucfp.planning.run_charts import (
     _format_money,
+    balances_chart,
+    flows_chart,
     net_worth_chart,
-    run_books_chart,
 )
 
 _D       = Decimal
@@ -54,27 +55,30 @@ def _books():
 
 
 def _run():
-    """A run stand-in exposing only what the adapter reads: yearly result steps."""
+    """A run stand-in exposing what the adapter reads: yearly result steps and the
+    profile whose primary subject (born 1960) age-labels the x axis."""
     steps = [ SimpleNamespace( start_date = date( year, 1, 1 ), end_date = date( year, 12, 31 ) )
               for year in range( 2026, 2031 ) ]
-    return SimpleNamespace( result = SimpleNamespace( stopped_early = False, steps = steps ) )
+    return SimpleNamespace(
+        result  = SimpleNamespace( stopped_early = False, steps = steps ),
+        profile = SimpleNamespace( subjects = [ SimpleNamespace( birthdate = date( 1960, 1, 1 ) ) ] ) )
 
 
-class RunBooksChartTestCase( unittest.TestCase ):
+class BalancesChartTestCase( unittest.TestCase ):
 
     def setUp( self ):
         self.run    = _run()
         self.books  = _books()
         self.ledger = Bookkeeper( self.books ).ledger
         self.spans  = run_period_spans( self.run )
-        self.chart  = run_books_chart( self.run, self.books )
+        self.chart  = balances_chart( self.run, self.books )
         self.series = { one.label : one.values for one in self.chart.series }
         return
 
-    def test_series_are_named_in_order( self ):
+    def test_net_worth_listed_first_so_it_paints_on_top( self ):
         self.assertEqual(
             [ one.label for one in self.chart.series ],
-            [ 'Net Worth', 'Assets', 'Liabilities', 'Income', 'Expenses' ] )
+            [ 'Net Worth', 'Assets', 'Liabilities' ] )
 
     def test_every_series_spans_the_opening_and_each_period( self ):
         # One opening span plus five yearly steps.
@@ -94,29 +98,6 @@ class RunBooksChartTestCase( unittest.TestCase ):
         self.assertEqual( self.series[ 'Assets' ], assets )
         self.assertEqual( self.series[ 'Liabilities' ], liabilities )
 
-    def test_income_and_expenses_are_within_period_flows( self ):
-        expenses = [ float( self.ledger.type_flow(
-            AccountType.EXPENSE, start = span.start_date, end = span.end_date )) for span in self.spans ]
-        income = [ float( self.ledger.type_flow(
-            AccountType.REVENUE, start = span.start_date, end = span.end_date )) for span in self.spans ]
-        self.assertEqual( self.series[ 'Expenses' ], expenses )
-        self.assertEqual( self.series[ 'Income' ], income )
-
-    def test_expenses_use_period_flow_not_cumulative_total( self ):
-        # The mortgage books interest every period, so the cumulative expense total
-        # at the final period exceeds that single period's flow -- confirming the
-        # series is the flow, not the running total.
-        last            = self.spans[ -1 ]
-        period_flow     = float( self.ledger.type_flow(
-            AccountType.EXPENSE, start = last.start_date, end = last.end_date ))
-        cumulative_total = float( self.ledger.type_total( AccountType.EXPENSE, through = last.end_date ))
-        self.assertGreater( cumulative_total, period_flow )
-        self.assertEqual( self.series[ 'Expenses' ][ -1 ], period_flow )
-
-    def test_opening_span_has_no_flow( self ):
-        self.assertEqual( self.series[ 'Income' ][ 0 ], 0.0 )
-        self.assertEqual( self.series[ 'Expenses' ][ 0 ], 0.0 )
-
     def test_net_worth_equals_assets_minus_liabilities( self ):
         for net_worth, assets, liabilities in zip(
                 self.series[ 'Net Worth' ], self.series[ 'Assets' ], self.series[ 'Liabilities' ] ):
@@ -132,20 +113,61 @@ class RunBooksChartTestCase( unittest.TestCase ):
         self.assertIsNotNone( self.chart.y_max )
         self.assertTrue( self.chart.y_ticks )
         self.assertTrue( self.chart.x_ticks )
-        self.assertTrue( all( len( tick.label ) == 4 and tick.label.isdigit()
-                              for tick in self.chart.x_ticks ) )
+        self.assertTrue( all( tick.label[ :4 ].isdigit() for tick in self.chart.x_ticks ) )
 
     def test_x_ticks_label_forecast_years_not_the_opening_snapshot( self ):
         # The opening span sits at the prior year's close (2025); it is plotted but
         # not ticked, so the axis reads the forecast years (2026 onward).
         labels = [ tick.label for tick in self.chart.x_ticks ]
-        self.assertNotIn( '2025', labels )
-        self.assertEqual( labels[ 0 ], '2026' )
+        self.assertFalse( any( label.startswith( '2025' ) for label in labels ) )
+        self.assertTrue( labels[ 0 ].startswith( '2026' ) )
+
+    def test_x_ticks_carry_the_primary_subject_age( self ):
+        # Primary subject born 1960 -> age 66 at end of 2026; shown parenthetically.
+        self.assertEqual( self.chart.x_ticks[ 0 ].label, '2026 (66)' )
 
     def test_series_carry_the_semantic_palette( self ):
         colors = { one.label : one.color for one in self.chart.series }
         self.assertIn( '--chart-net-worth-color', colors[ 'Net Worth' ] )
-        self.assertIn( '--chart-expenses-color', colors[ 'Expenses' ] )
+        self.assertIn( '--chart-liabilities-color', colors[ 'Liabilities' ] )
+
+
+class FlowsChartTestCase( unittest.TestCase ):
+
+    def setUp( self ):
+        self.run    = _run()
+        self.books  = _books()
+        self.ledger = Bookkeeper( self.books ).ledger
+        self.spans  = run_period_spans( self.run )
+        self.chart  = flows_chart( self.run, self.books )
+        self.series = { one.label : one.values for one in self.chart.series }
+        return
+
+    def test_series_are_income_then_expenses( self ):
+        self.assertEqual( [ one.label for one in self.chart.series ], [ 'Income', 'Expenses' ] )
+
+    def test_income_and_expenses_are_within_period_flows( self ):
+        expenses = [ float( self.ledger.type_flow(
+            AccountType.EXPENSE, start = span.start_date, end = span.end_date )) for span in self.spans ]
+        income = [ float( self.ledger.type_flow(
+            AccountType.REVENUE, start = span.start_date, end = span.end_date )) for span in self.spans ]
+        self.assertEqual( self.series[ 'Expenses' ], expenses )
+        self.assertEqual( self.series[ 'Income' ], income )
+
+    def test_expenses_use_period_flow_not_cumulative_total( self ):
+        # The mortgage books interest every period, so the cumulative expense total
+        # at the final period exceeds that single period's flow -- confirming the
+        # series is the flow, not the running total.
+        last             = self.spans[ -1 ]
+        period_flow      = float( self.ledger.type_flow(
+            AccountType.EXPENSE, start = last.start_date, end = last.end_date ))
+        cumulative_total = float( self.ledger.type_total( AccountType.EXPENSE, through = last.end_date ))
+        self.assertGreater( cumulative_total, period_flow )
+        self.assertEqual( self.series[ 'Expenses' ][ -1 ], period_flow )
+
+    def test_opening_span_has_no_flow( self ):
+        self.assertEqual( self.series[ 'Income' ][ 0 ], 0.0 )
+        self.assertEqual( self.series[ 'Expenses' ][ 0 ], 0.0 )
 
 
 class NetWorthChartTestCase( unittest.TestCase ):

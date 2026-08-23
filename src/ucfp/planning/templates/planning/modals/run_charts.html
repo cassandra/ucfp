@@ -1,0 +1,27 @@
+{% extends "modals/base.html" %}
+{% load charts %}
+{% comment %}
+The wide "full charts" modal opened from the run summary's balances thumbnail. Two
+charts split by scale so neither crushes the other: Balances (net worth, assets,
+liabilities -- end-of-period stocks) and Annual cash flow (income, expenses --
+within-period flows). Each is fully labelled and carries a legend (the secondary
+encoding colour alone can't provide). Reads `balances_chart` and `flows_chart`
+(both LineCharts) and `record`.
+{% endcomment %}
+
+{% block modal_dialog_class %}app-modal-wide{% endblock %}
+
+{% block title_text %}{{ record.label }} &mdash; charts{% endblock %}
+
+{% block body %}
+<figure class="modal-chart">
+  <figcaption class="modal-chart__title">Balances</figcaption>
+  {% line_chart balances_chart css_class="modal-chart__svg" aria_label="Net worth, assets and liabilities over time" %}
+  {% chart_legend balances_chart %}
+</figure>
+<figure class="modal-chart">
+  <figcaption class="modal-chart__title">Annual cash flow</figcaption>
+  {% line_chart flows_chart css_class="modal-chart__svg" aria_label="Income and expenses per year" %}
+  {% chart_legend flows_chart %}
+</figure>
+{% endblock %}

@@ -20,6 +20,7 @@ from common.line_chart import CHART_CHROME, LineChart, build_geometry
 register = template.Library()
 
 _CHART_TEMPLATE = 'charts/line_chart.svg'
+_LEGEND_TEMPLATE = 'charts/legend.html'
 
 
 @register.simple_tag
@@ -68,3 +69,21 @@ def line_chart( chart, css_class = '', aria_label = None, title = None ):
         'title_text'           : title,
     }
     return mark_safe( get_template( _CHART_TEMPLATE ).render( context ))
+
+
+@register.simple_tag
+def chart_legend( chart ):
+    """
+    Render an HTML legend for a `LineChart` -- a colour swatch and label per series.
+
+    This is the secondary encoding a multi-series chart needs (colour is never the
+    sole cue): the swatch carries the series colour, the label stays in text ink.
+
+    Raises:
+        template.TemplateSyntaxError: If `chart` is not a LineChart.
+    """
+    if not isinstance( chart, LineChart ):
+        raise template.TemplateSyntaxError(
+            f'{{% chart_legend %}} expects a LineChart, got {type( chart ).__name__}.'
+        )
+    return mark_safe( get_template( _LEGEND_TEMPLATE ).render( { 'series': chart.series } ))

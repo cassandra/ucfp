@@ -182,13 +182,16 @@ def build_geometry( chart : LineChart ) -> LineChartGeometry:
         # SVG y grows downward: the domain minimum sits at the plot bottom.
         return _scale( value, y_min, y_max, plot.bottom, plot.top )
 
+    # Painted back-to-front: the first-listed series is drawn last, so it sits on
+    # top where lines coincide (e.g. net worth over assets when liabilities are
+    # small). List the most prominent series first.
     rendered_series = [
         RenderedSeries(
             points  = _polyline_points( chart.x, series.values, to_px_x, to_px_y ),
             color   = series.color,
             label   = series.label,
         )
-        for series in chart.series
+        for series in reversed( chart.series )
     ]
 
     zero_line_y = to_px_y( 0.0 ) if ( y_min < 0.0 < y_max ) else None

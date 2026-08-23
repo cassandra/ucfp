@@ -1,0 +1,12 @@
+{% comment %}
+Legend for a line chart (see common/templatetags/charts.py chart_legend). One row
+per series: a colour swatch carrying the series colour, and the label in text ink
+(never the series colour) so identity is not colour-alone.
+{% endcomment %}<ul class="chart-legend">
+  {% for series in series %}
+  <li class="chart-legend__item">
+    <span class="chart-legend__swatch" style="background-color: {{ series.color }}"></span>
+    <span class="chart-legend__label">{{ series.label }}</span>
+  </li>
+  {% endfor %}
+</ul>
