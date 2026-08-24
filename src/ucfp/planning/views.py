@@ -23,8 +23,10 @@ from organization.decorators import PermitsReadonlyMutation, ensure_organization
 from common import antinode
 from common.async_view import ModalView
 from common.dataclass_json import from_json_data
+from common.line_chart import CHROME_FULL, CHROME_SPARKLINE
 
 from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.books_table import BooksColumnKey
 from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.inputs.drift import plans_drift
 from ucfp.inputs.enums import UsageRole
@@ -50,6 +52,7 @@ from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture, run_title
 from .overview import run_outcome
+from .run_charts import balances_chart, column_chart, flows_chart
 from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
@@ -57,6 +60,8 @@ _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
 _BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
 _JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
 _DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
+_CHARTS_MODAL_TEMPLATE = 'planning/modals/run_charts.html'
+_COLUMN_CHART_MODAL_TEMPLATE = 'planning/modals/run_column_chart.html'
 _EXPLORE_SAVE_TEMPLATE = 'planning/modals/explore_save.html'
 _COMING_SOON_TEMPLATE = 'planning/pages/coming_soon.html'
 
@@ -311,6 +316,9 @@ class RunResultsView( View ):
         }
         context.update( run_outcome( run, books ) )
         context.update( run_books_table_context( request, run, books ) )
+        # A compact balances sparkline beside the summary; the full charts open in a
+        # modal (RunChartsModalView), so only the thumbnail is built for the page.
+        context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
         context.update( self._extra_context( request ) )
         return render( request, self.results_template, context )
 
@@ -362,6 +370,54 @@ class RunDiscardConfirmView( ModalView ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         return self.modal_response( request, context = { 'record': record } )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RunChartsModalView( ModalView ):
+    """`/run/<uuid>/charts/` -- the wide modal opened from the summary's balances
+    thumbnail: the fully-labelled charts split by scale -- balances (net worth,
+    assets, liabilities) and annual flows (income, expenses) -- each with a legend."""
+
+    def get_template_name( self ):
+        return _CHARTS_MODAL_TEMPLATE
+
+    def get( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        run   = from_json_data( ProjectionRun, record.data )
+        books = BooksOfAccountRepository().load( record.books )
+        context = {
+            'record'         : record,
+            'balances_chart' : balances_chart(
+                run, books, chrome = CHROME_FULL, width = 720, height = 300 ),
+            'flows_chart'    : flows_chart(
+                run, books, chrome = CHROME_FULL, width = 720, height = 300 ),
+        }
+        return self.modal_response( request, context = context )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RunColumnChartModalView( ModalView ):
+    """`/run/<uuid>/column-chart/?column=<token>` -- the modal opened from a books-table
+    column's "Chart" action: that column's value over time, with its immediate children
+    beside it when it is a small-enough rollup."""
+
+    def get_template_name( self ):
+        return _COLUMN_CHART_MODAL_TEMPLATE
+
+    def get( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        token = request.GET.get( 'column' )
+        if not token:
+            raise Http404( 'No column specified.' )
+        run   = from_json_data( ProjectionRun, record.data )
+        books = BooksOfAccountRepository().load( record.books )
+        try:
+            chart = column_chart( run, books, BooksColumnKey( token ), width = 720, height = 320 )
+        except ValueError as error:
+            raise Http404( str( error ) )
+        return self.modal_response( request, context = { 'record': record, 'column_chart': chart } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -478,6 +534,9 @@ class ExploreView( InputGatedMixin, View ):
         }
         context.update( run_outcome( run, books ) )           # horizon + ending net worth for the banner
         context.update( run_books_table_context( request, run, books ) )
+        # The same balances thumbnail the results page shows -- charts are as useful while
+        # exploring as on a saved run; the modal keys on `record` (the selected run), set above.
+        context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
         return context
 
     @staticmethod

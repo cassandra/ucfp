@@ -503,6 +503,13 @@ class BooksTableColumnCatalog:
     def get( self, key : BooksColumnKey ) -> Optional[ BooksColumn ]:
         return self._by_key.get( key )
 
+    def member_keys( self, key : BooksColumnKey ) -> tuple:
+        """The immediate child columns of `key` (a summary's members), or empty for a leaf
+        or absent column -- one level only, for a per-column drill-in that graphs a column
+        beside its direct children."""
+        column = self._by_key.get( key )
+        return column.member_keys if isinstance( column, BooksSummaryColumn ) else ()
+
     def __contains__( self, key : BooksColumnKey ) -> bool:
         return key in self._by_key
 
@@ -756,6 +763,17 @@ def _account_leaf_keys( catalog : BooksTableColumnCatalog, key : BooksColumnKey 
             continue
         return leaves
     return [ key ]
+
+
+def column_series( catalog : BooksTableColumnCatalog, ledger : Ledger, chart : Chart,
+                   spans : list[ DateSpan ], key : BooksColumnKey ) -> list[ Decimal ]:
+    """A column's figure across `spans` -- the same per-period value the table cell shows
+    (a summary sums its account leaves, a leaf reads its own figure). The public entry for
+    graphing a column over time; returns an empty list for an unknown column."""
+    column = catalog.get( key )
+    if column is None:
+        return []
+    return [ _column_value( catalog, column, ledger, chart, span ) for span in spans ]
 
 
 def _column_value( catalog : BooksTableColumnCatalog, column : BooksColumn,

@@ -56,10 +56,19 @@ def _current_definition( request,
     return base.adapt( catalog )
 
 
+def run_period_spans( run : ProjectionRun, *, with_opening : bool = True ) -> list:
+    """The run's period spans, one per forecast step, optionally led by the opening span.
+
+    The shared way to turn a run's timeline into the column/point spans read off its
+    books -- used by the books table and by the run charts, so the opening-span rule
+    lives in one place."""
+    period_spans = [ DateSpan( step.start_date, step.end_date ) for step in run.result.steps ]
+    return _spans_with_opening( period_spans ) if with_opening else period_spans
+
+
 def _fragment_context( bookkeeper : Bookkeeper, catalog : BooksTableColumnCatalog,
                        run : ProjectionRun, definition : BooksTableDefinition ) -> dict:
-    period_spans = [ DateSpan( step.start_date, step.end_date ) for step in run.result.steps ]
-    spans        = _spans_with_opening( period_spans )
+    spans = run_period_spans( run )
     return {
         'books_table' : build_books_table(
             bookkeeper.ledger, bookkeeper.chart, spans, definition, catalog ),

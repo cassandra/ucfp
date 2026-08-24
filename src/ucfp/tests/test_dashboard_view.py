@@ -84,7 +84,9 @@ class DashboardViewTests( TestCase ):
         self.assertContains( response, 'Sample Forecast' )
         self.assertContains( response, 'from Sample Scenario' )
         self.assertContains( response, 'Ending net worth' )         # a KPI tile
-        self.assertContains( response, 'chart coming soon' )        # the graph placeholder
+        # The net-worth sparkline renders in place of the old placeholder.
+        self.assertContains( response, 'forecast-chart__svg' )
+        self.assertContains( response, '<polyline' )
         self.assertContains( response, reverse( 'run_results', args = [ self._latest_run_uuid() ] ) )
 
     def test_coming_soon_features_render_as_placeholders( self ):

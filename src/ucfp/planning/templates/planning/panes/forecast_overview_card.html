@@ -6,7 +6,7 @@ READY_NO_RUNS invites the first run; and the two setup states route to the preci
 flow, or the shared `scenario_required` pane to build/resume a scenario. Reads `overview` (a
 ForecastOverview) and `currency`.
 {% endcomment %}
-{% load icons common_tags %}
+{% load icons common_tags charts %}
 <div class="card overview-card mb-4">
   <div class="card-body">
     <div class="overview-card-head">
@@ -58,13 +58,11 @@ ForecastOverview) and `currency`.
           {% endif %}
         </div>
       </div>
-      {% comment %}Placeholder for the net-worth-over-time chart -- the graphing feature lands shortly and
-      fills this in place.{% endcomment %}
-      <div class="forecast-chart-placeholder" role="img"
-           aria-label="Net worth over time -- chart coming soon">
-        {% icon 'forecast' size='xl' color='muted' %}
-        <span>Net worth over time &mdash; chart coming soon</span>
-      </div>
+      <figure class="forecast-chart">
+        {% comment %}The figcaption names the chart, so the SVG stays decorative (no aria_label).{% endcomment %}
+        {% line_chart overview.card.net_worth_chart css_class="forecast-chart__svg" %}
+        <figcaption class="forecast-chart__caption">Net worth over time</figcaption>
+      </figure>
     </div>
 
     {% elif overview.ready_no_runs %}

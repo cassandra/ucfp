@@ -1,0 +1,38 @@
+{% comment %}
+Renders a LineChartGeometry (see common/line_chart.py) as inline SVG.
+
+Geometry is precomputed in Python (viewBox units); this template only places
+elements. Structural chrome is coloured via chart-scoped CSS custom properties
+with fallbacks so a theme layer can restyle without code changes; series strokes
+use the explicit colour carried on each series. No width/height attributes are
+set, so the chart scales to its CSS container via the viewBox.
+{% endcomment %}<svg class="line-chart line-chart--{{ chrome }} {{ css_class }}" viewBox="{{ geometry.view_box }}" preserveAspectRatio="{% if chrome == 'sparkline' %}none{% else %}xMidYMid meet{% endif %}" {{ accessibility_attrs }}>
+  {% if title_text %}<title>{{ title_text }}</title>{% endif %}
+  {% if geometry.show_axes %}
+  {% for y in geometry.gridlines %}
+  <line class="line-chart__gridline" x1="{{ geometry.plot.left }}" y1="{{ y }}" x2="{{ geometry.plot.right }}" y2="{{ y }}" stroke="var(--line-chart-grid-color, #e9edf2)" stroke-width="1" />
+  {% endfor %}
+  <line class="line-chart__axis" x1="{{ geometry.plot.left }}" y1="{{ geometry.plot.top }}" x2="{{ geometry.plot.left }}" y2="{{ geometry.plot.bottom }}" stroke="var(--line-chart-axis-color, #cbd5e1)" stroke-width="1" />
+  <line class="line-chart__axis" x1="{{ geometry.plot.left }}" y1="{{ geometry.plot.bottom }}" x2="{{ geometry.plot.right }}" y2="{{ geometry.plot.bottom }}" stroke="var(--line-chart-axis-color, #cbd5e1)" stroke-width="1" />
+  {% endif %}
+  {% if geometry.zero_line_y is not None %}
+  <line class="line-chart__zero-line" x1="{{ geometry.plot.left }}" y1="{{ geometry.zero_line_y }}" x2="{{ geometry.plot.right }}" y2="{{ geometry.zero_line_y }}" stroke="var(--line-chart-zero-color, #64748b)" stroke-width="1" />
+  {% endif %}
+  {% for series in geometry.series %}
+  <polyline class="line-chart__series" points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="{{ geometry.stroke_width }}" stroke-linejoin="round" stroke-linecap="round"{% if series.dash %} stroke-dasharray="{{ series.dash }}"{% endif %}{% if chrome == 'sparkline' %} vector-effect="non-scaling-stroke"{% endif %} />
+  {% endfor %}
+  {% if geometry.show_axes %}
+  {% for tick in geometry.y_ticks %}
+  <text class="line-chart__tick-label line-chart__tick-label--y" x="{{ geometry.y_tick_label_x }}" y="{{ tick.pos }}" text-anchor="{{ tick.anchor }}" dominant-baseline="middle" font-size="{{ geometry.tick_font_size }}" fill="var(--line-chart-label-color, #64748b)">{{ tick.label }}</text>
+  {% endfor %}
+  {% for tick in geometry.x_ticks %}
+  <text class="line-chart__tick-label line-chart__tick-label--x" x="{{ tick.pos }}" y="{{ geometry.x_tick_label_y }}" text-anchor="{{ tick.anchor }}" font-size="{{ geometry.tick_font_size }}" fill="var(--line-chart-label-color, #64748b)">{{ tick.label }}</text>
+  {% endfor %}
+  {% if geometry.x_axis_label %}
+  <text class="line-chart__axis-label line-chart__axis-label--x" x="{{ geometry.x_axis_label.x }}" y="{{ geometry.x_axis_label.y }}" text-anchor="middle" font-size="{{ geometry.axis_font_size }}" fill="var(--line-chart-label-color, #64748b)">{{ geometry.x_axis_label.text }}</text>
+  {% endif %}
+  {% if geometry.y_axis_label %}
+  <text class="line-chart__axis-label line-chart__axis-label--y" x="{{ geometry.y_axis_label.x }}" y="{{ geometry.y_axis_label.y }}" text-anchor="middle" font-size="{{ geometry.axis_font_size }}" fill="var(--line-chart-label-color, #64748b)" transform="{{ geometry.y_axis_label.transform }}">{{ geometry.y_axis_label.text }}</text>
+  {% endif %}
+  {% endif %}
+</svg>

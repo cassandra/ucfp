@@ -1,0 +1,19 @@
+{% extends "modals/base.html" %}
+{% load charts %}
+{% comment %}
+The per-column drill-in modal, opened from a books-table column's "Chart" action. Shows
+the column's value over time, and -- when it is a rollup small enough -- its immediate
+children beside it (the rollup drawn on top as the dark "total" line). A legend appears
+only when there is more than one line. Reads `column_chart` (a LineChart) and `record`.
+{% endcomment %}
+
+{% block modal_dialog_class %}app-modal-wide{% endblock %}
+
+{% block title_text %}{{ column_chart.series.0.label }} &mdash; over time{% endblock %}
+
+{% block body %}
+<figure class="modal-chart">
+  {% line_chart column_chart css_class="modal-chart__svg" aria_label="Column value over time" %}
+  {% if column_chart.series|length > 1 %}{% chart_legend column_chart %}{% endif %}
+</figure>
+{% endblock %}
