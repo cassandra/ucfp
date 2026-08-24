@@ -43,6 +43,7 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
     end_date = frame.end_date if lasted else steps[ -1 ].end_date
     depleted = ( not lasted ) and steps[ -1 ].is_depleted
     end_net_worth = ledger.net_worth( through = end_date )
+    solvent = end_net_worth >= 0
     return {
         'summary' : {
             'lasted'   : lasted,
@@ -54,11 +55,30 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
                 'ages'      : _ages_label( run.profile, frame.start_date ),
                 'net_worth' : ledger.net_worth( through = frame.start_date ) },
             'end'      : {
-                'year'          : end_date.year,
-                'ages'          : _ages_label( run.profile, end_date ),
+                'year'            : end_date.year,
+                'ages'            : _ages_label( run.profile, end_date ),
                 # Ending net worth is shown only when solvent; a depleted plan's is noise the result covers.
-                'net_worth'     : end_net_worth,
-                'has_net_worth' : end_net_worth >= 0 } } }
+                'net_worth'       : end_net_worth,
+                'has_net_worth'   : solvent,
+                # The nominal ending net worth restated in start-year ("today's") dollars, so a far-horizon
+                # figure is read against money the viewer knows. None when the restatement would add nothing
+                # -- not solvent, a same-year horizon, or a zero/absent inflation assumption -- and the
+                # summary then simply omits the companion line.
+                'net_worth_today' : _in_start_year_dollars( end_net_worth, run, end_date ) if solvent else None } } }
+
+
+def _in_start_year_dollars( amount : Decimal, run : ProjectionRun, end_date ) -> Optional[ Decimal ]:
+    """`amount`, a figure at `end_date`, discounted to the run's start-year dollars by its general
+    inflation assumption -- the "in today's dollars" companion to a nominal, far-horizon net worth. None
+    when the discount is a no-op: a same-year horizon (nothing to discount) or a zero/absent inflation rate
+    (the figure would merely repeat the nominal one). Uses the same inflation the engine grew the run by, so
+    the two figures are a consistent nominal/real pair."""
+    economics = run.assumptions.economics if run.assumptions else None
+    inflation = economics.inflation.fraction if economics else Decimal( '0' )
+    years     = end_date.year - run.frame.start_date.year
+    if ( inflation <= 0 ) or ( years <= 0 ):
+        return None
+    return amount / ( ( Decimal( '1' ) + inflation ) ** years )
 
 
 def _ages_label( profile, on_date ) -> str:

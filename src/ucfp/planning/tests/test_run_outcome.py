@@ -8,6 +8,7 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
+from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
@@ -24,15 +25,18 @@ _D      = Decimal
 _STATUTE = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) )
 
 
-def _run( frame, *, stopped_early, end_date, is_depleted, birthdate = date( 1960, 1, 1 ) ):
+def _run( frame, *, stopped_early, end_date, is_depleted, birthdate = date( 1960, 1, 1 ),
+          inflation = _D( '0' ) ):
     """A minimal ProjectionRun stand-in for `run_outcome`: its frame, the summarized result (one final
-    step carrying the stop year and depletion flag), and a single-subject profile for the ages."""
+    step carrying the stop year and depletion flag), a single-subject profile for the ages, and an
+    assumptions set carrying the general inflation rate (for the today's-dollars restatement)."""
     return SimpleNamespace(
-        frame   = frame,
-        result  = SimpleNamespace(
+        frame       = frame,
+        result      = SimpleNamespace(
             stopped_early = stopped_early,
             steps = [ SimpleNamespace( end_date = end_date, is_depleted = is_depleted ) ] ),
-        profile = SimpleNamespace( subjects = [ SimpleNamespace( birthdate = birthdate ) ] ) )
+        profile     = SimpleNamespace( subjects = [ SimpleNamespace( birthdate = birthdate ) ] ),
+        assumptions = SimpleNamespace( economics = SimpleNamespace( inflation = Rate( inflation ) ) ) )
 
 
 class RunOutcomeTests( unittest.TestCase ):
@@ -56,7 +60,8 @@ class RunOutcomeTests( unittest.TestCase ):
         self.assertEqual( outcome[ 'summary' ], {
             'lasted': True, 'depleted': False, 'years': 3,
             'start': { 'year': 2026, 'ages': 'age 66', 'net_worth': _D( '500000' ) },
-            'end': { 'year': 2028, 'ages': 'age 68', 'net_worth': _D( '500000' ), 'has_net_worth': True } } )
+            'end': { 'year': 2028, 'ages': 'age 68', 'net_worth': _D( '500000' ), 'has_net_worth': True,
+                     'net_worth_today': None } } )   # zero inflation -> no separate today's-dollars figure
 
     def test_ages_track_the_dates_not_just_the_year( self ):
         # Born Dec 22 1990; a run from Aug to Dec 2026 -> 35 at the start (birthday not yet reached in
@@ -77,6 +82,45 @@ class RunOutcomeTests( unittest.TestCase ):
 
         self.assertEqual( outcome[ 'summary' ][ 'start' ][ 'ages' ], 'age 35' )
         self.assertEqual( outcome[ 'summary' ][ 'end' ][ 'ages' ], 'age 36' )
+
+    def test_ending_net_worth_is_restated_in_todays_dollars_by_the_inflation_rate( self ):
+        # Cash held flat at $500,000 over a 10-year horizon under 3.5% inflation. The nominal ending
+        # figure is unchanged, but the today's-dollars companion discounts it by (1.035 ** 10).
+        frame  = ForecastFrame(
+            start_date = date( 2026, 1, 1 ), end_date = date( 2036, 12, 31 ),
+            granularity = Duration( 1, TimeUnit.YEAR ) )
+        params = ForecastParameters(
+            start_date = frame.start_date, end_date = frame.end_date, filing_status = FilingStatus.SINGLE,
+            statute = _STATUTE, subjects = [ Subject( 'you', date( 1960, 1, 1 ) ) ],
+            assets = [ AssetParameters( 'Cash', AssetClass.CASH, _D( '500000' ), _D( '500000' ) ) ],
+            economic_outlook = EconomicOutlook.constant( EconomicParameters() ) )
+        books = Forecast( params ).run().books
+
+        end = run_outcome(
+            _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False,
+                  inflation = _D( '0.035' ) ), books )[ 'summary' ][ 'end' ]
+
+        self.assertEqual( end[ 'net_worth' ], _D( '500000' ) )                 # nominal is unchanged
+        self.assertEqual( end[ 'net_worth_today' ], _D( '500000' ) / ( _D( '1.035' ) ** 10 ) )
+        self.assertLess( end[ 'net_worth_today' ], _D( '500000' ) )            # today's dollars are fewer
+
+    def test_a_same_year_horizon_has_no_todays_dollars_figure( self ):
+        # Start and end land in the same year, so there is nothing to discount even with inflation set.
+        frame  = ForecastFrame(
+            start_date = date( 2026, 1, 1 ), end_date = date( 2026, 12, 31 ),
+            granularity = Duration( 1, TimeUnit.YEAR ) )
+        params = ForecastParameters(
+            start_date = frame.start_date, end_date = frame.end_date, filing_status = FilingStatus.SINGLE,
+            statute = _STATUTE, subjects = [ Subject( 'you', date( 1960, 1, 1 ) ) ],
+            assets = [ AssetParameters( 'Cash', AssetClass.CASH, _D( '500000' ), _D( '500000' ) ) ],
+            economic_outlook = EconomicOutlook.constant( EconomicParameters() ) )
+        books = Forecast( params ).run().books
+
+        end = run_outcome(
+            _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False,
+                  inflation = _D( '0.035' ) ), books )[ 'summary' ][ 'end' ]
+
+        self.assertIsNone( end[ 'net_worth_today' ] )
 
     def test_a_depleted_run_ends_at_the_stop_year_and_hides_net_worth( self ):
         frame = ForecastFrame(

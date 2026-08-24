@@ -23,6 +23,10 @@ solvent -- a depleted plan's is noise the result line already conveys, shown as 
         <div class="run-summary-label text-muted text-uppercase small font-weight-bold">End</div>
         <div>{{ summary.end.year }}{% if summary.end.ages %} <span class="text-muted">&middot; {{ summary.end.ages }}</span>{% endif %}</div>
         <div class="font-weight-bold">{% if summary.end.has_net_worth %}{{ summary.end.net_worth|money:currency }}{% else %}&mdash;{% if summary.depleted %} <span class="text-danger font-weight-normal">(depleted)</span>{% endif %}{% endif %}</div>
+        {% comment %}A far-horizon net worth in nominal dollars is hard to read; restate it in today's
+        money. Shown only when the presenter provides it (solvent, a multi-year horizon, non-zero
+        inflation).{% endcomment %}
+        {% if summary.end.net_worth_today %}<div class="run-summary-today text-muted small">&asymp; {{ summary.end.net_worth_today|money:currency }} in today's dollars</div>{% endif %}
       </div>
     </div>
   </div>
