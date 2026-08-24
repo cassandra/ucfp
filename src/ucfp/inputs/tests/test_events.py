@@ -12,12 +12,16 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
-from ucfp.accounts.enums import AssetClass
-from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer
+from common.recurrence import OneTime
+from common.schedule import Schedule
+
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.forecast.parameters import (
+    ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, WindowedAmount )
 from ucfp.inputs.events import (
-    BoundOption, EventContributions, EventForm, POSSESSION_ROLE, PROPERTY_ROLE, SOURCE_ROLE, TARGET_ROLE,
-    SellPossessionEvent, SellPropertyEvent, TransferEvent, _payoff_loan_handle,
-    vehicle_disposition_contributions )
+    BoundOption, EventContributions, EventForm, GeneralPaymentEvent, POSSESSION_ROLE, PROPERTY_ROLE,
+    PAYMENT_EXPENSE_HANDLE_BASE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent, SellPropertyEvent,
+    TransferEvent, _payoff_loan_handle, payment_expense_handle, vehicle_disposition_contributions )
 from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
 from ucfp.inputs.profile.enums import DebtKind
@@ -262,6 +266,79 @@ class PayoffLoanHandleTests( unittest.TestCase ):
 
     def test_an_unknown_debt_handle_passes_through( self ):
         self.assertEqual( _payoff_loan_handle( SimpleNamespace( debts = [] ), 'gone' ), 'gone' )
+
+
+def _payment( amount = Decimal( '40000' ), label = '', when = date( 2030, 8, 1 ) ):
+    return PlanEvent( kind = EventKind.GENERAL_PAYMENT, date = when, amount = amount, label = label )
+
+
+def _payment_items( event ):
+    into = EventContributions()
+    GeneralPaymentEvent().contribute( event, SimpleNamespace(), {}, into )
+    return into
+
+
+class GeneralPaymentMaterializationTests( unittest.TestCase ):
+    """A Payment now books as a visible LIVING expense, not an equity disbursement (#210 Phase 1). The
+    routing decision -- an `ExpenseItem` named by the payment's label, so the money shows in the expense
+    column and same-label payments collapse into one account -- is what regresses silently, so it earns a
+    test here; the expense's booking and tax treatment are the engine's to prove."""
+
+    def test_a_payment_is_a_living_expense_item_not_a_disbursement( self ):
+        into = _payment_items( _payment( label = 'College Tuition' ) )
+        self.assertEqual( into.scheduled_events, [] )     # no longer an equity disbursement
+        self.assertEqual( len( into.expense_items ), 1 )
+        item = into.expense_items[ 0 ]
+        self.assertEqual( item.name, 'College Tuition' )
+        self.assertEqual( item.expense_tax_class, ExpenseTaxClass.LIVING )
+        self.assertEqual( item.cadence, OneTime( date( 2030, 8, 1 ) ) )
+        self.assertEqual( item.amounts, Schedule.constant( WindowedAmount( Decimal( '40000' ) ) ) )
+        self.assertEqual( item.handle, 'payment:college-tuition' )
+
+    def test_a_blank_label_falls_back_to_the_default_name( self ):
+        item = _payment_items( _payment( label = '' ) ).expense_items[ 0 ]
+        self.assertEqual( item.name, 'Payment' )
+        self.assertEqual( item.handle, f'{PAYMENT_EXPENSE_HANDLE_BASE}:payment' )
+
+    def test_same_label_payments_share_one_account_key( self ):
+        # Same label -> same name and handle, so `ExpenseAccounts` dedups them into one run-table line
+        # across years; distinct labels get distinct accounts.
+        first  = _payment_items( _payment( label = 'College Tuition', when = date( 2030, 8, 1 ) ) )
+        second = _payment_items( _payment( label = 'College Tuition', when = date( 2031, 8, 1 ) ) )
+        other  = _payment_items( _payment( label = 'Wedding' ) )
+        self.assertEqual( first.expense_items[ 0 ].handle, second.expense_items[ 0 ].handle )
+        self.assertNotEqual( first.expense_items[ 0 ].handle, other.expense_items[ 0 ].handle )
+
+    def test_the_handle_helper_slugs_the_label( self ):
+        self.assertEqual( payment_expense_handle( 'College Tuition' ), 'payment:college-tuition' )
+
+    def test_the_summary_shows_the_label_amount_and_year( self ):
+        summary = GeneralPaymentEvent().summary( _payment( label = 'College Tuition' ), SimpleNamespace() )
+        self.assertEqual( summary, 'College Tuition of $40,000 in 2030' )
+
+    def test_the_summary_uses_the_default_name_when_unlabeled( self ):
+        self.assertEqual(
+            GeneralPaymentEvent().summary( _payment( label = '' ), SimpleNamespace() ),
+            'Payment of $40,000 in 2030' )
+
+
+class GeneralPaymentFormTests( unittest.TestCase ):
+    """The Payment add form carries an optional purpose that becomes the event's label; blank yields an
+    empty label (the handler then falls back to the default name)."""
+
+    def _built( self, data ):
+        form = EventForm( data, event_type = GeneralPaymentEvent(), profile = SimpleNamespace() )
+        self.assertTrue( form.is_valid(), form.errors )
+        return form.build_event()
+
+    def test_a_purpose_becomes_the_event_label( self ):
+        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'label': '  College Tuition  ' } )
+        self.assertEqual( event.label, 'College Tuition' )      # trimmed
+        self.assertEqual( event.kind, EventKind.GENERAL_PAYMENT )
+
+    def test_a_blank_purpose_leaves_the_label_empty( self ):
+        event = self._built( { 'amount': '40000', 'date': '2030-08-01' } )
+        self.assertEqual( event.label, '' )
 
 
 class SellPropertyOptionFormTests( unittest.TestCase ):

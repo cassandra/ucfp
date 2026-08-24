@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
 from django import forms
+from django.utils.text import slugify
 
 from common.forms import MoneyField
 from common.recurrence import OneTime
@@ -24,7 +25,7 @@ from common.schedule import Schedule
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
-    ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
+    ExpenseItem, IncomeItem, ScheduledExternalReceipt,
     ScheduledLoanPayoff, ScheduledPropertySale, ScheduledRealization, ScheduledTransfer, SubjectRemoval,
     WindowedAmount )
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispositionKind
@@ -164,6 +165,28 @@ def _money( amount ) -> str:
     return f'${amount:,.0f}' if amount is not None else ''
 
 
+# A plan Payment books to its own named expense account rather than an equity disbursement, so the money
+# shows up in the expense column. Its account handle carries this base, so the run-table display placement
+# recognizes a payment account and rolls it under Miscellaneous (`display_placement`), the way a property
+# expense's handle carries its kind. The default label (used when the user leaves the purpose blank) also
+# names that catch-all account.
+PAYMENT_EXPENSE_HANDLE_BASE = 'payment'
+_PAYMENT_LABEL_DEFAULT      = 'Payment'
+
+
+def _payment_label( event : PlanEvent ) -> str:
+    """A payment's purpose for its account name and chip -- the user's free-text label, or the default
+    'Payment' when blank."""
+    return event.label.strip() or _PAYMENT_LABEL_DEFAULT
+
+
+def payment_expense_handle( name : str ) -> str:
+    """The expense-account handle a Payment materializes under -- `payment:<slug>`, keyed off its label so
+    same-label payments share one account (and one run-table line) while distinct labels each get their
+    own. Minted here, recognized by its base in `display_placement`."""
+    return f'{PAYMENT_EXPENSE_HANDLE_BASE}:{slugify( name )}'
+
+
 # --- The materialization accumulator --------------------------------------
 
 class EventContributions:
@@ -188,6 +211,7 @@ class EventType:
     kind        : EventKind
     group       : str
     has_amount  : bool = True
+    has_label   : bool = False   # whether the add form offers an optional free-text purpose (see EventForm)
     description : str  = ''   # a one-line "what this is", shown under the add form's title
 
     @property
@@ -469,16 +493,26 @@ class TaxFreeReceiptEvent( EventType ):
 
 
 class GeneralPaymentEvent( EventType ):
+    """A one-time non-deductible payment out -- tuition, a wedding, a personal gift. It books as a plain
+    LIVING expense (not an equity disbursement), so the money shows up in the expense column where a user
+    looks for it; net worth falls by the same amount either way, and there is no tax effect (non-deductible
+    on both paths). Its optional purpose names its own expense account, so repeated payments of one kind
+    collapse into one run-table line."""
+
     kind        = EventKind.GENERAL_PAYMENT
     group       = _MONEY_OUT_GROUP
+    has_label   = True
     description = 'A one-off payment out of the plan.'
 
     def summary( self, event : PlanEvent, profile ) -> str:
-        return f'Payment of {_money( event.amount )}'
+        return f'{_payment_label( event )} of {_money( event.amount )} in {event.date.year}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.scheduled_events.append(
-            ScheduledExternalDisbursement( event_date = event.date, amount = event.amount ) )
+        name = _payment_label( event )
+        into.expense_items.append( ExpenseItem(
+            name = name, expense_tax_class = ExpenseTaxClass.LIVING,
+            amounts = Schedule.constant( WindowedAmount( event.amount ) ),
+            cadence = OneTime( event.date ), handle = payment_expense_handle( name ) ) )
 
 
 class _DeductiblePaymentEvent( EventType ):
@@ -631,6 +665,12 @@ class EventForm( forms.Form ):
             self.fields[ self._role_field( spec.role ) ] = forms.ChoiceField(
                 label = spec.label, choices = self._choices( spec.choices( profile ) ),
                 widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
+        if event_type.has_label:
+            # Optional: a free-text purpose that names the payment's expense account and its chip. The
+            # placeholder shows the kind's own name, the value a blank label falls back to.
+            self.fields[ 'label' ] = forms.CharField(
+                label = 'Purpose', required = False, max_length = 60,
+                widget = forms.TextInput( attrs = { 'placeholder' : event_type.label } ) )
         if event_type.has_amount:
             self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
         self.fields[ 'date' ] = forms.DateField( label = 'Date', widget = IsoDateInput() )
@@ -645,6 +685,11 @@ class EventForm( forms.Form ):
         and date stay paired below them regardless of how many references a kind has."""
         return [ self[ self._role_field( spec.role ) ]
                  for spec in self._event_type.references( self._profile ) ]
+
+    @property
+    def label_field( self ):
+        """The bound purpose field, or None for a kind that offers none -- rendered above the amount."""
+        return self[ 'label' ] if 'label' in self.fields else None
 
     @property
     def amount_field( self ):
@@ -705,6 +750,7 @@ class EventForm( forms.Form ):
         return PlanEvent(
             kind = self._event_type.kind, date = self.cleaned_data[ 'date' ],
             amount = self.cleaned_data.get( 'amount' ),
+            label = ( self.cleaned_data.get( 'label' ) or '' ).strip(),
             selections = self._selections( self.cleaned_data ),
             options = self._options( self.cleaned_data ) )
 

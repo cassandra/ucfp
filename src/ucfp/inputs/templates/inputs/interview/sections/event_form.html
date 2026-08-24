@@ -17,6 +17,11 @@ appends the event and restores the menu; Cancel restores the menu without adding
       {% endfor %}
     </div>
     {% endif %}
+    {% if form.label_field %}
+    <div class="form-row">
+      <div class="col-sm mb-2">{{ form.label_field.as_field_group }}</div>
+    </div>
+    {% endif %}
     <div class="form-row">
       {% if form.amount_field %}<div class="col-sm mb-2">{{ form.amount_field.as_field_group }}</div>{% endif %}
       <div class="col-sm mb-2">{{ form.date.as_field_group }}</div>

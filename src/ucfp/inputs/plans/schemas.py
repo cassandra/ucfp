@@ -391,6 +391,10 @@ class PlanEvent:
     kind: EventKind
     date: date
     amount: Optional[ Decimal ] = None
+    # An optional free-text purpose a kind may surface (why a payment was made). Blank by default; a kind
+    # that offers it falls back to its own name. Where used it names the payment's own expense account, so
+    # the run table shows the money under a line the user recognizes ("College Tuition").
+    label: str = ''
     selections: dict[ str, str ] = field( default_factory = dict )
     # Event-specific non-entity settings a kind may read (distinct from `selections`, which are entity
     # handles): a small key->value bag, e.g. a residence sale's 'rent_after'. Absent keys take the kind's

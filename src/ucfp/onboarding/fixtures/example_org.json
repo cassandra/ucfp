@@ -159,6 +159,7 @@
           "amount": "40000",
           "date": "2030-08-01",
           "kind": "GENERAL_PAYMENT",
+          "label": "College Tuition",
           "options": {},
           "selections": {}
         },
@@ -166,6 +167,7 @@
           "amount": "40000",
           "date": "2031-08-01",
           "kind": "GENERAL_PAYMENT",
+          "label": "College Tuition",
           "options": {},
           "selections": {}
         },
@@ -173,6 +175,7 @@
           "amount": "40000",
           "date": "2032-08-01",
           "kind": "GENERAL_PAYMENT",
+          "label": "College Tuition",
           "options": {},
           "selections": {}
         },
@@ -180,6 +183,7 @@
           "amount": "40000",
           "date": "2032-08-01",
           "kind": "GENERAL_PAYMENT",
+          "label": "College Tuition",
           "options": {},
           "selections": {}
         }
