@@ -28,9 +28,9 @@ solvent -- a depleted plan's is noise the result line already conveys, shown as 
   </div>
   {% comment %}A compact balances trend beside the numbers -- net worth (on top),
   assets, and liabilities, colour-matched to the table columns. Clicking opens the
-  full, labelled charts (balances + cash flow) in a wide modal. Shown only where the
-  view provides `balances_thumbnail` (the run results page and the tour); the Explore
-  workspace omits it, so the guard also keeps that surface unchanged.{% endcomment %}
+  full, labelled charts (balances + cash flow) in a wide modal. Rendered wherever the
+  view provides `balances_thumbnail` (the run results page, Explore, and the tour); the
+  guard keeps any other includer unchanged.{% endcomment %}
   {% if balances_thumbnail %}
   <a class="run-summary-chart" href="{% url 'run_charts_modal' record.uuid %}" data-async="modal"
      aria-label="Open the full net-worth and cash-flow charts" title="Open full charts">

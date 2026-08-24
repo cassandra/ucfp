@@ -534,6 +534,9 @@ class ExploreView( InputGatedMixin, View ):
         }
         context.update( run_outcome( run, books ) )           # horizon + ending net worth for the banner
         context.update( run_books_table_context( request, run, books ) )
+        # The same balances thumbnail the results page shows -- charts are as useful while
+        # exploring as on a saved run; the modal keys on `record` (the selected run), set above.
+        context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
         return context
 
     @staticmethod

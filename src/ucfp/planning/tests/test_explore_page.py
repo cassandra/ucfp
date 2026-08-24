@@ -52,3 +52,10 @@ class ExplorePageRenderTest( TestCase ):
         self.assertTrue(                                           # the shared summary's result, either verdict
             'Money lasted all' in body or 'Money ran out after' in body )
         self.assertIn( 'Start', body )                             # the start→end arc from the shared summary
+
+    def test_page_renders_the_balances_thumbnail( self ):
+        # Charts are as useful while exploring as on a saved run, so the summary's
+        # clickable balances thumbnail renders here too.
+        body = self._get().content.decode()
+        self.assertIn( 'run-summary-chart__svg', body )
+        self.assertIn( '<polyline', body )
