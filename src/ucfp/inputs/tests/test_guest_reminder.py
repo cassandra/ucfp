@@ -11,7 +11,7 @@ from organization.models import Organization
 from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.mixins import GuestReminderMixin
 from ucfp.inputs.profile.repository import latest_profile, save_profile
-from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
+from ucfp.onboarding.constants import EXAMPLE_ORGANIZATION_NAME, EXAMPLE_ORGANIZATION_UUID
 from ucfp.planning.tests.support import forecast_profile
 
 User = get_user_model()
@@ -85,14 +85,14 @@ class GuestReminderPredicateTest( TestCase ):
         self.assertFalse( self.mixin.show_guest_reminder( self._request_for( self.guest ),
                                                           flow_complete = True ) )
 
-    def test_hidden_on_the_read_only_sample_org( self ):
-        # Viewing the sample: nothing of theirs to save, so the email pitch stands down ("Add my data"
-        # is the prompt there instead), even though the sample profile is complete.
-        sample = Organization.objects.create(
-            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
-        _complete_profile( sample )
+    def test_hidden_on_the_read_only_example_org( self ):
+        # Viewing the example: nothing of theirs to save, so the email pitch stands down ("Add my data"
+        # is the prompt there instead), even though the example profile is complete.
+        example = Organization.objects.create(
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+        _complete_profile( example )
         request = self._request_for( self.guest )
-        request.organization = sample
+        request.organization = example
         self.assertFalse( self.mixin.show_guest_reminder( request, flow_complete = True ) )
 
 

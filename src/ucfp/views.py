@@ -13,7 +13,7 @@ from common.request_utils import is_ajax
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.planning.overview import forecast_overview
 from ucfp.onboarding.home_cta import home_cta_state
-from ucfp.onboarding.membership import sample_organization
+from ucfp.onboarding.membership import example_organization
 from ucfp.privacy_consent import PrivacyConsent
 
 
@@ -186,16 +186,16 @@ class HomeView( View ):
 
 class ExplainView( View ):
     """The login-free "How does <SITE_NAME> work?" page: the four-step explanation of the app
-    (Profile / Plans / Assumptions -> Forecast) that funnels a visitor into the sample-data tour or the
+    (Profile / Plans / Assumptions -> Forecast) that funnels a visitor into the example-data tour or the
     convert-to-Guest graduation. Ungated and shown in both deployment modes, so it exposes the two flags
     the template gates its cloud-only chrome on: whether authentication applies at all
     (`authentication_enabled`, false under `SUPPRESS_AUTHENTICATION` -- gates the "free, no sign-up"
-    reassurance) and whether the tour can run (`tour_available`, i.e. the sample org is seeded)."""
+    reassurance) and whether the tour can run (`tour_available`, i.e. the example org is seeded)."""
 
     def get( self, request, *args, **kwargs ):
         return render( request, 'pages/explain.html', {
             'authentication_enabled' : not settings.SUPPRESS_AUTHENTICATION,
-            'tour_available'         : sample_organization() is not None,
+            'tour_available'         : example_organization() is not None,
         } )
 
 

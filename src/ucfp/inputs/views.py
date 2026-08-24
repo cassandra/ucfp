@@ -639,7 +639,7 @@ class InterviewView( GuestReminderMixin, View ):
     _STEPPER_TEMPLATE = 'inputs/interview/stepper.html'
     # The route this interview is hosted at -- the single source of truth every navigation URL (the stepper
     # and Next links, the async push_url, and the read-only Finish) derives from. A subclass that hosts the
-    # same interview elsewhere (the sample-data tour) overrides just this, and all its navigation follows.
+    # same interview elsewhere (the example-data tour) overrides just this, and all its navigation follows.
     SECTION_URL_NAME  = 'interview_section'
     # The status shows in two swap targets: the rail header (the completion badge, plus the Plans/Assumptions
     # part switch in a scenario build) and the detail notices below the page heading. Both refresh on advance,
@@ -664,7 +664,7 @@ class InterviewView( GuestReminderMixin, View ):
 
     def _page_template( self, section ):
         """The full-page template for `section`'s flow -- Profile is a top-level page, Plans/Assumptions
-        detail pages. The explicit, overridable seam by which a wrapper (the sample-data tour) renders the
+        detail pages. The explicit, overridable seam by which a wrapper (the example-data tour) renders the
         same interview under a different shell."""
         return self._PROFILE_TEMPLATE if flow_of( section ) == 'profile' else self._COMPONENT_TEMPLATE
 

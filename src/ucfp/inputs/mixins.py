@@ -11,7 +11,7 @@ from django.utils.decorators import method_decorator
 from organization.decorators import ensure_organization
 
 from ucfp.inputs.state import completed_profile, input_state
-from ucfp.onboarding.membership import is_sample_organization
+from ucfp.onboarding.membership import is_example_organization
 
 
 class InputGatedMixin:
@@ -31,7 +31,7 @@ class GuestReminderMixin:
     This mixin owns the whole "should the reminder show" decision. It shows only when a Guest with a
     *complete* profile -- real work invested, yet no email and so no way back to it if the browser session
     is lost -- is looking at a *completed* flow: never mid-build (where it would compete with an
-    incompleteness message), never for a Verified account, never on the read-only sample org (nothing of
+    incompleteness message), never for a Verified account, never on the read-only example org (nothing of
     *theirs* to save -- "Add my data" is the prompt there instead), and never under
     `SUPPRESS_AUTHENTICATION`, where the data is the self-hosted server's rather than browser-bound. The one
     signal the mixin cannot derive
@@ -47,5 +47,5 @@ class GuestReminderMixin:
         return bool( ( not settings.SUPPRESS_AUTHENTICATION )
                      and request.user.is_guest
                      and flow_complete
-                     and ( not is_sample_organization( request.organization ) )
+                     and ( not is_example_organization( request.organization ) )
                      and completed_profile( request.organization ) )

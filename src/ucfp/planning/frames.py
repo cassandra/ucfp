@@ -1,7 +1,7 @@
 """Forecast frame policy: the run's when-vocabulary (start, duration, interval), how those choices resolve
 into a `ForecastFrame`, and the default horizon.
 
-Kept separate from `forms.py` so non-form callers -- the hub view and the sample-org seed -- get frame
+Kept separate from `forms.py` so non-form callers -- the hub view and the example-org seed -- get frame
 logic without importing a Django-forms module. `forms.py` builds its fields from the vocabulary here.
 """
 from datetime import date, timedelta
@@ -65,7 +65,7 @@ FORECAST_MIN_YEARS   = 10
 def default_forecast_duration_years( profile, start_date : date ) -> int:
     """The default run length: enough years for the *youngest* household member to reach
     `FORECAST_THROUGH_AGE` as of `start_date`, floored at `FORECAST_MIN_YEARS`. Drives the hub's first-time
-    duration default and the sample seed's horizon. The youngest anchors it because they are the likely
+    duration default and the example seed's horizon. The youngest anchors it because they are the likely
     last survivor, so the window covers the surviving spouse's later years -- the crux of "can I retire".
     (The oldest would cut those years off; modeled death events handle the older member's absence inside
     the window, so this stays a pure age formula.)"""

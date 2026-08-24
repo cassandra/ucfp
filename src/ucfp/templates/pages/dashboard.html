@@ -6,7 +6,7 @@
   feature. The Financial Forecast gets a full-width card that recaps the latest run (or routes to the
   precise setup step) -- see planning/panes/forecast_overview_card.html and planning.overview. The three
   features still to come sit below as inert placeholders (no link yet -- the routes are stubs), reserved
-  for their own summaries once built. An early user exploring the read-only sample (offer_add_my_data) is
+  for their own summaries once built. An early user exploring the read-only example (offer_add_my_data) is
   promoted to start their own plan first.
 {% endcomment %}
 
@@ -14,7 +14,7 @@
 {% if offer_add_my_data %}
 <div class="text-center mb-4 p-4 bg-light border rounded">
   <h2 class="h4">Start your own plan</h2>
-  <p class="text-muted">You're exploring the sample data. Add your own to see your real forecast.</p>
+  <p class="text-muted">You're exploring the example data. Add your own to see your real forecast.</p>
   <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
     {% csrf_token %}
     <button type="submit" class="btn btn-cta btn-lg">Start planning</button>

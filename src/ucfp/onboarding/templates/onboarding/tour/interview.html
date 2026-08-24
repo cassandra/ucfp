@@ -6,7 +6,7 @@ The shared body for a tour step that reuses an interview flow -- the Profile, or
 scenario context. The real interview body (`InterviewView` via a tour subclass) composed under the tour
 shell instead of the app nav. Reuses `inputs/interview/body.html`; the editing-oriented extras (inline
 rename, guest "save your work" banner, completion notices) are omitted -- the tour is a read-only walk over
-sample data. `InterviewView._swap` still refreshes those omitted targets on an async step, but jQuery's
+example data. `InterviewView._swap` still refreshes those omitted targets on an async step, but jQuery's
 replace on a missing id is a no-op, so their absence is harmless.
 {% endcomment %}
 

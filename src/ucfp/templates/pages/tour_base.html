@@ -2,10 +2,10 @@
 {% load static %}
 {% load common_tags %}
 {% comment %}
-  The tour shell: the layout for the read-only sample-data tour. Like `app_base.html` it exposes an
+  The tour shell: the layout for the read-only example-data tour. Like `app_base.html` it exposes an
   `app_content` region (and the `main_container_class` override), so the real feature pages can render
   inside it via the swappable base -- but it carries the tour's own chrome instead of the app navbar. A
-  two-tier header: a top bar (logo escape hatch, a centered "guided tour" marker so the sample context is
+  two-tier header: a top bar (logo escape hatch, a centered "guided tour" marker so the example context is
   clear, and the "Start planning" graduation) over a prominent nav that is the tour's main navigation and
   mirrors the Explain page's three labelled boxes -- Current Facts (Profile), Future Scenario (Plans +
   Assumptions, the two parts of a Scenario), and What You Get (Forecast). The active step
@@ -23,7 +23,7 @@
         <a class="navbar-brand py-1 m-0" href="{% url 'home' %}">
           <img src="{% static 'img/app-logo-h64.png' %}" height="26" alt="{% settings_value 'SITE_NAME' %}">
         </a>
-        <span class="tour-badge">Guided tour &middot; sample data</span>
+        <span class="tour-badge">Guided tour &middot; example data</span>
         <form method="post" action="{% url 'add_my_data' %}" class="m-0">
           {% csrf_token %}
           <button type="submit" class="btn btn-cta btn-sm">Start planning</button>
@@ -32,7 +32,7 @@
 
       {% comment %}The main tour navigation, mirroring the Explain page's three labelled boxes: Current
       Facts (Profile), Future Scenario (Plans + Assumptions -- both enter the one tour_scenario view at each
-      flow's first section), and What You Get (Forecast, which resolves the sample run itself). Neutral
+      flow's first section), and What You Get (Forecast, which resolves the example run itself). Neutral
       labels only -- the tour's single gold action is "Start planning". The active chip is lit by
       `tour_active_step`, so the scenario view lights whichever of Plans/Assumptions is showing.{% endcomment %}
       <nav class="tour-nav" aria-label="Tour steps">
@@ -80,7 +80,7 @@
           payoff.
         {% elif tour_active_step == 3 %}The rest of your Scenario &mdash; the economic assumptions the
           forecast runs against, like inflation and investment returns.
-        {% elif tour_active_step == 4 %}The forecast this sample produces &mdash; net worth and cash flow year
+        {% elif tour_active_step == 4 %}The forecast this example produces &mdash; net worth and cash flow year
           by year. Scroll the table, and use the column controls to change the view.
         {% endif %}
       </p>
