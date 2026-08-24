@@ -206,15 +206,16 @@ class NetWorthChartTestCase( unittest.TestCase ):
 
 
 def _column_books():
-    """Books with several asset accounts -- Cash funded, Stocks/Bonds at zero -- plus a
-    mortgage, so an Asset drill-in has a non-zero child (cash) and zero children to skip."""
+    """Books with several asset accounts -- Cash and Stocks funded, Bonds at zero -- plus a
+    mortgage, so an Asset drill-in has two non-zero children and a zero child to skip, while
+    the Liability rollup has a single child (the mortgage)."""
     params = ForecastParameters(
         start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ),
         filing_status = FilingStatus.SINGLE, statute = _STATUTE,
         subjects = [ Subject( 'you', date( 1960, 1, 1 ) ) ],
         assets = [
             AssetParameters( 'Cash', AssetClass.CASH, _D( '500000' ), _D( '500000' ) ),
-            AssetParameters( 'Stocks', AssetClass.STOCKS, _D( '0' ), _D( '0' ) ),
+            AssetParameters( 'Stocks', AssetClass.STOCKS, _D( '100000' ), _D( '100000' ) ),
             AssetParameters( 'Bonds', AssetClass.BONDS, _D( '0' ), _D( '0' ) ) ],
         loans = [ LoanParameters(
             name = 'Mortgage', opening_balance = _D( '200000' ),
@@ -239,18 +240,24 @@ class ColumnChartTestCase( unittest.TestCase ):
 
     def test_summary_lists_rollup_first_then_children( self ):
         chart = column_chart( self.run, self.books, BooksColumnKey.for_type( AccountType.ASSET ) )
-        self.assertGreaterEqual( len( chart.series ), 2 )
-        # The rollup is first (painted on top) in the dark total colour; children follow
-        # in categorical hues.
+        # Rollup (dark total, painted on top) plus its two non-zero children in categorical hues.
+        self.assertEqual( len( chart.series ), 3 )
         self.assertIn( '--chart-total-color', chart.series[ 0 ].color )
         self.assertIn( '--chart-cat-1', chart.series[ 1 ].color )
 
     def test_zero_children_are_dropped( self ):
         chart  = column_chart( self.run, self.books, BooksColumnKey.for_type( AccountType.ASSET ) )
         labels = [ one.label for one in chart.series ]
-        # Stocks and Bonds hold zero throughout, so they are not drawn.
-        self.assertNotIn( 'Stocks', labels )
+        # Bonds hold zero throughout, so they are not drawn.
         self.assertNotIn( 'Bonds', labels )
+
+    def test_single_child_rollup_collapses_to_one_line( self ):
+        # The Liability rollup has just the mortgage, so its line equals that child's:
+        # one line, named for both.
+        chart = column_chart( self.run, self.books, BooksColumnKey.for_type( AccountType.LIABILITY ) )
+        self.assertEqual( len( chart.series ), 1 )
+        self.assertIn( '>', chart.series[ 0 ].label )
+        self.assertIn( 'Mortgage', chart.series[ 0 ].label )
 
     def test_unknown_column_raises( self ):
         with self.assertRaises( ValueError ):

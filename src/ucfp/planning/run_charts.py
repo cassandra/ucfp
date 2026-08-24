@@ -137,7 +137,9 @@ def column_chart( run : ProjectionRun, books : BooksOfAccount, column_key : Book
     shows) and, when it is a rollup, its immediate children beside it. Children that read
     zero across every period are dropped (they add nothing and the table hides them too),
     and if the rollup plus its non-zero children would exceed `_MAX_COLUMN_LINES`, only the
-    rollup is drawn. The rollup is listed first so it paints on top.
+    rollup is drawn. A rollup left with a single non-zero child collapses to one line (the
+    two would be identical), named "Parent > Child". The rollup is listed first so it paints
+    on top.
 
     Raises ValueError if `column_key` is not a column of this run's books.
     """
@@ -154,16 +156,23 @@ def column_chart( run : ProjectionRun, books : BooksOfAccount, column_key : Book
     def values_for( key ):
         return [ float( value ) for value in column_series( catalog, ledger, chart, spans, key ) ]
 
-    series = [ LineChartSeries( values_for( column_key ), column.label, _TOTAL_COLOR ) ]
-
+    parent_values = values_for( column_key )
     children = [ ( catalog.get( member_key ).label, values_for( member_key ) )
                  for member_key in catalog.member_keys( column_key ) ]
     children = [ ( label, values ) for label, values in children if any( values ) ]
 
-    if children and ( 1 + len( children ) ) <= _MAX_COLUMN_LINES:
-        for index, ( label, values ) in enumerate( children ):
-            color, dash = _child_style( index )
-            series.append( LineChartSeries( values, label, color, dash = dash ))
+    if len( children ) == 1:
+        # A rollup with one non-zero child is identical to that child, so draw one line
+        # and name it for both (unless they share a name, which would just repeat it).
+        child_label = children[ 0 ][ 0 ]
+        label = child_label if child_label == column.label else f'{column.label} > {child_label}'
+        series = [ LineChartSeries( parent_values, label, _TOTAL_COLOR ) ]
+    else:
+        series = [ LineChartSeries( parent_values, column.label, _TOTAL_COLOR ) ]
+        if children and ( 1 + len( children ) ) <= _MAX_COLUMN_LINES:
+            for index, ( label, values ) in enumerate( children ):
+                color, dash = _child_style( index )
+                series.append( LineChartSeries( values, label, color, dash = dash ))
 
     return _chart( spans, series, CHROME_FULL, run = run, width = width, height = height )
 
