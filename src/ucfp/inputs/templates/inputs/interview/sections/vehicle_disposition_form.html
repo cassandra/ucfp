@@ -23,8 +23,8 @@ sub-block, with the method as a nested switch). Empty when none is open. Reads `
         section. Balance is read-only and rides on the block as a data attr; the client calculator keeps
         the monthly and rate consistent over the months left (edit either -- the other follows).{% endcomment %}
         {% if disposition_form.is_financed %}
-        <fieldset class="border rounded px-2 pb-2 mb-2 {{ AppConst.CURRENT_LOAN_CLASS }}"
-                  data-{{ AppConst.CURRENT_LOAN_BALANCE_DATA_ATTR }}="{{ disposition_form.loan_balance }}">
+        <fieldset class="border rounded px-2 pb-2 mb-2 {{ AppConst.LOAN_CLASS }}"
+                  data-{{ AppConst.LOAN_BALANCE_DATA_ATTR }}="{{ disposition_form.loan_balance }}">
           <legend class="w-auto px-2 mb-1 h6">Current loan</legend>
           <p class="text-muted small mb-1">Balance owed: <strong>${{ disposition_form.loan_balance|floatformat:0 }}</strong></p>
           <div class="form-row">
@@ -34,8 +34,8 @@ sub-block, with the method as a nested switch). Empty when none is open. Reads `
           </div>
           {% comment %}role=alert announces the hint when the calculator reveals it; the rate input points
           at it via aria-describedby (a display:none hint is skipped by screen readers until shown).{% endcomment %}
-          <p id="current-loan-hint" role="alert"
-             class="text-danger small mb-0 d-none {{ AppConst.CURRENT_LOAN_HINT_CLASS }}">That payment and
+          <p id="loan-hint" role="alert"
+             class="text-danger small mb-0 d-none {{ AppConst.LOAN_HINT_CLASS }}">That payment and
             term don't fit the balance &mdash; check them.</p>
         </fieldset>
         {% endif %}

@@ -9,12 +9,11 @@ the shared vehicle-purchase fields (`VehiclePurchaseForm`); net-new future vehic
 (`vehicle.py`). This module owns listing the current vehicles and editing one's disposition.
 """
 from dataclasses import replace
-from decimal import Decimal
 
 from django import forms
 
-from common.amortization import level_payment, rate_for_payment
 from common.forms import MoneyField, PercentField
+from common.loan_solver import monthly_payment, resolved_annual_rate
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
@@ -32,22 +31,6 @@ from ucfp.inputs.widgets import IsoDateInput
 
 
 _DEFAULT_LOAN_APR_PERCENT = BUILTIN_ASSUMPTIONS.auto_loan_apr.fraction * 100   # pre-fill for a new loan
-
-# A monthly-derived rate above this reads as "doesn't fit" -- the calculator declines to fabricate a rate
-# from a monthly/term inconsistent with the balance (a payment implying, say, 60%/yr is not a real auto
-# loan). The ceiling has one source, `AppConst` (a percent), shared with the client calculator.
-_MAX_PLAUSIBLE_APR = Decimal( AppConst.MAX_PLAUSIBLE_LOAN_APR_PERCENT ) / 100
-
-
-def _plausible_rate_from_monthly( balance, monthly, months : int ):
-    """The annual `Rate` a `monthly` payment implies over `balance` and `months`, or None when it does not
-    form a plausible loan -- the payment cannot retire the balance in the term (total payments below it),
-    or the implied rate exceeds `_MAX_PLAUSIBLE_APR`. So an inconsistent monthly/term never stores a bogus
-    rate; a directly-entered rate is trusted as-is (this guards only the monthly-derived path)."""
-    if monthly * months < balance:                   # cannot retire the balance in the term at any rate
-        return None
-    rate = Rate( rate_for_payment( balance, monthly, months ) * 12 )
-    return rate if rate.fraction <= _MAX_PLAUSIBLE_APR else None
 
 
 def _current_vehicles( profile ) -> list:
@@ -150,23 +133,23 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
     # The current loan (an owned, financed vehicle only): its terms, re-homed here from the Debt plan. Rate
     # and monthly are two views of one amortization over `loan_months` (the rate is stored; the monthly is
     # a no-JS back-solve); shown only when financed, the rate pre-filling the assumed default until set.
-    # The `CURRENT_LOAN_*` constants own the fuller client/server contract.
+    # The shared `LOAN_*` calculator (client) and `common.loan_solver` (server) own the fuller contract.
     loan_rate    = PercentField(
         label = 'Rate (%)', required = False, min_value = 0,
-        css_class = AppConst.CURRENT_LOAN_RATE_CLASS, initial = _DEFAULT_LOAN_APR_PERCENT )
+        css_class = AppConst.LOAN_RATE_CLASS, initial = _DEFAULT_LOAN_APR_PERCENT )
     loan_monthly = MoneyField( label = 'Monthly payment', required = False, min_value = 0,
-                               css_class = AppConst.CURRENT_LOAN_MONTHLY_CLASS )
+                               css_class = AppConst.LOAN_PAYMENT_CLASS )
     loan_months  = forms.IntegerField(
         label = 'Months left', required = False, min_value = 1,
         widget = forms.NumberInput(
-            attrs = { 'class' : f'form-control {AppConst.CURRENT_LOAN_MONTHS_CLASS}' } ) )
+            attrs = { 'class' : f'form-control {AppConst.LOAN_TERM_CLASS}' } ) )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         self._handle  = handle
         self._profile = profile
         super().__init__( data, initial = self._initial( plans ) if handle else None )
         # The rate blanks (with a hint) when a monthly/term doesn't fit; point the input at that hint.
-        self.fields[ 'loan_rate' ].widget.attrs[ 'aria-describedby' ] = 'current-loan-hint'
+        self.fields[ 'loan_rate' ].widget.attrs[ 'aria-describedby' ] = 'loan-hint'
 
     def _auto_debt( self ):
         """This vehicle's auto-loan `Debt`, or None when it is not financed -- the current loan the card
@@ -207,8 +190,8 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
             initial[ 'loan_months' ] = months
             balance = self.loan_balance
             if balance is not None and balance > 0:                     # show the implied monthly too
-                initial[ 'loan_monthly' ] = round( level_payment(
-                    balance, repayment.interest_rate.fraction / 12, months ) )
+                initial[ 'loan_monthly' ] = round(
+                    monthly_payment( balance, repayment.interest_rate, months ) )
         return initial
 
     # The kind-switch case values, so the template carries no member-name literals (mirrors the payment
@@ -248,14 +231,12 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
     def _resolved_rate( self, months : int ):
         """The loan's annual rate from the current-loan fields: the entered `loan_rate` (which the client
         keeps authoritative -- it fills it from an edited monthly), or, as a no-JS fallback, back-solved
-        from the monthly payment over the balance and `months`. None when neither determines a rate."""
-        rate = self.cleaned_data.get( 'loan_rate' )
-        if rate is not None:
-            return Rate.percent( rate )                # a directly-entered rate stands as given
-        monthly, balance = self.cleaned_data.get( 'loan_monthly' ), self.loan_balance
-        if monthly is None or balance is None or balance <= 0:
-            return None
-        return _plausible_rate_from_monthly( balance, monthly, months )   # None when it doesn't fit
+        from the monthly payment over the balance and `months`. None when neither determines a rate. The
+        entered-vs-back-solved resolution and its plausibility guard live in `common.loan_solver`."""
+        entered = self.cleaned_data.get( 'loan_rate' )
+        return resolved_annual_rate(
+            Rate.percent( entered ) if entered is not None else None,
+            self.loan_balance, self.cleaned_data.get( 'loan_monthly' ), months )
 
     def _disposition( self, kind, cleaned ):
         # Retain is the default, so it is stored as the absence of a disposition (nothing to persist).

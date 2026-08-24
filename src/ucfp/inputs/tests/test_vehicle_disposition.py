@@ -28,7 +28,7 @@ from ucfp.inputs.plans.schemas import (
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile
 from ucfp.inputs.vehicle_disposition import (
-    LeasedVehicleDispositionForm, VehicleDispositionForm, _plausible_rate_from_monthly,
+    LeasedVehicleDispositionForm, VehicleDispositionForm,
     all_dispositions_context, dispositions_context, leased_dispositions_context )
 from ucfp.inputs.vehicle_handles import loan_debt_handle
 
@@ -227,30 +227,6 @@ class VehicleLoanTermsTests( unittest.TestCase ):
         form  = DebtPlanForm( profile = profile, plans = Plans() )
         names = [ row[ 'name' ] for row in form.rows ]
         self.assertEqual( names, [ 'Mortgage' ] )                       # the auto loan is not listed
-
-
-class PlausibleRateTests( unittest.TestCase ):
-    """The plausibility guard on the monthly-derived rate: below the ~30% APR cap it back-solves a Rate,
-    at/below zero-interest it is 0%, and above the cap or when the payment can't retire the balance it is
-    None (so an inconsistent monthly/term never fabricates a stored rate)."""
-
-    def test_just_below_the_cap_back_solves_a_rate( self ):
-        below = level_payment( Decimal( '20000' ), Decimal( '0.29' ) / 12, 36 )   # ~29% APR, under the cap
-        rate  = _plausible_rate_from_monthly( Decimal( '20000' ), below, 36 )
-        self.assertIsNotNone( rate )
-        self.assertLess( rate.fraction, Decimal( '0.30' ) )
-
-    def test_just_above_the_cap_is_none( self ):
-        above = level_payment( Decimal( '20000' ), Decimal( '0.31' ) / 12, 36 )   # ~31% APR, over the cap
-        self.assertIsNone( _plausible_rate_from_monthly( Decimal( '20000' ), above, 36 ) )
-
-    def test_the_zero_interest_monthly_is_a_zero_rate( self ):
-        # A monthly of exactly balance/months amortizes at 0% -- a valid in-range rate, not None.
-        rate = _plausible_rate_from_monthly( Decimal( '18000' ), Decimal( '500' ), 36 )   # 18,000 / 36 = 500
-        self.assertEqual( rate.fraction, Decimal( '0' ) )
-
-    def test_a_monthly_that_cannot_retire_the_balance_is_none( self ):
-        self.assertIsNone( _plausible_rate_from_monthly( Decimal( '18000' ), Decimal( '400' ), 36 ) )
 
 
 class DispositionListTests( unittest.TestCase ):
@@ -468,9 +444,9 @@ class DispositionFormRenderTests( unittest.TestCase ):
             { 'disposition_form': VehicleDispositionForm( profile = _financed_profile( balance = '18000' ),
                                                           plans = Plans(), handle = 'vehicle-1' ),
               'handle': 'vehicle-1', 'AppConst': AppConst } )
-        self.assertIn( AppConst.CURRENT_LOAN_CLASS, html )                            # calculator wrapper
-        self.assertIn( f'data-{AppConst.CURRENT_LOAN_BALANCE_DATA_ATTR}="18000"', html )   # balance on it
-        self.assertIn( AppConst.CURRENT_LOAN_MONTHLY_CLASS, html )                    # the monthly input
+        self.assertIn( AppConst.LOAN_CLASS, html )                                    # calculator wrapper
+        self.assertIn( f'data-{AppConst.LOAN_BALANCE_DATA_ATTR}="18000"', html )      # balance on it
+        self.assertIn( AppConst.LOAN_PAYMENT_CLASS, html )                            # the monthly input
         self.assertIn( '$18000', html )                                              # balance shown read-only
 
 
