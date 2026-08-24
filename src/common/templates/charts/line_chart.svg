@@ -19,7 +19,7 @@ set, so the chart scales to its CSS container via the viewBox.
   <line class="line-chart__zero-line" x1="{{ geometry.plot.left }}" y1="{{ geometry.zero_line_y }}" x2="{{ geometry.plot.right }}" y2="{{ geometry.zero_line_y }}" stroke="var(--line-chart-zero-color, #94a3b8)" stroke-width="1" />
   {% endif %}
   {% for series in geometry.series %}
-  <polyline class="line-chart__series" points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="{{ geometry.stroke_width }}" stroke-linejoin="round" stroke-linecap="round"{% if chrome == 'sparkline' %} vector-effect="non-scaling-stroke"{% endif %} />
+  <polyline class="line-chart__series" points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="{{ geometry.stroke_width }}" stroke-linejoin="round" stroke-linecap="round"{% if series.dash %} stroke-dasharray="{{ series.dash }}"{% endif %}{% if chrome == 'sparkline' %} vector-effect="non-scaling-stroke"{% endif %} />
   {% endfor %}
   {% if geometry.show_axes %}
   {% for tick in geometry.y_ticks %}

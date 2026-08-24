@@ -13,6 +13,8 @@ urlpatterns = [
     path( '<uuid:run_uuid>/discard-confirm/', views.RunDiscardConfirmView.as_view(),
           name = 'run_discard_confirm' ),
     path( '<uuid:run_uuid>/charts/', views.RunChartsModalView.as_view(), name = 'run_charts_modal' ),
+    path( '<uuid:run_uuid>/column-chart/', views.RunColumnChartModalView.as_view(),
+          name = 'run_column_chart' ),
     path( '<uuid:run_uuid>/books/', views.ProjectionRunBooksTableView.as_view(),
           name = 'run_books_table' ),
     path( '<uuid:run_uuid>/books/account/<uuid:account_uuid>/journal/',

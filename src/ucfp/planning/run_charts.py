@@ -29,6 +29,11 @@ from common.math_utils import nice_ticks
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.books import BooksOfAccount
+from ucfp.accounts.books_table import (
+    BooksColumnKey,
+    BooksTableColumnCatalog,
+    column_series,
+)
 from ucfp.accounts.enums import AccountType
 
 from .books_table import run_period_spans
@@ -39,19 +44,36 @@ from .schemas import ProjectionRun
 # the palette themes through CSS (defined in main.css) yet still renders standalone,
 # and the renderer stays colour-agnostic. Hues are the validated categorical set,
 # assigned to match the run table's column hues (violet net worth, blue asset, red
-# liability, green income, orange expense). Income/Expense sit in the CVD floor
+# liability, green income, gold expense). Income/Expense sit in the CVD floor
 # band, so the flows chart carries a legend as the required secondary encoding.
 _NET_WORTH_COLOR    = 'var(--chart-net-worth-color, #4a3aa7)'
 _ASSETS_COLOR       = 'var(--chart-assets-color, #2a78d6)'
 _LIABILITIES_COLOR  = 'var(--chart-liabilities-color, #e34948)'
 _INCOME_COLOR       = 'var(--chart-income-color, #008300)'
-_EXPENSES_COLOR     = 'var(--chart-expenses-color, #eb6834)'
+_EXPENSES_COLOR     = 'var(--chart-expenses-color, #b8860b)'
 
 _NET_WORTH_LABEL    = 'Net Worth'
 
-# Chart-shaping constants: how many axis ticks the full chart aims for.
-_MAX_X_TICKS  = 6
-_Y_TICK_COUNT = 4
+# Per-column drill-in palette (column_chart). The rollup line is a fixed dark "total"
+# colour, drawn on top (it is the sum, so it is the highest line); its children cycle
+# the validated categorical hues, then repeat them dashed -- a second channel so up to
+# seven children stay distinguishable without new hues.
+_TOTAL_COLOR = 'var(--chart-total-color, #334155)'
+_CAT_COLORS  = [
+    'var(--chart-cat-1, #2a78d6)',   # blue
+    'var(--chart-cat-2, #008300)',   # green
+    'var(--chart-cat-3, #e34948)',   # red
+    'var(--chart-cat-4, #4a3aa7)',   # violet
+    'var(--chart-cat-5, #b8860b)',   # gold
+]
+_CHILD_DASH = '6 4'
+
+# Chart-shaping constants: how many axis ticks the full chart aims for, and the most
+# lines a per-column drill-in shows (rollup + children) before falling back to just the
+# rollup.
+_MAX_X_TICKS       = 6
+_Y_TICK_COUNT      = 4
+_MAX_COLUMN_LINES  = 8
 
 
 def net_worth_chart( run : ProjectionRun, books : BooksOfAccount, *,
@@ -107,6 +129,50 @@ def flows_chart( run : ProjectionRun, books : BooksOfAccount, *,
         LineChartSeries( flow( AccountType.EXPENSE ), 'Expenses', _EXPENSES_COLOR ),
     ]
     return _chart( spans, series, chrome, run = run, width = width, height = height )
+
+
+def column_chart( run : ProjectionRun, books : BooksOfAccount, column_key : BooksColumnKey, *,
+                  width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
+    """A per-column drill-in: the column's value over time (the same figure the table cell
+    shows) and, when it is a rollup, its immediate children beside it. Children that read
+    zero across every period are dropped (they add nothing and the table hides them too),
+    and if the rollup plus its non-zero children would exceed `_MAX_COLUMN_LINES`, only the
+    rollup is drawn. The rollup is listed first so it paints on top.
+
+    Raises ValueError if `column_key` is not a column of this run's books.
+    """
+    spans      = run_period_spans( run )
+    bookkeeper = Bookkeeper( books )
+    ledger     = bookkeeper.ledger
+    chart      = bookkeeper.chart
+    catalog    = BooksTableColumnCatalog.build( chart )
+
+    column = catalog.get( column_key )
+    if column is None:
+        raise ValueError( f'No such column: {column_key}.' )
+
+    def values_for( key ):
+        return [ float( value ) for value in column_series( catalog, ledger, chart, spans, key ) ]
+
+    series = [ LineChartSeries( values_for( column_key ), column.label, _TOTAL_COLOR ) ]
+
+    children = [ ( catalog.get( member_key ).label, values_for( member_key ) )
+                 for member_key in catalog.member_keys( column_key ) ]
+    children = [ ( label, values ) for label, values in children if any( values ) ]
+
+    if children and ( 1 + len( children ) ) <= _MAX_COLUMN_LINES:
+        for index, ( label, values ) in enumerate( children ):
+            color, dash = _child_style( index )
+            series.append( LineChartSeries( values, label, color, dash = dash ))
+
+    return _chart( spans, series, CHROME_FULL, run = run, width = width, height = height )
+
+
+def _child_style( index : int ):
+    """The (colour, dash) for the nth child line: the categorical hues solid, then dashed."""
+    color = _CAT_COLORS[ index % len( _CAT_COLORS ) ]
+    dash  = _CHILD_DASH if index >= len( _CAT_COLORS ) else None
+    return ( color, dash )
 
 
 def _chart( spans : list, series : list[ LineChartSeries ], chrome : str, *,

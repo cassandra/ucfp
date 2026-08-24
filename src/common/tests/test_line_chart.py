@@ -231,3 +231,14 @@ class LineChartTagTestCase( SimpleTestCase ):
     def test_title_is_rendered_as_svg_title(self):
         result = line_chart_tag( self._chart(), title = 'Latest run' )
         self.assertIn( '<title>Latest run</title>', result )
+
+    def test_dashed_series_emits_stroke_dasharray(self):
+        chart = LineChart(
+            x = [ 0.0, 1.0 ],
+            series = [ LineChartSeries( values = [ 1, 2 ], label = 's', color = '#000', dash = '6 4' ) ] )
+        result = line_chart_tag( chart )
+        self.assertIn( 'stroke-dasharray="6 4"', result )
+
+    def test_solid_series_omits_stroke_dasharray(self):
+        result = line_chart_tag( self._chart() )
+        self.assertNotIn( 'stroke-dasharray', result )

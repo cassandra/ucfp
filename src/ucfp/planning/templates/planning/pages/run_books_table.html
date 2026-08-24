@@ -81,6 +81,8 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
                 <button type="submit" name="op" value="move_right" class="dropdown-item"
                         {% if not col.can_move_right %}disabled aria-disabled="true"{% endif %}>Move right</button>
               </form>
+              <a href="{% url 'run_column_chart' run_uuid=record.uuid %}?column={{ col.op_key.token|urlencode }}"
+                 data-async="modal" class="dropdown-item">Chart</a>
               {% if col.column.account_uuid %}
               <a href="{% url 'books_journal' run_uuid=record.uuid account_uuid=col.column.account_uuid %}"
                  data-async="modal" class="dropdown-item">Transaction history</a>

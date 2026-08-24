@@ -66,12 +66,22 @@
   --chart-assets-color: #2a78d6;       /* blue   -- matches the Asset column hue (210) */
   --chart-liabilities-color: #e34948;  /* red    -- matches the Liability column hue (8) */
   --chart-income-color: #008300;       /* green  -- matches the Income column hue (145) */
-  --chart-expenses-color: #eb6834;     /* orange -- matches the Expense column hue (35) */
+  --chart-expenses-color: #b8860b;     /* gold/amber -- matches the Expense column, distinct from red */
 
   --line-chart-axis-color: var(--line-color);
   --line-chart-grid-color: #e9edf2;
   --line-chart-zero-color: var(--muted-color);
   --line-chart-label-color: var(--muted-color);
+
+  /* Per-column drill-in (column_chart): a dark "total" for the rollup line, and the
+     validated categorical hues for its children (reused from the palette above; the
+     drill-in also repeats them dashed for a second channel). */
+  --chart-total-color: var(--tertiary-color);
+  --chart-cat-1: var(--chart-assets-color);       /* blue */
+  --chart-cat-2: var(--chart-income-color);       /* green */
+  --chart-cat-3: var(--chart-liabilities-color);  /* red */
+  --chart-cat-4: var(--chart-net-worth-color);    /* violet */
+  --chart-cat-5: var(--chart-expenses-color);     /* orange */
 }
 
 
@@ -1054,7 +1064,7 @@ body.has-cookie-notice {
                        padding: 0; list-style: none; }
 .chart-legend__item     { display: inline-flex; align-items: center; gap: 0.35rem;
                        font-size: 0.82rem; color: var(--muted-color); }
-.chart-legend__swatch   { width: 0.85rem; height: 0.85rem; border-radius: 2px; flex-shrink: 0; }
+.chart-legend__swatch   { flex-shrink: 0; display: block; }
 
 /* Charts inside the run charts modal: full-width, aspect-driven height, stacked. */
 .modal-chart            { margin: 0 0 1.5rem; }

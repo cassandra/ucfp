@@ -26,6 +26,7 @@ from common.dataclass_json import from_json_data
 from common.line_chart import CHROME_FULL, CHROME_SPARKLINE
 
 from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.books_table import BooksColumnKey
 from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.inputs.drift import plans_drift
 from ucfp.inputs.enums import UsageRole
@@ -51,7 +52,7 @@ from .materialization import ForecastFrame
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture, run_title
 from .overview import run_outcome
-from .run_charts import balances_chart, flows_chart
+from .run_charts import balances_chart, column_chart, flows_chart
 from .schemas import ProjectionRun
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
@@ -60,6 +61,7 @@ _BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
 _JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
 _DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
 _CHARTS_MODAL_TEMPLATE = 'planning/modals/run_charts.html'
+_COLUMN_CHART_MODAL_TEMPLATE = 'planning/modals/run_column_chart.html'
 _EXPLORE_SAVE_TEMPLATE = 'planning/modals/explore_save.html'
 _COMING_SOON_TEMPLATE = 'planning/pages/coming_soon.html'
 
@@ -392,6 +394,30 @@ class RunChartsModalView( ModalView ):
                 run, books, chrome = CHROME_FULL, width = 720, height = 300 ),
         }
         return self.modal_response( request, context = context )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RunColumnChartModalView( ModalView ):
+    """`/run/<uuid>/column-chart/?column=<token>` -- the modal opened from a books-table
+    column's "Graph" action: that column's value over time, with its immediate children
+    beside it when it is a small-enough rollup."""
+
+    def get_template_name( self ):
+        return _COLUMN_CHART_MODAL_TEMPLATE
+
+    def get( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        token = request.GET.get( 'column' )
+        if not token:
+            raise Http404( 'No column specified.' )
+        run   = from_json_data( ProjectionRun, record.data )
+        books = BooksOfAccountRepository().load( record.books )
+        try:
+            chart = column_chart( run, books, BooksColumnKey( token ), width = 720, height = 320 )
+        except ValueError as error:
+            raise Http404( str( error ) )
+        return self.modal_response( request, context = { 'record': record, 'column_chart': chart } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

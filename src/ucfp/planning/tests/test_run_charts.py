@@ -10,6 +10,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+from uuid import UUID
 
 from common.line_chart import CHROME_FULL, CHROME_SPARKLINE
 from common.recurrence import Duration, TimeUnit
@@ -27,10 +28,13 @@ from ucfp.forecast.parameters import (
 )
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
+from ucfp.accounts.books_table import BooksColumnKey, BooksDerivedFigure
 from ucfp.planning.books_table import run_period_spans
 from ucfp.planning.run_charts import (
+    _child_style,
     _format_money,
     balances_chart,
+    column_chart,
     flows_chart,
     net_worth_chart,
 )
@@ -199,6 +203,70 @@ class NetWorthChartTestCase( unittest.TestCase ):
         chart = net_worth_chart( self.run, self.books, chrome = CHROME_FULL )
         self.assertEqual( chart.chrome, CHROME_FULL )
         self.assertTrue( chart.y_ticks )
+
+
+def _column_books():
+    """Books with several asset accounts -- Cash funded, Stocks/Bonds at zero -- plus a
+    mortgage, so an Asset drill-in has a non-zero child (cash) and zero children to skip."""
+    params = ForecastParameters(
+        start_date = date( 2026, 1, 1 ), end_date = date( 2030, 12, 31 ),
+        filing_status = FilingStatus.SINGLE, statute = _STATUTE,
+        subjects = [ Subject( 'you', date( 1960, 1, 1 ) ) ],
+        assets = [
+            AssetParameters( 'Cash', AssetClass.CASH, _D( '500000' ), _D( '500000' ) ),
+            AssetParameters( 'Stocks', AssetClass.STOCKS, _D( '0' ), _D( '0' ) ),
+            AssetParameters( 'Bonds', AssetClass.BONDS, _D( '0' ), _D( '0' ) ) ],
+        loans = [ LoanParameters(
+            name = 'Mortgage', opening_balance = _D( '200000' ),
+            interest_rate = Rate.percent( _D( '5' ) ), term = Duration( 30, TimeUnit.YEAR ) ) ],
+        economic_outlook = EconomicOutlook.constant( EconomicParameters() ) )
+    return Forecast( params ).run().books
+
+
+class ColumnChartTestCase( unittest.TestCase ):
+
+    def setUp( self ):
+        self.run   = _run()
+        self.books = _column_books()
+        return
+
+    def test_leaf_column_is_a_single_total_line( self ):
+        key   = BooksColumnKey.for_derived( BooksDerivedFigure.NET_WORTH )
+        chart = column_chart( self.run, self.books, key )
+        self.assertEqual( len( chart.series ), 1 )
+        self.assertIn( '--chart-total-color', chart.series[ 0 ].color )
+        self.assertIsNone( chart.series[ 0 ].dash )
+
+    def test_summary_lists_rollup_first_then_children( self ):
+        chart = column_chart( self.run, self.books, BooksColumnKey.for_type( AccountType.ASSET ) )
+        self.assertGreaterEqual( len( chart.series ), 2 )
+        # The rollup is first (painted on top) in the dark total colour; children follow
+        # in categorical hues.
+        self.assertIn( '--chart-total-color', chart.series[ 0 ].color )
+        self.assertIn( '--chart-cat-1', chart.series[ 1 ].color )
+
+    def test_zero_children_are_dropped( self ):
+        chart  = column_chart( self.run, self.books, BooksColumnKey.for_type( AccountType.ASSET ) )
+        labels = [ one.label for one in chart.series ]
+        # Stocks and Bonds hold zero throughout, so they are not drawn.
+        self.assertNotIn( 'Stocks', labels )
+        self.assertNotIn( 'Bonds', labels )
+
+    def test_unknown_column_raises( self ):
+        with self.assertRaises( ValueError ):
+            column_chart( self.run, self.books, BooksColumnKey.for_account(
+                UUID( '00000000-0000-0000-0000-000000000000' ) ) )
+
+
+class ChildStyleTestCase( unittest.TestCase ):
+
+    def test_categorical_hues_solid_then_dashed( self ):
+        # The first five children are solid categorical hues; the sixth and seventh
+        # repeat the hues dashed (the second channel).
+        self.assertEqual( _child_style( 0 ), ( 'var(--chart-cat-1, #2a78d6)', None ) )
+        self.assertEqual( _child_style( 4 )[ 1 ], None )
+        self.assertEqual( _child_style( 5 ), ( 'var(--chart-cat-1, #2a78d6)', '6 4' ) )
+        self.assertEqual( _child_style( 6 ), ( 'var(--chart-cat-2, #008300)', '6 4' ) )
 
 
 class FormatMoneyTestCase( unittest.TestCase ):

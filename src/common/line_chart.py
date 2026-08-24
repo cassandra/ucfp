@@ -62,11 +62,17 @@ _EPSILON  = 1e-9
 
 @dataclass
 class LineChartSeries:
-    """One line: a value per shared x position, with its own colour and label."""
+    """One line: a value per shared x position, with its own colour and label.
+
+    `dash` is an optional SVG ``stroke-dasharray`` (e.g. "6 4") -- a second channel
+    beside colour so more series stay distinguishable (and CVD-robust) without new
+    hues; None draws a solid line.
+    """
 
     values  : list[ float ]
     label   : str
     color   : str            # any CSS colour value, incl. currentColor / var(--x)
+    dash    : Optional[ str ]  = None
 
 
 @dataclass
@@ -110,6 +116,7 @@ class RenderedSeries:
     points  : str            # SVG polyline "x1,y1 x2,y2 ..." in viewBox units
     color   : str
     label   : str
+    dash    : Optional[ str ]  = None
 
 
 @dataclass
@@ -190,6 +197,7 @@ def build_geometry( chart : LineChart ) -> LineChartGeometry:
             points  = _polyline_points( chart.x, series.values, to_px_x, to_px_y ),
             color   = series.color,
             label   = series.label,
+            dash    = series.dash,
         )
         for series in reversed( chart.series )
     ]
