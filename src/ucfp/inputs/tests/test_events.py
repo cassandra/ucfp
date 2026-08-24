@@ -554,6 +554,12 @@ class EventEditabilityTests( unittest.TestCase ):
         rows  = events_context( SimpleNamespace(), plans )
         self.assertEqual( [ ( row[ 'index' ], row[ 'editable' ] ) for row in rows ], [ ( 0, True ) ] )
 
+    def test_events_context_marks_a_drifted_row_not_editable( self ):
+        # A transfer whose target account was removed -> the row drives the template to hide its Edit link.
+        plans = Plans( events = [ _transfer( 'a', 'b' ) ] )
+        rows  = events_context( _named_accounts_profile( 'a' ), plans )
+        self.assertFalse( rows[ 0 ][ 'editable' ] )
+
 
 class EventEditGuardTests( unittest.TestCase ):
     """The edit view's shared guard: it opens a form (GET) or replaces an event (POST) only for an

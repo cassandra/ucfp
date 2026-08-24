@@ -12,14 +12,15 @@ event_delete, which swaps this list back in.
       <span>{{ event.summary }}</span>
       <span class="d-flex align-items-center ml-2 flex-shrink-0 edit-only">
         {% if event.editable %}
-        <a class="btn btn-link btn-sm p-0 mr-2" data-async="#events-add"
-           href="{% url 'event_edit' index=event.index %}" aria-label="Edit" title="Edit">Edit</a>
+        <a class="btn btn-link btn-sm p-0 mr-2 edit-only" data-async="#events-add"
+           href="{% url 'event_edit' index=event.index %}"
+           aria-label="Edit {{ event.summary }}" title="Edit">Edit</a>
         {% endif %}
         <form method="post" action="{% url 'event_delete' index=event.index %}"
               data-async="#events-list" class="d-inline">
           {% csrf_token %}
           <button type="submit" class="btn btn-link btn-sm text-danger p-0"
-                  aria-label="Remove" title="Remove">&times;</button>
+                  aria-label="Remove {{ event.summary }}" title="Remove">&times;</button>
         </form>
       </span>
     </li>

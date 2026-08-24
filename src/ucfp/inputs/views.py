@@ -1963,9 +1963,14 @@ class EventEditView( View ):
             return antinode.response( main_content = self._form( request, index, handler, form ) )
         original = profile
         updated  = form.build_event()
+        events   = list( plans.events )
         profile, plans = handler.cascade_on_remove( event, profile, plans )
         profile, plans = handler.cascade_on_add( updated, profile, plans )
-        events = list( plans.events )
+        # Replace at `index`. This holds because no editable kind's cascade touches the events list (only
+        # the non-editable card payoff cascades, on removal) -- so the list is the one captured above. The
+        # assertion makes that invariant fail loudly rather than silently overwriting the wrong event if a
+        # future editable kind ever cascades on it.
+        assert list( plans.events ) == events, 'an editable kind cascaded on the events list'
         events[ index ] = updated
         plans = replace( plans, events = events )
         with transaction.atomic():

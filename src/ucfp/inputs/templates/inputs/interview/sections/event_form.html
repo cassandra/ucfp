@@ -38,7 +38,7 @@ and `submit_label` reads "Add" or "Save". The edit form is the same fields pre-f
     (cadence + end date) only when Recurring is chosen. The date above is the window's start.{% endcomment %}
     {% if form.recurring_field %}
     <div class="{{ AppConst.SWITCH_CLASS }}">
-      <div class="mb-2">
+      <div class="mb-2" role="radiogroup" aria-label="Payment frequency">
         {% for radio in form.recurring_field %}
         <div class="form-check form-check-inline">
           {{ radio.tag }}
@@ -48,7 +48,9 @@ and `submit_label` reads "Add" or "Save". The edit form is the same fields pre-f
       </div>
       <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ form.recurring_case }}">
         <div class="col-sm mb-2">
-          <label class="d-block mb-1 small text-muted">Every</label>
+          {% comment %}A visual caption only -- the count/unit widgets carry their own aria-labels (see
+          inputs/cadence.py), so this is not a <label> for any one control.{% endcomment %}
+          <span class="d-block mb-1 small text-muted" aria-hidden="true">Every</span>
           <div class="form-inline">
             {{ form.recurrence_cadence.count }}&nbsp;{{ form.recurrence_cadence.unit }}
           </div>

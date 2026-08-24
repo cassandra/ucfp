@@ -273,6 +273,7 @@ class EventType:
             chosen = event.selections.get( spec.role )
             if chosen not in { handle for handle, _label in spec.choices( profile ) }:
                 return False
+            continue
         return True
 
     def references( self, profile ) -> list:
