@@ -795,7 +795,10 @@ class Forecast:
             windowed_amount = item.amounts.at( span.start_date )
             if ( occurrences == 0 ) or ( windowed_amount is None ):
                 continue
-            factor = self._expense_inflation_factor( item.expense_tax_class, span.start_date.year )
+            # A fixed-in-nominal item (inflate=False) takes its entered amount as the actual dollars paid
+            # each occurrence, so it does not grow with inflation; every other item grows to nominal.
+            factor = ( self._expense_inflation_factor( item.expense_tax_class, span.start_date.year )
+                       if item.inflate else Decimal( 1 ) )
             account = self._baseline.expense_accounts.account_for( item )
             lines.append(
                 ExpenseLine( account = account, amount = occurrences * windowed_amount.amount * factor ) )

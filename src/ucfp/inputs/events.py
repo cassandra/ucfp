@@ -17,21 +17,26 @@ from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
 from django import forms
+from django.utils.text import slugify
 
+from common.date_window import DateWindow
 from common.forms import MoneyField
-from common.recurrence import OneTime
+from common.recurrence import Duration, OneTime, Recurrence, TimeUnit
 from common.schedule import Schedule
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.environment.constants import AppConst
 from ucfp.forecast.parameters import (
-    ExpenseItem, IncomeItem, ScheduledExternalDisbursement, ScheduledExternalReceipt,
+    ExpenseItem, IncomeItem,
     ScheduledLoanPayoff, ScheduledPropertySale, ScheduledRealization, ScheduledTransfer, SubjectRemoval,
     WindowedAmount )
+from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, cadence_label, read_cadence
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.vehicle_handles import vehicle_loan_handle
 from ucfp.inputs.widgets import IsoDateInput
+from ucfp.parameter_sets.enums import CadenceDomain
 
 
 # Selection roles -- the canonical keys an event's references, the add form, and its materialization
@@ -164,6 +169,62 @@ def _money( amount ) -> str:
     return f'${amount:,.0f}' if amount is not None else ''
 
 
+# The general (non-deductible) Payment books to its own named expense account rather than an equity
+# disbursement, so the money shows up in the expense column. Its account handle carries this base, so the
+# run-table display placement recognizes it and rolls it under Miscellaneous (`display_placement`), the way
+# a property expense's handle carries its kind. The deductible payments (charitable, medical) take no such
+# handle -- they group under their own tax-class column instead.
+PAYMENT_EXPENSE_HANDLE_BASE = 'payment'
+
+
+def payment_expense_handle( name : str ) -> str:
+    """The expense-account handle a Payment materializes under -- `payment:<slug>`, keyed off its label so
+    same-label payments share one account (and one run-table line) while distinct labels each get their
+    own. Minted here, recognized by its base in `display_placement`."""
+    return f'{PAYMENT_EXPENSE_HANDLE_BASE}:{slugify( name )}'
+
+
+# A recurrence-capable kind's add form offers a one-time/recurring toggle (a `js-switch` control) that
+# reveals a date-based window: "every {interval} from {date} to {finish}". `_RECUR_ONCE`/`_RECUR_ON` are the
+# toggle's values (the recurring case reveals the window fields); `_RECUR_PREFIX` namespaces the cadence
+# magnitude/unit fields; the domain offers month/year (coarsest = year) seeded to a sensible yearly default.
+_RECUR_ONCE     = 'once'
+_RECUR_ON       = 'recurring'
+_RECUR_PREFIX   = 'recur'
+_RECUR_DOMAIN   = CadenceDomain.MO_YR
+_RECUR_DEFAULT  = Duration( 1, TimeUnit.YEAR )
+
+
+def _payment_cadence( event : PlanEvent ):
+    """A payment's engine cadence: a single dated occurrence when one-time, else the repeating cadence.
+    The engine expands the recurrence over the item's window (anchored at the window start), so a recurring
+    payment rides the existing expense-expansion path with no engine change."""
+    if event.interval is None:
+        return OneTime( event.date )
+    return Recurrence( event.interval )
+
+
+def _payment_window( event : PlanEvent ) -> DateWindow:
+    """A payment's existence window: unbounded for a one-time payment (its single date carries it), else the
+    `[date, finish]` window its recurrence repeats across."""
+    if event.interval is None:
+        return DateWindow()
+    return DateWindow( start = event.date, end = event.finish )
+
+
+def _window_text( event : PlanEvent ) -> str:
+    """A recurring payment's window for the chip -- "2032 to 2035", or "from 2032" when open-ended."""
+    if event.finish is None:
+        return f'from {event.date.year}'
+    return f'{event.date.year} to {event.finish.year}'
+
+
+def _fixed_suffix( event : PlanEvent ) -> str:
+    """A chip marker for a payment fixed in nominal terms (not inflation-indexed) -- empty for the
+    inflation-indexed default, so only the exception is called out."""
+    return '' if event.inflation_indexed else ' (fixed)'
+
+
 # --- The materialization accumulator --------------------------------------
 
 class EventContributions:
@@ -185,14 +246,35 @@ class EventType:
     """One kind of plan event. The common case is a single dated amount feeding one engine input;
     a subclass overrides only the references it needs, its summary, and how it contributes."""
 
-    kind        : EventKind
-    group       : str
-    has_amount  : bool = True
-    description : str  = ''   # a one-line "what this is", shown under the add form's title
+    kind           : EventKind
+    group          : str
+    has_amount     : bool = True
+    has_label      : bool = False   # whether the add form offers an optional free-text purpose (EventForm)
+    has_recurrence : bool = False   # whether the add form offers the one-time/recurring toggle (EventForm)
+    has_inflation  : bool = False   # whether the add form offers the "adjust for inflation" toggle
+    editable       : bool = True    # whether an existing event of this kind can be edited in place
+    description    : str  = ''   # a one-line "what this is", shown under the add form's title
 
     @property
     def label( self ) -> str:
         return self.kind.label
+
+    def is_editable( self, event : PlanEvent, profile ) -> bool:
+        """Whether this existing event can be edited in place -- an editable kind whose every referenced
+        entity still exists. A kind marked not editable (a card payoff, managed elsewhere) never is; an
+        event pointing at a since-removed entity is not (its drifted picker has no valid value to seed), so
+        it is removed and re-added rather than edited."""
+        return self.editable and self._references_resolvable( event, profile )
+
+    def _references_resolvable( self, event : PlanEvent, profile ) -> bool:
+        """Whether every entity this event references still exists among the current candidates -- False
+        once a referenced account, property, or subject has been removed from the profile."""
+        for spec in self.references( profile ):
+            chosen = event.selections.get( spec.role )
+            if chosen not in { handle for handle, _label in spec.choices( profile ) }:
+                return False
+            continue
+        return True
 
     def references( self, profile ) -> list:
         return list()
@@ -382,6 +464,7 @@ class LoanPayoffEvent( EventType ):
     kind       = EventKind.LOAN_PAYOFF
     group      = _MONEY_OUT_GROUP
     has_amount = False
+    editable   = False   # managed in the Debt plan step; its LOAN_ROLE has no add-form picker to round-trip
 
     def offerable( self, profile ) -> bool:
         return False   # created in the Debt plan step, not from the add menu
@@ -410,6 +493,7 @@ class CardPayoffEvent( EventType ):
     kind       = EventKind.CARD_PAYOFF
     group      = _MONEY_OUT_GROUP
     has_amount = False
+    editable   = False   # managed in the card paydown calculator (and carries a remove-cascade), not here
 
     def offerable( self, profile ) -> bool:
         return False   # created in the card paydown calculator, not from the add menu
@@ -456,61 +540,92 @@ class TaxableReceiptEvent( EventType ):
 
 
 class TaxFreeReceiptEvent( EventType ):
+    """A one-off tax-free amount received -- a gift, inheritance, or payout. It books as tax-free income (not
+    an equity receipt), so the money shows up in the income column where a user looks for inflows; net worth
+    rises by the same amount either way, and the tax-free class keeps it out of taxable income. The income
+    is not attributed to a person (no recipient) -- a gift is the household's, and being tax-free its owner
+    does not affect tax. This is the money-in mirror of the general Payment (visibility is orthogonal to
+    taxability)."""
+
     kind        = EventKind.TAX_FREE_RECEIPT
     group       = _MONEY_IN_GROUP
     description = 'A one-off tax-free amount received -- a gift, inheritance, or payout.'
 
     def summary( self, event : PlanEvent, profile ) -> str:
-        return f'Tax-free receipt of {_money( event.amount )}'
+        return f'Tax-free receipt of {_money( event.amount )} in {event.date.year}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.scheduled_events.append(
-            ScheduledExternalReceipt( event_date = event.date, amount = event.amount ) )
-
-
-class GeneralPaymentEvent( EventType ):
-    kind        = EventKind.GENERAL_PAYMENT
-    group       = _MONEY_OUT_GROUP
-    description = 'A one-off payment out of the plan.'
-
-    def summary( self, event : PlanEvent, profile ) -> str:
-        return f'Payment of {_money( event.amount )}'
-
-    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.scheduled_events.append(
-            ScheduledExternalDisbursement( event_date = event.date, amount = event.amount ) )
-
-
-class _DeductiblePaymentEvent( EventType ):
-    """A one-time deductible payment out -- a single expense item carrying its deductible tax class.
-    Charitable and medical differ only in that class and their wording."""
-
-    group      = _MONEY_OUT_GROUP
-    tax_class  : ExpenseTaxClass
-    noun       : str
-
-    def summary( self, event : PlanEvent, profile ) -> str:
-        return f'{self.noun} of {_money( event.amount )}'
-
-    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.expense_items.append( ExpenseItem(
-            name = f'{self.noun} ({event.date.isoformat()})', expense_tax_class = self.tax_class,
+        into.income_items.append( IncomeItem(
+            subject = None, income_tax_class = IncomeTaxClass.TAX_FREE,
             amounts = Schedule.constant( WindowedAmount( event.amount ) ),
-            cadence = OneTime( event.date ) ) )
+            cadence = OneTime( event.date ), name = 'Tax-free receipt' ) )
 
 
-class CharitablePaymentEvent( _DeductiblePaymentEvent ):
-    kind        = EventKind.CHARITABLE_PAYMENT
-    tax_class   = ExpenseTaxClass.CHARITABLE
-    noun        = 'Charitable gift'
-    description = 'A one-off charitable gift (tax-deductible).'
+class _ExpensePaymentEvent( EventType ):
+    """A payment out that books as a visible expense line -- the shared base of the general (non-deductible)
+    and the deductible (charitable, medical) payments. All carry an optional purpose that names their
+    account (so repeats of one kind collapse into a single run-table line), a date-based recurrence, and the
+    inflation toggle; they differ only in their `expense_tax_class`, their wording, and -- for the general
+    payment -- where the run table groups the account. No engine change: each materializes to an
+    `ExpenseItem`, which the forecast already expands over its window."""
+
+    group          = _MONEY_OUT_GROUP
+    has_label      = True
+    has_recurrence = True
+    has_inflation  = True
+    expense_tax_class : ExpenseTaxClass
+
+    def summary( self, event : PlanEvent, profile ) -> str:
+        money = _money( event.amount )
+        if event.interval is None:
+            schedule = f'in {event.date.year}'
+        else:
+            schedule = f'{cadence_label( event.interval )}, {_window_text( event )}'
+        return f'{self._effective_label( event )} of {money} {schedule}{_fixed_suffix( event )}'
+
+    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
+        name = self._effective_label( event )
+        into.expense_items.append( ExpenseItem(
+            name = name, expense_tax_class = self.expense_tax_class,
+            amounts = Schedule.constant( WindowedAmount( event.amount ) ),
+            cadence = _payment_cadence( event ), window = _payment_window( event ),
+            handle = self._account_handle( name ), inflate = event.inflation_indexed ) )
+
+    def _effective_label( self, event : PlanEvent ) -> str:
+        """The payment's purpose for its account name and chip -- the user's free-text label, or the kind's
+        own name (e.g. "Charitable gift") when blank."""
+        return event.label.strip() or self.label
+
+    def _account_handle( self, name : str ):
+        """The expense-account handle -- None by default, so a deductible payment falls to its own tax-class
+        column in the run table. The general payment overrides this to route to Miscellaneous."""
+        return None
 
 
-class MedicalPaymentEvent( _DeductiblePaymentEvent ):
-    kind        = EventKind.MEDICAL_PAYMENT
-    tax_class   = ExpenseTaxClass.MEDICAL
-    noun        = 'Medical expense'
-    description = 'A one-off medical expense (tax-deductible).'
+class GeneralPaymentEvent( _ExpensePaymentEvent ):
+    """A non-deductible payment out -- tuition, a wedding, a personal gift. It books as a plain LIVING
+    expense (not an equity disbursement), so the money shows up in the expense column where a user looks for
+    it; net worth falls by the same amount either way, with no tax effect. Its purpose names its own account
+    under Miscellaneous, so repeated payments of one kind collapse into one run-table line."""
+
+    kind              = EventKind.GENERAL_PAYMENT
+    expense_tax_class = ExpenseTaxClass.LIVING
+    description       = 'A payment out of the plan -- one-time, or repeating over a date window.'
+
+    def _account_handle( self, name : str ):
+        return payment_expense_handle( name )   # routes to the Miscellaneous rung (see display_placement)
+
+
+class CharitablePaymentEvent( _ExpensePaymentEvent ):
+    kind              = EventKind.CHARITABLE_PAYMENT
+    expense_tax_class = ExpenseTaxClass.CHARITABLE
+    description       = 'A charitable gift (tax-deductible) -- one-time, or repeating over a date window.'
+
+
+class MedicalPaymentEvent( _ExpensePaymentEvent ):
+    kind              = EventKind.MEDICAL_PAYMENT
+    expense_tax_class = ExpenseTaxClass.MEDICAL
+    description       = 'A medical expense (tax-deductible) -- one-time, or repeating over a date window.'
 
 
 class DeathEvent( EventType ):
@@ -599,10 +714,16 @@ def menu_context( profile ) -> list:
 
 
 def events_context( profile, plans ) -> list:
-    """The events list for the templates: each event's row index and human summary."""
+    """The events list for the templates: each event's row index, human summary, and whether it can be
+    edited in place (the row shows an Edit affordance only when so)."""
     events = plans.events if plans is not None else list()
-    return [ { 'index': index, 'summary': handler_for( event.kind ).summary( event, profile ) }
-             for index, event in enumerate( events ) ]
+    rows   = list()
+    for index, event in enumerate( events ):
+        handler = handler_for( event.kind )
+        rows.append( { 'index'    : index,
+                       'summary'  : handler.summary( event, profile ),
+                       'editable' : handler.is_editable( event, profile ) } )
+    return rows
 
 
 # --- Forms ----------------------------------------------------------------
@@ -622,22 +743,72 @@ class EventForm( forms.Form ):
     pre-selected, so the user sees and confirms what the event acts on; more than one prepends a
     placeholder, so the user must choose (no silent default). `build_event` returns the `PlanEvent`."""
 
-    def __init__( self, data = None, *, event_type = None, profile = None ):
+    def __init__( self, data = None, *, event_type = None, profile = None, event = None ):
         super().__init__( data )
         self._event_type = event_type
         self._profile    = profile
+        self._event      = event   # when editing, the event whose values seed the fields' initials
         # Order the form the way one describes an event: what it acts on, then how much, then when.
         for spec in event_type.references( profile ):
             self.fields[ self._role_field( spec.role ) ] = forms.ChoiceField(
                 label = spec.label, choices = self._choices( spec.choices( profile ) ),
+                initial = event.selections.get( spec.role ) if event else None,
                 widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
+        if event_type.has_label:
+            # Optional: a free-text purpose that names the payment's expense account and its chip. The
+            # placeholder shows the kind's own name, the value a blank label falls back to.
+            self.fields[ 'label' ] = forms.CharField(
+                label = 'Purpose', required = False, max_length = 60,
+                initial = event.label if event else None,
+                widget = forms.TextInput( attrs = { 'placeholder' : event_type.label } ) )
         if event_type.has_amount:
-            self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
-        self.fields[ 'date' ] = forms.DateField( label = 'Date', widget = IsoDateInput() )
+            self.fields[ 'amount' ] = MoneyField(
+                label = 'Amount', min_value = 0, initial = event.amount if event else None )
+        self.fields[ 'date' ] = forms.DateField(
+            label = 'Date', initial = event.date if event else None, widget = IsoDateInput() )
+        if event_type.has_recurrence:
+            # A one-time/recurring toggle (a `js-switch` control): 'recurring' reveals the cadence + finish
+            # date, turning the single `date` into the window start. The cadence is seeded to a yearly
+            # default so toggling on reads "every 1 year"; the whole window is date-based. Editing a
+            # recurring event opens on the recurring case with its own cadence and end date.
+            self.fields[ 'recurring' ] = forms.ChoiceField(
+                required = False, initial = _RECUR_ON if self._is_recurring_event() else _RECUR_ONCE,
+                choices = [ ( _RECUR_ONCE, 'One-time' ), ( _RECUR_ON, 'Recurring' ) ],
+                widget = forms.RadioSelect(
+                    attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
+            add_cadence_fields( self, _RECUR_PREFIX, self._seeded_interval(), _RECUR_DOMAIN )
+            self.fields[ 'finish' ] = forms.DateField(
+                label = 'Until', required = False, initial = event.finish if event else None,
+                widget = IsoDateInput() )
+        if event_type.has_inflation:
+            # On by default: the amount is read as today's dollars and grown to nominal. Unchecked fixes it
+            # in nominal terms (the entered figure is paid as-is each occurrence).
+            self.fields[ 'inflation_indexed' ] = forms.BooleanField(
+                label = 'Adjust for inflation', required = False,
+                initial = event.inflation_indexed if event else True,
+                help_text = "Amount is in today's dollars and grows with inflation; uncheck for a "
+                            'fixed-dollar amount.',
+                widget = forms.CheckboxInput( attrs = { 'class' : 'custom-control-input' } ) )
         for opt in event_type.options( profile ):
             self.fields[ self._option_field( opt.key ) ] = forms.BooleanField(
-                label = opt.label, required = False, initial = opt.default, help_text = opt.help_text,
+                label = opt.label, required = False, help_text = opt.help_text,
+                initial = self._seeded_option( opt ),
                 widget = forms.CheckboxInput( attrs = { 'class' : 'custom-control-input' } ) )
+
+    def _is_recurring_event( self ) -> bool:
+        return ( self._event is not None ) and ( self._event.interval is not None )
+
+    def _seeded_interval( self ):
+        """The cadence the recurrence fields seed from -- the edited event's interval when recurring, else
+        the yearly default (so a fresh or one-time event opens on 'every 1 year' when toggled recurring)."""
+        return self._event.interval if self._is_recurring_event() else _RECUR_DEFAULT
+
+    def _seeded_option( self, opt ) -> bool:
+        """An option checkbox's initial -- the edited event's stored choice ('yes'/'no'), else the kind's
+        default for a fresh add."""
+        if self._event is None:
+            return opt.default
+        return self._event.options.get( opt.key, 'yes' if opt.default else 'no' ) != 'no'
 
     @property
     def reference_fields( self ):
@@ -647,9 +818,42 @@ class EventForm( forms.Form ):
                  for spec in self._event_type.references( self._profile ) ]
 
     @property
+    def label_field( self ):
+        """The bound purpose field, or None for a kind that offers none -- rendered above the amount."""
+        return self[ 'label' ] if 'label' in self.fields else None
+
+    @property
     def amount_field( self ):
         """The bound amount field, or None for a kind that carries none."""
         return self[ 'amount' ] if 'amount' in self.fields else None
+
+    @property
+    def recurring_field( self ):
+        """The bound one-time/recurring toggle, or None for a kind that does not recur -- the `js-switch`
+        control whose value reveals the window fields."""
+        return self[ 'recurring' ] if 'recurring' in self.fields else None
+
+    @property
+    def recurring_case( self ) -> str:
+        """The toggle value the recurrence window is shown for -- the template marks the window block with
+        it, so the switch reveals the block only when 'recurring' is chosen."""
+        return _RECUR_ON
+
+    @property
+    def recurrence_cadence( self ) -> dict:
+        """The bound cadence magnitude/unit fields (the "every N period" control) for the recurrence
+        window, rendered inside the revealed case."""
+        return cadence_cells( self, _RECUR_PREFIX, _RECUR_DEFAULT, _RECUR_DOMAIN )
+
+    @property
+    def finish_field( self ):
+        """The bound recurrence-end date, or None for a kind that does not recur."""
+        return self[ 'finish' ] if 'finish' in self.fields else None
+
+    @property
+    def inflation_field( self ):
+        """The bound "adjust for inflation" checkbox, or None for a kind that does not offer it."""
+        return self[ 'inflation_indexed' ] if 'inflation_indexed' in self.fields else None
 
     @property
     def option_fields( self ):
@@ -695,18 +899,53 @@ class EventForm( forms.Form ):
         error   = self._event_type.validate( self._selections( cleaned ), self._profile )
         if error:
             raise forms.ValidationError( error )
+        self._validate_recurrence( cleaned )
         return cleaned
+
+    def _validate_recurrence( self, cleaned : dict ) -> None:
+        """A recurring payment needs an end no earlier than its start; a one-time one ignores the window
+        fields. (A blank cadence magnitude just falls back to the yearly default -- non-blocking.)"""
+        if not self._is_recurring( cleaned ):
+            return
+        finish = cleaned.get( 'finish' )
+        start  = cleaned.get( 'date' )
+        if finish is None:
+            self.add_error( 'finish', 'Give an end date for a recurring payment.' )
+        elif ( start is not None ) and ( finish < start ):
+            self.add_error( 'finish', 'The end date must not be before the start date.' )
+        return
+
+    def _is_recurring( self, cleaned : dict ) -> bool:
+        return self._event_type.has_recurrence and ( cleaned.get( 'recurring' ) == _RECUR_ON )
 
     def _selections( self, cleaned : dict ) -> dict:
         return { spec.role: cleaned.get( self._role_field( spec.role ) )
                  for spec in self._event_type.references( self._profile ) }
 
     def build_event( self ) -> PlanEvent:
+        interval, finish = self._recurrence( self.cleaned_data )
         return PlanEvent(
             kind = self._event_type.kind, date = self.cleaned_data[ 'date' ],
             amount = self.cleaned_data.get( 'amount' ),
+            label = ( self.cleaned_data.get( 'label' ) or '' ).strip(),
+            interval = interval, finish = finish,
+            inflation_indexed = self._inflation_indexed( self.cleaned_data ),
             selections = self._selections( self.cleaned_data ),
             options = self._options( self.cleaned_data ) )
+
+    def _inflation_indexed( self, cleaned : dict ) -> bool:
+        """Whether the payment is inflation-indexed -- the checkbox when the kind offers it (on by default),
+        else True (the model-wide default; a kind without the toggle indexes as everything else does)."""
+        if not self._event_type.has_inflation:
+            return True
+        return bool( cleaned.get( 'inflation_indexed' ) )
+
+    def _recurrence( self, cleaned : dict ) -> tuple:
+        """The event's recurrence as `(interval, finish)` -- `(None, None)` for a one-time payment (the
+        toggle off, or a kind that does not recur), else the chosen cadence over its end date."""
+        if not self._is_recurring( cleaned ):
+            return None, None
+        return read_cadence( self, _RECUR_PREFIX, _RECUR_DEFAULT, _RECUR_DOMAIN ), cleaned.get( 'finish' )
 
     def _options( self, cleaned : dict ) -> dict:
         return { opt.key: ( 'yes' if cleaned.get( self._option_field( opt.key ) ) else 'no' )

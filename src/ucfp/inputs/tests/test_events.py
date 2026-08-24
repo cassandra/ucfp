@@ -8,19 +8,28 @@ stable dispatch, not churning model. Only the branch (appreciating vs face-value
 cash-hub-vs-conversion destination sub-rule are pinned here; gain/basis math is the engine's to test.
 """
 import unittest
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
-from ucfp.accounts.enums import AssetClass
-from ucfp.forecast.parameters import ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer
+from common.date_window import DateWindow
+from common.recurrence import Duration, OneTime, Recurrence, TimeUnit
+from common.schedule import Schedule
+
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.forecast.parameters import (
+    IncomeItem, ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, WindowedAmount )
 from ucfp.inputs.events import (
-    BoundOption, EventContributions, EventForm, POSSESSION_ROLE, PROPERTY_ROLE, SOURCE_ROLE, TARGET_ROLE,
-    SellPossessionEvent, SellPropertyEvent, TransferEvent, _payoff_loan_handle,
+    BoundOption, CharitablePaymentEvent, EventContributions, EventForm, GeneralPaymentEvent,
+    MedicalPaymentEvent, POSSESSION_ROLE, PROPERTY_ROLE, PAYMENT_EXPENSE_HANDLE_BASE, SOURCE_ROLE,
+    TARGET_ROLE, SellPossessionEvent, SellPropertyEvent, TaxFreeReceiptEvent, TransferEvent,
+    _payoff_loan_handle, events_context, handler_for, payment_expense_handle,
     vehicle_disposition_contributions )
 from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
 from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.views import EventEditView
 
 
 def _profile( *holdings ):
@@ -262,6 +271,364 @@ class PayoffLoanHandleTests( unittest.TestCase ):
 
     def test_an_unknown_debt_handle_passes_through( self ):
         self.assertEqual( _payoff_loan_handle( SimpleNamespace( debts = [] ), 'gone' ), 'gone' )
+
+
+def _payment( amount = Decimal( '40000' ), label = '', when = date( 2030, 8, 1 ) ):
+    return PlanEvent( kind = EventKind.GENERAL_PAYMENT, date = when, amount = amount, label = label )
+
+
+def _payment_items( event ):
+    into = EventContributions()
+    GeneralPaymentEvent().contribute( event, SimpleNamespace(), {}, into )
+    return into
+
+
+class GeneralPaymentMaterializationTests( unittest.TestCase ):
+    """A Payment now books as a visible LIVING expense, not an equity disbursement (#210 Phase 1). The
+    routing decision -- an `ExpenseItem` named by the payment's label, so the money shows in the expense
+    column and same-label payments collapse into one account -- is what regresses silently, so it earns a
+    test here; the expense's booking and tax treatment are the engine's to prove."""
+
+    def test_a_payment_is_a_living_expense_item_not_a_disbursement( self ):
+        into = _payment_items( _payment( label = 'College Tuition' ) )
+        self.assertEqual( into.scheduled_events, [] )     # no longer an equity disbursement
+        self.assertEqual( len( into.expense_items ), 1 )
+        item = into.expense_items[ 0 ]
+        self.assertEqual( item.name, 'College Tuition' )
+        self.assertEqual( item.expense_tax_class, ExpenseTaxClass.LIVING )
+        self.assertEqual( item.cadence, OneTime( date( 2030, 8, 1 ) ) )
+        self.assertEqual( item.amounts, Schedule.constant( WindowedAmount( Decimal( '40000' ) ) ) )
+        self.assertEqual( item.handle, 'payment:college-tuition' )
+
+    def test_a_blank_label_falls_back_to_the_default_name( self ):
+        item = _payment_items( _payment( label = '' ) ).expense_items[ 0 ]
+        self.assertEqual( item.name, 'Payment' )
+        self.assertEqual( item.handle, f'{PAYMENT_EXPENSE_HANDLE_BASE}:payment' )
+
+    def test_same_label_payments_share_one_account_key( self ):
+        # Same label -> same name and handle, so `ExpenseAccounts` dedups them into one run-table line
+        # across years; distinct labels get distinct accounts.
+        first  = _payment_items( _payment( label = 'College Tuition', when = date( 2030, 8, 1 ) ) )
+        second = _payment_items( _payment( label = 'College Tuition', when = date( 2031, 8, 1 ) ) )
+        other  = _payment_items( _payment( label = 'Wedding' ) )
+        self.assertEqual( first.expense_items[ 0 ].handle, second.expense_items[ 0 ].handle )
+        self.assertNotEqual( first.expense_items[ 0 ].handle, other.expense_items[ 0 ].handle )
+
+    def test_the_handle_helper_slugs_the_label( self ):
+        self.assertEqual( payment_expense_handle( 'College Tuition' ), 'payment:college-tuition' )
+
+    def test_the_summary_shows_the_label_amount_and_year( self ):
+        summary = GeneralPaymentEvent().summary( _payment( label = 'College Tuition' ), SimpleNamespace() )
+        self.assertEqual( summary, 'College Tuition of $40,000 in 2030' )
+
+    def test_the_summary_uses_the_default_name_when_unlabeled( self ):
+        self.assertEqual(
+            GeneralPaymentEvent().summary( _payment( label = '' ), SimpleNamespace() ),
+            'Payment of $40,000 in 2030' )
+
+
+class TaxFreeReceiptTests( unittest.TestCase ):
+    """A tax-free receipt now books as tax-free income (not an equity receipt), so it shows in the income
+    column -- the money-in mirror of the Payment fix (#210 Phase 6). The routing decision regresses
+    silently, so it earns a test here; the tax-free treatment and net-worth effect are the engine's."""
+
+    _EVENT = PlanEvent( kind = EventKind.TAX_FREE_RECEIPT, date = date( 2030, 6, 1 ),
+                        amount = Decimal( '100000' ) )
+
+    def test_it_materializes_tax_free_income_not_an_equity_receipt( self ):
+        into = EventContributions()
+        TaxFreeReceiptEvent().contribute( self._EVENT, SimpleNamespace(), {}, into )
+        self.assertEqual( into.scheduled_events, [] )          # no longer an equity (external) receipt
+        self.assertEqual( len( into.income_items ), 1 )
+        item = into.income_items[ 0 ]
+        self.assertIsInstance( item, IncomeItem )
+        self.assertIsNone( item.subject )                      # a gift is the household's, not one person's
+        self.assertEqual( item.income_tax_class, IncomeTaxClass.TAX_FREE )
+        self.assertEqual( item.cadence, OneTime( date( 2030, 6, 1 ) ) )
+        self.assertEqual( item.amounts, Schedule.constant( WindowedAmount( Decimal( '100000' ) ) ) )
+
+    def test_the_summary_shows_the_amount_and_year( self ):
+        self.assertEqual( TaxFreeReceiptEvent().summary( self._EVENT, SimpleNamespace() ),
+                          'Tax-free receipt of $100,000 in 2030' )
+
+
+class DeductiblePaymentParityTests( unittest.TestCase ):
+    """Charitable and medical payments share the Payment pipeline (#210 Phase 5): an optional label naming
+    their account, date-based recurrence, and the inflation toggle -- differing only in their deductible tax
+    class and, unlike the general payment, taking no `payment:` handle (so they group under their own
+    tax-class column, not Miscellaneous)."""
+
+    def _item( self, handler, event ):
+        into = EventContributions()
+        handler.contribute( event, SimpleNamespace(), {}, into )
+        self.assertEqual( len( into.expense_items ), 1 )
+        return into.expense_items[ 0 ]
+
+    def _gift( self, handler_kind, **overrides ):
+        base = dict( kind = handler_kind, date = date( 2030, 1, 1 ), amount = Decimal( '5000' ),
+                     label = 'Alma Mater' )
+        return PlanEvent( **{ **base, **overrides } )
+
+    def test_a_charitable_gift_materializes_a_labeled_deductible_expense( self ):
+        event = self._gift( EventKind.CHARITABLE_PAYMENT,
+                            interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2034, 1, 1 ),
+                            inflation_indexed = False )
+        item  = self._item( CharitablePaymentEvent(), event )
+        self.assertEqual( item.name, 'Alma Mater' )                      # label names the account
+        self.assertEqual( item.expense_tax_class, ExpenseTaxClass.CHARITABLE )
+        self.assertEqual( item.cadence, Recurrence( Duration( 1, TimeUnit.YEAR ) ) )
+        self.assertEqual( item.window, DateWindow( date( 2030, 1, 1 ), date( 2034, 1, 1 ) ) )
+        self.assertFalse( item.inflate )                                 # the inflation toggle is honored
+        self.assertIsNone( item.handle )                                 # no payment: handle -> class column
+
+    def test_a_medical_expense_carries_its_class_and_defaults_its_name( self ):
+        item = self._item( MedicalPaymentEvent(),
+                           PlanEvent( kind = EventKind.MEDICAL_PAYMENT, date = date( 2030, 6, 1 ),
+                                      amount = Decimal( '2000' ), label = '' ) )
+        self.assertEqual( item.expense_tax_class, ExpenseTaxClass.MEDICAL )
+        self.assertEqual( item.name, 'Medical expense' )                 # blank label -> the kind's own name
+        self.assertEqual( item.cadence, OneTime( date( 2030, 6, 1 ) ) )
+
+    def test_same_label_gifts_share_one_account( self ):
+        first  = self._item( CharitablePaymentEvent(), self._gift( EventKind.CHARITABLE_PAYMENT ) )
+        second = self._item( CharitablePaymentEvent(),
+                             self._gift( EventKind.CHARITABLE_PAYMENT, date = date( 2031, 1, 1 ) ) )
+        self.assertEqual( first.name, second.name )                      # -> ExpenseAccounts dedups by name
+
+    def test_the_summary_matches_the_payment_shape( self ):
+        event = self._gift( EventKind.CHARITABLE_PAYMENT,
+                            interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2034, 1, 1 ),
+                            inflation_indexed = False )
+        self.assertEqual( CharitablePaymentEvent().summary( event, SimpleNamespace() ),
+                          'Alma Mater of $5,000 every year, 2030 to 2034 (fixed)' )
+
+
+class GeneralPaymentRecurrenceTests( unittest.TestCase ):
+    """A recurring Payment materializes a recurring `ExpenseItem` over a date-based window; the engine
+    already expands recurring expenses, so this pins the inputs-layer shape (cadence + window) that would
+    regress silently. The one-time payment keeps its single dated occurrence and an unbounded window."""
+
+    def test_a_recurring_payment_repeats_over_its_date_window( self ):
+        event = _payment( label = 'College Tuition', when = date( 2032, 8, 1 ) )
+        event = replace( event, interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2035, 8, 1 ) )
+        item  = _payment_items( event ).expense_items[ 0 ]
+        self.assertEqual( item.cadence, Recurrence( Duration( 1, TimeUnit.YEAR ) ) )
+        self.assertEqual( item.window, DateWindow( start = date( 2032, 8, 1 ), end = date( 2035, 8, 1 ) ) )
+        self.assertEqual( item.name, 'College Tuition' )       # same account key as the one-time payment
+
+    def test_a_one_time_payment_stays_a_single_dated_occurrence( self ):
+        item = _payment_items( _payment( when = date( 2030, 8, 1 ) ) ).expense_items[ 0 ]
+        self.assertEqual( item.cadence, OneTime( date( 2030, 8, 1 ) ) )
+        self.assertEqual( item.window, DateWindow() )          # unbounded -- its single date carries it
+
+    def test_the_summary_shows_the_cadence_and_window_when_recurring( self ):
+        event   = replace( _payment( label = 'College Tuition', when = date( 2032, 8, 1 ) ),
+                           interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2035, 8, 1 ) )
+        summary = GeneralPaymentEvent().summary( event, SimpleNamespace() )
+        self.assertEqual( summary, 'College Tuition of $40,000 every year, 2032 to 2035' )
+
+    def test_the_summary_reads_open_ended_when_no_finish( self ):
+        event   = replace( _payment( when = date( 2032, 8, 1 ) ),
+                           interval = Duration( 2, TimeUnit.YEAR ), finish = None )
+        self.assertEqual( GeneralPaymentEvent().summary( event, SimpleNamespace() ),
+                          'Payment of $40,000 every 2 years, from 2032' )
+
+
+class GeneralPaymentInflationTests( unittest.TestCase ):
+    """A payment is inflation-indexed by default (today's dollars grown to nominal); the flag can fix it in
+    nominal terms. The inputs layer threads that choice onto the `ExpenseItem` and marks the chip."""
+
+    def test_inflation_indexed_is_the_default_and_threads_to_the_item( self ):
+        item = _payment_items( _payment() ).expense_items[ 0 ]
+        self.assertTrue( item.inflate )
+
+    def test_a_fixed_payment_threads_inflate_false( self ):
+        item = _payment_items( replace( _payment(), inflation_indexed = False ) ).expense_items[ 0 ]
+        self.assertFalse( item.inflate )
+
+    def test_the_summary_marks_a_fixed_payment_only( self ):
+        indexed = GeneralPaymentEvent().summary( _payment(), SimpleNamespace() )
+        fixed   = GeneralPaymentEvent().summary(
+            replace( _payment(), inflation_indexed = False ), SimpleNamespace() )
+        self.assertNotIn( 'fixed', indexed )
+        self.assertTrue( fixed.endswith( '(fixed)' ) )
+
+
+class GeneralPaymentFormTests( unittest.TestCase ):
+    """The Payment add form carries an optional purpose that becomes the event's label; blank yields an
+    empty label (the handler then falls back to the default name). The one-time/recurring toggle reads the
+    date-based window only when recurring."""
+
+    def _form( self, data ):
+        return EventForm( data, event_type = GeneralPaymentEvent(), profile = SimpleNamespace() )
+
+    def _built( self, data ):
+        form = self._form( data )
+        self.assertTrue( form.is_valid(), form.errors )
+        return form.build_event()
+
+    def test_a_purpose_becomes_the_event_label( self ):
+        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'label': '  College Tuition  ' } )
+        self.assertEqual( event.label, 'College Tuition' )      # trimmed
+        self.assertEqual( event.kind, EventKind.GENERAL_PAYMENT )
+
+    def test_a_blank_purpose_leaves_the_label_empty( self ):
+        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'recurring': 'once' } )
+        self.assertEqual( event.label, '' )
+
+    def test_the_recurring_toggle_reads_the_cadence_and_end( self ):
+        event = self._built( {
+            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring',
+            'recur_count': '1', 'recur_unit': 'YEAR', 'finish': '2035-08-01' } )
+        self.assertEqual( event.interval, Duration( 1, TimeUnit.YEAR ) )
+        self.assertEqual( event.finish, date( 2035, 8, 1 ) )
+
+    def test_the_toggle_off_yields_a_one_time_event( self ):
+        # Window fields present but the toggle off -> one-time (no interval, no finish read).
+        event = self._built( {
+            'amount': '40000', 'date': '2030-08-01', 'recurring': 'once', 'finish': '2035-08-01' } )
+        self.assertIsNone( event.interval )
+        self.assertIsNone( event.finish )
+
+    def test_a_blank_cadence_falls_back_to_the_yearly_default( self ):
+        event = self._built( {
+            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring', 'finish': '2035-08-01' } )
+        self.assertEqual( event.interval, Duration( 1, TimeUnit.YEAR ) )
+
+    def test_a_recurring_payment_requires_an_end_date( self ):
+        form = self._form( { 'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring' } )
+        self.assertFalse( form.is_valid() )
+        self.assertIn( 'finish', form.errors )
+
+    def test_the_end_date_must_not_precede_the_start( self ):
+        form = self._form( {
+            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring', 'finish': '2030-08-01' } )
+        self.assertFalse( form.is_valid() )
+        self.assertIn( 'finish', form.errors )
+
+    def test_a_checked_inflation_box_indexes_the_payment( self ):
+        event = self._built( {
+            'amount': '40000', 'date': '2030-08-01', 'recurring': 'once', 'inflation_indexed': 'on' } )
+        self.assertTrue( event.inflation_indexed )
+
+    def test_an_unchecked_inflation_box_fixes_the_payment( self ):
+        # An unchecked checkbox is absent from the POST -> the payment is fixed in nominal terms.
+        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'recurring': 'once' } )
+        self.assertFalse( event.inflation_indexed )
+
+
+def _named_accounts_profile( *handles ):
+    """A profile whose money accounts a transfer can reference -- named cash accounts by handle."""
+    return SimpleNamespace(
+        assets   = [ SimpleNamespace( handle = h, asset_class = AssetClass.CASH, name = h.title() )
+                     for h in handles ],
+        debts    = [],
+        subjects = [] )
+
+
+class EventEditabilityTests( unittest.TestCase ):
+    """Which existing events can be edited in place: an editable kind whose referenced entities still
+    exist. A card payoff (managed in the paydown calculator) never is; an event pointing at a removed
+    account is not (its picker has no valid value to seed) -- it is removed and re-added instead."""
+
+    def test_a_payment_with_no_references_is_editable( self ):
+        self.assertTrue( GeneralPaymentEvent().is_editable( _payment(), SimpleNamespace() ) )
+
+    def test_the_debt_step_payoffs_are_not_editable( self ):
+        # Loan and card payoffs are managed in the Debt plan step and carry a role (LOAN_ROLE/CARD_ROLE)
+        # their add form does not render, so editing them here would rebuild empty selections and drop the
+        # reference. Both must stay non-editable in the events list.
+        self.assertFalse( handler_for( EventKind.CARD_PAYOFF ).editable )
+        self.assertFalse( handler_for( EventKind.LOAN_PAYOFF ).editable )
+
+    def test_a_transfer_is_editable_while_both_accounts_exist( self ):
+        profile = _named_accounts_profile( 'a', 'b' )
+        self.assertTrue( TransferEvent().is_editable( _transfer( 'a', 'b' ), profile ) )
+
+    def test_a_transfer_referencing_a_removed_account_is_not_editable( self ):
+        profile = _named_accounts_profile( 'a' )               # 'b' has been removed from the profile
+        self.assertFalse( TransferEvent().is_editable( _transfer( 'a', 'b' ), profile ) )
+
+    def test_events_context_flags_each_row_editable_with_its_index( self ):
+        plans = Plans( events = [ _payment( label = 'College Tuition' ) ] )
+        rows  = events_context( SimpleNamespace(), plans )
+        self.assertEqual( [ ( row[ 'index' ], row[ 'editable' ] ) for row in rows ], [ ( 0, True ) ] )
+
+    def test_events_context_marks_a_drifted_row_not_editable( self ):
+        # A transfer whose target account was removed -> the row drives the template to hide its Edit link.
+        plans = Plans( events = [ _transfer( 'a', 'b' ) ] )
+        rows  = events_context( _named_accounts_profile( 'a' ), plans )
+        self.assertFalse( rows[ 0 ][ 'editable' ] )
+
+
+class EventEditGuardTests( unittest.TestCase ):
+    """The edit view's shared guard: it opens a form (GET) or replaces an event (POST) only for an
+    in-range, editable, drift-free event -- so a stale or hand-typed URL degrades to a no-op."""
+
+    def test_an_editable_payment_index_resolves( self ):
+        plans = Plans( events = [ _payment( label = 'College Tuition' ) ] )
+        self.assertIsNotNone( EventEditView._editable_event( SimpleNamespace(), plans, 0 ) )
+
+    def test_an_out_of_range_index_resolves_to_none( self ):
+        self.assertIsNone( EventEditView._editable_event( SimpleNamespace(), Plans(), 0 ) )
+
+    def test_a_drifted_transfer_resolves_to_none( self ):
+        plans = Plans( events = [ _transfer( 'a', 'b' ) ] )
+        self.assertIsNone(
+            EventEditView._editable_event( _named_accounts_profile( 'a' ), plans, 0 ) )
+
+
+class EventEditFormTests( unittest.TestCase ):
+    """Editing opens the same form pre-filled from the event: its fields seed from the event's values, and
+    resubmitting an unchanged form rebuilds the identical event (an idempotent edit)."""
+
+    _EVENT = PlanEvent(
+        kind = EventKind.GENERAL_PAYMENT, date = date( 2032, 8, 1 ), amount = Decimal( '40000' ),
+        label = 'College Tuition', interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2035, 8, 1 ),
+        inflation_indexed = False )
+    # The unchanged resubmission of `_EVENT`: inflation is omitted (an unchecked box) to keep it fixed.
+    _UNCHANGED = { 'label': 'College Tuition', 'amount': '40000', 'date': '2032-08-01',
+                   'recurring': 'recurring', 'recur_count': '1', 'recur_unit': 'YEAR',
+                   'finish': '2035-08-01' }
+
+    def _form( self, event, data = None ):
+        return EventForm(
+            data, event_type = GeneralPaymentEvent(), profile = SimpleNamespace(), event = event )
+
+    def test_the_fields_seed_from_the_event( self ):
+        form = self._form( self._EVENT )
+        self.assertEqual( form.fields[ 'label' ].initial, 'College Tuition' )
+        self.assertEqual( form.fields[ 'amount' ].initial, Decimal( '40000' ) )
+        self.assertEqual( form.fields[ 'date' ].initial, date( 2032, 8, 1 ) )
+        self.assertEqual( form.fields[ 'recurring' ].initial, 'recurring' )
+        self.assertEqual( ( form.fields[ 'recur_count' ].initial, form.fields[ 'recur_unit' ].initial ),
+                          ( 1, 'YEAR' ) )
+        self.assertEqual( form.fields[ 'finish' ].initial, date( 2035, 8, 1 ) )
+        self.assertFalse( form.fields[ 'inflation_indexed' ].initial )
+
+    def test_a_one_time_indexed_event_seeds_the_toggles_accordingly( self ):
+        form = self._form( replace( self._EVENT, interval = None, finish = None, inflation_indexed = True ) )
+        self.assertEqual( form.fields[ 'recurring' ].initial, 'once' )
+        self.assertTrue( form.fields[ 'inflation_indexed' ].initial )
+
+    def test_resubmitting_unchanged_rebuilds_the_same_event( self ):
+        form = self._form( self._EVENT, self._UNCHANGED )
+        self.assertTrue( form.is_valid(), form.errors )
+        self.assertEqual( form.build_event(), self._EVENT )
+
+    def test_editing_one_field_updates_only_that_field( self ):
+        form = self._form( self._EVENT, { **self._UNCHANGED, 'amount': '50000' } )
+        self.assertTrue( form.is_valid(), form.errors )
+        self.assertEqual( form.build_event(), replace( self._EVENT, amount = Decimal( '50000' ) ) )
+
+    def test_an_option_checkbox_seeds_from_the_stored_choice( self ):
+        # A residence sale's rent-after option (default yes) seeds unchecked from a stored 'no'.
+        profile = SimpleNamespace( assets = [ SimpleNamespace(
+            handle = 'residence', asset_class = AssetClass.REAL_ESTATE_RESIDENCE, name = 'Home' ) ] )
+        event   = PlanEvent( kind = EventKind.SELL_PROPERTY, date = date( 2030, 6, 1 ),
+                             selections = { PROPERTY_ROLE: 'residence' }, options = { 'rent_after': 'no' } )
+        form    = EventForm( event_type = SellPropertyEvent(), profile = profile, event = event )
+        self.assertFalse( form.fields[ 'option_rent_after' ].initial )
 
 
 class SellPropertyOptionFormTests( unittest.TestCase ):

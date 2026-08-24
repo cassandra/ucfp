@@ -32,6 +32,7 @@ from dataclasses import dataclass
 
 from ucfp.accounts.books import AccountDisplayGroup, AccountDisplayPlacement, BooksOfAccount
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from ucfp.inputs.events import PAYMENT_EXPENSE_HANDLE_BASE
 from ucfp.inputs.expenses import is_renting, ordered_catalog, owned_property_handles
 from ucfp.inputs.profile.schemas import Profile, RENTED_HOME_HANDLE
 from ucfp.inputs.vehicle_handles import (
@@ -67,6 +68,13 @@ _GENERATED_VEHICLE_ORDER = { CAR_PURCHASE_HANDLE : 0, CAR_PAYMENTS_HANDLE : 5 }
 # pass ranks them); the interest's Vehicle rung and the holdings' per-vehicle rung nest within their
 # existing class / pane groupings.
 _VEHICLE_LOANS_ORDER = 0
+
+# A plan Payment (Money Movement) books to its own named LIVING expense account carrying the
+# `payment:<label>` handle (see `inputs/events.payment_expense_handle`). It has no catalog row, so it maps
+# to the Miscellaneous section of the Living surface directly -- the catch-all a one-off payment belongs
+# to -- sorting after the catalog's Miscellaneous entries (hence the fallback order) and ahead of the
+# engine-class fallback.
+_PAYMENT_EXPENSE_ORDER = _UNMAPPED_ORDER
 
 # A property expense's account handle scopes the catalog handle to its property (`property-tax:rental-1`),
 # so each property's costs are a distinct account -- a unique handle, keeping its own per-property tax
@@ -197,6 +205,8 @@ def _stamp_expense_placements( books : BooksOfAccount, profile : Profile ) -> No
             account.display_placement = _expense_placement(
                 _class_group( ExpenseClass.VEHICLE ), _category_group( ExpenseCategory.VEHICLE ),
                 _GENERATED_VEHICLE_ORDER[ base ] )
+        elif base == PAYMENT_EXPENSE_HANDLE_BASE:
+            account.display_placement = _payment_expense_placement()
         continue
     return
 
@@ -247,6 +257,15 @@ def _catalog_expense_placement( row, handle : str, properties : dict ) -> Accoun
                 order = row.order )
     return _expense_placement(
         _class_group( row.expense_class ), _category_group( row.category ), row.order )
+
+
+def _payment_expense_placement() -> AccountDisplayPlacement:
+    """A plan Payment's placement: the Miscellaneous section of the Living surface -- the catch-all a
+    one-off payment (tuition, a gift) rolls up under. Distinct payment labels each keep their own account
+    (leaf) within that section; they share this rung."""
+    return _expense_placement(
+        _class_group( ExpenseClass.LIVING ), _category_group( ExpenseCategory.MISCELLANEOUS ),
+        _PAYMENT_EXPENSE_ORDER )
 
 
 def _property_of_expense_handle( account_handle : str ):

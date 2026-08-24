@@ -1,12 +1,13 @@
 {% comment %}
-One event kind's add form, swapped into the add area (id=events-add). Add posts to event_add, which
-appends the event and restores the menu; Cancel restores the menu without adding.
+One event kind's form, swapped into the add area (id=events-add). Used for both adding a new event and
+editing an existing one -- `action_url` posts to event_add or event_edit, `cancel_url` restores the menu,
+and `submit_label` reads "Add" or "Save". The edit form is the same fields pre-filled from the event.
 {% endcomment %}
 <div id="events-add">
   <div class="mb-1"><span class="text-muted small">{{ group }} &rsaquo;</span>
     <span class="font-weight-bold">{{ title }}</span></div>
   {% if description %}<p class="text-muted small mb-2">{{ description }}</p>{% endif %}
-  <form method="post" action="{% url 'event_add' kind=kind %}" data-async="#events-add"
+  <form method="post" action="{{ action_url }}" data-async="#events-add"
         {% if form.gates_residence_option %}data-{{ AppConst.RESIDENCE_HANDLES_DATA_ATTR }}="{{ form.residence_handles|join:' ' }}"{% endif %}>
     {% csrf_token %}
     {% if form.non_field_errors %}<div class="text-danger small mb-2">{{ form.non_field_errors|join:" " }}</div>{% endif %}
@@ -17,10 +18,47 @@ appends the event and restores the menu; Cancel restores the menu without adding
       {% endfor %}
     </div>
     {% endif %}
+    {% if form.label_field %}
+    <div class="form-row">
+      <div class="col-sm mb-2">{{ form.label_field.as_field_group }}</div>
+    </div>
+    {% endif %}
     <div class="form-row">
       {% if form.amount_field %}<div class="col-sm mb-2">{{ form.amount_field.as_field_group }}</div>{% endif %}
       <div class="col-sm mb-2">{{ form.date.as_field_group }}</div>
     </div>
+    {% if form.inflation_field %}
+    <div class="custom-control custom-checkbox mb-2">
+      {{ form.inflation_field }}
+      <label class="custom-control-label" for="{{ form.inflation_field.id_for_label }}">{{ form.inflation_field.label }}</label>
+      {% if form.inflation_field.help_text %}<small class="form-text text-muted d-block">{{ form.inflation_field.help_text }}</small>{% endif %}
+    </div>
+    {% endif %}
+    {% comment %}The one-time/recurring toggle: a js-switch whose control reveals the date-based window
+    (cadence + end date) only when Recurring is chosen. The date above is the window's start.{% endcomment %}
+    {% if form.recurring_field %}
+    <div class="{{ AppConst.SWITCH_CLASS }}">
+      <div class="mb-2" role="radiogroup" aria-label="Payment frequency">
+        {% for radio in form.recurring_field %}
+        <div class="form-check form-check-inline">
+          {{ radio.tag }}
+          <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ form.recurring_case }}">
+        <div class="col-sm mb-2">
+          {% comment %}A visual caption only -- the count/unit widgets carry their own aria-labels (see
+          inputs/cadence.py), so this is not a <label> for any one control.{% endcomment %}
+          <span class="d-block mb-1 small text-muted" aria-hidden="true">Every</span>
+          <div class="form-inline">
+            {{ form.recurrence_cadence.count }}&nbsp;{{ form.recurrence_cadence.unit }}
+          </div>
+        </div>
+        <div class="col-sm mb-2">{{ form.finish_field.as_field_group }}</div>
+      </div>
+    </div>
+    {% endif %}
     {% for option in form.option_fields %}
     <div class="custom-control custom-checkbox mb-2"{% if option.requires_residence %} data-{{ AppConst.REQUIRES_RESIDENCE_DATA_ATTR }}{% endif %}>
       {{ option.field }}
@@ -29,9 +67,8 @@ appends the event and restores the menu; Cancel restores the menu without adding
     </div>
     {% endfor %}
     <div class="mt-2">
-      <button type="submit" class="btn btn-sm btn-outline-primary edit-only">Add</button>
-      <a class="btn btn-sm btn-link" data-async="#events-add"
-         href="{% url 'event_add' kind=kind %}?collapse=1">Cancel</a>
+      <button type="submit" class="btn btn-sm btn-outline-primary edit-only">{{ submit_label }}</button>
+      <a class="btn btn-sm btn-link" data-async="#events-add" href="{{ cancel_url }}">Cancel</a>
     </div>
   </form>
 </div>

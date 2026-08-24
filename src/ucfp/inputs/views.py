@@ -1883,10 +1883,12 @@ class EventAddView( View ):
 
     def _form( self, request, kind, form ):
         event_type = self._event_type( kind )
+        add_url    = reverse( 'event_add', kwargs = { 'kind': kind } )
         return render_to_string(
             self._FORM_TEMPLATE,
             { 'form': form, 'kind': kind, 'group': event_type.group, 'title': event_type.label,
-              'description': event_type.description },
+              'description': event_type.description, 'submit_label': 'Add',
+              'action_url': add_url, 'cancel_url': f'{add_url}?collapse=1' },
             request = request )
 
     def _list( self, request, profile, plans ):
@@ -1918,3 +1920,92 @@ class EventDeleteView( View ):
                 save_plans( current_plans_record( request ), plans )
         return antinode.response( main_content = render_to_string(
             self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) }, request = request ) )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class EventEditView( View ):
+    """`/inputs/interview/events/edit/<index>/` -- edit the event at `index` in place. GET opens its
+    kind's form pre-filled from the event (or, with `collapse`, restores the add menu); POST validates it
+    and replaces the event at `index`, keeping its kind, then refreshes the list and resets the add area.
+
+    Editing is a straight replace: no editable kind provisions an entity or cascades on add, so unlike
+    delete there is nothing to unwind (the `cascade_on_remove`/`cascade_on_add` pair is run for
+    forward-safety, but is a no-op for every editable kind today). A non-editable or drifted event never
+    reaches here from the UI (its row shows no Edit), and is treated as a no-op if its URL is hit directly.
+    """
+
+    _MENU_TEMPLATE = 'inputs/interview/sections/events_menu.html'
+    _FORM_TEMPLATE = 'inputs/interview/sections/event_form.html'
+    _LIST_TEMPLATE = 'inputs/interview/sections/events_list.html'
+
+    def get( self, request, index ):
+        profile, plans = _current_profile_and_plans( request )
+        if request.GET.get( 'collapse' ):
+            return antinode.response( main_content = self._menu( request, profile ) )
+        event = self._editable_event( profile, plans, index )
+        if event is None:                       # gone, out of range, non-editable, or drifted -- no form
+            return antinode.response( main_content = self._menu( request, profile ) )
+        handler = handler_for( event.kind )
+        form    = EventForm( event_type = handler, profile = profile, event = event )
+        return antinode.response( main_content = self._form( request, index, handler, form ) )
+
+    def post( self, request, index ):
+        organization   = request.organization
+        profile, plans = _current_profile_and_plans( request )
+        event = self._editable_event( profile, plans, index )
+        if event is None:
+            return antinode.response(
+                main_content = self._menu( request, profile ),
+                replace_map  = { 'events-list': self._list( request, profile, plans ) } )
+        handler = handler_for( event.kind )
+        form    = EventForm( request.POST, event_type = handler, profile = profile, event = event )
+        if not form.is_valid():
+            return antinode.response( main_content = self._form( request, index, handler, form ) )
+        original = profile
+        updated  = form.build_event()
+        events   = list( plans.events )
+        profile, plans = handler.cascade_on_remove( event, profile, plans )
+        profile, plans = handler.cascade_on_add( updated, profile, plans )
+        # Replace at `index`. This holds because no editable kind's cascade touches the events list (only
+        # the non-editable card payoff cascades, on removal) -- so the list is the one captured above. The
+        # assertion makes that invariant fail loudly rather than silently overwriting the wrong event if a
+        # future editable kind ever cascades on it.
+        assert list( plans.events ) == events, 'an editable kind cascaded on the events list'
+        events[ index ] = updated
+        plans = replace( plans, events = events )
+        with transaction.atomic():
+            if profile is not original:   # a cascade adjusted facts (no editable kind does today)
+                save_profile( organization, profile )
+            save_plans( current_plans_record( request ), plans )
+        return antinode.response(
+            main_content = self._menu( request, profile ),
+            replace_map  = { 'events-list': self._list( request, profile, plans ) } )
+
+    @staticmethod
+    def _editable_event( profile, plans, index ):
+        """The event at `index` when it exists and may be edited (an editable kind, references intact),
+        else None -- the guard the GET/POST share so a stale or hand-typed URL degrades to a no-op."""
+        events = list( plans.events )
+        if not ( 0 <= index < len( events ) ):
+            return None
+        event = events[ index ]
+        if not handler_for( event.kind ).is_editable( event, profile ):
+            return None
+        return event
+
+    def _menu( self, request, profile ):
+        return render_to_string(
+            self._MENU_TEMPLATE, { 'menu': menu_context( profile ) }, request = request )
+
+    def _form( self, request, index, event_type, form ):
+        edit_url = reverse( 'event_edit', kwargs = { 'index': index } )
+        return render_to_string(
+            self._FORM_TEMPLATE,
+            { 'form': form, 'kind': event_type.kind.name.lower(), 'group': event_type.group,
+              'title': event_type.label, 'description': event_type.description, 'submit_label': 'Save',
+              'action_url': edit_url, 'cancel_url': f'{edit_url}?collapse=1' },
+            request = request )
+
+    def _list( self, request, profile, plans ):
+        return render_to_string(
+            self._LIST_TEMPLATE, { 'events': events_context( profile, plans ) }, request = request )
