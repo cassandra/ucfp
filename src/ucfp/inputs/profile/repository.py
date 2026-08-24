@@ -48,15 +48,21 @@ def latest_profile( organization: Organization ) -> Optional[ ProfileRecord ]:
 
 def save_profile( organization: Organization, profile: Profile ) -> ProfileRecord:
     """Persist `profile` under the current month for `organization`: overwrite the current
-    month's record if one exists, else create it -- leaving prior months untouched. At most one
-    profile per month is enforced here rather than by a database constraint."""
+    month's record if one exists, else create it -- carrying the prior month's acknowledged
+    sections onto the new one so a new month *continues* the review state rather than resetting
+    it (without this, the first edit made in a month later than the profile's own -- e.g. seeded
+    data -- would mint a fresh record that reads as an un-reviewed, incomplete profile even though
+    every section is filled). Leaves prior months untouched. At most one profile per month is
+    enforced here rather than by a database constraint."""
     effective = current_effective_date()
     record = ProfileRecord.objects.filter(
         organization = organization, effective_date = effective ).first()
     if record is None:
+        prior = latest_profile( organization )   # the most recent earlier month, if any
         record = ProfileRecord(
             organization = organization, effective_date = effective,
-            label = effective.strftime( '%B %Y' ) )
+            label = effective.strftime( '%B %Y' ),
+            acknowledged_sections = list( prior.acknowledged_sections ) if prior is not None else [] )
     store_profile( record, profile )
     record.save()
     return record
