@@ -59,7 +59,8 @@ ForecastOverview) and `currency`.
         </div>
       </div>
       <figure class="forecast-chart">
-        {% line_chart overview.card.net_worth_chart css_class="forecast-chart__svg" aria_label="Net worth over time" %}
+        {% comment %}The figcaption names the chart, so the SVG stays decorative (no aria_label).{% endcomment %}
+        {% line_chart overview.card.net_worth_chart css_class="forecast-chart__svg" %}
         <figcaption class="forecast-chart__caption">Net worth over time</figcaption>
       </figure>
     </div>

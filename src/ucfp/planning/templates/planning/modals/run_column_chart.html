@@ -1,7 +1,7 @@
 {% extends "modals/base.html" %}
 {% load charts %}
 {% comment %}
-The per-column drill-in modal, opened from a books-table column's "Graph" action. Shows
+The per-column drill-in modal, opened from a books-table column's "Chart" action. Shows
 the column's value over time, and -- when it is a rollup small enough -- its immediate
 children beside it (the rollup drawn on top as the dark "total" line). A legend appears
 only when there is more than one line. Reads `column_chart` (a LineChart) and `record`.

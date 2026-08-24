@@ -142,11 +142,11 @@ class PlotArea:
     bottom  : float
 
     @property
-    def inner_width(self):
+    def inner_width(self) -> float:
         return self.right - self.left
 
     @property
-    def inner_height(self):
+    def inner_height(self) -> float:
         return self.bottom - self.top
 
 
@@ -288,7 +288,7 @@ def _plot_area( chart : LineChart, is_full : bool ) -> PlotArea:
     )
 
 
-def _x_domain( x_values : list[ float ] ):
+def _x_domain( x_values : list[ float ] ) -> tuple[ float, float ]:
     if not x_values:
         return ( 0.0, 1.0 )
     x_min = min( x_values )
@@ -299,7 +299,7 @@ def _x_domain( x_values : list[ float ] ):
     return ( x_min, x_max )
 
 
-def _y_domain( chart : LineChart ):
+def _y_domain( chart : LineChart ) -> tuple[ float, float ]:
     bounds = _data_bounds( chart.series )
     if bounds is None:
         data_min, data_max = ( 0.0, 1.0 )
@@ -323,7 +323,7 @@ def _y_domain( chart : LineChart ):
     return ( y_min, y_max )
 
 
-def _data_bounds( series : list[ LineChartSeries ] ):
+def _data_bounds( series : list[ LineChartSeries ] ) -> Optional[ tuple[ float, float ] ]:
     values = [ value for one in series for value in one.values ]
     if not values:
         return None

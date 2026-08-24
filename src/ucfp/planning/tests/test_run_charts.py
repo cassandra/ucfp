@@ -10,6 +10,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest import mock
 from uuid import UUID
 
 from common.line_chart import CHROME_FULL, CHROME_SPARKLINE
@@ -17,6 +18,7 @@ from common.recurrence import Duration, TimeUnit
 from common.rate import Rate
 
 from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.books_table import BooksColumnKey, BooksDerivedFigure
 from ucfp.accounts.enums import AccountType, AssetClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 from ucfp.forecast.forecast import Forecast
@@ -28,7 +30,7 @@ from ucfp.forecast.parameters import (
 )
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
-from ucfp.accounts.books_table import BooksColumnKey, BooksDerivedFigure
+from ucfp.planning import run_charts
 from ucfp.planning.books_table import run_period_spans
 from ucfp.planning.run_charts import (
     _child_style,
@@ -250,6 +252,14 @@ class ColumnChartTestCase( unittest.TestCase ):
         labels = [ one.label for one in chart.series ]
         # Bonds hold zero throughout, so they are not drawn.
         self.assertNotIn( 'Bonds', labels )
+
+    def test_too_many_children_falls_back_to_the_rollup_only( self ):
+        # With the cap lowered below the child count, the drill-in shows only the rollup
+        # line (the table stays the place to see every child).
+        with mock.patch.object( run_charts, '_MAX_COLUMN_LINES', 2 ):
+            chart = column_chart( self.run, self.books, BooksColumnKey.for_type( AccountType.ASSET ) )
+        self.assertEqual( len( chart.series ), 1 )
+        self.assertEqual( chart.series[ 0 ].label, 'Asset' )
 
     def test_single_child_rollup_collapses_to_one_line( self ):
         # The Liability rollup has just the mortgage, so its line equals that child's:

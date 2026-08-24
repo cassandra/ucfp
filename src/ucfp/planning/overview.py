@@ -119,7 +119,7 @@ class ForecastRunCard:
     ran_out_year     : Optional[ int ]
     start_net_worth  : Decimal
     end_net_worth    : Optional[ Decimal ]
-    net_worth_chart  : object            # a LineChart sparkline of net worth over the run
+    net_worth_chart  : object            # a LineChart of net worth over the run (full chrome)
 
     @property
     def has_end_net_worth( self ) -> bool:

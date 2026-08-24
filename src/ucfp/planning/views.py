@@ -399,7 +399,7 @@ class RunChartsModalView( ModalView ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class RunColumnChartModalView( ModalView ):
     """`/run/<uuid>/column-chart/?column=<token>` -- the modal opened from a books-table
-    column's "Graph" action: that column's value over time, with its immediate children
+    column's "Chart" action: that column's value over time, with its immediate children
     beside it when it is a small-enough rollup."""
 
     def get_template_name( self ):

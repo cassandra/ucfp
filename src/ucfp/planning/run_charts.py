@@ -5,10 +5,13 @@ The domain adapter between a run's books of accounts and the generic
 off the ledger and owns the semantic series palette; the renderer itself stays
 free of any domain or brand knowledge.
 
-Two charts serve the app's surfaces:
-  - `net_worth_chart` -- a single net-worth line (the dashboard / hub sparkline).
-  - `run_books_chart` -- net worth plus the four account-type totals (the run
-    output page's overview chart).
+Four builders serve the app's surfaces:
+  - `net_worth_chart` -- a single net-worth line (dashboard card / thumbnails).
+  - `balances_chart`  -- net worth, assets, and liabilities (end-of-period stocks).
+  - `flows_chart`     -- income and expenses (within-period flows), on their own
+    scale so the far larger balances do not crush them.
+  - `column_chart`    -- a books-table column's value over time, with its immediate
+    children beside it when it is a small-enough rollup.
 
 Series values are read live from the books (never cached; the books are the one
 source of truth). Assets and liabilities are end-of-period balances (stock);
@@ -185,7 +188,7 @@ def _child_style( index : int ):
 
 
 def _chart( spans : list, series : list[ LineChartSeries ], chrome : str, *,
-            run : ProjectionRun = None,
+            run : Optional[ ProjectionRun ] = None,
             width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
     x    = [ _x_position( span.end_date ) for span in spans ]
     dims = {}

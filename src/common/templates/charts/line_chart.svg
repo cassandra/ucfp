@@ -10,13 +10,13 @@ set, so the chart scales to its CSS container via the viewBox.
   {% if title_text %}<title>{{ title_text }}</title>{% endif %}
   {% if geometry.show_axes %}
   {% for y in geometry.gridlines %}
-  <line class="line-chart__gridline" x1="{{ geometry.plot.left }}" y1="{{ y }}" x2="{{ geometry.plot.right }}" y2="{{ y }}" stroke="var(--line-chart-grid-color, #e2e8f0)" stroke-width="1" />
+  <line class="line-chart__gridline" x1="{{ geometry.plot.left }}" y1="{{ y }}" x2="{{ geometry.plot.right }}" y2="{{ y }}" stroke="var(--line-chart-grid-color, #e9edf2)" stroke-width="1" />
   {% endfor %}
-  <line class="line-chart__axis" x1="{{ geometry.plot.left }}" y1="{{ geometry.plot.top }}" x2="{{ geometry.plot.left }}" y2="{{ geometry.plot.bottom }}" stroke="var(--line-chart-axis-color, #94a3b8)" stroke-width="1" />
-  <line class="line-chart__axis" x1="{{ geometry.plot.left }}" y1="{{ geometry.plot.bottom }}" x2="{{ geometry.plot.right }}" y2="{{ geometry.plot.bottom }}" stroke="var(--line-chart-axis-color, #94a3b8)" stroke-width="1" />
+  <line class="line-chart__axis" x1="{{ geometry.plot.left }}" y1="{{ geometry.plot.top }}" x2="{{ geometry.plot.left }}" y2="{{ geometry.plot.bottom }}" stroke="var(--line-chart-axis-color, #cbd5e1)" stroke-width="1" />
+  <line class="line-chart__axis" x1="{{ geometry.plot.left }}" y1="{{ geometry.plot.bottom }}" x2="{{ geometry.plot.right }}" y2="{{ geometry.plot.bottom }}" stroke="var(--line-chart-axis-color, #cbd5e1)" stroke-width="1" />
   {% endif %}
   {% if geometry.zero_line_y is not None %}
-  <line class="line-chart__zero-line" x1="{{ geometry.plot.left }}" y1="{{ geometry.zero_line_y }}" x2="{{ geometry.plot.right }}" y2="{{ geometry.zero_line_y }}" stroke="var(--line-chart-zero-color, #94a3b8)" stroke-width="1" />
+  <line class="line-chart__zero-line" x1="{{ geometry.plot.left }}" y1="{{ geometry.zero_line_y }}" x2="{{ geometry.plot.right }}" y2="{{ geometry.zero_line_y }}" stroke="var(--line-chart-zero-color, #64748b)" stroke-width="1" />
   {% endif %}
   {% for series in geometry.series %}
   <polyline class="line-chart__series" points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="{{ geometry.stroke_width }}" stroke-linejoin="round" stroke-linecap="round"{% if series.dash %} stroke-dasharray="{{ series.dash }}"{% endif %}{% if chrome == 'sparkline' %} vector-effect="non-scaling-stroke"{% endif %} />

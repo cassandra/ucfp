@@ -81,7 +81,7 @@
   --chart-cat-2: var(--chart-income-color);       /* green */
   --chart-cat-3: var(--chart-liabilities-color);  /* red */
   --chart-cat-4: var(--chart-net-worth-color);    /* violet */
-  --chart-cat-5: var(--chart-expenses-color);     /* orange */
+  --chart-cat-5: var(--chart-expenses-color);     /* gold */
 }
 
 

@@ -10,6 +10,7 @@ from common.line_chart import (
     LineChartSeries,
     build_geometry,
 )
+from common.templatetags.charts import chart_legend as chart_legend_tag
 from common.templatetags.charts import line_chart as line_chart_tag
 
 
@@ -242,3 +243,28 @@ class LineChartTagTestCase( SimpleTestCase ):
     def test_solid_series_omits_stroke_dasharray(self):
         result = line_chart_tag( self._chart() )
         self.assertNotIn( 'stroke-dasharray', result )
+
+
+class ChartLegendTagTestCase( SimpleTestCase ):
+
+    def _chart( self ):
+        return LineChart(
+            x = [ 0.0, 1.0 ],
+            series = [ LineChartSeries([ 1, 2 ], 'Solid', '#111111' ),
+                       LineChartSeries([ 3, 4 ], 'Dashed', '#222222', dash = '6 4' ) ] )
+
+    def test_renders_a_swatch_and_label_per_series(self):
+        result = chart_legend_tag( self._chart() )
+        self.assertIsInstance( result, SafeString )
+        self.assertEqual( result.count( 'chart-legend__item' ), 2 )
+        self.assertIn( 'Solid', result )
+        self.assertIn( 'Dashed', result )
+        self.assertIn( 'stroke="#111111"', result )
+
+    def test_dashed_series_swatch_shows_the_dash(self):
+        result = chart_legend_tag( self._chart() )
+        self.assertIn( 'stroke-dasharray="6 4"', result )
+
+    def test_non_linechart_argument_rejected(self):
+        with self.assertRaises( template.TemplateSyntaxError ):
+            chart_legend_tag( [ 'not', 'a', 'chart' ] )
