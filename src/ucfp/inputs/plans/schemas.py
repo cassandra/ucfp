@@ -395,6 +395,12 @@ class PlanEvent:
     # that offers it falls back to its own name. Where used it names the payment's own expense account, so
     # the run table shows the money under a line the user recognizes ("College Tuition").
     label: str = ''
+    # An optional recurrence a kind may offer (a repeating payment): the `interval` cadence over the date
+    # window from `date` (the start) to `finish` (inclusive). `None` interval means one-time -- the event
+    # is the single dated occurrence and `finish` is unused. The window is date-based (not age-based), so it
+    # needs no household member to anchor it.
+    interval: Optional[ Duration ] = None
+    finish: Optional[ date ] = None
     selections: dict[ str, str ] = field( default_factory = dict )
     # Event-specific non-entity settings a kind may read (distinct from `selections`, which are entity
     # handles): a small key->value bag, e.g. a residence sale's 'rent_after'. Absent keys take the kind's

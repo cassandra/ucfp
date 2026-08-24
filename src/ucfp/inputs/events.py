@@ -19,20 +19,24 @@ from typing import Callable, Optional
 from django import forms
 from django.utils.text import slugify
 
+from common.date_window import DateWindow
 from common.forms import MoneyField
-from common.recurrence import OneTime
+from common.recurrence import Duration, OneTime, Recurrence, TimeUnit
 from common.schedule import Schedule
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
+from ucfp.environment.constants import AppConst
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem, ScheduledExternalReceipt,
     ScheduledLoanPayoff, ScheduledPropertySale, ScheduledRealization, ScheduledTransfer, SubjectRemoval,
     WindowedAmount )
+from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, cadence_label, read_cadence
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.vehicle_handles import vehicle_loan_handle
 from ucfp.inputs.widgets import IsoDateInput
+from ucfp.parameter_sets.enums import CadenceDomain
 
 
 # Selection roles -- the canonical keys an event's references, the add form, and its materialization
@@ -187,6 +191,41 @@ def payment_expense_handle( name : str ) -> str:
     return f'{PAYMENT_EXPENSE_HANDLE_BASE}:{slugify( name )}'
 
 
+# A recurrence-capable kind's add form offers a one-time/recurring toggle (a `js-switch` control) that
+# reveals a date-based window: "every {interval} from {date} to {finish}". `_RECUR_ONCE`/`_RECUR_ON` are the
+# toggle's values (the recurring case reveals the window fields); `_RECUR_PREFIX` namespaces the cadence
+# magnitude/unit fields; the domain offers month/year (coarsest = year) seeded to a sensible yearly default.
+_RECUR_ONCE     = 'once'
+_RECUR_ON       = 'recurring'
+_RECUR_PREFIX   = 'recur'
+_RECUR_DOMAIN   = CadenceDomain.MO_YR
+_RECUR_DEFAULT  = Duration( 1, TimeUnit.YEAR )
+
+
+def _payment_cadence( event : PlanEvent ):
+    """A payment's engine cadence: a single dated occurrence when one-time, else the repeating cadence.
+    The engine expands the recurrence over the item's window (anchored at the window start), so a recurring
+    payment rides the existing expense-expansion path with no engine change."""
+    if event.interval is None:
+        return OneTime( event.date )
+    return Recurrence( event.interval )
+
+
+def _payment_window( event : PlanEvent ) -> DateWindow:
+    """A payment's existence window: unbounded for a one-time payment (its single date carries it), else the
+    `[date, finish]` window its recurrence repeats across."""
+    if event.interval is None:
+        return DateWindow()
+    return DateWindow( start = event.date, end = event.finish )
+
+
+def _window_text( event : PlanEvent ) -> str:
+    """A recurring payment's window for the chip -- "2032 to 2035", or "from 2032" when open-ended."""
+    if event.finish is None:
+        return f'from {event.date.year}'
+    return f'{event.date.year} to {event.finish.year}'
+
+
 # --- The materialization accumulator --------------------------------------
 
 class EventContributions:
@@ -208,11 +247,12 @@ class EventType:
     """One kind of plan event. The common case is a single dated amount feeding one engine input;
     a subclass overrides only the references it needs, its summary, and how it contributes."""
 
-    kind        : EventKind
-    group       : str
-    has_amount  : bool = True
-    has_label   : bool = False   # whether the add form offers an optional free-text purpose (see EventForm)
-    description : str  = ''   # a one-line "what this is", shown under the add form's title
+    kind           : EventKind
+    group          : str
+    has_amount     : bool = True
+    has_label      : bool = False   # whether the add form offers an optional free-text purpose (EventForm)
+    has_recurrence : bool = False   # whether the add form offers the one-time/recurring toggle (EventForm)
+    description    : str  = ''   # a one-line "what this is", shown under the add form's title
 
     @property
     def label( self ) -> str:
@@ -499,20 +539,26 @@ class GeneralPaymentEvent( EventType ):
     on both paths). Its optional purpose names its own expense account, so repeated payments of one kind
     collapse into one run-table line."""
 
-    kind        = EventKind.GENERAL_PAYMENT
-    group       = _MONEY_OUT_GROUP
-    has_label   = True
-    description = 'A one-off payment out of the plan.'
+    kind           = EventKind.GENERAL_PAYMENT
+    group          = _MONEY_OUT_GROUP
+    has_label      = True
+    has_recurrence = True
+    description    = 'A payment out of the plan -- one-time, or repeating over a date window.'
 
     def summary( self, event : PlanEvent, profile ) -> str:
-        return f'{_payment_label( event )} of {_money( event.amount )} in {event.date.year}'
+        money = _money( event.amount )
+        if event.interval is None:
+            return f'{_payment_label( event )} of {money} in {event.date.year}'
+        return ( f'{_payment_label( event )} of {money} {cadence_label( event.interval )}, '
+                 f'{_window_text( event )}' )
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
         name = _payment_label( event )
         into.expense_items.append( ExpenseItem(
             name = name, expense_tax_class = ExpenseTaxClass.LIVING,
             amounts = Schedule.constant( WindowedAmount( event.amount ) ),
-            cadence = OneTime( event.date ), handle = payment_expense_handle( name ) ) )
+            cadence = _payment_cadence( event ), window = _payment_window( event ),
+            handle = payment_expense_handle( name ) ) )
 
 
 class _DeductiblePaymentEvent( EventType ):
@@ -674,6 +720,18 @@ class EventForm( forms.Form ):
         if event_type.has_amount:
             self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
         self.fields[ 'date' ] = forms.DateField( label = 'Date', widget = IsoDateInput() )
+        if event_type.has_recurrence:
+            # A one-time/recurring toggle (a `js-switch` control): 'recurring' reveals the cadence + finish
+            # date, turning the single `date` into the window start. The cadence is seeded to a yearly
+            # default so toggling on reads "every 1 year"; the whole window is date-based.
+            self.fields[ 'recurring' ] = forms.ChoiceField(
+                required = False, initial = _RECUR_ONCE,
+                choices = [ ( _RECUR_ONCE, 'One-time' ), ( _RECUR_ON, 'Recurring' ) ],
+                widget = forms.RadioSelect(
+                    attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
+            add_cadence_fields( self, _RECUR_PREFIX, _RECUR_DEFAULT, _RECUR_DOMAIN )
+            self.fields[ 'finish' ] = forms.DateField(
+                label = 'Until', required = False, widget = IsoDateInput() )
         for opt in event_type.options( profile ):
             self.fields[ self._option_field( opt.key ) ] = forms.BooleanField(
                 label = opt.label, required = False, initial = opt.default, help_text = opt.help_text,
@@ -695,6 +753,29 @@ class EventForm( forms.Form ):
     def amount_field( self ):
         """The bound amount field, or None for a kind that carries none."""
         return self[ 'amount' ] if 'amount' in self.fields else None
+
+    @property
+    def recurring_field( self ):
+        """The bound one-time/recurring toggle, or None for a kind that does not recur -- the `js-switch`
+        control whose value reveals the window fields."""
+        return self[ 'recurring' ] if 'recurring' in self.fields else None
+
+    @property
+    def recurring_case( self ) -> str:
+        """The toggle value the recurrence window is shown for -- the template marks the window block with
+        it, so the switch reveals the block only when 'recurring' is chosen."""
+        return _RECUR_ON
+
+    @property
+    def recurrence_cadence( self ) -> dict:
+        """The bound cadence magnitude/unit fields (the "every N period" control) for the recurrence
+        window, rendered inside the revealed case."""
+        return cadence_cells( self, _RECUR_PREFIX, _RECUR_DEFAULT, _RECUR_DOMAIN )
+
+    @property
+    def finish_field( self ):
+        """The bound recurrence-end date, or None for a kind that does not recur."""
+        return self[ 'finish' ] if 'finish' in self.fields else None
 
     @property
     def option_fields( self ):
@@ -740,19 +821,45 @@ class EventForm( forms.Form ):
         error   = self._event_type.validate( self._selections( cleaned ), self._profile )
         if error:
             raise forms.ValidationError( error )
+        self._validate_recurrence( cleaned )
         return cleaned
+
+    def _validate_recurrence( self, cleaned : dict ) -> None:
+        """A recurring payment needs an end no earlier than its start; a one-time one ignores the window
+        fields. (A blank cadence magnitude just falls back to the yearly default -- non-blocking.)"""
+        if not self._is_recurring( cleaned ):
+            return
+        finish = cleaned.get( 'finish' )
+        start  = cleaned.get( 'date' )
+        if finish is None:
+            self.add_error( 'finish', 'Give an end date for a recurring payment.' )
+        elif ( start is not None ) and ( finish < start ):
+            self.add_error( 'finish', 'The end date must not be before the start date.' )
+        return
+
+    def _is_recurring( self, cleaned : dict ) -> bool:
+        return self._event_type.has_recurrence and ( cleaned.get( 'recurring' ) == _RECUR_ON )
 
     def _selections( self, cleaned : dict ) -> dict:
         return { spec.role: cleaned.get( self._role_field( spec.role ) )
                  for spec in self._event_type.references( self._profile ) }
 
     def build_event( self ) -> PlanEvent:
+        interval, finish = self._recurrence( self.cleaned_data )
         return PlanEvent(
             kind = self._event_type.kind, date = self.cleaned_data[ 'date' ],
             amount = self.cleaned_data.get( 'amount' ),
             label = ( self.cleaned_data.get( 'label' ) or '' ).strip(),
+            interval = interval, finish = finish,
             selections = self._selections( self.cleaned_data ),
             options = self._options( self.cleaned_data ) )
+
+    def _recurrence( self, cleaned : dict ) -> tuple:
+        """The event's recurrence as `(interval, finish)` -- `(None, None)` for a one-time payment (the
+        toggle off, or a kind that does not recur), else the chosen cadence over its end date."""
+        if not self._is_recurring( cleaned ):
+            return None, None
+        return read_cadence( self, _RECUR_PREFIX, _RECUR_DEFAULT, _RECUR_DOMAIN ), cleaned.get( 'finish' )
 
     def _options( self, cleaned : dict ) -> dict:
         return { opt.key: ( 'yes' if cleaned.get( self._option_field( opt.key ) ) else 'no' )

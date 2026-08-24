@@ -8,11 +8,13 @@ stable dispatch, not churning model. Only the branch (appreciating vs face-value
 cash-hub-vs-conversion destination sub-rule are pinned here; gain/basis math is the engine's to test.
 """
 import unittest
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
-from common.recurrence import OneTime
+from common.date_window import DateWindow
+from common.recurrence import Duration, OneTime, Recurrence, TimeUnit
 from common.schedule import Schedule
 
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
@@ -322,12 +324,47 @@ class GeneralPaymentMaterializationTests( unittest.TestCase ):
             'Payment of $40,000 in 2030' )
 
 
+class GeneralPaymentRecurrenceTests( unittest.TestCase ):
+    """A recurring Payment materializes a recurring `ExpenseItem` over a date-based window; the engine
+    already expands recurring expenses, so this pins the inputs-layer shape (cadence + window) that would
+    regress silently. The one-time payment keeps its single dated occurrence and an unbounded window."""
+
+    def test_a_recurring_payment_repeats_over_its_date_window( self ):
+        event = _payment( label = 'College Tuition', when = date( 2032, 8, 1 ) )
+        event = replace( event, interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2035, 8, 1 ) )
+        item  = _payment_items( event ).expense_items[ 0 ]
+        self.assertEqual( item.cadence, Recurrence( Duration( 1, TimeUnit.YEAR ) ) )
+        self.assertEqual( item.window, DateWindow( start = date( 2032, 8, 1 ), end = date( 2035, 8, 1 ) ) )
+        self.assertEqual( item.name, 'College Tuition' )       # same account key as the one-time payment
+
+    def test_a_one_time_payment_stays_a_single_dated_occurrence( self ):
+        item = _payment_items( _payment( when = date( 2030, 8, 1 ) ) ).expense_items[ 0 ]
+        self.assertEqual( item.cadence, OneTime( date( 2030, 8, 1 ) ) )
+        self.assertEqual( item.window, DateWindow() )          # unbounded -- its single date carries it
+
+    def test_the_summary_shows_the_cadence_and_window_when_recurring( self ):
+        event   = replace( _payment( label = 'College Tuition', when = date( 2032, 8, 1 ) ),
+                           interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2035, 8, 1 ) )
+        summary = GeneralPaymentEvent().summary( event, SimpleNamespace() )
+        self.assertEqual( summary, 'College Tuition of $40,000 every year, 2032 to 2035' )
+
+    def test_the_summary_reads_open_ended_when_no_finish( self ):
+        event   = replace( _payment( when = date( 2032, 8, 1 ) ),
+                           interval = Duration( 2, TimeUnit.YEAR ), finish = None )
+        self.assertEqual( GeneralPaymentEvent().summary( event, SimpleNamespace() ),
+                          'Payment of $40,000 every 2 years, from 2032' )
+
+
 class GeneralPaymentFormTests( unittest.TestCase ):
     """The Payment add form carries an optional purpose that becomes the event's label; blank yields an
-    empty label (the handler then falls back to the default name)."""
+    empty label (the handler then falls back to the default name). The one-time/recurring toggle reads the
+    date-based window only when recurring."""
+
+    def _form( self, data ):
+        return EventForm( data, event_type = GeneralPaymentEvent(), profile = SimpleNamespace() )
 
     def _built( self, data ):
-        form = EventForm( data, event_type = GeneralPaymentEvent(), profile = SimpleNamespace() )
+        form = self._form( data )
         self.assertTrue( form.is_valid(), form.errors )
         return form.build_event()
 
@@ -337,8 +374,38 @@ class GeneralPaymentFormTests( unittest.TestCase ):
         self.assertEqual( event.kind, EventKind.GENERAL_PAYMENT )
 
     def test_a_blank_purpose_leaves_the_label_empty( self ):
-        event = self._built( { 'amount': '40000', 'date': '2030-08-01' } )
+        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'recurring': 'once' } )
         self.assertEqual( event.label, '' )
+
+    def test_the_recurring_toggle_reads_the_cadence_and_end( self ):
+        event = self._built( {
+            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring',
+            'recur_count': '1', 'recur_unit': 'YEAR', 'finish': '2035-08-01' } )
+        self.assertEqual( event.interval, Duration( 1, TimeUnit.YEAR ) )
+        self.assertEqual( event.finish, date( 2035, 8, 1 ) )
+
+    def test_the_toggle_off_yields_a_one_time_event( self ):
+        # Window fields present but the toggle off -> one-time (no interval, no finish read).
+        event = self._built( {
+            'amount': '40000', 'date': '2030-08-01', 'recurring': 'once', 'finish': '2035-08-01' } )
+        self.assertIsNone( event.interval )
+        self.assertIsNone( event.finish )
+
+    def test_a_blank_cadence_falls_back_to_the_yearly_default( self ):
+        event = self._built( {
+            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring', 'finish': '2035-08-01' } )
+        self.assertEqual( event.interval, Duration( 1, TimeUnit.YEAR ) )
+
+    def test_a_recurring_payment_requires_an_end_date( self ):
+        form = self._form( { 'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring' } )
+        self.assertFalse( form.is_valid() )
+        self.assertIn( 'finish', form.errors )
+
+    def test_the_end_date_must_not_precede_the_start( self ):
+        form = self._form( {
+            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring', 'finish': '2030-08-01' } )
+        self.assertFalse( form.is_valid() )
+        self.assertIn( 'finish', form.errors )
 
 
 class SellPropertyOptionFormTests( unittest.TestCase ):
