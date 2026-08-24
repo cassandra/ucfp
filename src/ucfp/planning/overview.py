@@ -44,19 +44,23 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
     depleted = ( not lasted ) and steps[ -1 ].is_depleted
     end_net_worth = ledger.net_worth( through = end_date )
     solvent = end_net_worth >= 0
+    start_ages = _ages( run.profile, frame.start_date )
+    end_ages   = _ages( run.profile, end_date )
     return {
         'summary' : {
             'lasted'   : lasted,
             'depleted' : depleted,
             # Years the plan ran: the full horizon when it lasted, else through the period it stopped in.
             'years'    : end_date.year - frame.start_date.year + 1,
+            # The heading for the ages column -- singular for one member, plural for a couple.
+            'age_noun' : _age_noun( start_ages ),
             'start'    : {
                 'year'      : frame.start_date.year,
-                'ages'      : _ages_label( run.profile, frame.start_date ),
+                'ages'      : _join_ages( start_ages ),
                 'net_worth' : ledger.net_worth( through = frame.start_date ) },
             'end'      : {
                 'year'            : end_date.year,
-                'ages'            : _ages_label( run.profile, end_date ),
+                'ages'            : _join_ages( end_ages ),
                 # Ending net worth is shown only when solvent; a depleted plan's is noise the result covers.
                 'net_worth'       : end_net_worth,
                 'has_net_worth'   : solvent,
@@ -81,15 +85,18 @@ def _in_start_year_dollars( amount : Decimal, run : ProjectionRun, end_date ) ->
     return amount / ( ( Decimal( '1' ) + inflation ) ** years )
 
 
-def _ages_label( profile, on_date ) -> str:
-    """The household's ages on `on_date` -- 'age 65' for one member, 'ages 65 & 63' for a couple, '' for
-    none. True whole-year age from the birthdate, so a December birthday still reads a year younger through
-    a run that starts earlier in the year."""
-    ages = [ age_on( subject.birthdate, on_date ) for subject in profile.subjects ]
+def _ages( profile, on_date ) -> list:
+    """The household's whole-year ages on `on_date`, one per subject (empty when there are none). True age
+    from the birthdate, so a December birthday still reads a year younger through a run that starts earlier
+    in the year. The summary shows these bare (as a column) with the noun carried by `_age_noun`."""
+    return [ age_on( subject.birthdate, on_date ) for subject in profile.subjects ]
+
+
+def _age_noun( ages ) -> str:
+    """The ages column's heading -- 'Age' for one member, 'Ages' for a couple, '' for none."""
     if not ages:
         return ''
-    prefix = 'age' if len( ages ) == 1 else 'ages'
-    return f'{prefix} {_join_ages( ages )}'
+    return 'Age' if len( ages ) == 1 else 'Ages'
 
 
 def _age_span_label( profile, start_date, end_date ) -> str:

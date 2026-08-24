@@ -26,16 +26,18 @@ _STATUTE = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteFo
 
 
 def _run( frame, *, stopped_early, end_date, is_depleted, birthdate = date( 1960, 1, 1 ),
-          inflation = _D( '0' ) ):
+          birthdates = None, inflation = _D( '0' ) ):
     """A minimal ProjectionRun stand-in for `run_outcome`: its frame, the summarized result (one final
-    step carrying the stop year and depletion flag), a single-subject profile for the ages, and an
-    assumptions set carrying the general inflation rate (for the today's-dollars restatement)."""
+    step carrying the stop year and depletion flag), a profile of one or more subjects for the ages
+    (`birthdates` for a couple, else the single `birthdate`), and an assumptions set carrying the general
+    inflation rate (for the today's-dollars restatement)."""
+    subjects = [ SimpleNamespace( birthdate = b ) for b in ( birthdates or [ birthdate ] ) ]
     return SimpleNamespace(
         frame       = frame,
         result      = SimpleNamespace(
             stopped_early = stopped_early,
             steps = [ SimpleNamespace( end_date = end_date, is_depleted = is_depleted ) ] ),
-        profile     = SimpleNamespace( subjects = [ SimpleNamespace( birthdate = birthdate ) ] ),
+        profile     = SimpleNamespace( subjects = subjects ),
         assumptions = SimpleNamespace( economics = SimpleNamespace( inflation = Rate( inflation ) ) ) )
 
 
@@ -58,9 +60,9 @@ class RunOutcomeTests( unittest.TestCase ):
             _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False ), books )
 
         self.assertEqual( outcome[ 'summary' ], {
-            'lasted': True, 'depleted': False, 'years': 3,
-            'start': { 'year': 2026, 'ages': 'age 66', 'net_worth': _D( '500000' ) },
-            'end': { 'year': 2028, 'ages': 'age 68', 'net_worth': _D( '500000' ), 'has_net_worth': True,
+            'lasted': True, 'depleted': False, 'years': 3, 'age_noun': 'Age',   # one subject -> singular
+            'start': { 'year': 2026, 'ages': '66', 'net_worth': _D( '500000' ) },
+            'end': { 'year': 2028, 'ages': '68', 'net_worth': _D( '500000' ), 'has_net_worth': True,
                      'net_worth_today': None } } )   # zero inflation -> no separate today's-dollars figure
 
     def test_ages_track_the_dates_not_just_the_year( self ):
@@ -80,8 +82,28 @@ class RunOutcomeTests( unittest.TestCase ):
             _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False,
                   birthdate = date( 1990, 12, 22 ) ), books )
 
-        self.assertEqual( outcome[ 'summary' ][ 'start' ][ 'ages' ], 'age 35' )
-        self.assertEqual( outcome[ 'summary' ][ 'end' ][ 'ages' ], 'age 36' )
+        self.assertEqual( outcome[ 'summary' ][ 'start' ][ 'ages' ], '35' )
+        self.assertEqual( outcome[ 'summary' ][ 'end' ][ 'ages' ], '36' )
+
+    def test_a_couple_reads_a_plural_age_heading_and_joined_ages( self ):
+        # Two subjects -> the ages column heads 'Ages' and each cell joins both members' ages. Net worth
+        # is independent of the profile, so a plain cash books suffices.
+        frame  = ForecastFrame(
+            start_date = date( 2026, 1, 1 ), end_date = date( 2028, 12, 31 ),
+            granularity = Duration( 1, TimeUnit.YEAR ) )
+        params = ForecastParameters(
+            start_date = frame.start_date, end_date = frame.end_date, filing_status = FilingStatus.SINGLE,
+            statute = _STATUTE, subjects = [ Subject( 'you', date( 1960, 1, 1 ) ) ],
+            assets = [ AssetParameters( 'Cash', AssetClass.CASH, _D( '500000' ), _D( '500000' ) ) ],
+            economic_outlook = EconomicOutlook.constant( EconomicParameters() ) )
+        books = Forecast( params ).run().books
+
+        outcome = run_outcome(
+            _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False,
+                  birthdates = [ date( 1960, 1, 1 ), date( 1962, 1, 1 ) ] ), books )
+
+        self.assertEqual( outcome[ 'summary' ][ 'age_noun' ], 'Ages' )
+        self.assertEqual( outcome[ 'summary' ][ 'start' ][ 'ages' ], '66 & 64' )
 
     def test_ending_net_worth_is_restated_in_todays_dollars_by_the_inflation_rate( self ):
         # Cash held flat at $500,000 over a 10-year horizon under 3.5% inflation. The nominal ending

@@ -1047,7 +1047,7 @@ body.has-cookie-notice {
    surface, so the chart stays a modest secondary element.
    ========================================================================= */
 .run-summary            { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; }
-.run-summary-text       { flex: 1 1 16rem; }
+.run-summary-text       { flex: 2 1 20rem; }
 .run-summary-chart      { position: relative; flex: 1 1 18rem; display: block;
                        border: 1px solid var(--line-color); border-radius: 0.4rem;
                        padding: 0.4rem; background: var(--white); text-decoration: none; }
@@ -1058,6 +1058,23 @@ body.has-cookie-notice {
 .run-summary-chart__expand { position: absolute; top: 0.5rem; right: 0.5rem; color: var(--muted-color);
                        opacity: 0.75; }
 .run-summary-chart:hover .run-summary-chart__expand { color: var(--primary-color); opacity: 1; }
+
+/* Run summary table: End-over-Start, with comparable figures stacked down a column so the eye reads the
+   change vertically. The End row is the emphasized outcome (bold); the Start row is the muted baseline;
+   the trailing when/point column stays muted on both. Tabular figures align the digits down each money
+   column. */
+.run-summary-table         { border-collapse: collapse; margin-top: 0.35rem;
+                       font-variant-numeric: tabular-nums; }
+.run-summary-table th,
+.run-summary-table td      { padding: 0.2rem 0 0.2rem 1.5rem; white-space: nowrap; }
+.run-summary-table th:first-child,
+.run-summary-table td:first-child { padding-left: 0; }
+.run-summary-table thead th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em;
+                       font-weight: 700; color: var(--muted-color); padding-bottom: 0.3rem; }
+.run-summary-row--end   td { font-weight: 700; }
+.run-summary-row--start td { color: var(--muted-color); font-size: 0.95rem; }
+.run-summary-table td.run-summary-when { color: var(--muted-color); font-weight: 400; font-size: 0.9rem; }
+.run-summary-point-tag     { font-size: 0.85em; }
 
 /* Chart legend (charts/legend.html): swatch carries the series colour, label in ink. */
 .chart-legend           { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin: 0.5rem 0 0;

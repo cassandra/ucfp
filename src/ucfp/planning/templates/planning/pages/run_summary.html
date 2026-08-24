@@ -1,9 +1,12 @@
 {% comment %}
-The shared run-outcome summary: the salient result, then Start and End as two labelled stat blocks
-(year · household ages · net worth). Rendered as the run_table_panel's card header, so the summary reads
-identically wherever a run appears and caps the table it describes. Ending net worth shows only when
-solvent -- a depleted plan's is noise the result line already conveys, shown as an em dash. Reads
-`summary` (from `_run_outcome`) and `currency`.
+The shared run-outcome summary: the salient result, then a compact End-over-Start table (age · net worth ·
+today's-dollars · when). The End row leads and is emphasized -- it is the outcome; the Start row is the
+muted baseline; comparable figures stack in a column so the eye reads the change vertically. Rendered as
+the run_table_panel's card header, so the summary reads identically wherever a run appears and caps the
+table it describes. Ending net worth shows only when solvent (else an em dash -- a depleted plan's is noise
+the result line already conveys); the today's-dollars column appears only when the presenter provides that
+restatement (solvent, a multi-year horizon, non-zero inflation). Reads `summary` (from `run_outcome`) and
+`currency`.
 {% endcomment %}
 {% load common_tags icons charts %}
 <div class="run-summary">
@@ -13,22 +16,31 @@ solvent -- a depleted plan's is noise the result line already conveys, shown as 
       {% elif summary.depleted %}{% icon 'warning' size='sm' css_class='mr-1' %}Money ran out after {{ summary.years }} year{{ summary.years|pluralize }}
       {% else %}Plan ended after {{ summary.years }} year{{ summary.years|pluralize }}{% endif %}
     </p>
-    <div class="d-flex flex-wrap">
-      <div class="run-summary-point mr-5 mb-1">
-        <div class="run-summary-label text-muted text-uppercase small font-weight-bold">Start</div>
-        <div>{{ summary.start.year }}{% if summary.start.ages %} <span class="text-muted">&middot; {{ summary.start.ages }}</span>{% endif %}</div>
-        <div class="font-weight-bold">{{ summary.start.net_worth|money:currency }}</div>
-      </div>
-      <div class="run-summary-point mb-1">
-        <div class="run-summary-label text-muted text-uppercase small font-weight-bold">End</div>
-        <div>{{ summary.end.year }}{% if summary.end.ages %} <span class="text-muted">&middot; {{ summary.end.ages }}</span>{% endif %}</div>
-        <div class="font-weight-bold">{% if summary.end.has_net_worth %}{{ summary.end.net_worth|money:currency }}{% else %}&mdash;{% if summary.depleted %} <span class="text-danger font-weight-normal">(depleted)</span>{% endif %}{% endif %}</div>
-        {% comment %}A far-horizon net worth in nominal dollars is hard to read; restate it in today's
-        money. Shown only when the presenter provides it (solvent, a multi-year horizon, non-zero
-        inflation).{% endcomment %}
-        {% if summary.end.net_worth_today %}<div class="run-summary-today text-muted small">&asymp; {{ summary.end.net_worth_today|money:currency }} in today's dollars</div>{% endif %}
-      </div>
-    </div>
+    <table class="run-summary-table">
+      <caption class="sr-only">Net worth at the end of the plan versus the start</caption>
+      <thead>
+        <tr>
+          <th scope="col" class="text-left">{{ summary.age_noun }}</th>
+          <th scope="col" class="text-right">Net worth</th>
+          {% if summary.end.net_worth_today %}<th scope="col" class="text-right">Today&rsquo;s $</th>{% endif %}
+          <th scope="col"><span class="sr-only">When</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="run-summary-row run-summary-row--end">
+          <td class="text-left">{{ summary.end.ages }}</td>
+          <td class="text-right">{% if summary.end.has_net_worth %}{{ summary.end.net_worth|money:currency }}{% else %}&mdash;{% endif %}</td>
+          {% if summary.end.net_worth_today %}<td class="text-right">{{ summary.end.net_worth_today|money:currency }}</td>{% endif %}
+          <td class="run-summary-when">{{ summary.end.year }} <span class="run-summary-point-tag">({% if summary.depleted %}ran out{% else %}end{% endif %})</span></td>
+        </tr>
+        <tr class="run-summary-row run-summary-row--start">
+          <td class="text-left">{{ summary.start.ages }}</td>
+          <td class="text-right">{{ summary.start.net_worth|money:currency }}</td>
+          {% if summary.end.net_worth_today %}<td class="text-right">{{ summary.start.net_worth|money:currency }}</td>{% endif %}
+          <td class="run-summary-when">{{ summary.start.year }} <span class="run-summary-point-tag">(start)</span></td>
+        </tr>
+      </tbody>
+    </table>
   </div>
   {% comment %}A compact balances trend beside the numbers -- net worth (on top),
   assets, and liabilities, colour-matched to the table columns. Clicking opens the
