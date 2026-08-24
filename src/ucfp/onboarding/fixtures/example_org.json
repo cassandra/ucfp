@@ -126,20 +126,76 @@
         }
       ],
       "credit_card_plans": [],
-      "drawdown": null,
-      "events": [],
+      "drawdown": {
+        "cash_ceiling": "40000",
+        "cash_floor": "25000",
+        "draw_order": [
+          "CDS",
+          "BONDS",
+          "STOCKS",
+          "DIVIDEND_STOCKS",
+          "ROTH",
+          "PRETAX_RETIREMENT",
+          "PRECIOUS_METALS",
+          "COLLECTIBLES",
+          "REAL_ESTATE_SECOND_HOME",
+          "REAL_ESTATE_RENTAL",
+          "REAL_ESTATE_RESIDENCE"
+        ],
+        "retained": [],
+        "sweep_allocation": [
+          [
+            "stocks",
+            "0.500000"
+          ],
+          [
+            "bonds",
+            "0.500000"
+          ]
+        ]
+      },
+      "events": [
+        {
+          "amount": "40000",
+          "date": "2030-08-01",
+          "kind": "GENERAL_PAYMENT",
+          "options": {},
+          "selections": {}
+        },
+        {
+          "amount": "40000",
+          "date": "2031-08-01",
+          "kind": "GENERAL_PAYMENT",
+          "options": {},
+          "selections": {}
+        },
+        {
+          "amount": "40000",
+          "date": "2032-08-01",
+          "kind": "GENERAL_PAYMENT",
+          "options": {},
+          "selections": {}
+        },
+        {
+          "amount": "40000",
+          "date": "2032-08-01",
+          "kind": "GENERAL_PAYMENT",
+          "options": {},
+          "selections": {}
+        }
+      ],
       "expense_spans": [
         null
       ],
       "health_coverage": null,
       "income_timing": [
         {
-          "end": "2057-12-22",
+          "end": "2047-12-22",
           "flow_handle": "income-1",
           "start": null
         },
         {
-          "end": "2053-02-08",
+          "end": "2043-02-08",
           "flow_handle": "income-2",
           "start": null
         }
@@ -171,7 +227,7 @@
             "fraction": "0.055"
           },
           "remaining_term": {
-            "count": 120,
+            "count": 180,
             "unit": "MONTH"
           }
         }
@@ -674,7 +730,7 @@
         },
         {
           "amounts": [
-            "7500"
+            "12500"
           ],
           "cadence_domain": "MO_YR",
           "category": "DISCRETIONARY",
@@ -746,7 +802,7 @@
         },
         {
           "amounts": [
-            "100"
+            "200"
           ],
           "cadence_domain": "FIXED",
           "category": "DISCRETIONARY",
@@ -926,7 +982,7 @@
         },
         {
           "amounts": [
-            "0"
+            "300"
           ],
           "cadence_domain": "MO_YR",
           "category": "MISCELLANEOUS",
@@ -946,12 +1002,12 @@
       "roth_conversions": [],
       "timing": [
         {
-          "government_pension_claiming_date": "2057-12-22",
+          "government_pension_claiming_date": "2047-12-22",
           "pension_start": null,
           "subject_handle": "subject"
         },
         {
-          "government_pension_claiming_date": "2053-02-08",
+          "government_pension_claiming_date": "2043-02-08",
           "pension_start": null,
           "subject_handle": "partner"
         }
@@ -982,11 +1038,11 @@
               "end_date": null,
               "handle": "",
               "lease_end_payment": null,
-              "monthly_payment": "701",
+              "monthly_payment": "802",
               "name": "Her Car",
               "payment_method": "LOAN",
               "purchase_date": null,
-              "purchase_price": "40000",
+              "purchase_price": "45000",
               "recurrence_years": 12
             },
             "sale_date": "2035-07-11",
@@ -1074,33 +1130,6 @@
     "data": {
       "assets": [
         {
-          "asset_class": "REAL_ESTATE_RESIDENCE",
-          "cost_basis": "400000",
-          "handle": "residence",
-          "name": "Home",
-          "opening_value": "500000",
-          "owner_handle": null,
-          "property": null
-        },
-        {
-          "asset_class": "DEPRECIATING",
-          "cost_basis": null,
-          "handle": "vehicle-1",
-          "name": "His Car",
-          "opening_value": "8000",
-          "owner_handle": null,
-          "property": null
-        },
-        {
-          "asset_class": "DEPRECIATING",
-          "cost_basis": null,
-          "handle": "vehicle-2",
-          "name": "Her Car",
-          "opening_value": "17000",
-          "owner_handle": null,
-          "property": null
-        },
-        {
           "asset_class": "COLLECTIBLES",
           "cost_basis": null,
           "handle": "possession-1",
@@ -1114,7 +1143,7 @@
           "cost_basis": null,
           "handle": "cash",
           "name": "Cash & Savings",
-          "opening_value": "20000",
+          "opening_value": "40000",
           "owner_handle": null,
           "property": null
         },
@@ -1123,7 +1152,7 @@
           "cost_basis": null,
           "handle": "stocks",
           "name": "Stocks",
-          "opening_value": "10000",
+          "opening_value": "30000",
           "owner_handle": null,
           "property": null
         },
@@ -1141,7 +1170,7 @@
           "cost_basis": null,
           "handle": "bonds",
           "name": "Bonds",
-          "opening_value": "5000",
+          "opening_value": "15000",
           "owner_handle": null,
           "property": null
         },
@@ -1150,7 +1179,7 @@
           "cost_basis": null,
           "handle": "cds",
           "name": "CDs",
-          "opening_value": "3000",
+          "opening_value": "5000",
           "owner_handle": null,
           "property": null
         },
@@ -1159,7 +1188,7 @@
           "cost_basis": null,
           "handle": "pretax-subject",
           "name": "John Pre-Tax Retirement",
-          "opening_value": "97000",
+          "opening_value": "290000",
           "owner_handle": "subject",
           "property": null
         },
@@ -1177,7 +1206,7 @@
           "cost_basis": null,
           "handle": "pretax-partner",
           "name": "Jane Pre-Tax Retirement",
-          "opening_value": "140000",
+          "opening_value": "330000",
           "owner_handle": "partner",
           "property": null
         },
@@ -1186,42 +1215,69 @@
           "cost_basis": null,
           "handle": "roth-partner",
           "name": "Jane Roth Retirement",
-          "opening_value": "0",
+          "opening_value": "15000",
           "owner_handle": "partner",
+          "property": null
+        },
+        {
+          "asset_class": "REAL_ESTATE_RESIDENCE",
+          "cost_basis": "400000",
+          "handle": "residence",
+          "name": "Home",
+          "opening_value": "500000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "DEPRECIATING",
+          "cost_basis": null,
+          "handle": "vehicle-2",
+          "name": "Her Car",
+          "opening_value": "22000",
+          "owner_handle": null,
+          "property": null
+        },
+        {
+          "asset_class": "DEPRECIATING",
+          "cost_basis": null,
+          "handle": "vehicle-1",
+          "name": "His Car",
+          "opening_value": "12000",
+          "owner_handle": null,
           "property": null
         }
       ],
       "debts": [
         {
-          "balance": "230000",
+          "balance": "300000",
           "handle": "residence-mortgage",
           "kind": "MORTGAGE",
           "name": "Mortgage",
           "secured_asset": "residence"
         },
         {
-          "balance": "2000",
-          "handle": "vehicle-1-loan",
-          "kind": "AUTO",
-          "name": "His Car Loan",
-          "secured_asset": "vehicle-1"
-        },
-        {
-          "balance": "8000",
+          "balance": "15000",
           "handle": "vehicle-2-loan",
           "kind": "AUTO",
           "name": "Her Car Loan",
           "secured_asset": "vehicle-2"
+        },
+        {
+          "balance": "4000",
+          "handle": "vehicle-1-loan",
+          "kind": "AUTO",
+          "name": "His Car Loan",
+          "secured_asset": "vehicle-1"
         }
       ],
       "filing_status": "MARRIED_JOINT",
       "government_pension": [
         {
-          "monthly_at_normal_age": "3100",
+          "monthly_at_normal_age": "2900",
           "subject_handle": "subject"
         },
         {
-          "monthly_at_normal_age": "3300",
+          "monthly_at_normal_age": "3100",
           "subject_handle": "partner"
         }
       ],
@@ -1237,7 +1293,7 @@
           "subject_handle": "subject"
         },
         {
-          "amount": "123000",
+          "amount": "103000",
           "handle": "income-2",
           "income_tax_class": "WAGES",
           "interval": null,
@@ -1254,12 +1310,12 @@
       },
       "subjects": [
         {
-          "birthdate": "1990-12-22",
+          "birthdate": "1980-12-22",
           "handle": "subject",
           "name": "John"
         },
         {
-          "birthdate": "1988-02-08",
+          "birthdate": "1978-02-08",
           "handle": "partner",
           "name": "Jane"
         }
