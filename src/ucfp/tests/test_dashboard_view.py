@@ -52,7 +52,7 @@ class DashboardViewTests( TestCase ):
             AssumptionsRecord( organization = self.org, label = 'A' ), expected_assumptions() )
         return create_scenario( self.org, plans, assumptions, 'Half' )
 
-    def _saved_run( self, label = 'Sample Forecast', source_label = 'Sample Scenario' ):
+    def _saved_run( self, label = 'Example Forecast', source_label = 'Example Scenario' ):
         profile = load_profile( save_profile( self.org, forecast_profile() ) )
         run = run_and_capture(
             organization = self.org, profile = profile, plans = Plans(),
@@ -77,12 +77,12 @@ class DashboardViewTests( TestCase ):
         self.assertContains( response, 'Future Scenario' )          # from the shared scenario_required pane
 
     def test_has_run_renders_the_kpi_card( self ):
-        self._saved_run( label = 'Sample Forecast', source_label = 'Sample Scenario' )
+        self._saved_run( label = 'Example Forecast', source_label = 'Example Scenario' )
         response = self._get()
         self.assertEqual( response.status_code, 200 )
         # The recap leads with the run's name, then its source -- not the source in place of the name.
-        self.assertContains( response, 'Sample Forecast' )
-        self.assertContains( response, 'from Sample Scenario' )
+        self.assertContains( response, 'Example Forecast' )
+        self.assertContains( response, 'from Example Scenario' )
         self.assertContains( response, 'Ending net worth' )         # a KPI tile
         # The net-worth sparkline renders in place of the old placeholder.
         self.assertContains( response, 'forecast-chart__svg' )

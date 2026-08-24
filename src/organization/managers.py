@@ -144,7 +144,7 @@ class OrganizationMemberManager( models.Manager ):
         earliest creation -- a stable, predictable landing that keeps a member out of another
         household by default. Consulted only when nothing is already selected, so switching away
         from this default always wins. `exclude_uuids` drops organizations from consideration (e.g.
-        the read-only sample org, which a user may belong to but never lands in as a home).
+        the read-only example org, which a user may belong to but never lands in as a home).
         """
         memberships = self.for_user( user ).select_related( 'organization' )
         if exclude_uuids:

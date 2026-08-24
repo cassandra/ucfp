@@ -1,9 +1,9 @@
-"""Dump an organization's latest Profile and a saved scenario's Plans/Assumptions to the sample fixture.
+"""Dump an organization's latest Profile and a saved scenario's Plans/Assumptions to the example fixture.
 
 The fixture is plaintext -- the encrypted `data` fields decrypt on ORM read -- so it re-encrypts under the
 *local* key when seeded, and is portable across differently-keyed instances. Only a *complete* source is
 dumped, so the seed always produces a runnable forecast. This is the refresh half of the live-edit loop:
-the superuser hand-tunes the sample household through the normal UI, then re-dumps to update the committed
+the superuser hand-tunes the example household through the normal UI, then re-dumps to update the committed
 fixture (no redeploy for content tweaks).
 """
 import json
@@ -18,25 +18,25 @@ from ucfp.inputs.state import completed_profile
 from ucfp.planning.gating import partition_scenarios
 
 from ucfp.onboarding.constants import (
-    SAMPLE_FIXTURE_PATH, SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID, SAMPLE_SCENARIO_UUID )
+    EXAMPLE_FIXTURE_PATH, EXAMPLE_ORGANIZATION_NAME, EXAMPLE_ORGANIZATION_UUID, EXAMPLE_SCENARIO_UUID )
 
 
 class Command( BaseCommand ):
     help = ( "Dump an organization's latest Profile and a saved scenario's Plans/Assumptions to the "
-             "sample-household fixture (decrypted plaintext). Refuses an incomplete source." )
+             "example-household fixture (decrypted plaintext). Refuses an incomplete source." )
 
     def add_arguments( self, parser ):
-        parser.add_argument( '--org', help = 'Organization uuid or name (default: the sample household).' )
-        parser.add_argument( '--scenario', help = "Scenario uuid (default: the sample scenario, else the "
+        parser.add_argument( '--org', help = 'Organization uuid or name (default: the example household).' )
+        parser.add_argument( '--scenario', help = "Scenario uuid (default: the example scenario, else the "
                                                   "organization's sole saved scenario)." )
-        parser.add_argument( '--output', help = f'Fixture path (default: {SAMPLE_FIXTURE_PATH}).' )
+        parser.add_argument( '--output', help = f'Fixture path (default: {EXAMPLE_FIXTURE_PATH}).' )
 
     def handle( self, *args, **options ):
         organization = _resolve_organization( options[ 'org' ] )
         scenario     = _resolve_scenario( organization, options[ 'scenario' ] )
         profile      = _require_runnable( organization, scenario )
         payload      = _payload( profile, scenario )
-        path         = options[ 'output' ] or str( SAMPLE_FIXTURE_PATH )
+        path         = options[ 'output' ] or str( EXAMPLE_FIXTURE_PATH )
         with open( path, 'w' ) as fixture:
             json.dump( payload, fixture, indent = 2, sort_keys = True )
             fixture.write( '\n' )
@@ -47,10 +47,10 @@ class Command( BaseCommand ):
 
 def _resolve_organization( identifier ) -> Organization:
     if identifier is None:
-        organization = ( Organization.objects.filter( uuid = SAMPLE_ORGANIZATION_UUID ).first()
-                         or Organization.objects.filter( name = SAMPLE_ORGANIZATION_NAME ).first() )
+        organization = ( Organization.objects.filter( uuid = EXAMPLE_ORGANIZATION_UUID ).first()
+                         or Organization.objects.filter( name = EXAMPLE_ORGANIZATION_NAME ).first() )
         if organization is None:
-            raise CommandError( 'No sample household found; pass --org.' )
+            raise CommandError( 'No example household found; pass --org.' )
         return organization
     organization = _by_uuid_or_name( identifier )
     if organization is None:
@@ -71,7 +71,7 @@ def _resolve_scenario( organization, identifier ):
         if scenario is None:
             raise CommandError( f'No saved scenario {identifier!r} in {organization.name!r}.' )
         return scenario
-    reserved = scenarios_for( organization ).filter( uuid = SAMPLE_SCENARIO_UUID ).first()
+    reserved = scenarios_for( organization ).filter( uuid = EXAMPLE_SCENARIO_UUID ).first()
     if reserved is not None:
         return reserved
     saved = list( scenarios_for( organization ) )

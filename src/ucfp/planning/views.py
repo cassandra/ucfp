@@ -293,7 +293,7 @@ class RunResultsView( View ):
     (through the user's column lens), plus the stop condition and notices from the persisted
     result."""
 
-    # The full-page template; overridable so a wrapper (the sample-data tour) can render the same run
+    # The full-page template; overridable so a wrapper (the example-data tour) can render the same run
     # output under a different shell.
     results_template = _RESULTS_TEMPLATE
 
@@ -323,7 +323,7 @@ class RunResultsView( View ):
         return render( request, self.results_template, context )
 
     def _extra_context( self, request ) -> dict:
-        """Extra template context a wrapper wants merged in (e.g. the sample-data tour marking its active
+        """Extra template context a wrapper wants merged in (e.g. the example-data tour marking its active
         step for the shell's step-nav). Empty by default; overridden alongside `results_template`."""
         return {}
 

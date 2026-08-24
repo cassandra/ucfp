@@ -1,4 +1,4 @@
-"""`dump_sample_org`: export a complete organization's latest Profile + a saved scenario's Plans/Assumptions
+"""`dump_example_org`: export a complete organization's latest Profile + a saved scenario's Plans/Assumptions
 to a plaintext fixture, and refuse an incomplete (non-runnable) source."""
 import json
 import tempfile
@@ -18,7 +18,7 @@ from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.repository import latest_profile, save_profile
 from ucfp.inputs.scenarios.repository import create_scenario
-from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
+from ucfp.onboarding.constants import EXAMPLE_ORGANIZATION_NAME, EXAMPLE_ORGANIZATION_UUID
 from ucfp.onboarding.seeding import _fixture_matches, _seed_records
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.tests.support import expected_assumptions, forecast_profile
@@ -56,10 +56,10 @@ def _runnable_scenario( organization, *, reviewed = True ):
 
 
 def _dump( organization, output ):
-    call_command( 'dump_sample_org', '--org', str( organization.uuid ), '--output', output, verbosity = 0 )
+    call_command( 'dump_example_org', '--org', str( organization.uuid ), '--output', output, verbosity = 0 )
 
 
-class DumpSampleOrgTest( TestCase ):
+class DumpExampleOrgTest( TestCase ):
 
     def setUp( self ):
         seed_default_parameter_sets()                        # expected_assumptions reads a seeded outlook
@@ -82,27 +82,27 @@ class DumpSampleOrgTest( TestCase ):
         self.assertEqual( payload[ 'plans' ][ 'data' ], scenario.plans.data )
         self.assertEqual( payload[ 'assumptions' ][ 'data' ], scenario.assumptions.data )
 
-    def test_default_resolves_the_sample_org_by_reserved_uuid( self ):
+    def test_default_resolves_the_example_org_by_reserved_uuid( self ):
         # No --org: the reserved uuid wins even when the org is named something else.
-        organization = Organization.objects.create( name = 'Renamed', uuid = SAMPLE_ORGANIZATION_UUID )
+        organization = Organization.objects.create( name = 'Renamed', uuid = EXAMPLE_ORGANIZATION_UUID )
         _runnable_scenario( organization )
         with tempfile.TemporaryDirectory() as tmp:
             path = str( Path( tmp ) / 'out.json' )
-            call_command( 'dump_sample_org', '--output', path, verbosity = 0 )
+            call_command( 'dump_example_org', '--output', path, verbosity = 0 )
             self.assertEqual( set( json.load( open( path ) ) ), { 'profile', 'plans', 'assumptions' } )
 
-    def test_default_falls_back_to_the_sample_org_name( self ):
-        # No org carries the reserved uuid, but one is named 'Sample Household' -> found by name.
-        organization = Organization.objects.create( name = SAMPLE_ORGANIZATION_NAME )
+    def test_default_falls_back_to_the_example_org_name( self ):
+        # No org carries the reserved uuid, but one is named 'Example Household' -> found by name.
+        organization = Organization.objects.create( name = EXAMPLE_ORGANIZATION_NAME )
         _runnable_scenario( organization )
         with tempfile.TemporaryDirectory() as tmp:
             path = str( Path( tmp ) / 'out.json' )
-            call_command( 'dump_sample_org', '--output', path, verbosity = 0 )
+            call_command( 'dump_example_org', '--output', path, verbosity = 0 )
             self.assertEqual( set( json.load( open( path ) ) ), { 'profile', 'plans', 'assumptions' } )
 
-    def test_default_errors_when_no_sample_household_exists( self ):
+    def test_default_errors_when_no_example_household_exists( self ):
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises( CommandError ):
-            call_command( 'dump_sample_org', '--output', str( Path( tmp ) / 'out.json' ), verbosity = 0 )
+            call_command( 'dump_example_org', '--output', str( Path( tmp ) / 'out.json' ), verbosity = 0 )
 
     def test_refuses_an_organization_with_no_completed_profile( self ):
         bare = Organization.objects.create( name = 'Bare' )  # no profile at all -> nothing runnable
@@ -117,7 +117,7 @@ class DumpSampleOrgTest( TestCase ):
 
 
 class DumpThenSeedRoundTripTest( TestCase ):
-    """The live-edit loop's contract: what `dump_sample_org` writes, `seed` reads back into matching
+    """The live-edit loop's contract: what `dump_example_org` writes, `seed` reads back into matching
     records. Exercises both halves against each other without a forecast (so it stays in the fast suite)."""
 
     def setUp( self ):
@@ -127,11 +127,11 @@ class DumpThenSeedRoundTripTest( TestCase ):
         source = Organization.objects.create( name = 'Source' )
         profile_record, _scenario = _runnable_scenario( source )
         with tempfile.TemporaryDirectory() as tmp:
-            fixture_path = Path( tmp ) / 'sample_org.json'
+            fixture_path = Path( tmp ) / 'example_org.json'
             _dump( source, str( fixture_path ) )
             target = Organization.objects.create(
-                uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
-            with mock.patch( 'ucfp.onboarding.seeding.SAMPLE_FIXTURE_PATH', fixture_path ):
+                uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+            with mock.patch( 'ucfp.onboarding.seeding.EXAMPLE_FIXTURE_PATH', fixture_path ):
                 _seed_records( target )
                 self.assertTrue( _fixture_matches( target ) )           # seeded records equal the dump
         seeded_profile = latest_profile( target )                       # and equal the source's payloads

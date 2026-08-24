@@ -318,12 +318,12 @@ print_notice "Bootstrapping superuser and groups..."
 print_success "Superuser and groups ready"
 
 # Seed the default parameter sets (tax law / economic outlook) and the read-only
-# sample household with its forecast. Order matters: the sample run needs the
+# example household with its forecast. Order matters: the example run needs the
 # parameter sets present first. Both are idempotent.
-print_notice "Seeding parameter sets and the sample household..."
+print_notice "Seeding parameter sets and the example household..."
 ./manage.py seed_parameter_sets
-./manage.py seed_sample_org
-print_success "Parameter sets and sample household ready"
+./manage.py seed_example_org
+print_success "Parameter sets and example household ready"
 
 # Step 7: Run Tests
 print_notice "Step 7: Validation"

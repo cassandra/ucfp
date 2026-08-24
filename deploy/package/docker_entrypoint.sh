@@ -15,8 +15,8 @@ python manage.py bootstrap
 echo "Seeding parameters..."
 python manage.py seed_parameter_sets
 
-echo "Seeding the sample household..."
-python manage.py seed_sample_org
+echo "Seeding the example household..."
+python manage.py seed_example_org
 
 echo "Starting supervisord..."
 exec "$@"

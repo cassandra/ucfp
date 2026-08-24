@@ -1,7 +1,7 @@
-"""`StartTourView` / `TourProfileView`: "Take a Tour" joins the visitor to the sample org, switches to it,
+"""`StartTourView` / `TourProfileView`: "Take a Tour" joins the visitor to the example org, switches to it,
 and lands on the Profile step -- the *real* interview (`InterviewView`) rendered under the tour shell,
 not the app nav. An anonymous visitor is minted a Guest first; a signed-in visitor is used as-is (no
-conversion, no blocking). Unavailable when the sample org is not seeded."""
+conversion, no blocking). Unavailable when the example org is not seeded."""
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 from django.urls import reverse
@@ -10,10 +10,10 @@ from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 
 from ucfp.inputs.interview import first_section_of_flow
-from ucfp.onboarding.constants import SAMPLE_ORGANIZATION_NAME, SAMPLE_ORGANIZATION_UUID
+from ucfp.onboarding.constants import EXAMPLE_ORGANIZATION_NAME, EXAMPLE_ORGANIZATION_UUID
 from ucfp.onboarding.home_cta import HomeCtaState
-from ucfp.onboarding.membership import join_sample_org
-from ucfp.onboarding.seeding import _seed_records, seed_sample_org
+from ucfp.onboarding.membership import join_example_org
+from ucfp.onboarding.seeding import _seed_records, seed_example_org
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 
 User = get_user_model()
@@ -21,9 +21,9 @@ User = get_user_model()
 
 class StartTourTest( TestCase ):
 
-    def _seed_sample( self ):
+    def _seed_example( self ):
         return Organization.objects.create(
-            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
 
     def _tour_profile_url( self ):
         return reverse( 'tour_profile', kwargs = { 'section': first_section_of_flow( 'profile' ).key } )
@@ -32,19 +32,19 @@ class StartTourTest( TestCase ):
         return self.client.session.get( 'current_organization_uuid' )
 
     def test_anonymous_take_a_tour_mints_a_guest_and_enters( self ):
-        sample = self._seed_sample()
+        example = self._seed_example()
 
         response = self.client.post( reverse( 'start_tour' ) )
 
         self.assertRedirects( response, self._tour_profile_url(), fetch_redirect_response = False )
         self.assertEqual( User.objects.count(), 1 )                               # one Guest minted
-        member = OrganizationMember.objects.get( organization = sample )          # joined as VIEWER
+        member = OrganizationMember.objects.get( organization = example )          # joined as VIEWER
         self.assertEqual( member.organization_role, OrganizationRole.VIEWER )
         self.assertTrue( member.user.is_guest )
-        self.assertEqual( self._current_org_uuid(), str( SAMPLE_ORGANIZATION_UUID ) )  # switched to sample
+        self.assertEqual( self._current_org_uuid(), str( EXAMPLE_ORGANIZATION_UUID ) )  # switched to example
 
     def test_signed_in_visitor_enters_without_a_new_account( self ):
-        sample = self._seed_sample()
+        example = self._seed_example()
         user = User.objects.create_user( email = 'v@x.test' )
         self.client.force_login( user )
 
@@ -52,12 +52,12 @@ class StartTourTest( TestCase ):
 
         self.assertRedirects( response, self._tour_profile_url(), fetch_redirect_response = False )
         self.assertEqual( User.objects.count(), 1 )                               # no second account
-        member = OrganizationMember.objects.get( organization = sample, user = user )
+        member = OrganizationMember.objects.get( organization = example, user = user )
         self.assertEqual( member.organization_role, OrganizationRole.VIEWER )
-        self.assertEqual( self._current_org_uuid(), str( SAMPLE_ORGANIZATION_UUID ) )
+        self.assertEqual( self._current_org_uuid(), str( EXAMPLE_ORGANIZATION_UUID ) )
 
     def test_tour_profile_renders_the_real_interview_under_the_tour_shell( self ):
-        _seed_records( self._seed_sample() )                     # a real Profile (no forecast) to render
+        _seed_records( self._seed_example() )                     # a real Profile (no forecast) to render
         self.client.post( reverse( 'start_tour' ) )              # enter as a VIEWER guest
 
         response = self.client.get( self._tour_profile_url() )
@@ -77,7 +77,7 @@ class StartTourTest( TestCase ):
         self.assertFalse( response.context[ 'rail_scenario_mode' ] )
 
     def test_tour_scenario_shows_plans_and_assumptions_in_scenario_context( self ):
-        _seed_records( self._seed_sample() )                     # real Plans/Assumptions + sample scenario
+        _seed_records( self._seed_example() )                     # real Plans/Assumptions + example scenario
         self.client.post( reverse( 'start_tour' ) )
 
         url = reverse( 'tour_scenario', kwargs = { 'section': first_section_of_flow( 'plans' ).key } )
@@ -97,7 +97,7 @@ class StartTourTest( TestCase ):
     def test_a_scenario_visit_does_not_reveal_a_finish_escape( self ):
         # Visiting the scenario sets editing_scenario; that must not give Profile a completion destination
         # (the app's Scenarios page, via the build/component branch) -- the tour never has one.
-        _seed_records( self._seed_sample() )
+        _seed_records( self._seed_example() )
         self.client.post( reverse( 'start_tour' ) )
         self.client.get(                                         # sets editing_scenario in the session
             reverse( 'tour_scenario', kwargs = { 'section': first_section_of_flow( 'assumptions' ).key } ) )
@@ -108,14 +108,14 @@ class StartTourTest( TestCase ):
         self.assertIsNone( response.context[ 'completion_destination' ] )  # not the app's Scenarios page
 
     def test_tour_forecast_is_unavailable_without_a_captured_run( self ):
-        _seed_records( self._seed_sample() )                     # records but no forecast run
+        _seed_records( self._seed_example() )                     # records but no forecast run
         self.client.post( reverse( 'start_tour' ) )
 
         response = self.client.get( reverse( 'tour_forecast' ) )
 
         self.assertEqual( 404, response.status_code )            # DataNotAvailableError, not the run page
 
-    def test_unseeded_sample_makes_the_tour_unavailable( self ):
+    def test_unseeded_example_makes_the_tour_unavailable( self ):
         response = self.client.post( reverse( 'start_tour' ) )
 
         self.assertEqual( 404, response.status_code )                             # DataNotAvailableError
@@ -124,7 +124,7 @@ class StartTourTest( TestCase ):
     def test_step_nav_lights_the_current_step( self ):
         # `tour_active_step` drives the shell's four-step nav. The non-trivial case: Plans and Assumptions
         # are the one `tour_scenario` view, so the active step must follow the section's flow, not the URL.
-        _seed_records( self._seed_sample() )
+        _seed_records( self._seed_example() )
         self.client.post( reverse( 'start_tour' ) )
 
         def step_at( url ):
@@ -140,15 +140,15 @@ class StartTourTest( TestCase ):
 
 @tag( 'e2e' )
 class TourForecastRenderTest( TestCase ):
-    """The Forecast step renders the sample org's captured run under the tour shell -- needs a real
-    captured run (seed_sample_org runs a forecast), so it is e2e."""
+    """The Forecast step renders the example org's captured run under the tour shell -- needs a real
+    captured run (seed_example_org runs a forecast), so it is e2e."""
 
     def setUp( self ):
         seed_default_parameter_sets()
         User.objects.create_superuser( email = 'admin@x.test', password = 'x' )
-        seed_sample_org()                                        # sample org + a captured forecast run
+        seed_example_org()                                        # example org + a captured forecast run
 
-    def test_tour_forecast_renders_the_sample_run_under_the_tour_shell( self ):
+    def test_tour_forecast_renders_the_example_run_under_the_tour_shell( self ):
         self.client.post( reverse( 'start_tour' ) )              # enter as a VIEWER guest
 
         response = self.client.get( reverse( 'tour_forecast' ) )
@@ -164,7 +164,7 @@ class TourForecastRenderTest( TestCase ):
 
 class AddMyDataTest( TestCase ):
     """`AddMyDataView`: the universal graduation -- mint a Guest if anonymous, then ensure an organization
-    of the user's own (not the sample) and land on the Profile to start entering data."""
+    of the user's own (not the example) and land on the Profile to start entering data."""
 
     def _own_org( self, user ):
         return OrganizationMember.objects.get(
@@ -176,7 +176,7 @@ class AddMyDataTest( TestCase ):
         self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
         self.assertEqual( User.objects.count(), 1 )
         own = self._own_org( User.objects.get() )
-        self.assertNotEqual( str( own.uuid ), str( SAMPLE_ORGANIZATION_UUID ) )   # their own, not the sample
+        self.assertNotEqual( str( own.uuid ), str( EXAMPLE_ORGANIZATION_UUID ) )   # their own, not the example
         self.assertEqual( self.client.session.get( 'current_organization_uuid' ), str( own.uuid ) )
 
     def test_get_is_rejected_and_mints_no_account( self ):
@@ -198,26 +198,26 @@ class AddMyDataTest( TestCase ):
         self.assertEqual( 1, Organization.objects.count() )      # reused, not duplicated
         self.assertEqual( self.client.session.get( 'current_organization_uuid' ), str( own.uuid ) )
 
-    def test_tour_guest_add_my_data_switches_off_the_sample( self ):
-        sample = Organization.objects.create(
-            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
-        self.client.post( reverse( 'start_tour' ) )              # guest, VIEWER of sample, current-org=sample
+    def test_tour_guest_add_my_data_switches_off_the_example( self ):
+        example = Organization.objects.create(
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+        self.client.post( reverse( 'start_tour' ) )              # guest, VIEWER of example, current-org=example
 
         response = self.client.post( reverse( 'add_my_data' ) )
 
         self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
         self.assertEqual( User.objects.count(), 1 )              # no second account
         user = User.objects.get()
-        own = self._own_org( user )                             # a fresh owned org, not the sample
-        self.assertNotEqual( str( own.uuid ), str( SAMPLE_ORGANIZATION_UUID ) )
+        own = self._own_org( user )                             # a fresh owned org, not the example
+        self.assertNotEqual( str( own.uuid ), str( EXAMPLE_ORGANIZATION_UUID ) )
         self.assertEqual( self.client.session.get( 'current_organization_uuid' ), str( own.uuid ) )
-        # still a member of the sample -- reachable again via the switcher, just no longer the current org
-        self.assertTrue( OrganizationMember.objects.filter( user = user, organization = sample ).exists() )
+        # still a member of the example -- reachable again via the switcher, just no longer the current org
+        self.assertTrue( OrganizationMember.objects.filter( user = user, organization = example ).exists() )
 
 
 class FeaturePageAddMyDataTest( TestCase ):
     """The real feature pages (here the Profile interview under the app chrome) promote "Add my data" to a
-    user whose only org is the read-only sample, and suppress the guest "save your work" email banner there
+    user whose only org is the read-only example, and suppress the guest "save your work" email banner there
     -- there is nothing of *theirs* to save yet. Once they own an org, neither prompt shows."""
 
     _CTA_COPY   = "add your own to build your real plan"
@@ -227,10 +227,10 @@ class FeaturePageAddMyDataTest( TestCase ):
         return reverse( 'interview_section',
                         kwargs = { 'section': first_section_of_flow( 'profile' ).key } )
 
-    def test_sample_only_user_sees_add_my_data_and_not_the_email_banner( self ):
-        _seed_records( Organization.objects.create(               # a complete sample Profile to render
-            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME ) )
-        self.client.post( reverse( 'start_tour' ) )              # guest VIEWER, current-org = sample
+    def test_example_only_user_sees_add_my_data_and_not_the_email_banner( self ):
+        _seed_records( Organization.objects.create(               # a complete example Profile to render
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME ) )
+        self.client.post( reverse( 'start_tour' ) )              # guest VIEWER, current-org = example
 
         response = self.client.get( self._profile_url() )        # the REAL interview, app chrome
 
@@ -240,10 +240,10 @@ class FeaturePageAddMyDataTest( TestCase ):
         self.assertContains( response, self._CTA_COPY )                   # the "Add my data" prompt
         self.assertNotContains( response, self._EMAIL_COPY )              # email pitch stands down
 
-    def test_forecast_hub_promotes_add_my_data_to_a_sample_only_user( self ):
+    def test_forecast_hub_promotes_add_my_data_to_a_example_only_user( self ):
         _seed_records( Organization.objects.create(
-            uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME ) )
-        self.client.post( reverse( 'start_tour' ) )              # guest VIEWER, current-org = sample
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME ) )
+        self.client.post( reverse( 'start_tour' ) )              # guest VIEWER, current-org = example
 
         response = self.client.get( reverse( 'financial_forecast' ) )
 
@@ -264,16 +264,16 @@ class FeaturePageAddMyDataTest( TestCase ):
 
 class ExplainGatingTest( TestCase ):
     """`ExplainView` exposes the two deployment-mode flags its template gates cloud-only chrome on:
-    `tour_available` (is the sample org seeded, so "Take a tour" can run) and `authentication_enabled`
+    `tour_available` (is the example org seeded, so "Take a tour" can run) and `authentication_enabled`
     (is sign-in in play, so the "free, no sign-up" reassurance applies). This tests that contract, not
     the page's evolving layout/copy."""
 
-    def test_tour_available_reflects_a_seeded_sample_org( self ):
+    def test_tour_available_reflects_a_seeded_example_org( self ):
         response = self.client.get( reverse( 'explain' ) )
         self.assertEqual( 200, response.status_code )
-        self.assertFalse( response.context[ 'tour_available' ] )          # no sample seeded -> no tour
+        self.assertFalse( response.context[ 'tour_available' ] )          # no example seeded -> no tour
 
-        Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
+        Organization.objects.create( uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
 
         response = self.client.get( reverse( 'explain' ) )
         self.assertTrue( response.context[ 'tour_available' ] )           # seeded -> tour offered
@@ -293,7 +293,7 @@ class ExplainGatingTest( TestCase ):
 class HomeCtaStateTest( TestCase ):
     """The site root (`/`, HomeView) stays reachable for everyone and resolves one of three visitor states
     (`onboarding.home_cta`): an anonymous visitor learns how it works, an early user (only the read-only
-    sample) starts their own plan, an owner goes to their dashboard. The self-hosted singleton is always an
+    example) starts their own plan, an owner goes to their dashboard. The self-hosted singleton is always an
     owner. A *signed-in* visitor must never see two competing gold actions (the former bug); an anonymous
     visitor legitimately sees the same "See how it works" action repeated in the closing marketing band."""
 
@@ -313,23 +313,23 @@ class HomeCtaStateTest( TestCase ):
         self.assertEqual( 2, self._gold_count( response ) )              # hero + closing band, same action
 
     def test_early_user_starts_planning_with_a_single_gold_action( self ):
-        Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
-        self.client.post( reverse( 'start_tour' ) )              # a guest whose only org is the sample
+        Organization.objects.create( uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+        self.client.post( reverse( 'start_tour' ) )              # a guest whose only org is the example
 
         response = self.client.get( reverse( 'home' ) )
 
-        self.assertEqual( HomeCtaState.SAMPLE_ONLY.value, response.context[ 'home_cta' ] )
+        self.assertEqual( HomeCtaState.EXAMPLE_ONLY.value, response.context[ 'home_cta' ] )
         self.assertContains( response, reverse( 'add_my_data' ) )
         self.assertNotContains( response, reverse( 'dashboard' ) )
         self.assertEqual( 1, self._gold_count( response ) )             # one gold, not two (the fixed bug)
 
     def test_owner_is_pointed_to_the_dashboard( self ):
-        # The realistic owner is also auto-joined to the sample as a VIEWER, so this exercises the
-        # sample-excluding `working_organization` -- they still resolve to OWN_ORG, not SAMPLE_ONLY.
+        # The realistic owner is also auto-joined to the example as a VIEWER, so this exercises the
+        # example-excluding `working_organization` -- they still resolve to OWN_ORG, not EXAMPLE_ONLY.
         user = User.objects.create_user( email = 'o@x.test' )
         Organization.objects.create_for_owner( user, 'Mine' )
-        Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
-        join_sample_org( user )
+        Organization.objects.create( uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+        join_example_org( user )
         self.client.force_login( user )
 
         response = self.client.get( reverse( 'home' ) )
@@ -351,12 +351,12 @@ class HomeCtaStateTest( TestCase ):
 
 
 class DashboardEarlyUserTest( TestCase ):
-    """The dashboard promotes "Add My Data" to an early user (only the sample org) and not once they have
+    """The dashboard promotes "Add My Data" to an early user (only the example org) and not once they have
     their own org -- driven by the `offer_add_my_data` context flag."""
 
     def test_promotes_add_my_data_to_an_early_user( self ):
-        Organization.objects.create( uuid = SAMPLE_ORGANIZATION_UUID, name = SAMPLE_ORGANIZATION_NAME )
-        self.client.post( reverse( 'start_tour' ) )              # a guest whose only org is the sample
+        Organization.objects.create( uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+        self.client.post( reverse( 'start_tour' ) )              # a guest whose only org is the example
 
         response = self.client.get( reverse( 'dashboard' ) )
 

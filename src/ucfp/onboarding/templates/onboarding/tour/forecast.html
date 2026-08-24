@@ -2,7 +2,7 @@
 {% load common_tags %}
 {% block head_title %}Forecast · Guided Tour · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
-The Forecast step of the tour: the captured sample run's outcome summary and books table
+The Forecast step of the tour: the captured example run's outcome summary and books table
 (`RunResultsView` via `TourForecastView`) under the tour shell. Reuses the shared run output panel --
 including the in-window Maximize -- and drops the app-chrome extras (breadcrumb, Discard, rename). The
 books-table column operations (a fragment swap) and Maximize (pure JS) work here unchanged.

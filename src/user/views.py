@@ -332,7 +332,7 @@ class ConvertToGuestView( View ):
     POST-only, so an account is created only by a deliberate submission -- a crawled GET never mints one.
     An already-signed-in visitor is left as-is (no second account). The default forwards a fresh Guest to
     `settings.GUEST_START_URL` to begin entering their own data; a subclass tailors a different entry (e.g.
-    the sample-data tour) by overriding `after_conversion` and `landing_url`.
+    the example-data tour) by overriding `after_conversion` and `landing_url`.
     """
 
     def post( self, request, *args, **kwargs ):
