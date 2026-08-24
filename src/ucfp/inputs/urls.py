@@ -35,9 +35,13 @@ urlpatterns = [
     # The section-driven interview (entered per flow above) + the per-section editors.
     path( 'interview/<str:section>/', views.InterviewView.as_view(), name = 'interview_section' ),
     path( 'interview/income/table/', views.IncomeTableView.as_view(), name = 'income_table' ),
-    path( 'interview/debt/list/', views.DebtsView.as_view(), name = 'debts' ),
+    path( 'interview/debt/add/', views.DebtFormView.as_view(), name = 'debt_add' ),
     path( 'interview/debt/plan/', views.DebtPlanView.as_view(), name = 'debt_plan' ),
     path( 'interview/debt/cards/', views.CreditCardView.as_view(), name = 'credit_card_plan' ),
+    # The per-debt catch-alls follow the fixed debt/* routes above, so `plan`/`cards`/`add` are not read
+    # as handles.
+    path( 'interview/debt/<str:handle>/delete/', views.DebtDeleteView.as_view(), name = 'debt_delete' ),
+    path( 'interview/debt/<str:handle>/', views.DebtFormView.as_view(), name = 'debt_edit' ),
     path( 'interview/subjects/edit/', views.SubjectsView.as_view(), name = 'subjects' ),
     path( 'interview/accounts/edit/', views.AccountsView.as_view(), name = 'accounts' ),
     path( 'interview/external-factors/edit/', views.ExternalFactorsView.as_view(),

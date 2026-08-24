@@ -37,7 +37,7 @@ from ucfp.jurisdiction.us.subdivision_tax import USState
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .debt_plan import DebtPlanForm
-from .debts import DebtsForm
+from .debts import debts_context
 from .events import EventsForm
 from .external_factors import ExternalFactorsSectionForm
 from .cash_plan import CashPlanSectionForm
@@ -683,9 +683,9 @@ class TaxPlanningSectionForm:
 
 
 class DebtsSectionForm:
-    """§ Debts L0 -- the Debts pane. A no-op section form: the debts are edited and saved through
-    `DebtsView`, so Next just advances. It exposes the one debts list -- every debt, mortgages
-    included, in the order the user thinks of them."""
+    """§ Debts L0 -- the Debts pane. A no-op section form: each debt is edited and saved through its own
+    async view (`DebtFormView` / `DebtDeleteView`), so Next just advances. It exposes the debts as summary
+    rows for the list -- every debt, mortgages and autos included (those read-only)."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -695,8 +695,8 @@ class DebtsSectionForm:
         return True
 
     @property
-    def debts_form( self ):
-        return DebtsForm( profile = self._profile, plans = self._plans )
+    def debts( self ) -> list:
+        return debts_context( self._profile )
 
     def apply( self, profile, plans ):
         return profile, plans

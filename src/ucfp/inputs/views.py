@@ -67,7 +67,7 @@ from .cash_plan import DrawdownForm
 from .net_worth import NetWorthForm
 from .transaction_costs import TransactionCostsForm
 from .debt_plan import DebtPlanForm
-from .debts import DebtsForm
+from .debts import DebtForm, _minted_debt_handle, debt_heading, debts_context, delete_debt
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
 from .properties import (
@@ -1568,26 +1568,69 @@ class CurrentVehicleDeleteView( _CurrentVehicleListView ):
         return antinode.response( replace_map = { 'current-vehicles-list': self._list( request, profile ) } )
 
 
-class DebtsView( SelfSavingPaneView ):
-    """`/inputs/interview/debt/list/` -- the debts list of the Debts section. Its debt set can change,
-    so a save that adds or removes a row re-renders the list; an incomplete row simply does not
-    materialize. Mortgages edit here like any other debt; each row preserves its stable handle and any
-    property it is secured against."""
+@method_decorator( ensure_organization, name = 'dispatch' )
+class _DebtListView( View ):
+    """Shared, org-scoped base for the Debts section's one list -- the household's debts, editable loans
+    and read-only mortgages/autos together. The per-debt add/edit/delete swaps refresh this list."""
 
-    template     = 'inputs/interview/sections/debts_list.html'
-    target       = 'debts-list'
-    context_name = 'debts_form'
+    _LIST_TEMPLATE = 'inputs/interview/sections/debts_list.html'
 
-    def build_form( self, request, data = None ):
+    def _list( self, request, profile, active = None ):
+        # `active` is the handle whose editor is open, so the list can mark that row (the form detaches
+        # from its row, so the highlight ties them back together).
+        return render_to_string(
+            self._LIST_TEMPLATE, { 'debts': debts_context( profile ), 'active': active },
+            request = request )
+
+
+class DebtFormView( _DebtListView ):
+    """`/inputs/interview/debt/add/` and `.../<handle>/` -- the add/edit form for one debt, opened as a card
+    headed by the debt's name. Add and edit converge on a minted handle. Opening or saving marks the edited
+    row in the list; POST background-saves (non-blocking)."""
+
+    _FORM_TEMPLATE = 'inputs/interview/sections/debt_form.html'
+
+    def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
-        return DebtsForm( data, profile = profile, plans = plans )
+        if request.GET.get( 'collapse' ):                  # close: empty the editor, clear the row mark
+            return antinode.response(
+                main_content = self._form( request, None, None, profile ),
+                replace_map  = { 'debts-list': self._list( request, profile ) } )
+        if handle is None:                             # add: mint a fresh handle, open its editor
+            handle = _minted_debt_handle( profile )
+        form = DebtForm( profile = profile, plans = plans, handle = handle )
+        return antinode.response(
+            main_content = self._form( request, handle, form, profile ),
+            replace_map  = { 'debts-list': self._list( request, profile, active = handle ) } )
 
-    def persist( self, request, form ):
+    def post( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
-        before = len( profile.debts )
+        form = DebtForm( request.POST, profile = profile, plans = plans, handle = handle )
+        if not form.is_valid():
+            return antinode.response(                          # surface a genuine field error
+                replace_map = { 'debt-form': self._form( request, handle, form, profile ) } )
         profile, plans = form.apply( profile, plans )
-        _save_profile_and_plans( request, profile, plans )     # a removed debt reaps its plan too
-        return len( profile.debts ) != before                  # a row was added or removed
+        _save_profile_and_plans( request, profile, plans )
+        return antinode.response(
+            replace_map = { 'debts-list': self._list( request, profile, active = handle ) } )
+
+    def _form( self, request, handle, form, profile ):
+        return render_to_string(
+            self._FORM_TEMPLATE,
+            { 'debt_form': form, 'handle': handle,
+              'heading': debt_heading( profile, handle ) if handle else None },
+            request = request )
+
+
+class DebtDeleteView( _DebtListView ):
+    """`/inputs/interview/debt/<handle>/delete/` -- remove a debt, then refresh the list. Plans are left as
+    drift (reconciled on demand), not eagerly reaped."""
+
+    def post( self, request, handle ):
+        profile, plans = _current_profile_and_plans( request )
+        profile, plans = delete_debt( profile, plans, handle )
+        _save_profile_and_plans( request, profile, plans )
+        return antinode.response( replace_map = { 'debts-list': self._list( request, profile ) } )
 
 
 class DebtPlanView( SelfSavingPaneView ):
