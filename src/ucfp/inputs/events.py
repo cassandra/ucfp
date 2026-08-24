@@ -226,6 +226,12 @@ def _window_text( event : PlanEvent ) -> str:
     return f'{event.date.year} to {event.finish.year}'
 
 
+def _fixed_suffix( event : PlanEvent ) -> str:
+    """A chip marker for a payment fixed in nominal terms (not inflation-indexed) -- empty for the
+    inflation-indexed default, so only the exception is called out."""
+    return '' if event.inflation_indexed else ' (fixed)'
+
+
 # --- The materialization accumulator --------------------------------------
 
 class EventContributions:
@@ -252,6 +258,7 @@ class EventType:
     has_amount     : bool = True
     has_label      : bool = False   # whether the add form offers an optional free-text purpose (EventForm)
     has_recurrence : bool = False   # whether the add form offers the one-time/recurring toggle (EventForm)
+    has_inflation  : bool = False   # whether the add form offers the "adjust for inflation" toggle
     description    : str  = ''   # a one-line "what this is", shown under the add form's title
 
     @property
@@ -543,14 +550,16 @@ class GeneralPaymentEvent( EventType ):
     group          = _MONEY_OUT_GROUP
     has_label      = True
     has_recurrence = True
+    has_inflation  = True
     description    = 'A payment out of the plan -- one-time, or repeating over a date window.'
 
     def summary( self, event : PlanEvent, profile ) -> str:
         money = _money( event.amount )
         if event.interval is None:
-            return f'{_payment_label( event )} of {money} in {event.date.year}'
-        return ( f'{_payment_label( event )} of {money} {cadence_label( event.interval )}, '
-                 f'{_window_text( event )}' )
+            schedule = f'in {event.date.year}'
+        else:
+            schedule = f'{cadence_label( event.interval )}, {_window_text( event )}'
+        return f'{_payment_label( event )} of {money} {schedule}{_fixed_suffix( event )}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
         name = _payment_label( event )
@@ -558,7 +567,7 @@ class GeneralPaymentEvent( EventType ):
             name = name, expense_tax_class = ExpenseTaxClass.LIVING,
             amounts = Schedule.constant( WindowedAmount( event.amount ) ),
             cadence = _payment_cadence( event ), window = _payment_window( event ),
-            handle = payment_expense_handle( name ) ) )
+            handle = payment_expense_handle( name ), inflate = event.inflation_indexed ) )
 
 
 class _DeductiblePaymentEvent( EventType ):
@@ -732,6 +741,14 @@ class EventForm( forms.Form ):
             add_cadence_fields( self, _RECUR_PREFIX, _RECUR_DEFAULT, _RECUR_DOMAIN )
             self.fields[ 'finish' ] = forms.DateField(
                 label = 'Until', required = False, widget = IsoDateInput() )
+        if event_type.has_inflation:
+            # On by default: the amount is read as today's dollars and grown to nominal. Unchecked fixes it
+            # in nominal terms (the entered figure is paid as-is each occurrence).
+            self.fields[ 'inflation_indexed' ] = forms.BooleanField(
+                label = 'Adjust for inflation', required = False, initial = True,
+                help_text = "Amount is in today's dollars and grows with inflation; uncheck for a "
+                            'fixed-dollar amount.',
+                widget = forms.CheckboxInput( attrs = { 'class' : 'custom-control-input' } ) )
         for opt in event_type.options( profile ):
             self.fields[ self._option_field( opt.key ) ] = forms.BooleanField(
                 label = opt.label, required = False, initial = opt.default, help_text = opt.help_text,
@@ -776,6 +793,11 @@ class EventForm( forms.Form ):
     def finish_field( self ):
         """The bound recurrence-end date, or None for a kind that does not recur."""
         return self[ 'finish' ] if 'finish' in self.fields else None
+
+    @property
+    def inflation_field( self ):
+        """The bound "adjust for inflation" checkbox, or None for a kind that does not offer it."""
+        return self[ 'inflation_indexed' ] if 'inflation_indexed' in self.fields else None
 
     @property
     def option_fields( self ):
@@ -851,8 +873,16 @@ class EventForm( forms.Form ):
             amount = self.cleaned_data.get( 'amount' ),
             label = ( self.cleaned_data.get( 'label' ) or '' ).strip(),
             interval = interval, finish = finish,
+            inflation_indexed = self._inflation_indexed( self.cleaned_data ),
             selections = self._selections( self.cleaned_data ),
             options = self._options( self.cleaned_data ) )
+
+    def _inflation_indexed( self, cleaned : dict ) -> bool:
+        """Whether the payment is inflation-indexed -- the checkbox when the kind offers it (on by default),
+        else True (the model-wide default; a kind without the toggle indexes as everything else does)."""
+        if not self._event_type.has_inflation:
+            return True
+        return bool( cleaned.get( 'inflation_indexed' ) )
 
     def _recurrence( self, cleaned : dict ) -> tuple:
         """The event's recurrence as `(interval, finish)` -- `(None, None)` for a one-time payment (the

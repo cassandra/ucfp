@@ -203,7 +203,13 @@ class ExpenseItem:
     fleet-wide vehicle running cost that carries across a car's replacements -- anchors to a shared
     origin so the phase stays continuous, and the window merely gates which occurrences apply.
     Without it, two adjacent windows (a car and its replacement) would each restart the cadence and
-    double-count the changeover period."""
+    double-count the changeover period.
+
+    `inflate` (the default) grows the today's-dollar `amounts` to each occurrence's nominal figure by the
+    class inflation rate, as every model amount is grown; set it False for a cost fixed in nominal terms --
+    a set-dollar obligation the user enters as the actual amount paid each occurrence, which then does not
+    rise with inflation (e.g. a fixed-dollar payment). It affects only the inflation factor, not the
+    cadence or window."""
 
     name              : str
     expense_tax_class : ExpenseTaxClass
@@ -212,6 +218,7 @@ class ExpenseItem:
     window            : DateWindow      = DateWindow()
     handle            : Optional[ Handle ] = None
     cadence_anchor    : Optional[ date ] = None
+    inflate           : bool = True
 
 
 @dataclass( frozen = True )

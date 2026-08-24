@@ -45,10 +45,11 @@ def _profile() -> Profile:
                           opening_value = Decimal( '100000' ), cost_basis = Decimal( '100000' ) ) ] )
 
 
-def _recurring_payment( interval, finish ) -> Plans:
+def _recurring_payment( interval, finish, inflation_indexed = True ) -> Plans:
     event = PlanEvent(
         kind = EventKind.GENERAL_PAYMENT, date = date( 2032, 8, 1 ), amount = Decimal( '40000' ),
-        label = 'College Tuition', interval = interval, finish = finish )
+        label = 'College Tuition', interval = interval, finish = finish,
+        inflation_indexed = inflation_indexed )
     return Plans( events = [ event ] )
 
 
@@ -87,3 +88,20 @@ class RecurringPaymentForecastTests( TestCase ):
     def test_a_one_time_payment_books_a_single_year( self ):
         by_year = self._tuition_by_year( _recurring_payment( None, None ) )
         self.assertEqual( set( by_year ), { 2032 } )
+
+    def test_a_fixed_payment_books_its_entered_amount_unchanged_each_year( self ):
+        # inflation_indexed=False -> each occurrence books the entered $40,000 as-is, no inflation growth.
+        by_year = self._tuition_by_year( _recurring_payment(
+            Duration( 1, TimeUnit.YEAR ), date( 2035, 8, 1 ), inflation_indexed = False ) )
+        self.assertEqual( set( by_year ), { 2032, 2033, 2034, 2035 } )
+        for year, amount in by_year.items():
+            self.assertEqual( amount, Decimal( '40000' ), f'year {year} should be the entered amount' )
+
+    def test_an_indexed_payment_grows_year_over_year( self ):
+        # The inflation-indexed default grows the today's-dollar $40,000 to each year's nominal figure
+        # (from the 2030 forecast start), so every occurrence exceeds the entered amount and later ones
+        # exceed earlier ones -- the very growth the fixed option removes.
+        by_year = self._tuition_by_year( _recurring_payment(
+            Duration( 1, TimeUnit.YEAR ), date( 2035, 8, 1 ), inflation_indexed = True ) )
+        self.assertGreater( by_year[ 2032 ], Decimal( '40000' ) )      # already grown from the 2030 start
+        self.assertGreater( by_year[ 2035 ], by_year[ 2032 ] )         # and keeps growing

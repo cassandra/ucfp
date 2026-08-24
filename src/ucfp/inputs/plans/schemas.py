@@ -401,6 +401,10 @@ class PlanEvent:
     # needs no household member to anchor it.
     interval: Optional[ Duration ] = None
     finish: Optional[ date ] = None
+    # Whether an amount a kind books as an expense is inflation-indexed: True (the default) reads it as
+    # today's dollars grown to each occurrence's nominal figure; False fixes it in nominal terms (the
+    # entered amount is paid as-is each occurrence, not rising with inflation).
+    inflation_indexed: bool = True
     selections: dict[ str, str ] = field( default_factory = dict )
     # Event-specific non-entity settings a kind may read (distinct from `selections`, which are entity
     # handles): a small key->value bag, e.g. a residence sale's 'rent_after'. Absent keys take the kind's

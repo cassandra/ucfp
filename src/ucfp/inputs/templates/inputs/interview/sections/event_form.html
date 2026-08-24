@@ -26,6 +26,13 @@ appends the event and restores the menu; Cancel restores the menu without adding
       {% if form.amount_field %}<div class="col-sm mb-2">{{ form.amount_field.as_field_group }}</div>{% endif %}
       <div class="col-sm mb-2">{{ form.date.as_field_group }}</div>
     </div>
+    {% if form.inflation_field %}
+    <div class="custom-control custom-checkbox mb-2">
+      {{ form.inflation_field }}
+      <label class="custom-control-label" for="{{ form.inflation_field.id_for_label }}">{{ form.inflation_field.label }}</label>
+      {% if form.inflation_field.help_text %}<small class="form-text text-muted d-block">{{ form.inflation_field.help_text }}</small>{% endif %}
+    </div>
+    {% endif %}
     {% comment %}The one-time/recurring toggle: a js-switch whose control reveals the date-based window
     (cadence + end date) only when Recurring is chosen. The date above is the window's start.{% endcomment %}
     {% if form.recurring_field %}

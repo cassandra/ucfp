@@ -355,6 +355,26 @@ class GeneralPaymentRecurrenceTests( unittest.TestCase ):
                           'Payment of $40,000 every 2 years, from 2032' )
 
 
+class GeneralPaymentInflationTests( unittest.TestCase ):
+    """A payment is inflation-indexed by default (today's dollars grown to nominal); the flag can fix it in
+    nominal terms. The inputs layer threads that choice onto the `ExpenseItem` and marks the chip."""
+
+    def test_inflation_indexed_is_the_default_and_threads_to_the_item( self ):
+        item = _payment_items( _payment() ).expense_items[ 0 ]
+        self.assertTrue( item.inflate )
+
+    def test_a_fixed_payment_threads_inflate_false( self ):
+        item = _payment_items( replace( _payment(), inflation_indexed = False ) ).expense_items[ 0 ]
+        self.assertFalse( item.inflate )
+
+    def test_the_summary_marks_a_fixed_payment_only( self ):
+        indexed = GeneralPaymentEvent().summary( _payment(), SimpleNamespace() )
+        fixed   = GeneralPaymentEvent().summary(
+            replace( _payment(), inflation_indexed = False ), SimpleNamespace() )
+        self.assertNotIn( 'fixed', indexed )
+        self.assertTrue( fixed.endswith( '(fixed)' ) )
+
+
 class GeneralPaymentFormTests( unittest.TestCase ):
     """The Payment add form carries an optional purpose that becomes the event's label; blank yields an
     empty label (the handler then falls back to the default name). The one-time/recurring toggle reads the
@@ -406,6 +426,16 @@ class GeneralPaymentFormTests( unittest.TestCase ):
             'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring', 'finish': '2030-08-01' } )
         self.assertFalse( form.is_valid() )
         self.assertIn( 'finish', form.errors )
+
+    def test_a_checked_inflation_box_indexes_the_payment( self ):
+        event = self._built( {
+            'amount': '40000', 'date': '2030-08-01', 'recurring': 'once', 'inflation_indexed': 'on' } )
+        self.assertTrue( event.inflation_indexed )
+
+    def test_an_unchecked_inflation_box_fixes_the_payment( self ):
+        # An unchecked checkbox is absent from the POST -> the payment is fixed in nominal terms.
+        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'recurring': 'once' } )
+        self.assertFalse( event.inflation_indexed )
 
 
 class SellPropertyOptionFormTests( unittest.TestCase ):
