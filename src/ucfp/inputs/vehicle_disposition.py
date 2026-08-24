@@ -12,7 +12,7 @@ from dataclasses import replace
 
 from django import forms
 
-from common.forms import MoneyField, PercentField
+from common.forms import MoneyField
 from common.loan_solver import monthly_payment, resolved_annual_rate
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
@@ -20,6 +20,7 @@ from common.recurrence import Duration, TimeUnit
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
+from ucfp.inputs.loan_fieldset import loan_payment_field, loan_rate_field, loan_term_field
 from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
     LeasedVehicleDisposition, LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
@@ -133,23 +134,16 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
     # The current loan (an owned, financed vehicle only): its terms, re-homed here from the Debt plan. Rate
     # and monthly are two views of one amortization over `loan_months` (the rate is stored; the monthly is
     # a no-JS back-solve); shown only when financed, the rate pre-filling the assumed default until set.
-    # The shared `LOAN_*` calculator (client) and `common.loan_solver` (server) own the fuller contract.
-    loan_rate    = PercentField(
-        label = 'Rate (%)', required = False, min_value = 0,
-        css_class = AppConst.LOAN_RATE_CLASS, initial = _DEFAULT_LOAN_APR_PERCENT )
-    loan_monthly = MoneyField( label = 'Monthly payment', required = False, min_value = 0,
-                               css_class = AppConst.LOAN_PAYMENT_CLASS )
-    loan_months  = forms.IntegerField(
-        label = 'Months left', required = False, min_value = 1,
-        widget = forms.NumberInput(
-            attrs = { 'class' : f'form-control {AppConst.LOAN_TERM_CLASS}' } ) )
+    # These are the shared loan-terms fields (rendered by the `_loan_fields.html` partial); the client
+    # solver (inputs.js) and `common.loan_solver` own the fuller contract.
+    loan_rate    = loan_rate_field( initial = _DEFAULT_LOAN_APR_PERCENT, hint_id = 'current-loan-hint' )
+    loan_monthly = loan_payment_field()
+    loan_months  = loan_term_field()
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         self._handle  = handle
         self._profile = profile
         super().__init__( data, initial = self._initial( plans ) if handle else None )
-        # The rate blanks (with a hint) when a monthly/term doesn't fit; point the input at that hint.
-        self.fields[ 'loan_rate' ].widget.attrs[ 'aria-describedby' ] = 'loan-hint'
 
     def _auto_debt( self ):
         """This vehicle's auto-loan `Debt`, or None when it is not financed -- the current loan the card

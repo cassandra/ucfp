@@ -20,24 +20,10 @@ sub-block, with the method as a nested switch). Empty when none is open. Reads `
         {% csrf_token %}
         {% comment %}(1) The current loan -- financed owned vehicles only; its terms live in Plans, its
         balance in Profile (the Vehicles section). Vehicle loans are managed here, not in the Debts
-        section. Balance is read-only and rides on the block as a data attr; the client calculator keeps
-        the monthly and rate consistent over the months left (edit either -- the other follows).{% endcomment %}
+        section. The shared loan-fields block shows the balance read-only (a fixed fact) and keeps the
+        monthly, rate, and term consistent as they are edited.{% endcomment %}
         {% if disposition_form.is_financed %}
-        <fieldset class="border rounded px-2 pb-2 mb-2 {{ AppConst.LOAN_CLASS }}"
-                  data-{{ AppConst.LOAN_BALANCE_DATA_ATTR }}="{{ disposition_form.loan_balance }}">
-          <legend class="w-auto px-2 mb-1 h6">Current loan</legend>
-          <p class="text-muted small mb-1">Balance owed: <strong>${{ disposition_form.loan_balance|floatformat:0 }}</strong></p>
-          <div class="form-row">
-            <div class="col-sm-4">{{ disposition_form.loan_monthly.as_field_group }}</div>
-            <div class="col-sm-4">{{ disposition_form.loan_rate.as_field_group }}</div>
-            <div class="col-sm-4">{{ disposition_form.loan_months.as_field_group }}</div>
-          </div>
-          {% comment %}role=alert announces the hint when the calculator reveals it; the rate input points
-          at it via aria-describedby (a display:none hint is skipped by screen readers until shown).{% endcomment %}
-          <p id="loan-hint" role="alert"
-             class="text-danger small mb-0 d-none {{ AppConst.LOAN_HINT_CLASS }}">That payment and
-            term don't fit the balance &mdash; check them.</p>
-        </fieldset>
+        {% include 'inputs/interview/sections/_loan_fields.html' with legend='Current loan' loan_id='current-loan' balance_amount=disposition_form.loan_balance payment_field=disposition_form.loan_monthly rate_field=disposition_form.loan_rate term_field=disposition_form.loan_months %}
         {% endif %}
         <div class="{{ AppConst.SWITCH_CLASS }}">
           {% comment %}(2) The plan for this vehicle -- the kind switch, and (Sell/Replace) the handover

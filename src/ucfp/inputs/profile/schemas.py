@@ -91,20 +91,34 @@ class AssetProfile:
 # --- What you owe ---------------------------------------------------------
 
 @dataclass( frozen = True )
+class LoanTerms:
+    """The contract terms of an amortizing loan, captured as *facts* from its origination document -- the
+    interest rate, the remaining term, and the monthly payment. Distinct from the loan's outstanding
+    `balance` (the one loan fact that enters the opening books): these terms say nothing to the forecast on
+    their own -- they exist only to *seed* the repayment Plan, which then owns its copy. Any subset may be
+    known; the loan solver keeps the four quantities (balance + these three) consistent as they are
+    entered, and all three are stored even though they are over-determined, so the user may correct any of
+    them later. The preferred authoritative trio is balance + rate + term, with the payment re-derived."""
+    interest_rate: Optional[ Rate ] = None
+    remaining_term: Optional[ Duration ] = None
+    monthly_payment: Optional[ Decimal ] = None
+
+
+@dataclass( frozen = True )
 class Debt:
-    """A debt as a fact: its `kind`, a `name`, and the current `balance` owed -- and nothing about
-    how it will be repaid. Everything about the future (rate, term, extra principal, payoff, or a
-    monthly-servicing expense) is a Plans strategy, composed with this balance at materialization;
-    that is why we ask the *current* balance directly rather than an original amount (which would
-    amortize wrong once it has been paid down). An amortizing kind becomes a real loan on the balance
-    sheet; the trigger kind (a credit card) is not materialized here -- it drives the debt plan.
-    `secured_asset` links a mortgage to the property it finances (so a sale can end it); None
-    otherwise."""
+    """A debt as a fact: its `kind`, a `name`, the current `balance` owed, and (for an amortizing loan) its
+    contract `terms`. Only the *balance* enters the forecast books -- we ask the current balance directly
+    rather than an original amount, which would amortize wrong once it has been paid down. The `terms`
+    (rate/term/payment) are captured facts that say nothing to the engine on their own; they exist only to
+    seed the repayment Plan, where the actual servicing strategy (the schedule, extra principal, payoff)
+    lives. `secured_asset` links a mortgage to the property it finances (so a sale can end it); None
+    otherwise. The trigger kind (a credit card) is not materialized as a loan -- it drives the debt plan."""
     handle: str
     name: str
     kind: DebtKind
     balance: Decimal
     secured_asset: Optional[ str ] = None
+    terms: Optional[ LoanTerms ] = None
 
 
 # --- Income flows ---------------------------------------------------------

@@ -519,12 +519,13 @@ window.App.Inputs = (function () {
     }
 
     // ----- LoanCalculator: one loan widget over balance / rate / term / payment -----
-    // The shared client mirror for every loan-entry surface. The balance is a fixed Profile fact on the
-    // block; a surface exposes whichever of rate / term / payment it edits, and this adapts to what is
-    // present:
-    //   - where a payment input exists, rate and payment are two views of one amortization over the term,
-    //     kept consistent -- editing the rate fills the payment; editing the payment (or the term)
-    //     back-solves the rate, blanking it and showing the hint when the payment/term don't fit;
+    // The shared client mirror for every loan-entry surface. The balance is either a fixed fact on the
+    // block (the debt-plan and current-loan cards) or an editable input (the Profile loan entries); a
+    // surface exposes whichever of rate / term / payment it edits, and this adapts to what is present:
+    //   - where a payment input exists, the four quantities are kept consistent by the preferred trio
+    //     (balance + rate + term authoritative, payment re-derived) -- editing the balance, rate, or term
+    //     re-derives the payment; editing the payment instead back-solves the rate (the number people
+    //     don't know), blanking it and showing the hint when the payment/term don't fit the balance;
     //   - where a readout element exists, it writes the level payment (and any extra-principal payoff) the
     //     terms imply as an advisory line.
     // Entry aid only -- materialization is authoritative. Mirrors common/loan_solver.py and
@@ -534,7 +535,11 @@ window.App.Inputs = (function () {
         return parseAmount( $loan.find( classSelector( cls ) ).val() );
     }
 
+    // The balance from the editable input where the surface has one (Profile), else the fixed fact on the
+    // wrapper (the debt-plan / current-loan cards).
     function loanBalance( $loan ) {
+        const $input = $loan.find( classSelector( C.LOAN_BALANCE_CLASS ) );
+        if ( $input.length ) { return parseAmount( $input.val() ) || 0; }
         return parseFloat( $loan.attr( dataAttr( C.LOAN_BALANCE_DATA_ATTR ) ) ) || 0;
     }
 
@@ -567,8 +572,8 @@ window.App.Inputs = (function () {
 
     const MAX_PLAUSIBLE_APR = C.MAX_PLAUSIBLE_LOAN_APR_PERCENT;   // percent; one source, in AppConst
 
-    // Editing the rate fills the monthly payment: the level payment amortizing the balance over the months
-    // left. A directly-entered rate is explicit, so clear the "doesn't fit" hint.
+    // Editing the balance, rate, or term re-derives the monthly payment: the level payment amortizing the
+    // balance over the months left. The authoritative trio is explicit, so clear the "doesn't fit" hint.
     function fillLoanPayment( $loan ) {
         const balance = loanBalance( $loan ), months = loanMonths( $loan );
         const ratePercent = parseFloat( $loan.find( classSelector( C.LOAN_RATE_CLASS ) ).val() );
@@ -578,9 +583,9 @@ window.App.Inputs = (function () {
         $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).addClass( 'd-none' );
     }
 
-    // Editing the payment (or the term) back-solves the rate -- the annual rate that payment implies. The
-    // payment must retire the balance in the term and imply a plausible rate; otherwise it does not form a
-    // real loan, so leave the rate blank and show the hint rather than guess an implausible rate.
+    // Editing the payment back-solves the rate -- the annual rate that payment implies over the balance and
+    // term. The payment must retire the balance in the term and imply a plausible rate; otherwise it does
+    // not form a real loan, so leave the rate blank and show the hint rather than guess an implausible rate.
     function fillLoanRate( $loan ) {
         const balance = loanBalance( $loan ), months = loanMonths( $loan );
         const payment = parseAmount( $loan.find( classSelector( C.LOAN_PAYMENT_CLASS ) ).val() );
@@ -617,14 +622,16 @@ window.App.Inputs = (function () {
         if ( $readout.length ) { $readout.text( loanReadout( $loan ) ); }
     }
 
-    // Respond to an edit within a loan block: the two-way rate<->payment solve (only where the block
-    // carries a payment input), then refresh any advisory readout.
+    // Respond to an edit within a loan block: the four-quantity solve (only where the block carries a
+    // payment input) -- the payment back-solves the rate, any of the authoritative trio re-derives the
+    // payment -- then refresh any advisory readout.
     function solveLoan( $loan, $edited ) {
         if ( $loan.find( classSelector( C.LOAN_PAYMENT_CLASS ) ).length ) {
-            if ( $edited.hasClass( C.LOAN_RATE_CLASS ) ) {
-                fillLoanPayment( $loan );
-            } else if ( $edited.hasClass( C.LOAN_PAYMENT_CLASS ) || $edited.hasClass( C.LOAN_TERM_CLASS ) ) {
+            if ( $edited.hasClass( C.LOAN_PAYMENT_CLASS ) ) {
                 fillLoanRate( $loan );
+            } else if ( $edited.hasClass( C.LOAN_BALANCE_CLASS ) || $edited.hasClass( C.LOAN_RATE_CLASS )
+                        || $edited.hasClass( C.LOAN_TERM_CLASS ) ) {
+                fillLoanPayment( $loan );
             }
         }
         updateLoanReadout( $loan );

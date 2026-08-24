@@ -131,14 +131,18 @@ class AppConst:
     #     payment or term to back-solve the rate, blanking it with the hint when it doesn't fit);
     #   - a readout element -> a live, advisory monthly-payment estimate.
     # Display/entry aid only -- materialization is authoritative. The server twin is `common.loan_solver`.
-    LOAN_CLASS              = 'js-loan'          # the loan widget wrapper (carries the balance)
-    LOAN_RATE_CLASS         = 'js-loan-rate'     # the interest-rate input (percent)
-    LOAN_TERM_CLASS         = 'js-loan-term'     # the remaining-term input (months)
-    LOAN_PAYMENT_CLASS      = 'js-loan-payment'  # the monthly-payment input (the two-way surfaces)
-    LOAN_EXTRA_CLASS        = 'js-loan-extra'    # the extra-principal-per-month input (readout surfaces)
-    LOAN_READOUT_CLASS      = 'js-loan-readout'  # where the live estimate is written (readout surfaces)
-    LOAN_HINT_CLASS         = 'js-loan-hint'     # shown when an entered payment/term doesn't fit the balance
-    LOAN_BALANCE_DATA_ATTR  = 'loan-balance'     # the loan's current balance, on the wrapper
+    LOAN_CLASS              = 'js-loan'           # the loan widget wrapper (carries the balance)
+    LOAN_RATE_CLASS         = 'js-loan-rate'      # the interest-rate input (percent)
+    LOAN_TERM_CLASS         = 'js-loan-term'      # the remaining-term input (months)
+    LOAN_PAYMENT_CLASS      = 'js-loan-payment'   # the monthly-payment input (the two-way surfaces)
+    LOAN_BALANCE_CLASS      = 'js-loan-balance'   # the balance input, where the surface edits it (Profile)
+    LOAN_EXTRA_CLASS        = 'js-loan-extra'     # the extra-principal-per-month input (readout surfaces)
+    LOAN_READOUT_CLASS      = 'js-loan-readout'   # where the live estimate is written (readout surfaces)
+    LOAN_HINT_CLASS         = 'js-loan-hint'      # shown when an entered payment/term doesn't fit the balance
+    # The balance is a fixed fact on the wrapper where the surface does not edit it (the debt-plan and
+    # current-loan cards); where a surface edits it (the Profile loan entries), it is a `LOAN_BALANCE_CLASS`
+    # input instead, and the client reads whichever is present.
+    LOAN_BALANCE_DATA_ATTR  = 'loan-balance'      # the loan's current balance, on the wrapper (fixed case)
 
     # The vehicle finance calculator (the add/edit vehicle form). For a LOAN, price, down, and monthly
     # are locked by amortization at the assumed auto-loan rate/term, so the calculator keeps them

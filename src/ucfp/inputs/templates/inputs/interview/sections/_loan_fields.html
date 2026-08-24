@@ -1,0 +1,31 @@
+{% comment %}
+The shared loan-terms fieldset (the `.js-loan` block) -- the one place loan-solver inputs are authored, so
+every surface that solicits loan terms (the Profile Debts / Home / Property / Vehicles entries and the
+current-vehicle loan card) looks and behaves the same. The bound fields are passed in by the caller (their
+names differ per surface): `payment_field`, `rate_field`, `term_field`, and either an editable
+`balance_field` (the Profile entries) or a fixed `balance_amount` shown read-only and carried as the
+block's data attr (the current-loan card). `loan_id` namespaces the "doesn't fit" hint so several blocks
+can coexist on one page; `legend` names the block. The client solver (inputs.js) keeps the four quantities
+consistent as they are entered; the server (common.loan_solver) is authoritative.
+{% endcomment %}
+<fieldset class="border rounded px-2 pb-2 mb-2 {{ AppConst.LOAN_CLASS }}"
+          {% if not balance_field %}data-{{ AppConst.LOAN_BALANCE_DATA_ATTR }}="{{ balance_amount }}"{% endif %}>
+  <legend class="w-auto px-2 mb-1 h6">{{ legend|default:'Loan details' }}</legend>
+  {% if balance_field %}
+  <div class="form-row">
+    <div class="col-sm-4">{{ balance_field.as_field_group }}</div>
+  </div>
+  {% else %}
+  <p class="text-muted small mb-1">Balance owed: <strong>${{ balance_amount|floatformat:0 }}</strong></p>
+  {% endif %}
+  <div class="form-row">
+    <div class="col-sm-4">{{ payment_field.as_field_group }}</div>
+    <div class="col-sm-4">{{ rate_field.as_field_group }}</div>
+    <div class="col-sm-4">{{ term_field.as_field_group }}</div>
+  </div>
+  {% comment %}role=alert announces the hint when the solver reveals it; the rate input points at it via
+  aria-describedby (a display:none hint is skipped by screen readers until shown).{% endcomment %}
+  <p id="{{ loan_id }}-hint" role="alert"
+     class="text-danger small mb-0 d-none {{ AppConst.LOAN_HINT_CLASS }}">That payment and term don't fit
+    the balance &mdash; check them.</p>
+</fieldset>
