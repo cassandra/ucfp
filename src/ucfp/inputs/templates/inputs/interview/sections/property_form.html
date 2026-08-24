@@ -11,6 +11,7 @@ Empty when no form is open. The pane's `form_id`, `edit_url`, and `add_url` come
         action="{% url edit_url handle=handle %}">
     {% csrf_token %}
     {% for field in property_form.primary_fields %}{% include 'inputs/interview/_field_row.html' with field=field %}{% endfor %}
+    {% include 'inputs/interview/sections/_loan_fields.html' with legend='Mortgage (optional)' loan_id='loan' balance_field=property_form.mortgage_balance payment_field=property_form.loan_payment rate_field=property_form.loan_rate term_field=property_form.loan_term %}
     <div class="mt-2">
       <a class="btn btn-sm btn-outline-primary" data-async="#{{ form_id }}"
          href="{% url add_url %}?collapse=1">Done</a>

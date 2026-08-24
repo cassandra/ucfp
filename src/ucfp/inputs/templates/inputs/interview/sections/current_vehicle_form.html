@@ -27,10 +27,13 @@ Empty when no form is open. Reads `vehicle_form`, `heading`, and `handle`.
             </div>
             {% endfor %}
           </fieldset>
-          {# Owned only: current value and any auto-loan balance (a leased vehicle has neither here). #}
+          {# Owned only: current value, and the shared loan block for any auto loan (a leased vehicle has
+             neither here -- its terms are the Vehicle plan's). #}
           <div class="form-row" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.owned_case }}">
             <div class="col-sm-6">{{ vehicle_form.value.as_field_group }}</div>
-            <div class="col-sm-6">{{ vehicle_form.loan_balance.as_field_group }}</div>
+          </div>
+          <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ vehicle_form.owned_case }}">
+            {% include 'inputs/interview/sections/_loan_fields.html' with legend='Auto loan (optional)' loan_id='loan' balance_field=vehicle_form.loan_balance payment_field=vehicle_form.loan_payment rate_field=vehicle_form.loan_rate term_field=vehicle_form.loan_term %}
           </div>
         </div>
         <div class="mt-2">

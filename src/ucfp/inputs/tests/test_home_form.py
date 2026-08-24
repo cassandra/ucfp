@@ -5,13 +5,19 @@ shows no fields until a choice is made -- soliciting an explicit answer. 'Neithe
 explicit choice (no home), separate from the unselected start.
 """
 import unittest
+from decimal import Decimal
 
 from django.http import QueryDict
 
+from common.rate import Rate
+from common.recurrence import Duration, TimeUnit
+
 from ucfp.inputs.interview import HomeForm
 from ucfp.inputs.plans.schemas import Plans
-from ucfp.inputs.profile.enums import HousingTenure
-from ucfp.inputs.profile.schemas import Profile
+from ucfp.inputs.profile.enums import DebtKind, HousingTenure
+from ucfp.inputs.profile.schemas import (
+    RESIDENCE_MORTGAGE_HANDLE, AssetProfile, Debt, LoanTerms, Profile )
+from ucfp.accounts.enums import AssetClass
 
 
 def _applied( **fields ):
@@ -36,3 +42,39 @@ class HomeTenureTests( unittest.TestCase ):
 
     def test_neither_is_a_distinct_explicit_answer( self ):
         self.assertIs( _applied( tenure = 'neither' ).home_tenure, HousingTenure.NEITHER )
+
+
+class ResidenceMortgageTermsTests( unittest.TestCase ):
+    """The residence mortgage carries the shared loan-terms fields: entered terms are captured on the
+    mortgage `Debt`, and reopen an edit on them."""
+
+    def _mortgage( self, profile ) -> Debt:
+        return next( d for d in profile.debts if d.handle == RESIDENCE_MORTGAGE_HANDLE )
+
+    def test_entered_terms_are_stored_on_the_mortgage( self ):
+        profile = _applied( tenure = 'own', home_value = '500,000', mortgage_balance = '300,000',
+                            loan_payment = '1800', loan_term = '240' )
+        terms   = self._mortgage( profile ).terms
+        self.assertEqual( terms.remaining_term.months(), 240 )
+        self.assertGreater( terms.interest_rate.fraction, Decimal( '0' ) )   # back-solved from the payment
+
+    def test_a_mortgage_without_terms_stores_none( self ):
+        profile = _applied( tenure = 'own', home_value = '500,000', mortgage_balance = '300,000' )
+        self.assertIsNone( self._mortgage( profile ).terms )
+
+    def test_stored_terms_pre_fill_on_edit( self ):
+        profile = Profile(
+            home_tenure = HousingTenure.OWN,
+            assets = [ AssetProfile( handle = 'residence', name = 'Home',
+                                     asset_class = AssetClass.REAL_ESTATE_RESIDENCE,
+                                     opening_value = Decimal( '500000' ) ) ],
+            debts = [ Debt( handle = RESIDENCE_MORTGAGE_HANDLE, name = 'Mortgage',
+                            kind = DebtKind.MORTGAGE, balance = Decimal( '300000' ),
+                            secured_asset = 'residence',
+                            terms = LoanTerms( interest_rate = Rate.percent( 4 ),
+                                               remaining_term = Duration( 240, TimeUnit.MONTH ),
+                                               monthly_payment = Decimal( '1800' ) ) ) ] )
+        form = HomeForm( profile = profile, plans = Plans() )
+        self.assertEqual( form.initial[ 'loan_rate' ], Decimal( '4' ) )
+        self.assertEqual( form.initial[ 'loan_term' ], 240 )
+        self.assertEqual( form.initial[ 'loan_payment' ], Decimal( '1800' ) )

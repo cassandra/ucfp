@@ -18,7 +18,7 @@ from django import forms
 from common.forms import MoneyField, PercentField
 from common.loan_solver import monthly_payment, resolved_annual_rate
 from common.rate import Rate
-from common.recurrence import Duration
+from common.recurrence import Duration, TimeUnit
 
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.schemas import LoanTerms
@@ -68,3 +68,59 @@ def solved_loan_terms(
         return None
     return LoanTerms( interest_rate = rate, remaining_term = remaining_term,
                       monthly_payment = consistent_payment )
+
+
+def loan_terms_initial( terms : Optional[ LoanTerms ] ) -> dict:
+    """The shared loan-terms fields' initial values from a stored `LoanTerms` -- rate as a percent, term in
+    months, payment as-is; empty when there are none. Merge into a form's `_initial` so an edit reopens on
+    the captured terms."""
+    if terms is None:
+        return dict()
+    initial : dict = dict()
+    if terms.interest_rate is not None:
+        initial[ 'loan_rate' ] = terms.interest_rate.fraction * 100
+    if terms.remaining_term is not None:
+        initial[ 'loan_term' ] = terms.remaining_term.months()
+    if terms.monthly_payment is not None:
+        initial[ 'loan_payment' ] = terms.monthly_payment
+    return initial
+
+
+def solved_terms_from_cleaned( cleaned : dict, balance : Optional[ Decimal ] ) -> Optional[ LoanTerms ]:
+    """The consistent `LoanTerms` from the shared loan-terms fields in a form's `cleaned_data` and the
+    entered `balance` -- None for a balance-only loan (no terms given)."""
+    rate    = cleaned.get( 'loan_rate' )
+    term    = cleaned.get( 'loan_term' )
+    payment = cleaned.get( 'loan_payment' )
+    return solved_loan_terms(
+        balance,
+        Rate.percent( rate ) if rate is not None else None,
+        Duration( term, TimeUnit.MONTH ) if term is not None else None,
+        payment )
+
+
+class LoanTermsFieldsMixin:
+    """Adds the shared loan-terms fields (`loan_rate`/`loan_term`/`loan_payment`) to a flat, single-loan
+    Profile form, and rebuilds the consistent `LoanTerms` from them. The host form keeps its own balance
+    field (named to suit -- `mortgage_balance`, `loan_balance`), gives it `AppConst.LOAN_BALANCE_CLASS`,
+    seeds the terms by merging `loan_terms_initial( debt.terms )` into its initials, and renders the whole
+    block with the `_loan_fields.html` partial (`loan_id='loan'`, so the hint id matches `LOAN_HINT_ID`).
+    The Debts row list, whose fields are per-row, builds from the factories directly instead of this mixin.
+
+    The fields are injected in `__init__` (after the form builds `self.fields`), not declared as class
+    attributes, because Django's form metaclass only collects declared fields from form-class bases -- a
+    plain mixin's would be silently dropped."""
+
+    # The id of the block's hint (the `_loan_fields.html` `loan_id='loan'` block), which the rate input's
+    # aria-describedby targets. One block shows per page, so the fixed id is unambiguous.
+    LOAN_HINT_ID = 'loan-hint'
+
+    def __init__( self, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
+        self.fields[ 'loan_rate' ]    = loan_rate_field( hint_id = self.LOAN_HINT_ID )
+        self.fields[ 'loan_term' ]    = loan_term_field()
+        self.fields[ 'loan_payment' ] = loan_payment_field()
+
+    def loan_terms( self, balance : Optional[ Decimal ] ) -> Optional[ LoanTerms ]:
+        """The consistent `LoanTerms` the form's entered fields and `balance` imply."""
+        return solved_terms_from_cleaned( self.cleaned_data, balance )

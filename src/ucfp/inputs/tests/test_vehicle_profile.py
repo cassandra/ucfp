@@ -10,12 +10,15 @@ from decimal import Decimal
 
 from django.http import QueryDict
 
+from common.rate import Rate
+from common.recurrence import Duration, TimeUnit
+
 from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.plans.enums import LeaseDispositionKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
     LeasedVehicleDisposition, Plans, VehicleDisposition, VehiclePlan )
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, LoanTerms, Profile
 from ucfp.inputs.vehicle_profile import (
     CurrentVehicleForm, current_vehicles_context, delete_current_vehicle )
 
@@ -76,6 +79,37 @@ class OwnedVehicleTests( unittest.TestCase ):
         self.assertEqual( form.initial[ 'ownership' ], 'owned' )
         self.assertEqual( form.initial[ 'value' ], Decimal( '30000' ) )
         self.assertEqual( form.initial[ 'loan_balance' ], Decimal( '18000' ) )
+
+
+class OwnedVehicleLoanTermsTests( unittest.TestCase ):
+    """The shared loan-terms fields capture the auto loan's contract facts on the `Debt` and reopen an
+    edit on them; a loan without terms stores none."""
+
+    def test_entered_terms_are_stored_on_the_loan( self ):
+        profile, _plans = _apply(
+            Profile(), Plans(), handle = 'vehicle-1', name = 'Car', ownership = 'owned',
+            value = '30,000', loan_balance = '18,000', loan_payment = '540', loan_term = '36' )
+        terms = profile.debts[ 0 ].terms
+        self.assertEqual( terms.remaining_term.months(), 36 )
+        self.assertGreater( terms.interest_rate.fraction, Decimal( '0' ) )   # back-solved from the payment
+
+    def test_a_loan_without_terms_stores_none( self ):
+        profile, _plans = _apply(
+            Profile(), Plans(), handle = 'vehicle-1', name = 'Car', ownership = 'owned',
+            value = '30,000', loan_balance = '18,000' )
+        self.assertIsNone( profile.debts[ 0 ].terms )
+
+    def test_stored_terms_pre_fill_on_edit( self ):
+        loan = Debt( handle = 'vehicle-1-loan', name = 'Loan', kind = DebtKind.AUTO,
+                     balance = Decimal( '18000' ), secured_asset = 'vehicle-1',
+                     terms = LoanTerms( interest_rate = Rate.percent( 5 ),
+                                        remaining_term = Duration( 36, TimeUnit.MONTH ),
+                                        monthly_payment = Decimal( '540' ) ) )
+        profile = Profile( assets = [ _owned( 'vehicle-1', 'Car' ) ], debts = [ loan ] )
+        form    = CurrentVehicleForm( profile = profile, plans = Plans(), handle = 'vehicle-1' )
+        self.assertEqual( form.initial[ 'loan_rate' ], Decimal( '5' ) )
+        self.assertEqual( form.initial[ 'loan_term' ], 36 )
+        self.assertEqual( form.initial[ 'loan_payment' ], Decimal( '540' ) )
 
 
 class LeasedVehicleTests( unittest.TestCase ):

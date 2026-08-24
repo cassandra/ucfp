@@ -23,6 +23,7 @@ from common.widgets import PercentInput
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.loan_fieldset import LoanTermsFieldsMixin, loan_terms_initial
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRETAX_ACCOUNT_HANDLE_PREFIX, PRIMARY_SUBJECT_HANDLE,
@@ -240,7 +241,7 @@ class SubjectsSectionForm:
         return profile, plans
 
 
-class HomeForm( forms.Form ):
+class HomeForm( LoanTermsFieldsMixin, forms.Form ):
     """§3 -- the household residence. The tenure switch (own / rent / neither) is the fact recorded
     here; owning also captures the home's current value, purchase price (its cost basis), and any
     mortgage balance still owed. The residence is household-owned, so there is no "whose home". The
@@ -265,7 +266,8 @@ class HomeForm( forms.Form ):
     home_value       = MoneyField( label = 'Current value', required = False, min_value = 0 )
     purchase_price   = MoneyField( label = 'Purchase price', required = False, min_value = 0 )
     mortgage_balance = MoneyField(
-        label = 'Mortgage balance owed (optional)', required = False, min_value = 0 )
+        label = 'Mortgage balance owed (optional)', required = False, min_value = 0,
+        css_class = AppConst.LOAN_BALANCE_CLASS )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile ) if profile is not None else None
@@ -281,6 +283,7 @@ class HomeForm( forms.Form ):
         mortgage = cls._find( profile.debts, cls._MORTGAGE_HANDLE )
         if mortgage is not None:
             initial[ 'mortgage_balance' ] = mortgage.balance
+            initial.update( loan_terms_initial( mortgage.terms ) )
         return initial
 
     def apply( self, profile : Profile, plans : Plans ):
@@ -324,7 +327,8 @@ class HomeForm( forms.Form ):
             handle = self._MORTGAGE_HANDLE,
             name = existing.name if existing is not None else 'Mortgage',
             kind = existing.kind if existing is not None else DebtKind.MORTGAGE,
-            balance = cleaned[ 'mortgage_balance' ], secured_asset = self._RESIDENCE_HANDLE ) ]
+            balance = cleaned[ 'mortgage_balance' ], secured_asset = self._RESIDENCE_HANDLE,
+            terms = self.loan_terms( cleaned[ 'mortgage_balance' ] ) ) ]
 
     @staticmethod
     def _merged( existing : list, handle : str, replacement : list ) -> list:
