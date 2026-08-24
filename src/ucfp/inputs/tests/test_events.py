@@ -17,13 +17,14 @@ from common.date_window import DateWindow
 from common.recurrence import Duration, OneTime, Recurrence, TimeUnit
 from common.schedule import Schedule
 
-from ucfp.accounts.enums import AssetClass, ExpenseTaxClass
+from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.parameters import (
-    ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, WindowedAmount )
+    IncomeItem, ScheduledLoanPayoff, ScheduledRealization, ScheduledTransfer, WindowedAmount )
 from ucfp.inputs.events import (
-    BoundOption, EventContributions, EventForm, GeneralPaymentEvent, POSSESSION_ROLE, PROPERTY_ROLE,
-    PAYMENT_EXPENSE_HANDLE_BASE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent, SellPropertyEvent,
-    TransferEvent, _payoff_loan_handle, events_context, handler_for, payment_expense_handle,
+    BoundOption, CharitablePaymentEvent, EventContributions, EventForm, GeneralPaymentEvent,
+    MedicalPaymentEvent, POSSESSION_ROLE, PROPERTY_ROLE, PAYMENT_EXPENSE_HANDLE_BASE, SOURCE_ROLE,
+    TARGET_ROLE, SellPossessionEvent, SellPropertyEvent, TaxFreeReceiptEvent, TransferEvent,
+    _payoff_loan_handle, events_context, handler_for, payment_expense_handle,
     vehicle_disposition_contributions )
 from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
@@ -324,6 +325,82 @@ class GeneralPaymentMaterializationTests( unittest.TestCase ):
         self.assertEqual(
             GeneralPaymentEvent().summary( _payment( label = '' ), SimpleNamespace() ),
             'Payment of $40,000 in 2030' )
+
+
+class TaxFreeReceiptTests( unittest.TestCase ):
+    """A tax-free receipt now books as tax-free income (not an equity receipt), so it shows in the income
+    column -- the money-in mirror of the Payment fix (#210 Phase 6). The routing decision regresses
+    silently, so it earns a test here; the tax-free treatment and net-worth effect are the engine's."""
+
+    _EVENT = PlanEvent( kind = EventKind.TAX_FREE_RECEIPT, date = date( 2030, 6, 1 ),
+                        amount = Decimal( '100000' ) )
+
+    def test_it_materializes_tax_free_income_not_an_equity_receipt( self ):
+        into = EventContributions()
+        TaxFreeReceiptEvent().contribute( self._EVENT, SimpleNamespace(), {}, into )
+        self.assertEqual( into.scheduled_events, [] )          # no longer an equity (external) receipt
+        self.assertEqual( len( into.income_items ), 1 )
+        item = into.income_items[ 0 ]
+        self.assertIsInstance( item, IncomeItem )
+        self.assertIsNone( item.subject )                      # a gift is the household's, not one person's
+        self.assertEqual( item.income_tax_class, IncomeTaxClass.TAX_FREE )
+        self.assertEqual( item.cadence, OneTime( date( 2030, 6, 1 ) ) )
+        self.assertEqual( item.amounts, Schedule.constant( WindowedAmount( Decimal( '100000' ) ) ) )
+
+    def test_the_summary_shows_the_amount_and_year( self ):
+        self.assertEqual( TaxFreeReceiptEvent().summary( self._EVENT, SimpleNamespace() ),
+                          'Tax-free receipt of $100,000 in 2030' )
+
+
+class DeductiblePaymentParityTests( unittest.TestCase ):
+    """Charitable and medical payments share the Payment pipeline (#210 Phase 5): an optional label naming
+    their account, date-based recurrence, and the inflation toggle -- differing only in their deductible tax
+    class and, unlike the general payment, taking no `payment:` handle (so they group under their own
+    tax-class column, not Miscellaneous)."""
+
+    def _item( self, handler, event ):
+        into = EventContributions()
+        handler.contribute( event, SimpleNamespace(), {}, into )
+        self.assertEqual( len( into.expense_items ), 1 )
+        return into.expense_items[ 0 ]
+
+    def _gift( self, handler_kind, **overrides ):
+        base = dict( kind = handler_kind, date = date( 2030, 1, 1 ), amount = Decimal( '5000' ),
+                     label = 'Alma Mater' )
+        return PlanEvent( **{ **base, **overrides } )
+
+    def test_a_charitable_gift_materializes_a_labeled_deductible_expense( self ):
+        event = self._gift( EventKind.CHARITABLE_PAYMENT,
+                            interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2034, 1, 1 ),
+                            inflation_indexed = False )
+        item  = self._item( CharitablePaymentEvent(), event )
+        self.assertEqual( item.name, 'Alma Mater' )                      # label names the account
+        self.assertEqual( item.expense_tax_class, ExpenseTaxClass.CHARITABLE )
+        self.assertEqual( item.cadence, Recurrence( Duration( 1, TimeUnit.YEAR ) ) )
+        self.assertEqual( item.window, DateWindow( date( 2030, 1, 1 ), date( 2034, 1, 1 ) ) )
+        self.assertFalse( item.inflate )                                 # the inflation toggle is honored
+        self.assertIsNone( item.handle )                                 # no payment: handle -> class column
+
+    def test_a_medical_expense_carries_its_class_and_defaults_its_name( self ):
+        item = self._item( MedicalPaymentEvent(),
+                           PlanEvent( kind = EventKind.MEDICAL_PAYMENT, date = date( 2030, 6, 1 ),
+                                      amount = Decimal( '2000' ), label = '' ) )
+        self.assertEqual( item.expense_tax_class, ExpenseTaxClass.MEDICAL )
+        self.assertEqual( item.name, 'Medical expense' )                 # blank label -> the kind's own name
+        self.assertEqual( item.cadence, OneTime( date( 2030, 6, 1 ) ) )
+
+    def test_same_label_gifts_share_one_account( self ):
+        first  = self._item( CharitablePaymentEvent(), self._gift( EventKind.CHARITABLE_PAYMENT ) )
+        second = self._item( CharitablePaymentEvent(),
+                             self._gift( EventKind.CHARITABLE_PAYMENT, date = date( 2031, 1, 1 ) ) )
+        self.assertEqual( first.name, second.name )                      # -> ExpenseAccounts dedups by name
+
+    def test_the_summary_matches_the_payment_shape( self ):
+        event = self._gift( EventKind.CHARITABLE_PAYMENT,
+                            interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2034, 1, 1 ),
+                            inflation_indexed = False )
+        self.assertEqual( CharitablePaymentEvent().summary( event, SimpleNamespace() ),
+                          'Alma Mater of $5,000 every year, 2030 to 2034 (fixed)' )
 
 
 class GeneralPaymentRecurrenceTests( unittest.TestCase ):

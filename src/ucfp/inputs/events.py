@@ -27,7 +27,7 @@ from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.environment.constants import AppConst
 from ucfp.forecast.parameters import (
-    ExpenseItem, IncomeItem, ScheduledExternalReceipt,
+    ExpenseItem, IncomeItem,
     ScheduledLoanPayoff, ScheduledPropertySale, ScheduledRealization, ScheduledTransfer, SubjectRemoval,
     WindowedAmount )
 from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, cadence_label, read_cadence
@@ -169,19 +169,12 @@ def _money( amount ) -> str:
     return f'${amount:,.0f}' if amount is not None else ''
 
 
-# A plan Payment books to its own named expense account rather than an equity disbursement, so the money
-# shows up in the expense column. Its account handle carries this base, so the run-table display placement
-# recognizes a payment account and rolls it under Miscellaneous (`display_placement`), the way a property
-# expense's handle carries its kind. The default label (used when the user leaves the purpose blank) also
-# names that catch-all account.
+# The general (non-deductible) Payment books to its own named expense account rather than an equity
+# disbursement, so the money shows up in the expense column. Its account handle carries this base, so the
+# run-table display placement recognizes it and rolls it under Miscellaneous (`display_placement`), the way
+# a property expense's handle carries its kind. The deductible payments (charitable, medical) take no such
+# handle -- they group under their own tax-class column instead.
 PAYMENT_EXPENSE_HANDLE_BASE = 'payment'
-_PAYMENT_LABEL_DEFAULT      = 'Payment'
-
-
-def _payment_label( event : PlanEvent ) -> str:
-    """A payment's purpose for its account name and chip -- the user's free-text label, or the default
-    'Payment' when blank."""
-    return event.label.strip() or _PAYMENT_LABEL_DEFAULT
 
 
 def payment_expense_handle( name : str ) -> str:
@@ -546,31 +539,40 @@ class TaxableReceiptEvent( EventType ):
 
 
 class TaxFreeReceiptEvent( EventType ):
+    """A one-off tax-free amount received -- a gift, inheritance, or payout. It books as tax-free income (not
+    an equity receipt), so the money shows up in the income column where a user looks for inflows; net worth
+    rises by the same amount either way, and the tax-free class keeps it out of taxable income. The income
+    is not attributed to a person (no recipient) -- a gift is the household's, and being tax-free its owner
+    does not affect tax. This is the money-in mirror of the general Payment (visibility is orthogonal to
+    taxability)."""
+
     kind        = EventKind.TAX_FREE_RECEIPT
     group       = _MONEY_IN_GROUP
     description = 'A one-off tax-free amount received -- a gift, inheritance, or payout.'
 
     def summary( self, event : PlanEvent, profile ) -> str:
-        return f'Tax-free receipt of {_money( event.amount )}'
+        return f'Tax-free receipt of {_money( event.amount )} in {event.date.year}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.scheduled_events.append(
-            ScheduledExternalReceipt( event_date = event.date, amount = event.amount ) )
+        into.income_items.append( IncomeItem(
+            subject = None, income_tax_class = IncomeTaxClass.TAX_FREE,
+            amounts = Schedule.constant( WindowedAmount( event.amount ) ),
+            cadence = OneTime( event.date ), name = 'Tax-free receipt' ) )
 
 
-class GeneralPaymentEvent( EventType ):
-    """A one-time non-deductible payment out -- tuition, a wedding, a personal gift. It books as a plain
-    LIVING expense (not an equity disbursement), so the money shows up in the expense column where a user
-    looks for it; net worth falls by the same amount either way, and there is no tax effect (non-deductible
-    on both paths). Its optional purpose names its own expense account, so repeated payments of one kind
-    collapse into one run-table line."""
+class _ExpensePaymentEvent( EventType ):
+    """A payment out that books as a visible expense line -- the shared base of the general (non-deductible)
+    and the deductible (charitable, medical) payments. All carry an optional purpose that names their
+    account (so repeats of one kind collapse into a single run-table line), a date-based recurrence, and the
+    inflation toggle; they differ only in their `expense_tax_class`, their wording, and -- for the general
+    payment -- where the run table groups the account. No engine change: each materializes to an
+    `ExpenseItem`, which the forecast already expands over its window."""
 
-    kind           = EventKind.GENERAL_PAYMENT
     group          = _MONEY_OUT_GROUP
     has_label      = True
     has_recurrence = True
     has_inflation  = True
-    description    = 'A payment out of the plan -- one-time, or repeating over a date window.'
+    expense_tax_class : ExpenseTaxClass
 
     def summary( self, event : PlanEvent, profile ) -> str:
         money = _money( event.amount )
@@ -578,47 +580,51 @@ class GeneralPaymentEvent( EventType ):
             schedule = f'in {event.date.year}'
         else:
             schedule = f'{cadence_label( event.interval )}, {_window_text( event )}'
-        return f'{_payment_label( event )} of {money} {schedule}{_fixed_suffix( event )}'
+        return f'{self._effective_label( event )} of {money} {schedule}{_fixed_suffix( event )}'
 
     def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        name = _payment_label( event )
+        name = self._effective_label( event )
         into.expense_items.append( ExpenseItem(
-            name = name, expense_tax_class = ExpenseTaxClass.LIVING,
+            name = name, expense_tax_class = self.expense_tax_class,
             amounts = Schedule.constant( WindowedAmount( event.amount ) ),
             cadence = _payment_cadence( event ), window = _payment_window( event ),
-            handle = payment_expense_handle( name ), inflate = event.inflation_indexed ) )
+            handle = self._account_handle( name ), inflate = event.inflation_indexed ) )
+
+    def _effective_label( self, event : PlanEvent ) -> str:
+        """The payment's purpose for its account name and chip -- the user's free-text label, or the kind's
+        own name (e.g. "Charitable gift") when blank."""
+        return event.label.strip() or self.label
+
+    def _account_handle( self, name : str ):
+        """The expense-account handle -- None by default, so a deductible payment falls to its own tax-class
+        column in the run table. The general payment overrides this to route to Miscellaneous."""
+        return None
 
 
-class _DeductiblePaymentEvent( EventType ):
-    """A one-time deductible payment out -- a single expense item carrying its deductible tax class.
-    Charitable and medical differ only in that class and their wording."""
+class GeneralPaymentEvent( _ExpensePaymentEvent ):
+    """A non-deductible payment out -- tuition, a wedding, a personal gift. It books as a plain LIVING
+    expense (not an equity disbursement), so the money shows up in the expense column where a user looks for
+    it; net worth falls by the same amount either way, with no tax effect. Its purpose names its own account
+    under Miscellaneous, so repeated payments of one kind collapse into one run-table line."""
 
-    group      = _MONEY_OUT_GROUP
-    tax_class  : ExpenseTaxClass
-    noun       : str
+    kind              = EventKind.GENERAL_PAYMENT
+    expense_tax_class = ExpenseTaxClass.LIVING
+    description       = 'A payment out of the plan -- one-time, or repeating over a date window.'
 
-    def summary( self, event : PlanEvent, profile ) -> str:
-        return f'{self.noun} of {_money( event.amount )}'
-
-    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.expense_items.append( ExpenseItem(
-            name = f'{self.noun} ({event.date.isoformat()})', expense_tax_class = self.tax_class,
-            amounts = Schedule.constant( WindowedAmount( event.amount ) ),
-            cadence = OneTime( event.date ) ) )
+    def _account_handle( self, name : str ):
+        return payment_expense_handle( name )   # routes to the Miscellaneous rung (see display_placement)
 
 
-class CharitablePaymentEvent( _DeductiblePaymentEvent ):
-    kind        = EventKind.CHARITABLE_PAYMENT
-    tax_class   = ExpenseTaxClass.CHARITABLE
-    noun        = 'Charitable gift'
-    description = 'A one-off charitable gift (tax-deductible).'
+class CharitablePaymentEvent( _ExpensePaymentEvent ):
+    kind              = EventKind.CHARITABLE_PAYMENT
+    expense_tax_class = ExpenseTaxClass.CHARITABLE
+    description       = 'A charitable gift (tax-deductible) -- one-time, or repeating over a date window.'
 
 
-class MedicalPaymentEvent( _DeductiblePaymentEvent ):
-    kind        = EventKind.MEDICAL_PAYMENT
-    tax_class   = ExpenseTaxClass.MEDICAL
-    noun        = 'Medical expense'
-    description = 'A one-off medical expense (tax-deductible).'
+class MedicalPaymentEvent( _ExpensePaymentEvent ):
+    kind              = EventKind.MEDICAL_PAYMENT
+    expense_tax_class = ExpenseTaxClass.MEDICAL
+    description       = 'A medical expense (tax-deductible) -- one-time, or repeating over a date window.'
 
 
 class DeathEvent( EventType ):
