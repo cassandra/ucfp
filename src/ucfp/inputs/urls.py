@@ -91,6 +91,7 @@ urlpatterns = [
     path( 'interview/living-expenses/edit/', views.RecurringExpensesView.as_view(),
           name = 'recurring_expenses' ),
     path( 'interview/events/add/<str:kind>/', views.EventAddView.as_view(), name = 'event_add' ),
+    path( 'interview/events/edit/<int:index>/', views.EventEditView.as_view(), name = 'event_edit' ),
     path( 'interview/events/delete/<int:index>/', views.EventDeleteView.as_view(),
           name = 'event_delete' ),
 ]

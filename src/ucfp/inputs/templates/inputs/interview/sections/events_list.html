@@ -1,6 +1,8 @@
 {% comment %}
-The plan's events as removable rows (id=events-list, refreshed on add or delete). Each Remove posts
-to event_delete, which swaps this list back in.
+The plan's events as rows (id=events-list, refreshed on add, edit, or delete). Each editable row carries
+an Edit link that opens its form pre-filled in the add area (id=events-add); a row whose event references a
+since-removed entity is not editable (`event.editable`), so it shows Remove only. Remove posts to
+event_delete, which swaps this list back in.
 {% endcomment %}
 <div id="events-list" class="mb-3">
   {% if events %}
@@ -8,12 +10,18 @@ to event_delete, which swaps this list back in.
     {% for event in events %}
     <li class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
       <span>{{ event.summary }}</span>
-      <form method="post" action="{% url 'event_delete' index=event.index %}"
-            data-async="#events-list" class="d-inline ml-2 edit-only">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-link btn-sm text-danger p-0"
-                aria-label="Remove" title="Remove">&times;</button>
-      </form>
+      <span class="d-flex align-items-center ml-2 flex-shrink-0 edit-only">
+        {% if event.editable %}
+        <a class="btn btn-link btn-sm p-0 mr-2" data-async="#events-add"
+           href="{% url 'event_edit' index=event.index %}" aria-label="Edit" title="Edit">Edit</a>
+        {% endif %}
+        <form method="post" action="{% url 'event_delete' index=event.index %}"
+              data-async="#events-list" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-link btn-sm text-danger p-0"
+                  aria-label="Remove" title="Remove">&times;</button>
+        </form>
+      </span>
     </li>
     {% endfor %}
   </ul>

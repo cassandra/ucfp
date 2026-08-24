@@ -259,11 +259,28 @@ class EventType:
     has_label      : bool = False   # whether the add form offers an optional free-text purpose (EventForm)
     has_recurrence : bool = False   # whether the add form offers the one-time/recurring toggle (EventForm)
     has_inflation  : bool = False   # whether the add form offers the "adjust for inflation" toggle
+    editable       : bool = True    # whether an existing event of this kind can be edited in place
     description    : str  = ''   # a one-line "what this is", shown under the add form's title
 
     @property
     def label( self ) -> str:
         return self.kind.label
+
+    def is_editable( self, event : PlanEvent, profile ) -> bool:
+        """Whether this existing event can be edited in place -- an editable kind whose every referenced
+        entity still exists. A kind marked not editable (a card payoff, managed elsewhere) never is; an
+        event pointing at a since-removed entity is not (its drifted picker has no valid value to seed), so
+        it is removed and re-added rather than edited."""
+        return self.editable and self._references_resolvable( event, profile )
+
+    def _references_resolvable( self, event : PlanEvent, profile ) -> bool:
+        """Whether every entity this event references still exists among the current candidates -- False
+        once a referenced account, property, or subject has been removed from the profile."""
+        for spec in self.references( profile ):
+            chosen = event.selections.get( spec.role )
+            if chosen not in { handle for handle, _label in spec.choices( profile ) }:
+                return False
+        return True
 
     def references( self, profile ) -> list:
         return list()
@@ -481,6 +498,7 @@ class CardPayoffEvent( EventType ):
     kind       = EventKind.CARD_PAYOFF
     group      = _MONEY_OUT_GROUP
     has_amount = False
+    editable   = False   # managed in the card paydown calculator (and carries a remove-cascade), not here
 
     def offerable( self, profile ) -> bool:
         return False   # created in the card paydown calculator, not from the add menu
@@ -688,10 +706,16 @@ def menu_context( profile ) -> list:
 
 
 def events_context( profile, plans ) -> list:
-    """The events list for the templates: each event's row index and human summary."""
+    """The events list for the templates: each event's row index, human summary, and whether it can be
+    edited in place (the row shows an Edit affordance only when so)."""
     events = plans.events if plans is not None else list()
-    return [ { 'index': index, 'summary': handler_for( event.kind ).summary( event, profile ) }
-             for index, event in enumerate( events ) ]
+    rows   = list()
+    for index, event in enumerate( events ):
+        handler = handler_for( event.kind )
+        rows.append( { 'index'    : index,
+                       'summary'  : handler.summary( event, profile ),
+                       'editable' : handler.is_editable( event, profile ) } )
+    return rows
 
 
 # --- Forms ----------------------------------------------------------------
@@ -711,48 +735,72 @@ class EventForm( forms.Form ):
     pre-selected, so the user sees and confirms what the event acts on; more than one prepends a
     placeholder, so the user must choose (no silent default). `build_event` returns the `PlanEvent`."""
 
-    def __init__( self, data = None, *, event_type = None, profile = None ):
+    def __init__( self, data = None, *, event_type = None, profile = None, event = None ):
         super().__init__( data )
         self._event_type = event_type
         self._profile    = profile
+        self._event      = event   # when editing, the event whose values seed the fields' initials
         # Order the form the way one describes an event: what it acts on, then how much, then when.
         for spec in event_type.references( profile ):
             self.fields[ self._role_field( spec.role ) ] = forms.ChoiceField(
                 label = spec.label, choices = self._choices( spec.choices( profile ) ),
+                initial = event.selections.get( spec.role ) if event else None,
                 widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
         if event_type.has_label:
             # Optional: a free-text purpose that names the payment's expense account and its chip. The
             # placeholder shows the kind's own name, the value a blank label falls back to.
             self.fields[ 'label' ] = forms.CharField(
                 label = 'Purpose', required = False, max_length = 60,
+                initial = event.label if event else None,
                 widget = forms.TextInput( attrs = { 'placeholder' : event_type.label } ) )
         if event_type.has_amount:
-            self.fields[ 'amount' ] = MoneyField( label = 'Amount', min_value = 0 )
-        self.fields[ 'date' ] = forms.DateField( label = 'Date', widget = IsoDateInput() )
+            self.fields[ 'amount' ] = MoneyField(
+                label = 'Amount', min_value = 0, initial = event.amount if event else None )
+        self.fields[ 'date' ] = forms.DateField(
+            label = 'Date', initial = event.date if event else None, widget = IsoDateInput() )
         if event_type.has_recurrence:
             # A one-time/recurring toggle (a `js-switch` control): 'recurring' reveals the cadence + finish
             # date, turning the single `date` into the window start. The cadence is seeded to a yearly
-            # default so toggling on reads "every 1 year"; the whole window is date-based.
+            # default so toggling on reads "every 1 year"; the whole window is date-based. Editing a
+            # recurring event opens on the recurring case with its own cadence and end date.
             self.fields[ 'recurring' ] = forms.ChoiceField(
-                required = False, initial = _RECUR_ONCE,
+                required = False, initial = _RECUR_ON if self._is_recurring_event() else _RECUR_ONCE,
                 choices = [ ( _RECUR_ONCE, 'One-time' ), ( _RECUR_ON, 'Recurring' ) ],
                 widget = forms.RadioSelect(
                     attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
-            add_cadence_fields( self, _RECUR_PREFIX, _RECUR_DEFAULT, _RECUR_DOMAIN )
+            add_cadence_fields( self, _RECUR_PREFIX, self._seeded_interval(), _RECUR_DOMAIN )
             self.fields[ 'finish' ] = forms.DateField(
-                label = 'Until', required = False, widget = IsoDateInput() )
+                label = 'Until', required = False, initial = event.finish if event else None,
+                widget = IsoDateInput() )
         if event_type.has_inflation:
             # On by default: the amount is read as today's dollars and grown to nominal. Unchecked fixes it
             # in nominal terms (the entered figure is paid as-is each occurrence).
             self.fields[ 'inflation_indexed' ] = forms.BooleanField(
-                label = 'Adjust for inflation', required = False, initial = True,
+                label = 'Adjust for inflation', required = False,
+                initial = event.inflation_indexed if event else True,
                 help_text = "Amount is in today's dollars and grows with inflation; uncheck for a "
                             'fixed-dollar amount.',
                 widget = forms.CheckboxInput( attrs = { 'class' : 'custom-control-input' } ) )
         for opt in event_type.options( profile ):
             self.fields[ self._option_field( opt.key ) ] = forms.BooleanField(
-                label = opt.label, required = False, initial = opt.default, help_text = opt.help_text,
+                label = opt.label, required = False, help_text = opt.help_text,
+                initial = self._seeded_option( opt ),
                 widget = forms.CheckboxInput( attrs = { 'class' : 'custom-control-input' } ) )
+
+    def _is_recurring_event( self ) -> bool:
+        return ( self._event is not None ) and ( self._event.interval is not None )
+
+    def _seeded_interval( self ):
+        """The cadence the recurrence fields seed from -- the edited event's interval when recurring, else
+        the yearly default (so a fresh or one-time event opens on 'every 1 year' when toggled recurring)."""
+        return self._event.interval if self._is_recurring_event() else _RECUR_DEFAULT
+
+    def _seeded_option( self, opt ) -> bool:
+        """An option checkbox's initial -- the edited event's stored choice ('yes'/'no'), else the kind's
+        default for a fresh add."""
+        if self._event is None:
+            return opt.default
+        return self._event.options.get( opt.key, 'yes' if opt.default else 'no' ) != 'no'
 
     @property
     def reference_fields( self ):

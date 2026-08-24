@@ -1,12 +1,13 @@
 {% comment %}
-One event kind's add form, swapped into the add area (id=events-add). Add posts to event_add, which
-appends the event and restores the menu; Cancel restores the menu without adding.
+One event kind's form, swapped into the add area (id=events-add). Used for both adding a new event and
+editing an existing one -- `action_url` posts to event_add or event_edit, `cancel_url` restores the menu,
+and `submit_label` reads "Add" or "Save". The edit form is the same fields pre-filled from the event.
 {% endcomment %}
 <div id="events-add">
   <div class="mb-1"><span class="text-muted small">{{ group }} &rsaquo;</span>
     <span class="font-weight-bold">{{ title }}</span></div>
   {% if description %}<p class="text-muted small mb-2">{{ description }}</p>{% endif %}
-  <form method="post" action="{% url 'event_add' kind=kind %}" data-async="#events-add"
+  <form method="post" action="{{ action_url }}" data-async="#events-add"
         {% if form.gates_residence_option %}data-{{ AppConst.RESIDENCE_HANDLES_DATA_ATTR }}="{{ form.residence_handles|join:' ' }}"{% endif %}>
     {% csrf_token %}
     {% if form.non_field_errors %}<div class="text-danger small mb-2">{{ form.non_field_errors|join:" " }}</div>{% endif %}
@@ -64,9 +65,8 @@ appends the event and restores the menu; Cancel restores the menu without adding
     </div>
     {% endfor %}
     <div class="mt-2">
-      <button type="submit" class="btn btn-sm btn-outline-primary edit-only">Add</button>
-      <a class="btn btn-sm btn-link" data-async="#events-add"
-         href="{% url 'event_add' kind=kind %}?collapse=1">Cancel</a>
+      <button type="submit" class="btn btn-sm btn-outline-primary edit-only">{{ submit_label }}</button>
+      <a class="btn btn-sm btn-link" data-async="#events-add" href="{{ cancel_url }}">Cancel</a>
     </div>
   </form>
 </div>

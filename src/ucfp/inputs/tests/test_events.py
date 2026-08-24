@@ -23,10 +23,12 @@ from ucfp.forecast.parameters import (
 from ucfp.inputs.events import (
     BoundOption, EventContributions, EventForm, GeneralPaymentEvent, POSSESSION_ROLE, PROPERTY_ROLE,
     PAYMENT_EXPENSE_HANDLE_BASE, SOURCE_ROLE, TARGET_ROLE, SellPossessionEvent, SellPropertyEvent,
-    TransferEvent, _payoff_loan_handle, payment_expense_handle, vehicle_disposition_contributions )
+    TransferEvent, _payoff_loan_handle, events_context, handler_for, payment_expense_handle,
+    vehicle_disposition_contributions )
 from ucfp.inputs.plans.enums import EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent, Plans, Vehicle, VehicleDisposition, VehiclePlan
 from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.views import EventEditView
 
 
 def _profile( *holdings ):
@@ -436,6 +438,110 @@ class GeneralPaymentFormTests( unittest.TestCase ):
         # An unchecked checkbox is absent from the POST -> the payment is fixed in nominal terms.
         event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'recurring': 'once' } )
         self.assertFalse( event.inflation_indexed )
+
+
+def _named_accounts_profile( *handles ):
+    """A profile whose money accounts a transfer can reference -- named cash accounts by handle."""
+    return SimpleNamespace(
+        assets   = [ SimpleNamespace( handle = h, asset_class = AssetClass.CASH, name = h.title() )
+                     for h in handles ],
+        debts    = [],
+        subjects = [] )
+
+
+class EventEditabilityTests( unittest.TestCase ):
+    """Which existing events can be edited in place: an editable kind whose referenced entities still
+    exist. A card payoff (managed in the paydown calculator) never is; an event pointing at a removed
+    account is not (its picker has no valid value to seed) -- it is removed and re-added instead."""
+
+    def test_a_payment_with_no_references_is_editable( self ):
+        self.assertTrue( GeneralPaymentEvent().is_editable( _payment(), SimpleNamespace() ) )
+
+    def test_a_card_payoff_kind_is_not_editable( self ):
+        self.assertFalse( handler_for( EventKind.CARD_PAYOFF ).editable )
+
+    def test_a_transfer_is_editable_while_both_accounts_exist( self ):
+        profile = _named_accounts_profile( 'a', 'b' )
+        self.assertTrue( TransferEvent().is_editable( _transfer( 'a', 'b' ), profile ) )
+
+    def test_a_transfer_referencing_a_removed_account_is_not_editable( self ):
+        profile = _named_accounts_profile( 'a' )               # 'b' has been removed from the profile
+        self.assertFalse( TransferEvent().is_editable( _transfer( 'a', 'b' ), profile ) )
+
+    def test_events_context_flags_each_row_editable_with_its_index( self ):
+        plans = Plans( events = [ _payment( label = 'College Tuition' ) ] )
+        rows  = events_context( SimpleNamespace(), plans )
+        self.assertEqual( [ ( row[ 'index' ], row[ 'editable' ] ) for row in rows ], [ ( 0, True ) ] )
+
+
+class EventEditGuardTests( unittest.TestCase ):
+    """The edit view's shared guard: it opens a form (GET) or replaces an event (POST) only for an
+    in-range, editable, drift-free event -- so a stale or hand-typed URL degrades to a no-op."""
+
+    def test_an_editable_payment_index_resolves( self ):
+        plans = Plans( events = [ _payment( label = 'College Tuition' ) ] )
+        self.assertIsNotNone( EventEditView._editable_event( SimpleNamespace(), plans, 0 ) )
+
+    def test_an_out_of_range_index_resolves_to_none( self ):
+        self.assertIsNone( EventEditView._editable_event( SimpleNamespace(), Plans(), 0 ) )
+
+    def test_a_drifted_transfer_resolves_to_none( self ):
+        plans = Plans( events = [ _transfer( 'a', 'b' ) ] )
+        self.assertIsNone(
+            EventEditView._editable_event( _named_accounts_profile( 'a' ), plans, 0 ) )
+
+
+class EventEditFormTests( unittest.TestCase ):
+    """Editing opens the same form pre-filled from the event: its fields seed from the event's values, and
+    resubmitting an unchanged form rebuilds the identical event (an idempotent edit)."""
+
+    _EVENT = PlanEvent(
+        kind = EventKind.GENERAL_PAYMENT, date = date( 2032, 8, 1 ), amount = Decimal( '40000' ),
+        label = 'College Tuition', interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2035, 8, 1 ),
+        inflation_indexed = False )
+    # The unchanged resubmission of `_EVENT`: inflation is omitted (an unchecked box) to keep it fixed.
+    _UNCHANGED = { 'label': 'College Tuition', 'amount': '40000', 'date': '2032-08-01',
+                   'recurring': 'recurring', 'recur_count': '1', 'recur_unit': 'YEAR',
+                   'finish': '2035-08-01' }
+
+    def _form( self, event, data = None ):
+        return EventForm(
+            data, event_type = GeneralPaymentEvent(), profile = SimpleNamespace(), event = event )
+
+    def test_the_fields_seed_from_the_event( self ):
+        form = self._form( self._EVENT )
+        self.assertEqual( form.fields[ 'label' ].initial, 'College Tuition' )
+        self.assertEqual( form.fields[ 'amount' ].initial, Decimal( '40000' ) )
+        self.assertEqual( form.fields[ 'date' ].initial, date( 2032, 8, 1 ) )
+        self.assertEqual( form.fields[ 'recurring' ].initial, 'recurring' )
+        self.assertEqual( ( form.fields[ 'recur_count' ].initial, form.fields[ 'recur_unit' ].initial ),
+                          ( 1, 'YEAR' ) )
+        self.assertEqual( form.fields[ 'finish' ].initial, date( 2035, 8, 1 ) )
+        self.assertFalse( form.fields[ 'inflation_indexed' ].initial )
+
+    def test_a_one_time_indexed_event_seeds_the_toggles_accordingly( self ):
+        form = self._form( replace( self._EVENT, interval = None, finish = None, inflation_indexed = True ) )
+        self.assertEqual( form.fields[ 'recurring' ].initial, 'once' )
+        self.assertTrue( form.fields[ 'inflation_indexed' ].initial )
+
+    def test_resubmitting_unchanged_rebuilds_the_same_event( self ):
+        form = self._form( self._EVENT, self._UNCHANGED )
+        self.assertTrue( form.is_valid(), form.errors )
+        self.assertEqual( form.build_event(), self._EVENT )
+
+    def test_editing_one_field_updates_only_that_field( self ):
+        form = self._form( self._EVENT, { **self._UNCHANGED, 'amount': '50000' } )
+        self.assertTrue( form.is_valid(), form.errors )
+        self.assertEqual( form.build_event(), replace( self._EVENT, amount = Decimal( '50000' ) ) )
+
+    def test_an_option_checkbox_seeds_from_the_stored_choice( self ):
+        # A residence sale's rent-after option (default yes) seeds unchecked from a stored 'no'.
+        profile = SimpleNamespace( assets = [ SimpleNamespace(
+            handle = 'residence', asset_class = AssetClass.REAL_ESTATE_RESIDENCE, name = 'Home' ) ] )
+        event   = PlanEvent( kind = EventKind.SELL_PROPERTY, date = date( 2030, 6, 1 ),
+                             selections = { PROPERTY_ROLE: 'residence' }, options = { 'rent_after': 'no' } )
+        form    = EventForm( event_type = SellPropertyEvent(), profile = profile, event = event )
+        self.assertFalse( form.fields[ 'option_rent_after' ].initial )
 
 
 class SellPropertyOptionFormTests( unittest.TestCase ):
