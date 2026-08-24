@@ -60,9 +60,9 @@ Pick the shape by how the flow is *naturally known*:
 - **`ScheduledTransfer(date, source, target, amount)`** — move between holdings (no tax).
 - **`ScheduledPurchase(date, asset, amount)`** — buy a holding from cash at cost.
 - **`ScheduledRealization(date, holding, amount, destination=None)`** — sell / withdraw (proceeds to cash) or convert (to another holding, e.g. pre-tax → Roth).
-- **`ScheduledExternalReceipt(date, amount)`** — a non-taxable gift/inheritance in (equity).
-- **`ScheduledExternalDisbursement(date, amount)`** — a non-deductible gift out (equity).
-- Note the boundaries: a **taxable** one-time receipt is a one-time `IncomeItem`, not an event; a **deductible** charitable gift is a `CHARITABLE` expense, not an event. → `forecast/parameters.py`, `period/events.py`
+- **`ScheduledExternalReceipt(date, amount)`** — value in (equity, untaxed). Engine primitive; no current producer.
+- **`ScheduledExternalDisbursement(date, amount)`** — value out (equity); used for credit-card lump payoffs.
+- Note the boundaries: Money Movement events route inflows/outflows through the P&L for visibility — a **taxable** or **tax-free** receipt is a one-time `IncomeItem` (ordinary vs. tax-free class), and a **payment** out (general, charitable, or medical) is an `ExpenseItem`, not one of these equity events. → `forecast/parameters.py`, `period/events.py`
 
 ### Cash policy — `cash_account : CashAccountParameters`
 - `CashAccountParameters(cash_floor=0, cash_ceiling=None, draw_order=[], sweep_allocation=None)`. Below the floor the engine draws (realizes) from `draw_order` (a list of `AssetClass`); above the ceiling it sweeps surplus into `sweep_allocation` (an `AssetAllocation( ( (handle, weight), … ) )`, weights summing to 1). A `None` ceiling/allocation disables sweeping.
