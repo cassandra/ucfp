@@ -858,8 +858,9 @@ SECTIONS = [
     # The Plans flow opens with Retirement -- the headline concern for a retirement planner, and safe to
     # lead with because its inputs (income facts, entitlements, retirement-account balances) all come from
     # the Profile flow above, not from any other Plans step. Then spending, the debt repayment plan
-    # (another recurring outflow), the cash orchestration, and one-off events. Home Expenses shows only
-    # when the household has a dwelling with operating costs (see `applicable_sections`).
+    # (another recurring outflow), one-off money movements, the cash orchestration that reconciles all the
+    # inflows and outflows, and finally the optional tax moves. Home Expenses shows only when the household
+    # has a dwelling with operating costs (see `applicable_sections`).
     # When each income runs and each entitlement is claimed -- the timing over the income *facts* declared
     # in Income (Profile flow). Sits before Cash management, which balances this income against the outflows.
     Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
@@ -874,19 +875,20 @@ SECTIONS = [
     # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.
     Section( 'debt-plan'   , 'Debt plan', ( Aggregate.PLANS, ), DebtPlanSectionForm,
              outer_template = 'inputs/interview/sections/debt_plan.html' ),
+    # One-off money moves and life events (transfers, a property sale, receipts, payments, death) -- a
+    # catch-all that can reference any entity declared above. Placed before Cash management so these
+    # outflows are already known when the cash band is reconciled against income and outflows.
+    Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
+             outer_template = 'inputs/interview/sections/events.html' ),
     # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set up
     # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
     Section( 'cash-plan'   , 'Cash management', ( Aggregate.PLANS, ), CashPlanSectionForm,
              outer_template = 'inputs/interview/sections/cash_plan.html' ),
     # Advanced, optional tax moves -- Roth conversions and scheduled withdrawals. The deliberate-tax-lever
     # counterpart to Cash management's automatic funding, and distinct from the tax Assumptions (the tax
-    # environment).
+    # environment). Last in the Plans flow.
     Section( 'tax-planning', 'Tax Planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
              outer_template = 'inputs/interview/sections/tax_planning.html' ),
-    # One-off money moves and life events (transfers, a property sale, receipts, payments, death). Last
-    # in the Plans flow -- a catch-all that can reference any entity declared above.
-    Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
-             outer_template = 'inputs/interview/sections/events.html' ),
     Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html',
