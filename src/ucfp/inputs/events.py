@@ -470,6 +470,7 @@ class LoanPayoffEvent( EventType ):
     kind       = EventKind.LOAN_PAYOFF
     group      = _MONEY_OUT_GROUP
     has_amount = False
+    editable   = False   # managed in the Debt plan step; its LOAN_ROLE has no add-form picker to round-trip
 
     def offerable( self, profile ) -> bool:
         return False   # created in the Debt plan step, not from the add menu

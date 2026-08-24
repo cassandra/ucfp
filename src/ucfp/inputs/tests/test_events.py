@@ -457,8 +457,12 @@ class EventEditabilityTests( unittest.TestCase ):
     def test_a_payment_with_no_references_is_editable( self ):
         self.assertTrue( GeneralPaymentEvent().is_editable( _payment(), SimpleNamespace() ) )
 
-    def test_a_card_payoff_kind_is_not_editable( self ):
+    def test_the_debt_step_payoffs_are_not_editable( self ):
+        # Loan and card payoffs are managed in the Debt plan step and carry a role (LOAN_ROLE/CARD_ROLE)
+        # their add form does not render, so editing them here would rebuild empty selections and drop the
+        # reference. Both must stay non-editable in the events list.
         self.assertFalse( handler_for( EventKind.CARD_PAYOFF ).editable )
+        self.assertFalse( handler_for( EventKind.LOAN_PAYOFF ).editable )
 
     def test_a_transfer_is_editable_while_both_accounts_exist( self ):
         profile = _named_accounts_profile( 'a', 'b' )
