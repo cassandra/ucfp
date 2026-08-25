@@ -58,13 +58,15 @@ class AppConst:
     DATE_FIELD_DATA_ATTR    = 'date-field'
 
     # An optional block revealed on demand (e.g. a plan's second person): the
-    # body is collapsed until "add" is clicked and cleared when "remove" is,
-    # so the server infers the block's presence purely from whether its fields
-    # are filled -- no separate "include this?" checkbox. Driven by inputs.js.
+    # body is collapsed until revealed and cleared when dismissed, so the server
+    # infers the block's presence purely from whether its fields are filled. Two
+    # control styles share the mechanism: the add/remove buttons, or a single
+    # toggle checkbox that asks the question ("has a loan?") explicitly. inputs.js.
     OPTIONAL_CLASS        = 'js-optional'         # the wrapper
-    OPTIONAL_ADD_CLASS    = 'js-optional-add'     # reveals the body
+    OPTIONAL_ADD_CLASS    = 'js-optional-add'     # button: reveals the body
     OPTIONAL_BODY_CLASS   = 'js-optional-body'    # the optional fields
-    OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # clears + collapses the body
+    OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # button: clears + collapses the body
+    OPTIONAL_TOGGLE_CLASS = 'js-optional-toggle'  # checkbox: reveals when checked, clears + collapses when not
 
     # A group of fields entered together -- both filled or both empty (e.g. a person's name and
     # birthdate). While exactly one side is filled the person is mid-entry, so the autosave defers:

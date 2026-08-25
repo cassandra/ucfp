@@ -15,6 +15,7 @@ and removing a vehicle of either kind, and the combined list the section renders
 from dataclasses import replace
 
 from django import forms
+from django.urls import reverse
 
 from common.forms import MoneyField, StyledFormMixin
 
@@ -42,13 +43,20 @@ def _minted_current_vehicle_handle( profile ) -> str:
     return f'{VEHICLE_PREFIX}{index}'
 
 
+def _vehicle_action_urls( handle : str ) -> dict:
+    """The Edit/Remove targets a vehicle's item card posts to."""
+    return { 'edit_url'   : reverse( 'current_vehicle_edit', kwargs = { 'handle' : handle } ),
+             'delete_url' : reverse( 'current_vehicle_delete', kwargs = { 'handle' : handle } ) }
+
+
 def current_vehicles_context( profile ) -> list:
     """The household's current vehicles for the list -- owned holdings then leased facts, each with its
-    handle, name, ownership label, and (owned only) value."""
+    handle, name, ownership label, (owned only) value, and the Edit/Remove urls its item card posts to."""
     owned = [ { 'handle': asset.handle, 'name': asset.name, 'ownership': 'Owned',
-                'value': asset.opening_value }
+                'value': asset.opening_value, **_vehicle_action_urls( asset.handle ) }
               for asset in profile.assets if asset.asset_class is AssetClass.DEPRECIATING ]
-    leased = [ { 'handle': vehicle.handle, 'name': vehicle.name, 'ownership': 'Leased', 'value': None }
+    leased = [ { 'handle': vehicle.handle, 'name': vehicle.name, 'ownership': 'Leased', 'value': None,
+                 **_vehicle_action_urls( vehicle.handle ) }
                for vehicle in profile.leased_vehicles ]
     return owned + leased
 
@@ -89,7 +97,7 @@ class CurrentVehicleForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     value        = MoneyField( label = 'Current value', min_value = 0, required = False )
     loan_balance = MoneyField(
-        label = 'Loan balance (optional)', min_value = 0, required = False,
+        label = 'Loan balance', min_value = 0, required = False,
         css_class = AppConst.LOAN_BALANCE_CLASS )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):

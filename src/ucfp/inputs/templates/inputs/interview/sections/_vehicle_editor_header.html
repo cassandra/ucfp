@@ -1,9 +1,12 @@
 {% comment %}
-The card header shared by the vehicle editors -- it names the vehicle being edited (ownership badge +
-name), so which one is clear once the form detaches from its list row, and offers a close that acts as
-Done. Reads `heading` ({name, ownership}, or None for a just-added vehicle not yet named), `collapse_route`
-(the editor's edit URL name, which honours ?collapse to empty the form), `handle`, and `target` (the
-form-area id the close swaps empty).
+The card header shared by the vehicle-plan disposition editors -- it names the vehicle being edited
+(ownership badge + name), so which one is clear once the form detaches from its list row, and offers a
+close that acts as Done. Reads `heading` ({name, ownership}, or None for a just-added vehicle not yet
+named), `collapse_route` (the editor's edit URL name, which honours ?collapse to empty the form),
+`handle`, and `target` (the form-area id the close swaps empty).
+
+(The Profile Vehicles editor now uses the shared `_input_editor_card_header.html`; when the Vehicle plan
+migrates to the input primitives this header retires in favour of that one.)
 {% endcomment %}
 <div class="card-header py-2 d-flex justify-content-between align-items-center">
   <span class="font-weight-bold">

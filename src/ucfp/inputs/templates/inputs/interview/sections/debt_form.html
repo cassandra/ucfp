@@ -12,7 +12,7 @@ section's only Add (one editor at a time: Add is offered only while none is open
   {% if debt_form %}
   {% url 'debt_edit' handle=handle as debt_edit_url %}
   <div class="input-editor-card mt-2">
-    {% include 'inputs/interview/_input_editor_card_header.html' with heading=heading new_label='New debt' close_url=debt_edit_url|add:'?collapse=1' editor_target='#debt-editor' %}
+    {% include 'inputs/interview/_input_editor_card_header.html' with heading=heading badge=heading.kind new_label='New debt' close_url=debt_edit_url|add:'?collapse=1' editor_target='#debt-editor' %}
     <div class="input-editor-card__body">
       <form method="post"
             class="{{ AppConst.SWITCH_CLASS }} {{ AppConst.LOAN_CLASS }} {{ AppConst.AUTOSAVE_CLASS }}"

@@ -413,13 +413,16 @@ a.interview-part:hover {
     justify-content: space-between;
     align-items: baseline;
 }
-/* A quiet kind/ownership marker -- a tinted chip, not a loud status block. */
-.input-item-card__badge {
+/* A quiet kind/ownership marker -- a grey chip, not a loud status block. Shared by the item card and the
+   editor-card header so a member's badge reads the same in the list and in its open editor. Its fill is
+   the line grey (a step up from the near-white row) with dark text, so it stays legible on the white card
+   and on the tinted --active card alike -- quiet in hue without being faint. */
+.input-badge {
     display: inline-block;
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--muted-color);
-    background-color: var(--muted-bg-medium);
+    color: var(--tertiary-color);
+    background-color: var(--line-color);
     border-radius: 0.25rem;
     padding: 0.05rem 0.4rem;
     margin-right: 0.4rem;

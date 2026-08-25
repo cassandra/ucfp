@@ -1584,14 +1584,15 @@ class CurrentVehicleFormView( _CurrentVehicleListView ):
         form = CurrentVehicleForm( profile = profile, plans = plans, handle = handle )
         return antinode.response(
             main_content = self._form( request, handle, form, profile ),
-            replace_map  = { 'current-vehicles-list': self._list( request, profile, active = handle ) } )
+            replace_map  = { 'current-vehicles-list': self._list( request, profile, active = handle ) },
+            scroll_to    = 'current-vehicle-editor' )   # bring the editor into view on the stacked layout
 
     def post( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
         form = CurrentVehicleForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
-                replace_map = { 'current-vehicle-form': self._form( request, handle, form, profile ) } )
+                replace_map = { 'current-vehicle-editor': self._form( request, handle, form, profile ) } )
         # A vehicle write is a paired edit: it may reap a stale disposition when ownership flips, so
         # profile and plans commit together (the paired-save seam).
         profile, plans = form.apply( profile, plans )

@@ -265,14 +265,27 @@ window.App.Inputs = (function () {
             add    : $section.children( classSelector( C.OPTIONAL_ADD_CLASS ) ),
             body   : $section.children( classSelector( C.OPTIONAL_BODY_CLASS ) ),
             remove : $section.find( classSelector( C.OPTIONAL_REMOVE_CLASS ) ),
+            toggle : $section.find( classSelector( C.OPTIONAL_TOGGLE_CLASS ) ),
         };
     }
 
     function setOptionalOpen( $section, open ) {
         const parts = optionalParts( $section );
         parts.body.prop( 'hidden', ! open );
-        parts.add.prop( 'hidden', open );
-        parts.remove.prop( 'hidden', ! open );
+        parts.add.prop( 'hidden', open );      // button style: the add button hides once open
+        parts.remove.prop( 'hidden', ! open ); // button style: the remove button shows only while open
+        parts.toggle.prop( 'checked', open );  // checkbox style: the checkbox reflects the open state
+    }
+
+    // Clear an optional body (so the server reads it as absent) and collapse it, persisting the removal --
+    // clearing fires no `change`, so an autosave form must be told to save. Shared by the remove button and
+    // the toggle checkbox when it is unchecked.
+    function clearAndCollapseOptional( $section ) {
+        optionalParts( $section ).body.find( ':input' )
+            .val( '' ).filter( ':checkbox, :radio' ).prop( 'checked', false );
+        setOptionalOpen( $section, false );
+        const $form = $section.closest( 'form' + classSelector( C.AUTOSAVE_CLASS ) );
+        if ( $form.length ) { saveForm( $form ); }
     }
 
     // Whether any field in the body carries a value -- the same "is it present?" test the server
@@ -293,8 +306,13 @@ window.App.Inputs = (function () {
     function enhanceOptionalSections( $scope ) {
         const $root = $scope || $( document.body );
         $root.find( classSelector( C.OPTIONAL_CLASS ) ).each( function () {
-            const $section = $( this );
-            setOptionalOpen( $section, bodyIsFilled( optionalParts( $section ).body ) );
+            const parts = optionalParts( $( this ) );
+            // Where a toggle checkbox is present it IS the persistent open-state -- the user's explicit
+            // choice, which may be an intentionally-opened-but-still-empty block, so it must survive a
+            // re-render (this runs after every async render). Or-ing in bodyIsFilled auto-opens an existing
+            // block on first load, when the server-rendered checkbox is still unchecked. The button style
+            // has no persistent control, so it falls back to bodyIsFilled alone.
+            setOptionalOpen( $( this ), parts.toggle.prop( 'checked' ) || bodyIsFilled( parts.body ) );
         } );
     }
 
@@ -901,6 +919,10 @@ window.App.Inputs = (function () {
         // first in this one handler rather than relying on separate-handler registration order.
         $( 'body' ).on( 'change', autosaveForm + ' :input', function () {
             const $field = $( this );
+            // The disclosure toggle is a UI-only control (no name, nothing to persist): opening a block
+            // saves nothing, and its own handler saves on clear. Skip it, or the save's re-render would
+            // fight the open it just triggered.
+            if ( $field.hasClass( C.OPTIONAL_TOGGLE_CLASS ) ) { return; }
             syncField( $field );
             if ( pairMidEntry( $field ) ) { return; }   // person mid-entry: defer until the pair is whole
             applyCalculatorFill( $field );              // a calculator fill must land before the serialize
@@ -984,16 +1006,20 @@ window.App.Inputs = (function () {
             setOptionalOpen( $section, true );
             optionalParts( $section ).body.find( ':input' ).first().trigger( 'focus' );
         } );
-        // Dismiss an optional block: clear it (so the server reads it as absent) then collapse.
-        // Clearing fields programmatically fires no `change`, so inside an autosave form the removal
-        // must be persisted explicitly -- otherwise a removed partner would linger until the next edit.
+        // Dismiss an optional block via its remove button: clear + collapse (see clearAndCollapseOptional).
         $( 'body' ).on( 'click', classSelector( C.OPTIONAL_REMOVE_CLASS ), function () {
+            clearAndCollapseOptional( $( this ).closest( classSelector( C.OPTIONAL_CLASS ) ) );
+        } );
+        // The checkbox style of the same disclosure: checking asks to open the block (caret on its first
+        // field); unchecking clears + collapses it, exactly like the remove button.
+        $( 'body' ).on( 'change', classSelector( C.OPTIONAL_TOGGLE_CLASS ), function () {
             const $section = $( this ).closest( classSelector( C.OPTIONAL_CLASS ) );
-            optionalParts( $section ).body.find( ':input' )
-                .val( '' ).filter( ':checkbox, :radio' ).prop( 'checked', false );
-            setOptionalOpen( $section, false );
-            const $form = $section.closest( 'form' + classSelector( C.AUTOSAVE_CLASS ) );
-            if ( $form.length ) { saveForm( $form ); }
+            if ( $( this ).prop( 'checked' ) ) {
+                setOptionalOpen( $section, true );
+                optionalParts( $section ).body.find( ':input' ).first().trigger( 'focus' );
+            } else {
+                clearAndCollapseOptional( $section );
+            }
         } );
 
         // Flip a switch to the chosen case as its control changes.

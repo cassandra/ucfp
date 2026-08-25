@@ -108,13 +108,22 @@ The open form for adding or editing one member, in the right slot.
 
 ### `input-disclosure`
 
-A yes/no gate that keeps an optional sub-form collapsed until the user affirms it
-exists -- a mortgage on a home, an auto loan on a vehicle, a pension for a person.
+A gate that keeps an optional sub-form collapsed until the user affirms it exists
+-- an auto loan on a vehicle, a mortgage on a home, a pension for a person.
 
-- Structure: a **toggle** (`__toggle`: a radio/checkbox or an "Add a ..." link)
-  and a **body** (`__body`) revealed only when affirmed.
+- **Realized by the existing `js-optional` mechanism** (inputs.js): a `js-optional`
+  wrapper, a `js-optional-body` of fields, and a control that reveals the body and
+  clears it on dismiss -- so the server infers "absent" straight from empty fields
+  (no stored "include this?" flag). Two control styles share the one mechanism:
+  - a **toggle checkbox** (`js-optional-toggle`) that asks the question explicitly
+    ("This vehicle has a loan") -- the **preferred** form for a single binary
+    optional, since it frames the decision; and
+  - the older **add/remove buttons** (`js-optional-add` / `js-optional-remove`),
+    still used by the People partner block, to be converged onto the checkbox.
+- The body auto-opens on load when its fields are already filled (editing an
+  existing loan), so the gate reflects reality without a stored flag.
 - Replaces today's always-rendered optional blocks, which show a full empty
-  mortgage/loan/pension form to users who have none.
+  loan/mortgage/pension form to users who have none.
 
 ### `input-age-band`
 

@@ -12,7 +12,7 @@ delete_url, managed_in, editor_target, list_target.
 <div class="input-item-card{% if handle and handle == active_handle %} input-item-card--active{% endif %}{% if not editable %} input-item-card--readonly{% endif %}">
   <div class="input-item-card__head">
     <span>
-      {% if badge %}<span class="input-item-card__badge">{{ badge }}</span>{% endif %}
+      {% if badge %}<span class="input-badge">{{ badge }}</span>{% endif %}
       <span class="input-item-card__title">{{ title }}</span>
       {% if headline %}<span class="input-item-card__headline">{{ headline }}</span>{% endif %}
     </span>

@@ -1,16 +1,21 @@
 {% comment %}
 The Vehicles pane: one list of the household's current vehicles -- owned and leased together, each with an
-ownership badge -- edited through its own async view outside the section's Next form (a nested form would
-be invalid HTML). Adding or editing a vehicle opens the form beneath the list (#current-vehicle-form),
-where the owned/leased choice drives which fields apply. `form.vehicles` is the combined list, managed by
-`CurrentVehicleFormView` / `CurrentVehicleDeleteView`.
+ownership badge -- on the left, with the add/edit editor opening in the slot on the right (list-left /
+editor-right, the shared collection pattern; the columns stack below md). Editing runs through the section's
+own async view, outside the Next form (a nested form would be invalid HTML). `form.vehicles` is the combined
+list, managed by `CurrentVehicleFormView` / `CurrentVehicleDeleteView`.
 {% endcomment %}
 <p class="text-muted">The cars in your driveway, owned or leased -- one list. An owned vehicle with a loan
   still owed adds that loan to Debts; a leased one is just a name here (its terms are set in the Vehicle
   plan).</p>
 <div class="row">
-  <div class="col-md-6">
+  <div class="col-md-5">
     {% include 'inputs/interview/sections/current_vehicle_list.html' with vehicles=form.vehicles %}
-    <div id="current-vehicle-form" class="mt-2"></div>
+  </div>
+  <div class="col-md-7 mt-3 mt-md-0">
+    {% comment %}The editor slot. Rendered from the editor template even when empty so its resting state is
+    the master-detail prompt (a "pick or add" placeholder carrying the section's only Add, not a blank
+    column); Add/Edit swap the editor card in here, Done/collapse restores this empty state.{% endcomment %}
+    {% include 'inputs/interview/sections/current_vehicle_form.html' %}
   </div>
 </div>

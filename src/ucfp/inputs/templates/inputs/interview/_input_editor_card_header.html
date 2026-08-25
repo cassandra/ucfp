@@ -1,14 +1,15 @@
 {% comment %}
 The header of an input-editor-card (see docs/dev/frontend/interview-ui-guidelines.md):
 the edited member's name -- so which one is clear once the editor detaches from its list
-row -- and a close (x) that collapses the editor. `heading` is {name, kind} of a saved
-member, or None for a just-added one (then `new_label` is shown). `close_url` collapses
-the editor; `editor_target` is the editor slot's swap selector.
-Params: heading, new_label, close_url, editor_target.
+row -- with the same `badge` chip its list card carries, and a close (x) that collapses the
+editor. `heading` is {name, ...} of a saved member (with `badge` the chip text), or None for a
+just-added one (then `new_label` is shown, no badge). `close_url` collapses the editor;
+`editor_target` is the editor slot's swap selector.
+Params: heading, badge, new_label, close_url, editor_target.
 {% endcomment %}
 <div class="input-editor-card__header">
   <span class="input-editor-card__title">
-    {% if heading %}<span class="text-muted small mr-1">{{ heading.kind }}</span>{{ heading.name }}{% else %}{{ new_label }}{% endif %}
+    {% if heading %}{% if badge %}<span class="input-badge">{{ badge }}</span>{% endif %}{{ heading.name }}{% else %}{{ new_label }}{% endif %}
   </span>
   <a class="input-editor-card__close" aria-label="Done"
      data-async="{{ editor_target }}" href="{{ close_url }}">&times;</a>
