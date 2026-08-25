@@ -160,12 +160,22 @@ Some collections are homogeneous scalar rows and read better as a table than as 
 card list -- Income and Possessions. For these:
 
 - **Keep the table layout.** It is fine and sometimes clearer than cards.
-- **Replace the phantom trailing row** with the same explicit Add lifecycle:
-  a deliberate Add control appends an editable row (or opens an editor row); a
-  real remove control removes one. No self-spawning blank row, no "fill the blank
-  row to add one".
-- Rows that are fixed (a person's Social Security and pension lines) stay pinned
-  and are not removable; only user-added rows carry Add/Remove.
+- **Replace the phantom trailing row** with the explicit-add `js-rowset` primitive
+  (constants + inputs.js): a `js-rowset` table body holds the rows; a hidden
+  `<template>` prototype is cloned into it by the Add button, and each row carries
+  a **Remove**. The rows use repeated same-name inputs the form reads as parallel
+  lists (`getlist`) -- no per-row index to keep in sync, so client add/remove is
+  clean. No self-spawning blank row, no "fill the blank row to add one".
+- Rows that are **fixed** (a person's Social Security and pension lines, each
+  rental's rent) stay pinned, amount-only, and non-removable; only user-added rows
+  carry Add/Remove. Put the **fixed rows on top** so appended rows land at the
+  bottom and never wedge between fixed ones.
+- **Remove is the danger-text "Remove"** (as on the cards), not a bare "×" --
+  reserve "×" for close/collapse. Keep the deletion control the same word
+  everywhere.
+- A money amount in a hand-rendered row uses the `_money_cell.html` partial (the
+  `$` affix + `js-money` hook), and its posted value is parsed back through a
+  `MoneyField`, so the money "shape" is not re-implemented.
 
 ## Frozen exemplars
 

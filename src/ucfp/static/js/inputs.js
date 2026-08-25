@@ -1000,6 +1000,27 @@ window.App.Inputs = (function () {
             saveForm( $form );
         } );
 
+        // Rowset add: clone the hidden <template> prototype into the row container and focus the new row's
+        // first field. The clone's repeated-name inputs serialize with the rest, so the getlist form reads
+        // the new row on the next save. The prototype (inside <template>) is inert, so it never submits.
+        $( 'body' ).on( 'click', classSelector( C.ROWSET_ADD_CLASS ), function () {
+            const $rowset  = $( this ).closest( 'form' ).find( classSelector( C.ROWSET_CLASS ) );
+            const template = $rowset.find( classSelector( C.ROWSET_TEMPLATE_CLASS ) ).get( 0 );
+            if ( ! template ) { return; }
+            const $row = $( template.content.firstElementChild.cloneNode( true ) );
+            $rowset.append( $row );
+            enhanceMoneyInputs( $row );                  // group any money cell the new row carries
+            $row.find( ':input' ).first().trigger( 'focus' );
+        } );
+        // Rowset remove: drop the row and persist -- the removed row's inputs leave the serialization, so
+        // the getlist form rebuilds the set without it (removal fires no `change`, hence the explicit save).
+        $( 'body' ).on( 'click', classSelector( C.ROWSET_REMOVE_CLASS ), function () {
+            const $row  = $( this ).closest( classSelector( C.ROWSET_ROW_CLASS ) );
+            const $form = $row.closest( 'form' + classSelector( C.AUTOSAVE_CLASS ) );
+            $row.remove();
+            if ( $form.length ) { saveForm( $form ); }
+        } );
+
         // Reveal an optional block; land the caret on its first field so the user can type straight in.
         $( 'body' ).on( 'click', classSelector( C.OPTIONAL_ADD_CLASS ), function () {
             const $section = $( this ).closest( classSelector( C.OPTIONAL_CLASS ) );

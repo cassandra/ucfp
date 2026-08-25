@@ -68,6 +68,15 @@ class AppConst:
     OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # button: clears + collapses the body
     OPTIONAL_TOGGLE_CLASS = 'js-optional-toggle'  # checkbox: reveals when checked, clears + collapses when not
 
+    # A rowset: a table body whose rows the user adds and removes. A hidden <template> holds the blank
+    # prototype the add button clones and appends; a per-row remove drops it. Rows carry repeated same-name
+    # inputs, so the form reads them as parallel lists (getlist) -- no per-row index to keep in sync. inputs.js.
+    ROWSET_CLASS          = 'js-rowset'           # the row container (a table body)
+    ROWSET_ROW_CLASS      = 'js-rowset-row'       # one add/removable row
+    ROWSET_TEMPLATE_CLASS = 'js-rowset-template'  # a <template> holding the blank prototype row
+    ROWSET_ADD_CLASS      = 'js-rowset-add'       # button: append a blank row
+    ROWSET_REMOVE_CLASS   = 'js-rowset-remove'    # button: drop this row
+
     # A group of fields entered together -- both filled or both empty (e.g. a person's name and
     # birthdate). While exactly one side is filled the person is mid-entry, so the autosave defers:
     # it skips the background save (and the incomplete-pair validation and pane re-render that would

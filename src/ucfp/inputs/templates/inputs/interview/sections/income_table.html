@@ -1,11 +1,13 @@
 {% comment %}
-The §5 income *facts* table, auto-saved. Each income line is a row: general lines have an editable
-name/subject and a remove box (and a hidden stable handle the Retirement section's timing keys onto);
-rental rows show the property, household-owned (the rent is set here, the property in §3); the last two
-rows per subject are the Social Security and pension entitlement amounts. WHEN each income runs -- the
-windows and claiming dates -- is the separate Retirement section, not here. Edits save in the
-background; only a genuine input error (a negative amount) re-renders here.
+The §5 income *facts* table (id=income-table), auto-saved. Fixed rows sit at the top -- each subject's
+Social Security and pension benefit, then each rental's rent (amount only, not removable) -- so the growable
+general lines and their Add sit at the bottom and new rows never wedge between the fixed ones. The general
+lines are a rowset (js-rowset): repeated same-name inputs the form reads as parallel lists, added by the Add
+button (a cloned blank row) and removed per row -- no phantom trailing row. Each general line carries a
+hidden stable handle the Retirement section's timing keys onto. Edits save in the background; only a genuine
+input error (a negative amount) re-renders here. WHEN each income runs is the separate Retirement section.
 {% endcomment %}
+{% load common_tags %}
 <div id="income-table">
   <form method="post" action="{% url 'income_table' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
@@ -13,21 +15,36 @@ background; only a genuine input error (a negative amount) re-renders here.
       <thead>
         <tr><th>Attribution</th><th>Income Source</th><th>Amount</th><th>Per</th><th></th></tr>
       </thead>
+      {% comment %}Fixed rows -- each person's benefits, then each rental's rent. Amount only, no add/remove;
+      the count is set by the subjects and properties, not edited here.{% endcomment %}
       <tbody>
-        {% for row in income_form.income_rows %}
+        {% for row in income_form.entitlement_rows %}
         <tr>
-          <td>{% if row.kind == 'general' %}{{ row.subject }}{% else %}<span class="text-muted">{{ row.subject_name }}</span>{% endif %}</td>
-          <td>
-            {{ row.name }}{% if row.handle %}{{ row.handle }}{% endif %}
-            {% if row.note %}<span class="text-muted small d-block">{{ row.note }}</span>{% endif %}
-          </td>
+          <td class="align-middle"><span class="text-muted">{{ row.subject_name }}</span></td>
+          <td class="align-middle">{{ row.name }}{% if row.note %}<span class="text-muted small d-block">{{ row.note }}</span>{% endif %}</td>
           <td>{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
-          <td class="text-muted">{{ row.cadence }}</td>
-          <td>{% if row.remove %}<label class="small text-muted edit-only">{{ row.remove }} remove</label>{% endif %}</td>
+          <td class="text-muted align-middle">{{ row.cadence }}</td>
+          <td></td>
+        </tr>
+        {% endfor %}
+        {% for row in income_form.rental_rows %}
+        <tr>
+          <td class="align-middle"><span class="text-muted">Rental</span></td>
+          <td class="align-middle">{{ row.name }}</td>
+          <td>{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
+          <td class="text-muted align-middle">{{ row.cadence }}</td>
+          <td></td>
         </tr>
         {% endfor %}
       </tbody>
+      {% comment %}The general income lines: a rowset the user adds to and removes from.{% endcomment %}
+      <tbody class="{{ AppConst.ROWSET_CLASS }}">
+        {% for row in income_form.general_rows %}
+        {% include 'inputs/interview/sections/_income_general_row.html' with row=row names=income_form.names subject_choices=income_form.subject_choices %}
+        {% endfor %}
+        <template class="{{ AppConst.ROWSET_TEMPLATE_CLASS }}">{% include 'inputs/interview/sections/_income_general_row.html' with row=None names=income_form.names subject_choices=income_form.subject_choices %}</template>
+      </tbody>
     </table>
-    <p class="text-muted small">Fill the blank row to add one.</p>
+    <button type="button" class="btn btn-sm btn-outline-primary {{ AppConst.ROWSET_ADD_CLASS }} edit-only">&plus; Add income source</button>
   </form>
 </div>
