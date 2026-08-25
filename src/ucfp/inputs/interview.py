@@ -779,18 +779,13 @@ class HomeExpensesSectionForm:
             plans, property_expenses = merged_property_expenses( profile, plans ) )
 
 
-class VehicleExpensesSectionForm:
+class VehiclePlanSectionForm:
     """The Vehicle plan -- Profile-driven like the Debt plan: per current owned vehicle a disposition
-    (retain/sell/replace), per current leased vehicle its end-of-term plan (return/renew/buy), any net-new
-    future vehicles, and the shared per-car running costs. The dispositions are managed by
-    `VehicleDispositionView` / `LeasedVehicleDispositionView`, the net-new list by `VehicleFormView` /
-    `VehicleDeleteView`, and the running costs by `VehicleExpensesView`, each saving on its own. `apply`
-    seeds the running costs from the catalog on Next once a vehicle plan exists, so a household that began
-    a plan and accepts the default running costs still records them; with no plan, Next just advances.
-    `apply` ignores form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
-    `seeds_on_render`."""
-
-    seeds_on_render = True
+    (retain/sell/replace), per current leased vehicle its end-of-term plan (return/renew/buy), plus any
+    net-new future vehicles. The dispositions are managed by `VehicleDispositionView` /
+    `LeasedVehicleDispositionView` and the net-new list by `VehicleFormView` / `VehicleDeleteView`, each
+    saving on its own, so Next just advances. The shared per-car running costs are a separate section --
+    `VehicleExpensesSectionForm`."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -811,6 +806,28 @@ class VehicleExpensesSectionForm:
         """The plan's net-new future vehicles for the section's list template -- the per-vehicle
         add/edit/delete panes manage them through `VehicleFormView` / `VehicleDeleteView`."""
         return vehicles_context( self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class VehicleExpensesSectionForm:
+    """The Vehicle expenses step: the shared per-car running costs (insurance, maintenance, fuel, ...),
+    entered once per vehicle and applied to every vehicle while operated. Managed by `VehicleExpensesView`.
+    `apply` seeds the running costs from the catalog on Next once a vehicle plan exists, so a household that
+    began a plan and accepts the defaults still records them; with no plan, Next just advances. `apply`
+    ignores form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
+    `seeds_on_render`. The dispositions and net-new vehicles are the separate Vehicle plan section --
+    `VehiclePlanSectionForm`."""
+
+    seeds_on_render = True
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
 
     @property
     def vehicle_costs_form( self ):
@@ -908,7 +925,9 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
              outer_template = 'inputs/interview/sections/home_expenses.html' ),
-    Section( 'vehicle-expenses', 'Vehicle plan', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
+    Section( 'vehicle-plan'    , 'Vehicle plan', ( Aggregate.PLANS, ), VehiclePlanSectionForm,
+             outer_template = 'inputs/interview/sections/vehicle_plan.html' ),
+    Section( 'vehicle-expenses', 'Vehicle expenses', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
              outer_template = 'inputs/interview/sections/vehicle_expenses.html' ),
     # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal),
     # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.

@@ -97,7 +97,8 @@
       "living-expenses",
       "retirement-plan",
       "tax-planning",
-      "vehicle-expenses"
+      "vehicle-expenses",
+      "vehicle-plan"
     ],
     "data": {
       "contributions": [
