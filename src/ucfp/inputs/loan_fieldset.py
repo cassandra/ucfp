@@ -70,6 +70,19 @@ def solved_loan_terms(
                       monthly_payment = consistent_payment )
 
 
+def seeded_repayment_terms( debt, repayment ):
+    """The rate and remaining term a repayment Plan starts from -- the Plan's own `LoanRepayment` once it
+    exists (authoritative, since the user's repayment choice may deliberately differ from the contract),
+    else seeded from the Profile `Debt`'s captured contract terms. Returns `(Rate|None, Duration|None)`.
+    This is the one place a Plan's rate/term seed from the Profile facts, so the debt-plan and vehicle-plan
+    surfaces cannot seed differently."""
+    if repayment is not None:
+        return repayment.interest_rate, repayment.remaining_term
+    if debt is None or debt.terms is None:
+        return None, None
+    return debt.terms.interest_rate, debt.terms.remaining_term
+
+
 def loan_terms_initial( terms : Optional[ LoanTerms ] ) -> dict:
     """The shared loan-terms fields' initial values from a stored `LoanTerms` -- rate as a percent, term in
     months, payment as-is; empty when there are none. Merge into a form's `_initial` so an edit reopens on

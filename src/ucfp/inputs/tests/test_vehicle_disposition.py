@@ -26,7 +26,7 @@ from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, Vehicle
 from ucfp.inputs.plans.schemas import (
     LeasedVehicleDisposition, LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, LoanTerms, Profile
 from ucfp.inputs.vehicle_disposition import (
     LeasedVehicleDispositionForm, VehicleDispositionForm,
     all_dispositions_context, dispositions_context, leased_dispositions_context )
@@ -174,6 +174,23 @@ class VehicleLoanTermsTests( unittest.TestCase ):
         expected = round( level_payment( Decimal( '18000' ), Decimal( '0.05' ) / 12, 36 ) )
         self.assertEqual( form.initial[ 'loan_monthly' ], expected )   # the monthly the terms imply
 
+    def test_edit_seeds_the_current_loan_from_profile_facts( self ):
+        # No repayment yet: the current-loan fields seed from the auto Debt's contract terms (copy 1).
+        profile = replace( _financed_profile( balance = '18000' ), debts = [ Debt(
+            handle = 'vehicle-1-loan', name = 'Sedan loan', kind = DebtKind.AUTO,
+            balance = Decimal( '18000' ), secured_asset = 'vehicle-1',
+            terms = LoanTerms( interest_rate = Rate.percent( 5 ),
+                               remaining_term = Duration( 36, TimeUnit.MONTH ),
+                               monthly_payment = Decimal( '540' ) ) ) ] )
+        form = VehicleDispositionForm( profile = profile, plans = Plans(), handle = 'vehicle-1' )
+        self.assertEqual( form.initial[ 'loan_rate' ], Decimal( '5' ) )
+        self.assertEqual( form.initial[ 'loan_months' ], 36 )
+
+    def test_no_terms_and_no_repayment_leaves_the_rate_blank( self ):
+        # Nothing is invented: without a repayment or Profile terms, the rate field carries no default.
+        form = VehicleDispositionForm( profile = _financed_profile(), plans = Plans(), handle = 'vehicle-1' )
+        self.assertIsNone( form.initial.get( 'loan_rate' ) )
+
     def test_a_no_js_monthly_back_solves_the_rate( self ):
         # Without JS the rate field is blank; the monthly payment + balance + months determine the rate. A
         # payment amortizing 18,000 at 5%/yr over 36 mo back-solves to ~5%.
@@ -218,15 +235,43 @@ class VehicleLoanTermsTests( unittest.TestCase ):
         self.assertEqual( len( _dispositions( plans ) ), 1 )             # the sale...
         self.assertEqual( len( plans.loan_repayments ), 1 )             # ...and the loan terms both saved
 
-    def test_the_debt_plan_excludes_vehicle_auto_loans( self ):
+    def test_the_debt_plan_lists_auto_loans_read_only_not_editable( self ):
         profile = replace( _financed_profile(), debts = [
             Debt( handle = 'vehicle-1-loan', name = 'Car loan', kind = DebtKind.AUTO,
                   balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ),
             Debt( handle = 'debt-1', name = 'Mortgage', kind = DebtKind.MORTGAGE,
                   balance = Decimal( '300000' ), secured_asset = 'property-1' ) ] )
-        form  = DebtPlanForm( profile = profile, plans = Plans() )
-        names = [ row[ 'name' ] for row in form.rows ]
-        self.assertEqual( names, [ 'Mortgage' ] )                       # the auto loan is not listed
+        # The auto loan carries a vehicle-plan repayment; the mortgage is editable here.
+        plans = Plans( loan_repayments = [ _repayment( rate = '5', months = 36 ) ] )
+        form  = DebtPlanForm( profile = profile, plans = plans )
+        self.assertEqual( [ row[ 'name' ] for row in form.rows ], [ 'Mortgage' ] )   # editable rows
+        autos = form.auto_rows
+        self.assertEqual( [ row[ 'name' ] for row in autos ], [ 'Car loan' ] )       # read-only rows
+        self.assertIn( '5%, 36 mo left', autos[ 0 ][ 'terms' ] )
+
+    def test_an_auto_loan_without_a_repayment_points_at_the_vehicle_plan( self ):
+        form = DebtPlanForm( profile = _financed_profile(), plans = Plans() )
+        self.assertEqual( form.auto_rows[ 0 ][ 'terms' ], 'Terms set in the Vehicle plan' )
+
+    def test_the_debt_plan_seeds_rate_and_term_from_profile_facts( self ):
+        profile = Profile( debts = [ Debt(
+            handle = 'debt-1', name = 'Student loan', kind = DebtKind.STUDENT, balance = Decimal( '15000' ),
+            terms = LoanTerms( interest_rate = Rate.percent( 6 ),
+                               remaining_term = Duration( 48, TimeUnit.MONTH ),
+                               monthly_payment = Decimal( '450' ) ) ) ] )
+        row = DebtPlanForm( profile = profile, plans = Plans() ).rows[ 0 ]
+        self.assertEqual( row[ 'rate' ].value(), Decimal( '6' ) )       # seeded from the contract facts
+        self.assertEqual( row[ 'term' ].value(), 48 )
+
+    def test_a_saved_repayment_wins_over_the_profile_facts( self ):
+        profile = Profile( debts = [ Debt(
+            handle = 'debt-1', name = 'Student loan', kind = DebtKind.STUDENT, balance = Decimal( '15000' ),
+            terms = LoanTerms( interest_rate = Rate.percent( 6 ),
+                               remaining_term = Duration( 48, TimeUnit.MONTH ) ) ) ] )
+        plans = Plans( loan_repayments = [ _repayment( debt_handle = 'debt-1', rate = '4', months = 60 ) ] )
+        row   = DebtPlanForm( profile = profile, plans = plans ).rows[ 0 ]
+        self.assertEqual( row[ 'rate' ].value(), Decimal( '4' ) )       # the plan copy is authoritative
+        self.assertEqual( row[ 'term' ].value(), 60 )
 
 
 class DispositionListTests( unittest.TestCase ):

@@ -1,10 +1,12 @@
 """§ Debt plan: how each amortizing debt is repaid -- the Plans side of the Debts facts.
 
-A Profile `Debt` records only what is owed (its current balance). This step captures how an amortizing
-debt (mortgage, student, personal, other) is paid down: its interest rate and remaining term -- the
-`LoanRepayment` that, composed with the balance, materializes the engine loan -- plus any recurring
-extra principal (`LoanPrepayment`). The credit card -- the one non-loan debt kind -- is not a loan
-and is handled separately. Reads the declared debts; writes only Plans.
+A Profile `Debt` records what is owed (its current balance) and, as facts, its contract terms. This step
+captures how an amortizing debt (mortgage, student, personal, other) is *planned* to be paid down: its
+interest rate and remaining term -- the `LoanRepayment` that, composed with the balance, materializes the
+engine loan -- plus any recurring extra principal (`LoanPrepayment`). Each debt's rate/term seed from the
+Profile contract facts until a repayment is saved, after which the Plan owns its copy (the repayment may
+deliberately differ from the contract). Auto loans are authored in the Vehicle plan and shown here
+read-only with a pointer; the credit card is not a loan and is handled separately. Writes only Plans.
 """
 from dataclasses import replace
 
@@ -16,6 +18,7 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.events import LOAN_ROLE
+from ucfp.inputs.loan_fieldset import seeded_repayment_terms
 from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import LoanPrepayment, LoanRepayment, PlanEvent
 from ucfp.inputs.profile.enums import DebtKind
@@ -33,17 +36,18 @@ class DebtPlanForm( forms.Form ):
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
-        # Vehicle (auto) loans are excluded: their terms are authored in the Vehicle plan, not here (the
-        # debt plan covers the other debts). Any repayment they carry is left intact -- `apply` only
-        # rebuilds the shown debts' repayments, preserving the rest.
-        self._debts = ( [ debt for debt in profile.debts
-                          if debt.kind.is_amortizing and debt.kind is not DebtKind.AUTO ]
-                        if profile is not None else [] )
-        repayments = { r.debt_handle : r for r in ( plans.loan_repayments if plans else [] ) }
-        extra      = { p.loan_handle : p.annual_amount for p in ( plans.prepayments if plans else [] ) }
-        payoffs    = self._payoff_dates( plans )
-        for debt in self._debts:
-            self._build_fields( debt, repayments.get( debt.handle ), extra.get( debt.handle ),
+        amortizing = ( [ debt for debt in profile.debts if debt.kind.is_amortizing ]
+                       if profile is not None else [] )
+        # Non-auto amortizing debts are editable here; auto loans are authored in the Vehicle plan and
+        # shown read-only with a pointer. `apply` rebuilds only the editable debts' repayments, so an auto
+        # loan's repayment (and anything else) is left intact.
+        self._editable   = [ debt for debt in amortizing if debt.kind is not DebtKind.AUTO ]
+        self._auto       = [ debt for debt in amortizing if debt.kind is DebtKind.AUTO ]
+        self._repayments = { r.debt_handle : r for r in ( plans.loan_repayments if plans else [] ) }
+        extra   = { p.loan_handle : p.annual_amount for p in ( plans.prepayments if plans else [] ) }
+        payoffs = self._payoff_dates( plans )
+        for debt in self._editable:
+            self._build_fields( debt, self._repayments.get( debt.handle ), extra.get( debt.handle ),
                                 payoffs.get( debt.handle ) )
 
     @staticmethod
@@ -55,14 +59,16 @@ class DebtPlanForm( forms.Form ):
                  if event.kind is EventKind.LOAN_PAYOFF }
 
     def _build_fields( self, debt, repayment, extra_annual, payoff_date ):
+        # Rate and term seed from the repayment once it exists, else from the Profile contract facts.
+        rate, term = seeded_repayment_terms( debt, repayment )
         self.fields[ self._rate_field( debt.handle ) ] = PercentField(
             label = 'Rate (%)', required = False, min_value = 0,
             css_class = AppConst.LOAN_RATE_CLASS,
-            initial = repayment.interest_rate.fraction * 100 if repayment is not None else None )
+            initial = rate.fraction * 100 if rate is not None else None )
         self.fields[ self._term_field( debt.handle ) ] = forms.IntegerField(
             label = 'Months left', required = False, min_value = 1,
             widget = forms.NumberInput( attrs = { 'class' : f'form-control {AppConst.LOAN_TERM_CLASS}' } ),
-            initial = repayment.remaining_term.months() if repayment is not None else None )
+            initial = term.months() if term is not None else None )
         self.fields[ self._extra_field( debt.handle ) ] = MoneyField(
             label = 'Extra/month', required = False, min_value = 0,
             css_class = AppConst.LOAN_EXTRA_CLASS,
@@ -89,7 +95,7 @@ class DebtPlanForm( forms.Form ):
 
     @property
     def has_debts( self ) -> bool:
-        return bool( self._debts )
+        return bool( self._editable or self._auto )
 
     @property
     def rows( self ) -> list:
@@ -101,10 +107,27 @@ class DebtPlanForm( forms.Form ):
                    'term'            : self[ self._term_field( debt.handle ) ],
                    'extra'           : self[ self._extra_field( debt.handle ) ],
                    'payoff'          : self[ self._payoff_field( debt.handle ) ] }
-                 for debt in self._debts ]
+                 for debt in self._editable ]
+
+    @property
+    def auto_rows( self ) -> list:
+        """The household's auto loans, read-only here -- their repayment is authored in the Vehicle plan.
+        Each shows its balance and a summary of its current plan terms (or a prompt to set them)."""
+        return [ { 'name'            : debt.name,
+                   'balance_display' : f'${debt.balance:,.0f}' if debt.balance is not None else '',
+                   'terms'           : self._auto_terms_summary( self._repayments.get( debt.handle ) ) }
+                 for debt in self._auto ]
+
+    @staticmethod
+    def _auto_terms_summary( repayment ) -> str:
+        if repayment is None:
+            return 'Terms set in the Vehicle plan'
+        percent   = repayment.interest_rate.fraction * 100
+        rate_text = f'{percent:.2f}'.rstrip( '0' ).rstrip( '.' )   # 5.00 -> 5, 5.50 -> 5.5
+        return f'{rate_text}%, {repayment.remaining_term.months()} mo left'
 
     def apply( self, profile, plans ):
-        handles     = { debt.handle for debt in self._debts }
+        handles     = { debt.handle for debt in self._editable }
         repayments  = [ r for r in plans.loan_repayments if r.debt_handle not in handles ]
         prepays     = [ p for p in plans.prepayments if p.loan_handle not in handles ]
         # Preserve every event except this form's debts' payoffs, which we re-derive below.
@@ -112,7 +135,7 @@ class DebtPlanForm( forms.Form ):
                         if not ( event.kind is EventKind.LOAN_PAYOFF
                                  and event.selections.get( LOAN_ROLE ) in handles ) ]
         payoffs = []
-        for debt in self._debts:
+        for debt in self._editable:
             repayment, prepayment = self._plan_for( debt )
             if repayment is None:
                 continue                    # no terms -> no loan, so no repayment, prepay, or payoff
