@@ -9,6 +9,7 @@ rent; a second home is personal-use with neither. Operating expenses attach in H
 same handle.
 """
 from dataclasses import dataclass, replace
+from itertools import zip_longest
 
 from django import forms
 
@@ -307,46 +308,76 @@ class PossessionsForm( forms.Form ):
         ( AssetClass.PRECIOUS_METALS.name, 'Precious metals' ),
         ( AssetClass.COLLECTIBLES.name, 'Collectibles' ),
     )
+    _VALID_TYPES = frozenset( { AssetClass.PRECIOUS_METALS.name, AssetClass.COLLECTIBLES.name } )
+    # The repeated field names of a possession rowset row -- one source with the template's inputs (see
+    # `names`), read as parallel getlists and zipped by position.
+    _P_TYPE   = 'possession_type'
+    _P_NAME   = 'possession_name'
+    _P_VALUE  = 'possession_value'
+    _P_HANDLE = 'possession_handle'
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
-        self._items = self._existing( profile ) if profile is not None else []
-        for index in range( len( self._items ) + 1 ):   # existing rows, then one blank to add
-            self._build_row( index )
+        self._items       = self._existing( profile ) if profile is not None else []
+        self._value_field = MoneyField( required = False, min_value = 0 )   # reused to parse rowset values
+        self._row_errors  = dict()                     # rowset index -> value error message (set in clean)
 
     @classmethod
     def _existing( cls, profile ) -> list:
         return [ asset for asset in profile.assets if asset.asset_class in cls._CLASSES ]
 
-    def _build_row( self, index : int ):
-        item = self._items[ index ] if index < len( self._items ) else None
-        self.fields[ f'handle_{index}' ] = forms.CharField(
-            required = False, widget = forms.HiddenInput, initial = item.handle if item else None )
-        self.fields[ f'name_{index}' ]  = forms.CharField(
-            required = False, max_length = 100, initial = item.name if item else None,
-            widget = forms.TextInput( attrs = { 'class' : 'form-control' } ) )
-        self.fields[ f'value_{index}' ] = MoneyField(
-            required = False, min_value = 0, initial = item.opening_value if item else None )
-        self.fields[ f'type_{index}' ]  = forms.ChoiceField(
-            required = False, choices = self._TYPE_CHOICES,
-            initial = item.asset_class.name if item else None,
-            widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
-        if item is not None:
-            self.fields[ f'remove_{index}' ] = forms.BooleanField( required = False )
+    @property
+    def names( self ) -> dict:
+        """The rowset field names -- one source shared with the template's inputs and the getlist keys."""
+        return { 'type' : self._P_TYPE, 'name' : self._P_NAME,
+                 'value' : self._P_VALUE, 'handle' : self._P_HANDLE }
+
+    @property
+    def type_choices( self ) -> tuple:
+        return self._TYPE_CHOICES
+
+    def _posted( self ):
+        """The posted rows as `(type, name, value, handle)` tuples, zipped by position -- one per rendered
+        rowset row (the blank <template> prototype is inert, so it never posts)."""
+        return zip_longest(
+            self.data.getlist( self._P_TYPE ), self.data.getlist( self._P_NAME ),
+            self.data.getlist( self._P_VALUE ), self.data.getlist( self._P_HANDLE ), fillvalue = '' )
 
     @property
     def rows( self ) -> list:
-        rows = []
-        for index in range( len( self._items ) + 1 ):
-            remove = f'remove_{index}'
-            rows.append( {
-                'handle' : self[ f'handle_{index}' ],
-                'name'   : self[ f'name_{index}' ],
-                'type'   : self[ f'type_{index}' ],
-                'value'  : self[ f'value_{index}' ],
-                'remove' : self[ remove ] if remove in self.fields else None,
-            } )
-        return rows
+        """The possession rows for the rowset. Bound (a re-render after an edit): the submitted values, so
+        typing survives an error re-render, each with any value error. Unbound (first load): the stored
+        items."""
+        if self.is_bound:
+            return [ { 'type' : type_, 'name' : name, 'value' : value, 'handle' : handle,
+                       'error' : self._row_errors.get( i ) }
+                     for i, ( type_, name, value, handle ) in enumerate( self._posted() ) ]
+        return [ { 'type' : item.asset_class.name, 'name' : item.name, 'value' : item.opening_value,
+                   'handle' : item.handle, 'error' : None }
+                 for item in self._items ]
+
+    def _parse_value( self, raw : str ):
+        """A posted value as a non-negative Decimal, or None when blank or invalid -- the declared cells'
+        own parse, reused."""
+        try:
+            return self._value_field.clean( raw )
+        except forms.ValidationError:
+            return None
+
+    def clean( self ):
+        """Surface a negative value as a genuine error (so the pane re-renders it), keyed to its row for
+        the template; a blank or otherwise-incomplete row stays non-blocking."""
+        cleaned = super().clean()
+        for i, ( _type, _name, value, _handle ) in enumerate( self._posted() ):
+            if not value:
+                continue
+            try:
+                self._value_field.clean( value )
+            except forms.ValidationError as error:
+                self._row_errors[ i ] = ' '.join( error.messages )
+        if self._row_errors:
+            raise forms.ValidationError( 'Check the highlighted values.' )
+        return cleaned
 
     def apply( self, profile, plans ):
         kept = [ asset for asset in profile.assets if asset.asset_class not in self._CLASSES ]
@@ -357,19 +388,15 @@ class PossessionsForm( forms.Form ):
         # asset in play -- the possessions being rebuilt AND the retained assets. The latter matters
         # because a transition-era holding (a pre-split vehicle) can still occupy a `possession-N`; minting
         # only against the possessions being rebuilt would re-mint onto it and collide at persistence.
-        held  = self._items + kept
-        taken = { asset.handle for asset in held if asset.handle is not None }
+        taken = { asset.handle for asset in ( self._items + kept ) if asset.handle is not None }
+        taken |= { handle for handle in self.data.getlist( self._P_HANDLE ) if handle }
         possessions = []
-        for index in range( len( self._items ) + 1 ):
-            if self.cleaned_data.get( f'remove_{index}' ):
-                continue
-            name  = self.cleaned_data.get( f'name_{index}' )
-            value = self.cleaned_data.get( f'value_{index}' )
-            kind  = self.cleaned_data.get( f'type_{index}' )
-            if not name or value is None or not kind:
-                continue                                     # incomplete row -- not materialized
-            handle = self.cleaned_data.get( f'handle_{index}' ) or _minted_possession_handle( taken )
+        for type_raw, name, value_raw, handle_raw in self._posted():
+            value = self._parse_value( value_raw )
+            if not name or value is None or type_raw not in self._VALID_TYPES:
+                continue                                     # incomplete/invalid row -- not materialized
+            handle = handle_raw or _minted_possession_handle( taken )
             taken.add( handle )
             possessions.append( AssetProfile(
-                handle = handle, name = name, asset_class = AssetClass[ kind ], opening_value = value ) )
+                handle = handle, name = name, asset_class = AssetClass[ type_raw ], opening_value = value ) )
         return possessions

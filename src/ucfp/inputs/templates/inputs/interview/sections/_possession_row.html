@@ -1,0 +1,29 @@
+{% comment %}
+One possession line of the rowset (js-rowset-row): its type (a select, first for consistency with the
+Income table's leading dropdown), name, current value (a raw money cell), and Remove. `row` carries the
+line's values (type / name / value / handle / error), or is None for the blank <template> prototype. The
+inputs use repeated names (`names.*`, one source with the form's getlist keys), so the form reads the
+lines as parallel lists. Params: row, names, type_choices.
+{% endcomment %}
+<tr class="{{ AppConst.ROWSET_ROW_CLASS }}">
+  <td>
+    <select name="{{ names.type }}" class="custom-select" aria-label="Type">
+      {% for value, label in type_choices %}
+      <option value="{{ value }}"{% if row and row.type == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </td>
+  <td>
+    <input type="text" name="{{ names.name }}" value="{{ row.name|default:'' }}" class="form-control"
+           aria-label="Name">
+    <input type="hidden" name="{{ names.handle }}" value="{{ row.handle|default:'' }}">
+  </td>
+  <td>
+    {% include 'inputs/interview/_money_cell.html' with name=names.value value=row.value %}
+    {% if row.error %}<span class="text-danger small d-block">{{ row.error }}</span>{% endif %}
+  </td>
+  <td class="align-middle">
+    <button type="button" class="btn btn-link btn-sm text-danger p-0 {{ AppConst.ROWSET_REMOVE_CLASS }} edit-only"
+            aria-label="Remove possession">Remove</button>
+  </td>
+</tr>
