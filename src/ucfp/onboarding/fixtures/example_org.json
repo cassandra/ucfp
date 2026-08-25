@@ -158,6 +158,9 @@
         {
           "amount": "40000",
           "date": "2030-08-01",
+          "finish": null,
+          "inflation_indexed": true,
+          "interval": null,
           "kind": "GENERAL_PAYMENT",
           "label": "College Tuition",
           "options": {},
@@ -166,6 +169,9 @@
         {
           "amount": "40000",
           "date": "2031-08-01",
+          "finish": null,
+          "inflation_indexed": true,
+          "interval": null,
           "kind": "GENERAL_PAYMENT",
           "label": "College Tuition",
           "options": {},
@@ -174,6 +180,9 @@
         {
           "amount": "40000",
           "date": "2032-08-01",
+          "finish": null,
+          "inflation_indexed": true,
+          "interval": null,
           "kind": "GENERAL_PAYMENT",
           "label": "College Tuition",
           "options": {},
@@ -182,6 +191,9 @@
         {
           "amount": "40000",
           "date": "2032-08-01",
+          "finish": null,
+          "inflation_indexed": true,
+          "interval": null,
           "kind": "GENERAL_PAYMENT",
           "label": "College Tuition",
           "options": {},
@@ -232,6 +244,41 @@
           },
           "remaining_term": {
             "count": 180,
+            "unit": "MONTH"
+          }
+        }
+      ],
+      "loan_terms_snapshots": [
+        {
+          "debt_handle": "residence-mortgage",
+          "interest_rate": {
+            "fraction": "0.055"
+          },
+          "monthly_payment": "2451",
+          "remaining_term": {
+            "count": 180,
+            "unit": "MONTH"
+          }
+        },
+        {
+          "debt_handle": "vehicle-2-loan",
+          "interest_rate": {
+            "fraction": "0.0789"
+          },
+          "monthly_payment": "1125",
+          "remaining_term": {
+            "count": 14,
+            "unit": "MONTH"
+          }
+        },
+        {
+          "debt_handle": "vehicle-1-loan",
+          "interest_rate": {
+            "fraction": "0.04"
+          },
+          "monthly_payment": "808",
+          "remaining_term": {
+            "count": 5,
             "unit": "MONTH"
           }
         }
@@ -1257,21 +1304,51 @@
           "handle": "residence-mortgage",
           "kind": "MORTGAGE",
           "name": "Mortgage",
-          "secured_asset": "residence"
+          "secured_asset": "residence",
+          "terms": {
+            "interest_rate": {
+              "fraction": "0.055"
+            },
+            "monthly_payment": "2451",
+            "remaining_term": {
+              "count": 180,
+              "unit": "MONTH"
+            }
+          }
         },
         {
           "balance": "15000",
           "handle": "vehicle-2-loan",
           "kind": "AUTO",
           "name": "Her Car Loan",
-          "secured_asset": "vehicle-2"
+          "secured_asset": "vehicle-2",
+          "terms": {
+            "interest_rate": {
+              "fraction": "0.0789"
+            },
+            "monthly_payment": "1125",
+            "remaining_term": {
+              "count": 14,
+              "unit": "MONTH"
+            }
+          }
         },
         {
           "balance": "4000",
           "handle": "vehicle-1-loan",
           "kind": "AUTO",
           "name": "His Car Loan",
-          "secured_asset": "vehicle-1"
+          "secured_asset": "vehicle-1",
+          "terms": {
+            "interest_rate": {
+              "fraction": "0.04"
+            },
+            "monthly_payment": "808",
+            "remaining_term": {
+              "count": 5,
+              "unit": "MONTH"
+            }
+          }
         }
       ],
       "filing_status": "MARRIED_JOINT",
