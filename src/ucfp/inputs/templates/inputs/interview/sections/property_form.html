@@ -1,21 +1,63 @@
 {% comment %}
-The add/edit form for one mortgaged property (rentals, second homes), rendered into the pane's form
-area (id from `form_id`). It auto-saves in the background (js-autosave) and always edits a known handle
-(add mints one), so a new property has a stable identity from the first keystroke. Non-blocking: the
-property appears in the list once its fields are complete. "Done" closes the form; it is already saved.
-Empty when no form is open. The pane's `form_id`, `edit_url`, and `add_url` come from its `PropertyPane`.
+The add/edit editor for one other-property holding (id=property-editor), a rental or second home -- opened
+as an input-editor-card in the slot beside the list, its header naming the property with its type badge (or
+"New property" when just added). Auto-saves in the background. The type select is a switch (inputs.js): a
+Rental type reveals the rental-only fields (building basis, purchase date); Second Home reveals nothing
+more. The mortgage sits behind an explicit "This property has a mortgage" disclosure. Non-blocking: the
+property appears in the list once its fields are set. When no editor is open it rests as the master-detail
+prompt, which carries the section's only Add. Reads `property_form`, `heading`, and `handle`.
 {% endcomment %}
-<div id="{{ form_id }}" class="property-editor">
+<div id="property-editor">
   {% if property_form %}
-  <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }}"
-        action="{% url edit_url handle=handle %}">
-    {% csrf_token %}
-    {% for field in property_form.primary_fields %}{% include 'inputs/interview/_field_row.html' with field=field %}{% endfor %}
-    {% include 'inputs/interview/sections/_loan_fields.html' with legend='Mortgage (optional)' loan_id=property_form.loan_id balance_field=property_form.mortgage_balance payment_field=property_form.loan_payment rate_field=property_form.loan_rate term_field=property_form.loan_term %}
-    <div class="mt-2">
-      <a class="btn btn-sm btn-outline-primary" data-async="#{{ form_id }}"
-         href="{% url add_url %}?collapse=1">Done</a>
+  {% url 'property_edit' handle=handle as property_edit_url %}
+  <div class="input-editor-card mt-2">
+    {% include 'inputs/interview/_input_editor_card_header.html' with heading=heading badge=heading.badge new_label='New property' close_url=property_edit_url|add:'?collapse=1' editor_target='#property-editor' %}
+    <div class="input-editor-card__body">
+      <form method="post"
+            class="{{ AppConst.SWITCH_CLASS }} {{ AppConst.LOAN_CLASS }} {{ AppConst.AUTOSAVE_CLASS }}"
+            action="{{ property_edit_url }}">
+        {% csrf_token %}
+        <div class="form-row">
+          <div class="col-sm-6">{{ property_form.property_type.as_field_group }}</div>
+          <div class="col-sm-6">{{ property_form.name.as_field_group }}</div>
+        </div>
+        <div class="form-row">
+          <div class="col-sm-6">{{ property_form.value.as_field_group }}</div>
+          <div class="col-sm-6">{{ property_form.purchase_price.as_field_group }}</div>
+        </div>
+        {% comment %}Rental-only (the switch case for either rental type): the depreciable basis and purchase
+        date; a second home has neither.{% endcomment %}
+        <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ property_form.rental_cases }}">
+          <div class="form-row">
+            <div class="col-sm-6">{{ property_form.building_basis.as_field_group }}</div>
+            <div class="col-sm-6">{{ property_form.acquisition_date.as_field_group }}</div>
+          </div>
+        </div>
+        {% comment %}The mortgage behind an explicit "has a mortgage?" disclosure (the js-optional toggle
+        style): the loan fields stay collapsed until the box is checked, and clear when it is unchecked, so
+        an empty block reads as "no mortgage".{% endcomment %}
+        <div class="{{ AppConst.OPTIONAL_CLASS }}">
+          <div class="form-check mb-2">
+            <input type="checkbox" class="{{ AppConst.OPTIONAL_TOGGLE_CLASS }} form-check-input"
+                   id="property-has-mortgage">
+            <label class="form-check-label" for="property-has-mortgage">This property has a mortgage</label>
+          </div>
+          <div class="{{ AppConst.OPTIONAL_BODY_CLASS }}">
+            {% include 'inputs/interview/sections/_loan_fields.html' with legend='Mortgage' loan_id=property_form.loan_id balance_field=property_form.mortgage_balance payment_field=property_form.loan_payment rate_field=property_form.loan_rate term_field=property_form.loan_term %}
+          </div>
+        </div>
+        <div class="input-editor-card__footer">
+          <a class="btn btn-sm btn-outline-primary" data-async="#property-editor"
+             href="{{ property_edit_url }}?collapse=1">Done</a>
+        </div>
+      </form>
     </div>
-  </form>
+  </div>
+  {% else %}
+  <div class="input-editor-empty">
+    <p class="text-muted mb-2">Pick a property to edit, or add a new one.</p>
+    <a class="btn btn-sm btn-outline-primary" data-async="#property-editor"
+       href="{% url 'property_add' %}">Add a property</a>
+  </div>
   {% endif %}
 </div>

@@ -16,7 +16,7 @@ from ucfp.inputs.loan_fieldset import (
     loan_payment_field, loan_rate_field, loan_term_field, solved_loan_terms )
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import Debt, LoanTerms, Profile
-from ucfp.inputs.properties import RentalForm, SecondHomeForm
+from ucfp.inputs.properties import PropertyForm
 
 
 def _months( count : int ) -> Duration:
@@ -100,17 +100,15 @@ class DebtTermsRoundTripTest( SimpleTestCase ):
 
 
 class LoanBlockIdTest( SimpleTestCase ):
-    """Each loan-block host gets a distinct `loan_id`, so the several blocks that can share the Real Estate
-    page (the residence and the rental / second-home editors) do not collide on the hint's DOM id; the rate
-    input's aria-describedby tracks that id."""
+    """Each loan-block host gets a distinct `loan_id`, so a block's hint DOM id is unambiguous and the rate
+    input's aria-describedby tracks it. The residence (Home section) and the property editor (Other Property
+    section) now live on separate sections, but their ids stay distinct."""
 
     def test_the_rate_aria_targets_the_blocks_own_hint( self ):
         form = HomeForm( profile = Profile() )
         self.assertEqual( form.fields[ 'loan_rate' ].widget.attrs[ 'aria-describedby' ],
                           f'{form.loan_id}-hint' )
 
-    def test_co_rendered_real_estate_forms_have_distinct_ids( self ):
-        ids = { HomeForm( profile = Profile() ).loan_id,
-                RentalForm( profile = Profile() ).loan_id,
-                SecondHomeForm( profile = Profile() ).loan_id }
-        self.assertEqual( len( ids ), 3 )               # residence, rental, second home all differ
+    def test_the_real_estate_forms_have_distinct_loan_ids( self ):
+        ids = { HomeForm( profile = Profile() ).loan_id, PropertyForm( profile = Profile() ).loan_id }
+        self.assertEqual( len( ids ), 2 )               # residence and property editors differ

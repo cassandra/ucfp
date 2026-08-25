@@ -1,16 +1,21 @@
 {% comment %}
-The Other Property section: the household's rentals and second homes, each managed by its own async view
-outside the section's Next form (a nested form would be invalid HTML). Each property kind is one
-`PropertyPane` (`form.property_panes`); the generic `property_list.html` and its (initially empty) add/edit
-form area are driven entirely by the pane, so a new kind adds a pane, not markup here. The panes stack
-vertically, each full-width. (Phase 2 unifies these into one typed collection on the shared list+editor
-pattern.)
+The Other Property section: the household's rentals and second homes as one collection -- a list on the
+left, the add/edit editor opening on the right (list-left / editor-right, the shared collection pattern;
+the columns stack below md). Each property's type (Rental — Residential / Commercial, or Second Home) is
+chosen in the editor, so one list and one typed editor replace the old per-type panes. Editing runs through
+the section's own async view, outside the section's Next form. `form.properties` is the combined list,
+managed by `PropertyFormView` / `PropertyDeleteView`.
 {% endcomment %}
-<p class="text-muted">Rental properties and second homes you own.</p>
-{% for pane in form.property_panes %}
-<div class="property-pane {% if not forloop.first %}mt-4{% endif %}">
-  <h3 class="h6">{{ pane.heading }}</h3>
-  {% include 'inputs/interview/sections/property_list.html' with properties=pane.properties list_id=pane.list_id form_id=pane.form_id add_url=pane.add_url edit_url=pane.edit_url delete_url=pane.delete_url add_text=pane.add_text empty_text=pane.empty_text %}
-  <div id="{{ pane.form_id }}" class="property-editor"></div>
+<p class="text-muted">Rental properties and second homes you own. Each carries a type that sets how it's
+  taxed; a rental's rent is set later, in Income.</p>
+<div class="row">
+  <div class="col-md-5">
+    {% include 'inputs/interview/sections/property_list.html' with properties=form.properties %}
+  </div>
+  <div class="col-md-7 mt-3 mt-md-0">
+    {% comment %}The editor slot. Rendered from the editor template even when empty so its resting state is
+    the master-detail prompt carrying the section's only Add; Add/Edit swap the editor card in here,
+    Done/collapse restores this empty state.{% endcomment %}
+    {% include 'inputs/interview/sections/property_form.html' %}
+  </div>
 </div>
-{% endfor %}

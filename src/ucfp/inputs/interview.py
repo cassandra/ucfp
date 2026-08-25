@@ -44,7 +44,7 @@ from .cash_plan import CashPlanSectionForm
 from .net_worth import NetWorthSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
-from .properties import PANES, PossessionsForm, properties_context
+from .properties import PossessionsForm, properties_context
 from .vehicle_profile import current_vehicles_context
 from .retirement import RetirementForm
 from .expenses import has_property
@@ -374,14 +374,10 @@ class OtherPropertySectionForm:
         return True
 
     @property
-    def property_panes( self ) -> list:
-        """Each mortgaged-property pane's render context -- its heading, its holdings, and the template
-        config (ids, URL names, wording) from the shared `PropertyPane`. The section loops over these, so a
-        new property kind is one pane, not another hand-wired block."""
-        return [ { 'heading': pane.heading,
-                   'properties': properties_context( self._profile, pane.asset_class ),
-                   **pane.template_context() }
-                 for pane in PANES ]
+    def properties( self ) -> list:
+        """The household's rentals and second homes as one collection -- each holding's handle, name, value,
+        type badge, and the Edit/Remove urls its item card posts to. One list, one typed editor."""
+        return properties_context( self._profile )
 
     def apply( self, profile, plans ):
         return profile, plans
