@@ -24,7 +24,8 @@ from ucfp.environment.constants import AppConst
 from ucfp.inputs.debt_plan import DebtPlanForm
 from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
-    LeasedVehicleDisposition, LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
+    LeasedVehicleDisposition, LoanRepayment, LoanTermsSnapshot, Plans, Vehicle, VehicleDisposition,
+    VehiclePlan )
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, LoanTerms, Profile
 from ucfp.inputs.vehicle_disposition import (
@@ -228,6 +229,26 @@ class VehicleLoanTermsTests( unittest.TestCase ):
         plans = _apply( _financed_profile(), Plans(), 'vehicle-1',
                         kind = 'KEEP', loan_rate = '6', loan_monthly = '999', loan_months = '36' )
         self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( Decimal( '6' ) ) )
+
+    def test_saving_the_current_loan_records_a_terms_snapshot( self ):
+        # The auto pipeline records the contract snapshot (copy 3) when the repayment is saved.
+        profile = replace( _financed_profile( balance = '18000' ), debts = [ Debt(
+            handle = 'vehicle-1-loan', name = 'Sedan loan', kind = DebtKind.AUTO,
+            balance = Decimal( '18000' ), secured_asset = 'vehicle-1',
+            terms = LoanTerms( interest_rate = Rate.percent( 5 ), remaining_term = Duration( 36, TimeUnit.MONTH ),
+                               monthly_payment = Decimal( '540' ) ) ) ] )
+        plans = _apply( profile, Plans(), 'vehicle-1', kind = 'KEEP', loan_rate = '5', loan_months = '36' )
+        self.assertEqual( len( plans.loan_terms_snapshots ), 1 )
+        snap = plans.loan_terms_snapshots[ 0 ]
+        self.assertEqual( ( snap.debt_handle, snap.interest_rate, snap.remaining_term ),
+                          ( 'vehicle-1-loan', Rate.percent( 5 ), Duration( 36, TimeUnit.MONTH ) ) )
+
+    def test_clearing_the_current_loan_drops_its_snapshot( self ):
+        plans  = Plans( loan_repayments = [ _repayment() ],
+                        loan_terms_snapshots = [ LoanTermsSnapshot( 'vehicle-1-loan', Rate.percent( 5 ),
+                                                                    Duration( 36, TimeUnit.MONTH ) ) ] )
+        result = _apply( _financed_profile(), plans, 'vehicle-1', kind = 'KEEP' )   # no rate/months entered
+        self.assertEqual( result.loan_terms_snapshots, [] )
 
     def test_terms_persist_alongside_a_disposition( self ):
         plans = _apply( _financed_profile(), Plans(), 'vehicle-1', kind = 'SELL',

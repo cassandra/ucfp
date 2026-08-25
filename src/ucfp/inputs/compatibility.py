@@ -18,9 +18,10 @@ for a drifted scenario; a Profile edit does not prune Plans eagerly.
 """
 from dataclasses import replace
 from decimal import Decimal
+from typing import Optional
 
-from ucfp.inputs.plans.schemas import Plans
-from ucfp.inputs.profile.schemas import Profile
+from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
+from ucfp.inputs.profile.schemas import LoanTerms, Profile
 from ucfp.inputs.property_expenses import property_handles_for
 from ucfp.inputs.vehicle_expenses import plan_has_content
 
@@ -126,12 +127,93 @@ def plans_reconciled_with_profile( profile: Profile, plans: Plans ) -> Plans:
         withdrawals       = [ w for w in plans.withdrawals if w.source_handle in accounts ],
         loan_repayments   = [ r for r in plans.loan_repayments if r.debt_handle in debts ],
         prepayments       = [ p for p in plans.prepayments if p.loan_handle in debts ],
+        loan_terms_snapshots = [ s for s in plans.loan_terms_snapshots if s.debt_handle in debts ],
         credit_card_plans = [ c for c in plans.credit_card_plans if c.card_handle in debts ],
         property_expenses = [ _reconciled_property_expense( e, properties )
                               for e in plans.property_expenses ],
         vehicle_plan      = _reconciled_vehicle_plan( plans.vehicle_plan, accounts, leased ),
         drawdown          = _reconciled_drawdown( plans.drawdown, accounts ),
         events            = [ e for e in plans.events if _event_resolves( e, entities ) ] )
+
+
+# --- Loan-terms drift (value drift) --------------------------------------
+# The existence checks above ask whether a Plans reference still resolves; this asks a *value* question:
+# has a debt's Profile contract terms changed since the Plan's repayment was seeded from them? Each
+# repayment records a `LoanTermsSnapshot` of the contract at seed time; when the current Profile terms
+# diverge from that snapshot, the plan may be built on stale facts. Unlike the existence drift (one
+# reconcile that prunes), this offers a *choice* per loan -- reset the repayment to the updated contract,
+# or keep the current plan -- since the repayment may legitimately differ from the contract.
+
+
+def snapshot_of( debt_handle: str, terms: Optional[ LoanTerms ] ) -> LoanTermsSnapshot:
+    """A `LoanTermsSnapshot` copying a debt's current Profile `LoanTerms` -- the contract as of now, stored
+    on the Plans so a later Profile edit can be noticed. An all-None snapshot for a balance-only loan. The
+    single builder, so the seed-time write (in the debt/vehicle plan forms) and the reset/keep refresh
+    below produce identical snapshots."""
+    if terms is None:
+        return LoanTermsSnapshot( debt_handle = debt_handle )
+    return LoanTermsSnapshot(
+        debt_handle = debt_handle, interest_rate = terms.interest_rate,
+        remaining_term = terms.remaining_term, monthly_payment = terms.monthly_payment )
+
+
+def loan_terms_drift( profile: Profile, plans: Plans ) -> list:
+    """The debt handles whose Profile contract terms (rate/term) have changed since the Plan's repayment
+    was seeded from them -- the snapshot no longer matches the current facts, in first-seen order. Empty
+    when every snapshot is in step. A snapshot for a debt the Profile no longer has is not reported here
+    (that is existence drift, pruned by the reconcile); only value drift on a still-present debt. Payment is
+    not compared -- it is re-derived when the balance changes, which is not a change to the contract."""
+    terms = { debt.handle: debt.terms for debt in profile.debts }
+    drifted = []
+    for snapshot in plans.loan_terms_snapshots:
+        if snapshot.debt_handle not in terms:
+            continue
+        current = terms[ snapshot.debt_handle ]
+        current_rate = current.interest_rate if current is not None else None
+        current_term = current.remaining_term if current is not None else None
+        if ( snapshot.interest_rate, snapshot.remaining_term ) != ( current_rate, current_term ):
+            drifted.append( snapshot.debt_handle )
+    return drifted
+
+
+def reset_loan_terms( profile: Profile, plans: Plans, debt_handle: str ) -> Plans:
+    """Adopt the updated contract for one debt: re-seed its repayment's rate/term from the current Profile
+    terms and refresh its snapshot to match, clearing the drift. Extra principal and payoff are untouched.
+    When the updated contract is incomplete (missing a rate or term), the repayment is dropped -- an
+    incomplete contract cannot seed a loan (matching the forms' non-blocking rule)."""
+    terms     = _debt_terms( profile, debt_handle )
+    others    = [ r for r in plans.loan_repayments if r.debt_handle != debt_handle ]
+    repayment = _repayment_from_terms( debt_handle, terms )
+    return replace(
+        plans,
+        loan_repayments      = others + ( [ repayment ] if repayment is not None else [] ),
+        loan_terms_snapshots = _with_snapshot( plans, debt_handle, terms ) )
+
+
+def keep_loan_terms( profile: Profile, plans: Plans, debt_handle: str ) -> Plans:
+    """Keep the current plan for one debt: refresh its snapshot to the current Profile terms without
+    touching the repayment, so the drift clears while the plan's own terms stand."""
+    return replace(
+        plans,
+        loan_terms_snapshots = _with_snapshot( plans, debt_handle, _debt_terms( profile, debt_handle ) ) )
+
+
+def _debt_terms( profile: Profile, debt_handle: str ) -> Optional[ LoanTerms ]:
+    debt = next( ( d for d in profile.debts if d.handle == debt_handle ), None )
+    return debt.terms if debt is not None else None
+
+
+def _repayment_from_terms( debt_handle: str, terms: Optional[ LoanTerms ] ) -> Optional[ LoanRepayment ]:
+    if terms is None or terms.interest_rate is None or terms.remaining_term is None:
+        return None
+    return LoanRepayment( debt_handle = debt_handle, interest_rate = terms.interest_rate,
+                          remaining_term = terms.remaining_term )
+
+
+def _with_snapshot( plans: Plans, debt_handle: str, terms: Optional[ LoanTerms ] ) -> list:
+    """The snapshots with this debt's refreshed to the given terms (the others untouched)."""
+    others = [ s for s in plans.loan_terms_snapshots if s.debt_handle != debt_handle ]
+    return others + [ snapshot_of( debt_handle, terms ) ]
 
 
 def _stale_property_handles( plans: Plans, properties: set ) -> list:

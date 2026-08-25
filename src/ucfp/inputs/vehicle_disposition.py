@@ -19,6 +19,7 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.compatibility import snapshot_of
 from ucfp.inputs.loan_fieldset import (
     loan_payment_field, loan_rate_field, loan_term_field, seeded_repayment_terms )
 from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
@@ -212,14 +213,20 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
         if not self.is_financed:
             return plans
         debt_handle = loan_debt_handle( self._handle )
-        others      = [ r for r in plans.loan_repayments if r.debt_handle != debt_handle ]
+        others_r    = [ r for r in plans.loan_repayments if r.debt_handle != debt_handle ]
+        others_s    = [ s for s in plans.loan_terms_snapshots if s.debt_handle != debt_handle ]
         months      = self.cleaned_data.get( 'loan_months' )
         rate        = self._resolved_rate( months ) if months is not None else None
-        if rate is None:
-            return replace( plans, loan_repayments = others )           # incomplete -> no terms yet
+        if rate is None:                    # incomplete -> no repayment, so no snapshot either
+            return replace( plans, loan_repayments = others_r, loan_terms_snapshots = others_s )
         repayment = LoanRepayment( debt_handle = debt_handle, interest_rate = rate,
                                    remaining_term = Duration( months, TimeUnit.MONTH ) )
-        return replace( plans, loan_repayments = others + [ repayment ] )
+        # Preserve the seed-time snapshot (the contract when this repayment was established), else record
+        # the current Profile terms as the new snapshot.
+        existing = next( ( s for s in plans.loan_terms_snapshots if s.debt_handle == debt_handle ), None )
+        snapshot = existing if existing is not None else snapshot_of( debt_handle, self._auto_debt().terms )
+        return replace( plans, loan_repayments = others_r + [ repayment ],
+                        loan_terms_snapshots = others_s + [ snapshot ] )
 
     def _resolved_rate( self, months : int ):
         """The loan's annual rate from the current-loan fields: the entered `loan_rate` (which the client
