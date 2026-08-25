@@ -11,7 +11,7 @@ re-rendering only to surface a bad value.
   <form method="post" action="{% url 'credit_card_plan' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     {% for row in credit_card_form.rows %}
-    <div class="{{ AppConst.SWITCH_CLASS }} {{ AppConst.CREDIT_CARD_CLASS }} border rounded p-2 mb-2"
+    <div class="{{ AppConst.SWITCH_CLASS }} {{ AppConst.CREDIT_CARD_CLASS }} border rounded p-2 mb-2 bg-light"
          data-{{ AppConst.CREDIT_CARD_BALANCE_DATA_ATTR }}="{{ row.balance }}"
          data-{{ AppConst.CREDIT_CARD_APR_DATA_ATTR }}="{{ credit_card_form.apr_percent }}">
       <div class="mb-2"><span class="font-weight-bold">{{ row.name }}</span>
