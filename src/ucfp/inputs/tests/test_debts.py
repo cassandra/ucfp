@@ -90,6 +90,16 @@ class DebtFormWriteTests( SimpleTestCase ):
         self.assertNotIn( DebtKind.MORTGAGE.name, kinds )
         self.assertNotIn( DebtKind.AUTO.name, kinds )
 
+    def test_apply_refuses_to_rewrite_a_canonical_elsewhere_debt( self ):
+        # The debt/<handle>/ route is a catch-all, so a crafted post could name a mortgage/auto handle with
+        # an editable kind; apply must leave it untouched (edited only in its canonical section).
+        profile   = Profile( debts = [ _mortgage() ] )
+        result, _ = _apply( profile, handle = 'residence-mortgage', kind = 'STUDENT', name = 'Sneaky',
+                            balance = '1000' )
+        debt = result.debts[ 0 ]
+        self.assertEqual( ( debt.handle, debt.kind, debt.name ),
+                          ( 'residence-mortgage', DebtKind.MORTGAGE, 'Mortgage' ) )   # unchanged
+
 
 class DebtsContextTests( SimpleTestCase ):
     """The list distinguishes editable loans/cards from read-only mortgages/autos (a pointer to their

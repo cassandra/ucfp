@@ -944,7 +944,8 @@ class InterviewView( GuestReminderMixin, View ):
     def _plans_loan_terms_drift( request, flow ):
         """The current Plans record's loan-terms drift notice for the Plans-flow banner (loans whose
         contract terms changed since the plan seeded from them + the per-loan reset/keep), or None off the
-        Plans flow or before a *complete* profile exists. Gated exactly like `_plans_drift`."""
+        Plans flow or before a *complete* profile exists (so the banner never shows a fix that would
+        no-op)."""
         if flow != 'plans':
             return None
         profile_record = completed_profile( request.organization )

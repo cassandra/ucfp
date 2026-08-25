@@ -8,8 +8,7 @@ Every debt is listed, but the editor scope differs by kind, so each loan has exa
 - **Mortgages and auto loans** are read-only here, shown with a pointer to their canonical section (Home &
   Property for a mortgage, Vehicles for an auto loan), where their balance and terms are entered.
 
-This one-editor-per-loan rule also fixes the former two-writer bug (a mortgage was editable both here and
-on its property). The list (`debts_context`) offers Edit/Remove only on the editable debts; the editor
+One editor per loan: the list (`debts_context`) offers Edit/Remove only on the editable debts; the editor
 (`DebtForm`) writes one debt, keyed by its stable `handle` so Plans references survive an edit.
 """
 from dataclasses import replace
@@ -50,8 +49,8 @@ def _minted_debt_handle( profile ) -> str:
 
 
 def _terms_summary( terms ) -> str:
-    """A read-only one-line summary of a debt's contract terms, or empty when none are captured -- e.g.
-    `4% · 240 mo · $1,800/mo`."""
+    """A read-only one-line summary of a debt's contract terms, or empty when none are captured -- the set
+    parts (rate, term, payment) joined by a middot, e.g. "4%, 240 mo, $1,800/mo"."""
     if terms is None:
         return ''
     parts = []
@@ -100,8 +99,8 @@ class DebtForm( LoanTermsFieldsMixin, forms.Form ):
     `handle`; non-blocking and background-saved -- a partial debt (missing a kind, name, or balance) simply
     is not written, and other debts are left intact."""
 
-    # The editor holds a single loan block, so a fixed hint id is unambiguous.
-    LOAN_HINT_ID = 'debt-loan-hint'
+    # One debt editor renders per page, so a fixed block id is unambiguous.
+    LOAN_ID = 'debt-loan'
 
     # Addable/editable kinds: unsecured amortizing loans and cards. Mortgages and autos are entered in
     # their canonical section (read-only in the list), so they are not offered.
@@ -157,6 +156,11 @@ class DebtForm( LoanTermsFieldsMixin, forms.Form ):
         kind     = DebtKind[ self.cleaned_data[ 'kind' ] ]
         balance  = self.cleaned_data[ 'balance' ]
         existing = next( ( d for d in profile.debts if d.handle == handle ), None )
+        # A mortgage or auto loan is edited only in its canonical section; refuse to rewrite one here even
+        # if a crafted post names its handle (the catch-all route accepts any), so this stays read-only for
+        # those kinds -- the guard `_initial` applies when opening the editor, enforced now on write too.
+        if existing is not None and existing.kind in _CANONICAL_ELSEWHERE:
+            return profile, plans
         debt = Debt(
             handle = handle, name = self.cleaned_data[ 'name' ], kind = kind, balance = balance,
             secured_asset = existing.secured_asset if existing is not None else None,

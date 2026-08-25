@@ -1,8 +1,9 @@
 """The loan solver: derive a level-payment loan's missing term from the ones the user gave, guarding the
 back-solve for plausibility, so every loan-entry surface shares one implementation over the four loan
 quantities -- balance, rate, term (months), and monthly payment. Built on `common.amortization`, and
-mirrored client-side by the loan calculator in `inputs.js` (the two cannot drift because the plausibility
-ceiling has one source, re-exported to the client through `AppConst`).
+mirrored client-side by the loan calculator in `inputs.js` (a hand-maintained reimplementation of the same
+math; the plausibility ceiling alone has one source, re-exported to the client through `AppConst`, so at
+least that cannot drift).
 
 Only the payment->rate back-solve is guarded: a monthly that cannot retire the balance in the term, or
 that implies a rate above `MAX_PLAUSIBLE_APR`, does not form a real loan, so no rate is fabricated from

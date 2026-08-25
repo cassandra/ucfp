@@ -164,6 +164,7 @@ class RentalForm( _PropertyForm ):
     rental)."""
 
     _PREFIX       = 'rental-'
+    LOAN_ID       = 'rental-mortgage'   # distinct block id: shares the Real Estate page with the others
     _ASSET_FIELDS = ( 'name', 'value', 'purchase_price', 'acquisition_date',
                       'building_basis', 'property_type' )
     field_order   = [ 'name', 'value', 'purchase_price', 'building_basis', 'acquisition_date',
@@ -210,6 +211,7 @@ class SecondHomeForm( _PropertyForm ):
     is an itemizable deduction like the residence's rather than a rental expense."""
 
     _PREFIX       = 'second-home-'
+    LOAN_ID       = 'second-home-mortgage'   # distinct block id: shares the Real Estate page
     _ASSET_FIELDS = ( 'name', 'value', 'purchase_price' )
     field_order   = [ 'name', 'value', 'purchase_price', 'mortgage_balance' ]
 

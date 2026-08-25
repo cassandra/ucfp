@@ -157,6 +157,15 @@ def snapshot_of( debt_handle: str, terms: Optional[ LoanTerms ] ) -> LoanTermsSn
         remaining_term = terms.remaining_term, monthly_payment = terms.monthly_payment )
 
 
+def preserved_snapshot( plans: Plans, debt_handle: str, terms: Optional[ LoanTerms ] ) -> LoanTermsSnapshot:
+    """The snapshot to record when (re)writing a debt's repayment: its existing snapshot when it has one --
+    the contract as of when the repayment was first established, so a later plan edit does not silently
+    accept a since-changed Profile fact -- else a fresh snapshot of the current `terms`. The one seed-time
+    write rule, shared by the debt-plan and vehicle-plan forms."""
+    existing = next( ( s for s in plans.loan_terms_snapshots if s.debt_handle == debt_handle ), None )
+    return existing if existing is not None else snapshot_of( debt_handle, terms )
+
+
 def loan_terms_drift( profile: Profile, plans: Plans ) -> list:
     """The debt handles whose Profile contract terms (rate/term) have changed since the Plan's repayment
     was seeded from them -- the snapshot no longer matches the current facts, in first-seen order. Empty

@@ -117,20 +117,29 @@ class LoanTermsFieldsMixin:
     Profile form, and rebuilds the consistent `LoanTerms` from them. The host form keeps its own balance
     field (named to suit -- `mortgage_balance`, `loan_balance`), gives it `AppConst.LOAN_BALANCE_CLASS`,
     seeds the terms by merging `loan_terms_initial( debt.terms )` into its initials, and renders the whole
-    block with the `_loan_fields.html` partial (`loan_id='loan'`, so the hint id matches `LOAN_HINT_ID`).
-    The Debts row list, whose fields are per-row, builds from the factories directly instead of this mixin.
+    block with the `_loan_fields.html` partial (passing `loan_id=form.loan_id`, so the hint id it emits
+    matches the one the rate input targets). The Debts row list, whose fields are per-row, builds from the
+    factories directly instead of this mixin.
 
     The fields are injected in `__init__` (after the form builds `self.fields`), not declared as class
     attributes, because Django's form metaclass only collects declared fields from form-class bases -- a
-    plain mixin's would be silently dropped."""
+    plain mixin's would be silently dropped.
 
-    # The id of the block's hint (the `_loan_fields.html` `loan_id='loan'` block), which the rate input's
-    # aria-describedby targets. One block shows per page, so the fixed id is unambiguous.
-    LOAN_HINT_ID = 'loan-hint'
+    `loan_id` is the block's DOM id stem: the hint is `{loan_id}-hint`, which the rate input's
+    aria-describedby targets *and* which the host template passes to `_loan_fields.html` -- one source, so
+    the two cannot fall out of step. Each host sets a distinct `LOAN_ID` because several loan blocks can
+    share a page (the residence and the rental / second-home editors all render on the Real Estate
+    section)."""
+
+    LOAN_ID = 'loan'          # the block's id stem; each host overrides it so co-rendered blocks stay unique
+
+    @property
+    def loan_id( self ) -> str:
+        return self.LOAN_ID
 
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
-        self.fields[ 'loan_rate' ]    = loan_rate_field( hint_id = self.LOAN_HINT_ID )
+        self.fields[ 'loan_rate' ]    = loan_rate_field( hint_id = f'{self.loan_id}-hint' )
         self.fields[ 'loan_term' ]    = loan_term_field()
         self.fields[ 'loan_payment' ] = loan_payment_field()
 

@@ -19,7 +19,7 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
-from ucfp.inputs.compatibility import snapshot_of
+from ucfp.inputs.compatibility import preserved_snapshot
 from ucfp.inputs.loan_fieldset import (
     loan_payment_field, loan_rate_field, loan_term_field, seeded_repayment_terms )
 from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
@@ -221,10 +221,7 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
             return replace( plans, loan_repayments = others_r, loan_terms_snapshots = others_s )
         repayment = LoanRepayment( debt_handle = debt_handle, interest_rate = rate,
                                    remaining_term = Duration( months, TimeUnit.MONTH ) )
-        # Preserve the seed-time snapshot (the contract when this repayment was established), else record
-        # the current Profile terms as the new snapshot.
-        existing = next( ( s for s in plans.loan_terms_snapshots if s.debt_handle == debt_handle ), None )
-        snapshot = existing if existing is not None else snapshot_of( debt_handle, self._auto_debt().terms )
+        snapshot  = preserved_snapshot( plans, debt_handle, self._auto_debt().terms )
         return replace( plans, loan_repayments = others_r + [ repayment ],
                         loan_terms_snapshots = others_s + [ snapshot ] )
 

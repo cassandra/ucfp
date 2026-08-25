@@ -24,7 +24,7 @@ makes relevant.
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="own">
         {% include 'inputs/interview/_field_row.html' with field=residence_form.home_value %}
         {% include 'inputs/interview/_field_row.html' with field=residence_form.purchase_price %}
-        {% include 'inputs/interview/sections/_loan_fields.html' with legend='Mortgage (optional)' loan_id='loan' balance_field=residence_form.mortgage_balance payment_field=residence_form.loan_payment rate_field=residence_form.loan_rate term_field=residence_form.loan_term %}
+        {% include 'inputs/interview/sections/_loan_fields.html' with legend='Mortgage (optional)' loan_id=residence_form.loan_id balance_field=residence_form.mortgage_balance payment_field=residence_form.loan_payment rate_field=residence_form.loan_rate term_field=residence_form.loan_term %}
       </div>
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="rent">
         <p class="text-muted small">Your monthly rent is set with your other housing costs in Spending.</p>

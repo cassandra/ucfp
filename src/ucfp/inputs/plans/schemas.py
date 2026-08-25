@@ -469,7 +469,8 @@ class Plans:
     loan_repayments: list[ LoanRepayment ] = field( default_factory = list )
     prepayments: list[ LoanPrepayment ] = field( default_factory = list )
     # The contract terms each repayment was seeded from, mirrored per debt for drift detection (distinct
-    # from the repayment schedule above); refreshed only by the reset/keep reconcile, not by a plan edit.
+    # from the repayment schedule above): written when a repayment is first saved, then preserved across a
+    # plan edit and refreshed only by the reset/keep reconcile.
     loan_terms_snapshots: list[ LoanTermsSnapshot ] = field( default_factory = list )
     # Credit-card paydown plans (per card, resolved to expenses at materialization)
     credit_card_plans: list[ CreditCardPlan ] = field( default_factory = list )

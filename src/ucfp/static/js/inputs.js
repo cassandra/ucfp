@@ -638,9 +638,9 @@ window.App.Inputs = (function () {
     }
 
     function enhanceLoans( $scope ) {
-        // Bound directly on each block's inputs (re-applied per render, like the vehicle-finance enhancer)
-        // so a filled value lands before the form's change-driven autosave serializes; setting `.val()`
-        // fires no event, so the rate/payment pair does not loop.
+        // Bound directly on each block's inputs (re-applied per render) so a filled value lands before the
+        // form's change-driven autosave serializes; setting `.val()` fires no event, so the rate/payment
+        // pair does not loop.
         ( $scope || $( document.body ) ).find( classSelector( C.LOAN_CLASS ) ).each( function () {
             const $loan = $( this );
             $loan.find( ':input' ).off( 'input.loan' ).on( 'input.loan', function () {

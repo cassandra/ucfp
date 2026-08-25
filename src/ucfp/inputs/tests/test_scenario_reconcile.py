@@ -195,6 +195,17 @@ class PlansLoanTermsDriftViewTests( TestCase ):
         self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( 5 ) )        # unchanged
         self.assertEqual( loan_terms_drift( load_profile( profile_record ), plans ), [] )      # cleared
 
+    def test_reset_is_a_no_op_without_a_complete_profile( self ):
+        # No complete profile: there is no current contract to reconcile against, so the plan is left
+        # untouched (repayment and snapshot unchanged) and the view still redirects.
+        record   = _loan_terms_drifted_plans_record( self.organization )
+        response = self._post( PlansLoanTermsResetView, 'plans_loan_terms_reset', record.uuid )
+        self.assertEqual( response.status_code, 302 )
+        record.refresh_from_db()
+        plans = load_plans( record )
+        self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( 5 ) )        # unchanged
+        self.assertEqual( plans.loan_terms_snapshots[ 0 ].interest_rate, Rate.percent( 6 ) )   # unchanged
+
     def test_it_is_org_scoped( self ):
         record = _loan_terms_drifted_plans_record( self.organization )
         request = self.factory.post(

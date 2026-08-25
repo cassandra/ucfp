@@ -18,7 +18,7 @@ from common.recurrence import Duration, TimeUnit
 
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.events import LOAN_ROLE
-from ucfp.inputs.compatibility import snapshot_of
+from ucfp.inputs.compatibility import preserved_snapshot
 from ucfp.inputs.loan_fieldset import seeded_repayment_terms
 from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import LoanPrepayment, LoanRepayment, PlanEvent
@@ -144,7 +144,7 @@ class DebtPlanForm( forms.Form ):
             if repayment is None:
                 continue                    # no terms -> no loan, so no repayment, prepay, payoff, snapshot
             repayments.append( repayment )
-            snapshots.append( self._snapshot_for( debt, plans ) )
+            snapshots.append( preserved_snapshot( plans, debt.handle, debt.terms ) )
             if prepayment is not None:
                 prepays.append( prepayment )
             payoff = self._payoff_for( debt )
@@ -153,14 +153,6 @@ class DebtPlanForm( forms.Form ):
         return profile, replace(
             plans, loan_repayments = repayments, prepayments = prepays,
             loan_terms_snapshots = snapshots, events = kept_events + payoffs )
-
-    @staticmethod
-    def _snapshot_for( debt, plans ):
-        # Preserve the debt's existing snapshot (the contract as of when its repayment was established), so
-        # a plan edit does not silently accept a since-changed Profile fact; create one from the current
-        # Profile terms only when none exists yet (the repayment is new).
-        existing = next( ( s for s in plans.loan_terms_snapshots if s.debt_handle == debt.handle ), None )
-        return existing if existing is not None else snapshot_of( debt.handle, debt.terms )
 
     def _plan_for( self, debt ):
         # Non-blocking: terms are a pair -- a rate without a term (or the reverse) is mid-entry, so

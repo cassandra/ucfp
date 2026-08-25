@@ -22,7 +22,7 @@ kind, name, and balance are set. Empty when no form is open. Reads `debt_form`, 
         {% comment %}The loan-terms block shows only for an amortizing kind (the kind select is the switch
         control); a credit card reveals nothing more.{% endcomment %}
         <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ debt_form.amortizing_cases }}">
-          {% include 'inputs/interview/sections/_loan_term_fields.html' with payment_field=debt_form.loan_payment rate_field=debt_form.loan_rate term_field=debt_form.loan_term loan_id='debt-loan' %}
+          {% include 'inputs/interview/sections/_loan_term_fields.html' with payment_field=debt_form.loan_payment rate_field=debt_form.loan_rate term_field=debt_form.loan_term loan_id=debt_form.loan_id %}
         </div>
         <div class="mt-2">
           <a class="btn btn-sm btn-outline-primary" data-async="#debt-form"

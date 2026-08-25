@@ -80,6 +80,8 @@ class CurrentVehicleForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
     existing vehicle moves it between the two stores under the same handle; any now-mismatched disposition
     is left for on-demand reconciliation, not dropped here."""
 
+    LOAN_ID = 'vehicle-loan'     # distinct block id (one vehicle editor per page)
+
     name      = forms.CharField( label = 'Name', max_length = 100, required = False )
     ownership = forms.ChoiceField(
         label = 'This vehicle is', required = False, choices = _OWNERSHIP_CHOICES, initial = OWNED,

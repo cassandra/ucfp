@@ -243,6 +243,20 @@ class VehicleLoanTermsTests( unittest.TestCase ):
         self.assertEqual( ( snap.debt_handle, snap.interest_rate, snap.remaining_term ),
                           ( 'vehicle-1-loan', Rate.percent( 5 ), Duration( 36, TimeUnit.MONTH ) ) )
 
+    def test_saving_preserves_an_existing_snapshot( self ):
+        # The auto pipeline preserves the seed-time snapshot across a disposition edit (contract 6%, snapshot
+        # 5%), so a since-changed Profile fact is not silently accepted -- the drift stays visible.
+        profile = replace( _financed_profile( balance = '18000' ), debts = [ Debt(
+            handle = 'vehicle-1-loan', name = 'Sedan loan', kind = DebtKind.AUTO,
+            balance = Decimal( '18000' ), secured_asset = 'vehicle-1',
+            terms = LoanTerms( interest_rate = Rate.percent( 6 ),
+                               remaining_term = Duration( 36, TimeUnit.MONTH ) ) ) ] )
+        plans  = Plans( loan_repayments = [ _repayment( rate = '6', months = 36 ) ],
+                        loan_terms_snapshots = [ LoanTermsSnapshot( 'vehicle-1-loan', Rate.percent( 5 ),
+                                                                    Duration( 36, TimeUnit.MONTH ) ) ] )
+        result = _apply( profile, plans, 'vehicle-1', kind = 'KEEP', loan_rate = '6', loan_months = '36' )
+        self.assertEqual( result.loan_terms_snapshots[ 0 ].interest_rate, Rate.percent( 5 ) )   # preserved
+
     def test_clearing_the_current_loan_drops_its_snapshot( self ):
         plans  = Plans( loan_repayments = [ _repayment() ],
                         loan_terms_snapshots = [ LoanTermsSnapshot( 'vehicle-1-loan', Rate.percent( 5 ),
