@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
 from django import forms
+from django.urls import reverse
 from django.utils.text import slugify
 
 from common.date_window import DateWindow
@@ -719,10 +720,14 @@ def events_context( profile, plans ) -> list:
     events = plans.events if plans is not None else list()
     rows   = list()
     for index, event in enumerate( events ):
-        handler = handler_for( event.kind )
-        rows.append( { 'index'    : index,
-                       'summary'  : handler.summary( event, profile ),
-                       'editable' : handler.is_editable( event, profile ) } )
+        handler  = handler_for( event.kind )
+        editable = handler.is_editable( event, profile )
+        rows.append( { 'index'      : index,
+                       'summary'    : handler.summary( event, profile ),
+                       'group'      : handler.group,      # the menu group, shown as the card's type badge
+                       'editable'   : editable,
+                       'edit_url'   : reverse( 'event_edit', kwargs = { 'index': index } ) if editable else None,
+                       'delete_url' : reverse( 'event_delete', kwargs = { 'index': index } ) } )
     return rows
 
 

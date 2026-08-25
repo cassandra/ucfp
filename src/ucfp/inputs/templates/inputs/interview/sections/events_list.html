@@ -1,31 +1,15 @@
 {% comment %}
-The plan's events as rows (id=events-list, refreshed on add, edit, or delete). Each editable row carries
-an Edit link that opens its form pre-filled in the add area (id=events-add); a row whose event references a
-since-removed entity is not editable (`event.editable`), so it shows Remove only. Remove posts to
-event_delete, which swaps this list back in.
+The plan's events as input-item-cards (id=events-list, refreshed on add/edit/delete). Each carries Remove;
+an editable event (its referenced entities still exist) also carries Edit, which opens its form in the add
+area (#events-add). A non-editable event (references a since-removed entity, or a kind managed elsewhere)
+shows Remove only -- its `edit_url` is None, so the card omits Edit. `events` is the list of
+{index, summary, editable, edit_url, delete_url}.
 {% endcomment %}
 <div id="events-list" class="mb-3">
   {% if events %}
-  <ul class="list-unstyled mb-0">
-    {% for event in events %}
-    <li class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
-      <span>{{ event.summary }}</span>
-      <span class="d-flex align-items-center ml-2 flex-shrink-0 edit-only">
-        {% if event.editable %}
-        <a class="btn btn-link btn-sm p-0 mr-2 edit-only" data-async="#events-add"
-           href="{% url 'event_edit' index=event.index %}"
-           aria-label="Edit {{ event.summary }}" title="Edit">Edit</a>
-        {% endif %}
-        <form method="post" action="{% url 'event_delete' index=event.index %}"
-              data-async="#events-list" class="d-inline">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-link btn-sm text-danger p-0"
-                  aria-label="Remove {{ event.summary }}" title="Remove">&times;</button>
-        </form>
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
+  {% for event in events %}
+  {% include 'inputs/interview/_input_item_card.html' with title=event.summary badge=event.group editable=True edit_url=event.edit_url delete_url=event.delete_url editor_target='#events-add' list_target='#events-list' %}
+  {% endfor %}
   {% else %}
   <p class="text-muted">No events yet -- add one on the right.</p>
   {% endif %}

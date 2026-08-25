@@ -19,7 +19,7 @@ delete_url, managed_in, editor_target, list_target.
     <span class="input-item-card__actions">
       {% if editable %}
       {% if handle and handle == active_handle %}<span class="text-muted small mr-1">editing</span>{% endif %}
-      <a data-async="{{ editor_target }}" href="{{ edit_url }}" aria-label="Edit {{ title }}">Edit</a>
+      {% if edit_url %}<a data-async="{{ editor_target }}" href="{{ edit_url }}" aria-label="Edit {{ title }}">Edit</a>{% endif %}
       <form method="post" action="{{ delete_url }}" data-async="{{ list_target }}" class="d-inline edit-only">
         {% csrf_token %}
         <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"

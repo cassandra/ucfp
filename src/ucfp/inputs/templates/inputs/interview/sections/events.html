@@ -13,11 +13,11 @@ section's Next form (a nested form would be invalid HTML).
   view no matter how many events the list holds. Both #events-list and #events-add stay async-swap
   targets keyed by id, so the split does not affect add/remove.
   {% endcomment %}
-  <div class="col-lg-5 mb-3 mb-lg-0">
+  <div class="col-md-5 mb-3 mb-md-0">
     <h3 class="h6">Your events</h3>
     {% include 'inputs/interview/sections/events_list.html' with events=form.events %}
   </div>
-  <div class="col-lg-7">
+  <div class="col-md-7">
     {% include 'inputs/interview/sections/events_menu.html' with menu=form.menu %}
   </div>
 </div>
