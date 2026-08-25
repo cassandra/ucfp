@@ -4,6 +4,7 @@
 the current Profile; `ScenarioReconcileView` is the thin scenario-keyed wrapper over it. Both are
 org-scoped, no-op without a complete profile, and return to the page they were triggered from.
 """
+from dataclasses import replace
 from decimal import Decimal
 
 from django.http import Http404
@@ -17,13 +18,17 @@ from organization.models import Organization
 
 from ucfp.inputs.assumptions.repository import save_assumptions
 from ucfp.inputs.assumptions.schemas import Assumptions
+from ucfp.inputs.compatibility import loan_terms_drift
 from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import load_plans, save_plans
-from ucfp.inputs.plans.schemas import LoanRepayment, Plans
-from ucfp.inputs.profile.repository import save_profile
+from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
+from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.repository import load_profile, save_profile
+from ucfp.inputs.profile.schemas import Debt, LoanTerms
 from ucfp.inputs.scenarios.repository import create_scenario
-from ucfp.inputs.views import PlansReconcileView, ScenarioReconcileView
+from ucfp.inputs.views import (
+    PlansLoanTermsKeepView, PlansLoanTermsResetView, PlansReconcileView, ScenarioReconcileView )
 from ucfp.planning.tests.support import forecast_profile
 
 
@@ -133,3 +138,78 @@ class ScenarioReconcileViewTests( TestCase ):
         with self.assertRaises( Http404 ):
             self._post( scenario.uuid, organization = other )
         self.assertEqual( self._repayment_debts( scenario ), [ 'gone' ] )   # untouched by the foreign post
+
+
+def _profile_with_termed_debt( organization, rate ):
+    """A complete profile whose one amortizing debt carries contract terms at `rate`."""
+    profile = replace( forecast_profile(), debts = [ Debt(
+        handle = 'debt-1', name = 'Student loan', kind = DebtKind.STUDENT, balance = Decimal( '15000' ),
+        terms = LoanTerms( interest_rate = Rate.percent( rate ),
+                           remaining_term = Duration( 48, TimeUnit.MONTH ) ) ) ] )
+    record = save_profile( organization, profile )
+    record.acknowledged_sections = [ section.key for section in applicable_sections( profile )
+                                     if flow_of( section ) == 'profile' and section.form is not None ]
+    record.save()
+    return record
+
+
+def _loan_terms_drifted_plans_record( organization ):
+    """A Plans record whose repayment (5%) seeded from a contract (snapshot 6%) the profile has since
+    changed -- so it drifts against a 7% profile."""
+    record = PlansRecord( organization = organization, label = 'LT P' )
+    save_plans( record, Plans(
+        loan_repayments      = [ LoanRepayment( 'debt-1', Rate.percent( 5 ), Duration( 48, TimeUnit.MONTH ) ) ],
+        loan_terms_snapshots = [ LoanTermsSnapshot( 'debt-1', Rate.percent( 6 ), Duration( 48, TimeUnit.MONTH ) ) ] ) )
+    return record
+
+
+class PlansLoanTermsDriftViewTests( TestCase ):
+    """The per-loan value-drift reconcile views: reset re-seeds the repayment from the updated contract;
+    keep leaves the repayment and refreshes the snapshot. Both are org-scoped and return to the referer."""
+
+    def setUp( self ):
+        self.organization = Organization.objects.create( name = 'Org' )
+        self.factory      = RequestFactory()
+
+    def _post( self, view, name, uuid ):
+        request = self.factory.post( reverse( name, kwargs = { 'uuid': uuid, 'handle': 'debt-1' } ) )
+        request.organization = self.organization
+        return view().post( request, uuid = uuid, handle = 'debt-1' )
+
+    def test_reset_reseeds_the_repayment_from_the_contract( self ):
+        profile_record = _profile_with_termed_debt( self.organization, 7 )      # contract now 7%
+        record   = _loan_terms_drifted_plans_record( self.organization )
+        response = self._post( PlansLoanTermsResetView, 'plans_loan_terms_reset', record.uuid )
+        self.assertEqual( response.status_code, 302 )
+        record.refresh_from_db()
+        plans = load_plans( record )
+        self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( 7 ) )       # re-seeded
+        self.assertEqual( loan_terms_drift( load_profile( profile_record ), plans ), [] )      # cleared
+
+    def test_keep_leaves_the_repayment_and_clears_the_drift( self ):
+        profile_record = _profile_with_termed_debt( self.organization, 7 )
+        record = _loan_terms_drifted_plans_record( self.organization )
+        self._post( PlansLoanTermsKeepView, 'plans_loan_terms_keep', record.uuid )
+        record.refresh_from_db()
+        plans = load_plans( record )
+        self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( 5 ) )        # unchanged
+        self.assertEqual( loan_terms_drift( load_profile( profile_record ), plans ), [] )      # cleared
+
+    def test_reset_is_a_no_op_without_a_complete_profile( self ):
+        # No complete profile: there is no current contract to reconcile against, so the plan is left
+        # untouched (repayment and snapshot unchanged) and the view still redirects.
+        record   = _loan_terms_drifted_plans_record( self.organization )
+        response = self._post( PlansLoanTermsResetView, 'plans_loan_terms_reset', record.uuid )
+        self.assertEqual( response.status_code, 302 )
+        record.refresh_from_db()
+        plans = load_plans( record )
+        self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( 5 ) )        # unchanged
+        self.assertEqual( plans.loan_terms_snapshots[ 0 ].interest_rate, Rate.percent( 6 ) )   # unchanged
+
+    def test_it_is_org_scoped( self ):
+        record = _loan_terms_drifted_plans_record( self.organization )
+        request = self.factory.post(
+            reverse( 'plans_loan_terms_reset', kwargs = { 'uuid': record.uuid, 'handle': 'debt-1' } ) )
+        request.organization = Organization.objects.create( name = 'Other' )
+        with self.assertRaises( Http404 ):
+            PlansLoanTermsResetView().post( request, uuid = record.uuid, handle = 'debt-1' )

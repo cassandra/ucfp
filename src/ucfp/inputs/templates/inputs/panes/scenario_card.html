@@ -44,6 +44,13 @@ walk). Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice o
       {% include 'inputs/panes/scenario_drift.html' with drift=row.drift %}
     </div>
     {% endif %}
+    {% comment %}The sibling loan-terms drift: a loan's contract terms changed since this plan seeded from
+    them; resolve per loan (update or keep) before the scenario runs.{% endcomment %}
+    {% if row.loan_terms_drift %}
+    <div class="alert alert-warning py-2 mb-3">
+      {% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=row.loan_terms_drift %}
+    </div>
+    {% endif %}
     <div class="row">
       <div class="col-md-6 mb-2 mb-md-0">
         {% url 'plans_edit' row.scenario.plans.uuid as plans_edit_url %}

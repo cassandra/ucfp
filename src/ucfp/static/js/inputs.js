@@ -518,12 +518,33 @@ window.App.Inputs = (function () {
             .each( function () { updateCard( $( this ) ); } );
     }
 
-    // ----- LoanCalculator: a live, advisory monthly-payment estimate per loan -----
-    // Display-only. As a loan's rate/term/extra change, write the level payment its terms imply into
-    // its readout, reusing the amortization mirrors above. Materialization is authoritative.
+    // ----- LoanCalculator: one loan widget over balance / rate / term / payment -----
+    // The shared client mirror for every loan-entry surface. The balance is either a fixed fact on the
+    // block (the debt-plan and current-loan cards) or an editable input (the Profile loan entries); a
+    // surface exposes whichever of rate / term / payment it edits, and this adapts to what is present:
+    //   - where a payment input exists, the four quantities are kept consistent by the preferred trio
+    //     (balance + rate + term authoritative, payment re-derived) -- editing the balance, rate, or term
+    //     re-derives the payment; editing the payment instead back-solves the rate (the number people
+    //     don't know), blanking it and showing the hint when the payment/term don't fit the balance;
+    //   - where a readout element exists, it writes the level payment (and any extra-principal payoff) the
+    //     terms imply as an advisory line.
+    // Entry aid only -- materialization is authoritative. Mirrors common/loan_solver.py and
+    // common/amortization.py; the plausibility ceiling is read off AppConst (its one source).
 
     function loanField( $loan, cls ) {
         return parseAmount( $loan.find( classSelector( cls ) ).val() );
+    }
+
+    // The balance from the editable input where the surface has one (Profile), else the fixed fact on the
+    // wrapper (the debt-plan / current-loan cards).
+    function loanBalance( $loan ) {
+        const $input = $loan.find( classSelector( C.LOAN_BALANCE_CLASS ) );
+        if ( $input.length ) { return parseAmount( $input.val() ) || 0; }
+        return parseFloat( $loan.attr( dataAttr( C.LOAN_BALANCE_DATA_ATTR ) ) ) || 0;
+    }
+
+    function loanMonths( $loan ) {
+        return parseInt( $loan.find( classSelector( C.LOAN_TERM_CLASS ) ).val(), 10 ) || 0;
     }
 
     // A whole-month term as "29 yr 11 mo" (either part dropped when zero, but never both).
@@ -536,10 +557,51 @@ window.App.Inputs = (function () {
         return parts.join( ' ' );
     }
 
+    // The monthly rate at which `payment` retires `balance` over `months` (mirror of rate_for_payment):
+    // bisected, since the payment rises monotonically with the rate; 0 when the payment does not exceed
+    // the zero-interest payment.
+    function rateForPayment( balance, payment, months ) {
+        if ( months <= 0 || payment <= balance / months ) { return 0; }
+        let low = 0, high = 1;                            // 0 .. 100% per period brackets every real loan
+        for ( let i = 0; i < 60; i++ ) {
+            const mid = ( low + high ) / 2;
+            if ( paymentForMonths( balance, months, mid ) < payment ) { low = mid; } else { high = mid; }
+        }
+        return ( low + high ) / 2;
+    }
+
+    const MAX_PLAUSIBLE_APR = C.MAX_PLAUSIBLE_LOAN_APR_PERCENT;   // percent; one source, in AppConst
+
+    // Editing the balance, rate, or term re-derives the monthly payment: the level payment amortizing the
+    // balance over the months left. The authoritative trio is explicit, so clear the "doesn't fit" hint.
+    function fillLoanPayment( $loan ) {
+        const balance = loanBalance( $loan ), months = loanMonths( $loan );
+        const ratePercent = parseFloat( $loan.find( classSelector( C.LOAN_RATE_CLASS ) ).val() );
+        if ( !( balance > 0 ) || !( months > 0 ) || !( ratePercent >= 0 ) ) { return; }
+        setMoneyField( $loan.find( classSelector( C.LOAN_PAYMENT_CLASS ) ),
+                       paymentForMonths( balance, months, ( ratePercent / 100 ) / 12 ) );
+        $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).addClass( 'd-none' );
+    }
+
+    // Editing the payment back-solves the rate -- the annual rate that payment implies over the balance and
+    // term. The payment must retire the balance in the term and imply a plausible rate; otherwise it does
+    // not form a real loan, so leave the rate blank and show the hint rather than guess an implausible rate.
+    function fillLoanRate( $loan ) {
+        const balance = loanBalance( $loan ), months = loanMonths( $loan );
+        const payment = parseAmount( $loan.find( classSelector( C.LOAN_PAYMENT_CLASS ) ).val() );
+        if ( !( balance > 0 ) || !( months > 0 ) || !( payment > 0 ) ) { return; }
+        const annualPercent = rateForPayment( balance, payment, months ) * 12 * 100;
+        const fits = ( payment * months >= balance ) && ( annualPercent <= MAX_PLAUSIBLE_APR );
+        $loan.find( classSelector( C.LOAN_RATE_CLASS ) ).val( fits ? annualPercent.toFixed( 2 ) : '' );
+        $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).toggleClass( 'd-none', fits );
+    }
+
+    // The advisory readout (where a surface has one): the level payment the terms imply, plus any
+    // extra-principal payoff. Empty until balance, rate, and term are all set.
     function loanReadout( $loan ) {
-        const balance = parseFloat( $loan.attr( dataAttr( C.LOAN_BALANCE_DATA_ATTR ) ) ) || 0;
+        const balance = loanBalance( $loan );
         const ratePercent = loanField( $loan, C.LOAN_RATE_CLASS );
-        const months = loanField( $loan, C.LOAN_TERM_CLASS );
+        const months = loanMonths( $loan );
         if ( !( balance > 0 ) || !( ratePercent >= 0 ) || !( months > 0 ) ) { return ''; }
         const rate = ( ratePercent / 100 ) / 12;
         const payment = paymentForMonths( balance, months, rate );
@@ -555,13 +617,37 @@ window.App.Inputs = (function () {
         return text;
     }
 
-    function updateLoan( $loan ) {
-        $loan.find( classSelector( C.LOAN_READOUT_CLASS ) ).first().text( loanReadout( $loan ) );
+    function updateLoanReadout( $loan ) {
+        const $readout = $loan.find( classSelector( C.LOAN_READOUT_CLASS ) ).first();
+        if ( $readout.length ) { $readout.text( loanReadout( $loan ) ); }
+    }
+
+    // Respond to an edit within a loan block: the four-quantity solve (only where the block carries a
+    // payment input) -- the payment back-solves the rate, any of the authoritative trio re-derives the
+    // payment -- then refresh any advisory readout.
+    function solveLoan( $loan, $edited ) {
+        if ( $loan.find( classSelector( C.LOAN_PAYMENT_CLASS ) ).length ) {
+            if ( $edited.hasClass( C.LOAN_PAYMENT_CLASS ) ) {
+                fillLoanRate( $loan );
+            } else if ( $edited.hasClass( C.LOAN_BALANCE_CLASS ) || $edited.hasClass( C.LOAN_RATE_CLASS )
+                        || $edited.hasClass( C.LOAN_TERM_CLASS ) ) {
+                fillLoanPayment( $loan );
+            }
+        }
+        updateLoanReadout( $loan );
     }
 
     function enhanceLoans( $scope ) {
-        ( $scope || $( document.body ) ).find( classSelector( C.LOAN_CLASS ) )
-            .each( function () { updateLoan( $( this ) ); } );
+        // Bound directly on each block's inputs (re-applied per render) so a filled value lands before the
+        // form's change-driven autosave serializes; setting `.val()` fires no event, so the rate/payment
+        // pair does not loop.
+        ( $scope || $( document.body ) ).find( classSelector( C.LOAN_CLASS ) ).each( function () {
+            const $loan = $( this );
+            $loan.find( ':input' ).off( 'input.loan' ).on( 'input.loan', function () {
+                solveLoan( $loan, $( this ) );
+            } );
+            updateLoanReadout( $loan );      // initial advisory, before any edit
+        } );
     }
 
     // ----- VehicleFinanceCalculator: keep a loan's price / down / monthly consistent -----
@@ -654,72 +740,6 @@ window.App.Inputs = (function () {
                 .on( 'input.vehicleFinance', function () { fillVehicleDown( $form ); } );
             $form.find( classSelector( C.SWITCH_CONTROL_CLASS ) ).off( 'change.vehicleFinance' )
                 .on( 'change.vehicleFinance', function () { seedVehicleDownPayment( $form ); fillVehicleMonthly( $form ); } );
-        } );
-    }
-
-    // ----- CurrentLoanCalculator: keep a current auto loan's rate and monthly consistent -----
-    // The balance is fixed (a Profile fact, on the block). Rate and monthly are two views of the same
-    // amortization over the months left: editing the monthly (or the months) back-solves the rate; editing
-    // the rate fills the monthly. The rate is what is stored, so the client keeps it authoritative. Bound
-    // on `input` so the mirror fills live; setting `.val()` fires no event, so the pair does not loop.
-
-    // The monthly rate at which `payment` retires `balance` over `months` (mirror of rate_for_payment):
-    // bisected, since the payment rises monotonically with the rate; 0 when the payment does not exceed
-    // the zero-interest payment.
-    function rateForPayment( balance, payment, months ) {
-        if ( months <= 0 || payment <= balance / months ) { return 0; }
-        let low = 0, high = 1;                            // 0 .. 100% per period brackets every real loan
-        for ( let i = 0; i < 60; i++ ) {
-            const mid = ( low + high ) / 2;
-            if ( paymentForMonths( balance, months, mid ) < payment ) { low = mid; } else { high = mid; }
-        }
-        return ( low + high ) / 2;
-    }
-
-    function currentLoanBalance( $block ) {
-        return parseFloat( $block.attr( dataAttr( C.CURRENT_LOAN_BALANCE_DATA_ATTR ) ) ) || 0;
-    }
-
-    function currentLoanMonths( $block ) {
-        return parseInt( $block.find( classSelector( C.CURRENT_LOAN_MONTHS_CLASS ) ).val(), 10 ) || 0;
-    }
-
-    const MAX_PLAUSIBLE_APR = C.MAX_PLAUSIBLE_LOAN_APR_PERCENT;   // percent; one source, in AppConst
-
-    // Editing the rate fills the monthly: the level payment amortizing the balance over the months left. A
-    // directly-entered rate is explicit, so clear the "doesn't fit" hint.
-    function fillCurrentLoanMonthly( $block ) {
-        const balance = currentLoanBalance( $block ), months = currentLoanMonths( $block );
-        const ratePercent = parseFloat( $block.find( classSelector( C.CURRENT_LOAN_RATE_CLASS ) ).val() );
-        if ( !( balance > 0 ) || !( months > 0 ) || !( ratePercent >= 0 ) ) { return; }
-        setMoneyField( $block.find( classSelector( C.CURRENT_LOAN_MONTHLY_CLASS ) ),
-                       paymentForMonths( balance, months, ( ratePercent / 100 ) / 12 ) );
-        $block.find( classSelector( C.CURRENT_LOAN_HINT_CLASS ) ).addClass( 'd-none' );
-    }
-
-    // Editing the monthly (or the months) fills the rate -- the annual rate that payment implies, monthly
-    // held (the anchor). The payment must retire the balance in the term and imply a plausible rate;
-    // otherwise the monthly/term do not form a real loan, so leave the rate blank and show the hint rather
-    // than guess an implausible or unbounded rate.
-    function fillCurrentLoanRate( $block ) {
-        const balance = currentLoanBalance( $block ), months = currentLoanMonths( $block );
-        const monthly = parseAmount( $block.find( classSelector( C.CURRENT_LOAN_MONTHLY_CLASS ) ).val() );
-        if ( !( balance > 0 ) || !( months > 0 ) || !( monthly > 0 ) ) { return; }
-        const annualPercent = rateForPayment( balance, monthly, months ) * 12 * 100;
-        const fits = ( monthly * months >= balance ) && ( annualPercent <= MAX_PLAUSIBLE_APR );
-        $block.find( classSelector( C.CURRENT_LOAN_RATE_CLASS ) ).val( fits ? annualPercent.toFixed( 2 ) : '' );
-        $block.find( classSelector( C.CURRENT_LOAN_HINT_CLASS ) ).toggleClass( 'd-none', fits );
-    }
-
-    function enhanceCurrentLoan( $scope ) {
-        ( $scope || $( document.body ) ).find( classSelector( C.CURRENT_LOAN_CLASS ) ).each( function () {
-            const $block = $( this );
-            $block.find( classSelector( C.CURRENT_LOAN_RATE_CLASS ) ).off( 'input.currentLoan' )
-                .on( 'input.currentLoan', function () { fillCurrentLoanMonthly( $block ); } );
-            const monthlyOrMonths = classSelector( C.CURRENT_LOAN_MONTHLY_CLASS ) + ',' +
-                                    classSelector( C.CURRENT_LOAN_MONTHS_CLASS );
-            $block.find( monthlyOrMonths ).off( 'input.currentLoan' )
-                .on( 'input.currentLoan', function () { fillCurrentLoanRate( $block ); } );
         } );
     }
 
@@ -996,10 +1016,6 @@ window.App.Inputs = (function () {
         $( 'body' ).on( 'input change', classSelector( C.CREDIT_CARD_CLASS ) + ' :input',
             function () { updateCard( $( this ).closest( classSelector( C.CREDIT_CARD_CLASS ) ) ); } );
 
-        // Refresh a loan's advisory payment estimate as its rate/term/extra change.
-        $( 'body' ).on( 'input change', classSelector( C.LOAN_CLASS ) + ' :input',
-            function () { updateLoan( $( this ).closest( classSelector( C.LOAN_CLASS ) ) ); } );
-
         // Delete a recurring-expenses column: stamp its span index into the form's hidden field, then
         // save -- the server drops the span and re-renders the table.
         $( 'body' ).on( 'click', classSelector( C.RECURRING_DELETE_CLASS ), function () {
@@ -1059,7 +1075,6 @@ window.App.Inputs = (function () {
         enhanceCreditCards( $( document.body ) );
         enhanceLoans( $( document.body ) );
         enhanceVehicleFinance( $( document.body ) );
-        enhanceCurrentLoan( $( document.body ) );
         enhanceStateAutofill( $( document.body ) );
         enhanceCopySource( $( document.body ) );
         enhancePairCombine( $( document.body ) );
@@ -1074,7 +1089,6 @@ window.App.Inputs = (function () {
                 enhanceCreditCards( $( document.body ) );
                 enhanceLoans( $( document.body ) );
                 enhanceVehicleFinance( $( document.body ) );
-                enhanceCurrentLoan( $( document.body ) );
                 enhanceStateAutofill( $( document.body ) );
                 enhanceCopySource( $( document.body ) );
                 enhancePairCombine( $( document.body ) );

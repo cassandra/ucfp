@@ -23,6 +23,7 @@ from common.widgets import PercentInput
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.loan_fieldset import LoanTermsFieldsMixin, loan_terms_initial
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRETAX_ACCOUNT_HANDLE_PREFIX, PRIMARY_SUBJECT_HANDLE,
@@ -36,7 +37,7 @@ from ucfp.jurisdiction.us.subdivision_tax import USState
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
 from .debt_plan import DebtPlanForm
-from .debts import DebtsForm
+from .debts import debts_context
 from .events import EventsForm
 from .external_factors import ExternalFactorsSectionForm
 from .cash_plan import CashPlanSectionForm
@@ -240,7 +241,7 @@ class SubjectsSectionForm:
         return profile, plans
 
 
-class HomeForm( forms.Form ):
+class HomeForm( LoanTermsFieldsMixin, forms.Form ):
     """§3 -- the household residence. The tenure switch (own / rent / neither) is the fact recorded
     here; owning also captures the home's current value, purchase price (its cost basis), and any
     mortgage balance still owed. The residence is household-owned, so there is no "whose home". The
@@ -258,6 +259,8 @@ class HomeForm( forms.Form ):
     _RESIDENCE_HANDLE = RESIDENCE_ASSET_HANDLE
     _MORTGAGE_HANDLE  = RESIDENCE_MORTGAGE_HANDLE
 
+    LOAN_ID = 'residence-mortgage'   # distinct block id: the residence shares the Real Estate page
+
     tenure           = forms.ChoiceField(
         label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, required = False,
         widget = forms.RadioSelect(
@@ -265,7 +268,8 @@ class HomeForm( forms.Form ):
     home_value       = MoneyField( label = 'Current value', required = False, min_value = 0 )
     purchase_price   = MoneyField( label = 'Purchase price', required = False, min_value = 0 )
     mortgage_balance = MoneyField(
-        label = 'Mortgage balance owed (optional)', required = False, min_value = 0 )
+        label = 'Mortgage balance owed (optional)', required = False, min_value = 0,
+        css_class = AppConst.LOAN_BALANCE_CLASS )
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         initial = self._initial( profile ) if profile is not None else None
@@ -281,6 +285,7 @@ class HomeForm( forms.Form ):
         mortgage = cls._find( profile.debts, cls._MORTGAGE_HANDLE )
         if mortgage is not None:
             initial[ 'mortgage_balance' ] = mortgage.balance
+            initial.update( loan_terms_initial( mortgage.terms ) )
         return initial
 
     def apply( self, profile : Profile, plans : Plans ):
@@ -324,7 +329,8 @@ class HomeForm( forms.Form ):
             handle = self._MORTGAGE_HANDLE,
             name = existing.name if existing is not None else 'Mortgage',
             kind = existing.kind if existing is not None else DebtKind.MORTGAGE,
-            balance = cleaned[ 'mortgage_balance' ], secured_asset = self._RESIDENCE_HANDLE ) ]
+            balance = cleaned[ 'mortgage_balance' ], secured_asset = self._RESIDENCE_HANDLE,
+            terms = self.loan_terms( cleaned[ 'mortgage_balance' ] ) ) ]
 
     @staticmethod
     def _merged( existing : list, handle : str, replacement : list ) -> list:
@@ -679,9 +685,9 @@ class TaxPlanningSectionForm:
 
 
 class DebtsSectionForm:
-    """§ Debts L0 -- the Debts pane. A no-op section form: the debts are edited and saved through
-    `DebtsView`, so Next just advances. It exposes the one debts list -- every debt, mortgages
-    included, in the order the user thinks of them."""
+    """§ Debts L0 -- the Debts pane. A no-op section form: each debt is edited and saved through its own
+    async view (`DebtFormView` / `DebtDeleteView`), so Next just advances. It exposes the debts as summary
+    rows for the list -- every debt, mortgages and autos included (those read-only)."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -691,8 +697,8 @@ class DebtsSectionForm:
         return True
 
     @property
-    def debts_form( self ):
-        return DebtsForm( profile = self._profile, plans = self._plans )
+    def debts( self ) -> list:
+        return debts_context( self._profile )
 
     def apply( self, profile, plans ):
         return profile, plans

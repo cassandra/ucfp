@@ -20,6 +20,7 @@ from common.forms import MoneyField, StyledFormMixin
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.loan_fieldset import LoanTermsFieldsMixin, loan_terms_initial
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle
 from ucfp.inputs.properties import delete_property
@@ -70,7 +71,7 @@ def delete_current_vehicle( profile, plans, handle : str ):
     return profile, plans
 
 
-class CurrentVehicleForm( StyledFormMixin, forms.Form ):
+class CurrentVehicleForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
     """One current vehicle, owned or leased -- the user's single choice, driving which fields apply. The
     ownership radio is a switch (inputs.js): Owned reveals the current value and any auto-loan balance
     (written as a `DEPRECIATING` holding + an `AUTO` `Debt`); Leased reveals nothing more (written as a
@@ -79,6 +80,8 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
     existing vehicle moves it between the two stores under the same handle; any now-mismatched disposition
     is left for on-demand reconciliation, not dropped here."""
 
+    LOAN_ID = 'vehicle-loan'     # distinct block id (one vehicle editor per page)
+
     name      = forms.CharField( label = 'Name', max_length = 100, required = False )
     ownership = forms.ChoiceField(
         label = 'This vehicle is', required = False, choices = _OWNERSHIP_CHOICES, initial = OWNED,
@@ -86,7 +89,8 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     value        = MoneyField( label = 'Current value', min_value = 0, required = False )
     loan_balance = MoneyField(
-        label = 'Loan balance (optional)', min_value = 0, required = False )
+        label = 'Loan balance (optional)', min_value = 0, required = False,
+        css_class = AppConst.LOAN_BALANCE_CLASS )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( profile, handle ) if handle else None )
@@ -102,6 +106,7 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
             loan    = next( ( d for d in profile.debts if d.handle == loan_debt_handle( handle ) ), None )
             if loan is not None:
                 initial[ 'loan_balance' ] = loan.balance
+                initial.update( loan_terms_initial( loan.terms ) )
             return initial
         leased = next( ( v for v in profile.leased_vehicles if v.handle == handle ), None )
         if leased is not None:
@@ -178,4 +183,5 @@ class CurrentVehicleForm( StyledFormMixin, forms.Form ):
             handle = loan_debt_handle( vehicle_handle ),
             name = existing.name if existing is not None else f"{self.cleaned_data[ 'name' ]} Loan",
             kind = existing.kind if existing is not None else DebtKind.AUTO,
-            balance = balance, secured_asset = vehicle_handle ) ]
+            balance = balance, secured_asset = vehicle_handle,
+            terms = self.loan_terms( balance ) ) ]

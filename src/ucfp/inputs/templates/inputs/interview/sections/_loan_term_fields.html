@@ -1,0 +1,15 @@
+{% comment %}
+The loan-solver term inputs (payment / rate / term) plus the "doesn't fit" hint -- the inner half of the
+shared loan block, so the term fields render identically whether the balance sits in the same block (the
+single-loan surfaces, via `_loan_fields.html`) or apart from them (a Debts row, whose balance is its own
+column and whose terms show only for an amortizing kind). `loan_id` namespaces the hint so several blocks
+coexist on a page; the caller passes the three bound fields.
+{% endcomment %}
+<div class="form-row">
+  <div class="col-sm-4">{{ payment_field.as_field_group }}</div>
+  <div class="col-sm-4">{{ rate_field.as_field_group }}</div>
+  <div class="col-sm-4">{{ term_field.as_field_group }}</div>
+</div>
+<p id="{{ loan_id }}-hint" role="alert"
+   class="text-danger small mb-0 d-none {{ AppConst.LOAN_HINT_CLASS }}">That payment and term don't fit the
+  balance &mdash; check them.</p>

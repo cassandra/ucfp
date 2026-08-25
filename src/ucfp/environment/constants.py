@@ -1,5 +1,7 @@
 import json
 
+from common.loan_solver import MAX_PLAUSIBLE_APR_PERCENT
+
 
 class AppConst:
     """
@@ -121,15 +123,26 @@ class AppConst:
     CARD_READOUT_PAYMENT_FOR_DATE  = 'payment-for-date'      # a target date -- the monthly it needs
     CARD_READOUT_BALANCE_AT_DATE   = 'balance-at-date'       # monthly + date -- what remains at the date
 
-    # The loan payment calculator (one per amortizing debt, in the debt-plan step). The wrapper carries
-    # the current balance (a Profile fact); these mark the rate/term/extra inputs the calculator reads
-    # to show a live, advisory monthly-payment estimate. Display-only -- materialization is authoritative.
-    LOAN_CLASS              = 'js-loan'          # the per-loan widget wrapper
-    LOAN_RATE_CLASS         = 'js-loan-rate'     # the interest-rate input (percent)
-    LOAN_TERM_CLASS         = 'js-loan-term'     # the remaining-term input (months)
-    LOAN_EXTRA_CLASS        = 'js-loan-extra'    # the extra-principal-per-month input
-    LOAN_READOUT_CLASS      = 'js-loan-readout'  # where the live estimate is written
-    LOAN_BALANCE_DATA_ATTR  = 'loan-balance'     # the loan's current balance, on the wrapper
+    # The loan calculator: one widget over the four loan quantities (balance, rate, term, payment), shared
+    # by every loan-entry surface (the debt-plan step, the current-vehicle-loan card, ...). The wrapper
+    # carries the current balance (a Profile fact, fixed); the class-marked inputs are whichever of
+    # rate/term/payment a surface exposes. Its client mirror (`inputs.js`) adapts to what is present:
+    #   - a payment input  -> a two-way rate<->payment solve (edit the rate to fill the payment; edit the
+    #     payment or term to back-solve the rate, blanking it with the hint when it doesn't fit);
+    #   - a readout element -> a live, advisory monthly-payment estimate.
+    # Display/entry aid only -- materialization is authoritative. The server twin is `common.loan_solver`.
+    LOAN_CLASS              = 'js-loan'           # the loan widget wrapper (carries the balance)
+    LOAN_RATE_CLASS         = 'js-loan-rate'      # the interest-rate input (percent)
+    LOAN_TERM_CLASS         = 'js-loan-term'      # the remaining-term input (months)
+    LOAN_PAYMENT_CLASS      = 'js-loan-payment'   # the monthly-payment input (the two-way surfaces)
+    LOAN_BALANCE_CLASS      = 'js-loan-balance'   # the balance input, where the surface edits it (Profile)
+    LOAN_EXTRA_CLASS        = 'js-loan-extra'     # the extra-principal-per-month input (readout surfaces)
+    LOAN_READOUT_CLASS      = 'js-loan-readout'   # where the live estimate is written (readout surfaces)
+    LOAN_HINT_CLASS         = 'js-loan-hint'      # shown when an entered payment/term doesn't fit the balance
+    # The balance is a fixed fact on the wrapper where the surface does not edit it (the debt-plan and
+    # current-loan cards); where a surface edits it (the Profile loan entries), it is a `LOAN_BALANCE_CLASS`
+    # input instead, and the client reads whichever is present.
+    LOAN_BALANCE_DATA_ATTR  = 'loan-balance'      # the loan's current balance, on the wrapper (fixed case)
 
     # The vehicle finance calculator (the add/edit vehicle form). For a LOAN, price, down, and monthly
     # are locked by amortization at the assumed auto-loan rate/term, so the calculator keeps them
@@ -147,21 +160,11 @@ class AppConst:
     # fills the monthly only when the checked method carries it -- so the JS never names the method.
     VEHICLE_FINANCES_DATA_ATTR = 'vehicle-finances'
 
-    # The current-loan calculator (the disposition card's "Current loan" subsection). Its balance is a
-    # Profile fact (fixed, on the block); rate and monthly are the two views of the same amortization over
-    # the remaining months, kept consistent: editing the monthly (or the months) back-solves the rate,
-    # editing the rate fills the monthly. The rate is what is stored (the client keeps it authoritative);
-    # the server back-solves from the monthly only as a no-JS fallback. Materialization is authoritative.
-    CURRENT_LOAN_CLASS          = 'js-current-loan'          # the subsection wrapper (carries the balance)
-    CURRENT_LOAN_BALANCE_DATA_ATTR = 'current-loan-balance'  # the outstanding balance, on the wrapper
-    CURRENT_LOAN_RATE_CLASS     = 'js-current-loan-rate'     # the interest-rate input (percent)
-    CURRENT_LOAN_MONTHLY_CLASS  = 'js-current-loan-monthly'  # the monthly-payment input
-    CURRENT_LOAN_MONTHS_CLASS   = 'js-current-loan-months'   # the remaining-months input
-    CURRENT_LOAN_HINT_CLASS     = 'js-current-loan-hint'     # shown when the monthly/term doesn't fit
-    # A monthly-derived rate above this APR (percent) reads as "doesn't fit" -- the calculator declines to
-    # fabricate a rate from a monthly/term inconsistent with the balance. Shared by the client calculator
-    # (via `window.AppConst`) and the server's no-JS back-solve, so the ceiling has one source.
-    MAX_PLAUSIBLE_LOAN_APR_PERCENT = 30
+    # A monthly-derived rate above this APR (percent) reads as "doesn't fit" -- the loan calculator
+    # declines to fabricate a rate from a payment/term inconsistent with the balance. Re-exported here from
+    # `common.loan_solver` (its one source) so the client mirror reads it off `window.AppConst`, sharing
+    # the exact ceiling the server back-solve uses.
+    MAX_PLAUSIBLE_LOAN_APR_PERCENT = MAX_PLAUSIBLE_APR_PERCENT
 
     # Plans > Money Movements, the "Sell a property" add form: the "Rent after selling your home" option
     # applies only to selling the primary residence, so it is shown only while the chosen property is the

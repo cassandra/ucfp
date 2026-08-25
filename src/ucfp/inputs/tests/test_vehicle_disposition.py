@@ -24,11 +24,12 @@ from ucfp.environment.constants import AppConst
 from ucfp.inputs.debt_plan import DebtPlanForm
 from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import (
-    LeasedVehicleDisposition, LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
+    LeasedVehicleDisposition, LoanRepayment, LoanTermsSnapshot, Plans, Vehicle, VehicleDisposition,
+    VehiclePlan )
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, Profile
+from ucfp.inputs.profile.schemas import AssetProfile, Debt, LeasedVehicle, LoanTerms, Profile
 from ucfp.inputs.vehicle_disposition import (
-    LeasedVehicleDispositionForm, VehicleDispositionForm, _plausible_rate_from_monthly,
+    LeasedVehicleDispositionForm, VehicleDispositionForm,
     all_dispositions_context, dispositions_context, leased_dispositions_context )
 from ucfp.inputs.vehicle_handles import loan_debt_handle
 
@@ -174,6 +175,23 @@ class VehicleLoanTermsTests( unittest.TestCase ):
         expected = round( level_payment( Decimal( '18000' ), Decimal( '0.05' ) / 12, 36 ) )
         self.assertEqual( form.initial[ 'loan_monthly' ], expected )   # the monthly the terms imply
 
+    def test_edit_seeds_the_current_loan_from_profile_facts( self ):
+        # No repayment yet: the current-loan fields seed from the auto Debt's contract terms (copy 1).
+        profile = replace( _financed_profile( balance = '18000' ), debts = [ Debt(
+            handle = 'vehicle-1-loan', name = 'Sedan loan', kind = DebtKind.AUTO,
+            balance = Decimal( '18000' ), secured_asset = 'vehicle-1',
+            terms = LoanTerms( interest_rate = Rate.percent( 5 ),
+                               remaining_term = Duration( 36, TimeUnit.MONTH ),
+                               monthly_payment = Decimal( '540' ) ) ) ] )
+        form = VehicleDispositionForm( profile = profile, plans = Plans(), handle = 'vehicle-1' )
+        self.assertEqual( form.initial[ 'loan_rate' ], Decimal( '5' ) )
+        self.assertEqual( form.initial[ 'loan_months' ], 36 )
+
+    def test_no_terms_and_no_repayment_leaves_the_rate_blank( self ):
+        # Nothing is invented: without a repayment or Profile terms, the rate field carries no default.
+        form = VehicleDispositionForm( profile = _financed_profile(), plans = Plans(), handle = 'vehicle-1' )
+        self.assertIsNone( form.initial.get( 'loan_rate' ) )
+
     def test_a_no_js_monthly_back_solves_the_rate( self ):
         # Without JS the rate field is blank; the monthly payment + balance + months determine the rate. A
         # payment amortizing 18,000 at 5%/yr over 36 mo back-solves to ~5%.
@@ -212,45 +230,83 @@ class VehicleLoanTermsTests( unittest.TestCase ):
                         kind = 'KEEP', loan_rate = '6', loan_monthly = '999', loan_months = '36' )
         self.assertEqual( plans.loan_repayments[ 0 ].interest_rate, Rate.percent( Decimal( '6' ) ) )
 
+    def test_saving_the_current_loan_records_a_terms_snapshot( self ):
+        # The auto pipeline records the contract snapshot (copy 3) when the repayment is saved.
+        profile = replace( _financed_profile( balance = '18000' ), debts = [ Debt(
+            handle = 'vehicle-1-loan', name = 'Sedan loan', kind = DebtKind.AUTO,
+            balance = Decimal( '18000' ), secured_asset = 'vehicle-1',
+            terms = LoanTerms( interest_rate = Rate.percent( 5 ), remaining_term = Duration( 36, TimeUnit.MONTH ),
+                               monthly_payment = Decimal( '540' ) ) ) ] )
+        plans = _apply( profile, Plans(), 'vehicle-1', kind = 'KEEP', loan_rate = '5', loan_months = '36' )
+        self.assertEqual( len( plans.loan_terms_snapshots ), 1 )
+        snap = plans.loan_terms_snapshots[ 0 ]
+        self.assertEqual( ( snap.debt_handle, snap.interest_rate, snap.remaining_term ),
+                          ( 'vehicle-1-loan', Rate.percent( 5 ), Duration( 36, TimeUnit.MONTH ) ) )
+
+    def test_saving_preserves_an_existing_snapshot( self ):
+        # The auto pipeline preserves the seed-time snapshot across a disposition edit (contract 6%, snapshot
+        # 5%), so a since-changed Profile fact is not silently accepted -- the drift stays visible.
+        profile = replace( _financed_profile( balance = '18000' ), debts = [ Debt(
+            handle = 'vehicle-1-loan', name = 'Sedan loan', kind = DebtKind.AUTO,
+            balance = Decimal( '18000' ), secured_asset = 'vehicle-1',
+            terms = LoanTerms( interest_rate = Rate.percent( 6 ),
+                               remaining_term = Duration( 36, TimeUnit.MONTH ) ) ) ] )
+        plans  = Plans( loan_repayments = [ _repayment( rate = '6', months = 36 ) ],
+                        loan_terms_snapshots = [ LoanTermsSnapshot( 'vehicle-1-loan', Rate.percent( 5 ),
+                                                                    Duration( 36, TimeUnit.MONTH ) ) ] )
+        result = _apply( profile, plans, 'vehicle-1', kind = 'KEEP', loan_rate = '6', loan_months = '36' )
+        self.assertEqual( result.loan_terms_snapshots[ 0 ].interest_rate, Rate.percent( 5 ) )   # preserved
+
+    def test_clearing_the_current_loan_drops_its_snapshot( self ):
+        plans  = Plans( loan_repayments = [ _repayment() ],
+                        loan_terms_snapshots = [ LoanTermsSnapshot( 'vehicle-1-loan', Rate.percent( 5 ),
+                                                                    Duration( 36, TimeUnit.MONTH ) ) ] )
+        result = _apply( _financed_profile(), plans, 'vehicle-1', kind = 'KEEP' )   # no rate/months entered
+        self.assertEqual( result.loan_terms_snapshots, [] )
+
     def test_terms_persist_alongside_a_disposition( self ):
         plans = _apply( _financed_profile(), Plans(), 'vehicle-1', kind = 'SELL',
                         sale_date = '2032-06-01', loan_rate = '6', loan_months = '48' )
         self.assertEqual( len( _dispositions( plans ) ), 1 )             # the sale...
         self.assertEqual( len( plans.loan_repayments ), 1 )             # ...and the loan terms both saved
 
-    def test_the_debt_plan_excludes_vehicle_auto_loans( self ):
+    def test_the_debt_plan_lists_auto_loans_read_only_not_editable( self ):
         profile = replace( _financed_profile(), debts = [
             Debt( handle = 'vehicle-1-loan', name = 'Car loan', kind = DebtKind.AUTO,
                   balance = Decimal( '18000' ), secured_asset = 'vehicle-1' ),
             Debt( handle = 'debt-1', name = 'Mortgage', kind = DebtKind.MORTGAGE,
                   balance = Decimal( '300000' ), secured_asset = 'property-1' ) ] )
-        form  = DebtPlanForm( profile = profile, plans = Plans() )
-        names = [ row[ 'name' ] for row in form.rows ]
-        self.assertEqual( names, [ 'Mortgage' ] )                       # the auto loan is not listed
+        # The auto loan carries a vehicle-plan repayment; the mortgage is editable here.
+        plans = Plans( loan_repayments = [ _repayment( rate = '5', months = 36 ) ] )
+        form  = DebtPlanForm( profile = profile, plans = plans )
+        self.assertEqual( [ row[ 'name' ] for row in form.rows ], [ 'Mortgage' ] )   # editable rows
+        autos = form.auto_rows
+        self.assertEqual( [ row[ 'name' ] for row in autos ], [ 'Car loan' ] )       # read-only rows
+        self.assertIn( '5%, 36 mo left', autos[ 0 ][ 'terms' ] )
 
+    def test_an_auto_loan_without_a_repayment_points_at_the_vehicle_plan( self ):
+        form = DebtPlanForm( profile = _financed_profile(), plans = Plans() )
+        self.assertEqual( form.auto_rows[ 0 ][ 'terms' ], 'Terms set in the Vehicle plan' )
 
-class PlausibleRateTests( unittest.TestCase ):
-    """The plausibility guard on the monthly-derived rate: below the ~30% APR cap it back-solves a Rate,
-    at/below zero-interest it is 0%, and above the cap or when the payment can't retire the balance it is
-    None (so an inconsistent monthly/term never fabricates a stored rate)."""
+    def test_the_debt_plan_seeds_rate_and_term_from_profile_facts( self ):
+        profile = Profile( debts = [ Debt(
+            handle = 'debt-1', name = 'Student loan', kind = DebtKind.STUDENT, balance = Decimal( '15000' ),
+            terms = LoanTerms( interest_rate = Rate.percent( 6 ),
+                               remaining_term = Duration( 48, TimeUnit.MONTH ),
+                               monthly_payment = Decimal( '450' ) ) ) ] )
+        row = DebtPlanForm( profile = profile, plans = Plans() ).rows[ 0 ]
+        self.assertEqual( row[ 'rate' ].value(), Decimal( '6' ) )       # seeded from the contract facts
+        self.assertEqual( row[ 'term' ].value(), 48 )
 
-    def test_just_below_the_cap_back_solves_a_rate( self ):
-        below = level_payment( Decimal( '20000' ), Decimal( '0.29' ) / 12, 36 )   # ~29% APR, under the cap
-        rate  = _plausible_rate_from_monthly( Decimal( '20000' ), below, 36 )
-        self.assertIsNotNone( rate )
-        self.assertLess( rate.fraction, Decimal( '0.30' ) )
-
-    def test_just_above_the_cap_is_none( self ):
-        above = level_payment( Decimal( '20000' ), Decimal( '0.31' ) / 12, 36 )   # ~31% APR, over the cap
-        self.assertIsNone( _plausible_rate_from_monthly( Decimal( '20000' ), above, 36 ) )
-
-    def test_the_zero_interest_monthly_is_a_zero_rate( self ):
-        # A monthly of exactly balance/months amortizes at 0% -- a valid in-range rate, not None.
-        rate = _plausible_rate_from_monthly( Decimal( '18000' ), Decimal( '500' ), 36 )   # 18,000 / 36 = 500
-        self.assertEqual( rate.fraction, Decimal( '0' ) )
-
-    def test_a_monthly_that_cannot_retire_the_balance_is_none( self ):
-        self.assertIsNone( _plausible_rate_from_monthly( Decimal( '18000' ), Decimal( '400' ), 36 ) )
+    def test_a_saved_repayment_wins_over_the_profile_facts( self ):
+        profile = Profile( debts = [ Debt(
+            handle = 'debt-1', name = 'Student loan', kind = DebtKind.STUDENT, balance = Decimal( '15000' ),
+            terms = LoanTerms( interest_rate = Rate.percent( 6 ),
+                               remaining_term = Duration( 48, TimeUnit.MONTH ) ) ) ] )
+        plans = Plans( loan_repayments = [ _repayment( debt_handle = 'debt-1', rate = '4', months = 60 ) ] )
+        row   = DebtPlanForm( profile = profile, plans = plans ).rows[ 0 ]
+        self.assertEqual( row[ 'rate' ].value(), Decimal( '4' ) )       # the plan copy is authoritative
+        self.assertEqual( row[ 'term' ].value(), 60 )
 
 
 class DispositionListTests( unittest.TestCase ):
@@ -468,9 +524,9 @@ class DispositionFormRenderTests( unittest.TestCase ):
             { 'disposition_form': VehicleDispositionForm( profile = _financed_profile( balance = '18000' ),
                                                           plans = Plans(), handle = 'vehicle-1' ),
               'handle': 'vehicle-1', 'AppConst': AppConst } )
-        self.assertIn( AppConst.CURRENT_LOAN_CLASS, html )                            # calculator wrapper
-        self.assertIn( f'data-{AppConst.CURRENT_LOAN_BALANCE_DATA_ATTR}="18000"', html )   # balance on it
-        self.assertIn( AppConst.CURRENT_LOAN_MONTHLY_CLASS, html )                    # the monthly input
+        self.assertIn( AppConst.LOAN_CLASS, html )                                    # calculator wrapper
+        self.assertIn( f'data-{AppConst.LOAN_BALANCE_DATA_ATTR}="18000"', html )      # balance on it
+        self.assertIn( AppConst.LOAN_PAYMENT_CLASS, html )                            # the monthly input
         self.assertIn( '$18000', html )                                              # balance shown read-only
 
 

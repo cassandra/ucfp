@@ -25,6 +25,10 @@ urlpatterns = [
     path( 'plans/<uuid:uuid>/rename/', views.PlansRenameView.as_view(), name = 'plans_rename' ),
     path( 'plans/<uuid:uuid>/edit/', views.PlansEditView.as_view(), name = 'plans_edit' ),
     path( 'plans/<uuid:uuid>/reconcile/', views.PlansReconcileView.as_view(), name = 'plans_reconcile' ),
+    path( 'plans/<uuid:uuid>/loan-terms/<str:handle>/reset/',
+          views.PlansLoanTermsResetView.as_view(), name = 'plans_loan_terms_reset' ),
+    path( 'plans/<uuid:uuid>/loan-terms/<str:handle>/keep/',
+          views.PlansLoanTermsKeepView.as_view(), name = 'plans_loan_terms_keep' ),
     path( 'assumptions/', views.FlowEntryView.as_view( flow = 'assumptions' ),
           name = 'flow_assumptions' ),
     path( 'assumptions/<uuid:uuid>/rename/', views.AssumptionsRenameView.as_view(),
@@ -35,9 +39,13 @@ urlpatterns = [
     # The section-driven interview (entered per flow above) + the per-section editors.
     path( 'interview/<str:section>/', views.InterviewView.as_view(), name = 'interview_section' ),
     path( 'interview/income/table/', views.IncomeTableView.as_view(), name = 'income_table' ),
-    path( 'interview/debt/list/', views.DebtsView.as_view(), name = 'debts' ),
+    path( 'interview/debt/add/', views.DebtFormView.as_view(), name = 'debt_add' ),
     path( 'interview/debt/plan/', views.DebtPlanView.as_view(), name = 'debt_plan' ),
     path( 'interview/debt/cards/', views.CreditCardView.as_view(), name = 'credit_card_plan' ),
+    # The per-debt catch-alls follow the fixed debt/* routes above, so `plan`/`cards`/`add` are not read
+    # as handles.
+    path( 'interview/debt/<str:handle>/delete/', views.DebtDeleteView.as_view(), name = 'debt_delete' ),
+    path( 'interview/debt/<str:handle>/', views.DebtFormView.as_view(), name = 'debt_edit' ),
     path( 'interview/subjects/edit/', views.SubjectsView.as_view(), name = 'subjects' ),
     path( 'interview/accounts/edit/', views.AccountsView.as_view(), name = 'accounts' ),
     path( 'interview/external-factors/edit/', views.ExternalFactorsView.as_view(),

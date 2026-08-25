@@ -16,6 +16,7 @@ from common.forms import CHOOSE_PLACEHOLDER, MoneyField, StyledFormMixin
 
 from ucfp.accounts.enums import AssetClass, RealPropertyType
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.loan_fieldset import LoanTermsFieldsMixin, loan_terms_initial
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, PropertyProfile
 from ucfp.inputs.widgets import IsoDateInput
@@ -59,7 +60,7 @@ def delete_property( profile, plans, property_handle : str ):
     return profile, plans
 
 
-class _PropertyForm( StyledFormMixin, forms.Form ):
+class _PropertyForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
     """The shared skeleton for a mortgaged, handle-minted property (a rental, a second home): the
     mortgage-balance field and the `apply` that writes the holding and its secured mortgage debt under
     one property handle, leaving other properties intact. The mortgage is the same `Debt` the Debts
@@ -77,7 +78,12 @@ class _PropertyForm( StyledFormMixin, forms.Form ):
     _ASSET_FIELDS : tuple = ()
 
     mortgage_balance = MoneyField(
-        label = 'Mortgage balance owed (optional)', min_value = 0, required = False )
+        label = 'Mortgage balance owed (optional)', min_value = 0, required = False,
+        css_class = AppConst.LOAN_BALANCE_CLASS )
+
+    # The loan block (mortgage balance + rate/term/payment) renders on its own via `_loan_fields.html`, so
+    # it is held out of the holding-fields loop `primary_fields` drives.
+    _LOAN_BLOCK_FIELDS = ( 'mortgage_balance', 'loan_rate', 'loan_term', 'loan_payment' )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( profile, handle ) if handle else None )
@@ -94,6 +100,7 @@ class _PropertyForm( StyledFormMixin, forms.Form ):
         mortgage = next( ( d for d in profile.debts if d.handle == _mortgage_handle( handle ) ), None )
         if mortgage is not None:
             initial[ 'mortgage_balance' ] = mortgage.balance
+            initial.update( loan_terms_initial( mortgage.terms ) )
         return initial
 
     @staticmethod
@@ -103,8 +110,9 @@ class _PropertyForm( StyledFormMixin, forms.Form ):
 
     @property
     def primary_fields( self ):
-        """The holding fields, in `field_order`."""
-        return [ self[ name ] for name in self.fields ]
+        """The holding fields, in `field_order` -- the loan-block fields are excluded (they render via the
+        shared `_loan_fields.html` partial, not this loop)."""
+        return [ self[ name ] for name in self.fields if name not in self._LOAN_BLOCK_FIELDS ]
 
     def _complete( self ) -> bool:
         """All fields the holding needs are present -- the condition for materializing it. There is no
@@ -143,7 +151,8 @@ class _PropertyForm( StyledFormMixin, forms.Form ):
             handle = _mortgage_handle( property_handle ),
             name = existing.name if existing is not None else f"{self.cleaned_data[ 'name' ]} Mortgage",
             kind = existing.kind if existing is not None else DebtKind.MORTGAGE,
-            balance = balance, secured_asset = property_handle ) ]
+            balance = balance, secured_asset = property_handle,
+            terms = self.loan_terms( balance ) ) ]
 
 
 class RentalForm( _PropertyForm ):
@@ -155,6 +164,7 @@ class RentalForm( _PropertyForm ):
     rental)."""
 
     _PREFIX       = 'rental-'
+    LOAN_ID       = 'rental-mortgage'   # distinct block id: shares the Real Estate page with the others
     _ASSET_FIELDS = ( 'name', 'value', 'purchase_price', 'acquisition_date',
                       'building_basis', 'property_type' )
     field_order   = [ 'name', 'value', 'purchase_price', 'building_basis', 'acquisition_date',
@@ -201,6 +211,7 @@ class SecondHomeForm( _PropertyForm ):
     is an itemizable deduction like the residence's rather than a rental expense."""
 
     _PREFIX       = 'second-home-'
+    LOAN_ID       = 'second-home-mortgage'   # distinct block id: shares the Real Estate page
     _ASSET_FIELDS = ( 'name', 'value', 'purchase_price' )
     field_order   = [ 'name', 'value', 'purchase_price', 'mortgage_balance' ]
 

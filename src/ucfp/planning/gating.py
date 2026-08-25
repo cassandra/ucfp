@@ -31,16 +31,17 @@ def scenario_started( scenario_record ) -> bool:
 
 def partition_scenarios( organization, profile_record ):
     """The organization's saved scenarios split three ways against the current profile:
-    `(complete, drift_blocked, in_progress)`. `complete` are runnable now; `drift_blocked` are runnable
-    but for stale Plans->Profile references (a surface reads their drift through `inputs.drift` and offers
-    the reconcile); `in_progress` are genuinely half-built and resumable. A scenario blocked by drift *and*
-    something else is in-progress -- reconcile alone would not run it."""
+    `(complete, drift_blocked, in_progress)`. `complete` are runnable now; `drift_blocked` are runnable but
+    for Plans->Profile drift a surface resolves in place -- stale references (one-click reconcile) or a
+    loan's changed contract terms (a per-loan reset/keep), both read through `inputs.drift`; `in_progress`
+    are genuinely half-built and resumable. A scenario blocked by drift *and* something else is in-progress
+    -- resolving the drift alone would not run it."""
     complete, drift_blocked, in_progress = list(), list(), list()
     for scenario in scenarios_for( organization ).select_related( 'plans', 'assumptions' ):
         issues = scenario_readiness( profile_record, scenario )
         if not issues:
             complete.append( scenario )
-        elif all( issue.is_drift for issue in issues ):
+        elif all( issue.is_reconcilable_drift for issue in issues ):
             drift_blocked.append( scenario )
         else:
             in_progress.append( scenario )

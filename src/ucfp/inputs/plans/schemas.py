@@ -197,6 +197,22 @@ class LoanPrepayment:
 
 
 @dataclass( frozen = True )
+class LoanTermsSnapshot:
+    """A copy of a debt's Profile contract terms as they stood when this Plan's repayment was seeded from
+    them -- kept solely to detect drift, never materialized. It is the third of the three copies of a
+    loan's terms: the Profile `Debt.terms` are the facts, the `LoanRepayment` is the repayment schedule
+    (which may deliberately differ from the contract), and this mirrors the contract at seed time so a later
+    Profile edit to the terms can be noticed. `compatibility` compares its rate/term against the current
+    Profile `LoanTerms`; on a difference the Plans-readiness blocker offers to reset the repayment to the
+    updated loan or keep the current plan. Keyed to a Profile `Debt` by `debt_handle`; the fields mirror
+    `LoanTerms` (the Plans layer cannot import the Profile type)."""
+    debt_handle: str
+    interest_rate: Optional[ Rate ] = None
+    remaining_term: Optional[ Duration ] = None
+    monthly_payment: Optional[ Decimal ] = None
+
+
+@dataclass( frozen = True )
 class CreditCardPlan:
     """How a credit-card `Debt` will be paid down -- the Plans side of a card, which never becomes a
     loan on the books. Stored as intent (a `mode` and its one input); materialization resolves it, at
@@ -452,6 +468,10 @@ class Plans:
     # Loan repayment (rate/term per amortizing debt) and extra-principal paydown
     loan_repayments: list[ LoanRepayment ] = field( default_factory = list )
     prepayments: list[ LoanPrepayment ] = field( default_factory = list )
+    # The contract terms each repayment was seeded from, mirrored per debt for drift detection (distinct
+    # from the repayment schedule above): written when a repayment is first saved, then preserved across a
+    # plan edit and refreshed only by the reset/keep reconcile.
+    loan_terms_snapshots: list[ LoanTermsSnapshot ] = field( default_factory = list )
     # Credit-card paydown plans (per card, resolved to expenses at materialization)
     credit_card_plans: list[ CreditCardPlan ] = field( default_factory = list )
     # The household's car-ownership costs (smoothed to expenses at materialization)

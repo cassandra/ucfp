@@ -26,5 +26,12 @@ its rate and term are set; the js-loan calculator then writes a live, advisory m
     {% endfor %}
     <p class="text-muted small">A loan starts amortizing once its rate and months are both set; extra
       principal and a payoff date are optional.</p>
+    {% for row in debt_plan_form.auto_rows %}
+    <div class="border rounded p-2 mb-2 bg-light">
+      <div><span class="font-weight-bold">{{ row.name }}</span>
+        <span class="text-muted small">Auto loan &middot; balance {{ row.balance_display }} &middot; {{ row.terms }}</span></div>
+      <div class="text-muted small">Its repayment is set in the Vehicle plan.</div>
+    </div>
+    {% endfor %}
   </form>
 </div>

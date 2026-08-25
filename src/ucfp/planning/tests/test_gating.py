@@ -7,6 +7,7 @@ user never chose to build. `partition_scenarios` then splits an org's scenarios 
 drift-blocked (runnable but for stale Plans->Profile references), and in-progress.
 """
 import unittest
+from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -21,8 +22,10 @@ from ucfp.inputs.assumptions.repository import save_assumptions
 from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import save_plans
-from ucfp.inputs.plans.schemas import LoanRepayment, Plans
+from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
+from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.repository import save_profile
+from ucfp.inputs.profile.schemas import Debt, LoanTerms
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.gating import partition_scenarios, scenario_started
@@ -100,6 +103,23 @@ class PartitionScenariosTests( TestCase ):
         # the reconcile route are the shared `inputs.drift` notice's job (tested there).
         scenario = self._scenario( 'Foo', _drifted_plans() )
         _complete, drift_blocked, in_progress = partition_scenarios( self.organization, self.profile_record )
+        self.assertEqual( in_progress, [] )
+        self.assertEqual( [ s.uuid for s in drift_blocked ], [ scenario.uuid ] )
+
+    def test_a_loan_terms_drift_only_scenario_is_drift_blocked( self ):
+        # Value drift too holds a scenario out of the run chooser (resolved per loan by reset/keep), the
+        # same bucket as stale references. The profile's loan now says 7%; the plan seeded from 6%.
+        profile = replace( self.profile, debts = [ Debt(
+            handle = 'debt-1', name = 'Student loan', kind = DebtKind.STUDENT, balance = Decimal( '15000' ),
+            terms = LoanTerms( interest_rate = Rate.percent( 7 ),
+                               remaining_term = Duration( 48, TimeUnit.MONTH ) ) ) ] )
+        record = save_profile( self.organization, profile )
+        record.acknowledged_sections = self.keys[ 'profile' ]
+        record.save()
+        scenario = self._scenario( 'Drifted', Plans(
+            loan_repayments      = [ LoanRepayment( 'debt-1', Rate.percent( 7 ), Duration( 48, TimeUnit.MONTH ) ) ],
+            loan_terms_snapshots = [ LoanTermsSnapshot( 'debt-1', Rate.percent( 6 ), Duration( 48, TimeUnit.MONTH ) ) ] ) )
+        _complete, drift_blocked, in_progress = partition_scenarios( self.organization, record )
         self.assertEqual( in_progress, [] )
         self.assertEqual( [ s.uuid for s in drift_blocked ], [ scenario.uuid ] )
 

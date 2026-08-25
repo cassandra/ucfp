@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from django.urls import reverse
 
-from ucfp.inputs.compatibility import DRIFT_LEAD_IN, compatibility_issues
+from ucfp.inputs.compatibility import DRIFT_LEAD_IN, compatibility_issues, loan_terms_drift
 from ucfp.inputs.interview import applicable_sections
 from ucfp.inputs.plans.repository import load_plans
 from ucfp.inputs.profile.repository import load_profile
@@ -31,12 +31,22 @@ class ReadinessIssue:
     section key to link straight to one interview step); `fix_label` is the link text. `fix_url` resolves
     the two for a template. `is_drift` marks a Plans->Profile drift issue -- the one kind a scenario can
     clear in one click (a reconcile), so a selection surface can bucket it distinctly and render the
-    stale references and reconcile through the shared `inputs.drift` notice."""
-    message          : str
-    fix_label        : str
-    fix_route        : str
-    fix_route_kwargs : dict  = field( default_factory = dict )
-    is_drift         : bool  = False
+    stale references and reconcile through the shared `inputs.drift` notice. `is_loan_terms_drift` marks
+    the sibling *value* drift (a loan's contract terms changed since the plan seeded from them); it buckets
+    the same way (runnable once resolved, no interview resume), but its fix is a per-loan reset/keep choice
+    rather than the one-click reconcile."""
+    message             : str
+    fix_label           : str
+    fix_route           : str
+    fix_route_kwargs    : dict  = field( default_factory = dict )
+    is_drift            : bool  = False
+    is_loan_terms_drift : bool  = False
+
+    @property
+    def is_reconcilable_drift( self ) -> bool:
+        """Whether this issue is a Plans->Profile drift a surface resolves in place (existence or loan-term)
+        rather than by resuming the interview -- so gating can bucket it as drift-blocked."""
+        return self.is_drift or self.is_loan_terms_drift
 
     @property
     def fix_url( self ) -> str:
@@ -51,11 +61,13 @@ def readiness_issues( profile_record, plans_record, assumptions_record ) -> list
     the two genuinely cross-input concerns -- an unreviewed step (State 0), and Plans->Profile drift.
     Materialization stays the structural backstop that raises at use."""
     profile = load_profile( profile_record )
+    plans   = load_plans( plans_record )
     return ( _not_finished_issues( profile, profile_record, plans_record, assumptions_record )
              + _blocker_issues( profile_completion_blockers( profile_record ), 'flow_profile' )
              + _blocker_issues( plans_completion_blockers( profile, plans_record ), 'flow_plans' )
              + _blocker_issues( assumptions_completion_blockers( profile, assumptions_record ), 'flow_assumptions' )
-             + _drift_issues( profile, load_plans( plans_record ) ) )
+             + _drift_issues( profile, plans )
+             + _loan_terms_drift_issues( profile, plans ) )
 
 
 # The per-input flow each blocker links to, and its resume-link label -- a blocker is a whole-input concern
@@ -104,3 +116,18 @@ def _drift_issues( profile, plans ) -> list[ ReadinessIssue ]:
         fix_label = 'Review your plans',
         fix_route = 'flow_plans',
         is_drift  = True ) ]
+
+
+def _loan_terms_drift_issues( profile, plans ) -> list[ ReadinessIssue ]:
+    """Loan-term *value* drift (a debt's Profile contract terms changed since the plan seeded from them) as
+    one issue -- the plan may be built on stale terms, so the run waits on an explicit reset/keep choice.
+    `is_loan_terms_drift` buckets it as drift-blocked (runnable once resolved) while marking that its fix is
+    the per-loan reset/keep notice, not the one-click reconcile."""
+    if not loan_terms_drift( profile, plans ):
+        return list()
+    return [ ReadinessIssue(
+        message   = "A loan's terms changed in your profile since this plan was set -- choose whether to "
+                    'update the plan or keep it.',
+        fix_label = 'Review your plans',
+        fix_route = 'flow_plans',
+        is_loan_terms_drift = True ) ]

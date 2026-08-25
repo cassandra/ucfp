@@ -19,7 +19,8 @@ from organization.models import Organization, OrganizationMember
 from ucfp.accounts.models import BooksOfAccountRecord
 from ucfp.inputs.models import (
     AssumptionsRecord, PlansRecord, ProfileRecord, ScenarioExploration, ScenarioRecord )
-from ucfp.inputs.profile.repository import latest_profile
+from ucfp.inputs.plans.repository import load_plans
+from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.enums import PlanningFeature
@@ -62,6 +63,10 @@ class SeedRecordsFromFixtureTest( TestCase ):
         # The whole scenario is runnable now (profile + plans + assumptions complete, no drift).
         complete, _drift, _in_progress = partition_scenarios( organization, profile_record )
         self.assertIn( scenario.uuid, [ runnable.uuid for runnable in complete ] )
+        # The example loans carry contract-term facts and their plan snapshots (the loan-solver path), so
+        # the fixture exercises them and a re-dump that dropped them would be caught here.
+        self.assertTrue( any( debt.terms is not None for debt in load_profile( profile_record ).debts ) )
+        self.assertTrue( load_plans( scenario.plans ).loan_terms_snapshots )
 
 
 class FixtureMatchTest( TestCase ):
