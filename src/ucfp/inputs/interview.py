@@ -846,6 +846,19 @@ class VehicleExpensesSectionForm:
         step shows a pointer back to the Vehicle plan instead of the table."""
         return bool( self.current_count or self.future_count )
 
+    @property
+    def vehicle_scope_phrase( self ) -> str:
+        """The 'N current and M future vehicles' phrase for the side note -- only the non-zero parts (so a
+        household with no future vehicles is not told about '0 future'), with the noun pluralized on the
+        total."""
+        parts = []
+        if self.current_count:
+            parts.append( f'{self.current_count} current' )
+        if self.future_count:
+            parts.append( f'{self.future_count} future' )
+        noun = 'vehicle' if self.current_count + self.future_count == 1 else 'vehicles'
+        return f"{' and '.join( parts )} {noun}"
+
     def apply( self, profile, plans ):
         if plans.vehicle_plan is None:
             return profile, plans

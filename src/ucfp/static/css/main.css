@@ -497,10 +497,11 @@ a.interview-part:hover {
 .input-editor-card__body { padding: 0.7rem; }
 .input-editor-card__footer { margin-top: 0.5rem; }
 
-/* The resting state of the editor (detail) column in a master-detail collection: a quiet "pick one, or
-   add" placeholder so the column never reads as blank, and the narrow list beside it as intentional. It
-   carries the section's only Add -- one editor at a time, so Add is offered only while none is open. The
-   same prompt serves both the side-by-side and the stacked (below md) layouts. */
+/* The quiet resting panel of a right-hand column, so it never reads as blank and the content beside it as
+   intentional. Its main use is the editor (detail) column of a master-detail collection -- a "pick one, or
+   add" placeholder carrying the section's only Add (one editor at a time, so Add shows only while none is
+   open). It also styles a step's static right-column side note (e.g. Vehicle expenses), so both read the
+   same. The same panel serves the side-by-side and the stacked (below md) layouts. */
 .input-editor-empty {
     display: flex;
     flex-direction: column;
@@ -512,6 +513,9 @@ a.interview-part:hover {
     border: 1px dashed var(--line-color);
     border-radius: 0.35rem;
 }
+/* A side-note panel (e.g. Vehicle expenses) fills the column height beside a tall table via h-100; this
+   caps that growth so it stays a balanced panel rather than stretching to a very tall table's full height. */
+.input-editor-empty--capped { max-height: 16rem; }
 
 /* Date and number inputs read better at a natural width than the full column. */
 .form-control.js-date {

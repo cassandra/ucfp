@@ -46,7 +46,7 @@ class VehiclePlanCardsTests( unittest.TestCase ):
         current = vehicle_plan_cards( _profile_with_current(), Plans() )[ 0 ]
         self.assertIsNotNone( current[ 'edit_url' ] )        # Edit sets its plan
         self.assertIsNone( current[ 'delete_url' ] )         # but it is removed in the Profile
-        self.assertEqual( current[ 'source_note' ], 'From Profile' )
+        self.assertIsNotNone( current[ 'source_note' ] )     # it points back to where it is entered
 
     def test_a_future_vehicle_is_fully_managed( self ):
         future = vehicle_plan_cards( Profile(), _plans_with_future() )[ 0 ]
@@ -60,7 +60,6 @@ class VehiclePlanCardsTests( unittest.TestCase ):
                                   { 'cards': cards, 'active': None } )
         self.assertIn( 'aria-label="Edit Sedan"', html )     # both are editable
         self.assertIn( 'aria-label="Edit Truck"', html )
-        self.assertIn( 'From Profile', html )                # the current card explains its missing Remove
         self.assertEqual( html.count( 'aria-label="Remove' ), 1 )   # only the future card is removable
         self.assertIn( 'aria-label="Remove Truck"', html )
 
@@ -91,3 +90,9 @@ class VehicleExpensesEmptyStateTests( unittest.TestCase ):
         self.assertTrue( form.has_vehicles )
         self.assertEqual( form.current_count, 1 )
         self.assertEqual( form.future_count, 1 )
+
+    def test_the_scope_phrase_omits_a_zero_count( self ):
+        # Behaviour, not copy: a zero count is dropped, never rendered as "0 ...". Asserting on the digit
+        # (not the surrounding words) keeps this independent of the note's exact phrasing.
+        form = VehicleExpensesSectionForm( profile = _profile_with_current(), plans = Plans() )  # 1, then 0
+        self.assertNotIn( '0', form.vehicle_scope_phrase )

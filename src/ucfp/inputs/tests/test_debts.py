@@ -110,8 +110,9 @@ class DebtsContextTests( SimpleTestCase ):
         profile = Profile( debts = [ _mortgage(), _auto(), _student() ] )
         rows    = { row[ 'name' ]: row for row in debts_context( profile ) }
         self.assertFalse( rows[ 'Mortgage' ][ 'editable' ] )
-        self.assertEqual( rows[ 'Mortgage' ][ 'source_note' ], 'From Home' )       # secured on the residence
-        self.assertEqual( rows[ 'Civic loan' ][ 'source_note' ], 'From Vehicles' )
+        # Assert the routed section (the logic), not the note's exact phrasing (copy).
+        self.assertIn( 'Home', rows[ 'Mortgage' ][ 'source_note' ] )               # secured on the residence
+        self.assertIn( 'Vehicles', rows[ 'Civic loan' ][ 'source_note' ] )
         self.assertTrue( rows[ 'Student loan' ][ 'editable' ] )
         self.assertIsNone( rows[ 'Student loan' ][ 'source_note' ] )
 
@@ -122,7 +123,7 @@ class DebtsContextTests( SimpleTestCase ):
                                 kind = DebtKind.MORTGAGE, balance = Decimal( '150000' ),
                                 secured_asset = 'property-1' )
         rows = { row[ 'name' ]: row for row in debts_context( Profile( debts = [ rental_mortgage ] ) ) }
-        self.assertEqual( rows[ 'Rental mortgage' ][ 'source_note' ], 'From Other property' )
+        self.assertIn( 'Other property', rows[ 'Rental mortgage' ][ 'source_note' ] )
 
     def test_a_row_summarizes_captured_terms( self ):
         terms   = LoanTerms( interest_rate = Rate.percent( 4 ),
