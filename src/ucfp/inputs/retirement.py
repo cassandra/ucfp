@@ -45,6 +45,10 @@ class RetirementForm( forms.Form ):
                                 for entry in ( plans.income_timing if plans is not None else [] ) }
         self._timing   = { entry.subject_handle: entry
                            for entry in ( plans.timing if plans is not None else [] ) }
+        # Which subjects have a pension entitlement (from the Income step) -- the pension claim line shows
+        # only for them, so someone with no pension is not asked when they will start one.
+        self._pensions = { pension.subject_handle
+                           for pension in ( profile.pensions if profile is not None else [] ) }
         for i, flow in enumerate( self._flows ):
             self._add_window_fields( i, flow )
         for m, subject in enumerate( self._subjects ):
@@ -150,34 +154,39 @@ class RetirementForm( forms.Form ):
         return bool( self._flows )
 
     @property
-    def income_rows( self ) -> list:
-        rows = list()
-        for i, flow in enumerate( self._flows ):
-            has_age = flow.subject_handle is not None
-            rows.append( {
-                'name'      : flow.name,
-                'subject'   : self._subject_name( flow.subject_handle ),
-                'from'      : self[ self._key( 'f', i, 'from' ) ],
-                'from_age'  : self[ self._key( 'f', i, 'from_age' ) ] if has_age else None,
-                'until'     : self[ self._key( 'f', i, 'until' ) ],
-                'until_age' : self[ self._key( 'f', i, 'until_age' ) ] if has_age else None } )
-        return rows
+    def subject_groups( self ) -> list:
+        """The timing grouped by person -- a group per subject holding their income windows, Social
+        Security claim, and (only when they have a pension) pension start -- so each person's timing reads
+        as a unit rather than as scattered rows. Household income (no subject) is its own group,
+        `household_income`."""
+        groups = list()
+        for m, subject in enumerate( self._subjects ):
+            income = [ self._window_row( i, flow ) for i, flow in enumerate( self._flows )
+                       if flow.subject_handle == subject.handle ]
+            groups.append( {
+                'subject' : subject.name,
+                'income'  : income,
+                'ss'      : self._election_row( m, 'ss' ),
+                'pension' : self._election_row( m, 'pen' ) if subject.handle in self._pensions else None } )
+        return groups
 
     @property
-    def entitlement_rows( self ) -> list:
-        rows = list()
-        for m, subject in enumerate( self._subjects ):
-            rows.append( { 'subject' : subject.name, 'name' : 'Social Security',
-                           'from' : self[ self._key( 's', m, 'ss_from' ) ],
-                           'from_age' : self[ self._key( 's', m, 'ss_from_age' ) ] } )
-            rows.append( { 'subject' : subject.name, 'name' : 'Pension',
-                           'from' : self[ self._key( 's', m, 'pen_from' ) ],
-                           'from_age' : self[ self._key( 's', m, 'pen_from_age' ) ] } )
-        return rows
+    def household_income( self ) -> list:
+        """The income windows for flows with no subject (household income), shown in their own group."""
+        return [ self._window_row( i, flow ) for i, flow in enumerate( self._flows )
+                 if flow.subject_handle is None ]
 
-    def _subject_name( self, handle : Optional[ str ] ) -> str:
-        subject = next( ( s for s in self._subjects if s.handle == handle ), None )
-        return subject.name if subject is not None else 'Household'
+    def _window_row( self, i : int, flow : IncomeFlow ) -> dict:
+        has_age = flow.subject_handle is not None
+        return { 'name'      : flow.name,
+                 'from'      : self[ self._key( 'f', i, 'from' ) ],
+                 'from_age'  : self[ self._key( 'f', i, 'from_age' ) ] if has_age else None,
+                 'until'     : self[ self._key( 'f', i, 'until' ) ],
+                 'until_age' : self[ self._key( 'f', i, 'until_age' ) ] if has_age else None }
+
+    def _election_row( self, m : int, prefix : str ) -> dict:
+        return { 'from'     : self[ self._key( 's', m, f'{prefix}_from' ) ],
+                 'from_age' : self[ self._key( 's', m, f'{prefix}_from_age' ) ] }
 
     # --- apply -------------------------------------------------------------
 
