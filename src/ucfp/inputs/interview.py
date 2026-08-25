@@ -892,7 +892,7 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/home.html' ),
     Section( 'vehicles'      , 'Vehicles', ( Aggregate.PROFILE, Aggregate.PLANS ), VehiclesForm,
              outer_template = 'inputs/interview/sections/vehicles.html' ),
-    Section( 'other-property', 'Other Property', ( Aggregate.PROFILE, Aggregate.PLANS ),
+    Section( 'other-property', 'Other property', ( Aggregate.PROFILE, Aggregate.PLANS ),
              OtherPropertySectionForm,
              outer_template = 'inputs/interview/sections/other_property.html' ),
     Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
@@ -917,13 +917,13 @@ SECTIONS = [
     # in Income (Profile flow) -- then the recurring retirement contributions. Two sections (the timing was
     # dense enough on its own); both sit before Cash management, which balances this income against the
     # outflows. The Contributions rail label is shortened from its longer section title.
-    Section( 'retirement-plan', 'Retirement Plan', ( Aggregate.PLANS, ), RetirementPlanSectionForm,
+    Section( 'retirement-plan', 'Retirement plan', ( Aggregate.PLANS, ), RetirementPlanSectionForm,
              outer_template = 'inputs/interview/sections/retirement_plan.html' ),
-    Section( 'contributions'  , 'Retirement Contributions', ( Aggregate.PLANS, ), ContributionsSectionForm,
+    Section( 'contributions'  , 'Retirement contributions', ( Aggregate.PLANS, ), ContributionsSectionForm,
              outer_template = 'inputs/interview/sections/contributions.html', rail_title = 'Contributions' ),
-    Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
+    Section( 'living-expenses' , 'Living expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
-    Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
+    Section( 'home-expenses'   , 'Home expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
              outer_template = 'inputs/interview/sections/home_expenses.html' ),
     Section( 'vehicle-plan'    , 'Vehicle plan', ( Aggregate.PLANS, ), VehiclePlanSectionForm,
              outer_template = 'inputs/interview/sections/vehicle_plan.html' ),
@@ -945,9 +945,9 @@ SECTIONS = [
     # Advanced, optional tax moves -- Roth conversions and scheduled withdrawals. The deliberate-tax-lever
     # counterpart to Cash management's automatic funding, and distinct from the tax Assumptions (the tax
     # environment). Last in the Plans flow.
-    Section( 'tax-planning', 'Tax Planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
+    Section( 'tax-planning', 'Tax planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
              outer_template = 'inputs/interview/sections/tax_planning.html' ),
-    Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
+    Section( EXTERNAL_FACTORS_STEP, 'Economic assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html',
              rail_title = 'Economics' ),   # the flow heading already says "Assumptions"
@@ -956,7 +956,7 @@ SECTIONS = [
     Section( 'transaction-costs', 'Sales', ( Aggregate.ASSUMPTIONS, ),
              TransactionCostsSectionForm,
              outer_template = 'inputs/interview/sections/transaction_costs.html' ),
-    Section( 'net-worth', 'Net Worth', ( Aggregate.ASSUMPTIONS, ),
+    Section( 'net-worth', 'Net worth', ( Aggregate.ASSUMPTIONS, ),
              NetWorthSectionForm,
              outer_template = 'inputs/interview/sections/net_worth.html' ),
 ]
