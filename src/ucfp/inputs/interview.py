@@ -917,7 +917,7 @@ SECTIONS = [
     # One-off money moves and life events (transfers, a property sale, receipts, payments, death) -- a
     # catch-all that can reference any entity declared above. Placed before Cash management so these
     # outflows are already known when the cash band is reconciled against income and outflows.
-    Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
+    Section( 'events'      , 'Money moves', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
     # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set up
     # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.

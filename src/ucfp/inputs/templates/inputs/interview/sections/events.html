@@ -4,8 +4,9 @@ this plan. Choosing a kind opens its form inline in the add area; saving appends
 the list, and returns the add area to the menu. The list and the add area render outside the
 section's Next form (a nested form would be invalid HTML).
 {% endcomment %}
-<p class="text-muted">Add the plans and one-off events you expect -- transfers, windfalls, gifts, and
-  the like. Each becomes an input the forecast reads.</p>
+<p class="text-muted">The one-off and scheduled money moves you expect -- windfalls, gifts, transfers, big
+  purchases, and the like -- that aren't part of your regular income or spending. Each becomes an input the
+  forecast reads.</p>
 <div class="row">
   {% comment %}
   Two columns -- the events already defined on the left, the add menu/form on the right -- that stack
@@ -14,7 +15,7 @@ section's Next form (a nested form would be invalid HTML).
   targets keyed by id, so the split does not affect add/remove.
   {% endcomment %}
   <div class="col-md-5 mb-3 mb-md-0">
-    <h3 class="h6">Your events</h3>
+    <h3 class="h6">Your money moves</h3>
     {% include 'inputs/interview/sections/events_list.html' with events=form.events %}
   </div>
   <div class="col-md-7">

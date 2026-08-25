@@ -177,7 +177,7 @@ class AppConst:
     # the exact ceiling the server back-solve uses.
     MAX_PLAUSIBLE_LOAN_APR_PERCENT = MAX_PLAUSIBLE_APR_PERCENT
 
-    # Plans > Money Movements, the "Sell a property" add form: the "Rent after selling your home" option
+    # Plans > Money moves, the "Sell a property" add form: the "Rent after selling your home" option
     # applies only to selling the primary residence, so it is shown only while the chosen property is the
     # residence and hidden otherwise. The form carries the primary-residence handle(s); the option's
     # container is marked residence-gated. inputs.js toggles that container live as the property picker
