@@ -11,20 +11,22 @@
 
 {% if drift_scenarios %}
 {% comment %}
-The drift-blocked scenarios: runnable but for Plans references the Profile no longer has, so they are
-kept out of the chooser below. Each is named, with the shared scenario-drift pane listing what drifted
-and offering the one-click reconcile, after which it rejoins the chooser. `drift_scenarios` is the list
-of {label, drift}, where `drift` is the notice from `inputs.drift.plans_drift`.
+The drift-blocked scenarios: runnable but for a difference their plans hold against the current Profile,
+so they are kept out of the chooser below. Each is named, with the shared drift panes -- stale references
+(one-click reconcile) and/or loan-terms drift (per-loan update/keep) -- after which it rejoins the
+chooser. `drift_scenarios` is the list of {label, drift, loan_terms_drift}, either notice None when that
+kind does not apply.
 {% endcomment %}
 <div class="alert alert-warning mt-3">
   <h2 class="h6 mb-2">Some scenarios need reconciling</h2>
-  <p class="small mb-2">These scenarios can't run until you remove the stale references their plans
-    still hold. Each is listed below with a one-click fix.</p>
+  <p class="small mb-2">These scenarios can't run until you resolve the differences their plans hold
+    against your profile. Each is listed below with a fix.</p>
   <ul class="list-unstyled mb-0">
     {% for item in drift_scenarios %}
     <li class="border-top pt-2 mt-2">
       <strong>{{ item.label }}</strong>
-      {% include 'inputs/panes/scenario_drift.html' with drift=item.drift %}
+      {% if item.drift %}{% include 'inputs/panes/scenario_drift.html' with drift=item.drift %}{% endif %}
+      {% if item.loan_terms_drift %}{% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=item.loan_terms_drift %}{% endif %}
     </li>
     {% endfor %}
   </ul>

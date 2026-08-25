@@ -39,8 +39,8 @@ from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_fresh_scenario, create_scenario, default_scenario, delete_scenario,
     ensure_default_scenario, existing_pairings, rename_scenario, scenarios_for )
 from ucfp.inputs import expense_totals
-from ucfp.inputs.compatibility import plans_reconciled_with_profile
-from ucfp.inputs.drift import plans_drift
+from ucfp.inputs.compatibility import keep_loan_terms, plans_reconciled_with_profile, reset_loan_terms
+from ucfp.inputs.drift import plans_drift, plans_loan_terms_drift
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -142,6 +142,8 @@ class ScenariosHomeView( View ):
                          if profile is not None else list() )
             rows.append( { 'scenario': scenario, 'complete': complete, 'blockers': blockers,
                            'drift': plans_drift( profile, scenario.plans ) if profile is not None else None,
+                           'loan_terms_drift': ( plans_loan_terms_drift( profile, scenario.plans )
+                                                 if profile is not None else None ),
                            'plans_uses': plans_uses[ scenario.plans_id ],
                            'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
         return rows
@@ -505,6 +507,39 @@ def _reconcile_redirect( request ):
     if referer and url_has_allowed_host_and_scheme( referer, allowed_hosts = { request.get_host() } ):
         return redirect( referer )
     return redirect( 'scenarios_home' )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PlansLoanTermsResetView( View ):
+    """`/inputs/plans/<uuid>/loan-terms/<handle>/reset/` -- adopt the updated Profile contract for one loan,
+    re-seeding this Plans record's repayment from it and refreshing the drift snapshot. POST; returns to the
+    page it was triggered from. The value-drift twin of `PlansReconcileView`, one loan at a time."""
+
+    def post( self, request, uuid, handle ):
+        _resolve_loan_terms_drift( request, uuid, handle, reset_loan_terms )
+        return _reconcile_redirect( request )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PlansLoanTermsKeepView( View ):
+    """`/inputs/plans/<uuid>/loan-terms/<handle>/keep/` -- keep this Plans record's repayment for one loan
+    and refresh the drift snapshot to the current contract, so the drift clears without changing the plan.
+    POST; returns to the page it was triggered from."""
+
+    def post( self, request, uuid, handle ):
+        _resolve_loan_terms_drift( request, uuid, handle, keep_loan_terms )
+        return _reconcile_redirect( request )
+
+
+def _resolve_loan_terms_drift( request, uuid, handle, choose ):
+    """Apply a per-loan drift choice (`reset_loan_terms` or `keep_loan_terms`) to the named Plans record --
+    the core both loan-terms drift views share. A no-op when there is no complete profile to reconcile
+    against (there would be no current contract to compare)."""
+    plans_record   = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+    profile_record = completed_profile( request.organization )
+    if profile_record is not None:
+        save_plans( plans_record, choose(
+            load_profile( profile_record ), load_plans( plans_record ), handle ) )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -873,6 +908,8 @@ class InterviewView( GuestReminderMixin, View ):
             'section_url_name'     : self.SECTION_URL_NAME,
             # The Plans-flow drift banner: these plans reference removed Profile entities (None off Plans).
             'drift'                : self._plans_drift( request, flow ),
+            # The sibling loan-terms drift banner: a loan's contract terms changed since the plan seeded.
+            'loan_terms_drift'     : self._plans_loan_terms_drift( request, flow ),
             # The rail header: the completion badge(s) and, in a build, the Plans/Assumptions part switch.
             **rail,
             # The current flow's blocker/advisory notices for the detail banner below the heading.
@@ -902,6 +939,18 @@ class InterviewView( GuestReminderMixin, View ):
         if profile_record is None:
             return None
         return plans_drift( load_profile( profile_record ), current_plans_record( request ) )
+
+    @staticmethod
+    def _plans_loan_terms_drift( request, flow ):
+        """The current Plans record's loan-terms drift notice for the Plans-flow banner (loans whose
+        contract terms changed since the plan seeded from them + the per-loan reset/keep), or None off the
+        Plans flow or before a *complete* profile exists. Gated exactly like `_plans_drift`."""
+        if flow != 'plans':
+            return None
+        profile_record = completed_profile( request.organization )
+        if profile_record is None:
+            return None
+        return plans_loan_terms_drift( load_profile( profile_record ), current_plans_record( request ) )
 
     def _rail_header( self, request, flow ) -> dict:
         """The stepper's header context: the flow's title and completion badge. In a scenario build (editing
