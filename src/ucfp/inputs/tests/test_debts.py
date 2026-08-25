@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.http import QueryDict
 from django.test import SimpleTestCase
+from django.urls import reverse
 
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
@@ -120,6 +121,17 @@ class DebtsContextTests( SimpleTestCase ):
                              monthly_payment = Decimal( '1800' ) )
         profile = Profile( debts = [ _student( terms = terms ) ] )
         self.assertEqual( debts_context( profile )[ 0 ][ 'terms' ], '4% · 240 mo · $1,800/mo' )
+
+    def test_an_editable_row_carries_its_action_urls_a_read_only_row_none( self ):
+        # The item card's Edit/Remove post to these; a read-only mortgage/auto has no editor here.
+        profile = Profile( debts = [ _student(), _mortgage() ] )
+        rows    = { row[ 'name' ]: row for row in debts_context( profile ) }
+        self.assertEqual( rows[ 'Student loan' ][ 'edit_url' ],
+                          reverse( 'debt_edit', kwargs = { 'handle': 'debt-1' } ) )
+        self.assertEqual( rows[ 'Student loan' ][ 'delete_url' ],
+                          reverse( 'debt_delete', kwargs = { 'handle': 'debt-1' } ) )
+        self.assertIsNone( rows[ 'Mortgage' ][ 'edit_url' ] )
+        self.assertIsNone( rows[ 'Mortgage' ][ 'delete_url' ] )
 
 
 class DebtHeadingAndDeleteTests( SimpleTestCase ):

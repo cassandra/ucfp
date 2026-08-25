@@ -1,43 +1,20 @@
 {% comment %}
-The household's debts (id=debts-list), refreshed on add/edit/delete: one list of all debts, each with its
-kind, name, balance, and (when captured) a terms summary. Editable debts (unsecured loans, cards) carry
-Edit/Remove -- Edit/Add open the form in the pane's form area (#debt-form), Remove posts to the delete
-view. Read-only mortgages and auto loans carry a pointer to their canonical section instead. `debts` is the
-list of {handle, name, kind, balance, terms, editable, managed_in}.
+The household's debts (id=debts-list), refreshed on add/edit/delete: one input-item-card per
+debt -- its kind (badge), name, balance, and (when captured) a terms summary on the detail line.
+Editable debts (unsecured loans, cards) carry Edit/Remove -- Edit opens the editor in the pane's editor
+slot (#debt-editor), Remove posts to the delete view. Read-only mortgages and auto loans show a pointer
+to their canonical section instead. Adding a debt is offered by the editor slot's resting state (one
+editor at a time, so Add is not available while one is open). `debts` is the list of
+{handle, name, kind, balance, terms, editable, managed_in, edit_url, delete_url}; `active` is the handle
+whose editor is open.
 {% endcomment %}
 {% load common_tags %}
 <div id="debts-list">
   {% if debts %}
-  <ul class="list-unstyled mb-2">
-    {% for debt in debts %}
-    <li class="mb-2 py-1 {% if debt.handle == active %}bg-light border-left border-primary rounded-right pl-2{% endif %}">
-      <div class="d-flex justify-content-between align-items-baseline">
-        <span>
-          <span class="text-muted small mr-1">{{ debt.kind }}</span>
-          {{ debt.name }} <span class="text-muted">{{ debt.balance|money:currency }}</span>{% if debt.terms %} <span class="text-muted small">&middot; {{ debt.terms }}</span>{% endif %}
-        </span>
-        <span class="text-nowrap ml-3">
-          {% if debt.editable %}
-          {% if debt.handle == active %}<span class="text-muted small mr-1">editing</span>{% endif %}
-          <a data-async="#debt-form"
-             href="{% url 'debt_edit' handle=debt.handle %}" aria-label="Edit {{ debt.name }}">Edit</a>
-          <form method="post" action="{% url 'debt_delete' handle=debt.handle %}"
-                data-async="#debts-list" class="d-inline edit-only">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
-                    aria-label="Remove {{ debt.name }}">Remove</button>
-          </form>
-          {% else %}
-          <span class="text-muted small">Entered in {{ debt.managed_in }}</span>
-          {% endif %}
-        </span>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
+  {% for debt in debts %}
+  {% include 'inputs/interview/_input_item_card.html' with title=debt.name badge=debt.kind headline=debt.balance|money:currency detail=debt.terms handle=debt.handle active_handle=active editable=debt.editable edit_url=debt.edit_url delete_url=debt.delete_url managed_in=debt.managed_in editor_target='#debt-editor' list_target='#debts-list' %}
+  {% endfor %}
   {% else %}
   <p class="text-muted mb-2">No debts yet.</p>
   {% endif %}
-  <a class="btn btn-sm btn-outline-primary" data-async="#debt-form"
-     href="{% url 'debt_add' %}">Add a debt</a>
 </div>

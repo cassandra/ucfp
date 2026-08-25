@@ -1,18 +1,22 @@
 {% comment %}
-The add/edit form for one debt (id=debt-form), opened as a card beneath the debts list, its header naming
-the debt (from `heading`, or "New debt" when just added). Auto-saves in the background. The kind select is
-a switch (inputs.js): an amortizing loan reveals the shared loan-terms block (balance + rate/term/payment
-kept consistent), a credit card reveals nothing more. Non-blocking: the debt appears in the list once its
-kind, name, and balance are set. Empty when no form is open. Reads `debt_form`, `heading`, and `handle`.
+The add/edit editor for one debt (id=debt-editor), opened as an input-editor-card in the slot
+beside the debts list, its header naming the debt (from `heading`, or "New debt" when just added).
+Auto-saves in the background. The kind select is a switch (inputs.js): an amortizing loan reveals
+the shared loan-terms block (balance + rate/term/payment kept consistent), a credit card reveals
+nothing more. Non-blocking: the debt appears in the list once its kind, name, and balance are set. When no editor is
+open it rests as the master-detail prompt -- pick a debt to edit, or add one -- which carries the
+section's only Add (one editor at a time: Add is offered only while none is open). Reads `debt_form`,
+`heading`, `handle`.
 {% endcomment %}
-<div id="debt-form">
+<div id="debt-editor">
   {% if debt_form %}
-  <div class="card mt-2">
-    {% include 'inputs/interview/sections/_debt_editor_header.html' with heading=heading handle=handle %}
-    <div class="card-body">
+  {% url 'debt_edit' handle=handle as debt_edit_url %}
+  <div class="input-editor-card mt-2">
+    {% include 'inputs/interview/_input_editor_card_header.html' with heading=heading new_label='New debt' close_url=debt_edit_url|add:'?collapse=1' editor_target='#debt-editor' %}
+    <div class="input-editor-card__body">
       <form method="post"
             class="{{ AppConst.SWITCH_CLASS }} {{ AppConst.LOAN_CLASS }} {{ AppConst.AUTOSAVE_CLASS }}"
-            action="{% url 'debt_edit' handle=handle %}">
+            action="{{ debt_edit_url }}">
         {% csrf_token %}
         <div class="form-row">
           <div class="col-sm-4">{{ debt_form.kind.as_field_group }}</div>
@@ -24,12 +28,18 @@ kind, name, and balance are set. Empty when no form is open. Reads `debt_form`, 
         <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="{{ debt_form.amortizing_cases }}">
           {% include 'inputs/interview/sections/_loan_term_fields.html' with payment_field=debt_form.loan_payment rate_field=debt_form.loan_rate term_field=debt_form.loan_term loan_id=debt_form.loan_id %}
         </div>
-        <div class="mt-2">
-          <a class="btn btn-sm btn-outline-primary" data-async="#debt-form"
-             href="{% url 'debt_edit' handle=handle %}?collapse=1">Done</a>
+        <div class="input-editor-card__footer">
+          <a class="btn btn-sm btn-outline-primary" data-async="#debt-editor"
+             href="{{ debt_edit_url }}?collapse=1">Done</a>
         </div>
       </form>
     </div>
+  </div>
+  {% else %}
+  <div class="input-editor-empty">
+    <p class="text-muted mb-2">Pick a debt to edit, or add a new one.</p>
+    <a class="btn btn-sm btn-outline-primary" data-async="#debt-editor"
+       href="{% url 'debt_add' %}">Add a debt</a>
   </div>
   {% endif %}
 </div>

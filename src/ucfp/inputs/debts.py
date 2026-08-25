@@ -14,6 +14,7 @@ One editor per loan: the list (`debts_context`) offers Edit/Remove only on the e
 from dataclasses import replace
 
 from django import forms
+from django.urls import reverse
 
 from common.forms import CHOOSE_PLACEHOLDER, MoneyField
 
@@ -67,15 +68,23 @@ def _terms_summary( terms ) -> str:
 def debts_context( profile ) -> list:
     """One summary row per debt for the list -- editable debts (unsecured loans, cards) carry an editor,
     read-only mortgages/autos a pointer to their section. Each: handle, name, kind label, balance, a terms
-    summary, `editable`, and (read-only only) `managed_in`."""
-    return [ { 'handle'     : debt.handle,
-               'name'       : debt.name,
-               'kind'       : debt.kind.label,
-               'balance'    : debt.balance,
-               'terms'      : _terms_summary( debt.terms ),
-               'editable'   : debt.kind not in _CANONICAL_ELSEWHERE,
-               'managed_in' : _CANONICAL_ELSEWHERE.get( debt.kind ) }
-             for debt in ( profile.debts if profile is not None else [] ) ]
+    summary, `editable`, (read-only only) `managed_in`, and (editable only) the `edit_url`/`delete_url` the
+    item card's actions post to."""
+    rows = []
+    for debt in ( profile.debts if profile is not None else [] ):
+        editable = debt.kind not in _CANONICAL_ELSEWHERE
+        rows.append( {
+            'handle'     : debt.handle,
+            'name'       : debt.name,
+            'kind'       : debt.kind.label,
+            'balance'    : debt.balance,
+            'terms'      : _terms_summary( debt.terms ),
+            'editable'   : editable,
+            'managed_in' : _CANONICAL_ELSEWHERE.get( debt.kind ),
+            'edit_url'   : reverse( 'debt_edit', kwargs = { 'handle' : debt.handle } ) if editable else None,
+            'delete_url' : reverse( 'debt_delete', kwargs = { 'handle' : debt.handle } ) if editable else None,
+        } )
+    return rows
 
 
 def debt_heading( profile, handle : str ):

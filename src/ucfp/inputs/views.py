@@ -1651,14 +1651,15 @@ class DebtFormView( _DebtListView ):
         form = DebtForm( profile = profile, plans = plans, handle = handle )
         return antinode.response(
             main_content = self._form( request, handle, form, profile ),
-            replace_map  = { 'debts-list': self._list( request, profile, active = handle ) } )
+            replace_map  = { 'debts-list': self._list( request, profile, active = handle ) },
+            scroll_to    = 'debt-editor' )             # bring the editor into view on the stacked layout
 
     def post( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
         form = DebtForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
-                replace_map = { 'debt-form': self._form( request, handle, form, profile ) } )
+                replace_map = { 'debt-editor': self._form( request, handle, form, profile ) } )
         profile, plans = form.apply( profile, plans )
         _save_profile_and_plans( request, profile, plans )
         return antinode.response(

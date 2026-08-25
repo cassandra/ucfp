@@ -180,6 +180,7 @@ def test_article_detail_renders( self ):
 - Icon system: [Icon System](icon-system.md)
 - Style guidelines: [Style Guidelines](style-guidelines.md)
 - Template conventions: [Template Conventions](template-conventions.md)
+- Interview input UI: [Interview UI Guidelines](interview-ui-guidelines.md)
 - JavaScript testing: [JavaScript Testing](javascript-testing.md)
 - UI testing: [UI Testing](ui-testing.md)
 - Testing patterns: [Testing Patterns](../testing/testing-patterns.md)

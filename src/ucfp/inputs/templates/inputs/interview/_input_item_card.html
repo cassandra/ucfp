@@ -1,0 +1,34 @@
+{% comment %}
+One member of a collection, rendered as the input-item-card primitive (see
+docs/dev/frontend/interview-ui-guidelines.md). A bordered card: an optional `badge`,
+the `title` and an optional inline `headline`, right-aligned actions, and an optional
+muted `detail` line beneath. An editable member (`editable`) carries Edit -- which opens
+its editor in `editor_target` -- and Remove -- which posts to `delete_url`, refreshing
+`list_target`; a read-only member shows `managed_in` (the section that owns it) instead.
+The member whose editor is open (`handle` == `active_handle`) shows the active state.
+Params: title, badge, headline, detail, handle, active_handle, editable, edit_url,
+delete_url, managed_in, editor_target, list_target.
+{% endcomment %}
+<div class="input-item-card{% if handle and handle == active_handle %} input-item-card--active{% endif %}{% if not editable %} input-item-card--readonly{% endif %}">
+  <div class="input-item-card__head">
+    <span>
+      {% if badge %}<span class="input-item-card__badge">{{ badge }}</span>{% endif %}
+      <span class="input-item-card__title">{{ title }}</span>
+      {% if headline %}<span class="input-item-card__headline">{{ headline }}</span>{% endif %}
+    </span>
+    <span class="input-item-card__actions">
+      {% if editable %}
+      {% if handle and handle == active_handle %}<span class="text-muted small mr-1">editing</span>{% endif %}
+      <a data-async="{{ editor_target }}" href="{{ edit_url }}" aria-label="Edit {{ title }}">Edit</a>
+      <form method="post" action="{{ delete_url }}" data-async="{{ list_target }}" class="d-inline edit-only">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
+                aria-label="Remove {{ title }}">Remove</button>
+      </form>
+      {% else %}
+      <span class="text-muted small">Entered in {{ managed_in }}</span>
+      {% endif %}
+    </span>
+  </div>
+  {% if detail %}<div class="input-item-card__detail">{{ detail }}</div>{% endif %}
+</div>

@@ -65,3 +65,4 @@ state classes -- define the variables once and reference them everywhere.
 - [Icon System](icon-system.md)
 - [Frontend Guidelines](frontend-guidelines.md)
 - [Template Conventions](template-conventions.md)
+- [Interview UI Guidelines](interview-ui-guidelines.md)

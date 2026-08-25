@@ -1,17 +1,23 @@
 {% comment %}
-The Debts pane: one list of the household's debts -- loans and credit cards -- edited through its own async
-view outside the section's Next form (a nested form would be invalid HTML). Adding or editing a debt opens
-the form beneath the list (#debt-form); an amortizing loan reveals its terms. Mortgages and auto loans are
-entered in their own sections and shown here read-only. `form.debts` is the summary list, managed by
-`DebtFormView` / `DebtDeleteView`.
+The Debts pane: one list of the household's debts -- loans and credit cards -- on the left,
+with the add/edit editor opening in the slot on the right (list-left / editor-right, the
+shared collection pattern; the columns stack below md). Editing runs through the section's
+own async view, outside the Next form (a nested form would be invalid HTML). Mortgages and
+auto loans are entered in their own sections and shown here read-only. `form.debts` is the
+summary list, managed by `DebtFormView` / `DebtDeleteView`.
 {% endcomment %}
 <p class="text-muted">What you owe -- loans and credit cards. Enter each loan's current balance and, if you
   know them, its terms (rate, term, or monthly payment -- we fill in the rest). Mortgages and auto loans
   are entered in their own sections and shown here read-only. How you plan to repay a loan is set later,
   when you build a scenario.</p>
 <div class="row">
-  <div class="col-md-6">
+  <div class="col-md-5">
     {% include 'inputs/interview/sections/debts_list.html' with debts=form.debts %}
-    <div id="debt-form" class="mt-2"></div>
+  </div>
+  <div class="col-md-7 mt-3 mt-md-0">
+    {% comment %}The editor slot. Rendered from the editor template even when empty so its resting
+    state is the master-detail prompt (a "pick or add" placeholder, not a blank column); Add/Edit swap
+    the editor card in here, Done/collapse restores this same empty state.{% endcomment %}
+    {% include 'inputs/interview/sections/debt_form.html' %}
   </div>
 </div>
