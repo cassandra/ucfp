@@ -3,16 +3,21 @@ The add menu (id=events-add): the offerable event kinds, grouped. Choosing a kin
 into this area; the area is restored to this menu after a save or a Cancel.
 {% endcomment %}
 <div id="events-add">
-  <h3 class="h6">Add a money move</h3>
-  {% for group in menu %}
-  <div class="d-flex align-items-baseline mt-2">
-    <span class="text-muted small text-right flex-shrink-0 mr-2" style="width: 5.5rem">{{ group.group }}</span>
-    <div>
-      {% for type in group.types %}
-      <a class="btn btn-sm btn-outline-primary mr-1 mb-1" data-async="#events-add"
-         href="{% url 'event_add' kind=type.kind %}">{{ type.label }}</a>
-      {% endfor %}
+  {% comment %}The resting state of the add column -- the offerable kinds as a menu, in the shared
+  bg-light column card (the edit form that replaces it is itself a card), so the column reads the same
+  whether adding or choosing.{% endcomment %}
+  <div class="border rounded bg-light p-3">
+    <h3 class="h6 mt-0">Add a money move</h3>
+    {% for group in menu %}
+    <div class="d-flex align-items-baseline mt-2">
+      <span class="text-muted small text-right flex-shrink-0 mr-2" style="width: 5.5rem">{{ group.group }}</span>
+      <div>
+        {% for type in group.types %}
+        <a class="btn btn-sm btn-outline-primary mr-1 mb-1" data-async="#events-add"
+           href="{% url 'event_add' kind=type.kind %}">{{ type.label }}</a>
+        {% endfor %}
+      </div>
     </div>
+    {% endfor %}
   </div>
-  {% endfor %}
 </div>

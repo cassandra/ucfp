@@ -203,6 +203,23 @@ not let a redesign churn them.
 - **The draw-order ranked list** -- Cash management's reorderable, annotated list
   is a legitimate bespoke control; it is not a collection to normalize.
 
+## Two-column content: each column in a card
+
+When a page sets two columns of **independent content** side by side (not a
+master-detail list + editor), wrap **each column** in a shaded card
+(`border rounded bg-light p-3`) so the pair reads as two grouped panels and the
+white fields/rows inside them stand out. Let the cards take their natural height
+(no `h-100`) so a shorter column is not stretched with empty space. Conformant:
+Cash management (low-cash vs high-cash), Tax planning (withdrawals vs
+conversions), Accounts (taxable vs retirement).
+
+The master-detail two-column pages already satisfy this: the editor column's open
+form is itself a card, so only its *resting* state has to match -- an
+`input-editor-empty` panel, or (Money moves) the add menu wrapped in the same
+bg-light card. The list column is a column of `input-item-card`s and stays
+uncarded. Content cards inside a shaded column are white (`card`, the item-card
+white), never `bg-light` on `bg-light`.
+
 ## Intentional -- do not "normalize" these away
 
 Some cross-page differences are deliberate and must survive a consistency pass:
