@@ -5,14 +5,14 @@ Editable debts (unsecured loans, cards) carry Edit/Remove -- Edit opens the edit
 slot (#debt-editor), Remove posts to the delete view. Read-only mortgages and auto loans show a pointer
 to their canonical section instead. Adding a debt is offered by the editor slot's resting state (one
 editor at a time, so Add is not available while one is open). `debts` is the list of
-{handle, name, kind, balance, terms, editable, managed_in, edit_url, delete_url}; `active` is the handle
+{handle, name, kind, balance, terms, editable, source_note, edit_url, delete_url}; `active` is the handle
 whose editor is open.
 {% endcomment %}
 {% load common_tags %}
 <div id="debts-list">
   {% if debts %}
   {% for debt in debts %}
-  {% include 'inputs/interview/_input_item_card.html' with title=debt.name badge=debt.kind headline=debt.balance|money:currency detail=debt.terms handle=debt.handle active_handle=active editable=debt.editable edit_url=debt.edit_url delete_url=debt.delete_url managed_in=debt.managed_in editor_target='#debt-editor' list_target='#debts-list' %}
+  {% include 'inputs/interview/_input_item_card.html' with title=debt.name badge=debt.kind headline=debt.balance|money:currency detail=debt.terms handle=debt.handle active_handle=active edit_url=debt.edit_url delete_url=debt.delete_url source_note=debt.source_note editor_target='#debt-editor' list_target='#debts-list' %}
   {% endfor %}
   {% else %}
   <p class="text-muted mb-2">No debts yet.</p>

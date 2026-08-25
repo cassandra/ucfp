@@ -429,6 +429,18 @@ a.interview-part:hover {
 }
 .input-item-card__title  { font-weight: 600; }
 .input-item-card__headline { color: var(--muted-color); margin-left: 0.35rem; }
+/* A warning chip flagging a member that is not yet complete ("Needs details") -- the amber
+   counterpart to the neutral --badge, so an unfinished member stands out in the list. */
+.input-item-card__flag {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--on-warning-color);
+    background-color: var(--warning-color);
+    border-radius: 0.25rem;
+    padding: 0.05rem 0.4rem;
+    margin-left: 0.4rem;
+}
 .input-item-card__detail {
     color: var(--muted-color);
     font-size: 0.875rem;

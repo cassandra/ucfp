@@ -8,7 +8,7 @@ shows Remove only -- its `edit_url` is None, so the card omits Edit. `events` is
 <div id="events-list" class="mb-3">
   {% if events %}
   {% for event in events %}
-  {% include 'inputs/interview/_input_item_card.html' with title=event.summary badge=event.group editable=True edit_url=event.edit_url delete_url=event.delete_url editor_target='#events-add' list_target='#events-list' %}
+  {% include 'inputs/interview/_input_item_card.html' with title=event.summary badge=event.group edit_url=event.edit_url delete_url=event.delete_url editor_target='#events-add' list_target='#events-list' %}
   {% endfor %}
   {% else %}
   <p class="text-muted">No money moves yet -- add one on the right.</p>

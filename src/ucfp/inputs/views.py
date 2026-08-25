@@ -53,9 +53,10 @@ from .state import (
     assumptions_completion_blockers, assumptions_is_complete, completed_assumptions, completed_plans,
     completed_profile, plans_completion_blockers, plans_is_complete, profile_advisories,
     profile_completion_blockers, profile_is_complete )
-from .vehicle import VehicleForm, delete_vehicle, vehicles_context, _minted_vehicle_handle
+from .vehicle import VehicleForm, delete_vehicle, future_vehicle_heading, _minted_vehicle_handle
 from .vehicle_disposition import (
-    LeasedVehicleDispositionForm, VehicleDispositionForm, all_dispositions_context )
+    LeasedVehicleDispositionForm, VehicleDispositionForm, current_card_key, future_card_key,
+    vehicle_plan_cards )
 from .vehicle_expenses import VehicleExpensesForm
 from .vehicle_profile import (
     CurrentVehicleForm, _minted_current_vehicle_handle, current_vehicles_context,
@@ -1132,15 +1133,17 @@ class TotalsPaneMixin:
 
 @method_decorator( ensure_organization, name = 'dispatch' )
 class _VehicleListView( View ):
-    """Shared, org-scoped base for the vehicle list of the Vehicle plan step: it renders the plan's
-    vehicles. The per-vehicle add/edit/delete swaps refresh this list; the per-car running costs are the
-    sibling `VehicleExpensesView` pane."""
+    """Shared, org-scoped base for the Vehicle plan's one list -- the household's current vehicles then any
+    net-new future ones. The per-vehicle add/edit/delete swaps (and the disposition editors) refresh this
+    one list; the per-car running costs are the sibling `VehicleExpensesView` pane."""
 
-    _LIST_TEMPLATE = 'inputs/interview/sections/vehicle_list.html'
+    _LIST_TEMPLATE = 'inputs/interview/sections/vehicle_plan_list.html'
 
-    def _list( self, request, plans ):
+    def _list( self, request, profile, plans, active = None ):
         return render_to_string(
-            self._LIST_TEMPLATE, { 'vehicles': vehicles_context( plans ) }, request = request )
+            self._LIST_TEMPLATE,
+            { 'cards': vehicle_plan_cards( profile, plans ), 'active': active },
+            request = request )
 
 
 class VehicleFormView( _VehicleListView ):
@@ -1153,26 +1156,35 @@ class VehicleFormView( _VehicleListView ):
 
     def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
-        if request.GET.get( 'collapse' ):
-            return antinode.response( main_content = self._form( request, None, None ) )
+        if request.GET.get( 'collapse' ):                  # Done: restore the slot's resting state
+            return antinode.response(
+                main_content = self._form( request, None, None, plans ),
+                replace_map  = { 'vehicle-plan-list': self._list( request, profile, plans ) } )
         if handle is None:                             # add: mint a fresh handle, open its editor
             handle = _minted_vehicle_handle( plans )
         form = VehicleForm( profile = profile, plans = plans, handle = handle )
-        return antinode.response( main_content = self._form( request, handle, form ) )
+        return antinode.response(
+            main_content = self._form( request, handle, form, plans ),
+            replace_map  = { 'vehicle-plan-list':
+                             self._list( request, profile, plans, future_card_key( handle ) ) } )
 
     def post( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
         form = VehicleForm( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
-                replace_map = { 'vehicles-form': self._form( request, handle, form ) } )
+                replace_map = { 'vehicle-editor': self._form( request, handle, form, plans ) } )
         profile, plans = form.apply( profile, plans )
         _save_profile_and_plans( request, profile, plans )
-        return antinode.response( replace_map = { 'vehicles-list': self._list( request, plans ) } )
+        return antinode.response(
+            replace_map = { 'vehicle-plan-list':
+                            self._list( request, profile, plans, future_card_key( handle ) ) } )
 
-    def _form( self, request, handle, form ):
+    def _form( self, request, handle, form, plans ):
         return render_to_string(
-            self._FORM_TEMPLATE, { 'vehicle_form': form, 'handle': handle }, request = request )
+            self._FORM_TEMPLATE,
+            { 'vehicle_form': form, 'handle': handle, 'heading': future_vehicle_heading( plans, handle ) },
+            request = request )
 
 
 class VehicleDeleteView( _VehicleListView ):
@@ -1182,7 +1194,8 @@ class VehicleDeleteView( _VehicleListView ):
         profile, plans = _current_profile_and_plans( request )
         plans = delete_vehicle( plans, handle )
         _save_profile_and_plans( request, profile, plans )
-        return antinode.response( replace_map = { 'vehicles-list': self._list( request, plans ) } )
+        return antinode.response(
+            replace_map = { 'vehicle-plan-list': self._list( request, profile, plans ) } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -1194,37 +1207,39 @@ class _VehicleDispositionView( View ):
     template, and the template's context key for the form -- the owned (Retain/Sell/Replace) and leased
     (Return/Renew/Buy) editors are otherwise identical."""
 
-    _LIST_TEMPLATE    = 'inputs/interview/sections/vehicle_disposition_list.html'
+    _LIST_TEMPLATE    = 'inputs/interview/sections/vehicle_plan_list.html'
     _FORM_TEMPLATE    = None    # subclass: its editor template
     _form_class       = None    # subclass: its disposition form
     _form_context_key = None    # subclass: the template's key for the form
 
     def get( self, request, handle = None ):
         profile, plans = _current_profile_and_plans( request )
-        if request.GET.get( 'collapse' ):
+        if request.GET.get( 'collapse' ):                  # Done: restore the slot's resting state
             return antinode.response(
                 main_content = self._form( request, None, None, profile ),
-                replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans ) } )
+                replace_map  = { 'vehicle-plan-list': self._list( request, profile, plans ) } )
         form = self._form_class( profile = profile, plans = plans, handle = handle )
         return antinode.response(
             main_content = self._form( request, handle, form, profile ),
-            replace_map  = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
+            replace_map  = { 'vehicle-plan-list':
+                             self._list( request, profile, plans, current_card_key( handle ) ) } )
 
     def post( self, request, handle ):
         profile, plans = _current_profile_and_plans( request )
         form = self._form_class( request.POST, profile = profile, plans = plans, handle = handle )
         if not form.is_valid():
             return antinode.response(                          # surface a genuine field error
-                replace_map = { 'vehicle-disposition-form': self._form( request, handle, form, profile ) } )
+                replace_map = { 'vehicle-editor': self._form( request, handle, form, profile ) } )
         _profile, plans = form.apply( profile, plans )
         save_plans( current_plans_record( request ), plans )
         return antinode.response(
-            replace_map = { 'vehicle-dispositions-list': self._list( request, profile, plans, handle ) } )
+            replace_map = { 'vehicle-plan-list':
+                            self._list( request, profile, plans, current_card_key( handle ) ) } )
 
     def _list( self, request, profile, plans, active = None ):
         return render_to_string(
             self._LIST_TEMPLATE,
-            { 'dispositions': all_dispositions_context( profile, plans ), 'active': active },
+            { 'cards': vehicle_plan_cards( profile, plans ), 'active': active },
             request = request )
 
     def _form( self, request, handle, form, profile ):

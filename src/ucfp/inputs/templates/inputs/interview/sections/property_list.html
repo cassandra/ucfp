@@ -10,7 +10,7 @@ open.
 <div id="properties-list">
   {% if properties %}
   {% for prop in properties %}
-  {% include 'inputs/interview/_input_item_card.html' with title=prop.name badge=prop.badge headline=prop.value|money:currency handle=prop.handle active_handle=active editable=True edit_url=prop.edit_url delete_url=prop.delete_url editor_target='#property-editor' list_target='#properties-list' %}
+  {% include 'inputs/interview/_input_item_card.html' with title=prop.name badge=prop.badge headline=prop.value|money:currency handle=prop.handle active_handle=active edit_url=prop.edit_url delete_url=prop.delete_url editor_target='#property-editor' list_target='#properties-list' %}
   {% endfor %}
   {% else %}
   <p class="text-muted mb-2">No properties yet.</p>

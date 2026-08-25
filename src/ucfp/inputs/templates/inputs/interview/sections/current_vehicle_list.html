@@ -10,7 +10,7 @@ available while one is open). `vehicles` is the list of
 <div id="current-vehicles-list">
   {% if vehicles %}
   {% for vehicle in vehicles %}
-  {% include 'inputs/interview/_input_item_card.html' with title=vehicle.name badge=vehicle.ownership headline=vehicle.value|money:currency handle=vehicle.handle active_handle=active editable=True edit_url=vehicle.edit_url delete_url=vehicle.delete_url editor_target='#current-vehicle-editor' list_target='#current-vehicles-list' %}
+  {% include 'inputs/interview/_input_item_card.html' with title=vehicle.name badge=vehicle.ownership headline=vehicle.value|money:currency handle=vehicle.handle active_handle=active edit_url=vehicle.edit_url delete_url=vehicle.delete_url editor_target='#current-vehicle-editor' list_target='#current-vehicles-list' %}
   {% endfor %}
   {% else %}
   <p class="text-muted mb-2">No vehicles yet.</p>

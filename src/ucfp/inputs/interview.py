@@ -51,7 +51,7 @@ from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
-from .vehicle_disposition import all_dispositions_context
+from .vehicle_disposition import all_dispositions_context, vehicle_plan_cards
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
 from .widgets import IsoDateInput, StateRateSelect, percent_str
 
@@ -795,17 +795,13 @@ class VehiclePlanSectionForm:
         return True
 
     @property
-    def dispositions( self ):
-        """One row per current vehicle (from the Vehicles/Profile section) with its plan disposition --
-        owned and leased together, each Edit opening its editor into the shared form area. Managed by
-        `VehicleDispositionView` / `LeasedVehicleDispositionView`, mirroring the Debt plan's per-debt rows."""
-        return all_dispositions_context( self._profile, self._plans )
-
-    @property
-    def vehicles( self ):
-        """The plan's net-new future vehicles for the section's list template -- the per-vehicle
-        add/edit/delete panes manage them through `VehicleFormView` / `VehicleDeleteView`."""
-        return vehicles_context( self._plans )
+    def cards( self ):
+        """The section's single list -- the household's current vehicles (from the Vehicles/Profile section,
+        each with its plan disposition, editable but not removable here) then any net-new future vehicles,
+        as input-item-card rows. Every card's Edit (and a future vehicle's Remove/Add) opens into the one
+        shared editor slot, managed by `VehicleDispositionView` / `LeasedVehicleDispositionView` (current)
+        and `VehicleFormView` / `VehicleDeleteView` (future)."""
+        return vehicle_plan_cards( self._profile, self._plans )
 
     def apply( self, profile, plans ):
         return profile, plans
@@ -832,6 +828,23 @@ class VehicleExpensesSectionForm:
     @property
     def vehicle_costs_form( self ):
         return VehicleExpensesForm( profile = self._profile, plans = self._plans )
+
+    @property
+    def current_count( self ) -> int:
+        """How many current vehicles (owned + leased) the household has -- the running costs apply per
+        vehicle, so this and `future_count` frame what the table covers."""
+        return len( all_dispositions_context( self._profile, self._plans ) )
+
+    @property
+    def future_count( self ) -> int:
+        """How many net-new future vehicles are planned."""
+        return len( vehicles_context( self._plans ) )
+
+    @property
+    def has_vehicles( self ) -> bool:
+        """Whether any vehicle exists -- with none, the per-vehicle running costs are meaningless, so the
+        step shows a pointer back to the Vehicle plan instead of the table."""
+        return bool( self.current_count or self.future_count )
 
     def apply( self, profile, plans ):
         if plans.vehicle_plan is None:

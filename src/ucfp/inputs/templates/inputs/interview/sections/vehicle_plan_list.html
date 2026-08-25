@@ -1,0 +1,18 @@
+{% comment %}
+The Vehicle plan's single list (id=vehicle-plan-list), refreshed on any edit/add/delete: one
+input-item-card per vehicle -- the household's current vehicles first (a "Current" badge, editable to set
+its plan but not removable here -- its facts come from the Profile), then any net-new future ones (a
+"Future" badge, fully add/edit/remove). Every card's Edit (and a future card's Remove) opens into the one
+shared editor slot (#vehicle-editor); the section's only Add lives in that slot's resting state. `cards`
+is the ordered list of input-item-card rows; `active` is the handle whose editor is open.
+{% endcomment %}
+<div id="vehicle-plan-list">
+  {% if cards %}
+  {% for card in cards %}
+  {% include 'inputs/interview/_input_item_card.html' with title=card.title badge=card.badge headline=card.headline detail=card.detail flag=card.flag handle=card.handle active_handle=active edit_url=card.edit_url delete_url=card.delete_url source_note=card.source_note editor_target='#vehicle-editor' list_target='#vehicle-plan-list' %}
+  {% endfor %}
+  {% else %}
+  <p class="text-muted mb-2">No vehicles yet &mdash; add a future vehicle, or add current ones in the
+    Vehicles section.</p>
+  {% endif %}
+</div>

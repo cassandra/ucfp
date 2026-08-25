@@ -1,10 +1,26 @@
 {% comment %}
 The Vehicle expenses step (Plans flow): the shared per-car running costs (insurance, maintenance, repairs,
 fuel, fees) -- entered once per vehicle, applied to every vehicle while operated, at each cost's cadence.
-Managed by `VehicleExpensesView`; seeded from the catalog on Next/render once a vehicle plan exists. The
-per-vehicle dispositions and net-new future vehicles are the separate Vehicle plan section.
+Managed by `VehicleExpensesView`; seeded from the catalog on Next/render once a vehicle plan exists. With no
+vehicles the per-vehicle costs are meaningless, so the step points back to the Vehicle plan instead of the
+table; with vehicles, a short note reports how many the costs cover. The per-vehicle dispositions and
+net-new future vehicles are the separate Vehicle plan section.
 {% endcomment %}
-<h6>Running costs (per vehicle)</h6>
-<p class="text-muted small">Entered once per vehicle; each applies to every vehicle while you own it, at
-  its cadence.</p>
-{% include 'inputs/interview/sections/_vehicle_expenses.html' with vehicle_costs_form=form.vehicle_costs_form %}
+{% if form.has_vehicles %}
+<div class="row">
+  <div class="col-md-8">
+    <h6>Running costs (per vehicle)</h6>
+    <p class="text-muted small">Entered once per vehicle; each applies to every vehicle while you own it, at
+      its cadence.</p>
+    {% include 'inputs/interview/sections/_vehicle_expenses.html' with vehicle_costs_form=form.vehicle_costs_form %}
+  </div>
+  <div class="col-md-4 mt-3 mt-md-0">
+    <p class="text-muted small">These costs apply to your {{ form.current_count }} current and
+      {{ form.future_count }} future vehicle{{ form.future_count|pluralize }} defined in the Vehicle plan
+      step.</p>
+  </div>
+</div>
+{% else %}
+<p class="text-muted">No vehicles yet. Add a vehicle in the Vehicle plan step first &mdash; running costs
+  are entered per vehicle, so there is nothing to set until then.</p>
+{% endif %}

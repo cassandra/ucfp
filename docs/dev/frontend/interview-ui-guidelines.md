@@ -86,12 +86,21 @@ collision as the app grows.
 One member of a collection, in the left list.
 
 - Structure: an optional **badge** (`__badge`), the **title** (`__title`), inline
-  **headline** facts (`__headline`), right-aligned **actions** (`__actions`:
+  **headline** facts (`__headline`), an optional warning **flag** (`__flag`, e.g.
+  "Needs details" on an unfinished member), right-aligned **actions** (`__actions`:
   Edit, Remove), and an optional muted **detail** line beneath (`__detail`).
+- Actions are **independent**, driven by which routes the row carries, not one
+  `editable` flag: **Edit** shows when an `edit_url` is given, **Remove** when a
+  `delete_url` is given. This lets a member be *editable here but not removable
+  here* -- a current vehicle whose plan is set on its card but whose facts (and
+  deletion) live in the Vehicles section -- which one boolean could not express.
+- A `source_note` **note** (verbatim -- "From Profile", "Entered in Home &
+  Property") shows when the member has no `delete_url` -- naming where it is owned,
+  whether the card is otherwise read-only or still carries an Edit.
 - States: `--active` (this member's editor is open) renders the one canonical
   editing affordance -- a left accent border and subtle fill; `--readonly` (a
-  member owned by another section, e.g. a mortgage shown in Debts) drops the
-  actions and shows a pointer to its home section instead.
+  member with neither action, owned by another section, e.g. a mortgage shown in
+  Debts) tints the card and shows only its `managed_in` pointer.
 - Actions are touch targets: Edit and Remove must meet the 44px minimum -- the
   current bare text links and `×` glyphs do not, and this is the primitive's job
   to fix.
@@ -149,8 +158,10 @@ respect these, or a redesign silently breaks behavior:
   client-server namespace rule in the Frontend Guidelines -- never duplicated as a
   literal on both sides.
 - **Read-only / edit-only.** Every section renders in a read-only mode (the
-  example-data tour, and any non-editable viewer). Primitives take an `editable`
-  flag and drop Add/Edit/Remove when false; do not bolt this on afterward.
+  example-data tour, and any non-editable viewer). A read-only render drops the
+  action routes -- `input-item-card` shows Edit/Remove only when given an
+  `edit_url` / `delete_url`, so withholding them yields the read-only card -- and
+  the editor slot's Add is likewise route-driven; do not bolt this on afterward.
 - **Responsive & touch.** `md`+ two-column, stack below; 44px touch targets;
   16px minimum control font; visible focus. See [Style Guidelines](style-guidelines.md).
 
@@ -202,7 +213,7 @@ Some cross-page differences are deliberate and must survive a consistency pass:
 - **Profile default width vs. Plans/Assumptions `container-fluid`.** Plans and
   Assumptions go full width for their wide age-band matrices; Profile stays
   default because it has no such content. Keep per-flow.
-- **Section badges** (ownership, "entered in ...", "needs details") are meaningful
+- **Section badges** (ownership, "from ...", "needs details") are meaningful
   status, not decoration.
 
 ## Page-structure decisions
@@ -241,7 +252,7 @@ Each section migrates on its own, in this order:
 one reference page per distinct archetype before rolling out:
 
 - **Debts** -- the reference for the list + editor pattern (it exercises
-  `input-item-card` -- including its read-only "entered in ..." variant and the
+  `input-item-card` -- including its read-only "from ..." variant and the
   active state -- and `input-editor-card`, in one page). Its loan-terms reveal is
   a *kind switch*, not the disclosure gate, so Debts does not exercise
   `input-disclosure`. Then **Vehicles** confirms the primitives hold with an

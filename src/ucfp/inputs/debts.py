@@ -21,17 +21,27 @@ from common.forms import CHOOSE_PLACEHOLDER, MoneyField
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.loan_fieldset import LoanTermsFieldsMixin, loan_terms_initial
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.profile.schemas import Debt
+from ucfp.inputs.profile.schemas import Debt, RESIDENCE_ASSET_HANDLE
 
 
 _HANDLE_PREFIX = 'debt-'
 
-# Debts whose canonical editor is another section: listed read-only here with a pointer to it, never
-# edited or deleted here. A mortgage is entered on its property; an auto loan on its vehicle.
-_CANONICAL_ELSEWHERE = {
-    DebtKind.MORTGAGE : 'Home & Property',
-    DebtKind.AUTO     : 'Vehicles',
-}
+# Debt kinds whose canonical editor is another section: listed read-only here with a pointer to it, never
+# edited or deleted here. A mortgage is entered on its property; an auto loan on its vehicle. The pointer
+# text is `_source_note`, since a mortgage's section depends on which property secures it.
+_CANONICAL_ELSEWHERE = frozenset( { DebtKind.MORTGAGE, DebtKind.AUTO } )
+
+
+def _source_note( debt ):
+    """Where a read-only debt is entered and edited, for the item card's provenance note. A mortgage points
+    to the section holding its property -- Home for the residence, Other property for any other -- and an
+    auto loan to Vehicles; an editable debt (entered here) has none."""
+    if debt.kind is DebtKind.MORTGAGE:
+        return 'From Home' if debt.secured_asset == RESIDENCE_ASSET_HANDLE else 'From Other property'
+    if debt.kind is DebtKind.AUTO:
+        return 'From Vehicles'
+    return None
+
 
 # The kind values whose editor reveals the loan-terms block -- the amortizing loans editable here
 # (student / personal / other); a credit card is editable but carries no terms.
@@ -68,21 +78,21 @@ def _terms_summary( terms ) -> str:
 def debts_context( profile ) -> list:
     """One summary row per debt for the list -- editable debts (unsecured loans, cards) carry an editor,
     read-only mortgages/autos a pointer to their section. Each: handle, name, kind label, balance, a terms
-    summary, `editable`, (read-only only) `managed_in`, and (editable only) the `edit_url`/`delete_url` the
-    item card's actions post to."""
+    summary, `editable`, (read-only only) a `source_note` pointing to its section, and (editable only) the
+    `edit_url`/`delete_url` the item card's actions post to."""
     rows = []
     for debt in ( profile.debts if profile is not None else [] ):
         editable = debt.kind not in _CANONICAL_ELSEWHERE
         rows.append( {
-            'handle'     : debt.handle,
-            'name'       : debt.name,
-            'kind'       : debt.kind.label,
-            'balance'    : debt.balance,
-            'terms'      : _terms_summary( debt.terms ),
-            'editable'   : editable,
-            'managed_in' : _CANONICAL_ELSEWHERE.get( debt.kind ),
-            'edit_url'   : reverse( 'debt_edit', kwargs = { 'handle' : debt.handle } ) if editable else None,
-            'delete_url' : reverse( 'debt_delete', kwargs = { 'handle' : debt.handle } ) if editable else None,
+            'handle'      : debt.handle,
+            'name'        : debt.name,
+            'kind'        : debt.kind.label,
+            'balance'     : debt.balance,
+            'terms'       : _terms_summary( debt.terms ),
+            'editable'    : editable,
+            'source_note' : _source_note( debt ),
+            'edit_url'    : reverse( 'debt_edit', kwargs = { 'handle' : debt.handle } ) if editable else None,
+            'delete_url'  : reverse( 'debt_delete', kwargs = { 'handle' : debt.handle } ) if editable else None,
         } )
     return rows
 
