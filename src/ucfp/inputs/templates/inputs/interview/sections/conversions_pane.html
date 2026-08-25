@@ -12,11 +12,14 @@ picker.
     conversion is taxed as ordinary income that year.</p>
   <form method="post" action="{% url 'conversions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    {% for row in conversions_form.plan_rows %}
-    {% include 'inputs/components/_realization_plan_row.html' with row=row %}
-    {% endfor %}
-    <p class="text-muted small">Fill the blank block to add a conversion; leave the cadence blank for a
-      one-time conversion at the From age.</p>
+    <div class="{{ AppConst.ROWSET_CLASS }}">
+      {% for row in conversions_form.rows %}
+      {% include 'inputs/components/_realization_plan_row.html' with row=row form=conversions_form %}
+      {% endfor %}
+      <template class="{{ AppConst.ROWSET_TEMPLATE_CLASS }}">{% include 'inputs/components/_realization_plan_row.html' with row=None form=conversions_form %}</template>
+    </div>
+    <p class="text-muted small">Leave the cadence blank for a one-time conversion at the From age.</p>
+    <button type="button" class="btn btn-sm btn-outline-primary {{ AppConst.ROWSET_ADD_CLASS }} edit-only">&plus; Add a conversion</button>
   </form>
   {% else %}
   <p class="text-muted">Set up your accounts first (the Accounts step); each person's pre-tax retirement

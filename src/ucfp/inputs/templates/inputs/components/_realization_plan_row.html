@@ -1,26 +1,56 @@
 {% comment %}
-One retirement money-movement row block, shared by the contributions, Roth conversions, and scheduled
-withdrawals panes: the account, an amount at a cadence, an optional funding source (contributions only),
-and the age window (the account owner's), plus a remove box on an existing row. Each field renders through
-the field template (as_field_group), so its label comes from the form. Include with `row` = a `plan_rows`
-entry; the hidden `handle` (existing rows) carries the stable identity. When the form's cadence is
-optional (conversions/withdrawals), `row.cadence_optional` shows a "(blank = once)" hint.
+One retirement money-movement row of the rowset (js-rowset-row), shared by the contributions, Roth
+conversions, and scheduled withdrawals panes: the account, an optional funding source (contributions), an
+amount at a cadence, the age window (the input-age-band primitive), and a Remove. Raw inputs with repeated
+names (`form.names.*`, one source with the form's getlist keys) so the form reads the rows as parallel
+lists; `row` carries the values, or is None for the blank <template> prototype. `form` supplies the names,
+choices, label, and flags. When the form's cadence is optional (conversions/withdrawals) a "blank = once"
+hint shows. Include with `row` and `form`.
 {% endcomment %}
-<div class="border rounded p-2 mb-2">
-  {% if row.handle %}{{ row.handle }}{% endif %}
-  <div class="mb-2">{{ row.account.as_field_group }}</div>
-  {% if row.source %}<div class="mb-2">{{ row.source.as_field_group }}</div>{% endif %}
+<div class="js-rowset-row border rounded p-2 mb-2">
+  <input type="hidden" name="{{ form.names.handle }}" value="{{ row.handle|default:'' }}">
+  <div class="mb-2">
+    <label class="text-muted small mb-0 d-block">{{ form.account_label }}</label>
+    <select name="{{ form.names.account }}" class="custom-select" aria-label="{{ form.account_label }}">
+      {% for value, label in form.account_choices %}
+      <option value="{{ value }}"{% if row.account == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if form.has_source %}
+  <div class="mb-2">
+    <label class="text-muted small mb-0 d-block">Source</label>
+    <select name="{{ form.names.source }}" class="custom-select" aria-label="Source">
+      {% for value, label in form.source_choices %}
+      <option value="{{ value }}"{% if row.source == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
   <div class="form-row mb-2">
     <div class="col-6">
       <label class="text-muted small mb-0 d-block">Every</label>
-      {% include 'inputs/components/_cadence.html' with cadence=row.cadence hide_every=True %}{% if row.cadence_optional %}
-      <span class="text-muted small">(blank = once)</span>{% endif %}
+      <span class="text-nowrap">
+        <input type="number" name="{{ form.names.count }}" value="{{ row.count|default:'' }}" min="1" max="50"
+               class="form-control form-control-sm input-count" aria-label="Cadence magnitude">
+        <select name="{{ form.names.unit }}" class="custom-select custom-select-sm cadence-unit"
+                aria-label="Cadence unit">
+          {% for value, label in form.unit_choices %}
+          <option value="{{ value }}"{% if row.unit == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </span>
+      {% if form.cadence_optional %}<span class="text-muted small d-block">blank = once</span>{% endif %}
     </div>
-    <div class="col-6">{{ row.amount.as_field_group }}</div>
+    <div class="col-6">
+      <label class="text-muted small mb-0 d-block">Amount</label>
+      {% include 'inputs/interview/_money_cell.html' with name=form.names.amount value=row.amount %}
+      {% if row.error %}<span class="text-danger small d-block">{{ row.error }}</span>{% endif %}
+    </div>
   </div>
-  <div class="form-row">
-    <div class="col-6 text-right">{{ row.start_age.as_field_group }}</div>
-    <div class="col-6">{{ row.end_age.as_field_group }}</div>
+  {% include 'inputs/interview/_input_age_band.html' with start_name=form.names.start_age end_name=form.names.end_age start=row.start_age end=row.end_age %}
+  <div class="mt-2">
+    <button type="button" class="btn btn-link btn-sm text-danger p-0 {{ AppConst.ROWSET_REMOVE_CLASS }} edit-only"
+            aria-label="Remove">Remove</button>
   </div>
-  {% if row.remove %}<label class="small text-muted mb-0 mt-2 d-block edit-only">{{ row.remove }} remove</label>{% endif %}
 </div>

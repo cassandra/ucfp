@@ -13,11 +13,14 @@ reflow (`form-row` columns) so the block fits the half-width column.
   <p class="text-muted small">Recurring contributions into your retirement accounts.</p>
   <form method="post" action="{% url 'contributions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    {% for row in contributions_form.plan_rows %}
-    {% include 'inputs/components/_realization_plan_row.html' with row=row %}
-    {% endfor %}
-    <p class="text-muted small">Fill the blank block to add a contribution; leave the ages blank to
-      contribute from now, indefinitely.</p>
+    <div class="{{ AppConst.ROWSET_CLASS }}">
+      {% for row in contributions_form.rows %}
+      {% include 'inputs/components/_realization_plan_row.html' with row=row form=contributions_form %}
+      {% endfor %}
+      <template class="{{ AppConst.ROWSET_TEMPLATE_CLASS }}">{% include 'inputs/components/_realization_plan_row.html' with row=None form=contributions_form %}</template>
+    </div>
+    <p class="text-muted small">Leave the ages blank to contribute from now, indefinitely.</p>
+    <button type="button" class="btn btn-sm btn-outline-primary {{ AppConst.ROWSET_ADD_CLASS }} edit-only">&plus; Add a contribution</button>
   </form>
   {% else %}
   <p class="text-muted">Set up your accounts first (the Accounts step); each person's retirement

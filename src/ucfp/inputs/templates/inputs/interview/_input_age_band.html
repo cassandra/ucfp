@@ -1,0 +1,17 @@
+{% comment %}
+The input-age-band primitive (see docs/dev/frontend/interview-ui-guidelines.md): a compact "From age /
+Until age" pair of whole-year inputs, aligned side by side. Both optional -- a blank "From" runs from the
+plan start, a blank "Until" runs for life. Params: start_name, end_name, start, end.
+{% endcomment %}
+<div class="input-age-band">
+  <div class="input-age-band__field">
+    <label class="text-muted small mb-0">From age</label>
+    <input type="number" name="{{ start_name }}" value="{{ start|default:'' }}" min="0" max="120"
+           class="form-control input-age" aria-label="From age">
+  </div>
+  <div class="input-age-band__field">
+    <label class="text-muted small mb-0">Until age</label>
+    <input type="number" name="{{ end_name }}" value="{{ end|default:'' }}" min="0" max="120"
+           class="form-control input-age" aria-label="Until age">
+  </div>
+</div>

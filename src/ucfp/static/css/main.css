@@ -641,6 +641,18 @@ a.interview-part:hover {
     width: auto;
 }
 
+/* The input-age-band primitive (see docs/dev/frontend/interview-ui-guidelines.md): a compact "From age /
+   Until age" pair, each a labelled narrow age input, aligned side by side so the ages read as one control
+   rather than two floating boxes. */
+.input-age-band {
+    display: flex;
+    gap: 1rem;
+}
+.input-age-band__field {
+    display: flex;
+    flex-direction: column;
+}
+
 /* A durable's calculator opens as a full-width detail row directly under its expense row; drop the
    border between the pair so they read as one visual row. The border above the expense row and below
    the detail row still separate the group from its neighbours. */

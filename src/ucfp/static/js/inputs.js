@@ -1010,7 +1010,7 @@ window.App.Inputs = (function () {
             const $row = $( template.content.firstElementChild.cloneNode( true ) );
             $rowset.append( $row );
             enhanceMoneyInputs( $row );                  // group any money cell the new row carries
-            $row.find( ':input' ).first().trigger( 'focus' );
+            $row.find( ':input:not([type=hidden])' ).first().trigger( 'focus' );   // skip a leading hidden handle
         } );
         // Rowset remove: drop the row and persist -- the removed row's inputs leave the serialization, so
         // the getlist form rebuilds the set without it (removal fires no `change`, hence the explicit save).
