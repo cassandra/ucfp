@@ -644,11 +644,11 @@ class IncomeSectionForm:
         return profile, plans
 
 
-class RetirementSectionForm:
-    """§ Retirement L0 -- the pane. A no-op section form: the income/entitlement timing and the
-    recurring contributions each self-save through their own async view (`RetirementView`,
-    `ContributionsView`), so Next just advances. It exposes both forms -- the timing (reading the income
-    facts and entitlements from the Profile) and the contributions -- each writing only the Plans."""
+class RetirementPlanSectionForm:
+    """§ Retirement Plan L0 -- the pane: the income/entitlement *timing* (when income and benefits start
+    and stop), self-saving through its own async view (`RetirementView`), so Next just advances. It reads
+    the income facts and entitlements from the Profile and writes only the Plans timing. The recurring
+    contributions are a separate section -- `ContributionsSectionForm`."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -660,6 +660,22 @@ class RetirementSectionForm:
     @property
     def retirement_form( self ):
         return RetirementForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class ContributionsSectionForm:
+    """§ Retirement Contributions L0 -- the pane: the recurring contributions into the retirement accounts,
+    self-saving through its own async view (`ContributionsView`), so Next just advances. It writes only the
+    Plans. The income/entitlement timing is a separate section -- `RetirementPlanSectionForm`."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
 
     @property
     def contributions_form( self ):
@@ -881,9 +897,13 @@ SECTIONS = [
     # inflows and outflows, and finally the optional tax moves. Home Expenses shows only when the household
     # has a dwelling with operating costs (see `applicable_sections`).
     # When each income runs and each entitlement is claimed -- the timing over the income *facts* declared
-    # in Income (Profile flow). Sits before Cash management, which balances this income against the outflows.
-    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
-             outer_template = 'inputs/interview/sections/retirement.html' ),
+    # in Income (Profile flow) -- then the recurring retirement contributions. Two sections (the timing was
+    # dense enough on its own); both sit before Cash management, which balances this income against the
+    # outflows. The Contributions rail label is shortened from its longer section title.
+    Section( 'retirement-plan', 'Retirement Plan', ( Aggregate.PLANS, ), RetirementPlanSectionForm,
+             outer_template = 'inputs/interview/sections/retirement_plan.html' ),
+    Section( 'contributions'  , 'Retirement Contributions', ( Aggregate.PLANS, ), ContributionsSectionForm,
+             outer_template = 'inputs/interview/sections/contributions.html', rail_title = 'Contributions' ),
     Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
     Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,

@@ -1,0 +1,6 @@
+{% comment %}
+The Retirement Contributions section (Plans flow): the recurring contributions into the retirement
+accounts, managed by its own async view (`ContributionsView`) outside the section's Next form. It writes
+only the Plans. The income/entitlement timing is the separate Retirement Plan section.
+{% endcomment %}
+{% include 'inputs/interview/sections/contributions_pane.html' with contributions_form=form.contributions_form %}

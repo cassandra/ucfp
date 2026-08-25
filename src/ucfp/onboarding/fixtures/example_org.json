@@ -90,11 +90,12 @@
   "plans": {
     "acknowledged_sections": [
       "cash-plan",
+      "contributions",
       "debt-plan",
       "events",
       "home-expenses",
       "living-expenses",
-      "retirement",
+      "retirement-plan",
       "tax-planning",
       "vehicle-expenses"
     ],

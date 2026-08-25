@@ -1,0 +1,10 @@
+{% comment %}
+The Retirement Plan section (Plans flow): the income/entitlement *timing* -- when income and benefits start
+and stop, including when Social Security and any pension begin -- managed by its own async view
+(`RetirementView`) outside the section's Next form. It reads the income facts and entitlements from the
+Profile (Income, People) and writes only the Plans. The recurring contributions are the separate Retirement
+Contributions section.
+{% endcomment %}
+<p class="text-muted">Set when income and benefits start and stop -- including when Social Security and any
+  pension begin.</p>
+{% include 'inputs/interview/sections/retirement_pane.html' with retirement_form=form.retirement_form %}
