@@ -1172,9 +1172,10 @@
     "acknowledged_sections": [
       "accounts",
       "debt",
+      "home",
       "income",
+      "other-property",
       "possessions",
-      "real-estate",
       "subjects",
       "vehicles"
     ],

@@ -341,15 +341,14 @@ class HomeForm( LoanTermsFieldsMixin, forms.Form ):
         return next( ( item for item in items if item.handle == handle ), None )
 
 
-class RealEstateForm:
-    """§3 L0 -- the Real Estate pane. A no-op section form: the residence, the rentals, and the second
-    homes are each edited through their own async view, so Next just advances. It exposes the
-    residence sub-form and the property lists for the pane (the rentals and second homes manage
-    themselves). Other (non-real-estate) possessions are their own section -- `PossessionsSectionForm`."""
+class HomeSectionForm:
+    """§3 L0 -- the Home pane: the household residence. A no-op section form (the residence is edited
+    through its own async view, so Next just advances) exposing the residence sub-form. The rentals and
+    second homes are a separate section -- `OtherPropertySectionForm`."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
-        self._profile  = profile
-        self._plans = plans
+        self._profile = profile
+        self._plans   = plans
 
     def is_valid( self ) -> bool:
         return True
@@ -358,12 +357,27 @@ class RealEstateForm:
     def residence_form( self ):
         return HomeForm( profile = self._profile, plans = self._plans )
 
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class OtherPropertySectionForm:
+    """§ -- the Other Property pane: the household's rentals and second homes. A no-op section form (each
+    property is edited through its own async view, so Next just advances) exposing the property lists. The
+    residence is a separate section -- `HomeSectionForm`."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
     @property
     def property_panes( self ) -> list:
-        """Each mortgaged-property pane's render context for the Real Estate section -- its heading, its
-        holdings, and the template config (ids, URL names, wording) from the shared `PropertyPane`.
-        The section loops over these, so a new property kind is one pane, not another hand-wired
-        block."""
+        """Each mortgaged-property pane's render context -- its heading, its holdings, and the template
+        config (ids, URL names, wording) from the shared `PropertyPane`. The section loops over these, so a
+        new property kind is one pane, not another hand-wired block."""
         return [ { 'heading': pane.heading,
                    'properties': properties_context( self._profile, pane.asset_class ),
                    **pane.template_context() }
@@ -374,7 +388,7 @@ class RealEstateForm:
 
 
 class VehiclesForm:
-    """§ -- the Vehicles pane. A no-op section form mirroring `RealEstateForm`: each vehicle is edited
+    """§ -- the Vehicles pane. A no-op section form mirroring the property section forms: each vehicle is edited
     through its own async view, so Next just advances. It exposes the household's current vehicles as one
     list -- owned and leased together -- managed by `CurrentVehicleFormView` / `CurrentVehicleDeleteView`.
     Owned and leased are stored differently (a holding + loan vs. a lease fact); the list unifies them."""
@@ -838,17 +852,20 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    # The big-asset sections come first -- Accounts, then Real Estate, then Vehicles -- before Income.
-    # Real Estate precedes Income for a hard reason: declaring a rental creates its rent line on the
-    # Income step, so the properties must exist before the user works through Income or a rental's rent
-    # goes unnoticed. Vehicles sit beside Real Estate (an owned vehicle is a holding + an optional auto
-    # loan, mirroring a property + mortgage); they carry no income, so they need not precede Income, but
-    # they stay grouped with the other holdings. Possessions (the minor tangibles: precious metals,
-    # collectibles) are demoted below Debts.
-    Section( 'real-estate' , 'Home & Property', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
-             outer_template = 'inputs/interview/sections/properties.html' ),
-    Section( 'vehicles'    , 'Vehicles', ( Aggregate.PROFILE, Aggregate.PLANS ), VehiclesForm,
+    # The common big-asset sections lead -- Accounts, Home, Vehicles -- then Other Property, all before
+    # Income. Other Property (rentals and second homes) is less common, so it is demoted below Home and
+    # Vehicles; but it must still precede Income for a hard reason: declaring a rental creates its rent line
+    # on the Income step, so a rental must exist before the user works through Income or its rent goes
+    # unnoticed. That is the floor on how far it can move down -- just before Income, not past it. Vehicles
+    # carry no income, so they need not precede Income, but they stay grouped with the other holdings.
+    # Possessions (the minor tangibles: precious metals, collectibles) are demoted below Debts.
+    Section( 'home'          , 'Home', ( Aggregate.PROFILE, Aggregate.PLANS ), HomeSectionForm,
+             outer_template = 'inputs/interview/sections/home.html' ),
+    Section( 'vehicles'      , 'Vehicles', ( Aggregate.PROFILE, Aggregate.PLANS ), VehiclesForm,
              outer_template = 'inputs/interview/sections/vehicles.html' ),
+    Section( 'other-property', 'Other Property', ( Aggregate.PROFILE, Aggregate.PLANS ),
+             OtherPropertySectionForm,
+             outer_template = 'inputs/interview/sections/other_property.html' ),
     Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also

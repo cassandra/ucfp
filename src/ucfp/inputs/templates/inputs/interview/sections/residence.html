@@ -8,7 +8,6 @@ nested. Without JavaScript every case renders, and the server reads only the fie
 makes relevant.
 {% endcomment %}
 <div id="residence">
-  <h3 class="h6">Your home</h3>
   <form method="post" action="{% url 'residence' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <div class="{{ AppConst.SWITCH_CLASS }}">
@@ -24,7 +23,19 @@ makes relevant.
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="own">
         {% include 'inputs/interview/_field_row.html' with field=residence_form.home_value %}
         {% include 'inputs/interview/_field_row.html' with field=residence_form.purchase_price %}
-        {% include 'inputs/interview/sections/_loan_fields.html' with legend='Mortgage (optional)' loan_id=residence_form.loan_id balance_field=residence_form.mortgage_balance payment_field=residence_form.loan_payment rate_field=residence_form.loan_rate term_field=residence_form.loan_term %}
+        {% comment %}The mortgage behind an explicit "has a mortgage?" disclosure (the js-optional toggle
+        style): the loan fields stay collapsed until the box is checked, and clear when it is unchecked, so
+        an empty block reads as "no mortgage".{% endcomment %}
+        <div class="{{ AppConst.OPTIONAL_CLASS }}">
+          <div class="form-check mb-2">
+            <input type="checkbox" class="{{ AppConst.OPTIONAL_TOGGLE_CLASS }} form-check-input"
+                   id="home-has-mortgage">
+            <label class="form-check-label" for="home-has-mortgage">This home has a mortgage</label>
+          </div>
+          <div class="{{ AppConst.OPTIONAL_BODY_CLASS }}">
+            {% include 'inputs/interview/sections/_loan_fields.html' with legend='Mortgage' loan_id=residence_form.loan_id balance_field=residence_form.mortgage_balance payment_field=residence_form.loan_payment rate_field=residence_form.loan_rate term_field=residence_form.loan_term %}
+          </div>
+        </div>
       </div>
       <div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="rent">
         <p class="text-muted small">Your monthly rent is set with your other housing costs in Spending.</p>
