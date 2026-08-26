@@ -102,6 +102,11 @@ class ResolvedTermTest( SimpleTestCase ):
         # 20,000 at 12%/yr accrues 200/mo of interest; paying 150 never reduces the balance.
         self.assertIsNone( resolved_term( Decimal( '20000' ), Rate.percent( 12 ), Decimal( '150' ) ) )
 
+    def test_an_implausibly_long_term_yields_no_term( self ):
+        # 100,000 at 1%/yr accrues ~83/mo; paying 84 clears only ~1/mo -> a >100-year term, so it is
+        # declined (rather than fabricating an absurd term and iterating for it).
+        self.assertIsNone( resolved_term( Decimal( '100000' ), Rate.percent( 1 ), Decimal( '84' ) ) )
+
     def test_a_missing_balance_rate_or_payment_yields_no_term( self ):
         self.assertIsNone( resolved_term( None, Rate.percent( 5 ), Decimal( '500' ) ) )
         self.assertIsNone( resolved_term( Decimal( '20000' ), None, Decimal( '500' ) ) )

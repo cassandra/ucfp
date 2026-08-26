@@ -1,6 +1,6 @@
 import json
 
-from common.loan_solver import MAX_PLAUSIBLE_APR_PERCENT
+from common.loan_solver import MAX_PLAUSIBLE_APR_PERCENT, MAX_PLAUSIBLE_TERM_MONTHS
 
 
 class AppConst:
@@ -176,6 +176,11 @@ class AppConst:
     # `common.loan_solver` (its one source) so the client mirror reads it off `window.AppConst`, sharing
     # the exact ceiling the server back-solve uses.
     MAX_PLAUSIBLE_LOAN_APR_PERCENT = MAX_PLAUSIBLE_APR_PERCENT
+
+    # A back-solved remaining term beyond this many months reads as "doesn't fit" -- the calculator declines
+    # an implausibly long term (and it bounds the term back-solve's stepping). Re-exported from
+    # `common.loan_solver` (its one source) so the client mirror caps at the exact span the server does.
+    MAX_PLAUSIBLE_LOAN_TERM_MONTHS = MAX_PLAUSIBLE_TERM_MONTHS
 
     # Plans > Money moves, the "Sell a property" add form: the "Rent after selling your home" option
     # applies only to selling the primary residence, so it is shown only while the chosen property is the

@@ -59,8 +59,8 @@ def solved_loan_terms(
     the term (guarded). When the term is left blank but balance + rate + payment are given, the term is
     back-solved from the payment instead (the "how long until it's paid off?" direction, guarded). The
     payment is then re-derived from balance + rate + term so the stored trio is internally consistent --
-    including where the term was itself derived, matching how the rate back-solve already re-derives the
-    payment. `balance` is the books fact -- read but not stored on the terms."""
+    including where the term was itself derived. `balance` is the books fact -- read but not stored on the
+    terms."""
     months = remaining_term.months() if remaining_term is not None else None
     rate   = ( resolved_annual_rate( interest_rate, balance, payment, months )
                if months is not None else interest_rate )
