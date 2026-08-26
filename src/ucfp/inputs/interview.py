@@ -44,6 +44,7 @@ from .cash_plan import CashPlanSectionForm
 from .net_worth import NetWorthSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
+from .retirement_benefits import RetirementBenefitsForm
 from .properties import PossessionsForm, properties_context
 from .vehicle_profile import current_vehicles_context
 from .retirement import RetirementForm
@@ -644,6 +645,26 @@ class IncomeSectionForm:
         return profile, plans
 
 
+class RetirementBenefitsSectionForm:
+    """The Retirement benefits pane: the per-person Social Security and pension amounts. A no-op section
+    form -- the benefits are edited and saved through `RetirementBenefitsView`, so Next just advances. It
+    exposes the benefits table for the pane; WHEN each is claimed is the separate Retirement (Plans)
+    section."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def benefits_table( self ):
+        return RetirementBenefitsForm( profile = self._profile )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
 class RetirementPlanSectionForm:
     """§ Retirement Plan L0 -- the pane: the income/entitlement *timing* (when income and benefits start
     and stop), self-saving through its own async view (`RetirementView`), so Next just advances. It reads
@@ -921,8 +942,13 @@ SECTIONS = [
     Section( 'other-property', 'Other property', ( Aggregate.PROFILE, Aggregate.PLANS ),
              OtherPropertySectionForm,
              outer_template = 'inputs/interview/sections/other_property.html' ),
-    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
+    Section( INCOME_STEP   , 'Incomes', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
+    # The per-person Social Security and pension amounts -- split out of Incomes so that table stays the
+    # current income the user enters, and these derived-per-person benefits sit on their own, right after.
+    Section( 'retirement-benefits', 'Retirement benefits', ( Aggregate.PROFILE, ),
+             RetirementBenefitsSectionForm,
+             outer_template = 'inputs/interview/sections/retirement_benefits.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
     # adjustable on its property. Facts only; the repayment plan per debt is the Debt plan step below,
     # which opens the Plans flow.

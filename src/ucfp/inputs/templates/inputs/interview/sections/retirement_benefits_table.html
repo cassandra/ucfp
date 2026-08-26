@@ -1,0 +1,27 @@
+{% comment %}
+The Retirement benefits table (id=retirement-benefits-table), auto-saved. One row per subject per benefit
+-- Social Security (benefit at full retirement age) and pension (base benefit) -- amount only, no
+add/remove: the count is set by the people, not edited here. Same Attribution / Income Source / Amount /
+Per shape as the Incomes table. Edits save in the background; only a genuine input error (a negative
+amount) re-renders. WHEN each benefit is claimed is the separate Retirement (Plans) section.
+{% endcomment %}
+<div id="retirement-benefits-table">
+  <form method="post" action="{% url 'retirement_benefits' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <table class="table table-sm w-auto">
+      <thead>
+        <tr><th>Attribution</th><th>Income Source</th><th>Amount</th><th>Per</th></tr>
+      </thead>
+      <tbody>
+        {% for row in benefits_form.entitlement_rows %}
+        <tr>
+          <td class="align-middle"><span class="text-muted">{{ row.subject_name }}</span></td>
+          <td class="align-middle">{{ row.name }}{% if row.note %}<span class="text-muted small d-block">{{ row.note }}</span>{% endif %}</td>
+          <td>{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
+          <td class="text-muted align-middle">{{ row.cadence }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </form>
+</div>

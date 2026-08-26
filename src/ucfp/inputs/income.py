@@ -1,20 +1,19 @@
-"""§5 income: the editable income *facts* table.
+"""Incomes: the editable income *facts* table.
 
-Income is a list of flows -- the income twin of the expense side (see `IncomeFlow`). This module
-presents the FACTS as one editable table: the general income lines (salary, consulting, ...) as a rowset
-the user adds to and removes from, a row per rental property's rent, and two entitlement rows per subject
-(Social Security, pension). Each row captures the amount (a general line also its name and who receives
-it) and, for the entitlements, the stated benefit. WHEN each income runs -- the start/stop windows and the
-benefit claiming ages -- is a *plan*, edited in the separate Retirement section (`retirement.py`), not
-here; this form leaves the Plans untouched.
+Income is a list of flows -- the income twin of the expense side (see `IncomeFlow`). This module presents
+the FACTS as one editable table: the general income lines (salary, consulting, ...) as a rowset the user
+adds to and removes from, plus a row per rental property's rent. Each row captures the amount (a general
+line also its name and who receives it). WHEN each income runs -- the start/stop windows -- is a *plan*,
+edited in the separate Retirement section (`retirement.py`), not here; this form leaves the Plans
+untouched. The per-person Social Security and pension benefits are a sibling Profile section
+(`retirement_benefits.py`), so this table is purely the current income the user enters.
 
 The general lines are a rowset: repeated same-name inputs (`income_*`) read as parallel lists (getlist),
 added and removed client-side (`js-rowset`, inputs.js) rather than through a phantom trailing row. Each
 general line carries a stable `handle` (hidden, minted on first save) so the Retirement section's per-flow
-timing keys onto it across edits. The fixed rental and entitlement rows stay declared MoneyField cells,
-their count set by the properties and subjects. The table auto-saves; validation is deliberately
-non-blocking -- an incomplete row simply does not materialize -- save that a negative amount is a genuine
-error and re-renders.
+timing keys onto it across edits. The fixed rental rows stay declared MoneyField cells, their count set by
+the properties. The table auto-saves; validation is deliberately non-blocking -- an incomplete row simply
+does not materialize -- save that a negative amount is a genuine error and re-renders.
 """
 from dataclasses import replace
 from itertools import zip_longest
@@ -25,21 +24,18 @@ from common.forms import CHOOSE_PLACEHOLDER, MoneyField
 from common.recurrence import Duration, TimeUnit
 
 from ucfp.accounts.enums import AssetClass, IncomeTaxClass
-from ucfp.inputs.profile.schemas import GovernmentPensionEntitlement, IncomeFlow, PensionEntitlement
+from ucfp.inputs.profile.schemas import IncomeFlow
 
 _RENTAL_INTERVAL = Duration( 1, TimeUnit.MONTH )   # rent is a monthly item; general income a stream
 _INCOME_HANDLE_PREFIX = 'income-'                  # a general flow's stable handle; Retirement keys on it
-# The age a pension's base is quoted at. Unused until off-normal-start reduction terms exist; a fixed
-# placeholder here, since the start age is a plan (the Retirement section), not a fact.
-_PENSION_NORMAL_AGE = 65
 
 
 class IncomeTableForm( forms.Form ):
     """The income *facts* table. The general lines are a rowset -- `income_name` / `income_subject` /
     `income_amount` / `income_handle` posted as parallel lists, one entry per row, added and removed
-    client-side. The rental rents and the per-subject SS / pension benefits are fixed-count declared
-    MoneyField cells. `apply` rebuilds the profile's income flows (rental preserved by `property_handle`,
-    general from the rowset, each with a stable `handle`) and the entitlement facts. Editing timing is the
+    client-side. The rental rents are fixed-count declared MoneyField cells. `apply` rebuilds the profile's
+    income flows (rental preserved by `property_handle`, general from the rowset, each with a stable
+    `handle`), leaving the entitlement facts to the Retirement benefits section. Editing timing is the
     Retirement section's job; the only Plans it touches is to reap a deleted flow's orphaned timing."""
 
     # A general row's subject may be a person (their wages, taxed per worker) or the whole household (other
@@ -63,36 +59,18 @@ class IncomeTableForm( forms.Form ):
                            if profile is not None else list() )
         rental_flows   = { flow.property_handle: flow for flow in flows
                            if flow.property_handle is not None }
-        self._gov      = { entitlement.subject_handle: entitlement
-                           for entitlement in ( profile.government_pension if profile is not None else [] ) }
-        self._pension  = { pension.subject_handle: pension
-                           for pension in ( profile.pensions if profile is not None else [] ) }
         # One MoneyField reused to parse each posted rowset amount, so the general cells strip separators
         # and reject negatives exactly as the declared cells do.
         self._amount_field   = MoneyField( required = False, min_value = 0 )
         self._general_errors = dict()                  # rowset index -> amount error message (set in clean)
         for k, rental in enumerate( self._rentals ):
             self._add_rental_field( k, rental_flows.get( rental.handle ) )
-        for m, subject in enumerate( self._subjects ):
-            self._add_entitlement_fields( m, subject )
 
     # --- field construction (fixed rows only) ------------------------------
 
     def _add_rental_field( self, k : int, flow ):
         self.fields[ self._key( 'r', k, 'amount' ) ] = MoneyField(
             required = False, min_value = 0, initial = flow.amount if flow is not None else None )
-
-    def _add_entitlement_fields( self, m : int, subject ):
-        """The stated Social Security and pension benefits for the subject (FRA / base). When each is
-        claimed is a plan, set in the Retirement section; here we capture only the benefit amounts."""
-        gov     = self._gov.get( subject.handle )
-        pension = self._pension.get( subject.handle )
-        self.fields[ self._key( 's', m, 'ssamt' ) ] = MoneyField(
-            required = False, min_value = 0,
-            initial = gov.monthly_at_normal_age if gov is not None else None )
-        self.fields[ self._key( 's', m, 'penamt' ) ] = MoneyField(
-            required = False, min_value = 0,
-            initial = pension.base_annual_amount if pension is not None else None )
 
     @staticmethod
     def _key( prefix : str, index : int, part : str ) -> str:
@@ -154,18 +132,6 @@ class IncomeTableForm( forms.Form ):
     # --- template rows (fixed) ---------------------------------------------
 
     @property
-    def entitlement_rows( self ) -> list:
-        rows = list()
-        for m, subject in enumerate( self._subjects ):
-            rows.append( { 'subject_name' : subject.name, 'name' : 'Social Security',
-                           'amount' : self[ self._key( 's', m, 'ssamt' ) ], 'cadence' : 'month',
-                           'note' : 'benefit at full retirement age' } )
-            rows.append( { 'subject_name' : subject.name, 'name' : 'Pension',
-                           'amount' : self[ self._key( 's', m, 'penamt' ) ], 'cadence' : 'year',
-                           'note' : 'base benefit' } )
-        return rows
-
-    @property
     def rental_rows( self ) -> list:
         return [ { 'name' : rental.name, 'amount' : self[ self._key( 'r', k, 'amount' ) ], 'cadence' : 'month' }
                  for k, rental in enumerate( self._rentals ) ]
@@ -197,10 +163,7 @@ class IncomeTableForm( forms.Form ):
         # here (the only place a flow is removed) -- else it could re-bind to a later flow reclaiming its
         # `income-N` handle. Mirrors how the Debts section reaps a removed debt's repayment plan.
         plans   = _plans_without_income_timing( plans, removed ) if removed else plans
-        updated_profile = replace(
-            profile, income_flows = rebuilt,
-            government_pension = self._entitlements(), pensions = self._pensions() )
-        return updated_profile, plans
+        return replace( profile, income_flows = rebuilt ), plans
 
     def _general_flows( self ) -> list:
         taken = { handle for handle in self.data.getlist( self._G_HANDLE ) if handle }
@@ -231,25 +194,6 @@ class IncomeTableForm( forms.Form ):
                 income_tax_class = IncomeTaxClass.GROSS_RENTAL, amount = amount,
                 interval = _RENTAL_INTERVAL, property_handle = rental.handle ) )
         return flows
-
-    def _entitlements( self ) -> list:
-        entitlements = list()
-        for m, subject in enumerate( self._subjects ):
-            amount = self.cleaned_data.get( self._key( 's', m, 'ssamt' ) )
-            if amount is not None:
-                entitlements.append( GovernmentPensionEntitlement(
-                    subject_handle = subject.handle, monthly_at_normal_age = amount ) )
-        return entitlements
-
-    def _pensions( self ) -> list:
-        pensions = list()
-        for m, subject in enumerate( self._subjects ):
-            amount = self.cleaned_data.get( self._key( 's', m, 'penamt' ) )
-            if amount is not None:
-                pensions.append( PensionEntitlement(
-                    subject_handle = subject.handle, base_annual_amount = amount,
-                    normal_start_age = _PENSION_NORMAL_AGE ) )
-        return pensions
 
 
 def _plans_without_income_timing( plans, removed_handles : set ):

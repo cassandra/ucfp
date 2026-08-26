@@ -39,6 +39,8 @@ urlpatterns = [
     # The section-driven interview (entered per flow above) + the per-section editors.
     path( 'interview/<str:section>/', views.InterviewView.as_view(), name = 'interview_section' ),
     path( 'interview/income/table/', views.IncomeTableView.as_view(), name = 'income_table' ),
+    path( 'interview/retirement-benefits/edit/', views.RetirementBenefitsView.as_view(),
+          name = 'retirement_benefits' ),
     path( 'interview/debt/add/', views.DebtFormView.as_view(), name = 'debt_add' ),
     path( 'interview/debt/plan/', views.DebtPlanView.as_view(), name = 'debt_plan' ),
     path( 'interview/debt/cards/', views.CreditCardView.as_view(), name = 'credit_card_plan' ),

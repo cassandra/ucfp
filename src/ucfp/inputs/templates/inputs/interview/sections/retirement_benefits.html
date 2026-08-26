@@ -1,0 +1,11 @@
+{% comment %}
+The Retirement benefits pane (Profile flow): the per-person Social Security and pension amounts, managed by
+`RetirementBenefitsView` outside the section's Next form. Split from Incomes so that table stays the current
+income the user enters and these derived-per-person benefits get their own step. Each records only the
+stated benefit amount; WHEN each is claimed is the separate Retirement (Plans) step. Next advances when
+you're done.
+{% endcomment %}
+<p class="text-muted">Each person's stated retirement benefits -- Social Security at full retirement age
+  and any pension's base benefit. Enter the amounts here; when each is claimed comes later in the planning
+  scenarios.</p>
+{% include 'inputs/interview/sections/retirement_benefits_table.html' with benefits_form=form.benefits_table %}

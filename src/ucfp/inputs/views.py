@@ -71,6 +71,7 @@ from .debt_plan import DebtPlanForm
 from .debts import DebtForm, _minted_debt_handle, debt_heading, debts_context, delete_debt
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
+from .retirement_benefits import RetirementBenefitsForm
 from .properties import (
     PossessionsForm, PropertyForm, _minted_handle, delete_property, properties_context,
     property_heading )
@@ -1824,9 +1825,29 @@ class IncomeTableView( SelfSavingPaneView ):
 
     @staticmethod
     def _line_count( profile ) -> int:
-        """The general income lines (the only rows whose count changes); rental and entitlement rows
-        are fixed by the properties and subjects."""
+        """The general income lines (the only rows whose count changes); the rental rows are fixed by the
+        properties."""
         return sum( 1 for flow in profile.income_flows if flow.property_handle is None )
+
+
+class RetirementBenefitsView( SelfSavingPaneView ):
+    """`/inputs/interview/retirement-benefits/edit/` -- the per-person Social Security and pension amounts.
+    Its row set is fixed by the household (one pair per subject), so every valid edit saves silently; it
+    writes only the entitlement facts, leaving the income flows to `IncomeTableView`."""
+
+    template     = 'inputs/interview/sections/retirement_benefits_table.html'
+    target       = 'retirement-benefits-table'
+    context_name = 'benefits_form'
+
+    def build_form( self, request, data = None ):
+        profile, _plans = _current_profile_and_plans( request )
+        return RetirementBenefitsForm( data, profile = profile )
+
+    def persist( self, request, form ):
+        profile, plans = _current_profile_and_plans( request )
+        profile, plans = form.apply( profile, plans )
+        _save_profile_and_plans( request, profile, plans )
+        return False                                            # fixed row set -- never re-renders
 
 
 class RetirementView( SelfSavingPaneView ):

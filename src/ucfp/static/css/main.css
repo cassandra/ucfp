@@ -517,6 +517,15 @@ a.interview-part:hover {
    caps that growth so it stays a balanced panel rather than stretching to a very tall table's full height. */
 .input-editor-empty--capped { max-height: 16rem; }
 
+/* The Incomes facts table hides itself (a bare column header over an empty body reads as broken) and shows
+   a prompt until it holds a row; a client-side Add reveals the table and hides the prompt with no
+   round-trip, since :has() re-evaluates as the row is inserted. A <template>'s inert rows are not matched,
+   so only real rental/general rows count. Degrades without :has() to the table always showing and the
+   prompt hidden -- the prior behaviour. */
+.income-empty { display: none; }
+.income-facts-table:not(:has(tbody tr)) { display: none; }
+.income-facts-table:not(:has(tbody tr)) ~ .income-empty { display: block; }
+
 /* Date and number inputs read better at a natural width than the full column. */
 .form-control.js-date {
     max-width: 8.5rem;   /* an ISO yyyy-mm-dd needs no more, so a date input does not sprawl */

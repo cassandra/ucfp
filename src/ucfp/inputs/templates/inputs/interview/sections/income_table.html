@@ -1,32 +1,24 @@
 {% comment %}
-The §5 income *facts* table (id=income-table), auto-saved. Fixed rows sit at the top -- each subject's
-Social Security and pension benefit, then each rental's rent (amount only, not removable) -- so the growable
-general lines and their Add sit at the bottom and new rows never wedge between the fixed ones. The general
-lines are a rowset (js-rowset): repeated same-name inputs the form reads as parallel lists, added by the Add
-button (a cloned blank row) and removed per row -- no phantom trailing row. Each general line carries a
-hidden stable handle the Retirement section's timing keys onto. Edits save in the background; only a genuine
-input error (a negative amount) re-renders here. WHEN each income runs is the separate Retirement section.
+The Incomes *facts* table (id=income-table), auto-saved. Each rental's rent (amount only, not removable)
+sits at the top so the growable general lines and their Add sit at the bottom and new rows never wedge
+between the fixed ones. The general lines are a rowset (js-rowset): repeated same-name inputs the form
+reads as parallel lists, added by the Add button (a cloned blank row) and removed per row -- no phantom
+trailing row. Each general line carries a hidden stable handle the Retirement section's timing keys onto.
+Edits save in the background; only a genuine input error (a negative amount) re-renders here. WHEN each
+income runs is the separate Retirement section; the per-person SS / pension benefits are the sibling
+Retirement benefits section.
 {% endcomment %}
 {% load common_tags %}
 <div id="income-table">
   <form method="post" action="{% url 'income_table' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    <table class="table table-sm w-auto">
+    <table class="table table-sm w-auto income-facts-table">
       <thead>
         <tr><th>Attribution</th><th>Income Source</th><th>Amount</th><th>Per</th><th></th></tr>
       </thead>
-      {% comment %}Fixed rows -- each person's benefits, then each rental's rent. Amount only, no add/remove;
-      the count is set by the subjects and properties, not edited here.{% endcomment %}
+      {% comment %}Fixed rows -- each rental's rent. Amount only, no add/remove; the count is set by the
+      properties, not edited here.{% endcomment %}
       <tbody>
-        {% for row in income_form.entitlement_rows %}
-        <tr>
-          <td class="align-middle"><span class="text-muted">{{ row.subject_name }}</span></td>
-          <td class="align-middle">{{ row.name }}{% if row.note %}<span class="text-muted small d-block">{{ row.note }}</span>{% endif %}</td>
-          <td>{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
-          <td class="text-muted align-middle">{{ row.cadence }}</td>
-          <td></td>
-        </tr>
-        {% endfor %}
         {% for row in income_form.rental_rows %}
         <tr>
           <td class="align-middle"><span class="text-muted">Rental</span></td>
@@ -45,6 +37,15 @@ input error (a negative amount) re-renders here. WHEN each income runs is the se
         <template class="{{ AppConst.ROWSET_TEMPLATE_CLASS }}">{% include 'inputs/interview/sections/_income_general_row.html' with row=None names=income_form.names subject_choices=income_form.subject_choices %}</template>
       </tbody>
     </table>
+    {% comment %}Shown only while the table has no rows (CSS :has), so a bare header never floats over an
+    empty body; a client-side Add reveals the table and hides this without a round-trip. Styled as the
+    shared empty-placeholder panel so it reads as the table's empty state, distinct from the intro prose.{% endcomment %}
+    <div class="income-empty">
+      <div class="input-editor-empty">
+        <p class="text-muted mb-0">No income sources yet -- add a salary or other income below.<br>
+          <span class="small">Rent from a rental property appears here automatically.</span></p>
+      </div>
+    </div>
     <button type="button" class="btn btn-sm btn-outline-primary {{ AppConst.ROWSET_ADD_CLASS }} edit-only">&plus; Add income source</button>
   </form>
 </div>
