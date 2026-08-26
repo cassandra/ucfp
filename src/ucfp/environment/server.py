@@ -61,11 +61,10 @@ _ENV_SPEC = (
     _EnvVarSpec( 'DJANGO_SUPERUSER_EMAIL'   , 'DJANGO_SUPERUSER_EMAIL' ),
     _EnvVarSpec( 'DJANGO_SUPERUSER_PASSWORD', 'DJANGO_SUPERUSER_PASSWORD' ),
 
-    # Database selection: SQLite (file-based) or MySQL (server-based). Both sets
-    # are optional at this level; validate_database_config() (called from get())
-    # enforces that exactly one is fully specified. This single env-driven switch
-    # is what lets one image serve the SQLite self-host lane and the MySQL cloud
-    # lane. SQLite path:
+    # Database selection: SQLite (file-based) or MySQL (server-based). Both are
+    # optional here; validate_database_config() (from get()) requires at least one
+    # (MySQL wins if both are set). This env-driven switch is what lets one image
+    # serve both the self-host (SQLite) and cloud (MySQL) lanes. SQLite path:
     _EnvVarSpec( 'DATABASES_NAME_PATH'      , ENV_PREFIX + 'DB_PATH', str, '' ),
     # MySQL connection (all five required together):
     _EnvVarSpec( 'DATABASE_HOST'            , ENV_PREFIX + 'DB_HOST', str, '' ),
@@ -180,14 +179,20 @@ class EnvironmentSettings:
             return parts[-1]
         return 'unknown'
 
+    def _mysql_field_values(self) -> Tuple[ str, ... ]:
+        """The five MySQL connection values, whitespace-stripped so a blank or
+        whitespace-only variable counts as unset (an all-whitespace host must not
+        read as a configured backend)."""
+        fields = ( self.DATABASE_HOST, self.DATABASE_PORT, self.DATABASE_NAME,
+                   self.DATABASE_USER, self.DATABASE_PASSWORD, )
+        return tuple( ( value or '' ).strip() for value in fields )
+
     @property
     def uses_mysql(self) -> bool:
-        """Whether the MySQL backend is selected. MySQL is used whenever its
-        connection is configured (a host is present); SQLite is used otherwise.
-        When both are configured MySQL wins -- see validate_database_config().
-        That method guarantees a present host implies the whole MySQL connection
-        is present."""
-        return bool( self.DATABASE_HOST )
+        """Whether the MySQL backend is selected: true when the full MySQL
+        connection set is configured, false otherwise (SQLite). MySQL wins when
+        both backends are configured -- see validate_database_config()."""
+        return all( self._mysql_field_values() )
 
     def validate_database_config(self) -> None:
         """Require a usable database backend, chosen from the environment so one
@@ -201,11 +206,10 @@ class EnvironmentSettings:
         MySQL set (some but not all variables), or no backend at all, is a
         misconfiguration surfaced at startup.
         """
-        mysql_fields = ( self.DATABASE_HOST, self.DATABASE_PORT, self.DATABASE_NAME,
-                         self.DATABASE_USER, self.DATABASE_PASSWORD )
-        has_mysql         = all( bool( value ) for value in mysql_fields )
-        has_partial_mysql = any( bool( value ) for value in mysql_fields ) and not has_mysql
-        has_sqlite        = bool( self.DATABASES_NAME_PATH )
+        mysql_values      = self._mysql_field_values()
+        has_mysql         = all( mysql_values )
+        has_partial_mysql = any( mysql_values ) and not has_mysql
+        has_sqlite        = bool( self.DATABASES_NAME_PATH.strip() )
 
         if has_partial_mysql:
             raise ImproperlyConfigured(
@@ -217,6 +221,7 @@ class EnvironmentSettings:
                 f"No database configured. Provide either {ENV_PREFIX}DB_PATH (SQLite) "
                 f"or the {ENV_PREFIX}DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD set "
                 f"(MySQL)." )
+        return
 
     @classmethod
     def get( cls ) -> 'EnvironmentSettings':
@@ -308,7 +313,6 @@ class EnvironmentSettings:
             env_settings.CORS_ALLOWED_ORIGINS += tuple( cors_allowed_origins_list )
             env_settings.EXTRA_CSP_URLS += tuple( cors_allowed_origins_list )
 
-        # A database backend must be configured (MySQL wins if both are).
         env_settings.validate_database_config()
 
         return env_settings

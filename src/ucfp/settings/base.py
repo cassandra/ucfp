@@ -172,8 +172,8 @@ WSGI_APPLICATION = 'ucfp.wsgi.application'
 # The backend is chosen from the environment so that one Docker image can serve
 # both deployment lanes: SQLite for the zero-dependency self-hosted install, and
 # MySQL for the cloud (droplet) install. The environment layer
-# (ucfp.environment.server) validates that exactly one backend is fully
-# configured; here we merely materialize the choice. See
+# (ucfp.environment.server) validates that a usable backend is configured (MySQL
+# wins if both are); here we merely materialize the choice. See
 # docs/dev/project/droplet-setup.md.
 if ENV.uses_mysql:
     DATABASES = {
@@ -184,6 +184,10 @@ if ENV.uses_mysql:
             'NAME'    : ENV.DATABASE_NAME,
             'USER'    : ENV.DATABASE_USER,
             'PASSWORD': ENV.DATABASE_PASSWORD,
+            # Pin the client connection charset so 4-byte characters round-trip
+            # regardless of the server's negotiated default (the DB is created
+            # utf8mb4 -- see docs/dev/project/droplet-setup.md).
+            'OPTIONS' : { 'charset': 'utf8mb4' },
         }
     }
 else:

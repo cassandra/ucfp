@@ -63,6 +63,23 @@ class DatabaseConfigValidationTests( SimpleTestCase ):
         with self.assertRaises( ImproperlyConfigured ):
             settings.validate_database_config()
 
+    def test_partial_mysql_missing_host_is_rejected( self ):
+        # The most likely misconfiguration: the other four set but the host
+        # forgotten. Must still be rejected, not silently fall through to SQLite.
+        settings = _mysql_settings( DATABASE_HOST = '' )
+        self.assertFalse( settings.uses_mysql )
+        with self.assertRaises( ImproperlyConfigured ):
+            settings.validate_database_config()
+
+    def test_whitespace_only_mysql_counts_as_unset( self ):
+        # A whitespace-only value must not read as a configured backend.
+        settings = _mysql_settings(
+            DATABASE_HOST = '   ', DATABASE_PORT = '', DATABASE_NAME = '',
+            DATABASE_USER = '', DATABASE_PASSWORD = '',
+            DATABASES_NAME_PATH = '/data/database' )
+        settings.validate_database_config()          # does not raise (SQLite)
+        self.assertFalse( settings.uses_mysql )
+
     def test_mysql_takes_precedence_when_both_configured( self ):
         # A self-hoster who adds MySQL variables gets MySQL without having to also
         # clear the default SQLite path.
@@ -102,3 +119,25 @@ class DatabaseEnvironmentMappingTests( SimpleTestCase ):
         with mock.patch.dict( 'os.environ', dict( _BASE_ENV ), clear = True ):
             with self.assertRaises( ImproperlyConfigured ):
                 EnvironmentSettings.get()
+
+    def test_mysql_takes_precedence_over_sqlite_path( self ):
+        environ = dict( _BASE_ENV, UCFP_DB_PATH = '/data/database', **_MYSQL_ENV )
+        with mock.patch.dict( 'os.environ', environ, clear = True ):
+            settings = EnvironmentSettings.get()
+        self.assertTrue( settings.uses_mysql )
+
+    def test_empty_db_host_falls_back_to_sqlite( self ):
+        # An explicitly empty UCFP_DB_HOST (as a compose .env file commonly emits)
+        # is equivalent to unset -- SQLite is used.
+        environ = dict( _BASE_ENV, UCFP_DB_PATH = '/data/database', UCFP_DB_HOST = '' )
+        with mock.patch.dict( 'os.environ', environ, clear = True ):
+            settings = EnvironmentSettings.get()
+        self.assertFalse( settings.uses_mysql )
+
+    def test_bundled_redis_flag_resolves( self ):
+        base_sqlite = dict( _BASE_ENV, UCFP_DB_PATH = '/data/database' )
+        with mock.patch.dict( 'os.environ',
+                              dict( base_sqlite, UCFP_BUNDLED_REDIS = 'true' ), clear = True ):
+            self.assertTrue( EnvironmentSettings.get().BUNDLED_REDIS )
+        with mock.patch.dict( 'os.environ', base_sqlite, clear = True ):
+            self.assertFalse( EnvironmentSettings.get().BUNDLED_REDIS )
