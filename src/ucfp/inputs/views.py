@@ -39,8 +39,9 @@ from ucfp.inputs.scenarios.repository import (
     clone_scenario, create_fresh_scenario, create_scenario, default_scenario, delete_scenario,
     ensure_default_scenario, existing_pairings, rename_scenario, scenarios_for )
 from ucfp.inputs import expense_totals
-from ucfp.inputs.compatibility import keep_loan_terms, plans_reconciled_with_profile, reset_loan_terms
-from ucfp.inputs.drift import plans_drift, plans_loan_terms_drift
+from ucfp.inputs.compatibility import (
+    keep_home_rent, keep_loan_terms, plans_reconciled_with_profile, reset_home_rent, reset_loan_terms )
+from ucfp.inputs.drift import plans_drift, plans_home_rent_drift, plans_loan_terms_drift
 from ucfp.inputs.plans.enums import EventKind
 
 from .interview import (
@@ -146,6 +147,8 @@ class ScenariosHomeView( View ):
                            'drift': plans_drift( profile, scenario.plans ) if profile is not None else None,
                            'loan_terms_drift': ( plans_loan_terms_drift( profile, scenario.plans )
                                                  if profile is not None else None ),
+                           'home_rent_drift': ( plans_home_rent_drift( profile, scenario.plans )
+                                                if profile is not None else None ),
                            'plans_uses': plans_uses[ scenario.plans_id ],
                            'assumptions_uses': assumptions_uses[ scenario.assumptions_id ] } )
         return rows
@@ -545,6 +548,38 @@ def _resolve_loan_terms_drift( request, uuid, handle, choose ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
+class PlansHomeRentResetView( View ):
+    """`/inputs/plans/<uuid>/home-rent/reset/` -- adopt the updated Profile rent for this Plans record,
+    re-seeding its rented-home rent expense and refreshing the drift snapshot. POST; returns to the page it
+    was triggered from. The single-value twin of `PlansLoanTermsResetView`."""
+
+    def post( self, request, uuid ):
+        _resolve_home_rent_drift( request, uuid, reset_home_rent )
+        return _reconcile_redirect( request )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class PlansHomeRentKeepView( View ):
+    """`/inputs/plans/<uuid>/home-rent/keep/` -- keep this Plans record's rent and refresh the drift
+    snapshot to the current Profile rent, so the drift clears without changing the plan. POST; returns to
+    the page it was triggered from."""
+
+    def post( self, request, uuid ):
+        _resolve_home_rent_drift( request, uuid, keep_home_rent )
+        return _reconcile_redirect( request )
+
+
+def _resolve_home_rent_drift( request, uuid, choose ):
+    """Apply a rent drift choice (`reset_home_rent` or `keep_home_rent`) to the named Plans record -- the
+    core both home-rent drift views share. A no-op when there is no complete profile to reconcile against."""
+    plans_record   = get_object_or_404( PlansRecord, uuid = uuid, organization = request.organization )
+    profile_record = completed_profile( request.organization )
+    if profile_record is not None:
+        save_plans( plans_record, choose(
+            load_profile( profile_record ), load_plans( plans_record ) ) )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
 class FlowEntryView( View ):
     """`/inputs/<flow>/` -- edit a single input flow (Profile, Plans, or Assumptions) on its own. `flow`
     is set per route via `as_view`. Profile is the standalone first flow; Plans/Assumptions are edited on
@@ -912,6 +947,8 @@ class InterviewView( GuestReminderMixin, View ):
             'drift'                : self._plans_drift( request, flow ),
             # The sibling loan-terms drift banner: a loan's contract terms changed since the plan seeded.
             'loan_terms_drift'     : self._plans_loan_terms_drift( request, flow ),
+            # The sibling home-rent drift banner: the Profile rent changed since the plan's rent seeded.
+            'home_rent_drift'      : self._plans_home_rent_drift( request, flow ),
             # The rail header: the completion badge(s) and, in a build, the Plans/Assumptions part switch.
             **rail,
             # The current flow's blocker/advisory notices for the detail banner below the heading.
@@ -954,6 +991,18 @@ class InterviewView( GuestReminderMixin, View ):
         if profile_record is None:
             return None
         return plans_loan_terms_drift( load_profile( profile_record ), current_plans_record( request ) )
+
+    @staticmethod
+    def _plans_home_rent_drift( request, flow ):
+        """The current Plans record's home-rent drift notice for the Plans-flow banner (the Profile rent
+        changed since the plan's rent expense seeded from it + the update/keep), or None off the Plans flow
+        or before a *complete* profile exists (so the banner never shows a fix that would no-op)."""
+        if flow != 'plans':
+            return None
+        profile_record = completed_profile( request.organization )
+        if profile_record is None:
+            return None
+        return plans_home_rent_drift( load_profile( profile_record ), current_plans_record( request ) )
 
     def _rail_header( self, request, flow ) -> dict:
         """The stepper's header context: the flow's title and completion badge. In a scenario build (editing

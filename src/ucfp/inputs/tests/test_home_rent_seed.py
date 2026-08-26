@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from ucfp.inputs.compatibility import home_rent_drift, keep_home_rent, reset_home_rent
 from ucfp.inputs.interview import HomeExpensesSectionForm
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.enums import HousingTenure
@@ -67,3 +68,45 @@ class SeedHomeRentTests( TestCase ):
         _p, plans = HomeExpensesSectionForm( profile = profile, plans = Plans() ).apply( profile, Plans() )
         self.assertEqual( plans.home_rent_snapshot, Decimal( '1800' ) )
         self.assertEqual( _rent_amount( plans ), Decimal( '1800' ) )
+
+
+class HomeRentDriftTests( TestCase ):
+    """The Profile-rent-vs-seeded drift and its two reconciles (update / keep)."""
+
+    @classmethod
+    def setUpTestData( cls ):
+        seed_default_parameter_sets()
+
+    def _seeded( self, rent = '1800' ):
+        profile = _renter( rent )
+        return profile, seeded_home_rent( profile, _plans_for( profile ) )
+
+    def test_no_drift_when_the_fact_is_in_step( self ):
+        profile, plans = self._seeded()
+        self.assertFalse( home_rent_drift( profile, plans ) )
+
+    def test_drift_fires_when_the_profile_rent_changes( self ):
+        _profile, plans = self._seeded( '1800' )
+        changed = _renter( '2500' )
+        self.assertTrue( home_rent_drift( changed, plans ) )
+
+    def test_switching_to_own_does_not_read_as_rent_drift( self ):
+        _profile, plans = self._seeded( '1800' )   # snapshot 1800 lingers
+        owner = Profile( home_tenure = HousingTenure.OWN )   # no longer renting, rent fact cleared
+        self.assertFalse( home_rent_drift( owner, plans ) )
+
+    def test_reset_adopts_the_fact_and_clears_the_drift( self ):
+        _profile, plans = self._seeded( '1800' )
+        changed = _renter( '2500' )
+        reset   = reset_home_rent( changed, plans )
+        self.assertEqual( reset.home_rent_snapshot, Decimal( '2500' ) )
+        self.assertEqual( _rent_amount( reset ), Decimal( '2500' ) )   # plan rent updated to the fact
+        self.assertFalse( home_rent_drift( changed, reset ) )
+
+    def test_keep_refreshes_the_snapshot_but_leaves_the_plan( self ):
+        _profile, plans = self._seeded( '1800' )
+        changed = _renter( '2500' )
+        kept    = keep_home_rent( changed, plans )
+        self.assertEqual( kept.home_rent_snapshot, Decimal( '2500' ) )  # snapshot follows the fact
+        self.assertEqual( _rent_amount( kept ), Decimal( '1800' ) )     # plan rent unchanged
+        self.assertFalse( home_rent_drift( changed, kept ) )

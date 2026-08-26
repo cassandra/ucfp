@@ -1,11 +1,13 @@
 {% comment %}
-The interview status *detail* -- the full-width completion notices below the heading: the danger blocker
-alert (shown once a flow is walked but a hard requirement is still unmet) and, for the Profile, the info
-advisories. The second of the two swap targets InterviewView._swap refreshes on each section advance (the
-badge is interview_status_badge.html), so red->green happens live as a gap is filled. The Plans and
-Assumptions flows carry only a blocker alert; Profile adds its advisories. The outer id div is the antinode
+The interview status *detail* -- the plan-level notices below the heading, all gathered here so every notice
+about the current flow sits in one region at one width (rather than split between here and the section pane):
+the danger blocker alert (shown once a flow is walked but a hard requirement is still unmet), the Profile's
+info advisories, and -- on the Plans flow -- the drift advisories (stale references, loan-terms, rent). The
+second of the two swap targets InterviewView._swap refreshes on each section advance (the badge is
+interview_status_badge.html), so red->green and a just-reconciled drift both update live. Assumptions carries
+only a blocker; Profile adds its advisories; Plans adds the drift panel. The outer id div is the antinode
 replace target, so it must always render. Reads `flow`, `profile_blockers`, `profile_advisories`,
-`plans_blockers`, `assumptions_blockers`.
+`plans_blockers`, `assumptions_blockers`, and (Plans) `drift`, `loan_terms_drift`, `home_rent_drift`.
 {% endcomment %}
 {% load icons %}
 <div id="interview-status-detail">
@@ -31,6 +33,18 @@ replace target, so it must always render. Reads `flow`, `profile_blockers`, `pro
     <ul class="mb-0 mt-1">
       {% for blocker in plans_blockers %}<li>{{ blocker }}</li>{% endfor %}
     </ul>
+  </div>
+  {% endif %}
+  {% comment %}The Plans-flow drift advisories, gathered into one warning panel so they read as a single
+  "things changed in your profile" region rather than separate stacked boxes: stale Profile references, a
+  loan whose contract terms changed, and the rented-home rent. Each pane names its own change and offers its
+  reconcile; every var is None off the Plans flow or when nothing drifted. role=alert: this panel is
+  refreshed in the detail swap target on each Plans section advance, so announce it.{% endcomment %}
+  {% if drift or loan_terms_drift or home_rent_drift %}
+  <div class="alert alert-warning py-2 px-3 small mb-4" role="alert">
+    {% if drift %}{% include 'inputs/panes/scenario_drift.html' with drift=drift %}{% endif %}
+    {% if loan_terms_drift %}{% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=loan_terms_drift %}{% endif %}
+    {% if home_rent_drift %}{% include 'inputs/panes/home_rent_drift.html' with home_rent_drift=home_rent_drift %}{% endif %}
   </div>
   {% endif %}
   {% elif flow == 'assumptions' %}

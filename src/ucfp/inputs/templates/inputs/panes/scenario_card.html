@@ -51,6 +51,13 @@ walk). Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice o
       {% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=row.loan_terms_drift %}
     </div>
     {% endif %}
+    {% comment %}The sibling home-rent drift: the Profile rent changed since this plan's rent expense seeded
+    from it (update or keep). Non-blocking advisory.{% endcomment %}
+    {% if row.home_rent_drift %}
+    <div class="alert alert-warning py-2 mb-3">
+      {% include 'inputs/panes/home_rent_drift.html' with home_rent_drift=row.home_rent_drift %}
+    </div>
+    {% endif %}
     <div class="row">
       <div class="col-md-6 mb-2 mb-md-0">
         {% url 'plans_edit' row.scenario.plans.uuid as plans_edit_url %}

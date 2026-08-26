@@ -142,22 +142,27 @@ def _seed_rental_zeros( overrides : dict, profile, catalog_expense, live_handles
 RENT_EXPENSE_HANDLE = 'rent'
 
 
+def set_home_rent( plans, rent ):
+    """`plans` with the rented-home Rent expense's amount and `home_rent_snapshot` both set to `rent` -- the
+    shared write behind first seeding and the drift reconcile. Rent reaches only the single rented home, so
+    the amount is the Rent row's shared default."""
+    expenses = [ replace( expense, default_amount = rent ) if expense.handle == RENT_EXPENSE_HANDLE
+                 else expense
+                 for expense in plans.property_expenses ]
+    return replace( plans, property_expenses = expenses, home_rent_snapshot = rent )
+
+
 def seeded_home_rent( profile, plans ):
     """`plans` with its rented-home rent expense seeded from the Profile `home_monthly_rent` fact, and the
     seed recorded as `home_rent_snapshot` -- once. The rent analog of a loan repayment's
     `preserved_snapshot`: it seeds only when there is no snapshot yet, the household rents, and a rent fact
     is present, so a later Profile rent edit surfaces as drift rather than silently re-seeding. A no-op for
-    an owner, a blank fact, or an already-seeded plan. Rent reaches only the single rented home, so the fact
-    is stored as the Rent row's shared default."""
+    an owner, a blank fact, or an already-seeded plan."""
     if ( plans.home_rent_snapshot is not None
          or not is_renting( profile )
          or profile.home_monthly_rent is None ):
         return plans
-    rent = profile.home_monthly_rent
-    expenses = [ replace( expense, default_amount = rent ) if expense.handle == RENT_EXPENSE_HANDLE
-                 else expense
-                 for expense in plans.property_expenses ]
-    return replace( plans, property_expenses = expenses, home_rent_snapshot = rent )
+    return set_home_rent( plans, profile.home_monthly_rent )
 
 
 class PropertyExpensesForm( ExpenseTotalsMatrix, forms.Form ):

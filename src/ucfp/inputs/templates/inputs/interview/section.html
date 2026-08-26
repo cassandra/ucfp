@@ -5,24 +5,9 @@ that form because nesting a form inside it would be invalid HTML. The button rea
 last step (`is_last`), else "Next".
 {% endcomment %}
 <div id="{{ section_target }}">
-  {% comment %}Plans-flow only: these plans reference Profile entities that are gone. Not blocking here --
-  the section still edits normally -- but it names the drift and offers the same one-click reconcile the
-  Forecast page does, so a deleted debt's stale repayment (or a removed possession's sale event) is visible
-  where the user meets its effect, not silently absent. `drift` is None off the Plans flow.{% endcomment %}
-  {% if drift %}
-  {# role=alert: this banner is injected via antinode when navigating Plans sections, so announce it. #}
-  <div class="alert alert-warning" role="alert">
-    {% include 'inputs/panes/scenario_drift.html' with drift=drift %}
-  </div>
-  {% endif %}
-  {% comment %}The sibling loan-terms drift: a loan's contract terms changed in the Profile since this plan
-  seeded from them. Blocking for a run (choose per loan), but the section still edits here. None off Plans
-  or when nothing drifted.{% endcomment %}
-  {% if loan_terms_drift %}
-  <div class="alert alert-warning" role="alert">
-    {% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=loan_terms_drift %}
-  </div>
-  {% endif %}
+  {% comment %}The Plans-flow drift advisories (stale references, loan-terms, rent) render in the top status
+  detail region alongside the completion blocker (interview_status_detail.html), not here -- so every
+  plan-level notice shares one place and width. This pane is just the section's own editor.{% endcomment %}
   <h2 class="h4 mb-3">{{ current_section.title }}</h2>
   {% if current_section.outer_template %}{% include current_section.outer_template %}{% endif %}
   <div class="interview-advance">
