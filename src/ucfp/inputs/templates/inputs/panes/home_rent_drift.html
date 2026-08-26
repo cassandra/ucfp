@@ -11,11 +11,16 @@ reset_label, keep_label}).
   <div class="small d-flex flex-wrap align-items-baseline">
     <form method="post" action="{{ home_rent_drift.reset_url }}" class="m-0 mr-1 edit-only">
       {% csrf_token %}
-      <button type="submit" class="btn btn-outline-primary btn-sm">{{ home_rent_drift.reset_label }}</button>
+      {% comment %}Explicit aria-labels: this pane can share a reconcile panel with the loan-terms drift,
+      whose buttons carry the same visible text -- so the accessible names must name the rent to tell
+      them apart.{% endcomment %}
+      <button type="submit" class="btn btn-outline-primary btn-sm"
+              aria-label="Update the plan to the new rent">{{ home_rent_drift.reset_label }}</button>
     </form>
     <form method="post" action="{{ home_rent_drift.keep_url }}" class="m-0 edit-only">
       {% csrf_token %}
-      <button type="submit" class="btn btn-outline-secondary btn-sm">{{ home_rent_drift.keep_label }}</button>
+      <button type="submit" class="btn btn-outline-secondary btn-sm"
+              aria-label="Keep the current rent">{{ home_rent_drift.keep_label }}</button>
     </form>
   </div>
 </div>
