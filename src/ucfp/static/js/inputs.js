@@ -615,6 +615,30 @@ window.App.Inputs = (function () {
         $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).toggleClass( 'd-none', fits );
     }
 
+    // Back-solve the remaining term -- the months this payment takes to clear the balance at the rate
+    // ("how long until it's paid off?"). Like the rate back-solve, a payment that cannot retire the balance
+    // forms no real loan, so leave the term blank and show the hint rather than an absurd term.
+    function fillLoanTerm( $loan ) {
+        const balance = loanBalance( $loan ), payment = loanField( $loan, C.LOAN_PAYMENT_CLASS );
+        const ratePercent = parseFloat( $loan.find( classSelector( C.LOAN_RATE_CLASS ) ).val() );
+        if ( !( balance > 0 ) || !( ratePercent >= 0 ) || !( payment > 0 ) ) { return; }
+        const months = monthsToClear( balance, payment, ( ratePercent / 100 ) / 12 );
+        $loan.find( classSelector( C.LOAN_TERM_CLASS ) ).val( months === null ? '' : months );
+        $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).toggleClass( 'd-none', months !== null );
+    }
+
+    // Re-derive the balance where the surface edits it (the Profile entries) -- the principal these terms
+    // imply (the present value of the payments). Always computable from rate + term + payment, so clear the
+    // hint.
+    function fillLoanBalance( $loan ) {
+        const months = loanMonths( $loan ), payment = loanField( $loan, C.LOAN_PAYMENT_CLASS );
+        const ratePercent = parseFloat( $loan.find( classSelector( C.LOAN_RATE_CLASS ) ).val() );
+        if ( !( months > 0 ) || !( ratePercent >= 0 ) || !( payment > 0 ) ) { return; }
+        setMoneyField( $loan.find( classSelector( C.LOAN_BALANCE_CLASS ) ),
+                       presentValue( payment, months, ( ratePercent / 100 ) / 12 ) );
+        $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).addClass( 'd-none' );
+    }
+
     // The advisory readout (where a surface has one): the level payment the terms imply, plus any
     // extra-principal payoff. Empty until balance, rate, and term are all set.
     function loanReadout( $loan ) {
@@ -641,16 +665,43 @@ window.App.Inputs = (function () {
         if ( $readout.length ) { $readout.text( loanReadout( $loan ) ); }
     }
 
-    // Respond to an edit within a loan block: the four-quantity solve (only where the block carries a
-    // payment input) -- the payment back-solves the rate, any of the authoritative trio re-derives the
-    // payment -- then refresh any advisory readout.
+    // The four loan quantities in knownness order, least-known first: balance and remaining term drift month
+    // to month (the vaguest), the rate is a remembered ballpark, the payment is seen every month (the surest).
+    // The sink policy re-derives the least-known field the surface lets it write. `has` reports whether the
+    // field currently holds a usable value; `writeable` whether this surface renders it as an editable input
+    // (balance is a fixed fact on the current-loan cards, an input only on the Profile entries).
+    function loanHas( $loan, cls ) {
+        if ( cls === C.LOAN_BALANCE_CLASS ) { return loanBalance( $loan ) > 0; }
+        if ( cls === C.LOAN_TERM_CLASS )    { return loanMonths( $loan ) > 0; }
+        if ( cls === C.LOAN_RATE_CLASS )    { return parseFloat( $loan.find( classSelector( cls ) ).val() ) >= 0; }
+        return loanField( $loan, cls ) > 0;                  // payment
+    }
+
+    function loanWriteable( $loan, cls ) {
+        return $loan.find( classSelector( cls ) ).length > 0;
+    }
+
+    const LOAN_QUANTITIES = [
+        { cls: C.LOAN_BALANCE_CLASS, fill: fillLoanBalance },
+        { cls: C.LOAN_TERM_CLASS,    fill: fillLoanTerm },
+        { cls: C.LOAN_RATE_CLASS,    fill: fillLoanRate },
+        { cls: C.LOAN_PAYMENT_CLASS, fill: fillLoanPayment },
+    ];
+
+    // Respond to an edit within a loan block (only where the block carries a payment input -- the
+    // four-quantity solve). Every edit re-derives exactly one other field, never the one just edited: the
+    // sole writeable blank if there is one (so a missing quantity is solved -- a blank term back-solved from
+    // the payment, a blank payment from the trio), otherwise the least-known writeable field (the balance
+    // where the surface edits it, else the term). Then refresh any advisory readout.
     function solveLoan( $loan, $edited ) {
         if ( $loan.find( classSelector( C.LOAN_PAYMENT_CLASS ) ).length ) {
-            if ( $edited.hasClass( C.LOAN_PAYMENT_CLASS ) ) {
-                fillLoanRate( $loan );
-            } else if ( $edited.hasClass( C.LOAN_BALANCE_CLASS ) || $edited.hasClass( C.LOAN_RATE_CLASS )
-                        || $edited.hasClass( C.LOAN_TERM_CLASS ) ) {
-                fillLoanPayment( $loan );
+            const writeable = LOAN_QUANTITIES.filter( function ( q ) { return loanWriteable( $loan, q.cls ); } );
+            const blanks    = writeable.filter( function ( q ) { return !loanHas( $loan, q.cls ); } );
+            if ( blanks.length === 1 && !$edited.hasClass( blanks[ 0 ].cls ) ) {
+                blanks[ 0 ].fill( $loan );                   // solve the one missing quantity
+            } else if ( blanks.length === 0 ) {
+                const sink = writeable.filter( function ( q ) { return !$edited.hasClass( q.cls ); } )[ 0 ];
+                if ( sink ) { sink.fill( $loan ); }          // re-derive the least-known other field
             }
         }
         updateLoanReadout( $loan );
