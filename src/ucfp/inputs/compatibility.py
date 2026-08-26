@@ -22,7 +22,8 @@ from typing import Optional
 
 from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
 from ucfp.inputs.profile.schemas import LoanTerms, Profile
-from ucfp.inputs.property_expenses import property_handles_for
+from ucfp.inputs.expenses import is_renting
+from ucfp.inputs.property_expenses import property_handles_for, set_home_rent
 from ucfp.inputs.vehicle_expenses import plan_has_content
 
 
@@ -223,6 +224,33 @@ def _with_snapshot( plans: Plans, debt_handle: str, terms: Optional[ LoanTerms ]
     """The snapshots with this debt's refreshed to the given terms (the others untouched)."""
     others = [ s for s in plans.loan_terms_snapshots if s.debt_handle != debt_handle ]
     return others + [ snapshot_of( debt_handle, terms ) ]
+
+
+# --- Home-rent drift (value drift) ---------------------------------------
+# The single-value analog of the loan-terms drift above: one rented home, so no per-item handle.
+
+def home_rent_drift( profile: Profile, plans: Plans ) -> bool:
+    """Whether the current Profile rent differs from the value this plan's rented-home rent expense was
+    seeded with -- true only while the household rents, a present rent fact exists to reconcile to, and a
+    snapshot exists (the rent was seeded). Guarding on `is_renting` keeps switching to own (which clears the
+    rent fact) from reading as rent drift; requiring a present fact -- like the loan twin requires present
+    terms -- keeps a cleared rent from drifting to a reconcile that would blank the plan's rent."""
+    return bool( is_renting( profile )
+                 and profile.home_monthly_rent is not None
+                 and plans.home_rent_snapshot is not None
+                 and profile.home_monthly_rent != plans.home_rent_snapshot )
+
+
+def reset_home_rent( profile: Profile, plans: Plans ) -> Plans:
+    """Adopt the current Profile rent into this plan: set the rent expense's amount and the snapshot to the
+    fact, clearing the drift."""
+    return set_home_rent( plans, profile.home_monthly_rent )
+
+
+def keep_home_rent( profile: Profile, plans: Plans ) -> Plans:
+    """Keep this plan's rent and refresh the snapshot to the current fact, so the drift clears while the
+    plan's own rent stands."""
+    return replace( plans, home_rent_snapshot = profile.home_monthly_rent )
 
 
 def _stale_property_handles( plans: Plans, properties: set ) -> list:

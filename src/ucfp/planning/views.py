@@ -28,7 +28,7 @@ from common.line_chart import CHROME_FULL, CHROME_SPARKLINE
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.books_table import BooksColumnKey
 from ucfp.accounts.repository import BooksOfAccountRepository
-from ucfp.inputs.drift import plans_drift, plans_loan_terms_drift
+from ucfp.inputs.drift import plans_drift, plans_home_rent_drift, plans_loan_terms_drift
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.inputs.models import ScenarioRecord
@@ -234,15 +234,17 @@ class FinancialForecastView( InputGatedMixin, View ):
 
     @staticmethod
     def _drift_notices( drift_blocked, profile_record ) -> list:
-        """Each drift-blocked scenario as `{label, drift, loan_terms_drift}` for the hub -- its stale
-        references (one-click reconcile) and any loan-terms drift (per-loan reset/keep), from the shared
-        `inputs.drift` notices rendered through the same panes the Scenarios cards and Plans flow use."""
+        """Each drift-blocked scenario as `{label, drift, loan_terms_drift, home_rent_drift}` for the hub --
+        its stale references (one-click reconcile), any loan-terms drift (per-loan reset/keep), and any
+        rent drift (update/keep), from the shared `inputs.drift` notices rendered through the same panes the
+        Scenarios cards and Plans flow use."""
         if profile_record is None:
             return list()
         profile = load_profile( profile_record )
         return [ { 'label'            : scenario.label,
                    'drift'            : plans_drift( profile, scenario.plans ),
-                   'loan_terms_drift' : plans_loan_terms_drift( profile, scenario.plans ) }
+                   'loan_terms_drift' : plans_loan_terms_drift( profile, scenario.plans ),
+                   'home_rent_drift'  : plans_home_rent_drift( profile, scenario.plans ) }
                  for scenario in drift_blocked ]
 
     @classmethod

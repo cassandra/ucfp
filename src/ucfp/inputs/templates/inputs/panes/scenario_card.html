@@ -16,7 +16,7 @@ walk). Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice o
     <div class="d-flex align-items-center flex-wrap mb-3">
       <h2 class="h5 mb-0 mr-3">{{ row.scenario.label }}</h2>
       {% if row.complete %}{% elif row.blockers %}<span class="badge badge-danger mr-3">incomplete</span>{% else %}<span class="badge badge-secondary mr-3">in progress</span>{% endif %}
-      {% if row.drift %}<span class="badge badge-warning mr-3">needs reconciling</span>{% endif %}
+      {% if row.drift or row.loan_terms_drift or row.home_rent_drift %}<span class="badge badge-warning mr-3">needs reconciling</span>{% endif %}
       <form method="post" action="{% url 'scenario_edit' row.scenario.uuid %}" class="m-0 edit-only">
         {% csrf_token %}
         {% comment %}Both unfinished states re-enter the same walk, so they share one action; the badge
@@ -36,19 +36,17 @@ walk). Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice o
       <ul class="mb-0 mt-1">{% for blocker in row.blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>
     </div>
     {% endif %}
-    {% comment %}Drift is not blocking here (the card keeps every action) -- it names the stale references
-    and offers the same one-click reconcile the Forecast page does, so the card explains why the scenario
-    would not run rather than silently reading as ready.{% endcomment %}
-    {% if row.drift %}
-    <div class="alert alert-warning py-2 mb-3">
-      {% include 'inputs/panes/scenario_drift.html' with drift=row.drift %}
-    </div>
-    {% endif %}
-    {% comment %}The sibling loan-terms drift: a loan's contract terms changed since this plan seeded from
-    them; resolve per loan (update or keep) before the scenario runs.{% endcomment %}
-    {% if row.loan_terms_drift %}
-    <div class="alert alert-warning py-2 mb-3">
-      {% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=row.loan_terms_drift %}
+    {% comment %}The scenario's drift, gathered under one heading with a divider between each entry (stale
+    references, loan-terms, rent) rather than separate stacked boxes -- matching the Plans flow and the
+    Forecast hub. The card keeps every action (drift does not block editing here), but each entry gates a
+    run, so the panel says so and offers the same reconcile the hub does. Each var is None when nothing
+    drifted.{% endcomment %}
+    {% if row.drift or row.loan_terms_drift or row.home_rent_drift %}
+    <div class="alert alert-warning py-2 px-3 small mb-3">
+      {% icon 'exclamation-triangle' size='sm' css_class='mr-1' aria_label='Needs reconciling' %}<strong>This scenario needs reconciling before it can run.</strong>
+      {% if row.drift %}<div class="border-top mt-2 pt-2">{% include 'inputs/panes/scenario_drift.html' with drift=row.drift %}</div>{% endif %}
+      {% if row.loan_terms_drift %}<div class="border-top mt-2 pt-2">{% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=row.loan_terms_drift %}</div>{% endif %}
+      {% if row.home_rent_drift %}<div class="border-top mt-2 pt-2">{% include 'inputs/panes/home_rent_drift.html' with home_rent_drift=row.home_rent_drift %}</div>{% endif %}
     </div>
     {% endif %}
     <div class="row">

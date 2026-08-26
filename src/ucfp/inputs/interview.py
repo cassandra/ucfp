@@ -49,7 +49,7 @@ from .properties import PossessionsForm, properties_context
 from .vehicle_profile import current_vehicles_context
 from .retirement import RetirementForm
 from .expenses import has_property
-from .property_expenses import PropertyExpensesForm, merged_property_expenses
+from .property_expenses import PropertyExpensesForm, merged_property_expenses, seeded_home_rent
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
 from .vehicle_disposition import all_dispositions_context, vehicle_plan_cards
@@ -250,9 +250,10 @@ class HomeForm( LoanTermsFieldsMixin, forms.Form ):
     residence -- the same debt the Debts section shows (read-only there, since it is owned here).
 
     `apply` records the tenure and merges only the residence asset and its mortgage debt into the
-    Profile by their stable handles, leaving other sections' items intact. The monthly rent is a plan,
-    not a fact: it is set in Spending (the property-expenses matrix) when the tenure is rent.
-    Associated home expenses (property tax, insurance) are likewise seeded in Spending.
+    Profile by their stable handles, leaving other sections' items intact. When the tenure is Rent it
+    also records the current `home_monthly_rent` fact (blank otherwise) -- the entry aid that seeds the
+    Plans rented-home rent expense, mirroring how the mortgage balance/terms seed the repayment plan.
+    Associated home expenses (property tax, insurance) are seeded from the catalog in Home Expenses.
     """
 
     _TENURE_CHOICES = tuple( ( member.name.lower(), member.label ) for member in HousingTenure )
@@ -268,6 +269,7 @@ class HomeForm( LoanTermsFieldsMixin, forms.Form ):
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     home_value       = MoneyField( label = 'Current value', required = False, min_value = 0 )
     purchase_price   = MoneyField( label = 'Purchase price', required = False, min_value = 0 )
+    monthly_rent     = MoneyField( label = 'Monthly rent', required = False, min_value = 0 )
     mortgage_balance = MoneyField(
         label = 'Mortgage balance owed (optional)', required = False, min_value = 0,
         css_class = AppConst.LOAN_BALANCE_CLASS )
@@ -279,6 +281,8 @@ class HomeForm( LoanTermsFieldsMixin, forms.Form ):
     @classmethod
     def _initial( cls, profile : Profile ) -> dict:
         initial   = { 'tenure': profile.home_tenure.name.lower() } if profile.home_tenure else dict()
+        if profile.home_monthly_rent is not None:
+            initial[ 'monthly_rent' ] = profile.home_monthly_rent
         residence = cls._find( profile.assets, cls._RESIDENCE_HANDLE )
         if residence is not None:
             initial[ 'home_value' ]     = residence.opening_value
@@ -294,10 +298,16 @@ class HomeForm( LoanTermsFieldsMixin, forms.Form ):
         updated_profile = replace(
             profile,
             home_tenure = self._tenure(),
+            home_monthly_rent = self._monthly_rent(),
             assets      = self._merged( profile.assets, self._RESIDENCE_HANDLE, self._residence() ),
             debts       = self._merged(
                 profile.debts, self._MORTGAGE_HANDLE, self._mortgage( existing_mortgage ) ) )
         return updated_profile, plans
+
+    def _monthly_rent( self ) -> Optional[ Decimal ]:
+        """The current monthly rent, recorded only when the tenure is Rent -- own/neither/unanswered carry
+        no rent, so switching away from Rent clears the fact (and, later, drifts its seeded plan value)."""
+        return self.cleaned_data.get( 'monthly_rent' ) if self._tenure() is HousingTenure.RENT else None
 
     def _tenure( self ) -> Optional[ HousingTenure ]:
         """The chosen tenure, or None when the household has not yet answered the housing question --
@@ -779,8 +789,9 @@ class DebtPlanSectionForm:
 class HomeExpensesSectionForm:
     """Home Expenses -- the per-property operating-cost matrix. It exposes the matrix pane (saved on
     its own through `PropertyExpensesView`); `apply` seeds the property expenses from the catalog on
-    Next, so a household that accepts the defaults still gets them without opening the pane. `apply` is a
-    pure catalog merge (it ignores form input), so it also seeds on render -- see `seeds_on_render`."""
+    Next, so a household that accepts the defaults still gets them without opening the pane, and seeds the
+    rented-home rent from the Profile `home_monthly_rent` fact (once, with a snapshot for drift). `apply`
+    ignores form input, so it also seeds on render -- see `seeds_on_render`."""
 
     seeds_on_render = True
 
@@ -796,8 +807,8 @@ class HomeExpensesSectionForm:
         return PropertyExpensesForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
-        return profile, replace(
-            plans, property_expenses = merged_property_expenses( profile, plans ) )
+        merged = replace( plans, property_expenses = merged_property_expenses( profile, plans ) )
+        return profile, seeded_home_rent( profile, merged )
 
 
 class VehiclePlanSectionForm:

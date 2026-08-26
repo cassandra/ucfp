@@ -12,13 +12,18 @@ is a small POST form that returns to the page it was triggered from. Reads one `
     {% for loan in loan_terms_drift.loans %}
     <li class="mb-1 d-flex flex-wrap align-items-baseline">
       <span class="font-weight-bold mr-2">{{ loan.label }}</span>
+      {% comment %}Accessible names name the loan: the visible text ("Update the plan") repeats per loan and
+      matches the sibling rent drift's buttons when they share a reconcile panel, so the label alone is
+      ambiguous to a screen reader.{% endcomment %}
       <form method="post" action="{{ loan.reset_url }}" class="m-0 mr-1 edit-only">
         {% csrf_token %}
-        <button type="submit" class="btn btn-outline-primary btn-sm">{{ loan_terms_drift.reset_label }}</button>
+        <button type="submit" class="btn btn-outline-primary btn-sm"
+                aria-label="{{ loan_terms_drift.reset_label }} for {{ loan.label }}">{{ loan_terms_drift.reset_label }}</button>
       </form>
       <form method="post" action="{{ loan.keep_url }}" class="m-0 edit-only">
         {% csrf_token %}
-        <button type="submit" class="btn btn-outline-secondary btn-sm">{{ loan_terms_drift.keep_label }}</button>
+        <button type="submit" class="btn btn-outline-secondary btn-sm"
+                aria-label="{{ loan_terms_drift.keep_label }} for {{ loan.label }}">{{ loan_terms_drift.keep_label }}</button>
       </form>
     </li>
     {% endfor %}

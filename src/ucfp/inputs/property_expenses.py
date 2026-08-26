@@ -16,7 +16,7 @@ from common.forms import MoneyField
 from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseClass, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
-from ucfp.inputs.plans.schemas import PropertyExpense
+from ucfp.inputs.plans.schemas import Plans, PropertyExpense
 from ucfp.inputs.expense_totals import ExpenseTotalsMatrix, annualized_sum
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
@@ -135,6 +135,34 @@ def _seed_rental_zeros( overrides : dict, profile, catalog_expense, live_handles
         if is_rental and handle not in seeded:
             seeded[ handle ] = Decimal( 0 )
     return seeded
+
+
+# The catalog handle of the Rent row (it applies to the single rented home) -- the expense the Profile's
+# `home_monthly_rent` fact seeds.
+RENT_EXPENSE_HANDLE = 'rent'
+
+
+def set_home_rent( plans : Plans, rent : Optional[ Decimal ] ) -> Plans:
+    """`plans` with the rented-home Rent expense's amount and `home_rent_snapshot` both set to `rent` -- the
+    shared write behind first seeding and the drift reconcile. Rent reaches only the single rented home, so
+    the amount is the Rent row's shared default."""
+    expenses = [ replace( expense, default_amount = rent ) if expense.handle == RENT_EXPENSE_HANDLE
+                 else expense
+                 for expense in plans.property_expenses ]
+    return replace( plans, property_expenses = expenses, home_rent_snapshot = rent )
+
+
+def seeded_home_rent( profile, plans : Plans ) -> Plans:
+    """`plans` with its rented-home rent expense seeded from the Profile `home_monthly_rent` fact, and the
+    seed recorded as `home_rent_snapshot` -- once. The rent analog of a loan repayment's
+    `preserved_snapshot`: it seeds only when there is no snapshot yet, the household rents, and a rent fact
+    is present, so a later Profile rent edit surfaces as drift rather than silently re-seeding. A no-op for
+    an owner, a blank fact, or an already-seeded plan."""
+    if ( plans.home_rent_snapshot is not None
+         or not is_renting( profile )
+         or profile.home_monthly_rent is None ):
+        return plans
+    return set_home_rent( plans, profile.home_monthly_rent )
 
 
 class PropertyExpensesForm( ExpenseTotalsMatrix, forms.Form ):

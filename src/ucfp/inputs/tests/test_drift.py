@@ -9,11 +9,11 @@ from common.recurrence import Duration, TimeUnit
 
 from organization.models import Organization
 
-from ucfp.inputs.drift import plans_drift, plans_loan_terms_drift
+from ucfp.inputs.drift import plans_drift, plans_home_rent_drift, plans_loan_terms_drift
 from ucfp.inputs.models import PlansRecord
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
-from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import Debt, LoanTerms, Profile
 
 
@@ -73,3 +73,28 @@ class PlansLoanTermsDriftTests( TestCase ):
         loan = notice[ 'loans' ][ 0 ]
         self.assertEqual( loan[ 'reset_url' ], f'/inputs/plans/{record.uuid}/loan-terms/debt-1/reset/' )
         self.assertEqual( loan[ 'keep_url' ], f'/inputs/plans/{record.uuid}/loan-terms/debt-1/keep/' )
+
+
+class PlansHomeRentDriftTests( TestCase ):
+    """`plans_home_rent_drift`: the single-value rent-drift notice -- None in step, else the update/keep
+    URLs for the one rented home."""
+
+    def setUp( self ):
+        self.organization = Organization.objects.create( name = 'Org' )
+
+    def _record( self, snapshot ):
+        record = PlansRecord( organization = self.organization, label = 'P' )
+        save_plans( record, Plans( home_rent_snapshot = Decimal( snapshot ) ) )
+        return record
+
+    def _renter( self, rent ):
+        return Profile( home_tenure = HousingTenure.RENT, home_monthly_rent = Decimal( rent ) )
+
+    def test_a_matching_snapshot_has_no_drift( self ):
+        self.assertIsNone( plans_home_rent_drift( self._renter( '2000' ), self._record( '2000' ) ) )
+
+    def test_drift_links_update_and_keep( self ):
+        record = self._record( '2000' )
+        notice = plans_home_rent_drift( self._renter( '2500' ), record )       # fact now $2,500, snapshot $2,000
+        self.assertEqual( notice[ 'reset_url' ], f'/inputs/plans/{record.uuid}/home-rent/reset/' )
+        self.assertEqual( notice[ 'keep_url' ], f'/inputs/plans/{record.uuid}/home-rent/keep/' )

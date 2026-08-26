@@ -12,7 +12,8 @@ from typing import Optional
 
 from django.urls import reverse
 
-from ucfp.inputs.compatibility import DRIFT_LEAD_IN, compatibility_issues, loan_terms_drift
+from ucfp.inputs.compatibility import (
+    DRIFT_LEAD_IN, compatibility_issues, home_rent_drift, loan_terms_drift )
 from ucfp.inputs.models import PlansRecord
 from ucfp.inputs.plans.repository import load_plans
 from ucfp.inputs.profile.schemas import Profile
@@ -26,6 +27,12 @@ RECONCILE_LABEL = 'Remove stale references'
 LOAN_TERMS_DRIFT_LEAD_IN = "A loan's terms changed in your profile since this plan was set:"
 LOAN_TERMS_RESET_LABEL   = 'Update the plan'
 LOAN_TERMS_KEEP_LABEL    = 'Keep the current plan'
+
+# The rented-home rent (value) drift notice -- the single-value sibling of the loan-terms drift. One rented
+# home, so the notice carries the two action URLs directly (no per-item list).
+HOME_RENT_DRIFT_LEAD_IN = 'Your rent changed in your profile since this plan was set.'
+HOME_RENT_RESET_LABEL   = 'Update the plan'
+HOME_RENT_KEEP_LABEL    = 'Keep the current plan'
 
 
 def plans_drift( profile: Profile, plans_record: PlansRecord ) -> Optional[ dict ]:
@@ -63,3 +70,18 @@ def plans_loan_terms_drift( profile: Profile, plans_record: PlansRecord ) -> Opt
                           for handle in handles ],
         'reset_label' : LOAN_TERMS_RESET_LABEL,
         'keep_label'  : LOAN_TERMS_KEEP_LABEL }
+
+
+def plans_home_rent_drift( profile: Profile, plans_record: PlansRecord ) -> Optional[ dict ]:
+    """The rented-home rent drift notice for a Plans record -- `{lead_in, reset_url, keep_url, reset_label,
+    keep_label}` for the shared home-rent drift pane -- or None when the rent is in step. A single value
+    (one rented home), so it carries the two action URLs directly. Keyed by the Plans, so one notice serves
+    every scenario sharing them."""
+    if not home_rent_drift( profile, load_plans( plans_record ) ):
+        return None
+    return {
+        'lead_in'     : HOME_RENT_DRIFT_LEAD_IN,
+        'reset_url'   : reverse( 'plans_home_rent_reset', kwargs = { 'uuid': plans_record.uuid } ),
+        'keep_url'    : reverse( 'plans_home_rent_keep', kwargs = { 'uuid': plans_record.uuid } ),
+        'reset_label' : HOME_RENT_RESET_LABEL,
+        'keep_label'  : HOME_RENT_KEEP_LABEL }

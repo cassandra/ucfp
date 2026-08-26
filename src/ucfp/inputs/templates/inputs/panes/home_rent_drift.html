@@ -1,0 +1,26 @@
+{% comment %}
+The rented-home rent drift notice -- the single-value sibling of `loan_terms_drift.html` (the household's
+Profile rent changed since this plan's rent expense was seeded from it). Rendered on every surface that
+reads `home_rent_drift` (the Forecast hub, the Scenarios cards, and the Plans flow) so they cannot disagree.
+Two choices: update the plan to the new rent, or keep the current plan; each is a small POST form that
+returns to the page it was triggered from. Reads one `home_rent_drift` var ({lead_in, reset_url, keep_url,
+reset_label, keep_label}).
+{% endcomment %}
+<div class="mt-2">
+  <p class="text-muted small mb-1">{{ home_rent_drift.lead_in }}</p>
+  <div class="small d-flex flex-wrap align-items-baseline">
+    <form method="post" action="{{ home_rent_drift.reset_url }}" class="m-0 mr-1 edit-only">
+      {% csrf_token %}
+      {% comment %}Explicit aria-labels: this pane can share a reconcile panel with the loan-terms drift,
+      whose buttons carry the same visible text -- so the accessible names must name the rent to tell
+      them apart.{% endcomment %}
+      <button type="submit" class="btn btn-outline-primary btn-sm"
+              aria-label="Update the plan to the new rent">{{ home_rent_drift.reset_label }}</button>
+    </form>
+    <form method="post" action="{{ home_rent_drift.keep_url }}" class="m-0 edit-only">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-secondary btn-sm"
+              aria-label="Keep the current rent">{{ home_rent_drift.keep_label }}</button>
+    </form>
+  </div>
+</div>
