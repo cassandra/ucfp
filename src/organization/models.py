@@ -265,6 +265,35 @@ class OrganizationInvitation( TimestampedModel ):
         OrganizationInvitationStatus,
         verbose_name = 'Status',
     )
+    # DB-computed keys that isolate the "one WAITING invitation per org per
+    # recipient" invariant so a plain UniqueConstraint enforces it on every
+    # backend -- a partial UniqueConstraint is silently dropped on MySQL (see
+    # #223). Each key holds the recipient identity only while the invitation is
+    # WAITING (and present), NULL otherwise, so historical / re-sent invitations
+    # are exempt. The email key is lower-cased to keep pending-email identity
+    # case-insensitive, matching the previous Lower() constraint.
+    pending_email_key = models.GeneratedField(
+        expression = models.Case(
+            models.When(
+                models.Q( status = str( OrganizationInvitationStatus.WAITING ),
+                          email_address__isnull = False ),
+                then = Lower( 'email_address' ),
+            ),
+        ),
+        output_field = models.CharField( max_length = 254 ),
+        db_persist = True,
+    )
+    pending_user_key = models.GeneratedField(
+        expression = models.Case(
+            models.When(
+                models.Q( status = str( OrganizationInvitationStatus.WAITING ),
+                          invited_user__isnull = False ),
+                then = models.F( 'invited_user' ),
+            ),
+        ),
+        output_field = models.BigIntegerField(),
+        db_persist = True,
+    )
 
     class Meta:
         verbose_name = 'Organization Invitation'
@@ -278,21 +307,11 @@ class OrganizationInvitation( TimestampedModel ):
                 name = 'invitation_has_email_or_user',
             ),
             models.UniqueConstraint(
-                Lower( 'email_address' ),
-                'organization',
-                condition = models.Q(
-                    status = str( OrganizationInvitationStatus.WAITING ),
-                    email_address__isnull = False,
-                ),
+                fields = [ 'organization', 'pending_email_key' ],
                 name = 'unique_pending_invitation_per_org_email',
             ),
             models.UniqueConstraint(
-                'invited_user',
-                'organization',
-                condition = models.Q(
-                    status = str( OrganizationInvitationStatus.WAITING ),
-                    invited_user__isnull = False,
-                ),
+                fields = [ 'organization', 'pending_user_key' ],
                 name = 'unique_pending_invitation_per_org_user',
             ),
         ]

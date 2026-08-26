@@ -144,6 +144,22 @@ class InvitationDatabaseConstraintTestCase( BaseTestCase ):
                 )
         return
 
+    def test_db_rejects_two_pending_invites_for_same_user(self):
+        recipient = self.User.objects.create_user( email = 'recipient@example.com', password = 'x' )
+        OrganizationInvitation.objects.create(
+            organization = self.organization,
+            invited_user = recipient,
+            organization_role = OrganizationRole.MEMBER,
+        )
+        with self.assertRaises( IntegrityError ):
+            with transaction.atomic():
+                OrganizationInvitation.objects.create(
+                    organization = self.organization,
+                    invited_user = recipient,
+                    organization_role = OrganizationRole.MEMBER,
+                )
+        return
+
 
 class InvitationAcceptTestCase( BaseTestCase ):
 
