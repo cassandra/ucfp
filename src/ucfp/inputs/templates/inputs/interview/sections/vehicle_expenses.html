@@ -1,32 +1,31 @@
 {% comment %}
-The Vehicle plan step (Plans flow), Profile-driven like the Debt plan. Left column: the household's
-*current* vehicles as one list -- owned and leased together, each with its plan disposition -- then any
-*additional* net-new future vehicles; each is edited through its own async view outside the section's Next
-form, opening beneath its list (a leased row's editor and an owned row's share one form area). Right
-column: the shared per-car running costs. The disposition rows come from the Vehicles (Profile) section via
-`form.dispositions` (managed by `VehicleDispositionView` / `LeasedVehicleDispositionView`); the net-new list
-is `form.vehicles` (`VehicleFormView` / `VehicleDeleteView`); the running-costs table is
-`form.vehicle_costs_form` (`VehicleExpensesView`). Each running cost is entered once per car and applies to
-every car while operated.
+The Vehicle expenses step (Plans flow): the shared per-car running costs (insurance, maintenance, repairs,
+fuel, fees) -- entered once per vehicle, applied to every vehicle while operated, at each cost's cadence.
+Managed by `VehicleExpensesView`; seeded from the catalog on Next/render once a vehicle plan exists. With no
+vehicles the per-vehicle costs are meaningless, so the step points back to the Vehicle plan instead of the
+table; with vehicles, a short note reports how many the costs cover. The per-vehicle dispositions and
+net-new future vehicles are the separate Vehicle plan section.
 {% endcomment %}
+{% if form.has_vehicles %}
 <div class="row">
-  <div class="col-lg-6 mb-3 mb-lg-0">
-    <h6>Your current vehicles</h6>
-    <p class="text-muted small">For each vehicle you have today -- owned or leased -- what you plan to do
-      with it. (These come from the Vehicles section.)</p>
-    {% include 'inputs/interview/sections/vehicle_disposition_list.html' with dispositions=form.dispositions %}
-    <div id="vehicle-disposition-form" class="mt-2"></div>
-
-    <h6 class="mt-4">Additional future vehicles</h6>
-    <p class="text-muted small">Any recurring vehicle purchases not tied to a car you own now -- a new car
-      you plan to add, on its own replacement schedule.</p>
-    {% include 'inputs/interview/sections/vehicle_list.html' with vehicles=form.vehicles %}
-    <div id="vehicles-form" class="mt-2"></div>
-  </div>
-  <div class="col-lg-6">
+  <div class="col-md-7">
     <h6>Running costs (per vehicle)</h6>
-    <p class="text-muted small">Entered once per vehicle; each applies to every vehicle while you own it,
-      at its cadence.</p>
+    <p class="text-muted small">Entered once per vehicle; each applies to every vehicle while you own it, at
+      its cadence.</p>
     {% include 'inputs/interview/sections/_vehicle_expenses.html' with vehicle_costs_form=form.vehicle_costs_form %}
   </div>
+  <div class="col-md-5 mt-3 mt-md-0">
+    {% comment %}The right column carries a quiet side note (not an editor here), styled as the shared
+    right-column panel so it matches the master-detail editor's resting state elsewhere. `h-100` lets it
+    fill the column beside the taller table (the --capped modifier stops it growing unboundedly), so the
+    note is centred in a balanced panel rather than a small box hugging the top.{% endcomment %}
+    <div class="input-editor-empty input-editor-empty--capped h-100">
+      <p class="text-muted mb-0">These costs apply to your {{ form.vehicle_scope_phrase }} defined in the
+        Vehicle plan step. Costs run only while each vehicle is held.</p>
+    </div>
+  </div>
 </div>
+{% else %}
+<p class="text-muted">No vehicles yet. Add a vehicle in the Vehicle plan step first &mdash; running costs
+  are entered per vehicle, so there is nothing to set until then.</p>
+{% endif %}

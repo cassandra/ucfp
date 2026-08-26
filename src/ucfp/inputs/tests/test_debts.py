@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.http import QueryDict
 from django.test import SimpleTestCase
+from django.urls import reverse
 
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
@@ -109,10 +110,20 @@ class DebtsContextTests( SimpleTestCase ):
         profile = Profile( debts = [ _mortgage(), _auto(), _student() ] )
         rows    = { row[ 'name' ]: row for row in debts_context( profile ) }
         self.assertFalse( rows[ 'Mortgage' ][ 'editable' ] )
-        self.assertEqual( rows[ 'Mortgage' ][ 'managed_in' ], 'Home & Property' )
-        self.assertEqual( rows[ 'Civic loan' ][ 'managed_in' ], 'Vehicles' )
+        # Assert the routed section (the logic), not the note's exact phrasing (copy).
+        self.assertIn( 'Home', rows[ 'Mortgage' ][ 'source_note' ] )               # secured on the residence
+        self.assertIn( 'Vehicles', rows[ 'Civic loan' ][ 'source_note' ] )
         self.assertTrue( rows[ 'Student loan' ][ 'editable' ] )
-        self.assertIsNone( rows[ 'Student loan' ][ 'managed_in' ] )
+        self.assertIsNone( rows[ 'Student loan' ][ 'source_note' ] )
+
+    def test_a_mortgage_on_another_property_points_to_other_property( self ):
+        # The old single "Home & Property" section split into Home (the residence) and Other property; a
+        # mortgage on a non-residence property points to the latter, keyed off its secured asset.
+        rental_mortgage = Debt( handle = 'rental-mortgage', name = 'Rental mortgage',
+                                kind = DebtKind.MORTGAGE, balance = Decimal( '150000' ),
+                                secured_asset = 'property-1' )
+        rows = { row[ 'name' ]: row for row in debts_context( Profile( debts = [ rental_mortgage ] ) ) }
+        self.assertIn( 'Other property', rows[ 'Rental mortgage' ][ 'source_note' ] )
 
     def test_a_row_summarizes_captured_terms( self ):
         terms   = LoanTerms( interest_rate = Rate.percent( 4 ),
@@ -120,6 +131,17 @@ class DebtsContextTests( SimpleTestCase ):
                              monthly_payment = Decimal( '1800' ) )
         profile = Profile( debts = [ _student( terms = terms ) ] )
         self.assertEqual( debts_context( profile )[ 0 ][ 'terms' ], '4% · 240 mo · $1,800/mo' )
+
+    def test_an_editable_row_carries_its_action_urls_a_read_only_row_none( self ):
+        # The item card's Edit/Remove post to these; a read-only mortgage/auto has no editor here.
+        profile = Profile( debts = [ _student(), _mortgage() ] )
+        rows    = { row[ 'name' ]: row for row in debts_context( profile ) }
+        self.assertEqual( rows[ 'Student loan' ][ 'edit_url' ],
+                          reverse( 'debt_edit', kwargs = { 'handle': 'debt-1' } ) )
+        self.assertEqual( rows[ 'Student loan' ][ 'delete_url' ],
+                          reverse( 'debt_delete', kwargs = { 'handle': 'debt-1' } ) )
+        self.assertIsNone( rows[ 'Mortgage' ][ 'edit_url' ] )
+        self.assertIsNone( rows[ 'Mortgage' ][ 'delete_url' ] )
 
 
 class DebtHeadingAndDeleteTests( SimpleTestCase ):

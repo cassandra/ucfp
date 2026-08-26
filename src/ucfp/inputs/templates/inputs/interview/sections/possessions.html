@@ -1,28 +1,25 @@
 {% comment %}
-The Possessions list (id=possessions), auto-saved. Each row is a tangible non-real-estate holding: a
-name, a type (precious metals / collectibles / vehicle -- classes the engine treats differently), and
-a value. Each row's hidden handle keeps the item's identity stable across edits (Plans reference
-possessions by handle). Fill the blank row to add one; the Remove box drops one. Edits save in the
-background; only a row added/removed or a bad value re-renders here. The section heading names it.
+The Possessions list (id=possessions), auto-saved. Each row is a tangible non-real-estate holding: a type
+(precious metals / collectibles -- classes the engine treats differently), a name, and a value. The lines
+are a rowset (js-rowset): repeated same-name inputs the form reads as parallel lists, added by the Add
+button (a cloned blank row) and removed per row -- no phantom trailing row. Each row's hidden handle keeps
+the item's identity stable across edits (Plans reference possessions by handle). Edits save in the
+background; only a row added/removed or a negative value re-renders here. The section heading names it.
 {% endcomment %}
 <div id="possessions">
   <form method="post" action="{% url 'possessions' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <table class="table table-sm w-auto">
       <thead>
-        <tr><th>Name</th><th>Type</th><th>Current Value</th><th></th></tr>
+        <tr><th>Type</th><th>Name</th><th>Current Value</th><th></th></tr>
       </thead>
-      <tbody>
+      <tbody class="{{ AppConst.ROWSET_CLASS }}">
         {% for row in possessions_form.rows %}
-        <tr>
-          <td>{{ row.handle }}{{ row.name }}</td>
-          <td>{{ row.type }}</td>
-          <td>{{ row.value }}{% if row.value.errors %}<span class="text-danger small d-block">{{ row.value.errors|join:" " }}</span>{% endif %}</td>
-          <td>{% if row.remove %}<label class="small text-muted edit-only">{{ row.remove }} remove</label>{% endif %}</td>
-        </tr>
+        {% include 'inputs/interview/sections/_possession_row.html' with row=row names=possessions_form.names type_choices=possessions_form.type_choices %}
         {% endfor %}
+        <template class="{{ AppConst.ROWSET_TEMPLATE_CLASS }}">{% include 'inputs/interview/sections/_possession_row.html' with row=None names=possessions_form.names type_choices=possessions_form.type_choices %}</template>
       </tbody>
     </table>
-    <p class="text-muted small">Fill the blank row to add one.</p>
+    <button type="button" class="btn btn-sm btn-outline-primary {{ AppConst.ROWSET_ADD_CLASS }} edit-only">&plus; Add a possession</button>
   </form>
 </div>

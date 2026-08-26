@@ -9,20 +9,24 @@ Individual accounts and cost basis are later drill-downs. Reads `accounts_form`.
   <form method="post" action="{% url 'accounts' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <div class="row">
-      <div class="col-md-6">
-        <h3 class="h6 mt-3">Savings &amp; investments</h3>
-        {% for field in accounts_form.taxable_fields %}
-        {% include 'inputs/interview/_field_row.html' with field=field %}
-        {% endfor %}
+      <div class="col-md-6 mb-3 mb-md-0">
+        <div class="border rounded bg-light p-3">
+          <h3 class="h6 mt-0">Savings &amp; investments</h3>
+          {% for field in accounts_form.taxable_fields %}
+          {% include 'inputs/interview/_field_row.html' with field=field %}
+          {% endfor %}
+        </div>
       </div>
 
       <div class="col-md-6">
-        {% for group in accounts_form.retirement_groups %}
-        <h3 class="h6 mt-3">Retirement &mdash; {{ group.subject }}</h3>
-        {% for field in group.fields %}
-        {% include 'inputs/interview/_field_row.html' with field=field %}
-        {% endfor %}
-        {% endfor %}
+        <div class="border rounded bg-light p-3">
+          {% for group in accounts_form.retirement_groups %}
+          <h3 class="h6 {% if forloop.first %}mt-0{% else %}mt-3{% endif %}">Retirement &mdash; {{ group.subject }}</h3>
+          {% for field in group.fields %}
+          {% include 'inputs/interview/_field_row.html' with field=field %}
+          {% endfor %}
+          {% endfor %}
+        </div>
       </div>
     </div>
   </form>

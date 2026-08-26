@@ -1,0 +1,11 @@
+{% comment %}
+The resting state of the Vehicle plan's shared editor slot -- the master-detail prompt shown when no
+editor is open. It carries the section's only Add (a future vehicle; current vehicles come from the
+Vehicles section, so they are edited, never added, here). Each editor template falls back to this when its
+form is absent (a fresh section render, or a Done/collapse), so the slot never reads as blank.
+{% endcomment %}
+<div class="input-editor-empty">
+  <p class="text-muted mb-2">Pick a vehicle to set its plan, or add a future one.</p>
+  <a class="btn btn-sm btn-outline-primary" data-async="#vehicle-editor"
+     href="{% url 'vehicle_add' %}">Add a vehicle</a>
+</div>

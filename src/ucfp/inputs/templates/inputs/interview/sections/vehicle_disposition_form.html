@@ -1,22 +1,24 @@
 {% comment %}
-The disposition editor for one current owned vehicle (id=vehicle-disposition-form), opened as a card
-beneath the current-vehicles list; its header names the vehicle (from `heading`). Auto-saves in the
-background. Three subsections in chronological order, each a bordered block so they stay distinct:
-(1) the vehicle's *current* loan (rate + months left) -- shown only when it is financed (`is_financed`);
-(2) the *plan* for it -- the `kind` switch (Retain / Sell / Replace) and, for Sell/Replace, the handover
-date; (3) the *replacement* (Replace only) -- its recurrence/end and how it is financed (the payment
-sub-block, with the method as a nested switch). Empty when none is open. Reads `disposition_form`,
-`heading`, `handle`.
+The disposition editor for one current owned vehicle, rendered as an input-editor-card into the Vehicle
+plan's shared editor slot (id=vehicle-editor) beside the list. Its header names the vehicle (from
+`heading`) with the same "Current" badge its list card carries. Auto-saves in the background. Three
+subsections in chronological order, each a bordered block so they stay distinct: (1) the vehicle's
+*current* loan (rate + months left) -- shown only when it is financed (`is_financed`); (2) the *plan* for
+it -- the `kind` switch (Retain / Sell / Replace) and, for Sell/Replace, the handover date; (3) the
+*replacement* (Replace only) -- its recurrence/end and how it is financed (the payment sub-block, with the
+method as a nested switch). When no editor is open the slot rests as the master-detail prompt. Reads
+`disposition_form`, `heading`, `handle`.
 {% endcomment %}
-<div id="vehicle-disposition-form">
+<div id="vehicle-editor">
   {% if disposition_form %}
-  <div class="card mt-2">
-    {% include 'inputs/interview/sections/_vehicle_editor_header.html' with heading=heading collapse_route='vehicle_disposition_edit' handle=handle target='vehicle-disposition-form' %}
-    <div class="card-body">
+  {% url 'vehicle_disposition_edit' handle=handle as disposition_edit_url %}
+  <div class="input-editor-card mt-2">
+    {% include 'inputs/interview/_input_editor_card_header.html' with heading=heading badge='Current' close_url=disposition_edit_url|add:'?collapse=1' editor_target='#vehicle-editor' %}
+    <div class="input-editor-card__body">
       <form method="post" class="{{ AppConst.AUTOSAVE_CLASS }} {{ AppConst.VEHICLE_FINANCE_CLASS }}"
             data-{{ AppConst.VEHICLE_APR_DATA_ATTR }}="{{ disposition_form.auto_loan_apr_percent }}"
             data-{{ AppConst.VEHICLE_TERM_DATA_ATTR }}="{{ disposition_form.auto_loan_term_months }}"
-            action="{% url 'vehicle_disposition_edit' handle=handle %}">
+            action="{{ disposition_edit_url }}">
         {% csrf_token %}
         {% comment %}(1) The current loan -- financed owned vehicles only; its terms live in Plans, its
         balance in Profile (the Vehicles section). Vehicle loans are managed here, not in the Debts
@@ -51,12 +53,14 @@ sub-block, with the method as a nested switch). Empty when none is open. Reads `
             {% include 'inputs/interview/sections/_vehicle_payment_fields.html' with form=disposition_form %}
           </fieldset>
         </div>
-        <div class="mt-2">
-          <a class="btn btn-sm btn-outline-primary" data-async="#vehicle-disposition-form"
-             href="{% url 'vehicle_disposition_edit' handle=handle %}?collapse=1">Done</a>
+        <div class="input-editor-card__footer">
+          <a class="btn btn-sm btn-outline-primary" data-async="#vehicle-editor"
+             href="{{ disposition_edit_url }}?collapse=1">Done</a>
         </div>
       </form>
     </div>
   </div>
+  {% else %}
+  {% include 'inputs/interview/sections/_vehicle_editor_empty.html' %}
   {% endif %}
 </div>

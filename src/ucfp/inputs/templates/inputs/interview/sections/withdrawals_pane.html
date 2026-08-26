@@ -1,7 +1,8 @@
 {% comment %}
 The pre-tax account withdrawals of the Tax Planning section (id=withdrawals), auto-saved. One block per
-withdrawal (the shared realization-plan row) plus a blank block to add one -- a deliberate draw from a
-pre-tax retirement account to cash, landing before the automatic cash-management drawdown. The row set
+withdrawal (the shared realization-plan row), added or removed as a rowset (an Add button and a per-row
+Remove) -- a deliberate draw from a pre-tax retirement account to cash, landing before the automatic
+cash-management drawdown. The row set
 can change, so adding or removing re-renders; a value edit saves silently. Non-blocking: a block without
 both a source and an amount is not saved. When there is no pre-tax account, it says so rather than
 offering an empty picker.
@@ -13,11 +14,14 @@ offering an empty picker.
     (bracket-filling, RMDs). Each draw is ordinary income.</p>
   <form method="post" action="{% url 'withdrawals' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    {% for row in withdrawals_form.plan_rows %}
-    {% include 'inputs/components/_realization_plan_row.html' with row=row %}
-    {% endfor %}
-    <p class="text-muted small">Fill the blank block to add a withdrawal; leave the cadence blank for a
-      one-time draw at the From age.</p>
+    <div class="{{ AppConst.ROWSET_CLASS }}">
+      {% for row in withdrawals_form.rows %}
+      {% include 'inputs/components/_realization_plan_row.html' with row=row form=withdrawals_form %}
+      {% endfor %}
+      <template class="{{ AppConst.ROWSET_TEMPLATE_CLASS }}">{% include 'inputs/components/_realization_plan_row.html' with row=None form=withdrawals_form %}</template>
+    </div>
+    <p class="text-muted small">Leave the cadence blank for a one-time draw at the From age.</p>
+    <button type="button" class="btn btn-sm btn-outline-primary {{ AppConst.ROWSET_ADD_CLASS }} edit-only">&plus; Add a withdrawal</button>
   </form>
   {% else %}
   <p class="text-muted">Set up your accounts first (the Accounts step); each person's pre-tax retirement

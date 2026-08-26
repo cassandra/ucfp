@@ -1,0 +1,40 @@
+{% comment %}
+One member of a collection, rendered as the input-item-card primitive (see
+docs/dev/frontend/interview-ui-guidelines.md). A bordered card: an optional `badge`,
+the `title` and an optional inline `headline`, an optional `flag` (a warning chip such as
+"Needs details"), right-aligned actions, and an optional muted `detail` line beneath.
+Actions are independent: Edit shows when `edit_url` is given (opening the editor in
+`editor_target`), Remove when `delete_url` is given (posting there and refreshing
+`list_target`). A `source_note` (verbatim, e.g. "From Profile" or "From Home") shows
+when the member cannot be removed here (no `delete_url`) -- it names
+where the member is owned, whether the card is otherwise read-only or still editable here
+(e.g. a vehicle whose plan is set here but whose facts live in Profile). A card with
+neither action reads as read-only. The member whose editor is open (`handle` ==
+`active_handle`) shows the active state.
+Params: title, badge, headline, flag, detail, handle, active_handle, edit_url,
+delete_url, source_note, editor_target, list_target.
+{% endcomment %}
+<div class="input-item-card{% if handle and handle == active_handle %} input-item-card--active{% endif %}{% if not edit_url and not delete_url %} input-item-card--readonly{% endif %}">
+  <div class="input-item-card__head">
+    <span>
+      {% if badge %}<span class="input-badge">{{ badge }}</span>{% endif %}
+      <span class="input-item-card__title">{{ title }}</span>
+      {% if headline %}<span class="input-item-card__headline">{{ headline }}</span>{% endif %}
+      {% if flag %}<span class="input-item-card__flag">{{ flag }}</span>{% endif %}
+    </span>
+    <span class="input-item-card__actions">
+      {% if handle and handle == active_handle %}<span class="text-muted small mr-1">editing</span>{% endif %}
+      {% if edit_url %}<a data-async="{{ editor_target }}" href="{{ edit_url }}" aria-label="Edit {{ title }}">Edit</a>{% endif %}
+      {% if delete_url %}
+      <form method="post" action="{{ delete_url }}" data-async="{{ list_target }}" class="d-inline edit-only">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
+                aria-label="Remove {{ title }}">Remove</button>
+      </form>
+      {% elif source_note %}
+      <span class="text-muted small{% if edit_url %} ml-2{% endif %}">{{ source_note }}</span>
+      {% endif %}
+    </span>
+  </div>
+  {% if detail %}<div class="input-item-card__detail">{{ detail }}</div>{% endif %}
+</div>

@@ -8,9 +8,11 @@ rental additionally carries depreciation attributes (a `PropertyProfile`) and, i
 rent; a second home is personal-use with neither. Operating expenses attach in Home Expenses by the
 same handle.
 """
-from dataclasses import dataclass, replace
+from dataclasses import replace
+from itertools import zip_longest
 
 from django import forms
+from django.urls import reverse
 
 from common.forms import CHOOSE_PLACEHOLDER, MoneyField, StyledFormMixin
 
@@ -37,12 +39,38 @@ def _mortgage_handle( property_handle : str ) -> str:
     return f'{property_handle}-mortgage'
 
 
-def properties_context( profile, asset_class : AssetClass ) -> list:
-    """The holdings of one real-estate class for a list template: each one's handle, name, and value.
-    A rental's rent is set in the Income section, not here."""
-    return [ { 'handle': asset.handle, 'name': asset.name, 'value': asset.opening_value }
-             for asset in profile.assets
-             if asset.asset_class is asset_class ]
+_PROPERTY_BADGE = {
+    AssetClass.REAL_ESTATE_RENTAL      : 'Rental',
+    AssetClass.REAL_ESTATE_SECOND_HOME : 'Second home',
+}
+
+
+def properties_context( profile ) -> list:
+    """The household's other-property holdings -- rentals and second homes together -- for the list: each
+    one's handle, name, value, a type badge, and the Edit/Remove urls its item card posts to. A rental's
+    rent is set in the Income section, not here."""
+    rows = []
+    for asset in profile.assets:
+        badge = _PROPERTY_BADGE.get( asset.asset_class )
+        if badge is None:
+            continue
+        rows.append( { 'handle'     : asset.handle,
+                       'name'       : asset.name,
+                       'value'      : asset.opening_value,
+                       'badge'      : badge,
+                       'edit_url'   : reverse( 'property_edit', kwargs = { 'handle' : asset.handle } ),
+                       'delete_url' : reverse( 'property_delete', kwargs = { 'handle' : asset.handle } ) } )
+    return rows
+
+
+def property_heading( profile, handle : str ):
+    """The {handle, name, badge} of a saved property for the editor card header, or None when the handle
+    names no saved property yet (a just-added one being filled in)."""
+    asset = next( ( a for a in profile.assets if a.handle == handle
+                    and a.asset_class in _PROPERTY_BADGE ), None )
+    if asset is None:
+        return None
+    return { 'handle' : handle, 'name' : asset.name, 'badge' : _PROPERTY_BADGE[ asset.asset_class ] }
 
 
 def delete_property( profile, plans, property_handle : str ):
@@ -60,30 +88,50 @@ def delete_property( profile, plans, property_handle : str ):
     return profile, plans
 
 
-class _PropertyForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
-    """The shared skeleton for a mortgaged, handle-minted property (a rental, a second home): the
-    mortgage-balance field and the `apply` that writes the holding and its secured mortgage debt under
-    one property handle, leaving other properties intact. The mortgage is the same `Debt` the Debts
-    section shows read-only; its interest tax treatment is chosen at materialization from the secured
-    asset's class. A concrete property declares its own holding fields plus `_PREFIX` (its handle
-    stem), `_ASSET_FIELDS` (which must all be set before it materializes), `field_order` (to place the
-    inherited mortgage field among them), and how to build its `AssetProfile` (`_asset`) and edit
-    initials (`_asset_initial`)."""
+_PROPERTY_PREFIX = 'property-'
 
-    # The holding fields are all optional individually: the form background-saves and the property
-    # materializes only once all of `_ASSET_FIELDS` are set (see `_complete`), so a just-opened blank
-    # that is abandoned never appears. The mortgage balance is separate -- it rides along on a
-    # materialized property but is not required to complete one.
-    _PREFIX       : str   = ''
-    _ASSET_FIELDS : tuple = ()
+# The three property types the unified editor offers, each encoding an asset class (and, for a rental, its
+# depreciation type). The two rental types share the rental-only fields; a second home has none.
+_RENTAL_RESIDENTIAL = 'RENTAL_RESIDENTIAL'
+_RENTAL_COMMERCIAL  = 'RENTAL_COMMERCIAL'
+_SECOND_HOME        = 'SECOND_HOME'
+_RENTAL_TYPES       = ( _RENTAL_RESIDENTIAL, _RENTAL_COMMERCIAL )
+_TYPE_TO_PROPERTY = { _RENTAL_RESIDENTIAL : RealPropertyType.RESIDENTIAL,
+                      _RENTAL_COMMERCIAL  : RealPropertyType.COMMERCIAL }
+_PROPERTY_TO_TYPE = { real_type : type_value for type_value, real_type in _TYPE_TO_PROPERTY.items() }
 
+
+class PropertyForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
+    """One other-property holding -- a rental or a second home -- as a unit. The `property_type` select is a
+    switch (inputs.js): the two Rental types reveal the rental-only fields (building basis, purchase date)
+    and materialize a `REAL_ESTATE_RENTAL` holding with a depreciation `PropertyProfile`; Second Home hides
+    them and materializes a `REAL_ESTATE_SECOND_HOME`. Either type may carry a mortgage (the same `Debt` the
+    Debts section shows read-only), behind a disclosure. Handle-minted (`property-N`) and non-blocking: it
+    materializes only once its needed fields are set, leaving other properties intact. Flipping an existing
+    property to Second Home drops its rental rent (set in Income) -- second homes have none."""
+
+    _PREFIX = _PROPERTY_PREFIX
+    LOAN_ID = 'property-mortgage'
+    _TYPE_CHOICES = ( ( _RENTAL_RESIDENTIAL, 'Rental — Residential' ),
+                      ( _RENTAL_COMMERCIAL , 'Rental — Commercial' ),
+                      ( _SECOND_HOME       , 'Second Home' ) )
+    _COMMON_FIELDS = ( 'name', 'value', 'purchase_price' )      # every property needs these
+    _RENTAL_FIELDS = ( 'building_basis', 'acquisition_date' )   # a rental additionally needs these
+
+    property_type    = forms.ChoiceField(
+        label = 'Type', required = False, choices = _TYPE_CHOICES, initial = _RENTAL_RESIDENTIAL,
+        widget = forms.Select( attrs = { 'class' : f'custom-select {AppConst.SWITCH_CONTROL_CLASS}' } ) )
+    name             = forms.CharField( label = 'Name', max_length = 100, required = False )
+    value            = MoneyField( label = 'Current value', min_value = 0, required = False )
+    purchase_price   = MoneyField( label = 'Purchase price', min_value = 0, required = False )
+    building_basis   = MoneyField(
+        label = 'Building value at purchase, excludes land', min_value = 0, required = False )
+    acquisition_date = forms.DateField(
+        label = 'Purchase date', required = False,
+        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
     mortgage_balance = MoneyField(
-        label = 'Mortgage balance owed (optional)', min_value = 0, required = False,
+        label = 'Mortgage balance owed', min_value = 0, required = False,
         css_class = AppConst.LOAN_BALANCE_CLASS )
-
-    # The loan block (mortgage balance + rate/term/payment) renders on its own via `_loan_fields.html`, so
-    # it is held out of the holding-fields loop `primary_fields` drives.
-    _LOAN_BLOCK_FIELDS = ( 'mortgage_balance', 'loan_rate', 'loan_term', 'loan_payment' )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         super().__init__( data, initial = self._initial( profile, handle ) if handle else None )
@@ -96,37 +144,44 @@ class _PropertyForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
         asset = next( ( a for a in profile.assets if a.handle == handle ), None )
         if asset is None:
             return dict()
-        initial  = cls._asset_initial( asset )
+        initial = { 'name': asset.name, 'value': asset.opening_value, 'purchase_price': asset.cost_basis }
+        if asset.asset_class is AssetClass.REAL_ESTATE_RENTAL and asset.property is not None:
+            initial[ 'property_type' ]    = _PROPERTY_TO_TYPE[ asset.property.property_type ]
+            initial[ 'building_basis' ]   = asset.property.depreciable_basis
+            initial[ 'acquisition_date' ] = asset.property.acquisition_date
+        else:
+            initial[ 'property_type' ] = _SECOND_HOME
         mortgage = next( ( d for d in profile.debts if d.handle == _mortgage_handle( handle ) ), None )
         if mortgage is not None:
             initial[ 'mortgage_balance' ] = mortgage.balance
             initial.update( loan_terms_initial( mortgage.terms ) )
         return initial
 
-    @staticmethod
-    def _asset_initial( asset ) -> dict:
-        """The edit-form initials from a saved holding (name, value, and any type-specific fields)."""
-        raise NotImplementedError
-
     @property
-    def primary_fields( self ):
-        """The holding fields, in `field_order` -- the loan-block fields are excluded (they render via the
-        shared `_loan_fields.html` partial, not this loop)."""
-        return [ self[ name ] for name in self.fields if name not in self._LOAN_BLOCK_FIELDS ]
+    def rental_cases( self ) -> str:
+        """The type values whose editor reveals the rental-only fields -- the switch-case that block is
+        marked with (both rental types, so the block shows for either)."""
+        return ' '.join( _RENTAL_TYPES )
+
+    def _type( self ) -> str:
+        return self.cleaned_data.get( 'property_type' ) or _RENTAL_RESIDENTIAL
+
+    def _is_rental( self ) -> bool:
+        return self._type() in _RENTAL_TYPES
 
     def _complete( self ) -> bool:
-        """All fields the holding needs are present -- the condition for materializing it. There is no
-        hard validation, so a partially-entered property is simply not written rather than fighting a
-        background save."""
+        """The fields the holding needs to materialize -- the common fields always, plus the rental-only
+        fields when the chosen type is a rental. Non-blocking: a partial property is simply not written."""
         cleaned = self.cleaned_data
-        return all( cleaned.get( field ) not in ( None, '' ) for field in self._ASSET_FIELDS )
+        needed  = self._COMMON_FIELDS + ( self._RENTAL_FIELDS if self._is_rental() else () )
+        return all( cleaned.get( field ) not in ( None, '' ) for field in needed )
 
     def apply( self, profile, plans ):
-        # Non-blocking and non-destructive: a partial edit writes nothing and leaves any existing
-        # property (and its mortgage) untouched. The form background-saves on every change, so a save
-        # can fire mid-edit with a required field transiently blank -- a stray one must never delete a
-        # property. Removal is the explicit delete action's job, not a side effect of incompleteness.
-        # A complete form writes its asset and, if a balance is entered, its secured mortgage debt.
+        # Non-blocking and non-destructive: a partial edit writes nothing and leaves other properties
+        # intact. A complete form writes the holding in the class its type chooses (a rental carries a
+        # depreciation profile; a second home does not) and, if a balance is entered, its secured mortgage.
+        # Flipping to Second Home drops any rental rent keyed to this property (second homes have none); a
+        # rental's rent is set in Income, not here.
         if not self._complete():
             return profile, plans
         handle   = self._handle or _minted_handle( profile, self._PREFIX )
@@ -135,15 +190,28 @@ class _PropertyForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
         assets   = [ a for a in profile.assets if a.handle != handle ] + [ self._asset( handle ) ]
         debts    = ( [ d for d in profile.debts if d.handle != mortgage ]
                      + self._mortgage( handle, existing ) )
-        return replace( profile, assets = assets, debts = debts ), plans
+        income   = ( profile.income_flows if self._is_rental()
+                     else [ f for f in profile.income_flows if f.property_handle != handle ] )
+        return replace( profile, assets = assets, debts = debts, income_flows = income ), plans
 
     def _asset( self, handle : str ) -> AssetProfile:
-        raise NotImplementedError
+        cleaned = self.cleaned_data
+        if self._is_rental():
+            return AssetProfile(
+                handle = handle, name = cleaned[ 'name' ], asset_class = AssetClass.REAL_ESTATE_RENTAL,
+                opening_value = cleaned[ 'value' ], cost_basis = cleaned[ 'purchase_price' ],
+                property = PropertyProfile(
+                    acquisition_date = cleaned[ 'acquisition_date' ],
+                    depreciable_basis = cleaned[ 'building_basis' ],
+                    property_type = _TYPE_TO_PROPERTY[ self._type() ] ) )
+        return AssetProfile(
+            handle = handle, name = cleaned[ 'name' ], asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
+            opening_value = cleaned[ 'value' ], cost_basis = cleaned[ 'purchase_price' ] )
 
     def _mortgage( self, property_handle : str, existing ) -> list:
         # The property-secured mortgage debt, present only when a balance is entered. The property is a
-        # balance-only convenience surface onto the one debt; the name and kind the Debts section may
-        # have set are preserved.
+        # balance-only convenience surface onto the one debt; the name and kind the Debts section may have
+        # set are preserved.
         balance = self.cleaned_data.get( 'mortgage_balance' )
         if balance is None:
             return []
@@ -153,128 +221,6 @@ class _PropertyForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
             kind = existing.kind if existing is not None else DebtKind.MORTGAGE,
             balance = balance, secured_asset = property_handle,
             terms = self.loan_terms( balance ) ) ]
-
-
-class RentalForm( _PropertyForm ):
-    """One rental property as a unit: the holding (value, basis, acquisition, type) and any mortgage
-    balance still owed. It is household-owned -- like the residence, and because the engine taxes
-    rentals as one aggregate passive activity, no per-owner rule applies -- so there is no owner field.
-    It sets a `PropertyProfile` for depreciation; the gross rent is set in Income, and its mortgage
-    interest nets against rental income at materialization (keyed on the secured asset being a
-    rental)."""
-
-    _PREFIX       = 'rental-'
-    LOAN_ID       = 'rental-mortgage'   # distinct block id: shares the Real Estate page with the others
-    _ASSET_FIELDS = ( 'name', 'value', 'purchase_price', 'acquisition_date',
-                      'building_basis', 'property_type' )
-    field_order   = [ 'name', 'value', 'purchase_price', 'building_basis', 'acquisition_date',
-                      'mortgage_balance', 'property_type' ]
-
-    name             = forms.CharField( label = 'Name', max_length = 100, required = False )
-    value            = MoneyField( label = 'Current value', min_value = 0, required = False )
-    building_basis   = MoneyField(
-        label = 'Building value at purchase, excludes land', min_value = 0, required = False )
-    purchase_price   = MoneyField( label = 'Purchase price', min_value = 0, required = False )
-    acquisition_date = forms.DateField(
-        label = 'Purchase date', required = False,
-        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
-    property_type    = forms.ChoiceField(
-        label = 'Property type', required = False,
-        choices = [ ( '', CHOOSE_PLACEHOLDER ) ] + [ ( k.name, k.label ) for k in RealPropertyType ] )
-
-    @staticmethod
-    def _asset_initial( asset ) -> dict:
-        initial = { 'name': asset.name, 'value': asset.opening_value,
-                    'purchase_price': asset.cost_basis }
-        if asset.property is not None:
-            initial[ 'acquisition_date' ] = asset.property.acquisition_date
-            initial[ 'building_basis' ]   = asset.property.depreciable_basis
-            initial[ 'property_type' ]    = asset.property.property_type.name
-        return initial
-
-    def _asset( self, handle : str ) -> AssetProfile:
-        cleaned = self.cleaned_data
-        return AssetProfile(
-            handle = handle, name = cleaned[ 'name' ], asset_class = AssetClass.REAL_ESTATE_RENTAL,
-            opening_value = cleaned[ 'value' ], cost_basis = cleaned[ 'purchase_price' ],
-            property = PropertyProfile(
-                acquisition_date = cleaned[ 'acquisition_date' ],
-                depreciable_basis = cleaned[ 'building_basis' ],
-                property_type = RealPropertyType[ cleaned[ 'property_type' ] ] ) )
-
-
-class SecondHomeForm( _PropertyForm ):
-    """One second (vacation) home as a unit: the holding (value, purchase price) and any mortgage
-    balance still owed. It is personal-use -- it appreciates and carries a real basis but has no
-    depreciation, no rental income, and no §121 exclusion (all consequences of its
-    `REAL_ESTATE_SECOND_HOME` class) -- so it carries no `PropertyProfile`, and its mortgage interest
-    is an itemizable deduction like the residence's rather than a rental expense."""
-
-    _PREFIX       = 'second-home-'
-    LOAN_ID       = 'second-home-mortgage'   # distinct block id: shares the Real Estate page
-    _ASSET_FIELDS = ( 'name', 'value', 'purchase_price' )
-    field_order   = [ 'name', 'value', 'purchase_price', 'mortgage_balance' ]
-
-    name           = forms.CharField( label = 'Name', max_length = 100, required = False )
-    value          = MoneyField( label = 'Current value', min_value = 0, required = False )
-    purchase_price = MoneyField( label = 'Purchase price', min_value = 0, required = False )
-
-    @staticmethod
-    def _asset_initial( asset ) -> dict:
-        return { 'name': asset.name, 'value': asset.opening_value,
-                 'purchase_price': asset.cost_basis }
-
-    def _asset( self, handle : str ) -> AssetProfile:
-        cleaned = self.cleaned_data
-        return AssetProfile(
-            handle = handle, name = cleaned[ 'name' ],
-            asset_class = AssetClass.REAL_ESTATE_SECOND_HOME,
-            opening_value = cleaned[ 'value' ], cost_basis = cleaned[ 'purchase_price' ] )
-
-
-@dataclass( frozen = True )
-class PropertyPane:
-    """Per-type configuration for a mortgaged-property pane (rentals, second homes), the single source
-    consumed by both the Property-section template (the initial render) and the pane's add/edit/delete
-    views (the async swaps): the form class, the holding asset class, the section heading, the DOM ids
-    the async swaps target, the URL names the generic list/form partials resolve, and the list's
-    wording. Holding it in one place keeps the initial render and the swaps from drifting. The handle
-    stem is not here -- it lives on the form (`form._PREFIX`), the single source for minting."""
-
-    form        : type
-    asset_class : AssetClass
-    heading     : str
-    list_id     : str
-    form_id     : str
-    add_url     : str
-    edit_url    : str
-    delete_url  : str
-    add_text    : str
-    empty_text  : str
-
-    def template_context( self ) -> dict:
-        """The context the generic `property_list.html` / `property_form.html` partials render from --
-        the ids, URL names, and wording (the holdings themselves are supplied by the caller)."""
-        return { 'list_id': self.list_id, 'form_id': self.form_id, 'add_url': self.add_url,
-                 'edit_url': self.edit_url, 'delete_url': self.delete_url,
-                 'add_text': self.add_text, 'empty_text': self.empty_text }
-
-
-RENTAL_PANE = PropertyPane(
-    form = RentalForm, asset_class = AssetClass.REAL_ESTATE_RENTAL, heading = 'Rental properties',
-    list_id = 'rentals-list', form_id = 'rentals-form',
-    add_url = 'rental_add', edit_url = 'rental_edit', delete_url = 'rental_delete',
-    add_text = 'Add a rental property', empty_text = 'No rental properties.' )
-
-SECOND_HOME_PANE = PropertyPane(
-    form = SecondHomeForm, asset_class = AssetClass.REAL_ESTATE_SECOND_HOME, heading = 'Second homes',
-    list_id = 'second-homes-list', form_id = 'second-homes-form',
-    add_url = 'second_home_add', edit_url = 'second_home_edit', delete_url = 'second_home_delete',
-    add_text = 'Add a second home', empty_text = 'No second homes.' )
-
-# The mortgaged-property panes in display order, iterated by the Property section and mapped to their
-# add/edit/delete views.
-PANES = ( RENTAL_PANE, SECOND_HOME_PANE )
 
 
 _POSSESSION_PREFIX = 'possession-'
@@ -307,46 +253,76 @@ class PossessionsForm( forms.Form ):
         ( AssetClass.PRECIOUS_METALS.name, 'Precious metals' ),
         ( AssetClass.COLLECTIBLES.name, 'Collectibles' ),
     )
+    _VALID_TYPES = frozenset( { AssetClass.PRECIOUS_METALS.name, AssetClass.COLLECTIBLES.name } )
+    # The repeated field names of a possession rowset row -- one source with the template's inputs (see
+    # `names`), read as parallel getlists and zipped by position.
+    _P_TYPE   = 'possession_type'
+    _P_NAME   = 'possession_name'
+    _P_VALUE  = 'possession_value'
+    _P_HANDLE = 'possession_handle'
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
-        self._items = self._existing( profile ) if profile is not None else []
-        for index in range( len( self._items ) + 1 ):   # existing rows, then one blank to add
-            self._build_row( index )
+        self._items       = self._existing( profile ) if profile is not None else []
+        self._value_field = MoneyField( required = False, min_value = 0 )   # reused to parse rowset values
+        self._row_errors  = dict()                     # rowset index -> value error message (set in clean)
 
     @classmethod
     def _existing( cls, profile ) -> list:
         return [ asset for asset in profile.assets if asset.asset_class in cls._CLASSES ]
 
-    def _build_row( self, index : int ):
-        item = self._items[ index ] if index < len( self._items ) else None
-        self.fields[ f'handle_{index}' ] = forms.CharField(
-            required = False, widget = forms.HiddenInput, initial = item.handle if item else None )
-        self.fields[ f'name_{index}' ]  = forms.CharField(
-            required = False, max_length = 100, initial = item.name if item else None,
-            widget = forms.TextInput( attrs = { 'class' : 'form-control' } ) )
-        self.fields[ f'value_{index}' ] = MoneyField(
-            required = False, min_value = 0, initial = item.opening_value if item else None )
-        self.fields[ f'type_{index}' ]  = forms.ChoiceField(
-            required = False, choices = self._TYPE_CHOICES,
-            initial = item.asset_class.name if item else None,
-            widget = forms.Select( attrs = { 'class' : 'custom-select' } ) )
-        if item is not None:
-            self.fields[ f'remove_{index}' ] = forms.BooleanField( required = False )
+    @property
+    def names( self ) -> dict:
+        """The rowset field names -- one source shared with the template's inputs and the getlist keys."""
+        return { 'type' : self._P_TYPE, 'name' : self._P_NAME,
+                 'value' : self._P_VALUE, 'handle' : self._P_HANDLE }
+
+    @property
+    def type_choices( self ) -> tuple:
+        return self._TYPE_CHOICES
+
+    def _posted( self ):
+        """The posted rows as `(type, name, value, handle)` tuples, zipped by position -- one per rendered
+        rowset row (the blank <template> prototype is inert, so it never posts)."""
+        return zip_longest(
+            self.data.getlist( self._P_TYPE ), self.data.getlist( self._P_NAME ),
+            self.data.getlist( self._P_VALUE ), self.data.getlist( self._P_HANDLE ), fillvalue = '' )
 
     @property
     def rows( self ) -> list:
-        rows = []
-        for index in range( len( self._items ) + 1 ):
-            remove = f'remove_{index}'
-            rows.append( {
-                'handle' : self[ f'handle_{index}' ],
-                'name'   : self[ f'name_{index}' ],
-                'type'   : self[ f'type_{index}' ],
-                'value'  : self[ f'value_{index}' ],
-                'remove' : self[ remove ] if remove in self.fields else None,
-            } )
-        return rows
+        """The possession rows for the rowset. Bound (a re-render after an edit): the submitted values, so
+        typing survives an error re-render, each with any value error. Unbound (first load): the stored
+        items."""
+        if self.is_bound:
+            return [ { 'type' : type_, 'name' : name, 'value' : value, 'handle' : handle,
+                       'error' : self._row_errors.get( i ) }
+                     for i, ( type_, name, value, handle ) in enumerate( self._posted() ) ]
+        return [ { 'type' : item.asset_class.name, 'name' : item.name, 'value' : item.opening_value,
+                   'handle' : item.handle, 'error' : None }
+                 for item in self._items ]
+
+    def _parse_value( self, raw : str ):
+        """A posted value as a non-negative Decimal, or None when blank or invalid -- the declared cells'
+        own parse, reused."""
+        try:
+            return self._value_field.clean( raw )
+        except forms.ValidationError:
+            return None
+
+    def clean( self ):
+        """Surface a negative value as a genuine error (so the pane re-renders it), keyed to its row for
+        the template; a blank or otherwise-incomplete row stays non-blocking."""
+        cleaned = super().clean()
+        for i, ( _type, _name, value, _handle ) in enumerate( self._posted() ):
+            if not value:
+                continue
+            try:
+                self._value_field.clean( value )
+            except forms.ValidationError as error:
+                self._row_errors[ i ] = ' '.join( error.messages )
+        if self._row_errors:
+            raise forms.ValidationError( 'Check the highlighted values.' )
+        return cleaned
 
     def apply( self, profile, plans ):
         kept = [ asset for asset in profile.assets if asset.asset_class not in self._CLASSES ]
@@ -357,19 +333,15 @@ class PossessionsForm( forms.Form ):
         # asset in play -- the possessions being rebuilt AND the retained assets. The latter matters
         # because a transition-era holding (a pre-split vehicle) can still occupy a `possession-N`; minting
         # only against the possessions being rebuilt would re-mint onto it and collide at persistence.
-        held  = self._items + kept
-        taken = { asset.handle for asset in held if asset.handle is not None }
+        taken = { asset.handle for asset in ( self._items + kept ) if asset.handle is not None }
+        taken |= { handle for handle in self.data.getlist( self._P_HANDLE ) if handle }
         possessions = []
-        for index in range( len( self._items ) + 1 ):
-            if self.cleaned_data.get( f'remove_{index}' ):
-                continue
-            name  = self.cleaned_data.get( f'name_{index}' )
-            value = self.cleaned_data.get( f'value_{index}' )
-            kind  = self.cleaned_data.get( f'type_{index}' )
-            if not name or value is None or not kind:
-                continue                                     # incomplete row -- not materialized
-            handle = self.cleaned_data.get( f'handle_{index}' ) or _minted_possession_handle( taken )
+        for type_raw, name, value_raw, handle_raw in self._posted():
+            value = self._parse_value( value_raw )
+            if not name or value is None or type_raw not in self._VALID_TYPES:
+                continue                                     # incomplete/invalid row -- not materialized
+            handle = handle_raw or _minted_possession_handle( taken )
             taken.add( handle )
             possessions.append( AssetProfile(
-                handle = handle, name = name, asset_class = AssetClass[ kind ], opening_value = value ) )
+                handle = handle, name = name, asset_class = AssetClass[ type_raw ], opening_value = value ) )
         return possessions

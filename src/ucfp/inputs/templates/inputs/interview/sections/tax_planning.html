@@ -15,10 +15,14 @@ where the user schedules the tax *moves*.
   column.
   {% endcomment %}
   <div class="col-12 col-lg-6">
-    {% include 'inputs/interview/sections/withdrawals_pane.html' with withdrawals_form=form.withdrawals_form %}
+    <div class="border rounded bg-light p-3">
+      {% include 'inputs/interview/sections/withdrawals_pane.html' with withdrawals_form=form.withdrawals_form %}
+    </div>
   </div>
   <div class="col-12 col-lg-6 mt-3 mt-lg-0">
-    {% include 'inputs/interview/sections/conversions_pane.html' with conversions_form=form.conversions_form %}
+    <div class="border rounded bg-light p-3">
+      {% include 'inputs/interview/sections/conversions_pane.html' with conversions_form=form.conversions_form %}
+    </div>
   </div>
 </div>
 <p class="text-muted small">Each draw or conversion is capped by the account's balance, so a schedule can

@@ -1,38 +1,46 @@
 {% comment %}
-The add/edit form for one net-new future vehicle (id=vehicles-form), rendered into the pane's form area
-beneath the additional-vehicles list. It auto-saves in the background (js-autosave) and always edits a
-known handle (add mints one), so a new vehicle has a stable identity from the first keystroke. Two groups:
-the vehicle (what it is, when, how often, and its price) and payment (how it is paid). The payment-method
-radio drives a switch (inputs.js) that shows the fields the chosen method needs -- cash shows none, a loan
-its down/monthly, a lease its down/monthly/lease-end. Non-blocking: the vehicle appears in the list once
-its required fields (name, next purchase date, price, replacement interval) are set. "Done" closes the
-form; it is already saved. Empty when no form is open. Reads `vehicle_form` and `handle`.
+The add/edit editor for one net-new future vehicle, rendered as an input-editor-card into the Vehicle
+plan's shared editor slot (id=vehicle-editor) beside the list. Its header names the vehicle (from
+`heading`, or "New vehicle" when just added) with the same "Future" badge its list card carries. It
+auto-saves in the background (js-autosave) and always edits a known handle (add mints one), so a new
+vehicle has a stable identity from the first keystroke. Two groups: the vehicle (what it is, when, how
+often, and its price) and payment (how it is paid). The payment-method radio drives a switch (inputs.js)
+that shows the fields the chosen method needs -- cash shows none, a loan its down/monthly, a lease its
+down/monthly/lease-end. Non-blocking: the vehicle appears in the list once its required fields (name, next
+purchase date, price, replacement interval) are set. "Done" closes the editor; it is already saved. When
+no editor is open the slot rests as the master-detail prompt, which carries the section's only Add. Reads
+`vehicle_form`, `handle`, `heading`.
 {% endcomment %}
-<div id="vehicles-form">
+<div id="vehicle-editor">
   {% if vehicle_form %}
-  <form method="post" class="mt-2 {{ AppConst.AUTOSAVE_CLASS }} {{ AppConst.VEHICLE_FINANCE_CLASS }}"
-        data-{{ AppConst.VEHICLE_APR_DATA_ATTR }}="{{ vehicle_form.auto_loan_apr_percent }}"
-        data-{{ AppConst.VEHICLE_TERM_DATA_ATTR }}="{{ vehicle_form.auto_loan_term_months }}"
-        action="{% url 'vehicle_edit' handle=handle %}">
-    {% csrf_token %}
-
-    <p class="small text-muted mb-1"><strong>Vehicle</strong></p>
-    {# The price is a payment field (a lease has none), so it lives in the payment block below. #}
-    <div class="form-row">
-      <div class="col-sm-6">{{ vehicle_form.name.as_field_group }}</div>
-      <div class="col-sm-6">{{ vehicle_form.purchase_date.as_field_group }}</div>
+  {% url 'vehicle_edit' handle=handle as vehicle_edit_url %}
+  <div class="input-editor-card mt-2">
+    {% include 'inputs/interview/_input_editor_card_header.html' with heading=heading badge='Future' new_label='New vehicle' close_url=vehicle_edit_url|add:'?collapse=1' editor_target='#vehicle-editor' %}
+    <div class="input-editor-card__body">
+      <form method="post" class="{{ AppConst.AUTOSAVE_CLASS }} {{ AppConst.VEHICLE_FINANCE_CLASS }}"
+            data-{{ AppConst.VEHICLE_APR_DATA_ATTR }}="{{ vehicle_form.auto_loan_apr_percent }}"
+            data-{{ AppConst.VEHICLE_TERM_DATA_ATTR }}="{{ vehicle_form.auto_loan_term_months }}"
+            action="{{ vehicle_edit_url }}">
+        {% csrf_token %}
+        <p class="small text-muted mb-1"><strong>Vehicle</strong></p>
+        {# The price is a payment field (a lease has none), so it lives in the payment block below. #}
+        <div class="form-row">
+          <div class="col-sm-6">{{ vehicle_form.name.as_field_group }}</div>
+          <div class="col-sm-6">{{ vehicle_form.purchase_date.as_field_group }}</div>
+        </div>
+        <div class="form-row">
+          <div class="col-sm-6">{{ vehicle_form.recurrence_years.as_field_group }}</div>
+          <div class="col-sm-6">{{ vehicle_form.end_date.as_field_group }}</div>
+        </div>
+        {% include 'inputs/interview/sections/_vehicle_payment_fields.html' with form=vehicle_form %}
+        <div class="input-editor-card__footer">
+          <a class="btn btn-sm btn-outline-primary" data-async="#vehicle-editor"
+             href="{{ vehicle_edit_url }}?collapse=1">Done</a>
+        </div>
+      </form>
     </div>
-    <div class="form-row">
-      <div class="col-sm-6">{{ vehicle_form.recurrence_years.as_field_group }}</div>
-      <div class="col-sm-6">{{ vehicle_form.end_date.as_field_group }}</div>
-    </div>
-
-    {% include 'inputs/interview/sections/_vehicle_payment_fields.html' with form=vehicle_form %}
-
-    <div class="mt-2">
-      <a class="btn btn-sm btn-outline-primary" data-async="#vehicles-form"
-         href="{% url 'vehicle_add' %}?collapse=1">Done</a>
-    </div>
-  </form>
+  </div>
+  {% else %}
+  {% include 'inputs/interview/sections/_vehicle_editor_empty.html' %}
   {% endif %}
 </div>

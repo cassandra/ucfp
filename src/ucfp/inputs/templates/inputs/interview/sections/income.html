@@ -1,10 +1,9 @@
 {% comment %}
-The §5 income *facts* pane: the editable income table, managed by its own async view outside the
-section's Next form. Each line records its amount (a general line also its name and recipient); the
-entitlement rows record the stated Social Security and pension benefits. WHEN each income runs -- its
-window and the claiming dates -- is the separate Retirement (Plans) step. Next advances when you're done.
+The Incomes *facts* pane: the editable income table, managed by its own async view outside the section's
+Next form. Each line records its amount (a general line also its name and recipient). WHEN each income runs
+-- its window -- is the separate Retirement (Plans) step; the per-person Social Security and pension
+benefits are the sibling Retirement benefits section. Next advances when you're done.
 {% endcomment %}
-<p class="text-muted">Your income sources and amounts -- salaries, rent, other income, and each
-  person's Social Security and pension. When each starts and stops will come later in the planning
-  scenarios.</p>
+<p class="text-muted">Your income sources and amounts -- salaries, rent, and other income. When each
+  starts and stops will come later in the planning scenarios.</p>
 {% include 'inputs/interview/sections/income_table.html' with income_form=form.income_table %}

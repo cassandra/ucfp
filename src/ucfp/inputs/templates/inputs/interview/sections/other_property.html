@@ -1,0 +1,21 @@
+{% comment %}
+The Other Property section: the household's rentals and second homes as one collection -- a list on the
+left, the add/edit editor opening on the right (list-left / editor-right, the shared collection pattern;
+the columns stack below md). Each property's type (Rental — Residential / Commercial, or Second Home) is
+chosen in the editor, so one list and one typed editor replace the old per-type panes. Editing runs through
+the section's own async view, outside the section's Next form. `form.properties` is the combined list,
+managed by `PropertyFormView` / `PropertyDeleteView`.
+{% endcomment %}
+<p class="text-muted">Rental properties and second homes you own. Each carries a type that sets how it's
+  taxed; a rental's rent is set later, in Income.</p>
+<div class="row">
+  <div class="col-md-5">
+    {% include 'inputs/interview/sections/property_list.html' with properties=form.properties %}
+  </div>
+  <div class="col-md-7 mt-3 mt-md-0">
+    {% comment %}The editor slot. Rendered from the editor template even when empty so its resting state is
+    the master-detail prompt carrying the section's only Add; Add/Edit swap the editor card in here,
+    Done/collapse restores this empty state.{% endcomment %}
+    {% include 'inputs/interview/sections/property_form.html' %}
+  </div>
+</div>

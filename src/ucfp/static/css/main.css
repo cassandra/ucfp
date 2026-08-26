@@ -387,6 +387,145 @@ a.interview-part:hover {
     z-index: 1030;
 }
 
+/* =========================================================================
+   Interview input primitives
+
+   The shared building blocks for the input interview sections (see
+   docs/dev/frontend/interview-ui-guidelines.md): a card for one member of a
+   collection (input-item-card) and the editor that opens beside the list to add
+   or edit one (input-editor-card). Defined once here so every section renders
+   items and editors identically -- a refinement lands on all of them at once.
+   ========================================================================= */
+
+/* One member of a collection, in the left-hand list: an optional badge, the
+   member's name and inline headline facts, right-aligned actions, and an optional
+   muted detail line. --active marks the member whose editor is open; --readonly is
+   a member owned by another section (a pointer, no actions). */
+.input-item-card {
+    border: 1px solid var(--line-color);
+    border-radius: 0.35rem;
+    padding: 0.55rem 0.7rem;
+    margin-bottom: 0.5rem;
+    background-color: var(--white);
+}
+.input-item-card__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+/* A quiet kind/ownership marker -- a grey chip, not a loud status block. Shared by the item card and the
+   editor-card header so a member's badge reads the same in the list and in its open editor. Its fill is
+   the line grey (a step up from the near-white row) with dark text, so it stays legible on the white card
+   and on the tinted --active card alike -- quiet in hue without being faint. */
+.input-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--tertiary-color);
+    background-color: var(--line-color);
+    border-radius: 0.25rem;
+    padding: 0.05rem 0.4rem;
+    margin-right: 0.4rem;
+}
+.input-item-card__title  { font-weight: 600; }
+.input-item-card__headline { color: var(--muted-color); margin-left: 0.35rem; }
+/* A warning chip flagging a member that is not yet complete ("Needs details") -- the amber
+   counterpart to the neutral --badge, so an unfinished member stands out in the list. */
+.input-item-card__flag {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--on-warning-color);
+    background-color: var(--warning-color);
+    border-radius: 0.25rem;
+    padding: 0.05rem 0.4rem;
+    margin-left: 0.4rem;
+}
+.input-item-card__detail {
+    color: var(--muted-color);
+    font-size: 0.875rem;
+    margin-top: 0.15rem;
+}
+.input-item-card__actions {
+    white-space: nowrap;
+    margin-left: 0.75rem;
+    flex-shrink: 0;
+}
+/* Touch-friendly action targets (the guidelines' 44px minimum) -- the bare text
+   links they replace did not meet it. */
+.input-item-card__actions a,
+.input-item-card__actions .btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.35rem;
+}
+/* The one canonical "this member is being edited" affordance: a primary accent
+   rail and a soft tint, replacing the ad-hoc per-section highlights. */
+.input-item-card--active {
+    border-left: 3px solid var(--primary-color);
+    background-color: var(--info-bg-light);
+}
+.input-item-card--readonly {
+    background-color: var(--muted-bg-light);
+}
+
+/* The editor for adding or editing one member, in the right-hand slot: a header
+   (title + close), a body of fields, and a footer of actions. One is open at a
+   time. */
+.input-editor-card {
+    border: 1px solid var(--line-color);
+    border-radius: 0.35rem;
+    background-color: var(--white);
+}
+.input-editor-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--line-color);
+    background-color: var(--muted-bg-light);
+}
+.input-editor-card__title { font-weight: 600; }
+.input-editor-card__close {
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--muted-color);
+    margin-left: 0.75rem;
+}
+.input-editor-card__close:hover { color: var(--tertiary-color); text-decoration: none; }
+.input-editor-card__body { padding: 0.7rem; }
+.input-editor-card__footer { margin-top: 0.5rem; }
+
+/* The quiet resting panel of a right-hand column, so it never reads as blank and the content beside it as
+   intentional. Its main use is the editor (detail) column of a master-detail collection -- a "pick one, or
+   add" placeholder carrying the section's only Add (one editor at a time, so Add shows only while none is
+   open). It also styles a step's static right-column side note (e.g. Vehicle expenses), so both read the
+   same. The same panel serves the side-by-side and the stacked (below md) layouts. */
+.input-editor-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 9rem;
+    padding: 1.25rem;
+    border: 1px dashed var(--line-color);
+    border-radius: 0.35rem;
+}
+/* A side-note panel (e.g. Vehicle expenses) fills the column height beside a tall table via h-100; this
+   caps that growth so it stays a balanced panel rather than stretching to a very tall table's full height. */
+.input-editor-empty--capped { max-height: 16rem; }
+
+/* The Incomes facts table hides itself (a bare column header over an empty body reads as broken) and shows
+   a prompt until it holds a row; a client-side Add reveals the table and hides the prompt with no
+   round-trip, since :has() re-evaluates as the row is inserted. A <template>'s inert rows are not matched,
+   so only real rental/general rows count. Degrades without :has() to the table always showing and the
+   prompt hidden -- the prior behaviour. */
+.income-empty { display: none; }
+.income-facts-table:not(:has(tbody tr)) { display: none; }
+.income-facts-table:not(:has(tbody tr)) ~ .income-empty { display: block; }
+
 /* Date and number inputs read better at a natural width than the full column. */
 .form-control.js-date {
     max-width: 8.5rem;   /* an ISO yyyy-mm-dd needs no more, so a date input does not sprawl */
@@ -525,6 +664,18 @@ a.interview-part:hover {
 }
 .cadence-unit {
     width: auto;
+}
+
+/* The input-age-band primitive (see docs/dev/frontend/interview-ui-guidelines.md): a compact "From age /
+   Until age" pair, each a labelled narrow age input, aligned side by side so the ages read as one control
+   rather than two floating boxes. */
+.input-age-band {
+    display: flex;
+    gap: 1rem;
+}
+.input-age-band__field {
+    display: flex;
+    flex-direction: column;
 }
 
 /* A durable's calculator opens as a full-width detail row directly under its expense row; drop the

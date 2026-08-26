@@ -14,9 +14,12 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
     {% csrf_token %}
     <div class="form-row mt-2">
 
+      {% comment %}Left card -- what happens when cash runs low: the floor it is kept above, and the draw
+      order it sells from to top up. Shaded so the white draw rows and input read as distinct.{% endcomment %}
       <div class="col-md-6 mb-3">
+        <div class="border rounded bg-light p-3">
         <div class="form-group">
-          <label class="font-weight-normal mb-1">{{ drawdown_form.cash_floor.label }}
+          <label class="font-weight-normal mb-1 d-block">{{ drawdown_form.cash_floor.label }}
             <span class="text-muted small d-block">Kept on hand; topped up when cash falls below it.</span></label>
           {{ drawdown_form.cash_floor }}
           {% if drawdown_form.cash_floor.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_floor.errors|join:" " }}</span>{% endif %}
@@ -31,11 +34,15 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
           {% include 'inputs/interview/sections/_draw_source_row.html' with row=row %}
           {% endfor %}
         </ul>
+        </div>
       </div>
 
+      {% comment %}Right card -- what happens when cash runs high: the ceiling it is swept down to, and the
+      holdings the surplus is invested into.{% endcomment %}
       <div class="col-md-6 mb-3">
+        <div class="border rounded bg-light p-3">
         <div class="form-group">
-          <label class="font-weight-normal mb-1">{{ drawdown_form.cash_ceiling.label }}
+          <label class="font-weight-normal mb-1 d-block">{{ drawdown_form.cash_ceiling.label }}
             <span class="text-muted small d-block">Surplus above it is swept into the holdings below; blank lets cash accumulate.</span></label>
           {{ drawdown_form.cash_ceiling }}
           {% if drawdown_form.cash_ceiling.errors %}<span class="text-danger small d-block">{{ drawdown_form.cash_ceiling.errors|join:" " }}</span>{% endif %}
@@ -69,6 +76,7 @@ or a maximum with no holding) is simply not saved, never re-rendered from under 
           </tbody>
         </table>
         <button type="button" class="btn btn-sm btn-outline-primary js-sweep-add edit-only">&plus; Add holding</button>
+        </div>
       </div>
 
     </div>

@@ -58,13 +58,24 @@ class AppConst:
     DATE_FIELD_DATA_ATTR    = 'date-field'
 
     # An optional block revealed on demand (e.g. a plan's second person): the
-    # body is collapsed until "add" is clicked and cleared when "remove" is,
-    # so the server infers the block's presence purely from whether its fields
-    # are filled -- no separate "include this?" checkbox. Driven by inputs.js.
+    # body is collapsed until revealed and cleared when dismissed, so the server
+    # infers the block's presence purely from whether its fields are filled. Two
+    # control styles share the mechanism: the add/remove buttons, or a single
+    # toggle checkbox that asks the question ("has a loan?") explicitly. inputs.js.
     OPTIONAL_CLASS        = 'js-optional'         # the wrapper
-    OPTIONAL_ADD_CLASS    = 'js-optional-add'     # reveals the body
+    OPTIONAL_ADD_CLASS    = 'js-optional-add'     # button: reveals the body
     OPTIONAL_BODY_CLASS   = 'js-optional-body'    # the optional fields
-    OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # clears + collapses the body
+    OPTIONAL_REMOVE_CLASS = 'js-optional-remove'  # button: clears + collapses the body
+    OPTIONAL_TOGGLE_CLASS = 'js-optional-toggle'  # checkbox: reveals when checked, clears + collapses when not
+
+    # A rowset: a table body whose rows the user adds and removes. A hidden <template> holds the blank
+    # prototype the add button clones and appends; a per-row remove drops it. Rows carry repeated same-name
+    # inputs, so the form reads them as parallel lists (getlist) -- no per-row index to keep in sync. inputs.js.
+    ROWSET_CLASS          = 'js-rowset'           # the row container (a table body)
+    ROWSET_ROW_CLASS      = 'js-rowset-row'       # one add/removable row
+    ROWSET_TEMPLATE_CLASS = 'js-rowset-template'  # a <template> holding the blank prototype row
+    ROWSET_ADD_CLASS      = 'js-rowset-add'       # button: append a blank row
+    ROWSET_REMOVE_CLASS   = 'js-rowset-remove'    # button: drop this row
 
     # A group of fields entered together -- both filled or both empty (e.g. a person's name and
     # birthdate). While exactly one side is filled the person is mid-entry, so the autosave defers:
@@ -166,7 +177,7 @@ class AppConst:
     # the exact ceiling the server back-solve uses.
     MAX_PLAUSIBLE_LOAN_APR_PERCENT = MAX_PLAUSIBLE_APR_PERCENT
 
-    # Plans > Money Movements, the "Sell a property" add form: the "Rent after selling your home" option
+    # Plans > Money moves, the "Sell a property" add form: the "Rent after selling your home" option
     # applies only to selling the primary residence, so it is shown only while the chosen property is the
     # residence and hidden otherwise. The form carries the primary-residence handle(s); the option's
     # container is marked residence-gated. inputs.js toggles that container live as the property picker

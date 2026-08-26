@@ -1,0 +1,30 @@
+{% comment %}
+One general income line of the rowset (js-rowset-row): its attribution (a subject select), name, amount
+(a raw money cell), the fixed yearly cadence, and Remove. `row` carries the line's values
+(name / subject / amount / handle / error), or is None for the blank <template> prototype. The inputs use
+repeated names (`names.*`, one source with the form's getlist keys), so the form reads the lines as
+parallel lists. Params: row, names, subject_choices.
+{% endcomment %}
+<tr class="{{ AppConst.ROWSET_ROW_CLASS }}">
+  <td>
+    <select name="{{ names.subject }}" class="custom-select" aria-label="Attribution">
+      {% for value, label in subject_choices %}
+      <option value="{{ value }}"{% if row and row.subject == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </td>
+  <td>
+    <input type="text" name="{{ names.name }}" value="{{ row.name|default:'' }}" class="form-control"
+           aria-label="Income source">
+    <input type="hidden" name="{{ names.handle }}" value="{{ row.handle|default:'' }}">
+  </td>
+  <td>
+    {% include 'inputs/interview/_money_cell.html' with name=names.amount value=row.amount %}
+    {% if row.error %}<span class="text-danger small d-block">{{ row.error }}</span>{% endif %}
+  </td>
+  <td class="text-muted align-middle">year</td>
+  <td class="align-middle">
+    <button type="button" class="btn btn-link btn-sm text-danger p-0 {{ AppConst.ROWSET_REMOVE_CLASS }} edit-only"
+            aria-label="Remove income source">Remove</button>
+  </td>
+</tr>

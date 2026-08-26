@@ -1,0 +1,12 @@
+{% comment %}
+A raw money input -- a Bootstrap input-group with a leading "$" and the js-money grouping hook -- for
+hand-rendered rows where a Django MoneyField BoundField is not available (e.g. a rowset's cloned rows).
+Mirrors the MoneyInput widget (django/forms/widgets/money.html); the affix markup is small enough to repeat
+here rather than force a BoundField. The form parses the posted value through a MoneyField, so grouping and
+the $ are display-only. Params: name, value, label (the screen-reader label, default "Amount").
+{% endcomment %}
+<div class="input-group input-group-sm">
+  <div class="input-group-prepend"><span class="input-group-text">$</span></div>
+  <input type="text" name="{{ name }}" value="{{ value|default:'' }}" inputmode="decimal"
+         class="form-control {{ AppConst.MONEY_INPUT_CLASS }}" aria-label="{{ label|default:'Amount' }}">
+</div>

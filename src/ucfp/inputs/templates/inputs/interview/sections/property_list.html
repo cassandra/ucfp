@@ -1,32 +1,18 @@
 {% comment %}
-A mortgaged-property list (rentals, second homes), refreshed on add/edit/delete: each holding with
-Edit and Remove, plus the Add affordance. Edit/Add open the form in the pane's form area; Remove posts
-to the delete view. The pane's DOM ids, URL names, and wording come from its `PropertyPane` config;
-`properties` is the holdings to list.
+The household's other property (id=properties-list), refreshed on add/edit/delete: one input-item-card per
+rental or second home, each with a type badge, its value, and Edit/Remove. Edit opens the editor in the
+pane's editor slot (#property-editor); Remove posts to the delete view. Adding a property is offered by the
+editor slot's resting state (one editor at a time, so Add is not available while one is open). `properties`
+is the list of {handle, name, value, badge, edit_url, delete_url}; `active` is the handle whose editor is
+open.
 {% endcomment %}
 {% load common_tags %}
-<div id="{{ list_id }}">
+<div id="properties-list">
   {% if properties %}
-  <ul class="list-unstyled mb-2">
-    {% for prop in properties %}
-    <li class="mb-1">
-      {{ prop.name }} <span class="text-muted">{{ prop.value|money:currency }}</span>
-      <span class="text-muted mx-1">·</span>
-      <a class="btn btn-link btn-sm p-0 align-baseline" data-async="#{{ form_id }}"
-         href="{% url edit_url handle=prop.handle %}" aria-label="Edit {{ prop.name }}">Edit</a>
-      <span class="text-muted mx-1">·</span>
-      <form method="post" action="{% url delete_url handle=prop.handle %}"
-            data-async="#{{ list_id }}" class="d-inline edit-only">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-link btn-sm text-danger p-0 align-baseline"
-                aria-label="Remove {{ prop.name }}">Remove</button>
-      </form>
-    </li>
-    {% endfor %}
-  </ul>
+  {% for prop in properties %}
+  {% include 'inputs/interview/_input_item_card.html' with title=prop.name badge=prop.badge headline=prop.value|money:currency handle=prop.handle active_handle=active edit_url=prop.edit_url delete_url=prop.delete_url editor_target='#property-editor' list_target='#properties-list' %}
+  {% endfor %}
   {% else %}
-  <p class="text-muted mb-2">{{ empty_text }}</p>
+  <p class="text-muted mb-2">No properties yet.</p>
   {% endif %}
-  <a class="property-add btn btn-sm btn-outline-primary" data-async="#{{ form_id }}"
-     href="{% url add_url %}">{{ add_text }}</a>
 </div>

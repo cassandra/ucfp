@@ -1,38 +1,18 @@
 {% comment %}
-The household's current vehicles (id=current-vehicles-list), refreshed on add/edit/delete: one list of all
-the cars -- owned and leased together -- each with an ownership badge, its value (owned only), and
-Edit/Remove. Edit/Add open the form in the pane's form area (#current-vehicle-form); Remove posts to the
-delete view. `vehicles` is the list of {handle, name, ownership, value}.
+The household's current vehicles (id=current-vehicles-list), refreshed on add/edit/delete: one
+input-item-card per vehicle -- owned and leased together, each with an ownership badge and (owned only) its
+value. Edit opens the editor in the pane's editor slot (#current-vehicle-editor); Remove posts to the delete
+view. Adding a vehicle is offered by the editor slot's resting state (one editor at a time, so Add is not
+available while one is open). `vehicles` is the list of
+{handle, name, ownership, value, edit_url, delete_url}; `active` is the handle whose editor is open.
 {% endcomment %}
 {% load common_tags %}
 <div id="current-vehicles-list">
   {% if vehicles %}
-  <ul class="list-unstyled mb-2">
-    {% for vehicle in vehicles %}
-    <li class="mb-2 py-1 {% if vehicle.handle == active %}bg-light border-left border-primary rounded-right pl-2{% endif %}">
-      <div class="d-flex justify-content-between align-items-baseline">
-        <span>
-          <span class="badge badge-{% if vehicle.ownership == 'Owned' %}info{% else %}secondary{% endif %} mr-1">{{ vehicle.ownership }}</span>
-          {{ vehicle.name }}{% if vehicle.value %} <span class="text-muted">{{ vehicle.value|money:currency }}</span>{% endif %}
-        </span>
-        <span class="text-nowrap ml-3">
-          {% if vehicle.handle == active %}<span class="text-muted small mr-1">editing</span>{% endif %}
-          <a data-async="#current-vehicle-form"
-             href="{% url 'current_vehicle_edit' handle=vehicle.handle %}" aria-label="Edit {{ vehicle.name }}">Edit</a>
-          <form method="post" action="{% url 'current_vehicle_delete' handle=vehicle.handle %}"
-                data-async="#current-vehicles-list" class="d-inline edit-only">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-link btn-sm text-danger p-0 ml-1"
-                    aria-label="Remove {{ vehicle.name }}">Remove</button>
-          </form>
-        </span>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
+  {% for vehicle in vehicles %}
+  {% include 'inputs/interview/_input_item_card.html' with title=vehicle.name badge=vehicle.ownership headline=vehicle.value|money:currency handle=vehicle.handle active_handle=active edit_url=vehicle.edit_url delete_url=vehicle.delete_url editor_target='#current-vehicle-editor' list_target='#current-vehicles-list' %}
+  {% endfor %}
   {% else %}
   <p class="text-muted mb-2">No vehicles yet.</p>
   {% endif %}
-  <a class="btn btn-sm btn-outline-primary" data-async="#current-vehicle-form"
-     href="{% url 'current_vehicle_add' %}">Add a vehicle</a>
 </div>

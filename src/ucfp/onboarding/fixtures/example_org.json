@@ -90,13 +90,15 @@
   "plans": {
     "acknowledged_sections": [
       "cash-plan",
+      "contributions",
       "debt-plan",
       "events",
       "home-expenses",
       "living-expenses",
-      "retirement",
+      "retirement-plan",
       "tax-planning",
-      "vehicle-expenses"
+      "vehicle-expenses",
+      "vehicle-plan"
     ],
     "data": {
       "contributions": [
@@ -1172,9 +1174,11 @@
     "acknowledged_sections": [
       "accounts",
       "debt",
+      "home",
       "income",
+      "other-property",
       "possessions",
-      "real-estate",
+      "retirement-benefits",
       "subjects",
       "vehicles"
     ],

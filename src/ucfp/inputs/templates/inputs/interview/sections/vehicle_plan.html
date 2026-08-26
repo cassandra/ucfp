@@ -1,0 +1,21 @@
+{% comment %}
+The Vehicle plan step (Plans flow), Profile-driven like the Debt plan: one list of the household's
+vehicles on the left, with the editor opening in the slot on the right (list-left / editor-right, the
+shared collection pattern; the columns stack below md). The list runs current vehicles first -- each from
+the Vehicles (Profile) section, editable here to set its plan disposition (owned: retain/sell/replace;
+leased: return/renew/buy) but removed only in Vehicles -- then any net-new future vehicles, which are fully
+added/edited/removed here. Every card's Edit (and a future card's Remove/Add) runs through its own async
+view, outside the section's Next form, into the one shared editor slot. `form.cards` is the ordered list;
+the shared per-car running costs are the separate Vehicle expenses section.
+{% endcomment %}
+<p class="text-muted">Your current vehicles and any you plan to add. For each vehicle you have today &mdash;
+  owned or leased &mdash; set what you plan to do with it (these come from the Vehicles section). Add future
+  vehicles &mdash; ones not tied to a car you own now, on their own replacement schedule &mdash; here.</p>
+<div class="row">
+  <div class="col-md-5">
+    {% include 'inputs/interview/sections/vehicle_plan_list.html' with cards=form.cards %}
+  </div>
+  <div class="col-md-7 mt-3 mt-md-0">
+    {% include 'inputs/interview/sections/vehicle_form.html' %}
+  </div>
+</div>

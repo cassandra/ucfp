@@ -1,0 +1,14 @@
+{% comment %}
+The Home section: the household residence -- whether you own, rent, or have no housing cost, and (when
+owned) its value, purchase price, and any mortgage. Edited through the residence sub-form's own async view,
+outside the section's Next form (a nested form would be invalid HTML). Rentals and second homes are the
+separate Other Property section.
+{% endcomment %}
+<p class="text-muted">Your home -- whether you own or rent, and, if you own, its value and any mortgage.</p>
+{% comment %}Constrain the residence to a compact column: its `_field_row` inputs pair a col-5 input with a
+col-7 label, which only reads well in a narrow column (full width flings the label far from its input).{% endcomment %}
+<div class="row">
+  <div class="col-md-7">
+    {% include 'inputs/interview/sections/residence.html' with residence_form=form.residence_form %}
+  </div>
+</div>

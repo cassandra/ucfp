@@ -36,6 +36,17 @@ def _vehicles( plans ) -> list:
     return list( plan.vehicles ) if plan is not None else []
 
 
+def future_vehicle_heading( plans, handle ):
+    """The editor-card heading for one net-new future vehicle -- its name, or None (rendered as "New
+    vehicle") when it is just added and not yet named, or not yet saved to the plan."""
+    if handle is None:
+        return None
+    vehicle = next( ( v for v in _vehicles( plans ) if v.handle == handle ), None )
+    if vehicle is None or not vehicle.name:
+        return None
+    return { 'name': vehicle.name }
+
+
 def _minted_vehicle_handle( plans ) -> str:
     """A fresh `vehicle-N` handle, the lowest index free among the plan's vehicles."""
     taken = { vehicle.handle for vehicle in _vehicles( plans ) }

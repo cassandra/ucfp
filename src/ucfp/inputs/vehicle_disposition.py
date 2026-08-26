@@ -11,6 +11,7 @@ the shared vehicle-purchase fields (`VehiclePurchaseForm`); net-new future vehic
 from dataclasses import replace
 
 from django import forms
+from django.urls import reverse
 
 from common.forms import MoneyField
 from common.loan_solver import monthly_payment, resolved_annual_rate
@@ -26,7 +27,7 @@ from ucfp.inputs.plans.enums import LeaseDispositionKind, PaymentMethod, Vehicle
 from ucfp.inputs.plans.schemas import (
     LeasedVehicleDisposition, LoanRepayment, Plans, Vehicle, VehicleDisposition, VehiclePlan )
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.vehicle import VehiclePurchaseForm
+from ucfp.inputs.vehicle import VehiclePurchaseForm, vehicles_context
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
 from ucfp.inputs.vehicle_handles import loan_debt_handle
 from ucfp.inputs.widgets import IsoDateInput
@@ -281,7 +282,8 @@ def _leased_row( vehicle, disposition ) -> dict:
     vehicle whose Retain default runs it to end-of-life at no extra input. So it is not silently free."""
     return { 'handle' : vehicle.handle, 'name' : vehicle.name,
              'summary' : _leased_summary( disposition ),
-             'incomplete' : disposition is None or not disposition.is_complete }
+             'incomplete' : disposition is None or not disposition.is_complete,
+             'loan' : None }   # a lease carries no loan line; keep the row shape uniform for the card builder
 
 
 def _leased_summary( disposition ) -> str:
@@ -303,6 +305,61 @@ def all_dispositions_context( profile, plans ) -> list:
     leased = [ { **row, 'ownership': 'Leased', 'edit_route': 'leased_disposition_edit' }
                for row in leased_dispositions_context( profile, plans ) ]
     return owned + leased
+
+
+def current_card_key( handle : str ) -> str:
+    """The merged Vehicle plan list's active-edit key for a current vehicle. Current and future vehicles
+    each mint `vehicle-N` in their own space, so the two can collide (`vehicle-1` and `vehicle-1`) once
+    listed together; the kind prefix keeps the "being edited" highlight matching exactly one card. It keys
+    only the highlight -- Edit/Remove route by the real handle."""
+    return f'current:{handle}'
+
+
+def future_card_key( handle : str ) -> str:
+    """The merged list's active-edit key for a future vehicle -- the future counterpart to
+    `current_card_key`, disambiguating a future `vehicle-N` from a current one of the same handle."""
+    return f'future:{handle}'
+
+
+def vehicle_plan_cards( profile, plans ) -> list:
+    """The Vehicle plan's single card list for the input-item-card primitive -- the household's current
+    vehicles first (each with its plan disposition), then any net-new future ones. A current vehicle is a
+    Vehicles/Profile fact, so its card is editable here (to set the disposition) but not removable ("Entered
+    in Vehicles"); a future vehicle is fully add/edit/remove. Both open into the one shared editor slot."""
+    current = [ _current_card( row ) for row in all_dispositions_context( profile, plans ) ]
+    future = [ _future_card( row ) for row in vehicles_context( plans ) ]
+    return current + future
+
+
+def _current_card( row ) -> dict:
+    """One current vehicle as a card -- a 'Current' badge, its disposition summary, an ownership/loan detail,
+    a 'Needs details' flag when its chosen plan is unfinished, and the Edit route to its disposition editor.
+    No delete route: the vehicle itself is removed in the Profile, noted by `source_note`."""
+    return { 'handle' : current_card_key( row[ 'handle' ] ), 'badge' : 'Current', 'title' : row[ 'name' ],
+             'headline'    : row[ 'summary' ], 'detail' : _current_detail( row ),
+             'flag'        : 'Needs details' if row[ 'incomplete' ] else None,
+             'edit_url'    : reverse( row[ 'edit_route' ], kwargs = { 'handle' : row[ 'handle' ] } ),
+             'delete_url'  : None, 'source_note' : 'From Profile' }
+
+
+def _current_detail( row ) -> str:
+    """A current vehicle card's muted detail -- its ownership (now that the badge carries Current/Future),
+    and its loan status appended when it is financed."""
+    if row[ 'loan' ]:
+        return f"{row[ 'ownership' ]} — {row[ 'loan' ]}"
+    return row[ 'ownership' ]
+
+
+def _future_card( row ) -> dict:
+    """One net-new future vehicle as a card -- a 'Future' badge, its purchase headline and detail, a 'Needs
+    details' flag when it is not yet materializable, and the Edit/Remove routes (a future vehicle is fully
+    managed here)."""
+    return { 'handle' : future_card_key( row[ 'handle' ] ), 'badge' : 'Future', 'title' : row[ 'name' ],
+             'headline'    : row[ 'headline' ], 'detail' : row[ 'detail' ],
+             'flag'        : 'Needs details' if row[ 'incomplete' ] else None,
+             'edit_url'    : reverse( 'vehicle_edit', kwargs = { 'handle' : row[ 'handle' ] } ),
+             'delete_url'  : reverse( 'vehicle_delete', kwargs = { 'handle' : row[ 'handle' ] } ),
+             'source_note' : None }
 
 
 # Each end-of-term kind fixes what the successor is paid with -- the lease/purchase choice *is* the kind,

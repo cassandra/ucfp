@@ -44,14 +44,15 @@ from .cash_plan import CashPlanSectionForm
 from .net_worth import NetWorthSectionForm
 from .transaction_costs import TransactionCostsSectionForm
 from .income import IncomeTableForm
-from .properties import PANES, PossessionsForm, properties_context
+from .retirement_benefits import RetirementBenefitsForm
+from .properties import PossessionsForm, properties_context
 from .vehicle_profile import current_vehicles_context
 from .retirement import RetirementForm
 from .expenses import has_property
 from .property_expenses import PropertyExpensesForm, merged_property_expenses
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
-from .vehicle_disposition import all_dispositions_context
+from .vehicle_disposition import all_dispositions_context, vehicle_plan_cards
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
 from .widgets import IsoDateInput, StateRateSelect, percent_str
 
@@ -259,7 +260,7 @@ class HomeForm( LoanTermsFieldsMixin, forms.Form ):
     _RESIDENCE_HANDLE = RESIDENCE_ASSET_HANDLE
     _MORTGAGE_HANDLE  = RESIDENCE_MORTGAGE_HANDLE
 
-    LOAN_ID = 'residence-mortgage'   # distinct block id: the residence shares the Real Estate page
+    LOAN_ID = 'residence-mortgage'   # the loan block's DOM id stem (the residence's mortgage fieldset)
 
     tenure           = forms.ChoiceField(
         label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, required = False,
@@ -341,15 +342,14 @@ class HomeForm( LoanTermsFieldsMixin, forms.Form ):
         return next( ( item for item in items if item.handle == handle ), None )
 
 
-class RealEstateForm:
-    """§3 L0 -- the Real Estate pane. A no-op section form: the residence, the rentals, and the second
-    homes are each edited through their own async view, so Next just advances. It exposes the
-    residence sub-form and the property lists for the pane (the rentals and second homes manage
-    themselves). Other (non-real-estate) possessions are their own section -- `PossessionsSectionForm`."""
+class HomeSectionForm:
+    """§3 L0 -- the Home pane: the household residence. A no-op section form (the residence is edited
+    through its own async view, so Next just advances) exposing the residence sub-form. The rentals and
+    second homes are a separate section -- `OtherPropertySectionForm`."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
-        self._profile  = profile
-        self._plans = plans
+        self._profile = profile
+        self._plans   = plans
 
     def is_valid( self ) -> bool:
         return True
@@ -358,23 +358,34 @@ class RealEstateForm:
     def residence_form( self ):
         return HomeForm( profile = self._profile, plans = self._plans )
 
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class OtherPropertySectionForm:
+    """§ -- the Other Property pane: the household's rentals and second homes. A no-op section form (each
+    property is edited through its own async view, so Next just advances) exposing the property lists. The
+    residence is a separate section -- `HomeSectionForm`."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
     @property
-    def property_panes( self ) -> list:
-        """Each mortgaged-property pane's render context for the Real Estate section -- its heading, its
-        holdings, and the template config (ids, URL names, wording) from the shared `PropertyPane`.
-        The section loops over these, so a new property kind is one pane, not another hand-wired
-        block."""
-        return [ { 'heading': pane.heading,
-                   'properties': properties_context( self._profile, pane.asset_class ),
-                   **pane.template_context() }
-                 for pane in PANES ]
+    def properties( self ) -> list:
+        """The household's rentals and second homes as one collection -- each holding's handle, name, value,
+        type badge, and the Edit/Remove urls its item card posts to. One list, one typed editor."""
+        return properties_context( self._profile )
 
     def apply( self, profile, plans ):
         return profile, plans
 
 
 class VehiclesForm:
-    """§ -- the Vehicles pane. A no-op section form mirroring `RealEstateForm`: each vehicle is edited
+    """§ -- the Vehicles pane. A no-op section form: each vehicle is edited
     through its own async view, so Next just advances. It exposes the household's current vehicles as one
     list -- owned and leased together -- managed by `CurrentVehicleFormView` / `CurrentVehicleDeleteView`.
     Owned and leased are stored differently (a holding + loan vs. a lease fact); the list unifies them."""
@@ -634,11 +645,31 @@ class IncomeSectionForm:
         return profile, plans
 
 
-class RetirementSectionForm:
-    """§ Retirement L0 -- the pane. A no-op section form: the income/entitlement timing and the
-    recurring contributions each self-save through their own async view (`RetirementView`,
-    `ContributionsView`), so Next just advances. It exposes both forms -- the timing (reading the income
-    facts and entitlements from the Profile) and the contributions -- each writing only the Plans."""
+class RetirementBenefitsSectionForm:
+    """The Retirement benefits pane: the per-person Social Security and pension amounts. A no-op section
+    form -- the benefits are edited and saved through `RetirementBenefitsView`, so Next just advances. It
+    exposes the benefits table for the pane; WHEN each is claimed is the separate Retirement (Plans)
+    section."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def benefits_table( self ):
+        return RetirementBenefitsForm( profile = self._profile )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class RetirementPlanSectionForm:
+    """§ Retirement Plan L0 -- the pane: the income/entitlement *timing* (when income and benefits start
+    and stop), self-saving through its own async view (`RetirementView`), so Next just advances. It reads
+    the income facts and entitlements from the Profile and writes only the Plans timing. The recurring
+    contributions are a separate section -- `ContributionsSectionForm`."""
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -650,6 +681,22 @@ class RetirementSectionForm:
     @property
     def retirement_form( self ):
         return RetirementForm( profile = self._profile, plans = self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class ContributionsSectionForm:
+    """§ Retirement Contributions L0 -- the pane: the recurring contributions into the retirement accounts,
+    self-saving through its own async view (`ContributionsView`), so Next just advances. It writes only the
+    Plans. The income/entitlement timing is a separate section -- `RetirementPlanSectionForm`."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
 
     @property
     def contributions_form( self ):
@@ -753,16 +800,42 @@ class HomeExpensesSectionForm:
             plans, property_expenses = merged_property_expenses( profile, plans ) )
 
 
-class VehicleExpensesSectionForm:
+class VehiclePlanSectionForm:
     """The Vehicle plan -- Profile-driven like the Debt plan: per current owned vehicle a disposition
-    (retain/sell/replace), per current leased vehicle its end-of-term plan (return/renew/buy), any net-new
-    future vehicles, and the shared per-car running costs. The dispositions are managed by
-    `VehicleDispositionView` / `LeasedVehicleDispositionView`, the net-new list by `VehicleFormView` /
-    `VehicleDeleteView`, and the running costs by `VehicleExpensesView`, each saving on its own. `apply`
-    seeds the running costs from the catalog on Next once a vehicle plan exists, so a household that began
-    a plan and accepts the default running costs still records them; with no plan, Next just advances.
-    `apply` ignores form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
-    `seeds_on_render`."""
+    (retain/sell/replace), per current leased vehicle its end-of-term plan (return/renew/buy), plus any
+    net-new future vehicles. The dispositions are managed by `VehicleDispositionView` /
+    `LeasedVehicleDispositionView` and the net-new list by `VehicleFormView` / `VehicleDeleteView`, each
+    saving on its own, so Next just advances. The shared per-car running costs are a separate section --
+    `VehicleExpensesSectionForm`."""
+
+    def __init__( self, data = None, *, profile = None, plans = None ):
+        self._profile = profile
+        self._plans   = plans
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def cards( self ):
+        """The section's single list -- the household's current vehicles (from the Vehicles/Profile section,
+        each with its plan disposition, editable but not removable here) then any net-new future vehicles,
+        as input-item-card rows. Every card's Edit (and a future vehicle's Remove/Add) opens into the one
+        shared editor slot, managed by `VehicleDispositionView` / `LeasedVehicleDispositionView` (current)
+        and `VehicleFormView` / `VehicleDeleteView` (future)."""
+        return vehicle_plan_cards( self._profile, self._plans )
+
+    def apply( self, profile, plans ):
+        return profile, plans
+
+
+class VehicleExpensesSectionForm:
+    """The Vehicle expenses step: the shared per-car running costs (insurance, maintenance, fuel, ...),
+    entered once per vehicle and applied to every vehicle while operated. Managed by `VehicleExpensesView`.
+    `apply` seeds the running costs from the catalog on Next once a vehicle plan exists, so a household that
+    began a plan and accepts the defaults still records them; with no plan, Next just advances. `apply`
+    ignores form input (a pure merge, a no-op without a plan), so it also seeds on render -- see
+    `seeds_on_render`. The dispositions and net-new vehicles are the separate Vehicle plan section --
+    `VehiclePlanSectionForm`."""
 
     seeds_on_render = True
 
@@ -774,21 +847,38 @@ class VehicleExpensesSectionForm:
         return True
 
     @property
-    def dispositions( self ):
-        """One row per current vehicle (from the Vehicles/Profile section) with its plan disposition --
-        owned and leased together, each Edit opening its editor into the shared form area. Managed by
-        `VehicleDispositionView` / `LeasedVehicleDispositionView`, mirroring the Debt plan's per-debt rows."""
-        return all_dispositions_context( self._profile, self._plans )
-
-    @property
-    def vehicles( self ):
-        """The plan's net-new future vehicles for the section's list template -- the per-vehicle
-        add/edit/delete panes manage them through `VehicleFormView` / `VehicleDeleteView`."""
-        return vehicles_context( self._plans )
-
-    @property
     def vehicle_costs_form( self ):
         return VehicleExpensesForm( profile = self._profile, plans = self._plans )
+
+    @property
+    def current_count( self ) -> int:
+        """How many current vehicles (owned + leased) the household has -- the running costs apply per
+        vehicle, so this and `future_count` frame what the table covers."""
+        return len( all_dispositions_context( self._profile, self._plans ) )
+
+    @property
+    def future_count( self ) -> int:
+        """How many net-new future vehicles are planned."""
+        return len( vehicles_context( self._plans ) )
+
+    @property
+    def has_vehicles( self ) -> bool:
+        """Whether any vehicle exists -- with none, the per-vehicle running costs are meaningless, so the
+        step shows a pointer back to the Vehicle plan instead of the table."""
+        return bool( self.current_count or self.future_count )
+
+    @property
+    def vehicle_scope_phrase( self ) -> str:
+        """The 'N current and M future vehicles' phrase for the side note -- only the non-zero parts (so a
+        household with no future vehicles is not told about '0 future'), with the noun pluralized on the
+        total."""
+        parts = []
+        if self.current_count:
+            parts.append( f'{self.current_count} current' )
+        if self.future_count:
+            parts.append( f'{self.future_count} future' )
+        noun = 'vehicle' if self.current_count + self.future_count == 1 else 'vehicles'
+        return f"{' and '.join( parts )} {noun}"
 
     def apply( self, profile, plans ):
         if plans.vehicle_plan is None:
@@ -838,19 +928,27 @@ SECTIONS = [
              outer_template = 'inputs/interview/sections/subjects.html' ),
     Section( 'accounts'    , 'Accounts', form = AccountsSectionForm,
              outer_template = 'inputs/interview/sections/accounts.html' ),
-    # The big-asset sections come first -- Accounts, then Real Estate, then Vehicles -- before Income.
-    # Real Estate precedes Income for a hard reason: declaring a rental creates its rent line on the
-    # Income step, so the properties must exist before the user works through Income or a rental's rent
-    # goes unnoticed. Vehicles sit beside Real Estate (an owned vehicle is a holding + an optional auto
-    # loan, mirroring a property + mortgage); they carry no income, so they need not precede Income, but
-    # they stay grouped with the other holdings. Possessions (the minor tangibles: precious metals,
-    # collectibles) are demoted below Debts.
-    Section( 'real-estate' , 'Home & Property', ( Aggregate.PROFILE, Aggregate.PLANS ), RealEstateForm,
-             outer_template = 'inputs/interview/sections/properties.html' ),
-    Section( 'vehicles'    , 'Vehicles', ( Aggregate.PROFILE, Aggregate.PLANS ), VehiclesForm,
+    # The common big-asset sections lead -- Accounts, Home, Vehicles -- then Other Property, all before
+    # Income. Other Property (rentals and second homes) is less common, so it is demoted below Home and
+    # Vehicles; but it must still precede Income for a hard reason: declaring a rental creates its rent line
+    # on the Income step, so a rental must exist before the user works through Income or its rent goes
+    # unnoticed. That is the floor on how far it can move down -- just before Income, not past it. Vehicles
+    # carry no income, so they need not precede Income, but they stay grouped with the other holdings.
+    # Possessions (the minor tangibles: precious metals, collectibles) are demoted below Debts.
+    Section( 'home'          , 'Home', ( Aggregate.PROFILE, Aggregate.PLANS ), HomeSectionForm,
+             outer_template = 'inputs/interview/sections/home.html' ),
+    Section( 'vehicles'      , 'Vehicles', ( Aggregate.PROFILE, Aggregate.PLANS ), VehiclesForm,
              outer_template = 'inputs/interview/sections/vehicles.html' ),
-    Section( INCOME_STEP   , 'Income', ( Aggregate.PROFILE, ), IncomeSectionForm,
+    Section( 'other-property', 'Other property', ( Aggregate.PROFILE, Aggregate.PLANS ),
+             OtherPropertySectionForm,
+             outer_template = 'inputs/interview/sections/other_property.html' ),
+    Section( INCOME_STEP   , 'Incomes', ( Aggregate.PROFILE, ), IncomeSectionForm,
              outer_template = 'inputs/interview/sections/income.html' ),
+    # The per-person Social Security and pension amounts -- split out of Incomes so that table stays the
+    # current income the user enters, and these derived-per-person benefits sit on their own, right after.
+    Section( 'retirement-benefits', 'Retirement benefits', ( Aggregate.PROFILE, ),
+             RetirementBenefitsSectionForm,
+             outer_template = 'inputs/interview/sections/retirement_benefits.html' ),
     # The one liabilities view: every debt as a flat list of loans (mortgages included), each also
     # adjustable on its property. Facts only; the repayment plan per debt is the Debt plan step below,
     # which opens the Plans flow.
@@ -868,14 +966,20 @@ SECTIONS = [
     # inflows and outflows, and finally the optional tax moves. Home Expenses shows only when the household
     # has a dwelling with operating costs (see `applicable_sections`).
     # When each income runs and each entitlement is claimed -- the timing over the income *facts* declared
-    # in Income (Profile flow). Sits before Cash management, which balances this income against the outflows.
-    Section( 'retirement'  , 'Retirement', ( Aggregate.PLANS, ), RetirementSectionForm,
-             outer_template = 'inputs/interview/sections/retirement.html' ),
-    Section( 'living-expenses' , 'Living Expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
+    # in Income (Profile flow) -- then the recurring retirement contributions. Two sections (the timing was
+    # dense enough on its own); both sit before Cash management, which balances this income against the
+    # outflows. The Contributions rail label is shortened from its longer section title.
+    Section( 'retirement-plan', 'Retirement plan', ( Aggregate.PLANS, ), RetirementPlanSectionForm,
+             outer_template = 'inputs/interview/sections/retirement_plan.html' ),
+    Section( 'contributions'  , 'Retirement contributions', ( Aggregate.PLANS, ), ContributionsSectionForm,
+             outer_template = 'inputs/interview/sections/contributions.html', rail_title = 'Contributions' ),
+    Section( 'living-expenses' , 'Living expenses', ( Aggregate.PLANS, ), LivingExpensesSectionForm,
              outer_template = 'inputs/interview/sections/living_expenses.html' ),
-    Section( 'home-expenses'   , 'Home Expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
+    Section( 'home-expenses'   , 'Home expenses', ( Aggregate.PLANS, ), HomeExpensesSectionForm,
              outer_template = 'inputs/interview/sections/home_expenses.html' ),
-    Section( 'vehicle-expenses', 'Vehicle plan', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
+    Section( 'vehicle-plan'    , 'Vehicle plan', ( Aggregate.PLANS, ), VehiclePlanSectionForm,
+             outer_template = 'inputs/interview/sections/vehicle_plan.html' ),
+    Section( 'vehicle-expenses', 'Vehicle expenses', ( Aggregate.PLANS, ), VehicleExpensesSectionForm,
              outer_template = 'inputs/interview/sections/vehicle_expenses.html' ),
     # The Plans side of the debts: how each amortizing debt is repaid (rate, term, extra principal),
     # reading the debts declared in the Debts step (Profile flow). Grouped here with the other outflows.
@@ -884,7 +988,7 @@ SECTIONS = [
     # One-off money moves and life events (transfers, a property sale, receipts, payments, death) -- a
     # catch-all that can reference any entity declared above. Placed before Cash management so these
     # outflows are already known when the cash band is reconciled against income and outflows.
-    Section( 'events'      , 'Money movements', ( Aggregate.PLANS, ), EventsForm,
+    Section( 'events'      , 'Money moves', ( Aggregate.PLANS, ), EventsForm,
              outer_template = 'inputs/interview/sections/events.html' ),
     # How the cash hub is kept in a band: the min/max and the draw-order priority (the sweep is set up
     # in the same pane). Late in the flow, once income and outflows are set, since it reconciles them.
@@ -893,9 +997,9 @@ SECTIONS = [
     # Advanced, optional tax moves -- Roth conversions and scheduled withdrawals. The deliberate-tax-lever
     # counterpart to Cash management's automatic funding, and distinct from the tax Assumptions (the tax
     # environment). Last in the Plans flow.
-    Section( 'tax-planning', 'Tax Planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
+    Section( 'tax-planning', 'Tax planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
              outer_template = 'inputs/interview/sections/tax_planning.html' ),
-    Section( EXTERNAL_FACTORS_STEP, 'Economic Assumptions', ( Aggregate.ASSUMPTIONS, ),
+    Section( EXTERNAL_FACTORS_STEP, 'Economic assumptions', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
              outer_template = 'inputs/interview/sections/external_factors.html',
              rail_title = 'Economics' ),   # the flow heading already says "Assumptions"
@@ -904,7 +1008,7 @@ SECTIONS = [
     Section( 'transaction-costs', 'Sales', ( Aggregate.ASSUMPTIONS, ),
              TransactionCostsSectionForm,
              outer_template = 'inputs/interview/sections/transaction_costs.html' ),
-    Section( 'net-worth', 'Net Worth', ( Aggregate.ASSUMPTIONS, ),
+    Section( 'net-worth', 'Net worth', ( Aggregate.ASSUMPTIONS, ),
              NetWorthSectionForm,
              outer_template = 'inputs/interview/sections/net_worth.html' ),
 ]
