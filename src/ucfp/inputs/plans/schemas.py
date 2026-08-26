@@ -38,7 +38,7 @@ class RetirementTiming:
     started, and the subject's optional expected lifetime. Each election selects into that subject's
     profile entitlement facts, so the realized benefit is derived from the entitlement plus the election
     rather than stored. `expected_lifetime` is the date the subject is modeled to die (blank = not modeled);
-    it drives the engine's survivor transition. (A wage's start/stop is not a retirement date here -- it
+    it feeds the engine's `SubjectRemoval` (the survivor transition). (A wage's start/stop is not a retirement date here -- it
     lives in `IncomeTiming`, keyed to the flow.)"""
     subject_handle: str
     government_pension_claiming_date: Optional[ date ] = None

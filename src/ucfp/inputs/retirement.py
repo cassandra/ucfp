@@ -86,14 +86,13 @@ class RetirementForm( forms.Form ):
     def _add_lifetime_field( self, m : int, subject : SubjectProfile, date_initial : Optional[ date ] ):
         """The subject's expected lifetime -- a standalone *age* input (no paired date), since a lifetime is
         thought of in years, not a calendar date; this also sets it apart from the date-backed benefit
-        elections. Stored as the age-derived date (`_lifetime_date`). Reuses the age class for sizing; with
-        no paired date the client's age->date fill simply no-ops."""
-        self.fields[ self._key( 's', m, 'life_age' ) ] = forms.IntegerField(
-            required = False, min_value = 0, max_value = 120,
-            initial = self._derived_age( date_initial, subject.birthdate ),
-            widget = forms.NumberInput( attrs = {
-                'class' : f'form-control {AppConst.AGE_FIELD_CLASS}',
-                'aria-label' : f'{subject.name} expected lifetime age' } ) )
+        elections. Stored as the age-derived date (`_lifetime_date`). Built from the shared `_age_field`, so
+        the bounds and widget stay in step with the paired ages; `_link_age` (which pairs it with a date and
+        adds the class) is not called here, so the class is set directly -- and with no paired date the
+        client's age->date fill simply no-ops."""
+        field = self._age_field( date_initial, subject.birthdate, f'{subject.name} expected lifetime age' )
+        field.widget.attrs[ 'class' ] = f'form-control {AppConst.AGE_FIELD_CLASS}'
+        self.fields[ self._key( 's', m, 'life_age' ) ] = field
 
     def _add_election_field( self, m : int, kind : str, label : str, subject : SubjectProfile,
                              date_initial : Optional[ date ] ):
@@ -164,7 +163,7 @@ class RetirementForm( forms.Form ):
 
     def _lifetime_date( self, m : int, birthdate : Optional[ date ] ) -> Optional[ date ]:
         """The expected-lifetime date from the entered age (age-only field), or None when blank -- the age
-        resolved against the subject's birthdate, the value the engine's survivor transition reads."""
+        resolved against the subject's birthdate, the value the engine's `SubjectRemoval` reads."""
         age = self.cleaned_data.get( self._key( 's', m, 'life_age' ) )
         return _at_age( birthdate, age ) if age is not None and birthdate is not None else None
 
@@ -177,9 +176,9 @@ class RetirementForm( forms.Form ):
     @property
     def subject_groups( self ) -> list:
         """The timing grouped by person -- a group per subject holding their income windows, Social
-        Security claim, and (only when they have a pension) pension start -- so each person's timing reads
-        as a unit rather than as scattered rows. Household income (no subject) is its own group,
-        `household_income`."""
+        Security claim, (only when they have a pension) pension start, and their expected lifetime (the
+        age-only `lifetime` entry) -- so each person's timing reads as a unit rather than as scattered rows.
+        Household income (no subject) is its own group, `household_income`."""
         groups = list()
         for m, subject in enumerate( self._subjects ):
             income = [ self._window_row( i, flow ) for i, flow in enumerate( self._flows )

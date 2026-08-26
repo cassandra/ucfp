@@ -46,3 +46,15 @@ class ExpectedLifetimeTests( unittest.TestCase ):
             subject_handle = 'you', expected_lifetime = date( 2050, 1, 1 ) ) ] )
         form = RetirementForm( profile = _profile(), plans = plans )
         self.assertEqual( form.subject_groups[ 0 ][ 'lifetime' ].value(), 90 )   # derived from the date
+
+    def test_all_three_elections_land_together( self ):
+        # ss / pension / lifetime all write onto one RetirementTiming via `replace`; submitting them
+        # together guards against one election clobbering another.
+        timing = self._apply( s0_ss_from = '2027-01-01', s0_pen_from = '2025-06-01', s0_life_age = '90' )
+        self.assertEqual( timing.government_pension_claiming_date, date( 2027, 1, 1 ) )
+        self.assertEqual( timing.pension_start, date( 2025, 6, 1 ) )
+        self.assertEqual( timing.expected_lifetime, date( 2050, 1, 1 ) )
+
+    def test_an_implausible_age_is_rejected( self ):
+        form = RetirementForm( _post( s0_life_age = '121' ), profile = _profile(), plans = Plans() )
+        self.assertFalse( form.is_valid() )                  # the field's max_value = 120

@@ -140,8 +140,9 @@ def _subjects( profile : Profile ) -> list[ Subject ]:
 
 
 def _lifetime_removals( plans : Plans ) -> list[ SubjectRemoval ]:
-    """A `SubjectRemoval` per subject whose Retirement-plan `expected_lifetime` is set -- the survivor
-    transition, sourced from the per-subject timing (blank = death not modeled)."""
+    """A `SubjectRemoval` per subject whose Retirement-plan `expected_lifetime` is set -- the removal the
+    engine derives the survivor transition from, sourced from the per-subject timing (blank = death not
+    modeled)."""
     return [ SubjectRemoval( event_date = entry.expected_lifetime, subject_handle = entry.subject_handle )
              for entry in plans.timing if entry.expected_lifetime is not None ]
 

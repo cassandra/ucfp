@@ -1,11 +1,12 @@
 {% comment %}
 The income/entitlement *timing* of the Retirement Plan section (id=retirement), auto-saved. Grouped by
 person, two columns wide: a card per subject holding their income windows (start/stop), their Social
-Security claim, (only when they have a pension, declared in Income) their pension start, and their optional
-expected lifetime (blank = death not modeled). With no partner, a muted placeholder fills the second column
-so a lone card does not leave a wide empty space.
-Household income (no subject) is its own full-width card below. Each line pairs an age helper with the
-canonical date (inputs.js keeps them in lockstep from the subject's fixed birthdate). The rows are fixed by
+Security claim, and (only when they have a pension, declared in Income) their pension start. (A per-subject
+expected-lifetime input also lives in this card but is currently hidden -- see the HIDDEN note at its block
+below.) With no partner, a muted placeholder fills the second column so a lone card does not leave a wide
+empty space.
+Household income (no subject) is its own full-width card below. Each of these lines pairs an age helper with
+the canonical date (inputs.js keeps them in lockstep from the subject's fixed birthdate). The rows are fixed by
 the income facts and subjects declared in the Profile, so editing here never adds or removes one; edits
 save in the background, re-rendering only to surface a bad value. Leaving a window blank means "runs the
 whole horizon"; Social Security and a pension run for life once claimed.
@@ -49,6 +50,7 @@ whole horizon"; Social Security and a pension run for life once claimed.
                 {{ group.lifetime }}
                 <span class="ml-2">years <span class="font-italic">(optional)</span></span>
               </div>
+              {% if group.lifetime.errors %}<div class="text-danger small">{{ group.lifetime.errors|join:" " }}</div>{% endif %}
               <div class="small text-muted mt-1">Leave blank to assume a full lifetime.</div>
             </div>
             {% endcomment %}
