@@ -27,7 +27,6 @@ class RetirementBenefitsForm( forms.Form ):
 
     def __init__( self, data = None, *, profile = None ):
         super().__init__( data )
-        self._profile  = profile
         self._subjects = list( profile.subjects ) if profile is not None else list()
         self._gov      = { entitlement.subject_handle: entitlement
                            for entitlement in ( profile.government_pension if profile is not None else [] ) }

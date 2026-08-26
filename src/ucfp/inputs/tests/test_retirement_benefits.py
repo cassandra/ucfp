@@ -71,6 +71,38 @@ class RetirementBenefitsApplyTests( SimpleTestCase ):
         result, _ = form.apply( profile, Plans() )
         self.assertEqual( result.income_flows, [ flow ] )    # the Incomes section owns these
 
+    def test_each_subjects_benefits_are_attributed_independently( self ):
+        # Two-subject household: the per-subject indexing (s0/s1) must attribute each benefit to the right
+        # person, and one person's blank must not suppress the other's.
+        profile = Profile( subjects = [
+            SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ),
+            SubjectProfile( handle = 'partner', name = 'Partner', birthdate = date( 1962, 1, 1 ) ) ] )
+        data = QueryDict( mutable = True )
+        data[ 's0_ssamt' ]  = '2,900'
+        data[ 's1_ssamt' ]  = '3,100'
+        data[ 's0_penamt' ] = '30,000'                       # a pension for the primary only
+        form = RetirementBenefitsForm( data, profile = profile )
+        self.assertTrue( form.is_valid(), form.errors )
+        result, _ = form.apply( profile, Plans() )
+        self.assertEqual(
+            { e.subject_handle: e.monthly_at_normal_age for e in result.government_pension },
+            { 'you': Decimal( '2900' ), 'partner': Decimal( '3100' ) } )
+        self.assertEqual(
+            { p.subject_handle: p.base_annual_amount for p in result.pensions },
+            { 'you': Decimal( '30000' ) } )                  # partner's blank pension is not recorded
+
+    def test_clearing_a_stored_benefit_removes_it( self ):
+        profile = _profile( government_pension = [ GovernmentPensionEntitlement(
+            subject_handle = 'you', monthly_at_normal_age = Decimal( '2900' ) ) ] )
+        form = RetirementBenefitsForm( self._post( ss = '' ), profile = profile )   # blanked out
+        self.assertTrue( form.is_valid(), form.errors )
+        result, _ = form.apply( profile, Plans() )
+        self.assertEqual( len( result.government_pension ), 0 )
+
+    def test_a_negative_benefit_is_a_genuine_error( self ):
+        form = RetirementBenefitsForm( self._post( ss = '-100' ), profile = _profile() )
+        self.assertFalse( form.is_valid() )
+
 
 class IncomeLeavesBenefitsAloneTest( SimpleTestCase ):
     """The other half of the split: the Incomes pane rewrites income flows but must not clobber the

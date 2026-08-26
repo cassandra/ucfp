@@ -137,6 +137,19 @@ class StartTourTest( TestCase ):
         self.assertEqual( 3, step_at(
             reverse( 'tour_scenario', kwargs = { 'section': first_section_of_flow( 'assumptions' ).key } ) ) )
 
+    def test_the_shell_nav_links_target_the_live_flow_sections( self ):
+        # The shell's step links must track the section registry. A renamed first-section (e.g.
+        # retirement -> retirement-plan) 404s on click while `{% url %}` reversal still succeeds for any
+        # string, so assert the rendered nav carries the *current* first-section URL of each flow.
+        _seed_records( self._seed_example() )
+        self.client.post( reverse( 'start_tour' ) )
+        shell = self.client.get(
+            reverse( 'tour_profile', kwargs = { 'section': first_section_of_flow( 'profile' ).key } ) )
+        for flow, url_name in ( ( 'profile', 'tour_profile' ), ( 'plans', 'tour_scenario' ),
+                                ( 'assumptions', 'tour_scenario' ) ):
+            self.assertContains( shell, reverse(
+                url_name, kwargs = { 'section': first_section_of_flow( flow ).key } ) )
+
 
 @tag( 'e2e' )
 class TourForecastRenderTest( TestCase ):

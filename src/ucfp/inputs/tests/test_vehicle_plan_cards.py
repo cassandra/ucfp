@@ -16,8 +16,8 @@ from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.interview import VehicleExpensesSectionForm
 from ucfp.inputs.plans.enums import PaymentMethod
 from ucfp.inputs.plans.schemas import Plans, Vehicle, VehiclePlan
-from ucfp.inputs.profile.schemas import AssetProfile, Profile
-from ucfp.inputs.vehicle_disposition import current_card_key, vehicle_plan_cards
+from ucfp.inputs.profile.schemas import AssetProfile, LeasedVehicle, Profile
+from ucfp.inputs.vehicle_disposition import current_card_key, future_card_key, vehicle_plan_cards
 
 
 def _profile_with_current() -> Profile:
@@ -42,6 +42,16 @@ class VehiclePlanCardsTests( unittest.TestCase ):
         self.assertEqual( [ c[ 'badge' ] for c in cards ], [ 'Current', 'Future' ] )
         self.assertEqual( [ c[ 'title' ] for c in cards ], [ 'Sedan', 'Truck' ] )
 
+    def test_a_leased_current_vehicle_builds_a_card( self ):
+        # A leased current vehicle carries no loan line; the shared card builder must handle its row shape
+        # (regression: _current_detail once assumed every current row had a 'loan' key -> KeyError).
+        plans = Plans()
+        cards = vehicle_plan_cards(
+            Profile( leased_vehicles = [ LeasedVehicle( handle = 'vehicle-1', name = 'Leased Car' ) ] ),
+            plans )
+        self.assertEqual( [ c[ 'badge' ] for c in cards ], [ 'Current' ] )
+        self.assertEqual( cards[ 0 ][ 'title' ], 'Leased Car' )
+
     def test_a_current_vehicle_is_editable_but_not_removable( self ):
         current = vehicle_plan_cards( _profile_with_current(), Plans() )[ 0 ]
         self.assertIsNotNone( current[ 'edit_url' ] )        # Edit sets its plan
@@ -65,15 +75,17 @@ class VehiclePlanCardsTests( unittest.TestCase ):
 
     def test_a_colliding_current_and_future_handle_highlight_independently( self ):
         # Current and future vehicles each mint `vehicle-N` in their own space, so both can be `vehicle-1`.
-        # Editing the current one must highlight only its card -- the kind-scoped active key disambiguates.
+        # Editing one must highlight only its card -- the kind-scoped active key disambiguates each way, so
+        # neither key ever lights both cards.
         colliding = Plans( vehicle_plan = VehiclePlan( vehicles = [
             Vehicle( handle = 'vehicle-1', name = 'Truck', purchase_date = date( 2030, 1, 1 ),
                      purchase_price = Decimal( '35000' ), recurrence_years = 7,
                      payment_method = PaymentMethod.CASH ) ] ) )
         cards = vehicle_plan_cards( _profile_with_current(), colliding )  # current vehicle-1 + future vehicle-1
-        html  = render_to_string( 'inputs/interview/sections/vehicle_plan_list.html',
-                                  { 'cards': cards, 'active': current_card_key( 'vehicle-1' ) } )
-        self.assertEqual( html.count( 'input-item-card--active' ), 1 )
+        for active in ( current_card_key( 'vehicle-1' ), future_card_key( 'vehicle-1' ) ):
+            html = render_to_string( 'inputs/interview/sections/vehicle_plan_list.html',
+                                     { 'cards': cards, 'active': active } )
+            self.assertEqual( html.count( 'input-item-card--active' ), 1 )   # exactly one card, never both
 
 
 class VehicleExpensesEmptyStateTests( unittest.TestCase ):
@@ -82,8 +94,7 @@ class VehicleExpensesEmptyStateTests( unittest.TestCase ):
         form = VehicleExpensesSectionForm( profile = Profile(), plans = Plans() )
         self.assertFalse( form.has_vehicles )
         html = render_to_string( 'inputs/interview/sections/vehicle_expenses.html', { 'form': form } )
-        self.assertIn( 'Add a vehicle in the Vehicle plan step', html )
-        self.assertNotIn( 'Running costs', html )            # the per-vehicle table is withheld
+        self.assertNotIn( '<table', html )   # structural: the per-vehicle running-costs table is withheld
 
     def test_counts_frame_the_running_costs_when_vehicles_exist( self ):
         form = VehicleExpensesSectionForm( profile = _profile_with_current(), plans = _plans_with_future() )

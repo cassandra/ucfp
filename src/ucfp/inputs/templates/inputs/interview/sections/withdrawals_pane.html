@@ -1,7 +1,8 @@
 {% comment %}
 The pre-tax account withdrawals of the Tax Planning section (id=withdrawals), auto-saved. One block per
-withdrawal (the shared realization-plan row) plus a blank block to add one -- a deliberate draw from a
-pre-tax retirement account to cash, landing before the automatic cash-management drawdown. The row set
+withdrawal (the shared realization-plan row), added or removed as a rowset (an Add button and a per-row
+Remove) -- a deliberate draw from a pre-tax retirement account to cash, landing before the automatic
+cash-management drawdown. The row set
 can change, so adding or removing re-renders; a value edit saves silently. Non-blocking: a block without
 both a source and an amount is not saved. When there is no pre-tax account, it says so rather than
 offering an empty picker.

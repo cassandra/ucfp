@@ -307,11 +307,12 @@ window.App.Inputs = (function () {
         const $root = $scope || $( document.body );
         $root.find( classSelector( C.OPTIONAL_CLASS ) ).each( function () {
             const parts = optionalParts( $( this ) );
-            // Where a toggle checkbox is present it IS the persistent open-state -- the user's explicit
-            // choice, which may be an intentionally-opened-but-still-empty block, so it must survive a
-            // re-render (this runs after every async render). Or-ing in bodyIsFilled auto-opens an existing
-            // block on first load, when the server-rendered checkbox is still unchecked. The button style
-            // has no persistent control, so it falls back to bodyIsFilled alone.
+            // Where a toggle checkbox is present, its checked state holds the open-state *within the
+            // current DOM* -- the user's explicit choice, which may be an intentionally-opened-but-still-
+            // empty block, honoured each time this runs (after every async render). The checkbox carries no
+            // name and is always server-rendered unchecked, so across a server re-render the open-state is
+            // reconstructed from bodyIsFilled alone; or-ing it in also auto-opens an existing block on first
+            // load. The button style has no toggle control, so it falls back to bodyIsFilled alone.
             setOptionalOpen( $( this ), parts.toggle.prop( 'checked' ) || bodyIsFilled( parts.body ) );
         } );
     }

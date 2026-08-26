@@ -385,7 +385,7 @@ class OtherPropertySectionForm:
 
 
 class VehiclesForm:
-    """§ -- the Vehicles pane. A no-op section form mirroring the property section forms: each vehicle is edited
+    """§ -- the Vehicles pane. A no-op section form: each vehicle is edited
     through its own async view, so Next just advances. It exposes the household's current vehicles as one
     list -- owned and leased together -- managed by `CurrentVehicleFormView` / `CurrentVehicleDeleteView`.
     Owned and leased are stored differently (a holding + loan vs. a lease fact); the list unifies them."""

@@ -282,7 +282,8 @@ def _leased_row( vehicle, disposition ) -> dict:
     vehicle whose Retain default runs it to end-of-life at no extra input. So it is not silently free."""
     return { 'handle' : vehicle.handle, 'name' : vehicle.name,
              'summary' : _leased_summary( disposition ),
-             'incomplete' : disposition is None or not disposition.is_complete }
+             'incomplete' : disposition is None or not disposition.is_complete,
+             'loan' : None }   # a lease carries no loan line; keep the row shape uniform for the card builder
 
 
 def _leased_summary( disposition ) -> str:

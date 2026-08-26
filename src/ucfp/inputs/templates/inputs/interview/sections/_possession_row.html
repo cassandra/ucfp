@@ -19,7 +19,7 @@ lines as parallel lists. Params: row, names, type_choices.
     <input type="hidden" name="{{ names.handle }}" value="{{ row.handle|default:'' }}">
   </td>
   <td>
-    {% include 'inputs/interview/_money_cell.html' with name=names.value value=row.value %}
+    {% include 'inputs/interview/_money_cell.html' with name=names.value value=row.value label='Current value' %}
     {% if row.error %}<span class="text-danger small d-block">{{ row.error }}</span>{% endif %}
   </td>
   <td class="align-middle">
