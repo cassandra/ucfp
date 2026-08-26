@@ -12,9 +12,11 @@ restatement (solvent, a multi-year horizon, non-zero inflation). Reads `summary`
 <div class="run-summary">
   <div class="run-summary-text">
     <p class="h5 mb-2 {% if summary.lasted %}text-success{% elif summary.depleted %}text-danger{% else %}text-muted{% endif %}">
-      {% if summary.lasted %}{% icon 'check' size='sm' css_class='mr-1' %}Money lasted all {{ summary.years }} year{{ summary.years|pluralize }}
-      {% elif summary.depleted %}{% icon 'warning' size='sm' css_class='mr-1' %}Money ran out after {{ summary.years }} year{{ summary.years|pluralize }}
-      {% else %}Plan ended after {{ summary.years }} year{{ summary.years|pluralize }}{% endif %}
+      {% comment %}Order by salience -- the household ages first, then the year, then the run length demoted
+      to a muted parenthetical (once the ages and year are shown, the count of years adds little).{% endcomment %}
+      {% if summary.lasted %}{% icon 'check' size='sm' css_class='mr-1' %}Money lasted{% if summary.end.ages %} to {{ summary.age_noun|lower }} {{ summary.end.ages }} in {{ summary.end.year }}{% else %} through {{ summary.end.year }}{% endif %} <span class="small text-muted">(all {{ summary.years }} year{{ summary.years|pluralize }})</span>
+      {% elif summary.depleted %}{% icon 'warning' size='sm' css_class='mr-1' %}Money ran out{% if summary.end.ages %} at {{ summary.age_noun|lower }} {{ summary.end.ages }}{% endif %} in {{ summary.end.year }} <span class="small text-muted">(after {{ summary.years }} year{{ summary.years|pluralize }})</span>
+      {% else %}Plan ended{% if summary.end.ages %} at {{ summary.age_noun|lower }} {{ summary.end.ages }}{% endif %} in {{ summary.end.year }} <span class="small text-muted">(after {{ summary.years }} year{{ summary.years|pluralize }})</span>{% endif %}
     </p>
     <table class="run-summary-table">
       <caption class="sr-only">Net worth at the end of the plan versus the start</caption>

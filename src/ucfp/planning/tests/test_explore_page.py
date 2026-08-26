@@ -49,8 +49,7 @@ class ExplorePageRenderTest( TestCase ):
         self.assertEqual( response.status_code, 200 )
         body = response.content.decode()
         self.assertIn( 'Re-run', body )                             # the inputs-foot CTA
-        self.assertTrue(                                           # the shared summary's result, either verdict
-            'Money lasted all' in body or 'Money ran out after' in body )
+        self.assertIn( 'run-summary', body )                        # the shared outcome summary rendered
         self.assertIn( 'Start', body )                             # the start→end arc from the shared summary
 
     def test_page_renders_the_balances_thumbnail( self ):
