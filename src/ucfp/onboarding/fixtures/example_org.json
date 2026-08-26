@@ -136,10 +136,10 @@
           "BONDS",
           "STOCKS",
           "DIVIDEND_STOCKS",
+          "COLLECTIBLES",
           "ROTH",
           "PRETAX_RETIREMENT",
           "PRECIOUS_METALS",
-          "COLLECTIBLES",
           "REAL_ESTATE_SECOND_HOME",
           "REAL_ESTATE_RENTAL",
           "REAL_ESTATE_RESIDENCE"
@@ -192,7 +192,7 @@
         },
         {
           "amount": "40000",
-          "date": "2032-08-01",
+          "date": "2033-08-01",
           "finish": null,
           "inflation_indexed": true,
           "interval": null,
@@ -206,6 +206,7 @@
         null
       ],
       "health_coverage": null,
+      "home_rent_snapshot": null,
       "income_timing": [
         {
           "end": "2047-12-22",
@@ -1055,11 +1056,13 @@
       "roth_conversions": [],
       "timing": [
         {
+          "expected_lifetime": null,
           "government_pension_claiming_date": "2047-12-22",
           "pension_start": null,
           "subject_handle": "subject"
         },
         {
+          "expected_lifetime": null,
           "government_pension_claiming_date": "2043-02-08",
           "pension_start": null,
           "subject_handle": "partner"
@@ -1366,6 +1369,7 @@
           "subject_handle": "partner"
         }
       ],
+      "home_monthly_rent": null,
       "home_tenure": "OWN",
       "income_flows": [
         {

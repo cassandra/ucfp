@@ -17,7 +17,7 @@ whole horizon"; Social Security and a pension run for life once claimed.
     <div class="row">
       {% for group in retirement_form.subject_groups %}
       <div class="col-md-6 mb-3">
-        <div class="card h-100">
+        <div class="card h-100 bg-light">
           <div class="card-body py-2">
             <h3 class="h6 mb-2">{{ group.subject }}</h3>
             {% for row in group.income %}
@@ -70,7 +70,7 @@ whole horizon"; Social Security and a pension run for life once claimed.
     </div>
 
     {% if retirement_form.household_income %}
-    <div class="card mb-3">
+    <div class="card mb-3 bg-light">
       <div class="card-body py-2">
         <h3 class="h6 mb-2">Household</h3>
         {% for row in retirement_form.household_income %}

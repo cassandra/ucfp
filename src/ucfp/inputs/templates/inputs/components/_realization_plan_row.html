@@ -8,7 +8,7 @@ values, or is None for the blank <template> prototype. `form` supplies the names
 flags. When the form's cadence is optional (conversions/withdrawals) a "blank = once" hint shows. Include
 with `row` and `form`.
 {% endcomment %}
-<div class="js-rowset-row card mb-3">
+<div class="js-rowset-row card bg-light mb-3">
   <div class="card-body p-2">
     <input type="hidden" name="{{ form.names.handle }}" value="{{ row.handle|default:'' }}">
     <div class="form-row">
