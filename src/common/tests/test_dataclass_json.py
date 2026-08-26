@@ -95,7 +95,8 @@ def _sample_plans():
         timing = [ RetirementTiming(
             subject_handle = 'you',
             government_pension_claiming_date = date( 2040, 1, 1 ),
-            pension_start = date( 2038, 1, 1 ) ) ],
+            pension_start = date( 2038, 1, 1 ),
+            expected_lifetime = date( 2060, 1, 1 ) ) ],
         income_timing = [ IncomeTiming( flow_handle = 'income-0', end = date( 2035, 1, 1 ) ),
                           IncomeTiming( flow_handle = 'home' ) ],
         expense_spans = [ 70, 80, None ],
@@ -159,9 +160,7 @@ def _sample_plans():
         events = [
             PlanEvent( kind = EventKind.TRANSFER, date = date( 2040, 1, 1 ),
                        amount = Decimal( '15000' ),
-                       selections = { 'source': 'brok', 'target': 'savings' } ),
-            PlanEvent( kind = EventKind.DEATH, date = date( 2060, 1, 1 ),
-                       selections = { 'subject': 'spouse' } ) ],
+                       selections = { 'source': 'brok', 'target': 'savings' } ) ],
         health_coverage = HealthCoverageAssumption( household_size = 2,
                                                     reference_premium = Decimal( '12000' ),
                                                     start = date( 2035, 1, 1 ) ),
