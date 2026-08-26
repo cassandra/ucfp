@@ -169,31 +169,34 @@ WSGI_APPLICATION = 'ucfp.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 #
-# The template defaults to SQLite for a zero-dependency self-hosted install.
-# To deploy with MySQL (e.g. the droplet lane in deploy/droplet/), switch the
-# WHOLE project -- you almost certainly want MySQL in development too, so dev
-# and production behave the same. See
-# docs/dev/project/droplet-deployment.md. The change here is roughly:
-#
-#     DATABASES = {
-#         'default': {
-#             'ENGINE'   : 'django.db.backends.mysql',
-#             'HOST'     : ENV.DATABASE_HOST,
-#             'PORT'     : ENV.DATABASE_PORT,
-#             'NAME'     : ENV.DATABASE_NAME,
-#             'USER'     : ENV.DATABASE_USER,
-#             'PASSWORD' : ENV.DATABASE_PASSWORD,
-#         }
-#     }
-#
-# plus adding those DATABASE_* rows to _ENV_SPEC in environment/server.py and
-# `mysqlclient` to requirements/base.txt.
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join( ENV.DATABASES_NAME_PATH, 'ucfp.sqlite3' ),
+# The backend is chosen from the environment so that one Docker image can serve
+# both deployment lanes: SQLite for the zero-dependency self-hosted install, and
+# MySQL for the cloud (droplet) install. The environment layer
+# (ucfp.environment.server) validates that a usable backend is configured (MySQL
+# wins if both are); here we merely materialize the choice. See
+# docs/dev/project/droplet-setup.md.
+if ENV.uses_mysql:
+    DATABASES = {
+        'default': {
+            'ENGINE'  : 'django.db.backends.mysql',
+            'HOST'    : ENV.DATABASE_HOST,
+            'PORT'    : ENV.DATABASE_PORT,
+            'NAME'    : ENV.DATABASE_NAME,
+            'USER'    : ENV.DATABASE_USER,
+            'PASSWORD': ENV.DATABASE_PASSWORD,
+            # Pin the client connection charset so 4-byte characters round-trip
+            # regardless of the server's negotiated default (the DB is created
+            # utf8mb4 -- see docs/dev/project/droplet-setup.md).
+            'OPTIONS' : { 'charset': 'utf8mb4' },
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME'  : os.path.join( ENV.DATABASES_NAME_PATH, 'ucfp.sqlite3' ),
+        }
+    }
 
 
 # Password validation

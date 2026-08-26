@@ -87,7 +87,7 @@ when they opt in -- e.g. a MySQL connection for a cloud deployment). Mark the
 `_EnvVarSpec` row `in_env_file = False`: `get()` still reads it (with its
 default), but `all_env_var_names()` excludes it, so `env-generate.py`,
 `install.sh`, and `local.env.example` are not required to declare it and the
-drift check stays green. See [Droplet / MySQL Production Deployment](../project/droplet-deployment.md).
+drift check stays green. See [Droplet Setup](../project/droplet-setup.md).
 
 ## What the drift check does *not* cover
 

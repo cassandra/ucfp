@@ -61,8 +61,19 @@ _ENV_SPEC = (
     _EnvVarSpec( 'DJANGO_SUPERUSER_EMAIL'   , 'DJANGO_SUPERUSER_EMAIL' ),
     _EnvVarSpec( 'DJANGO_SUPERUSER_PASSWORD', 'DJANGO_SUPERUSER_PASSWORD' ),
 
-    # Database and media paths.
-    _EnvVarSpec( 'DATABASES_NAME_PATH'      , ENV_PREFIX + 'DB_PATH' ),
+    # Database selection: SQLite (file-based) or MySQL (server-based). Both are
+    # optional here; validate_database_config() (from get()) requires at least one
+    # (MySQL wins if both are set). This env-driven switch is what lets one image
+    # serve both the self-host (SQLite) and cloud (MySQL) lanes. SQLite path:
+    _EnvVarSpec( 'DATABASES_NAME_PATH'      , ENV_PREFIX + 'DB_PATH', str, '' ),
+    # MySQL connection (all five required together):
+    _EnvVarSpec( 'DATABASE_HOST'            , ENV_PREFIX + 'DB_HOST', str, '' ),
+    _EnvVarSpec( 'DATABASE_PORT'            , ENV_PREFIX + 'DB_PORT', str, '' ),
+    _EnvVarSpec( 'DATABASE_NAME'            , ENV_PREFIX + 'DB_NAME', str, '' ),
+    _EnvVarSpec( 'DATABASE_USER'            , ENV_PREFIX + 'DB_USER', str, '' ),
+    _EnvVarSpec( 'DATABASE_PASSWORD'        , ENV_PREFIX + 'DB_PASSWORD', str, '' ),
+
+    # Media path.
     _EnvVarSpec( 'MEDIA_ROOT'               , ENV_PREFIX + 'MEDIA_PATH' ),
 
     # Redis.
@@ -82,6 +93,11 @@ _ENV_SPEC = (
 
     # Application-specific.
     _EnvVarSpec( 'SUPPRESS_AUTHENTICATION'  , ENV_PREFIX + 'SUPPRESS_AUTHENTICATION', bool, False ),
+
+    # Consumed by the container entrypoint/supervisord (not by Django) to decide
+    # whether to run redis inside the image (self-host lane) or use host redis
+    # (cloud lane). Declared here so it is part of the one canonical env surface.
+    _EnvVarSpec( 'BUNDLED_REDIS'            , ENV_PREFIX + 'BUNDLED_REDIS', bool, False ),
 )
 
 
@@ -127,11 +143,17 @@ class EnvironmentSettings:
     ALLOWED_HOSTS              : Tuple[ str ]  = field( default_factory = tuple )
     CORS_ALLOWED_ORIGINS       : Tuple[ str ]  = field( default_factory = tuple )
     EXTRA_CSP_URLS             : Tuple[ str ]  = field( default_factory = tuple )
-    DATABASES_NAME_PATH        : str           = None
+    DATABASES_NAME_PATH        : str           = ''
+    DATABASE_HOST              : str           = ''
+    DATABASE_PORT              : str           = ''
+    DATABASE_NAME              : str           = ''
+    DATABASE_USER              : str           = ''
+    DATABASE_PASSWORD          : str           = ''
     MEDIA_ROOT                 : str           = None
     REDIS_HOST                 : str           = 'localhost'
     REDIS_PORT                 : int           = 6379
     SUPPRESS_AUTHENTICATION    : bool          = False
+    BUNDLED_REDIS              : bool          = False
     FIELD_ENCRYPTION_KEYS      : Tuple[ str ]  = field( default_factory = tuple )
     SECRET_URL_PREFIX          : str           = ''
     EMAIL_SUBJECT_PREFIX       : str           = ''
@@ -156,6 +178,50 @@ class EnvironmentSettings:
         if len(parts) > 1:
             return parts[-1]
         return 'unknown'
+
+    def _mysql_field_values(self) -> Tuple[ str, ... ]:
+        """The five MySQL connection values, whitespace-stripped so a blank or
+        whitespace-only variable counts as unset (an all-whitespace host must not
+        read as a configured backend)."""
+        fields = ( self.DATABASE_HOST, self.DATABASE_PORT, self.DATABASE_NAME,
+                   self.DATABASE_USER, self.DATABASE_PASSWORD, )
+        return tuple( ( value or '' ).strip() for value in fields )
+
+    @property
+    def uses_mysql(self) -> bool:
+        """Whether the MySQL backend is selected: true when the full MySQL
+        connection set is configured, false otherwise (SQLite). MySQL wins when
+        both backends are configured -- see validate_database_config()."""
+        return all( self._mysql_field_values() )
+
+    def validate_database_config(self) -> None:
+        """Require a usable database backend, chosen from the environment so one
+        image serves every deployment. MySQL is used when its full connection set
+        (DB_HOST/PORT/NAME/USER/PASSWORD) is present; otherwise SQLite is used when
+        a file path (DB_PATH) is given.
+
+        When both are configured MySQL takes precedence. This is what lets a
+        self-hoster switch to an external MySQL by simply adding the MySQL
+        variables, without also having to clear the default SQLite path. A partial
+        MySQL set (some but not all variables), or no backend at all, is a
+        misconfiguration surfaced at startup.
+        """
+        mysql_values      = self._mysql_field_values()
+        has_mysql         = all( mysql_values )
+        has_partial_mysql = any( mysql_values ) and not has_mysql
+        has_sqlite        = bool( self.DATABASES_NAME_PATH.strip() )
+
+        if has_partial_mysql:
+            raise ImproperlyConfigured(
+                f"Incomplete MySQL configuration: set all of {ENV_PREFIX}DB_HOST, "
+                f"{ENV_PREFIX}DB_PORT, {ENV_PREFIX}DB_NAME, {ENV_PREFIX}DB_USER and "
+                f"{ENV_PREFIX}DB_PASSWORD together, or none of them." )
+        if not has_mysql and not has_sqlite:
+            raise ImproperlyConfigured(
+                f"No database configured. Provide either {ENV_PREFIX}DB_PATH (SQLite) "
+                f"or the {ENV_PREFIX}DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD set "
+                f"(MySQL)." )
+        return
 
     @classmethod
     def get( cls ) -> 'EnvironmentSettings':
@@ -246,6 +312,8 @@ class EnvironmentSettings:
         if cors_allowed_origins_list:
             env_settings.CORS_ALLOWED_ORIGINS += tuple( cors_allowed_origins_list )
             env_settings.EXTRA_CSP_URLS += tuple( cors_allowed_origins_list )
+
+        env_settings.validate_database_config()
 
         return env_settings
 

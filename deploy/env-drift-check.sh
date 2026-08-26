@@ -57,5 +57,22 @@ fail() {
     "server.py (all_env_var_names)" "${app_names}" \
     "local.env.example" "${example_names}"
 
+# The cloud (droplet) example declares a SUBSET of the same canonical surface, so
+# it is not part of the equality check above. Guard it against typos: every name
+# it declares must exist in the app's canonical set. (Both lists are sorted.)
+droplet_example="deploy/droplet/droplet.env.example"
+if [[ -f "${droplet_example}" ]]; then
+    droplet_names=$( extract_names < "${droplet_example}" )
+    unknown=$( comm -23 <( printf '%s\n' "${droplet_names}" ) <( printf '%s\n' "${app_names}" ) )
+    if [[ -n "${unknown}" ]]; then
+        echo
+        echo "Env-var drift: ${droplet_example} declares names not in server.py (all_env_var_names):"
+        printf '  %s\n' ${unknown}
+        echo
+        echo "Fix: correct the typo, or add the variable to _ENV_SPEC in server.py."
+        exit 1
+    fi
+fi
+
 count=$( printf '%s\n' "${app_names}" | wc -l | tr -d '[:space:]' )
 echo "env-drift-check: OK (${count} env vars consistent across server.py, env-generate.py, install.sh, and local.env.example)"

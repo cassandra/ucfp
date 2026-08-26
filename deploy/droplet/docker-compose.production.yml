@@ -1,17 +1,22 @@
-# UCFP — droplet/cloud production compose file.
+# UCFP -- droplet/cloud production compose file.
 #
-# Deployed to the droplet by deploy/droplet/deploy-prod.sh (which scp's this
-# file as docker-compose.yml alongside the converted env file ucfp.env). Uses
-# network_mode: host so the container reaches the host's MySQL and redis on
-# localhost. The image is the droplet build (mysqlclient, no bundled redis),
-# loaded onto the droplet from a `docker save` tar by deploy-prod.sh.
+# Deployed to the droplet by deploy/droplet/deploy-prod.sh (which scp's this file
+# as docker-compose.yml alongside the converted env file ucfp.env). It runs the
+# SAME published image as the self-host lane; the cloud behavior comes entirely
+# from ucfp.env (UCFP_BUNDLED_REDIS=false so it uses the host redis, and the
+# UCFP_DB_* MySQL variables so it uses the host MySQL). network_mode: host lets
+# the container reach the host's MySQL and redis on localhost, and lets the host
+# nginx reverse-proxy to the container on :8000.
 #
-# No healthcheck: stanza — the Dockerfile defines one (HEALTHCHECK on /health).
+# UCFP_VERSION is supplied by deploy-prod.sh (from the VERSION file) so the exact
+# released image is pinned; :-latest is only a fallback.
+#
+# No healthcheck: stanza -- the Dockerfile defines one (HEALTHCHECK on /health).
 version: '3.8'
 
 services:
   ucfp:
-    image: ucfp:${UCFP_VERSION:-latest}
+    image: ghcr.io/cassandra/ucfp:${UCFP_VERSION:-latest}
     container_name: ucfp
     restart: unless-stopped
     network_mode: host
