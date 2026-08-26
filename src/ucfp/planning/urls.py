@@ -29,13 +29,4 @@ urlpatterns = [
           name = 'explore_keep_run' ),
     path( 'financial-forecast/explore/reset/', views.ResetExploreView.as_view(),
           name = 'explore_reset' ),
-    path( 'retirement-timing/',
-          views.ComingSoonView.as_view( feature_key = 'retirement_timing' ),
-          name = 'retirement_timing' ),
-    path( 'social-security/',
-          views.ComingSoonView.as_view( feature_key = 'social_security' ),
-          name = 'social_security' ),
-    path( 'cash-flow-planning/',
-          views.ComingSoonView.as_view( feature_key = 'cash_flow_planning' ),
-          name = 'cash_flow_planning' ),
 ]

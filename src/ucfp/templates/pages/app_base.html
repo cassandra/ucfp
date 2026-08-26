@@ -24,10 +24,11 @@
     </button>
     <div class="collapse navbar-collapse" id="app-nav">
       {% comment %}
-      The four planning perspectives are grouped under one dropdown rather than spread across the
-      navbar: it keeps the bar from crowding as perspectives are added, and frees width for the
-      household indicator. The toggle stays lit while any perspective is active. (Menu label
-      "Planning" is provisional -- a naming pass is expected during review.)
+      Only the Financial Forecast perspective is built, so Planning is a single direct link ("Forecast")
+      rather than a dropdown -- a menu over one item is pure friction. Restore the dropdown pattern (a
+      "Planning" toggle lit while any perspective is active, one dropdown-item per feature) when a second
+      perspective ships; the three still to come are previewed on the dashboard (Retirement Timing #40,
+      Social Security #6, Cash Flow #5).
       {% endcomment %}
       <ul class="navbar-nav">
         {# Dashboard is the app home; the logo goes to the public home. #}
@@ -35,20 +36,9 @@
           <a class="nav-link {% if url_name == 'dashboard' %}active{% endif %}"
              href="{% url 'dashboard' %}">Dashboard</a>
         </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if url_name == 'financial_forecast' or url_name == 'retirement_timing' or url_name == 'social_security' or url_name == 'cash_flow_planning' %}active{% endif %}"
-             href="#" id="planning-menu" role="button" data-toggle="dropdown"
-             aria-haspopup="true" aria-expanded="false">Planning</a>
-          <div class="dropdown-menu" aria-labelledby="planning-menu">
-            <a class="dropdown-item {% if url_name == 'financial_forecast' %}active{% endif %}"
-               href="{% url 'financial_forecast' %}">Financial Forecast</a>
-            <a class="dropdown-item {% if url_name == 'retirement_timing' %}active{% endif %}"
-               href="{% url 'retirement_timing' %}">Retirement Timing</a>
-            <a class="dropdown-item {% if url_name == 'social_security' %}active{% endif %}"
-               href="{% url 'social_security' %}">Social Security</a>
-            <a class="dropdown-item {% if url_name == 'cash_flow_planning' %}active{% endif %}"
-               href="{% url 'cash_flow_planning' %}">Cash Flow</a>
-          </div>
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'financial_forecast' %}active{% endif %}"
+             href="{% url 'financial_forecast' %}">Forecast</a>
         </li>
       </ul>
       {% comment %} Current household, shown for context -- a subtle link into Settings, where switching

@@ -16,7 +16,6 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
-from django.views.generic import TemplateView
 
 from organization.decorators import PermitsReadonlyMutation, ensure_organization
 
@@ -63,32 +62,6 @@ _DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
 _CHARTS_MODAL_TEMPLATE = 'planning/modals/run_charts.html'
 _COLUMN_CHART_MODAL_TEMPLATE = 'planning/modals/run_column_chart.html'
 _EXPLORE_SAVE_TEMPLATE = 'planning/modals/explore_save.html'
-_COMING_SOON_TEMPLATE = 'planning/pages/coming_soon.html'
-
-# The unbuilt planning features: title + one-line pitch for their placeholder pages.
-_COMING_SOON = {
-    'retirement_timing'  : ( 'Retirement Timing',
-                             'When can I retire? Sweep retirement dates to find the earliest feasible one.' ),
-    'social_security'    : ( 'Social Security',
-                             'When should I claim? Compare claiming strategies side by side.' ),
-    'cash_flow_planning' : ( 'Cash Flow',
-                             'Will I have enough? A fine-grained look at the next ~12 months.' ),
-}
-
-
-@method_decorator( ensure_organization, name = 'dispatch' )
-class ComingSoonView( TemplateView ):
-    """A first-class but unbuilt planning feature: real route and nav presence, placeholder body.
-    `feature_key` selects the title/pitch from `_COMING_SOON` (set per route via `as_view`)."""
-
-    template_name = _COMING_SOON_TEMPLATE
-    feature_key   = None
-
-    def get_context_data( self, **kwargs ):
-        context = super().get_context_data( **kwargs )
-        title, pitch = _COMING_SOON[ self.feature_key ]
-        context.update( feature_title = title, feature_pitch = pitch )
-        return context
 
 
 def _run_frame( result ) -> ForecastFrame:
