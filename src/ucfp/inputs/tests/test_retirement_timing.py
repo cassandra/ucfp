@@ -1,13 +1,13 @@
-"""RetirementForm: the per-subject expected-lifetime election round-trips into RetirementTiming (blank =
-not modeled), alongside the existing Social Security / pension elections. The date is canonical; a JS-less
-client that submits only an age falls back to the age-derived date.
+"""RetirementForm: the per-subject expected lifetime is entered as an *age only* (no paired date, unlike
+the SS/pension elections) and stored as the age-derived date the engine's survivor transition reads. Blank
+= not modeled; a stored date pre-fills the age.
 """
 import unittest
 from datetime import date
 
 from django.http import QueryDict
 
-from ucfp.inputs.plans.schemas import Plans
+from ucfp.inputs.plans.schemas import Plans, RetirementTiming
 from ucfp.inputs.profile.schemas import Profile, SubjectProfile
 from ucfp.inputs.retirement import RetirementForm
 
@@ -32,14 +32,17 @@ class ExpectedLifetimeTests( unittest.TestCase ):
         _profile_out, plans = form.apply( _profile(), Plans() )
         return plans.timing[ 0 ]
 
-    def test_a_lifetime_date_round_trips_into_the_timing( self ):
-        timing = self._apply( s0_life_from = '2050-06-01' )
+    def test_an_age_stores_the_age_derived_date( self ):
+        # Age-only: 90 for someone born 1960 -> the date they turn 90.
+        timing = self._apply( s0_life_age = '90' )
         self.assertEqual( timing.subject_handle, 'you' )
-        self.assertEqual( timing.expected_lifetime, date( 2050, 6, 1 ) )
+        self.assertEqual( timing.expected_lifetime, date( 2050, 1, 1 ) )
 
     def test_a_blank_lifetime_is_not_modeled( self ):
         self.assertIsNone( self._apply().expected_lifetime )
 
-    def test_an_age_with_no_date_falls_back_to_the_derived_date( self ):
-        # JS-less client: an age with a blank date resolves to birthdate + age (1960 + 90).
-        self.assertEqual( self._apply( s0_life_from_age = '90' ).expected_lifetime, date( 2050, 1, 1 ) )
+    def test_a_stored_lifetime_prefills_the_age( self ):
+        plans = Plans( timing = [ RetirementTiming(
+            subject_handle = 'you', expected_lifetime = date( 2050, 1, 1 ) ) ] )
+        form = RetirementForm( profile = _profile(), plans = plans )
+        self.assertEqual( form.subject_groups[ 0 ][ 'lifetime' ].value(), 90 )   # derived from the date

@@ -81,7 +81,19 @@ class RetirementForm( forms.Form ):
         lifetime = timing.expected_lifetime if timing is not None else None
         self._add_election_field( m, 'ss', 'Social Security claim', subject, claiming )
         self._add_election_field( m, 'pen', 'pension start', subject, start )
-        self._add_election_field( m, 'life', 'expected lifetime', subject, lifetime )
+        self._add_lifetime_field( m, subject, lifetime )
+
+    def _add_lifetime_field( self, m : int, subject : SubjectProfile, date_initial : Optional[ date ] ):
+        """The subject's expected lifetime -- a standalone *age* input (no paired date), since a lifetime is
+        thought of in years, not a calendar date; this also sets it apart from the date-backed benefit
+        elections. Stored as the age-derived date (`_lifetime_date`). Reuses the age class for sizing; with
+        no paired date the client's age->date fill simply no-ops."""
+        self.fields[ self._key( 's', m, 'life_age' ) ] = forms.IntegerField(
+            required = False, min_value = 0, max_value = 120,
+            initial = self._derived_age( date_initial, subject.birthdate ),
+            widget = forms.NumberInput( attrs = {
+                'class' : f'form-control {AppConst.AGE_FIELD_CLASS}',
+                'aria-label' : f'{subject.name} expected lifetime age' } ) )
 
     def _add_election_field( self, m : int, kind : str, label : str, subject : SubjectProfile,
                              date_initial : Optional[ date ] ):
@@ -150,6 +162,12 @@ class RetirementForm( forms.Form ):
             return _at_age( birthdate, age )
         return None
 
+    def _lifetime_date( self, m : int, birthdate : Optional[ date ] ) -> Optional[ date ]:
+        """The expected-lifetime date from the entered age (age-only field), or None when blank -- the age
+        resolved against the subject's birthdate, the value the engine's survivor transition reads."""
+        age = self.cleaned_data.get( self._key( 's', m, 'life_age' ) )
+        return _at_age( birthdate, age ) if age is not None and birthdate is not None else None
+
     # --- template rows -----------------------------------------------------
 
     @property
@@ -171,7 +189,7 @@ class RetirementForm( forms.Form ):
                 'income'   : income,
                 'ss'       : self._election_row( m, 'ss' ),
                 'pension'  : self._election_row( m, 'pen' ) if subject.handle in self._pensions else None,
-                'lifetime' : self._election_row( m, 'life' ) } )
+                'lifetime' : self[ self._key( 's', m, 'life_age' ) ] } )   # age-only, no paired date
         return groups
 
     @property
@@ -217,7 +235,7 @@ class RetirementForm( forms.Form ):
                 current,
                 government_pension_claiming_date = self._endpoint( 's', m, 'ss_from', subject.birthdate ),
                 pension_start = self._endpoint( 's', m, 'pen_from', subject.birthdate ),
-                expected_lifetime = self._endpoint( 's', m, 'life_from', subject.birthdate ) ) )
+                expected_lifetime = self._lifetime_date( m, subject.birthdate ) ) )
         return timing
 
 
