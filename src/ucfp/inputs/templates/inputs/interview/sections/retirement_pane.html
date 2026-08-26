@@ -36,12 +36,13 @@ whole horizon"; Social Security and a pension run for life once claimed.
               {% include 'inputs/components/_timing_line.html' with label='Claim' date=group.pension.from age=group.pension.from_age %}
             </div>
             {% endif %}
-            {% comment %}The subject's optional expected lifetime -- a secondary input most plans leave
-            blank, so it is de-emphasized vs. the SS/pension benefits: a divider sets it apart, the whole
-            line is muted and non-bold, and it is an *age only* (no paired date), which both matches how a
-            lifetime is thought of and distinguishes it from the date-backed benefits. Label, input, and
-            "(optional)" sit on one line to keep it compact. A set age drives the engine's survivor
-            transition (re-homed from the old Death money-move).{% endcomment %}
+            {% comment %}HIDDEN pending #14 (the survivor-transition module). The Expected lifetime input is
+            re-homed here from the old Death money-move, but the forecast engine does not yet stop a
+            decedent's income (SS, pension, wages) or model survivor benefits -- so a set value yields a
+            broken forecast (income continues past death). The plumbing below the fold is intact and dormant:
+            the form field (RetirementForm `_add_lifetime_field` / `_lifetime_date`),
+            `RetirementTiming.expected_lifetime`, and materialization's `_lifetime_removals`. Resurrect by
+            removing this comment wrapper (this opening line and the closing tag below) once #14 lands.
             <div class="mt-3 pt-2 border-top">
               <div class="d-flex align-items-center small text-muted">
                 <span class="mr-2">Expected lifetime:</span>
@@ -50,6 +51,7 @@ whole horizon"; Social Security and a pension run for life once claimed.
               </div>
               <div class="small text-muted mt-1">Leave blank to assume a full lifetime.</div>
             </div>
+            {% endcomment %}
           </div>
         </div>
       </div>
