@@ -99,21 +99,23 @@ test-js:
 test-all:	test test-granularity test-e2e test-js
 
 # ----- Docker (local self-hosted run) -----------------------------------------
-# The container is self-contained: supervisord runs redis + gunicorn + nginx
-# (see package/docker_*.conf). `docker-build` bakes the image; `docker-run`
-# launches it with the local env file (~/.ucfp/env/local.env, from `make
-# env-build`) and host-mounted data dirs (~/.ucfp/{database,media}). See
-# deploy/run_container.sh for the run details and overridable flags.
+# One image (deploy/Dockerfile) serves both deployment lanes; `docker-build`
+# builds it and `docker-run` launches it in the self-host configuration:
+# supervisord runs the bundled redis + gunicorn + nginx (UCFP_BUNDLED_REDIS=true;
+# see deploy/package/docker_*.conf), with the local env file
+# (~/.ucfp/env/local.env, from `make env-build`) and host-mounted data dirs
+# (~/.ucfp/{database,media}). See deploy/local/run_container.sh for the run
+# details and overridable flags.
 
 # Fail fast if the Docker daemon is not running.
 check-docker:
 	@docker info > /dev/null 2>&1 || \
 		(echo "ERROR: Docker is not running. Please start Docker and try again." && exit 1)
 
-docker-build:	check-docker deploy/local/Dockerfile
+docker-build:	check-docker deploy/Dockerfile
 	@VERSION=$$(cat VERSION); \
 	docker build \
-		-f deploy/local/Dockerfile \
+		-f deploy/Dockerfile \
 		--label "name=ucfp" \
 		--label "version=$$VERSION" \
 		--label "build-date=$(NOW_DATE)" \

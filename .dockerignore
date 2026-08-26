@@ -14,13 +14,11 @@ __pycache__
 /.claude/
 /.private/
 /venv/
-# Exclude deploy/ noise from the build context, but keep the docker build inputs
-# the Dockerfiles COPY (deploy/local/* and the shared deploy/package/*). The
-# droplet lane and the env tooling stay out of the local image context.
+# Exclude deploy/ noise from the build context, keeping only the docker build
+# inputs the unified Dockerfile COPYs (the shared deploy/package/*). The lane
+# scripts, compose/env templates, and env tooling stay out of the image context.
 /deploy/*
-!/deploy/local
 !/deploy/package
-!/deploy/droplet
 /data/
 /docs/
 /design/

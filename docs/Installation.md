@@ -24,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/cassandra/ucfp/master/install.sh | 
 - Downloads and starts the application
 - Shows your login URL and credentials
 
-**Result:** Visit [http://localhost:8666](http://localhost:8666) and sign in with the displayed credentials.
+**Result:** Visit [http://localhost:9666](http://localhost:9666) and sign in with the displayed credentials.
 
 **Data location:**
 - Database: `~/.ucfp/database/`
@@ -88,8 +88,8 @@ rm -rf ~/.ucfp/
 By default, the app only accepts requests to `localhost`. To access it from other devices (including by IP address), you need to tell the app which URLs are allowed:
 
 - Set `UCFP_EXTRA_HOST_URLS` to the URL(s) you'll use to access the app, including the scheme and port
-- Example: `UCFP_EXTRA_HOST_URLS="http://192.168.1.100:8666"` (use your server's actual IP)
-- Multiple URLs can be space-separated: `UCFP_EXTRA_HOST_URLS="http://192.168.1.100:8666 http://myserver.local:8666"`
+- Example: `UCFP_EXTRA_HOST_URLS="http://192.168.1.100:9666"` (use your server's actual IP)
+- Multiple URLs can be space-separated: `UCFP_EXTRA_HOST_URLS="http://192.168.1.100:9666 http://myserver.local:9666"`
 - For standalone Docker: edit `$HOME/.ucfp/env/local.env` and run `docker restart ucfp`
 
 If you see `Invalid HTTP_HOST header` errors in the logs, this is the setting you need. However, note that this setting requires the full URL location, not just a hostname.

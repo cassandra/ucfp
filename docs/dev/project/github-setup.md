@@ -113,8 +113,7 @@ Every workflow slash command (`/pickup`, `/createissue`, `/pr`, `/commit`,
 - [ ] Contributors have `gh` installed and authenticated
 
 ## Related Documentation
-- Droplet provisioning: [Droplet Provisioning](droplet-provisioning.md)
-- Droplet deployment: [Droplet / MySQL Production Deployment](droplet-deployment.md)
+- Droplet setup (one-time): [Droplet Setup](droplet-setup.md)
 - Workflow: [Workflow Guidelines](../workflow/workflow-guidelines.md)
 - Releases: [Release Process](../workflow/release-process.md)
 - Rollback: [Rollback Process](../workflow/rollback-process.md)

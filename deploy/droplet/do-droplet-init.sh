@@ -2,14 +2,17 @@
 #
 # One-time provisioning for a fresh production droplet (Ubuntu/Debian).
 # Installs Docker, an nginx + certbot TLS reverse proxy, MySQL, Redis, and
-# docker-compose, then prepares /opt/ucfp for deploy-prod.sh.
+# docker-compose, then prepares /opt/ucfp to receive deployments.
 #
-# Per-project: set DOMAIN below before running on the droplet.
+# Usage (run on the droplet):
+#   ./do-droplet-init.sh <domain> [admin-email]
+# e.g.
+#   ./do-droplet-init.sh app.example.com admin@example.com
 
 set -e
 
-# Per-project — edit this.
-DOMAIN="example.com"
+DOMAIN="${1:?Usage: $0 <domain> [admin-email]}"
+ADMIN_EMAIL="${2:-admin@$DOMAIN}"
 DOCKER_APP_PORT=8000
 
 echo "Updating system ..."
@@ -74,10 +77,18 @@ mkdir -p /opt/ucfp
 echo "*********"
 echo "* NOTICE: Run certbot after DNS points here to enable HTTPS."
 echo "* "
-echo "*         certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN"
+echo "*         certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos -m $ADMIN_EMAIL"
 echo "* "
 echo "* Renewal is automatic: the certbot package installs a systemd timer"
 echo "* (certbot.timer) that renews the cert and reloads nginx before expiry."
+echo "*********"
+echo "* NOTICE: the release deploy step pulls the app image from GitHub Container Registry"
+echo "*         (ghcr.io/cassandra/ucfp). If that package is private, authenticate"
+echo "*         this droplet to GHCR once:"
+echo "* "
+echo "*         echo <GITHUB_PAT> | docker login ghcr.io -u <github-username> --password-stdin"
+echo "* "
+echo "*         A public package needs no login."
 echo "*********"
 
 echo "Ready."

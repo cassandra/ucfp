@@ -231,7 +231,20 @@ DJANGO_SUPERUSER_PASSWORD=${DJANGO_ADMIN_PASSWORD}
 UCFP_DB_PATH=/data/database
 UCFP_MEDIA_PATH=/data/media
 
-# Redis Configuration (bundled in the container at localhost)
+# Database backend: defaults to SQLite at UCFP_DB_PATH above -- zero setup. To use
+# your own MySQL/MariaDB server instead, fill in all five variables below; MySQL
+# then takes precedence over UCFP_DB_PATH (no need to clear it). Leave blank for
+# the default SQLite.
+UCFP_DB_HOST=
+UCFP_DB_PORT=
+UCFP_DB_NAME=
+UCFP_DB_USER=
+UCFP_DB_PASSWORD=
+
+# Redis: bundled inside the container by default (UCFP_BUNDLED_REDIS=true), so a
+# standard install needs no external Redis. To use your own Redis instead, set
+# UCFP_BUNDLED_REDIS=false and point UCFP_REDIS_HOST / UCFP_REDIS_PORT at it.
+UCFP_BUNDLED_REDIS=true
 UCFP_REDIS_HOST=127.0.0.1
 UCFP_REDIS_PORT=6379
 

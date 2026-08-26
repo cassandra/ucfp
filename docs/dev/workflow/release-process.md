@@ -1,21 +1,23 @@
 # Release Process
 
 > **Role**: Process Documentation
-> **Purpose**: How a versioned release is cut, published, and validated
+> **Purpose**: The recurring steps to cut a release and deploy it to the droplet
 
 A release **promotes the latest `staging` to `master` and tags it**. `master`
 holds released code only -- it is never committed to directly; every change
 reaches it by merging `staging`. Publishing a GitHub Release for the tag triggers
 two workflows that do the actual distribution:
 
-- `.github/workflows/docker-publish.yml` builds `deploy/local/Dockerfile` and
-  pushes `ghcr.io/cassandra/ucfp:<version>` and `:latest` (linux/amd64 + arm64).
+- `.github/workflows/docker-publish.yml` builds the unified `deploy/Dockerfile`
+  and pushes `ghcr.io/cassandra/ucfp:<version>` and `:latest` (linux/amd64 + arm64).
 - `.github/workflows/release-assets.yml` attaches a source archive (`ucfp.zip`).
 
-Self-host users then get the new image via `install.sh` / `update.sh`. (The
-droplet/MySQL deployment is separate -- see
-[Droplet / MySQL Production Deployment](../project/droplet-deployment.md) and
-`deploy/droplet/deploy-prod.sh`.)
+One image serves both deployment lanes. Self-host users get the new image on their
+own via `install.sh` / `update.sh` -- publishing the release is all it takes to
+ship to them. Deploying the same published image to the production droplet is the
+final step of this process (step 5, a short sequence of validated commands). The
+droplet's one-time host and config setup is a prerequisite done once -- see
+[Droplet Setup](../project/droplet-setup.md).
 
 ## Prerequisites
 - Direct repository access (maintainers).
@@ -68,13 +70,50 @@ On the Actions page, confirm both succeeded:
   `:latest` exist in the registry.
 - **Create Release Assets** -> `ucfp.zip` is attached to the release.
 
-### 5. Validate the install
-Confirm the published image installs cleanly (ideally on a clean machine):
+### 5. Deploy to the production droplet
+With the image published, deploy it to the droplet one validated step at a time.
+Prerequisite: the one-time [Droplet Setup](../project/droplet-setup.md) is done. The
+examples use the `ucfp-prod` SSH alias and `/opt/ucfp` path from that setup.
+
+1. **Convert the env file** (local) — only if `production.sh` changed:
+   ```bash
+   python3 deploy/droplet/docker-compose-env-convert.py \
+       .private/env/production.sh .private/env/docker-compose.production.env
+   ```
+2. **Ship the config** and confirm it landed:
+   ```bash
+   scp .private/env/docker-compose.production.env  ucfp-prod:/opt/ucfp/ucfp.env
+   scp .private/env/production.sh                   ucfp-prod:/opt/ucfp/ucfp.sh
+   scp deploy/droplet/docker-compose.production.yml ucfp-prod:/opt/ucfp/docker-compose.yml
+   ssh ucfp-prod 'ls -l /opt/ucfp'
+   ```
+3. **Pull the released image** on the droplet:
+   ```bash
+   ssh ucfp-prod "docker pull ghcr.io/cassandra/ucfp:$(cat VERSION)"
+   ```
+4. **Restart** with the new image. `up -d` recreates the changed container in place
+   (no separate `down`, so no downtime gap); migrations and collectstatic run from
+   the entrypoint on start. `UCFP_VERSION` is passed inline so the compose file pins
+   the exact released image:
+   ```bash
+   ssh ucfp-prod "cd /opt/ucfp && UCFP_VERSION=$(cat VERSION) docker-compose up -d"
+   ssh ucfp-prod 'docker ps'          # container up and healthy?
+   ```
+5. **Verify** the live site:
+   ```bash
+   curl -I https://example.com
+   curl https://example.com/health    # JSON including the version you just deployed
+   ```
+   If anything looks wrong, see [Rollback Process](rollback-process.md).
+
+### 6. Validate the self-host install (optional)
+Confirm the published image installs cleanly for self-hosters (ideally on a clean
+machine):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cassandra/ucfp/master/install.sh | bash
 ```
 
-### 6. Open the next development version on `staging`
+### 7. Open the next development version on `staging`
 ```bash
 git checkout staging
 # Edit VERSION -> next anticipated version with a -dev suffix, e.g. 1.5.0-dev
@@ -100,5 +139,6 @@ Development versions carry a `-dev` suffix so a working tree is never mistaken
 for a released build.
 
 ## Related Documentation
+- Droplet one-time setup (deploy prerequisite): [Droplet Setup](../project/droplet-setup.md)
 - Workflow guidelines: [Workflow Guidelines](workflow-guidelines.md)
 - Rollback procedures: [Rollback Process](rollback-process.md)

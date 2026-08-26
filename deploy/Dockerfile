@@ -1,7 +1,12 @@
 # Pin specific Python version for consistency across platforms
 FROM python:3.11.8-bookworm
 
-# Install dependencies with curl for healthcheck
+# One image serves both deployment lanes. It always carries redis-server (started
+# by supervisord only in the self-host lane -- see the entrypoint's
+# UCFP_BUNDLED_REDIS handling) and the MySQL client + build deps that mysqlclient
+# needs (exercised only when the cloud lane selects the MySQL backend). curl is
+# for the healthcheck; redis-tools provides the readiness check in
+# docker-start-gunicorn.sh.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
@@ -9,8 +14,12 @@ RUN apt-get update \
         nginx \
         redis-server \
         redis-tools \
+        default-libmysqlclient-dev \
+        pkg-config \
+        build-essential \
     && mkdir -p /var/log/supervisor \
     && mkdir -p /etc/supervisor/conf.d \
+    && mkdir -p /etc/supervisor/available \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --upgrade pip
 
@@ -28,11 +37,16 @@ RUN mkdir -p /data/database && mkdir -p /data/media
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Assumes base.txt is all that is needed (ignores dev-specific dependencies)
+# base.txt is the full production dependency set (production.txt is just an alias
+# for it); dev-only tooling is intentionally excluded.
 COPY src/ucfp/requirements/base.txt /src/requirements.txt
 RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 
-COPY deploy/local/docker_supervisord.conf /etc/supervisor/conf.d/ucfp.conf
+# Always-on programs (gunicorn + nginx) go straight into conf.d. The bundled-redis
+# program ships to an "available" staging dir and is enabled into conf.d by the
+# entrypoint only when UCFP_BUNDLED_REDIS is true (the self-host lane).
+COPY deploy/package/docker_supervisord.conf /etc/supervisor/conf.d/ucfp.conf
+COPY deploy/package/docker_supervisord_redis.conf /etc/supervisor/available/redis.conf
 COPY deploy/package/docker_nginx.conf /etc/nginx/sites-available/default
 
 # Clean up nginx default configurations and ensure proper symlinks

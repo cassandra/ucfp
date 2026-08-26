@@ -25,7 +25,7 @@
 
 services:
   ucfp:
-    image: ghcr.io/cassandra/ucfp-app:latest
+    image: ghcr.io/cassandra/ucfp:latest
     container_name: ucfp
     restart: unless-stopped
     ports:

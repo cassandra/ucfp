@@ -3,15 +3,16 @@
 # Droplet MySQL backup -> S3 (run from cron on the droplet).
 # Sources the deployed env (UCFP_DB_*) and uploads a gzipped mysqldump.
 #
-# Per-project: set S3_BUCKET / S3_PREFIX below.
+# The S3 destination is operator-specific: define UCFP_BACKUP_S3_BUCKET (and
+# optionally UCFP_BACKUP_S3_PREFIX) in the deployed /opt/ucfp/ucfp.sh, which is
+# sourced below, so the bucket name stays out of the repo.
 
 set -e
 
 . /opt/ucfp/ucfp.sh
 
-# Config  (per-project — edit these)
-S3_BUCKET='your-bucket'
-S3_PREFIX='ucfp/mysql-backups'
+S3_BUCKET="${UCFP_BACKUP_S3_BUCKET:?Set UCFP_BACKUP_S3_BUCKET in /opt/ucfp/ucfp.sh}"
+S3_PREFIX="${UCFP_BACKUP_S3_PREFIX:-ucfp/mysql-backups}"
 
 TODAY=$(date +%A)         # e.g., Monday, Tuesday
 DAY=$(date +%d)           # e.g., 01, 15

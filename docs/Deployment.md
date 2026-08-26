@@ -10,7 +10,7 @@ By default, the app only accepts requests addressed to `localhost`. To access it
 
 ```shell
 # Example: accessing via IP address and hostname
-UCFP_EXTRA_HOST_URLS="http://192.168.1.100:8666 http://home-server:8666"
+UCFP_EXTRA_HOST_URLS="http://192.168.1.100:9666 http://home-server:9666"
 ```
 
 Multiple URLs are space-separated. After saving, restart the app: `docker restart ucfp`.
@@ -41,13 +41,30 @@ sudo systemctl enable docker
 
 If you enabled user authentication, create user accounts via the Django admin interface:
 
-1. Sign in at [http://localhost:8666/admin/](http://localhost:8666/admin/) using:
+1. Sign in at [http://localhost:9666/admin/](http://localhost:9666/admin/) using:
    - Email: `DJANGO_SUPERUSER_EMAIL` (from your env file)
    - Password: `DJANGO_SUPERUSER_PASSWORD` (from your env file)
 
-2. Add users at: [http://localhost:8666/admin/custom/customuser/add/](http://localhost:8666/admin/custom/customuser/add/)
+2. Add users at: [http://localhost:9666/admin/custom/customuser/add/](http://localhost:9666/admin/custom/customuser/add/)
 
 **Requirements:** Email configuration must be working (users receive "magic code" login links).
+
+## Advanced: external database or Redis
+
+The standard install is self-contained — SQLite plus a Redis bundled inside the
+container — and needs no external services. If you would rather use your own
+database or cache server, edit `~/.ucfp/env/local.env`:
+
+- **External MySQL/MariaDB** — fill in all five `UCFP_DB_*` variables
+  (`UCFP_DB_HOST`, `UCFP_DB_PORT`, `UCFP_DB_NAME`, `UCFP_DB_USER`,
+  `UCFP_DB_PASSWORD`). MySQL then takes precedence over `UCFP_DB_PATH`, so you do
+  not need to clear it. Leaving them blank keeps the default SQLite.
+- **External Redis** — set `UCFP_BUNDLED_REDIS=false` and point
+  `UCFP_REDIS_HOST` / `UCFP_REDIS_PORT` at your server. The container then does not
+  run its own Redis.
+
+Restart after editing (`docker restart ucfp`). See
+[`local.env.example`](../local.env.example) for the full annotated env surface.
 
 ## Using docker compose directly
 
