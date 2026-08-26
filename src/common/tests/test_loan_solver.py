@@ -5,10 +5,12 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
-from common.amortization import level_payment
+from common.amortization import level_payment, periods_to_repay
 from common.loan_solver import (
-    MAX_PLAUSIBLE_APR, monthly_payment, plausible_rate_from_payment, resolved_annual_rate )
+    MAX_PLAUSIBLE_APR, monthly_payment, plausible_rate_from_payment, resolved_annual_rate,
+    resolved_term )
 from common.rate import Rate
+from common.recurrence import Duration, TimeUnit
 
 
 class MonthlyPaymentTest( SimpleTestCase ):
@@ -78,3 +80,32 @@ class ResolvedAnnualRateTest( SimpleTestCase ):
     def test_an_implausible_payment_resolves_to_none( self ):
         high = monthly_payment( Decimal( '20000' ), Rate.percent( 60 ), 36 )
         self.assertIsNone( resolved_annual_rate( None, Decimal( '20000' ), high, 36 ) )
+
+
+class ResolvedTermTest( SimpleTestCase ):
+    """The payment->term back-solve: the whole months a monthly takes to clear the balance at a rate,
+    guarded so a payment that cannot retire the balance yields no term. Used only when the term is blank."""
+
+    def test_it_wraps_periods_to_repay_as_a_month_duration( self ):
+        # It takes the annual rate per month and returns the whole-month count periods_to_repay gives.
+        payment  = Decimal( '600' )                     # a real monthly on 20,000 at 5%
+        expected = periods_to_repay( Decimal( '20000' ), Rate.percent( 5 ).fraction / 12, payment )
+        self.assertEqual( resolved_term( Decimal( '20000' ), Rate.percent( 5 ), payment ),
+                          Duration( expected, TimeUnit.MONTH ) )
+
+    def test_zero_interest_is_straight_line( self ):
+        # 12,000 at 0% paying 1,000/mo clears in 12 months.
+        self.assertEqual( resolved_term( Decimal( '12000' ), Rate( Decimal( '0' ) ), Decimal( '1000' ) ),
+                          Duration( 12, TimeUnit.MONTH ) )
+
+    def test_a_payment_below_the_interest_yields_no_term( self ):
+        # 20,000 at 12%/yr accrues 200/mo of interest; paying 150 never reduces the balance.
+        self.assertIsNone( resolved_term( Decimal( '20000' ), Rate.percent( 12 ), Decimal( '150' ) ) )
+
+    def test_a_missing_balance_rate_or_payment_yields_no_term( self ):
+        self.assertIsNone( resolved_term( None, Rate.percent( 5 ), Decimal( '500' ) ) )
+        self.assertIsNone( resolved_term( Decimal( '20000' ), None, Decimal( '500' ) ) )
+        self.assertIsNone( resolved_term( Decimal( '20000' ), Rate.percent( 5 ), None ) )
+
+    def test_a_zero_balance_yields_no_term( self ):
+        self.assertIsNone( resolved_term( Decimal( '0' ), Rate.percent( 5 ), Decimal( '500' ) ) )
