@@ -36,26 +36,16 @@ walk). Reads `row` (a scenario with `complete`, `blockers`, its `drift` notice o
       <ul class="mb-0 mt-1">{% for blocker in row.blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>
     </div>
     {% endif %}
-    {% comment %}Drift is not blocking here (the card keeps every action) -- it names the stale references
-    and offers the same one-click reconcile the Forecast page does, so the card explains why the scenario
-    would not run rather than silently reading as ready.{% endcomment %}
-    {% if row.drift %}
-    <div class="alert alert-warning py-2 mb-3">
-      {% include 'inputs/panes/scenario_drift.html' with drift=row.drift %}
-    </div>
-    {% endif %}
-    {% comment %}The sibling loan-terms drift: a loan's contract terms changed since this plan seeded from
-    them; resolve per loan (update or keep) before the scenario runs.{% endcomment %}
-    {% if row.loan_terms_drift %}
-    <div class="alert alert-warning py-2 mb-3">
-      {% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=row.loan_terms_drift %}
-    </div>
-    {% endif %}
-    {% comment %}The sibling home-rent drift: the Profile rent changed since this plan's rent expense seeded
-    from it (update or keep). Non-blocking advisory.{% endcomment %}
-    {% if row.home_rent_drift %}
-    <div class="alert alert-warning py-2 mb-3">
-      {% include 'inputs/panes/home_rent_drift.html' with home_rent_drift=row.home_rent_drift %}
+    {% comment %}The scenario's drift advisories, gathered into one warning panel (stale references,
+    loan-terms, rent) so they read as a single "things changed in your profile" region rather than separate
+    stacked boxes -- matching the Plans flow. Not blocking here (the card keeps every action): the panel
+    names each change and offers the same reconcile the Forecast page does, so the card explains why the
+    scenario would not run rather than silently reading as ready. Each var is None when nothing drifted.{% endcomment %}
+    {% if row.drift or row.loan_terms_drift or row.home_rent_drift %}
+    <div class="alert alert-warning py-2 px-3 small mb-3">
+      {% if row.drift %}{% include 'inputs/panes/scenario_drift.html' with drift=row.drift %}{% endif %}
+      {% if row.loan_terms_drift %}{% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=row.loan_terms_drift %}{% endif %}
+      {% if row.home_rent_drift %}{% include 'inputs/panes/home_rent_drift.html' with home_rent_drift=row.home_rent_drift %}{% endif %}
     </div>
     {% endif %}
     <div class="row">
