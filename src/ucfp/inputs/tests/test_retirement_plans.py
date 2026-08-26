@@ -85,6 +85,14 @@ class ApplyTests( unittest.TestCase ):
         self.assertIsNone( plans.withdrawals[ 0 ].interval )   # a blank cadence means one-time
         self.assertEqual( plans.withdrawals[ 0 ].start_age, 60 )
 
+    def test_an_implausible_age_is_treated_as_unset( self ):
+        # An age past the plausible cap (the declared field's old max_value=120) is dropped rather than
+        # materialized; the rest of the row still applies.
+        form = _form( WithdrawalsForm, w_account = 'ira', w_amount = '10000', w_start_age = '999' )
+        self.assertTrue( form.is_valid(), form.errors )
+        _profile_out, plans = form.apply( None, Plans() )
+        self.assertIsNone( plans.withdrawals[ 0 ].start_age )
+
     def test_a_row_without_an_amount_is_not_materialized( self ):
         form = _form( ContributionsForm, c_amount = '' )       # account defaults to the sole account
         self.assertTrue( form.is_valid(), form.errors )

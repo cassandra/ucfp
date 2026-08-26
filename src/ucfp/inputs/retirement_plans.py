@@ -26,6 +26,7 @@ from ucfp.parameter_sets.enums import CadenceDomain
 _PRETAX             = AssetClass.PRETAX_RETIREMENT
 _RETIREMENT_CLASSES = ( AssetClass.PRETAX_RETIREMENT, AssetClass.ROTH )
 _CADENCE_DOMAIN     = CadenceDomain.WK_MO_YR   # weekly (per-paycheck), monthly, or yearly
+_MAX_PLAN_AGE       = 120                      # a plan age above this is implausible; treated as unset
 
 
 class RetirementMovementForm( forms.Form ):
@@ -186,7 +187,13 @@ class RetirementMovementForm( forms.Form ):
 
     @staticmethod
     def _parse_age( raw : str ):
-        return int( raw ) if raw and raw.strip().isdigit() else None
+        """A posted age as an int in [0, 120], else None -- blank, non-numeric (negatives fail `isdigit`),
+        or an implausible age is treated as unset rather than materialized, the non-blocking equivalent of
+        the declared field's old `max_value=120` (kept through the getlist migration)."""
+        if not ( raw and raw.strip().isdigit() ):
+            return None
+        age = int( raw.strip() )
+        return age if age <= _MAX_PLAN_AGE else None
 
     def _read_interval( self, count_raw : str, unit_raw : str ):
         """The row's cadence as a Duration: the chosen magnitude/unit, else -- for an optional cadence -- a

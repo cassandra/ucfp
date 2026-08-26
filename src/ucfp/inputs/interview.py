@@ -260,7 +260,7 @@ class HomeForm( LoanTermsFieldsMixin, forms.Form ):
     _RESIDENCE_HANDLE = RESIDENCE_ASSET_HANDLE
     _MORTGAGE_HANDLE  = RESIDENCE_MORTGAGE_HANDLE
 
-    LOAN_ID = 'residence-mortgage'   # distinct block id: the residence shares the Real Estate page
+    LOAN_ID = 'residence-mortgage'   # the loan block's DOM id stem (the residence's mortgage fieldset)
 
     tenure           = forms.ChoiceField(
         label = 'Do you own or rent your home?', choices = _TENURE_CHOICES, required = False,
