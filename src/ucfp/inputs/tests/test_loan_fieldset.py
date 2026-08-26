@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
+from common.amortization import periods_to_repay
 from common.dataclass_json import from_json_data, to_json_data
 from common.loan_solver import monthly_payment
 from common.rate import Rate
@@ -54,6 +55,33 @@ class SolvedLoanTermsTest( SimpleTestCase ):
         terms = solved_loan_terms( Decimal( '20000' ), None, _months( 36 ), high )
         self.assertIsNone( terms.interest_rate )
         self.assertEqual( terms.monthly_payment, high )
+
+    def test_a_blank_term_back_solves_from_the_payment( self ):
+        # Balance + rate + payment with the term left blank -- the "how long to pay off?" direction fills
+        # the term, then the payment is re-derived from the now-complete trio (as the rate path does).
+        payment = Decimal( '600' )                          # a real monthly on 20,000 at 5%
+        months  = periods_to_repay( Decimal( '20000' ), Rate.percent( 5 ).fraction / 12, payment )
+        terms   = solved_loan_terms( Decimal( '20000' ), Rate.percent( 5 ), None, payment )
+        self.assertEqual( terms.remaining_term, _months( months ) )
+        self.assertEqual( terms.interest_rate, Rate.percent( 5 ) )
+        expected = Decimal( round( monthly_payment( Decimal( '20000' ), Rate.percent( 5 ), months ) ) )
+        self.assertEqual( terms.monthly_payment, expected )
+
+    def test_a_blank_term_and_an_unclearable_payment_derive_no_term( self ):
+        # 20,000 at 12%/yr accrues 200/mo of interest; paying 150 never clears it, so no term is invented
+        # and the payment is kept as given (there is no consistent trio to re-derive it from).
+        terms = solved_loan_terms( Decimal( '20000' ), Rate.percent( 12 ), None, Decimal( '150' ) )
+        self.assertIsNone( terms.remaining_term )
+        self.assertEqual( terms.interest_rate, Rate.percent( 12 ) )
+        self.assertEqual( terms.monthly_payment, Decimal( '150' ) )
+
+    def test_a_blank_term_without_a_rate_leaves_the_term_blank( self ):
+        # No rate to pin the term against: the payment alone cannot place both rate and term, so the term
+        # stays blank (today's behavior) -- the term back-solve needs an entered rate.
+        terms = solved_loan_terms( Decimal( '20000' ), None, None, Decimal( '500' ) )
+        self.assertIsNone( terms.remaining_term )
+        self.assertIsNone( terms.interest_rate )
+        self.assertEqual( terms.monthly_payment, Decimal( '500' ) )
 
     def test_a_partial_entry_stores_what_is_given( self ):
         # Rate only, no term: nothing to derive, but the rate is a legitimate captured fact.

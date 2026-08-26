@@ -16,7 +16,7 @@ from typing import Optional
 from django import forms
 
 from common.forms import MoneyField, PercentField
-from common.loan_solver import monthly_payment, resolved_annual_rate
+from common.loan_solver import monthly_payment, resolved_annual_rate, resolved_term
 from common.rate import Rate
 from common.recurrence import Duration, TimeUnit
 
@@ -54,13 +54,19 @@ def loan_payment_field( *, initial = None ) -> MoneyField:
 def solved_loan_terms(
         balance : Optional[ Decimal ], interest_rate : Optional[ Rate ],
         remaining_term : Optional[ Duration ], payment : Optional[ Decimal ] ) -> Optional[ LoanTerms ]:
-    """The consistent `LoanTerms` the user's entries imply, or None when no term was entered at all (a
-    balance-only loan). The rate is taken as entered, else back-solved from the `payment` over `balance`
-    and the term (guarded); the payment is then re-derived from balance + rate + term so the stored trio is
-    internally consistent. `balance` is the books fact -- read but not stored on the terms."""
+    """The consistent `LoanTerms` the user's entries imply, or None for a loan with no terms at all (a
+    balance-only loan). The rate is taken as entered, else back-solved from the `payment` over `balance` and
+    the term (guarded). When the term is left blank but balance + rate + payment are given, the term is
+    back-solved from the payment instead (the "how long until it's paid off?" direction, guarded). The
+    payment is then re-derived from balance + rate + term so the stored trio is internally consistent --
+    including where the term was itself derived. `balance` is the books fact -- read but not stored on the
+    terms."""
     months = remaining_term.months() if remaining_term is not None else None
     rate   = ( resolved_annual_rate( interest_rate, balance, payment, months )
                if months is not None else interest_rate )
+    if remaining_term is None and rate is not None and payment is not None:
+        remaining_term = resolved_term( balance, rate, payment )
+        months         = remaining_term.months() if remaining_term is not None else None
     consistent_payment = payment
     if balance is not None and balance > 0 and rate is not None and months is not None:
         consistent_payment = Decimal( round( monthly_payment( balance, rate, months ) ) )

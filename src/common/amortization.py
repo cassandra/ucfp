@@ -21,13 +21,15 @@ def level_payment( principal : Decimal, periodic_rate : Decimal, periods : int )
 
 
 def periods_to_repay(
-        balance : Decimal, periodic_rate : Decimal, payment : Decimal ) -> Optional[ int ]:
+        balance : Decimal, periodic_rate : Decimal, payment : Decimal,
+        max_periods : Optional[ int ] = None ) -> Optional[ int ]:
     """The number of level `payment`s needed to retire `balance` at `periodic_rate` per period,
     rounded up to the whole period that clears it -- the counterpart of `level_payment` when the
     payment is known and the term is not. None when the payment cannot retire the balance: a payment
     that does not exceed the first period's interest never brings the balance down. Computed by
     stepping the balance (exact over `Decimal`), which terminates because a qualifying payment
-    strictly reduces it each period."""
+    strictly reduces it each period. `max_periods`, when given, caps that stepping: a payoff that would
+    take longer returns None (an implausibly long term the caller declines) and bounds the work."""
     if balance <= 0:
         return 0
     if payment <= 0 or ( periodic_rate > 0 and payment <= balance * periodic_rate ):
@@ -38,6 +40,8 @@ def periods_to_repay(
         payoff   = remaining + remaining * periodic_rate
         if payment >= payoff:
             return periods                  # this payment covers the full payoff -- cleared here
+        if max_periods is not None and periods >= max_periods:
+            return None                     # longer than the caller's plausible span -- decline
         remaining = payoff - payment
     return periods
 

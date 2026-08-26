@@ -448,14 +448,15 @@ window.App.Inputs = (function () {
     function monthsToClear( balance, payment, rate ) {
         if ( balance <= 0 ) { return 0; }
         if ( rate > 0 && payment <= balance * rate ) { return null; }
+        const cap = C.MAX_PLAUSIBLE_LOAN_TERM_MONTHS;   // shared with the server's periods_to_repay bound
         let remaining = balance, months = 0;
-        while ( remaining > 0 && months < 1200 ) {
+        while ( remaining > 0 && months < cap ) {
             months += 1;
             const payoff = remaining + remaining * rate;
             if ( payment >= payoff ) { return months; }
             remaining = payoff - payment;
         }
-        return months < 1200 ? months : null;
+        return months < cap ? months : null;
     }
 
     // The level payment that clears `balance` over `months` at the card rate (mirror of level_payment).
@@ -566,6 +567,12 @@ window.App.Inputs = (function () {
         return parseInt( $loan.find( classSelector( C.LOAN_TERM_CLASS ) ).val(), 10 ) || 0;
     }
 
+    // The interest rate as a percent, or NaN when the field is blank -- a blank rate is "not entered" while
+    // an entered 0 is a real 0% loan, so callers test `>= 0` (NaN fails that, 0 passes).
+    function loanRatePercent( $loan ) {
+        return parseFloat( $loan.find( classSelector( C.LOAN_RATE_CLASS ) ).val() );
+    }
+
     // A whole-month term as "29 yr 11 mo" (either part dropped when zero, but never both).
     function describeTerm( months ) {
         const whole = Math.round( months );
@@ -595,7 +602,7 @@ window.App.Inputs = (function () {
     // balance over the months left. The authoritative trio is explicit, so clear the "doesn't fit" hint.
     function fillLoanPayment( $loan ) {
         const balance = loanBalance( $loan ), months = loanMonths( $loan );
-        const ratePercent = parseFloat( $loan.find( classSelector( C.LOAN_RATE_CLASS ) ).val() );
+        const ratePercent = loanRatePercent( $loan );
         if ( !( balance > 0 ) || !( months > 0 ) || !( ratePercent >= 0 ) ) { return; }
         setMoneyField( $loan.find( classSelector( C.LOAN_PAYMENT_CLASS ) ),
                        paymentForMonths( balance, months, ( ratePercent / 100 ) / 12 ) );
@@ -615,11 +622,35 @@ window.App.Inputs = (function () {
         $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).toggleClass( 'd-none', fits );
     }
 
+    // Back-solve the remaining term -- the months this payment takes to clear the balance at the rate
+    // ("how long until it's paid off?"). A payment that cannot retire the balance (or would take an absurd
+    // span) forms no real loan, so leave the term blank and show the hint rather than an implausible term.
+    function fillLoanTerm( $loan ) {
+        const balance = loanBalance( $loan ), payment = loanField( $loan, C.LOAN_PAYMENT_CLASS );
+        const ratePercent = loanRatePercent( $loan );
+        if ( !( balance > 0 ) || !( ratePercent >= 0 ) || !( payment > 0 ) ) { return; }
+        const months = monthsToClear( balance, payment, ( ratePercent / 100 ) / 12 );
+        $loan.find( classSelector( C.LOAN_TERM_CLASS ) ).val( months === null ? '' : months );
+        $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).toggleClass( 'd-none', months !== null );
+    }
+
+    // Re-derive the balance where the surface edits it (the Profile entries) -- the principal these terms
+    // imply (the present value of the payments). Always computable from rate + term + payment, so clear the
+    // hint.
+    function fillLoanBalance( $loan ) {
+        const months = loanMonths( $loan ), payment = loanField( $loan, C.LOAN_PAYMENT_CLASS );
+        const ratePercent = loanRatePercent( $loan );
+        if ( !( months > 0 ) || !( ratePercent >= 0 ) || !( payment > 0 ) ) { return; }
+        setMoneyField( $loan.find( classSelector( C.LOAN_BALANCE_CLASS ) ),
+                       presentValue( payment, months, ( ratePercent / 100 ) / 12 ) );
+        $loan.find( classSelector( C.LOAN_HINT_CLASS ) ).addClass( 'd-none' );
+    }
+
     // The advisory readout (where a surface has one): the level payment the terms imply, plus any
     // extra-principal payoff. Empty until balance, rate, and term are all set.
     function loanReadout( $loan ) {
         const balance = loanBalance( $loan );
-        const ratePercent = loanField( $loan, C.LOAN_RATE_CLASS );
+        const ratePercent = loanRatePercent( $loan );
         const months = loanMonths( $loan );
         if ( !( balance > 0 ) || !( ratePercent >= 0 ) || !( months > 0 ) ) { return ''; }
         const rate = ( ratePercent / 100 ) / 12;
@@ -641,16 +672,67 @@ window.App.Inputs = (function () {
         if ( $readout.length ) { $readout.text( loanReadout( $loan ) ); }
     }
 
-    // Respond to an edit within a loan block: the four-quantity solve (only where the block carries a
-    // payment input) -- the payment back-solves the rate, any of the authoritative trio re-derives the
-    // payment -- then refresh any advisory readout.
+    // The four loan quantities in knownness order, least-known first: balance and remaining term drift month
+    // to month (the vaguest), the rate is a remembered ballpark, the payment is seen every month (the surest).
+    // The sink policy re-derives the least-known field the surface lets it write. `has` reports whether the
+    // field currently holds a usable value; `writeable` whether this surface renders it as an editable input
+    // (balance is a fixed fact on the current-loan cards, an input only on the Profile entries).
+    function loanHas( $loan, cls ) {
+        if ( cls === C.LOAN_BALANCE_CLASS ) { return loanBalance( $loan ) > 0; }
+        if ( cls === C.LOAN_TERM_CLASS )    { return loanMonths( $loan ) > 0; }
+        if ( cls === C.LOAN_RATE_CLASS )    { return loanRatePercent( $loan ) >= 0; }
+        return loanField( $loan, cls ) > 0;                  // payment
+    }
+
+    function loanWriteable( $loan, cls ) {
+        return $loan.find( classSelector( cls ) ).length > 0;
+    }
+
+    const LOAN_QUANTITIES = [
+        { cls: C.LOAN_BALANCE_CLASS, fill: fillLoanBalance },
+        { cls: C.LOAN_TERM_CLASS,    fill: fillLoanTerm },
+        { cls: C.LOAN_RATE_CLASS,    fill: fillLoanRate },
+        { cls: C.LOAN_PAYMENT_CLASS, fill: fillLoanPayment },
+    ];
+
+    // The pure sink decision, factored out so it can be unit-tested without the DOM: given the writeable
+    // field classes (in knownness order, least-known first), which of them are currently blank, and the
+    // class just edited, return the one field to (re-)derive -- the sole writeable blank that is not the
+    // edited field (solve the missing quantity), else the least-known writeable field that is not the edited
+    // field (re-derive it), else null (>=2 blanks is underdetermined, and nothing is derived while the edited
+    // field is itself the only blank). Never returns the edited field, so an in-progress edit is never
+    // overwritten.
+    function selectLoanSink( writeableClasses, blankClasses, editedClass ) {
+        if ( blankClasses.length === 1 && blankClasses[ 0 ] !== editedClass ) {
+            return blankClasses[ 0 ];
+        }
+        if ( blankClasses.length === 0 ) {
+            const others = writeableClasses.filter( function ( cls ) { return cls !== editedClass; } );
+            return others.length ? others[ 0 ] : null;
+        }
+        return null;
+    }
+
+    // Which loan quantity the edited element is (its knownness-table class), or null -- so the sink
+    // decision can exclude it.
+    function editedLoanClass( $edited ) {
+        const quantity = LOAN_QUANTITIES.filter( function ( q ) { return $edited.hasClass( q.cls ); } )[ 0 ];
+        return quantity ? quantity.cls : null;
+    }
+
+    // Respond to an edit within a loan block (only where the block carries a payment input -- the
+    // four-quantity solve): read which quantities this surface can write and which are blank, ask
+    // selectLoanSink which single field to derive, fill it, then refresh any advisory readout.
     function solveLoan( $loan, $edited ) {
         if ( $loan.find( classSelector( C.LOAN_PAYMENT_CLASS ) ).length ) {
-            if ( $edited.hasClass( C.LOAN_PAYMENT_CLASS ) ) {
-                fillLoanRate( $loan );
-            } else if ( $edited.hasClass( C.LOAN_BALANCE_CLASS ) || $edited.hasClass( C.LOAN_RATE_CLASS )
-                        || $edited.hasClass( C.LOAN_TERM_CLASS ) ) {
-                fillLoanPayment( $loan );
+            const writeable = LOAN_QUANTITIES.filter( function ( q ) { return loanWriteable( $loan, q.cls ); } );
+            const blanks    = writeable.filter( function ( q ) { return !loanHas( $loan, q.cls ); } );
+            const sinkClass = selectLoanSink(
+                writeable.map( function ( q ) { return q.cls; } ),
+                blanks.map( function ( q ) { return q.cls; } ),
+                editedLoanClass( $edited ) );
+            if ( sinkClass ) {
+                LOAN_QUANTITIES.filter( function ( q ) { return q.cls === sinkClass; } )[ 0 ].fill( $loan );
             }
         }
         updateLoanReadout( $loan );
@@ -1155,5 +1237,6 @@ window.App.Inputs = (function () {
         enhanceSwitches         : enhanceSwitches,
         enhanceResidenceOptions : enhanceResidenceOptions,
         enhanceCreditCards      : enhanceCreditCards,
+        selectLoanSink          : selectLoanSink,   // exposed for unit testing (pure sink-selection logic)
     };
 } )();

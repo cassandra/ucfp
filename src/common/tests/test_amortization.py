@@ -60,6 +60,16 @@ class PeriodsToRepayTest( SimpleTestCase ):
         # 1000 @ 10%, paying 600/period: 1100-600=500, 550-600<=0 -> cleared in 2 (2nd is partial).
         self.assertEqual( periods_to_repay( Decimal( '1000' ), Decimal( '0.1' ), Decimal( '600' ) ), 2 )
 
+    def test_max_periods_declines_a_longer_payoff( self ):
+        # 12000 at no interest, 1000/period clears in 12; a cap below that declines (None) rather than run on.
+        self.assertIsNone( periods_to_repay( Decimal( '12000' ), Decimal( '0' ), Decimal( '1000' ),
+                                             max_periods = 6 ) )
+
+    def test_max_periods_allows_a_payoff_that_clears_within_it( self ):
+        # The same loan clears in 12, so a cap at or above 12 returns 12 (the cap bounds work, not answers).
+        self.assertEqual( periods_to_repay( Decimal( '12000' ), Decimal( '0' ), Decimal( '1000' ),
+                                            max_periods = 12 ), 12 )
+
 
 class PresentValueTest( SimpleTestCase ):
 
