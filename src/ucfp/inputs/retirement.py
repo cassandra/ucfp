@@ -28,7 +28,8 @@ from ucfp.inputs.widgets import IsoDateInput
 class RetirementForm( forms.Form ):
     """When each income runs and each entitlement is claimed. Per general income flow (read from the
     Profile): a from/until window, with an age helper when the flow is a person's; per subject: the
-    Social Security claiming and pension start dates. `apply` rebuilds the Plans' per-flow `income_timing`
+    Social Security claiming and pension start dates, and an optional expected lifetime (blank = death not
+    modeled). `apply` rebuilds the Plans' per-flow `income_timing`
     (only for the current general flows, so timing for a deleted flow self-prunes) and the per-subject
     `timing`; the Profile is untouched. Rentals are excluded -- their rent is clipped to the property's
     sale event at materialize, not timed here."""
@@ -77,8 +78,10 @@ class RetirementForm( forms.Form ):
         timing   = self._timing.get( subject.handle )
         claiming = timing.government_pension_claiming_date if timing is not None else None
         start    = timing.pension_start if timing is not None else None
+        lifetime = timing.expected_lifetime if timing is not None else None
         self._add_election_field( m, 'ss', 'Social Security claim', subject, claiming )
         self._add_election_field( m, 'pen', 'pension start', subject, start )
+        self._add_election_field( m, 'life', 'expected lifetime', subject, lifetime )
 
     def _add_election_field( self, m : int, kind : str, label : str, subject : SubjectProfile,
                              date_initial : Optional[ date ] ):
@@ -164,10 +167,11 @@ class RetirementForm( forms.Form ):
             income = [ self._window_row( i, flow ) for i, flow in enumerate( self._flows )
                        if flow.subject_handle == subject.handle ]
             groups.append( {
-                'subject' : subject.name,
-                'income'  : income,
-                'ss'      : self._election_row( m, 'ss' ),
-                'pension' : self._election_row( m, 'pen' ) if subject.handle in self._pensions else None } )
+                'subject'  : subject.name,
+                'income'   : income,
+                'ss'       : self._election_row( m, 'ss' ),
+                'pension'  : self._election_row( m, 'pen' ) if subject.handle in self._pensions else None,
+                'lifetime' : self._election_row( m, 'life' ) } )
         return groups
 
     @property
@@ -212,7 +216,8 @@ class RetirementForm( forms.Form ):
             timing.append( replace(
                 current,
                 government_pension_claiming_date = self._endpoint( 's', m, 'ss_from', subject.birthdate ),
-                pension_start = self._endpoint( 's', m, 'pen_from', subject.birthdate ) ) )
+                pension_start = self._endpoint( 's', m, 'pen_from', subject.birthdate ),
+                expected_lifetime = self._endpoint( 's', m, 'life_from', subject.birthdate ) ) )
         return timing
 
 
