@@ -201,6 +201,11 @@ class Profile:
     # start that solicits an explicit choice). Owning is also carried by the residence asset; renting
     # and the rent-free 'Neither' carry no asset, so this fact carries them (and gates rented-home costs).
     home_tenure: Optional[ HousingTenure ] = None
+    # The household's current monthly rent -- a fact captured (in the Home section) only when the tenure is
+    # Rent, blank otherwise. It seeds the Plans rented-home rent expense (Plans-side, with drift), the rent
+    # analog of the mortgage balance/terms facts: the Plans expense stays authoritative, this is the entry
+    # aid / seed default the plan is built from.
+    home_monthly_rent: Optional[ Decimal ] = None
     # The household's tax jurisdiction -- a fact these facts are all expressed under (account tax
     # classes, entitlements, filing status). US federal is the only one modeled today.
     jurisdiction_type: JurisdictionType = JurisdictionType.US_FEDERAL

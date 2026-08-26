@@ -44,6 +44,35 @@ class HomeTenureTests( unittest.TestCase ):
         self.assertIs( _applied( tenure = 'neither' ).home_tenure, HousingTenure.NEITHER )
 
 
+class MonthlyRentTests( unittest.TestCase ):
+    """The current monthly rent is a Profile fact, captured only for the Rent tenure."""
+
+    def test_rent_tenure_records_the_monthly_rent( self ):
+        self.assertEqual(
+            _applied( tenure = 'rent', monthly_rent = '1,800' ).home_monthly_rent, Decimal( '1800' ) )
+
+    def test_rent_is_recorded_only_for_the_rent_tenure( self ):
+        # A rent amount posted while owning is ignored -- the fact belongs to the Rent case.
+        self.assertIsNone(
+            _applied( tenure = 'own', home_value = '500,000', monthly_rent = '1,800' ).home_monthly_rent )
+
+    def test_a_blank_rent_is_not_recorded( self ):
+        self.assertIsNone( _applied( tenure = 'rent' ).home_monthly_rent )
+
+    def test_a_stored_rent_prefills_the_field( self ):
+        form = HomeForm( profile = Profile( home_tenure = HousingTenure.RENT,
+                                            home_monthly_rent = Decimal( '1800' ) ), plans = Plans() )
+        self.assertEqual( form[ 'monthly_rent' ].value(), Decimal( '1800' ) )
+
+    def test_switching_away_from_rent_clears_the_fact( self ):
+        data = QueryDict( mutable = True )
+        data.update( tenure = 'own', home_value = '500,000' )
+        form = HomeForm( data, profile = Profile( home_monthly_rent = Decimal( '1800' ) ), plans = Plans() )
+        self.assertTrue( form.is_valid(), form.errors )
+        profile, _plans = form.apply( Profile( home_monthly_rent = Decimal( '1800' ) ), Plans() )
+        self.assertIsNone( profile.home_monthly_rent )
+
+
 class ResidenceMortgageTermsTests( unittest.TestCase ):
     """The residence mortgage carries the shared loan-terms fields: entered terms are captured on the
     mortgage `Debt`, and reopen an edit on them."""
