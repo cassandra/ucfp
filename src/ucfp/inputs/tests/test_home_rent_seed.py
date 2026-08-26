@@ -95,6 +95,13 @@ class HomeRentDriftTests( TestCase ):
         owner = Profile( home_tenure = HousingTenure.OWN )   # no longer renting, rent fact cleared
         self.assertFalse( home_rent_drift( owner, plans ) )
 
+    def test_a_cleared_rent_fact_does_not_drift( self ):
+        # Requiring a present fact (like the loan twin requires present terms) keeps a renter who cleared
+        # their rent from drifting to a reconcile that would blank the plan's rent.
+        _profile, plans = self._seeded( '1800' )
+        cleared = Profile( home_tenure = HousingTenure.RENT )   # still renting, rent fact removed
+        self.assertFalse( home_rent_drift( cleared, plans ) )
+
     def test_reset_adopts_the_fact_and_clears_the_drift( self ):
         _profile, plans = self._seeded( '1800' )
         changed = _renter( '2500' )

@@ -227,16 +227,18 @@ def _with_snapshot( plans: Plans, debt_handle: str, terms: Optional[ LoanTerms ]
 
 
 # --- Home-rent drift (value drift) ---------------------------------------
-# Has the household's Profile rent changed since the Plan's rented-home rent expense was seeded from it?
 # The single-value analog of the loan-terms drift above: one rented home, so no per-item handle.
 
 def home_rent_drift( profile: Profile, plans: Plans ) -> bool:
     """Whether the current Profile rent differs from the value this plan's rented-home rent expense was
-    seeded with -- true only while the household rents and a snapshot exists (the rent was seeded). Guarding
-    on `is_renting` keeps switching to own (which clears the rent fact) from reading as rent drift."""
-    return ( is_renting( profile )
-             and plans.home_rent_snapshot is not None
-             and profile.home_monthly_rent != plans.home_rent_snapshot )
+    seeded with -- true only while the household rents, a present rent fact exists to reconcile to, and a
+    snapshot exists (the rent was seeded). Guarding on `is_renting` keeps switching to own (which clears the
+    rent fact) from reading as rent drift; requiring a present fact -- like the loan twin requires present
+    terms -- keeps a cleared rent from drifting to a reconcile that would blank the plan's rent."""
+    return bool( is_renting( profile )
+                 and profile.home_monthly_rent is not None
+                 and plans.home_rent_snapshot is not None
+                 and profile.home_monthly_rent != plans.home_rent_snapshot )
 
 
 def reset_home_rent( profile: Profile, plans: Plans ) -> Plans:

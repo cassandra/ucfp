@@ -18,17 +18,21 @@ from organization.models import Organization
 
 from ucfp.inputs.assumptions.repository import save_assumptions
 from ucfp.inputs.assumptions.schemas import Assumptions
-from ucfp.inputs.compatibility import loan_terms_drift
+from ucfp.inputs.compatibility import home_rent_drift, loan_terms_drift
 from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import load_plans, save_plans
 from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
-from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.repository import load_profile, save_profile
 from ucfp.inputs.profile.schemas import Debt, LoanTerms
+from ucfp.inputs.property_expenses import (
+    RENT_EXPENSE_HANDLE, merged_property_expenses, set_home_rent )
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.inputs.views import (
-    PlansLoanTermsKeepView, PlansLoanTermsResetView, PlansReconcileView, ScenarioReconcileView )
+    PlansHomeRentKeepView, PlansHomeRentResetView, PlansLoanTermsKeepView, PlansLoanTermsResetView,
+    PlansReconcileView, ScenarioReconcileView )
+from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.tests.support import forecast_profile
 
 
@@ -213,3 +217,86 @@ class PlansLoanTermsDriftViewTests( TestCase ):
         request.organization = Organization.objects.create( name = 'Other' )
         with self.assertRaises( Http404 ):
             PlansLoanTermsResetView().post( request, uuid = record.uuid, handle = 'debt-1' )
+
+
+def _renter_profile( organization, rent = '2500' ):
+    """A complete profile that rents, carrying `rent` as its current monthly-rent fact."""
+    profile = replace( forecast_profile(), home_tenure = HousingTenure.RENT,
+                       home_monthly_rent = Decimal( rent ) )
+    record  = save_profile( organization, profile )
+    record.acknowledged_sections = [ section.key for section in applicable_sections( profile )
+                                     if flow_of( section ) == 'profile' and section.form is not None ]
+    record.save()
+    return record
+
+
+def _rent_drifted_plans_record( organization, profile ):
+    """A Plans record whose rented-home rent expense seeded from $2,000 (snapshot $2,000) -- so it drifts
+    against a profile whose current rent fact has since moved."""
+    record = PlansRecord( organization = organization, label = 'Rent P' )
+    seeded = set_home_rent(
+        Plans( property_expenses = merged_property_expenses( profile, Plans() ) ), Decimal( '2000' ) )
+    save_plans( record, seeded )
+    return record
+
+
+def _rent_amount( plans ):
+    return next( e for e in plans.property_expenses if e.handle == RENT_EXPENSE_HANDLE ).default_amount
+
+
+class PlansHomeRentDriftViewTests( TestCase ):
+    """The rented-home rent value-drift reconcile views: reset adopts the current Profile rent into the plan;
+    keep leaves the plan's rent and refreshes the snapshot. Both are org-scoped and return to the referer."""
+
+    @classmethod
+    def setUpTestData( cls ):
+        seed_default_parameter_sets()      # merged_property_expenses reads the seeded catalog
+
+    def setUp( self ):
+        self.organization = Organization.objects.create( name = 'Org' )
+        self.factory      = RequestFactory()
+
+    def _post( self, view, name, uuid ):
+        request = self.factory.post( reverse( name, kwargs = { 'uuid': uuid } ) )
+        request.organization = self.organization
+        return view().post( request, uuid = uuid )
+
+    def test_reset_adopts_the_profile_rent_into_the_plan( self ):
+        profile_record = _renter_profile( self.organization, '2500' )        # fact now $2,500
+        record   = _rent_drifted_plans_record( self.organization, load_profile( profile_record ) )
+        response = self._post( PlansHomeRentResetView, 'plans_home_rent_reset', record.uuid )
+        self.assertEqual( response.status_code, 302 )
+        record.refresh_from_db()
+        plans = load_plans( record )
+        self.assertEqual( _rent_amount( plans ), Decimal( '2500' ) )                             # adopted
+        self.assertFalse( home_rent_drift( load_profile( profile_record ), plans ) )             # cleared
+
+    def test_keep_leaves_the_plan_rent_and_clears_the_drift( self ):
+        profile_record = _renter_profile( self.organization, '2500' )
+        record = _rent_drifted_plans_record( self.organization, load_profile( profile_record ) )
+        self._post( PlansHomeRentKeepView, 'plans_home_rent_keep', record.uuid )
+        record.refresh_from_db()
+        plans = load_plans( record )
+        self.assertEqual( _rent_amount( plans ), Decimal( '2000' ) )                             # unchanged
+        self.assertFalse( home_rent_drift( load_profile( profile_record ), plans ) )             # cleared
+
+    def test_reset_is_a_no_op_without_a_complete_profile( self ):
+        # No complete profile: there is no current rent to reconcile against, so the plan is left untouched
+        # (rent and snapshot unchanged) and the view still redirects.
+        renter   = replace( forecast_profile(), home_tenure = HousingTenure.RENT,
+                            home_monthly_rent = Decimal( '2500' ) )
+        record   = _rent_drifted_plans_record( self.organization, renter )   # never saved as a complete profile
+        response = self._post( PlansHomeRentResetView, 'plans_home_rent_reset', record.uuid )
+        self.assertEqual( response.status_code, 302 )
+        record.refresh_from_db()
+        plans = load_plans( record )
+        self.assertEqual( _rent_amount( plans ), Decimal( '2000' ) )                             # unchanged
+        self.assertEqual( plans.home_rent_snapshot, Decimal( '2000' ) )                          # unchanged
+
+    def test_it_is_org_scoped( self ):
+        profile_record = _renter_profile( self.organization, '2500' )
+        record  = _rent_drifted_plans_record( self.organization, load_profile( profile_record ) )
+        request = self.factory.post( reverse( 'plans_home_rent_reset', kwargs = { 'uuid': record.uuid } ) )
+        request.organization = Organization.objects.create( name = 'Other' )
+        with self.assertRaises( Http404 ):
+            PlansHomeRentResetView().post( request, uuid = record.uuid )

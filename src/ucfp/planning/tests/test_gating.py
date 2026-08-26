@@ -23,9 +23,10 @@ from ucfp.inputs.interview import applicable_sections, flow_of
 from ucfp.inputs.models import AssumptionsRecord, PlansRecord
 from ucfp.inputs.plans.repository import save_plans
 from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
-from ucfp.inputs.profile.enums import DebtKind
+from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.profile.schemas import Debt, LoanTerms
+from ucfp.inputs.property_expenses import merged_property_expenses, set_home_rent
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.gating import partition_scenarios, scenario_started
@@ -81,14 +82,17 @@ class PartitionScenariosTests( TestCase ):
         record.save()
         self.profile_record = record
 
-    def _scenario( self, label, plans_schema, reviewed = True ):
+    def _scenario( self, label, plans_schema, reviewed = True, keys = None ):
+        # `keys` overrides the reviewed section keys -- needed when a scenario's profile makes a different
+        # set of sections applicable (a renter gains Home Expenses), so "reviewed" still means all of them.
+        keys = keys or self.keys
         plans_record = PlansRecord(
             organization = self.organization, label = f'{label} P',
-            acknowledged_sections = self.keys[ 'plans' ] if reviewed else [] )
+            acknowledged_sections = keys[ 'plans' ] if reviewed else [] )
         save_plans( plans_record, plans_schema )
         assumptions_record = AssumptionsRecord(
             organization = self.organization, label = f'{label} A',
-            acknowledged_sections = self.keys[ 'assumptions' ] if reviewed else [] )
+            acknowledged_sections = keys[ 'assumptions' ] if reviewed else [] )
         save_assumptions( assumptions_record, expected_assumptions() )
         return create_scenario( self.organization, plans_record, assumptions_record, label )
 
@@ -119,6 +123,22 @@ class PartitionScenariosTests( TestCase ):
         scenario = self._scenario( 'Drifted', Plans(
             loan_repayments      = [ LoanRepayment( 'debt-1', Rate.percent( 7 ), Duration( 48, TimeUnit.MONTH ) ) ],
             loan_terms_snapshots = [ LoanTermsSnapshot( 'debt-1', Rate.percent( 6 ), Duration( 48, TimeUnit.MONTH ) ) ] ) )
+        _complete, drift_blocked, in_progress = partition_scenarios( self.organization, record )
+        self.assertEqual( in_progress, [] )
+        self.assertEqual( [ s.uuid for s in drift_blocked ], [ scenario.uuid ] )
+
+    def test_a_home_rent_drift_only_scenario_is_drift_blocked( self ):
+        # Rent value drift holds a scenario out of the run chooser too (resolved by update/keep), the same
+        # bucket as stale references. The profile now says $2,500; the plan's rent expense seeded from $2,000.
+        profile = replace( self.profile, home_tenure = HousingTenure.RENT,
+                           home_monthly_rent = Decimal( '2500' ) )
+        record  = save_profile( self.organization, profile )
+        keys    = _reviewed_keys_by_flow( profile )   # renting makes Home Expenses applicable
+        record.acknowledged_sections = keys[ 'profile' ]
+        record.save()
+        plans = set_home_rent(
+            Plans( property_expenses = merged_property_expenses( profile, Plans() ) ), Decimal( '2000' ) )
+        scenario = self._scenario( 'Rent drift', plans, keys = keys )
         _complete, drift_blocked, in_progress = partition_scenarios( self.organization, record )
         self.assertEqual( in_progress, [] )
         self.assertEqual( [ s.uuid for s in drift_blocked ], [ scenario.uuid ] )

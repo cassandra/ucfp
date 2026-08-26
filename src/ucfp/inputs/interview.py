@@ -808,7 +808,7 @@ class HomeExpensesSectionForm:
 
     def apply( self, profile, plans ):
         merged = replace( plans, property_expenses = merged_property_expenses( profile, plans ) )
-        return profile, seeded_home_rent( profile, merged )   # seed the rented-home rent from the fact, once
+        return profile, seeded_home_rent( profile, merged )
 
 
 class VehiclePlanSectionForm:

@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 
 from django.urls import reverse
 
-from ucfp.inputs.compatibility import DRIFT_LEAD_IN, compatibility_issues, loan_terms_drift
+from ucfp.inputs.compatibility import (
+    DRIFT_LEAD_IN, compatibility_issues, home_rent_drift, loan_terms_drift )
 from ucfp.inputs.interview import applicable_sections
 from ucfp.inputs.plans.repository import load_plans
 from ucfp.inputs.profile.repository import load_profile
@@ -34,19 +35,21 @@ class ReadinessIssue:
     stale references and reconcile through the shared `inputs.drift` notice. `is_loan_terms_drift` marks
     the sibling *value* drift (a loan's contract terms changed since the plan seeded from them); it buckets
     the same way (runnable once resolved, no interview resume), but its fix is a per-loan reset/keep choice
-    rather than the one-click reconcile."""
+    rather than the one-click reconcile. `is_home_rent_drift` is its single-value twin (the Profile rent
+    changed since the plan's rent expense seeded from it) -- same bucketing, an update/keep choice."""
     message             : str
     fix_label           : str
     fix_route           : str
     fix_route_kwargs    : dict  = field( default_factory = dict )
     is_drift            : bool  = False
     is_loan_terms_drift : bool  = False
+    is_home_rent_drift  : bool  = False
 
     @property
     def is_reconcilable_drift( self ) -> bool:
-        """Whether this issue is a Plans->Profile drift a surface resolves in place (existence or loan-term)
-        rather than by resuming the interview -- so gating can bucket it as drift-blocked."""
-        return self.is_drift or self.is_loan_terms_drift
+        """Whether this issue is a Plans->Profile drift a surface resolves in place (existence, loan-term, or
+        rent) rather than by resuming the interview -- so gating can bucket it as drift-blocked."""
+        return self.is_drift or self.is_loan_terms_drift or self.is_home_rent_drift
 
     @property
     def fix_url( self ) -> str:
@@ -67,7 +70,8 @@ def readiness_issues( profile_record, plans_record, assumptions_record ) -> list
              + _blocker_issues( plans_completion_blockers( profile, plans_record ), 'flow_plans' )
              + _blocker_issues( assumptions_completion_blockers( profile, assumptions_record ), 'flow_assumptions' )
              + _drift_issues( profile, plans )
-             + _loan_terms_drift_issues( profile, plans ) )
+             + _loan_terms_drift_issues( profile, plans )
+             + _home_rent_drift_issues( profile, plans ) )
 
 
 # The per-input flow each blocker links to, and its resume-link label -- a blocker is a whole-input concern
@@ -131,3 +135,18 @@ def _loan_terms_drift_issues( profile, plans ) -> list[ ReadinessIssue ]:
         fix_label = 'Review your plans',
         fix_route = 'flow_plans',
         is_loan_terms_drift = True ) ]
+
+
+def _home_rent_drift_issues( profile, plans ) -> list[ ReadinessIssue ]:
+    """Rented-home rent *value* drift (the Profile rent changed since the plan seeded its rent expense) as
+    one issue -- the single-value twin of the loan-terms drift, so the plan may hold a stale rent and the run
+    waits on an explicit update/keep choice. `is_home_rent_drift` buckets it as drift-blocked (runnable once
+    resolved), its fix the update/keep notice rather than the one-click reconcile."""
+    if not home_rent_drift( profile, plans ):
+        return list()
+    return [ ReadinessIssue(
+        message   = 'Your rent changed in your profile since this plan was set -- choose whether to '
+                    'update the plan or keep it.',
+        fix_label = 'Review your plans',
+        fix_route = 'flow_plans',
+        is_home_rent_drift = True ) ]

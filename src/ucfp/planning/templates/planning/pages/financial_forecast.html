@@ -13,9 +13,9 @@
 {% comment %}
 The drift-blocked scenarios: runnable but for a difference their plans hold against the current Profile,
 so they are kept out of the chooser below. Each is named, with the shared drift panes -- stale references
-(one-click reconcile) and/or loan-terms drift (per-loan update/keep) -- after which it rejoins the
-chooser. `drift_scenarios` is the list of {label, drift, loan_terms_drift}, either notice None when that
-kind does not apply.
+(one-click reconcile), loan-terms drift (per-loan update/keep), and/or rent drift (update/keep) -- after
+which it rejoins the chooser. `drift_scenarios` is the list of {label, drift, loan_terms_drift,
+home_rent_drift}, each notice None when that kind does not apply.
 {% endcomment %}
 <div class="alert alert-warning mt-3">
   <h2 class="h6 mb-2">Some scenarios need reconciling</h2>
@@ -27,6 +27,7 @@ kind does not apply.
       <strong>{{ item.label }}</strong>
       {% if item.drift %}{% include 'inputs/panes/scenario_drift.html' with drift=item.drift %}{% endif %}
       {% if item.loan_terms_drift %}{% include 'inputs/panes/loan_terms_drift.html' with loan_terms_drift=item.loan_terms_drift %}{% endif %}
+      {% if item.home_rent_drift %}{% include 'inputs/panes/home_rent_drift.html' with home_rent_drift=item.home_rent_drift %}{% endif %}
     </li>
     {% endfor %}
   </ul>

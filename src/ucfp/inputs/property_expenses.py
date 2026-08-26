@@ -16,7 +16,7 @@ from common.forms import MoneyField
 from ucfp.environment.constants import AppConst
 from ucfp.parameter_sets.enums import ExpenseClass, PropertyContext
 from ucfp.inputs.profile.schemas import RENTED_HOME_HANDLE
-from ucfp.inputs.plans.schemas import PropertyExpense
+from ucfp.inputs.plans.schemas import Plans, PropertyExpense
 from ucfp.inputs.expense_totals import ExpenseTotalsMatrix, annualized_sum
 from ucfp.inputs.cadence import (
     add_cadence_fields, add_calculator_fields, cadence_cells, calculator_cells, per_year, read_cadence,
@@ -142,7 +142,7 @@ def _seed_rental_zeros( overrides : dict, profile, catalog_expense, live_handles
 RENT_EXPENSE_HANDLE = 'rent'
 
 
-def set_home_rent( plans, rent ):
+def set_home_rent( plans : Plans, rent : Optional[ Decimal ] ) -> Plans:
     """`plans` with the rented-home Rent expense's amount and `home_rent_snapshot` both set to `rent` -- the
     shared write behind first seeding and the drift reconcile. Rent reaches only the single rented home, so
     the amount is the Rent row's shared default."""
@@ -152,7 +152,7 @@ def set_home_rent( plans, rent ):
     return replace( plans, property_expenses = expenses, home_rent_snapshot = rent )
 
 
-def seeded_home_rent( profile, plans ):
+def seeded_home_rent( profile, plans : Plans ) -> Plans:
     """`plans` with its rented-home rent expense seeded from the Profile `home_monthly_rent` fact, and the
     seed recorded as `home_rent_snapshot` -- once. The rent analog of a loan repayment's
     `preserved_snapshot`: it seeds only when there is no snapshot yet, the household rents, and a rent fact
