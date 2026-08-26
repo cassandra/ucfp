@@ -29,7 +29,7 @@ from ucfp.forecast.parameters import (
     AssetAllocation, AssetParameters, CashAccountParameters, ExpenseItem, ExpenseStream,
     ForecastParameters, IncomeItem, IncomeStream, LoanParameters, PropertyAttributes,
     RecurringHoldingPurchase, RecurringLoanOrigination, RecurringRealization, RetirementContribution,
-    NetWorthCalculation, ScheduledExternalDisbursement, ScheduledRealization, Subject,
+    NetWorthCalculation, ScheduledExternalDisbursement, ScheduledRealization, Subject, SubjectRemoval,
     SubsidizedHealthCoverage, TransactionCosts, WindowedAmount )
 
 from ucfp.period.parameters import PropertyData
@@ -126,7 +126,7 @@ def materialize(
         property_data    = _property_data( profile, plans ),
         cash_account     = _cash_account( plans ),
         health_coverage  = _health_coverage( plans ),
-        subject_removals = events.subject_removals,
+        subject_removals = _lifetime_removals( plans ),
         property_sale_costs = _property_sale_costs( assumptions ),
         net_worth_calculation = _net_worth_calculation( assumptions ),
     )
@@ -137,6 +137,14 @@ def materialize(
 def _subjects( profile : Profile ) -> list[ Subject ]:
     return [ Subject( name = person.name, birthdate = person.birthdate, handle = person.handle )
              for person in profile.subjects ]
+
+
+def _lifetime_removals( plans : Plans ) -> list[ SubjectRemoval ]:
+    """A `SubjectRemoval` per subject whose Retirement-plan `expected_lifetime` is set -- the removal the
+    engine derives the survivor transition from, sourced from the per-subject timing (blank = death not
+    modeled)."""
+    return [ SubjectRemoval( event_date = entry.expected_lifetime, subject_handle = entry.subject_handle )
+             for entry in plans.timing if entry.expected_lifetime is not None ]
 
 
 def _assets( profile : Profile ) -> list[ AssetParameters ]:

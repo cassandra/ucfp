@@ -1,10 +1,12 @@
 {% comment %}
 The income/entitlement *timing* of the Retirement Plan section (id=retirement), auto-saved. Grouped by
 person, two columns wide: a card per subject holding their income windows (start/stop), their Social
-Security claim, and -- only when they have a pension (declared in Income) -- their pension start. With no
-partner, a muted placeholder fills the second column so a lone card does not leave a wide empty space.
-Household income (no subject) is its own full-width card below. Each line pairs an age helper with the
-canonical date (inputs.js keeps them in lockstep from the subject's fixed birthdate). The rows are fixed by
+Security claim, and (only when they have a pension, declared in Income) their pension start. (A per-subject
+expected-lifetime input also lives in this card but is currently hidden -- see the HIDDEN note at its block
+below.) With no partner, a muted placeholder fills the second column so a lone card does not leave a wide
+empty space.
+Household income (no subject) is its own full-width card below. Each of these lines pairs an age helper with
+the canonical date (inputs.js keeps them in lockstep from the subject's fixed birthdate). The rows are fixed by
 the income facts and subjects declared in the Profile, so editing here never adds or removes one; edits
 save in the background, re-rendering only to surface a bad value. Leaving a window blank means "runs the
 whole horizon"; Social Security and a pension run for life once claimed.
@@ -35,6 +37,23 @@ whole horizon"; Social Security and a pension run for life once claimed.
               {% include 'inputs/components/_timing_line.html' with label='Claim' date=group.pension.from age=group.pension.from_age %}
             </div>
             {% endif %}
+            {% comment %}HIDDEN pending #14 (the survivor-transition module). The Expected lifetime input is
+            re-homed here from the old Death money-move, but the forecast engine does not yet stop a
+            decedent's income (SS, pension, wages) or model survivor benefits -- so a set value yields a
+            broken forecast (income continues past death). The plumbing below the fold is intact and dormant:
+            the form field (RetirementForm `_add_lifetime_field` / `_lifetime_date`),
+            `RetirementTiming.expected_lifetime`, and materialization's `_lifetime_removals`. Resurrect by
+            removing this comment wrapper (this opening line and the closing tag below) once #14 lands.
+            <div class="mt-3 pt-2 border-top">
+              <div class="d-flex align-items-center small text-muted">
+                <span class="mr-2">Expected lifetime:</span>
+                {{ group.lifetime }}
+                <span class="ml-2">years <span class="font-italic">(optional)</span></span>
+              </div>
+              {% if group.lifetime.errors %}<div class="text-danger small">{{ group.lifetime.errors|join:" " }}</div>{% endif %}
+              <div class="small text-muted mt-1">Leave blank to assume a full lifetime.</div>
+            </div>
+            {% endcomment %}
           </div>
         </div>
       </div>

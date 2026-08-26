@@ -28,7 +28,8 @@ from ucfp.inputs.widgets import IsoDateInput
 class RetirementForm( forms.Form ):
     """When each income runs and each entitlement is claimed. Per general income flow (read from the
     Profile): a from/until window, with an age helper when the flow is a person's; per subject: the
-    Social Security claiming and pension start dates. `apply` rebuilds the Plans' per-flow `income_timing`
+    Social Security claiming and pension start dates, and an optional expected lifetime (blank = death not
+    modeled). `apply` rebuilds the Plans' per-flow `income_timing`
     (only for the current general flows, so timing for a deleted flow self-prunes) and the per-subject
     `timing`; the Profile is untouched. Rentals are excluded -- their rent is clipped to the property's
     sale event at materialize, not timed here."""
@@ -77,8 +78,21 @@ class RetirementForm( forms.Form ):
         timing   = self._timing.get( subject.handle )
         claiming = timing.government_pension_claiming_date if timing is not None else None
         start    = timing.pension_start if timing is not None else None
+        lifetime = timing.expected_lifetime if timing is not None else None
         self._add_election_field( m, 'ss', 'Social Security claim', subject, claiming )
         self._add_election_field( m, 'pen', 'pension start', subject, start )
+        self._add_lifetime_field( m, subject, lifetime )
+
+    def _add_lifetime_field( self, m : int, subject : SubjectProfile, date_initial : Optional[ date ] ):
+        """The subject's expected lifetime -- a standalone *age* input (no paired date), since a lifetime is
+        thought of in years, not a calendar date; this also sets it apart from the date-backed benefit
+        elections. Stored as the age-derived date (`_lifetime_date`). Built from the shared `_age_field`, so
+        the bounds and widget stay in step with the paired ages; `_link_age` (which pairs it with a date and
+        adds the class) is not called here, so the class is set directly -- and with no paired date the
+        client's age->date fill simply no-ops."""
+        field = self._age_field( date_initial, subject.birthdate, f'{subject.name} expected lifetime age' )
+        field.widget.attrs[ 'class' ] = f'form-control {AppConst.AGE_FIELD_CLASS}'
+        self.fields[ self._key( 's', m, 'life_age' ) ] = field
 
     def _add_election_field( self, m : int, kind : str, label : str, subject : SubjectProfile,
                              date_initial : Optional[ date ] ):
@@ -147,6 +161,12 @@ class RetirementForm( forms.Form ):
             return _at_age( birthdate, age )
         return None
 
+    def _lifetime_date( self, m : int, birthdate : Optional[ date ] ) -> Optional[ date ]:
+        """The expected-lifetime date from the entered age (age-only field), or None when blank -- the age
+        resolved against the subject's birthdate, the value the engine's `SubjectRemoval` reads."""
+        age = self.cleaned_data.get( self._key( 's', m, 'life_age' ) )
+        return _at_age( birthdate, age ) if age is not None and birthdate is not None else None
+
     # --- template rows -----------------------------------------------------
 
     @property
@@ -156,18 +176,19 @@ class RetirementForm( forms.Form ):
     @property
     def subject_groups( self ) -> list:
         """The timing grouped by person -- a group per subject holding their income windows, Social
-        Security claim, and (only when they have a pension) pension start -- so each person's timing reads
-        as a unit rather than as scattered rows. Household income (no subject) is its own group,
-        `household_income`."""
+        Security claim, (only when they have a pension) pension start, and their expected lifetime (the
+        age-only `lifetime` entry) -- so each person's timing reads as a unit rather than as scattered rows.
+        Household income (no subject) is its own group, `household_income`."""
         groups = list()
         for m, subject in enumerate( self._subjects ):
             income = [ self._window_row( i, flow ) for i, flow in enumerate( self._flows )
                        if flow.subject_handle == subject.handle ]
             groups.append( {
-                'subject' : subject.name,
-                'income'  : income,
-                'ss'      : self._election_row( m, 'ss' ),
-                'pension' : self._election_row( m, 'pen' ) if subject.handle in self._pensions else None } )
+                'subject'  : subject.name,
+                'income'   : income,
+                'ss'       : self._election_row( m, 'ss' ),
+                'pension'  : self._election_row( m, 'pen' ) if subject.handle in self._pensions else None,
+                'lifetime' : self[ self._key( 's', m, 'life_age' ) ] } )   # age-only, no paired date
         return groups
 
     @property
@@ -212,7 +233,8 @@ class RetirementForm( forms.Form ):
             timing.append( replace(
                 current,
                 government_pension_claiming_date = self._endpoint( 's', m, 'ss_from', subject.birthdate ),
-                pension_start = self._endpoint( 's', m, 'pen_from', subject.birthdate ) ) )
+                pension_start = self._endpoint( 's', m, 'pen_from', subject.birthdate ),
+                expected_lifetime = self._lifetime_date( m, subject.birthdate ) ) )
         return timing
 
 

@@ -13,7 +13,6 @@ class EventKind( LabeledEnum ):
     GENERAL_PAYMENT    = ( 'Payment'         , 'A non-deductible payment out (one-time or recurring).' )
     CHARITABLE_PAYMENT = ( 'Charitable gift' , 'A deductible charitable gift (one-time or recurring).' )
     MEDICAL_PAYMENT    = ( 'Medical expense' , 'A deductible medical expense (one-time or recurring).' )
-    DEATH              = ( 'Death'           , "A subject's passing -- the survivor transition." )
     SELL_PROPERTY      = ( 'Sell property'   , 'Sell a home or rental property.' )
     SELL_POSSESSION    = ( 'Sell possession' , 'Sell a collectible or other possession (not a vehicle).' )
     LOAN_PAYOFF        = ( 'Loan payoff'     , 'Pay off an amortizing loan in full on a date.' )

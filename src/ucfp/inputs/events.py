@@ -29,8 +29,7 @@ from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.environment.constants import AppConst
 from ucfp.forecast.parameters import (
     ExpenseItem, IncomeItem,
-    ScheduledLoanPayoff, ScheduledPropertySale, ScheduledRealization, ScheduledTransfer, SubjectRemoval,
-    WindowedAmount )
+    ScheduledLoanPayoff, ScheduledPropertySale, ScheduledRealization, ScheduledTransfer, WindowedAmount )
 from ucfp.inputs.cadence import add_cadence_fields, cadence_cells, cadence_label, read_cadence
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispositionKind
 from ucfp.inputs.plans.schemas import PlanEvent
@@ -42,7 +41,6 @@ from ucfp.parameter_sets.enums import CadenceDomain
 
 # Selection roles -- the canonical keys an event's references, the add form, and its materialization
 # all agree on (each is a `PlanEvent.selections` key).
-SUBJECT_ROLE   = 'subject'
 RECIPIENT_ROLE = 'recipient'
 SOURCE_ROLE    = 'source'
 TARGET_ROLE    = 'target'
@@ -56,9 +54,7 @@ _ACCOUNTS_GROUP  = 'Accounts'
 _PROPERTY_GROUP  = 'Property'
 _MONEY_IN_GROUP  = 'Money in'
 _MONEY_OUT_GROUP = 'Money out'
-_HOUSEHOLD_GROUP = 'Household'
-_GROUP_ORDER     = ( _ACCOUNTS_GROUP, _PROPERTY_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP,
-                     _HOUSEHOLD_GROUP )
+_GROUP_ORDER     = ( _ACCOUNTS_GROUP, _PROPERTY_GROUP, _MONEY_IN_GROUP, _MONEY_OUT_GROUP )
 
 
 @dataclass( frozen = True )
@@ -236,7 +232,6 @@ class EventContributions:
         self.scheduled_events = list()
         self.income_items     = list()
         self.expense_items    = list()
-        self.subject_removals = list()
         self.property_sales   = dict()   # property handle -> sale date, for clipping its operating costs
         self.possession_sales = dict()   # possession handle -> sale date, for clipping its running costs
 
@@ -629,30 +624,12 @@ class MedicalPaymentEvent( _ExpensePaymentEvent ):
     description       = 'A medical expense (tax-deductible) -- one-time, or repeating over a date window.'
 
 
-class DeathEvent( EventType ):
-    kind        = EventKind.DEATH
-    group       = _HOUSEHOLD_GROUP
-    has_amount  = False
-    description = "Project a household member's death to model its financial impact."
-
-    def references( self, profile ) -> list:
-        return [ ReferenceSpec( SUBJECT_ROLE, 'Subject', _subjects ) ]
-
-    def summary( self, event : PlanEvent, profile ) -> str:
-        subject = _names( profile ).get( event.selections.get( SUBJECT_ROLE ) )
-        return f'Death of {subject} in {event.date.year}'
-
-    def contribute( self, event : PlanEvent, profile, subjects : dict, into : EventContributions ):
-        into.subject_removals.append( SubjectRemoval(
-            event_date = event.date, subject_handle = event.selections[ SUBJECT_ROLE ] ) )
-
-
 # --- Registry -------------------------------------------------------------
 
 _EVENT_TYPES = (
     TransferEvent(), SellPropertyEvent(), SellPossessionEvent(), LoanPayoffEvent(),
     CardPayoffEvent(), TaxableReceiptEvent(), TaxFreeReceiptEvent(), GeneralPaymentEvent(),
-    CharitablePaymentEvent(), MedicalPaymentEvent(), DeathEvent() )
+    CharitablePaymentEvent(), MedicalPaymentEvent() )
 
 _BY_KIND = { event_type.kind: event_type for event_type in _EVENT_TYPES }
 
