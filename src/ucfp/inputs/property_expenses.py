@@ -137,6 +137,29 @@ def _seed_rental_zeros( overrides : dict, profile, catalog_expense, live_handles
     return seeded
 
 
+# The catalog handle of the Rent row (it applies to the single rented home) -- the expense the Profile's
+# `home_monthly_rent` fact seeds.
+RENT_EXPENSE_HANDLE = 'rent'
+
+
+def seeded_home_rent( profile, plans ):
+    """`plans` with its rented-home rent expense seeded from the Profile `home_monthly_rent` fact, and the
+    seed recorded as `home_rent_snapshot` -- once. The rent analog of a loan repayment's
+    `preserved_snapshot`: it seeds only when there is no snapshot yet, the household rents, and a rent fact
+    is present, so a later Profile rent edit surfaces as drift rather than silently re-seeding. A no-op for
+    an owner, a blank fact, or an already-seeded plan. Rent reaches only the single rented home, so the fact
+    is stored as the Rent row's shared default."""
+    if ( plans.home_rent_snapshot is not None
+         or not is_renting( profile )
+         or profile.home_monthly_rent is None ):
+        return plans
+    rent = profile.home_monthly_rent
+    expenses = [ replace( expense, default_amount = rent ) if expense.handle == RENT_EXPENSE_HANDLE
+                 else expense
+                 for expense in plans.property_expenses ]
+    return replace( plans, property_expenses = expenses, home_rent_snapshot = rent )
+
+
 class PropertyExpensesForm( ExpenseTotalsMatrix, forms.Form ):
     """The property-expenses matrix: rows are the property operating-cost types (property tax,
     insurance, ...), columns are the shared Default plus one per property (owned dwellings, then the

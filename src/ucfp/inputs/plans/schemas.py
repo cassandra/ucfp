@@ -462,6 +462,10 @@ class Plans:
     recurring_expenses: list[ RecurringExpense ] = field( default_factory = list )
     # Property operating expenses (one shared set with per-property overrides)
     property_expenses: list[ PropertyExpense ] = field( default_factory = list )
+    # The Profile `home_monthly_rent` this plan's rented-home rent expense was seeded from -- the rent
+    # analog of a loan's `loan_terms_snapshots`: written when the rent is first seeded, then preserved and
+    # refreshed only by the rent drift's reconcile, so a later Profile rent edit surfaces as drift.
+    home_rent_snapshot: Optional[ Decimal ] = None
     # Saving
     contributions: list[ Contribution ] = field( default_factory = list )
     # Tax planning: Roth conversions (pre-tax -> Roth) and scheduled withdrawals (pre-tax -> cash),

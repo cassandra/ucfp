@@ -49,7 +49,7 @@ from .properties import PossessionsForm, properties_context
 from .vehicle_profile import current_vehicles_context
 from .retirement import RetirementForm
 from .expenses import has_property
-from .property_expenses import PropertyExpensesForm, merged_property_expenses
+from .property_expenses import PropertyExpensesForm, merged_property_expenses, seeded_home_rent
 from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
 from .vehicle_disposition import all_dispositions_context, vehicle_plan_cards
@@ -789,8 +789,9 @@ class DebtPlanSectionForm:
 class HomeExpensesSectionForm:
     """Home Expenses -- the per-property operating-cost matrix. It exposes the matrix pane (saved on
     its own through `PropertyExpensesView`); `apply` seeds the property expenses from the catalog on
-    Next, so a household that accepts the defaults still gets them without opening the pane. `apply` is a
-    pure catalog merge (it ignores form input), so it also seeds on render -- see `seeds_on_render`."""
+    Next, so a household that accepts the defaults still gets them without opening the pane, and seeds the
+    rented-home rent from the Profile `home_monthly_rent` fact (once, with a snapshot for drift). `apply`
+    ignores form input, so it also seeds on render -- see `seeds_on_render`."""
 
     seeds_on_render = True
 
@@ -806,8 +807,8 @@ class HomeExpensesSectionForm:
         return PropertyExpensesForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
-        return profile, replace(
-            plans, property_expenses = merged_property_expenses( profile, plans ) )
+        merged = replace( plans, property_expenses = merged_property_expenses( profile, plans ) )
+        return profile, seeded_home_rent( profile, merged )   # seed the rented-home rent from the fact, once
 
 
 class VehiclePlanSectionForm:
