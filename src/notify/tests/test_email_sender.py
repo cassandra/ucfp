@@ -43,6 +43,14 @@ class UnsubscribeEnforcementTest(TestCase):
         self.assertEqual(len(mail.outbox), 0)
 
 
+RESEND_CFG = dict(
+    EMAIL_BACKEND='anymail.backends.resend.EmailBackend',
+    ANYMAIL={'RESEND_API_KEY': 're_live_key'},
+    EMAIL_HOST='', EMAIL_HOST_USER='',            # unset SMTP creds -- irrelevant to the API backend
+    DEFAULT_FROM_EMAIL='from@example.com', SERVER_EMAIL='srv@example.com',
+)
+
+
 class IsEmailConfiguredTest(TestCase):
 
     def test_missing_setting_returns_false(self):
@@ -54,6 +62,20 @@ class IsEmailConfiguredTest(TestCase):
         with override_settings(**EMAIL_CFG):
             self.assertTrue(EmailSender.is_email_configured())
             self.assertEqual(EmailSender.get_missing_email_setting_names(), [])
+
+    def test_api_backend_configured_by_key_not_smtp_host(self):
+        # The Resend/Anymail backend is configured by its API key; the empty SMTP
+        # host/user must NOT be reported missing, or the cloud sign-in UI would
+        # wrongly show "email not configured".
+        with override_settings(**RESEND_CFG):
+            self.assertTrue(EmailSender.is_email_configured())
+            self.assertEqual(EmailSender.get_missing_email_setting_names(), [])
+
+    def test_api_backend_without_key_reports_the_key_missing(self):
+        with override_settings(**dict(RESEND_CFG, ANYMAIL={})):
+            self.assertFalse(EmailSender.is_email_configured())
+            self.assertIn("ANYMAIL['RESEND_API_KEY']",
+                          EmailSender.get_missing_email_setting_names())
 
 
 class UnsubscribedEmailManagerTest(TestCase):

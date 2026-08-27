@@ -269,6 +269,8 @@ UCFP_EMAIL_HOST_USER=
 UCFP_EMAIL_HOST_PASSWORD=
 UCFP_EMAIL_USE_TLS=false
 UCFP_EMAIL_USE_SSL=false
+# API-based sending (Anymail/Resend); used by the cloud deployment. Empty for self-hosted SMTP.
+UCFP_EMAIL_API_KEY=
 
 # Network Configuration (for localhost only)
 UCFP_EXTRA_HOST_URLS=

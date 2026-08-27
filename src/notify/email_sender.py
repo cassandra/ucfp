@@ -180,17 +180,41 @@ class EmailSender:
             return False
         return True
 
+    # Anymail's ESP backends (Resend here) are API-based: they need an API key rather
+    # than SMTP host/port/user. Recognized by the backend module family so the check
+    # tracks whatever Anymail ESP a deployment selects.
+    _ANYMAIL_BACKEND_PREFIX = 'anymail.backends.'
+
     @classmethod
     def get_missing_email_setting_names( cls ) -> List[ str ]:
+        """Names of the settings the *active* backend needs but lacks; empty means
+        sending is configured. The required set is backend-specific -- an SMTP backend
+        needs host/port/user, an API backend (Anymail/Resend) needs its API key -- so
+        the SMTP names are not reported missing when an API backend is in use, and
+        vice versa. This keeps `is_email_configured()` honest on the cloud deployment,
+        which gates the sign-in UI on it."""
         missing_names = list()
-        for setting_name in [ 'EMAIL_BACKEND',
-                              'EMAIL_HOST',
-                              'EMAIL_PORT',
-                              'EMAIL_HOST_USER',
-                              'DEFAULT_FROM_EMAIL',
-                              'SERVER_EMAIL' ]:
-            email_setting = getattr( settings, setting_name )
-            if not email_setting:
+        for setting_name in [ 'EMAIL_BACKEND', 'DEFAULT_FROM_EMAIL', 'SERVER_EMAIL' ]:
+            if not getattr( settings, setting_name, None ):
+                missing_names.append( setting_name )
+            continue
+        missing_names += cls._missing_transport_setting_names()
+        return missing_names
+
+    @classmethod
+    def _missing_transport_setting_names( cls ) -> List[ str ]:
+        """The transport credential(s) the active backend needs but lacks: an API
+        backend's key, else the SMTP host/port/user."""
+        backend = getattr( settings, 'EMAIL_BACKEND', '' ) or ''
+        if backend.startswith( cls._ANYMAIL_BACKEND_PREFIX ):
+            anymail = getattr( settings, 'ANYMAIL', None ) or {}
+            # Resend is our only API ESP; Anymail reads its key from ANYMAIL.
+            if not anymail.get( 'RESEND_API_KEY' ):
+                return [ "ANYMAIL['RESEND_API_KEY']" ]
+            return list()
+        missing_names = list()
+        for setting_name in [ 'EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_HOST_USER' ]:
+            if not getattr( settings, setting_name, None ):
                 missing_names.append( setting_name )
             continue
         return missing_names

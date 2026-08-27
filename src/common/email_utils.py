@@ -99,5 +99,10 @@ class EmailThread( threading.Thread ):
         try:
             self.message.send()
         except Exception:
-            logger.exception( 'Problem in email thread.' )
+            # Background send: the request has already returned, so this log is the
+            # only signal a delivery failed. Names the backend because the usual
+            # cause is a transport/credential problem (e.g. a wrong Resend API key)
+            # that fails every send until fixed.
+            logger.exception( 'Email delivery failed (backend=%s); message not sent.',
+                              getattr( settings, 'EMAIL_BACKEND', 'unknown' ) )
         return

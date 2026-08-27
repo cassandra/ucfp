@@ -97,6 +97,9 @@ _ENV_SPEC = (
     _EnvVarSpec( 'EMAIL_HOST_PASSWORD'      , ENV_PREFIX + 'EMAIL_HOST_PASSWORD', str, '' ),
     _EnvVarSpec( 'EMAIL_USE_TLS'            , ENV_PREFIX + 'EMAIL_USE_TLS', bool, False ),
     _EnvVarSpec( 'EMAIL_USE_SSL'            , ENV_PREFIX + 'EMAIL_USE_SSL', bool, False ),
+    # API-based sending (Anymail/Resend), used by the cloud deployment where SMTP is
+    # blocked; optional here (empty self-hosted) and required only by settings/production.py.
+    _EnvVarSpec( 'EMAIL_API_KEY'            , ENV_PREFIX + 'EMAIL_API_KEY', str, '' ),
 
     # Application-specific.
     _EnvVarSpec( 'SUPPRESS_AUTHENTICATION'  , ENV_PREFIX + 'SUPPRESS_AUTHENTICATION', bool, False ),
@@ -173,6 +176,7 @@ class EnvironmentSettings:
     EMAIL_HOST_PASSWORD        : str           = ''
     EMAIL_USE_TLS              : bool          = False
     EMAIL_USE_SSL              : bool          = False
+    EMAIL_API_KEY              : str           = ''
 
     @property
     def environment_name(self) -> str:

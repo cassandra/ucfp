@@ -175,6 +175,7 @@ class EnvironmentGenerator:
               ( 'UCFP_EMAIL_HOST_PASSWORD', '' ),
               ( 'UCFP_EMAIL_USE_TLS', 'false' ),
               ( 'UCFP_EMAIL_USE_SSL', 'false' ),
+              ( 'UCFP_EMAIL_API_KEY', '' ),
           ] ),
         ( 'Network', 'optional; needed when accessing beyond localhost', [
             ( 'UCFP_EXTRA_HOST_URLS', '' ),

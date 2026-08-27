@@ -1,5 +1,6 @@
 Django==5.2.15
 cryptography==50.0.0
+django-anymail==15.1
 django-constance==4.3.5
 django-csp==4.0
 django-pipeline==4.1.0
