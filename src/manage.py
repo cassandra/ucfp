@@ -36,7 +36,7 @@ def set_runserver_defaults_if_needed():
 
       - Hostname: 'localhost' -- a stable named host matching ALLOWED_HOSTS and
         any cookie/CORS scope (rather than Django's bare-port 127.0.0.1 default).
-      - Port: from the DJANGO_SERVER_PORT env var, if set (else Django's default).
+      - Port: from the UCFP_APP_PORT env var, if set (else Django's default).
 
     Explicit args are always respected; only the missing parts are filled in.
     """
@@ -44,7 +44,7 @@ def set_runserver_defaults_if_needed():
         return
 
     default_hostname = "localhost"
-    default_port = os.environ.get("DJANGO_SERVER_PORT")
+    default_port = os.environ.get("UCFP_APP_PORT")
 
     if runserver_has_address_specified():
         # User gave an address -- only add a port if they gave a bare hostname.

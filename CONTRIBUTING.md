@@ -28,7 +28,7 @@ No contribution is too small! Even fixing typos or clarifying confusing document
 ## Ways to Contribute
 
 ### User Contributions
-*The foundation of open source - real users with real needs*
+*The heart of the project - real users with real needs*
 
 **What we need:**
 - Test the software
@@ -115,4 +115,4 @@ We aim to respond to issues and pull requests within a few days. For urgent secu
 We're committed to creating a welcoming, inclusive environment. Please read our [Code of Conduct](CODE_OF_CONDUCT.md) and help us build a positive community around the app.
 
 ### Licensing
-By contributing to the app, you agree that your contributions will be licensed under the MIT License. See [LICENSE.md](LICENSE.md) for full terms.
+By contributing to the app, you agree that your contributions are licensed under the same terms as the project — the **PolyForm Noncommercial License 1.0.0**. See [LICENSE.md](LICENSE.md) for full terms.

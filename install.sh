@@ -220,7 +220,7 @@ create_env_file() {
 
 # Core Django Settings
 DJANGO_SETTINGS_MODULE=ucfp.settings.local
-DJANGO_SERVER_PORT=8000
+UCFP_APP_PORT=8000
 DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
 
 # Admin User (for Django admin interface)
@@ -247,6 +247,7 @@ UCFP_DB_PASSWORD=
 UCFP_BUNDLED_REDIS=true
 UCFP_REDIS_HOST=127.0.0.1
 UCFP_REDIS_PORT=6379
+UCFP_REDIS_DB_INDEX=0
 
 # Authentication (disabled for simple setup)
 UCFP_SUPPRESS_AUTHENTICATION=true

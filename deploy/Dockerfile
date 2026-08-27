@@ -29,13 +29,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/src
 
-EXPOSE 8000
-
 VOLUME /data/database /data/media
 RUN mkdir -p /data/database && mkdir -p /data/media
 
+# Shell-form so UCFP_APP_PORT (from the env file) is resolved at check time,
+# matching the port the entrypoint configured nginx to listen on.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${UCFP_APP_PORT:-8000}/health || exit 1
 
 # base.txt is the full production dependency set (production.txt is just an alias
 # for it); dev-only tooling is intentionally excluded.

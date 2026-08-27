@@ -1,88 +1,44 @@
 # Droplet Setup (one-time)
 
 > **Role**: Project Setup
-> **Purpose**: One-time setup to stand up a cloud droplet that can receive releases
+> **Purpose**: One-time **ucfp-specific** configuration for deploying to a cloud droplet
 
-This is the one-time host and configuration setup. Once it is done, each release is
-deployed to the droplet as the final step of the
-[Release Process](../workflow/release-process.md) -- that recurring step is not
-repeated here.
+The droplet runs the same published `ghcr.io/cassandra/ucfp` image as the self-host
+lane, configured through environment variables for MySQL, host redis, real
+authentication, and TLS (`deploy/droplet/droplet.env.example` is the reference
+surface). Once this is done, each release is deployed as the final step of the
+[Release Process](../workflow/release-process.md).
 
-The droplet runs the same published `ghcr.io/cassandra/ucfp` image as the
-self-host lane, configured through environment variables for MySQL, host redis,
-real authentication, and TLS (`deploy/droplet/droplet.env.example` is the
-reference surface). The steps are provider-agnostic; **DigitalOcean** (whose term
-for a VM is a "droplet") via the `doctl` CLI is the worked example.
+**Host provisioning is not covered here.** Standing up the droplet -- the VM, its
+firewall, the shared MySQL / redis / Docker / nginx, and ucfp's per-app
+registration (its database, nginx vhost, TLS cert, and port / redis-index
+reservation) -- is done with the shared **`droplet-ops`** repo, whose README is
+authoritative. A droplet can host several apps side by side this way. This document
+covers only what is ucfp-specific: the production config, backups, and notes.
 
-## 1. Create the host and firewall
+## 1. Host prerequisites (via `droplet-ops`)
 
-Everything runs on one box -- the app container, MySQL, and redis share the host,
-so ~2 GB RAM is a reasonable floor. A single host with nginx terminating TLS avoids
-paying for a separate load balancer and managed DB/cache.
+On the droplet, from a clone of `droplet-ops` (see its README for the detail):
 
-```bash
-doctl auth init                       # one-time: paste a personal access token
-doctl compute ssh-key import my-key --public-key-file ~/.ssh/id_ed25519.pub
+- A VM with the firewall open to **22** (your IP), **80**, and **443**, sized for
+  co-hosting (~2 GB RAM floor). DNS **A records** for ucfp's domain → the droplet IP
+  (the apex can't be a CNAME). Optional: host resource alerts (CPU / mem / disk).
+- **Fresh host only:** `./provision-host.sh` (Docker, docker-compose, nginx+certbot,
+  MySQL, redis). Skip on a droplet already hosting another app.
+- **Register ucfp:** `./add-app.sh ucfp <domain> <port> <redis-index> [admin-email]`
+  — creates `ucfp_prod` + a least-privilege user, the nginx vhost, the TLS cert, and
+  `/opt/ucfp`, and prints the generated DB password plus the exact `UCFP_APP_PORT` /
+  `UCFP_REDIS_DB_INDEX` / `UCFP_DB_*` values for the production config below. A
+  dedicated droplet can use the defaults (port 8000, redis index 0); the database is
+  created with the `utf8mb4_unicode_ci` collation (see Notes).
 
-doctl compute droplet create ucfp \
-    --region nyc3 --image ubuntu-24-04-x64 --size s-1vcpu-2gb \
-    --ssh-keys <ssh-key-id> --enable-monitoring
-doctl compute droplet list            # note the droplet id and public IP
-
-# Lock SSH to your own IP; open HTTP/HTTPS to the world
-doctl compute firewall create --name ucfp-firewall \
-    --inbound-rules "protocol:tcp,ports:22,address:<your-ip>/32 protocol:tcp,ports:80,address:0.0.0.0/0 protocol:tcp,ports:443,address:0.0.0.0/0" \
-    --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0" \
-    --droplet-ids <droplet-id>
-```
-
-A `~/.ssh/config` entry (`Host ucfp-prod` / `Hostname <ip>` / `User root`) makes the
-later SSH-based deploy convenient.
-
-## 2. Point DNS at the host
-
-Create **A records** for the domain (`@`, and `www` if wanted) pointing at the
-droplet's public IP. Wait for propagation before the TLS step -- certificate
-issuance fails until the name resolves to the host:
-```bash
-dig NS example.com        # nameservers delegated?
-dig example.com           # resolves to <droplet-ip>?
-```
-
-## 3. Provision the host
-
-Run `deploy/droplet/do-droplet-init.sh <domain> [admin-email]` on the fresh host. It
-installs Docker, an nginx + certbot TLS reverse proxy, MySQL, redis, and
-docker-compose, and creates `/opt/ucfp`.
-
-Create the database and a least-privilege user:
-```sql
-CREATE DATABASE ucfp_prod CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER ucfp_prod_user@localhost IDENTIFIED BY 'change-me';
-GRANT ALL PRIVILEGES ON ucfp_prod.* TO ucfp_prod_user@localhost;
-```
-The `utf8mb4_unicode_ci` collation is a deliberate, audited choice -- see the
-Notes section.
-
-If the GHCR package is private, authenticate the droplet once so it can pull the
-image (a public package needs no login):
+If the GHCR package is private, authenticate the droplet once (a public package
+needs no login):
 ```bash
 echo <GITHUB_PAT> | docker login ghcr.io -u <github-username> --password-stdin
 ```
 
-## 4. Obtain the TLS certificate
-
-`do-droplet-init.sh` writes an **HTTP-only** nginx config on purpose -- it lets the
-ACME challenge be served and avoids referencing a certificate that does not exist
-yet. Once DNS resolves (step 2), issue the cert; `certbot --nginx` injects the HTTPS
-server block:
-```bash
-certbot --nginx -d example.com -d www.example.com \
-    --expand --non-interactive --agree-tos -m admin@example.com
-certbot renew --dry-run               # confirm automatic renewal works
-```
-
-## 5. Prepare the production config
+## 2. Prepare the production config
 
 Production secrets are hand-maintained under `.private/env/` (gitignored;
 `env-generate.py` deliberately refuses production). Use
@@ -94,17 +50,20 @@ as the template.
   `UCFP_DB_*`, `UCFP_BUNDLED_REDIS=false`, `UCFP_SUPPRESS_AUTHENTICATION=false`,
   email, `UCFP_FIELD_ENCRYPTION_KEY`, the S3 backup bucket
   (`UCFP_BACKUP_S3_BUCKET`), and `UCFP_EXTRA_HOST_URLS=https://example.com` (its
-  first entry becomes `SITE_DOMAIN` and feeds `ALLOWED_HOSTS`/CSP).
+  first entry becomes `SITE_DOMAIN` and feeds `ALLOWED_HOSTS`/CSP). On a **shared**
+  droplet also set `UCFP_APP_PORT` and `UCFP_REDIS_DB_INDEX` to the port and index
+  `add-app.sh` reserved (step 1) -- these keep ucfp off the other apps' host port and
+  redis keyspace. On a dedicated droplet the defaults (8000, 0) apply.
 - Convert it to the compose `env_file` format the deploy step ships:
   ```bash
   python3 deploy/droplet/docker-compose-env-convert.py \
       .private/env/production.sh .private/env/docker-compose.production.env
   ```
 
-The release deploy steps reach the droplet over SSH -- the `ucfp-prod` alias from
-step 1 (or `root@<droplet-ip>`) is the host they target.
+The release deploy steps reach the droplet over SSH -- a `~/.ssh/config` alias
+(e.g. `ucfp-prod`) or `root@<droplet-ip>` is the host they target.
 
-## 6. Set up backups
+## 3. Set up backups
 
 `deploy/droplet/do-droplet-backup.sh` (cron on the droplet) dumps MySQL to S3,
 reading `UCFP_BACKUP_S3_BUCKET` from the deployed `/opt/ucfp/ucfp.sh`. One-time, on
@@ -117,16 +76,11 @@ aws configure                 # IAM key/secret with PutObject on the bucket
 crontab -e                    # e.g.:  0 3 * * * /opt/ucfp/do-droplet-backup.sh
 ```
 
-## 7. Monitoring (optional)
-
-Set host-level resource alerts (CPU / memory / disk sustained above ~70%). On
-DigitalOcean: *Manage -> Monitoring -> Create Resource Alert*. Any equivalent works.
-
 ## Notes
 
-- **Database collation** (`utf8mb4_unicode_ci`, set in the `CREATE DATABASE`
-  above): case- and accent-insensitive, and kept that way deliberately. The
-  self-host (SQLite) lane is case-sensitive; the two lanes have disjoint
+- **Database collation** (`utf8mb4_unicode_ci`, the collation `add-app.sh` creates
+  the database with): case- and accent-insensitive, and kept that way deliberately.
+  The self-host (SQLite) lane is case-sensitive; the two lanes have disjoint
   users/data, so they are **not** made to match. Audited under issue #223 -- no
   field requires case-sensitivity: sign-in tokens are validated in Python (never a
   DB equality lookup), emails are stored lower-cased (case-insensitive identity is
@@ -147,6 +101,7 @@ DigitalOcean: *Manage -> Monitoring -> Create Resource Alert*. Any equivalent wo
   ```
 
 ## Related Documentation
+- Host provisioning + per-app setup (VM, firewall, DNS, services, `add-app.sh`): the **`droplet-ops`** repo
 - Deploy releases onto this host: [Release Process](../workflow/release-process.md)
 - Self-host deployment: [Deployment](../../Deployment.md)
 - GitHub repository configuration: [GitHub Setup](github-setup.md)

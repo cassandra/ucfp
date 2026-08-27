@@ -79,7 +79,7 @@ class EnvironmentConfig:
     data_directory        : str   = 'data'
     secrets_directory     : str   = '.private/env'
     secrets_suffix        : str   = 'sh'
-    django_server_port    : str   = '8000'
+    app_port              : str   = '8000'
     email_subject_prefix  : str   = ''
     
     @classmethod
@@ -92,7 +92,7 @@ class EnvironmentConfig:
                 data_directory = '/data',  # Location relative to internal Docker container
                 secrets_directory = os.path.join( app_home, 'env' ),
                 secrets_suffix = 'env',
-                django_server_port  = '8000',
+                app_port            = '8000',
                 email_subject_prefix = '',
             )
         if env_name == 'development':
@@ -102,7 +102,7 @@ class EnvironmentConfig:
                 data_directory = 'data',
                 secrets_directory = '.private/env',
                 secrets_suffix = 'sh',
-                django_server_port  = '8666',
+                app_port            = '8666',
                 email_subject_prefix = '[DEV] ',
             )
         return EnvironmentConfig(
@@ -126,7 +126,7 @@ class EnvironmentGenerator:
     SETTING_SECTIONS = [
         ( 'Core Django', 'required', [
             ( 'DJANGO_SETTINGS_MODULE', 'ucfp.settings.local' ),
-            ( 'DJANGO_SERVER_PORT', '8000' ),
+            ( 'UCFP_APP_PORT', '8000' ),
             ( 'DJANGO_SECRET_KEY', '<replace-with-50-char-random-string>' ),
         ] ),
         ( 'Admin user', 'required', [
@@ -150,6 +150,7 @@ class EnvironmentGenerator:
             ( 'UCFP_BUNDLED_REDIS', 'true' ),
             ( 'UCFP_REDIS_HOST', '127.0.0.1' ),
             ( 'UCFP_REDIS_PORT', '6379' ),
+            ( 'UCFP_REDIS_DB_INDEX', '0' ),
         ] ),
         ( 'Authentication',
           'optional; "true" disables login for simple single-user setups', [
@@ -238,7 +239,7 @@ class EnvironmentGenerator:
         self._settings_map = { name: None for name in self._declared_var_names() }
         self._settings_map.update( {
             'DJANGO_SETTINGS_MODULE': f'ucfp.settings.{self._env_name}',
-            'DJANGO_SERVER_PORT': self._env_config.django_server_port,
+            'UCFP_APP_PORT': self._env_config.app_port,
             'UCFP_SUPPRESS_AUTHENTICATION': 'true',
             'UCFP_SECRET_URL_PREFIX_UUID': '',
             'UCFP_DB_HOST': '',
@@ -249,6 +250,7 @@ class EnvironmentGenerator:
             'UCFP_BUNDLED_REDIS': 'true',
             'UCFP_REDIS_HOST': '127.0.0.1',
             'UCFP_REDIS_PORT': '6379',
+            'UCFP_REDIS_DB_INDEX': '0',
             'UCFP_EMAIL_SUBJECT_PREFIX': self._env_config.email_subject_prefix,
             'UCFP_EXTRA_HOST_URLS': '',  # To be filled in manually if/when running beyond localhost
             'UCFP_EXTRA_CSP_URLS': '',  # To be filled in manually if/when running beyond localhost

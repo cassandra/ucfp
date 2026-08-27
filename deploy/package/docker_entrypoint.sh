@@ -15,6 +15,20 @@ else
     rm -f /etc/supervisor/conf.d/redis.conf
 fi
 
+# The container's nginx listens on UCFP_APP_PORT (default 8000). Templating it
+# here -- rather than baking a fixed port into docker_nginx.conf -- lets several
+# app containers share one host under `network_mode: host` by each taking a
+# distinct port. The config file ships with :8000 so it stays valid for the
+# build-time `nginx -t`; this rewrites the listen directives before nginx starts.
+APP_PORT="${UCFP_APP_PORT:-8000}"
+if ! [[ "${APP_PORT}" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: UCFP_APP_PORT='${APP_PORT}' is not a positive integer." >&2
+    exit 1
+fi
+echo "Configuring nginx to listen on port ${APP_PORT}..."
+sed -i -E "s/(listen[[:space:]]+[^;]+):[0-9]+;/\1:${APP_PORT};/" \
+    /etc/nginx/sites-available/default
+
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 

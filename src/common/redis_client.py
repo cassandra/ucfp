@@ -35,17 +35,22 @@ def initialize_global_cache_client():
     if not port:
         port = 6379
 
-    logger.info( "Attempting to connect to Redis at %s:%s ..." % ( host, port ))
+    # Match the logical DB index the Django cache uses (settings.REDIS_DB_INDEX)
+    # so this raw client and the cache share one keyspace, and so two apps on one
+    # host Redis stay isolated by index.
+    db_index = settings.REDIS_DB_INDEX
+
+    logger.info( "Attempting to connect to Redis at %s:%s/%s ..." % ( host, port, db_index ))
 
     try:
         _g_global_redis_client = redis.StrictRedis( host = host,
                                                     port = port,
-                                                    db = 0,
+                                                    db = db_index,
                                                     socket_timeout = 5,
                                                     socket_connect_timeout = 5,
                                                     decode_responses = True )
         _g_global_redis_client.ping()
-        logger.info( "Successfully connected to Redis at %s:%s" % ( host, port ))
+        logger.info( "Successfully connected to Redis at %s:%s/%s" % ( host, port, db_index ))
 
     except ( ConnectionRefusedError, redis.exceptions.ConnectionError ) as e:
         logger.error( f'Could not connect to Redis server: {e}' )

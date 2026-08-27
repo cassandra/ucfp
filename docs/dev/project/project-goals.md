@@ -12,11 +12,6 @@ A personal financial-planning tool. Today this planning is spread across several
 spreadsheets that have grown unwieldy and lack good sanity-checking. The goal is
 a single, robustly-modeled application that replaces them.
 
-The distinguishing idea: planning **spans past, present, and future** at
-**multiple timescales** — unlike most financial calculators, which focus on a
-single horizon. Past/present actuals and future projections live in one model so
-that plans can be continuously reconciled against reality.
-
 ## Domain Overview
 
 Several planning *perspectives*, all in the financial-planning realm:
@@ -40,11 +35,10 @@ forecast engine, and captured projection runs.
 
 Settled model decisions:
 
-- **Current state is a snapshot** of finances (a GNUCash export, or manual entry),
-  modeled as an initial **"seed" opening transaction** so the books balance from t0.
-- **Real past transactions are NOT stored here** — GNUCash remains the system of
-  record for actual transaction history. We keep **historical snapshots**, not a
-  past journal.
+- **Current state is a snapshot** of finances (manual entry, possible future import),
+  modeled as an initial **opening transaction** so the books balance from t0.
+- **Real past transactions are NOT stored here** — actual transaction history.
+  We keep **historical snapshots**, not a past journal.
 - A captured run stores **materialized outputs** (an immutable projection), not
   merely its inputs.
 
@@ -56,20 +50,19 @@ Settled model decisions:
 
 - Replace the current planning spreadsheets with a single, well-modeled tool.
 - Provide strong sanity-checking / validation that the spreadsheets lack.
-- Project finances across past, present, and future at multiple timescales.
+- Project finances across to future at multiple timescales.
 - Continuously compare plan vs. reality as actuals come in over time.
 
 ## Non-Goals / Out of Scope
 
 - **Not** replacing or reinventing expense/transaction tracking — the user uses
-  **GNUCash** for tracking past and current expenses and it does that job well.
-- Instead, **integrate with / import from GNUCash** so established plans can be
-  updated with reality over time, tracking how well planning and reality match.
 
 ## Target Users & Deployment Modes
 
 - **Primary (now):** the user's own financial-planning needs.
-- **Aspirational (if it turns out well):** open-source it, supporting two modes:
+- **Aspirational:** release it publicly as free,
+  source-available software (free for noncommercial use under the PolyForm
+  Noncommercial License; commercial use by separate license), supporting two modes:
   - **Self-hosted** — for people who want to keep their financial data private.
   - **Public, free, hosted instance** — for people who want access without
     self-hosting.
@@ -80,7 +73,6 @@ Settled model decisions:
 
 - Double-entry core model spanning past/present/future.
 - Multiple planning perspectives (retirement, near-term cash flow, SS timing).
-- GNUCash data import / integration; plan-vs-actual reconciliation.
 - Validation and sanity-checking of plans.
 
 ### Non-Functional
@@ -88,17 +80,3 @@ Settled model decisions:
 - Multi-timescale modeling (fine-grained near term, coarse long term).
 - Dual deployment (self-host + public cloud) — see project-phase.md.
 - Privacy/data-ownership considerations for self-hosted users.
-
-## Constraints & Assumptions
-
-- GNUCash is the system of record for actual past/current transactions.
-
-## Open Questions
-
-_Larger directions not yet built; each detailed in its own issue when taken up:_
-
-- The **Monte Carlo / sweep layer** (name TBD) that generates and compares many
-  scenarios over sampled or enumerated parameters — including the **Social Security
-  timing** comparison.
-- Mechanism and direction of **GNUCash integration** (import format, frequency,
-  plan-vs-actual reconciliation) — still the largest unbuilt piece.
