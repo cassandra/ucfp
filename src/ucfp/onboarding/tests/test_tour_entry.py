@@ -19,7 +19,10 @@ from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 User = get_user_model()
 
 
+@override_settings( SUPPRESS_AUTHENTICATION = False )
 class StartTourTest( TestCase ):
+    """Cloud mode: the tour funnel starts from an anonymous visitor, so pin authentication enabled --
+    self-hosted has no anonymous visitor to convert (the singleton owner is always signed in)."""
 
     def _seed_example( self ):
         return Organization.objects.create(
@@ -175,9 +178,12 @@ class TourForecastRenderTest( TestCase ):
         self.assertEqual( 4, response.context[ 'tour_active_step' ] )             # the shell lights Forecast
 
 
+@override_settings( SUPPRESS_AUTHENTICATION = False )
 class AddMyDataTest( TestCase ):
     """`AddMyDataView`: the universal graduation -- mint a Guest if anonymous, then ensure an organization
-    of the user's own (not the example) and land on the Profile to start entering data."""
+    of the user's own (not the example) and land on the Profile to start entering data. Pinned to cloud
+    mode: the anonymous-visitor and no-minting-on-GET assertions have no analogue self-hosted, where the
+    singleton owner is always signed in."""
 
     def _own_org( self, user ):
         return OrganizationMember.objects.get(
@@ -228,10 +234,12 @@ class AddMyDataTest( TestCase ):
         self.assertTrue( OrganizationMember.objects.filter( user = user, organization = example ).exists() )
 
 
+@override_settings( SUPPRESS_AUTHENTICATION = False )
 class FeaturePageAddMyDataTest( TestCase ):
     """The real feature pages (here the Profile interview under the app chrome) promote "Add my data" to a
     user whose only org is the read-only example, and suppress the guest "save your work" email banner there
-    -- there is nothing of *theirs* to save yet. Once they own an org, neither prompt shows."""
+    -- there is nothing of *theirs* to save yet. Once they own an org, neither prompt shows. Pinned to cloud
+    mode: the example-only state cannot arise self-hosted, where the singleton always owns its org."""
 
     _CTA_COPY   = "add your own to build your real plan"
     _EMAIL_COPY = "add an email so you don't lose it"
@@ -275,11 +283,13 @@ class FeaturePageAddMyDataTest( TestCase ):
         self.assertNotContains( response, self._CTA_COPY )
 
 
+@override_settings( SUPPRESS_AUTHENTICATION = False )
 class ExplainGatingTest( TestCase ):
     """`ExplainView` exposes the two deployment-mode flags its template gates cloud-only chrome on:
     `tour_available` (is the example org seeded, so "Take a tour" can run) and `authentication_enabled`
     (is sign-in in play, so the "free, no sign-up" reassurance applies). This tests that contract, not
-    the page's evolving layout/copy."""
+    the page's evolving layout/copy. Pinned to cloud mode by default; the one self-hosted case re-pins
+    `SUPPRESS_AUTHENTICATION=True` at the method level."""
 
     def test_tour_available_reflects_a_seeded_example_org( self ):
         response = self.client.get( reverse( 'explain' ) )
@@ -303,12 +313,15 @@ class ExplainGatingTest( TestCase ):
         self.assertFalse( response.context[ 'authentication_enabled' ] )  # no sign-up concept self-hosted
 
 
+@override_settings( SUPPRESS_AUTHENTICATION = False )
 class HomeCtaStateTest( TestCase ):
     """The site root (`/`, HomeView) stays reachable for everyone and resolves one of three visitor states
     (`onboarding.home_cta`): an anonymous visitor learns how it works, an early user (only the read-only
     example) starts their own plan, an owner goes to their dashboard. The self-hosted singleton is always an
     owner. A *signed-in* visitor must never see two competing gold actions (the former bug); an anonymous
-    visitor legitimately sees the same "See how it works" action repeated in the closing marketing band."""
+    visitor legitimately sees the same "See how it works" action repeated in the closing marketing band.
+    Pinned to cloud mode by default; the self-hosted-singleton case re-pins `SUPPRESS_AUTHENTICATION=True`
+    at the method level."""
 
     @staticmethod
     def _gold_count( response ):
@@ -363,9 +376,11 @@ class HomeCtaStateTest( TestCase ):
         self.assertNotContains( response, reverse( 'user_signin' ) )
 
 
+@override_settings( SUPPRESS_AUTHENTICATION = False )
 class DashboardEarlyUserTest( TestCase ):
     """The dashboard promotes "Add My Data" to an early user (only the example org) and not once they have
-    their own org -- driven by the `offer_add_my_data` context flag."""
+    their own org -- driven by the `offer_add_my_data` context flag. Pinned to cloud mode: the example-only
+    early-user state cannot arise self-hosted, where the singleton always owns its org."""
 
     def test_promotes_add_my_data_to_an_early_user( self ):
         Organization.objects.create( uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
