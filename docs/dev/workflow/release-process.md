@@ -70,7 +70,23 @@ On the Actions page, confirm both succeeded:
   `:latest` exist in the registry.
 - **Create Release Assets** -> `ucfp.zip` is attached to the release.
 
-### 5. Deploy to the production droplet
+### 5. Open the next development version on `staging`
+```bash
+git checkout staging
+# Edit VERSION -> next anticipated version with a -dev suffix, e.g. 1.5.0-dev
+git add VERSION
+git commit -m "Bump version to v1.5.0-dev"
+git push origin staging
+```
+
+### 6. Validate the self-host install (optional)
+Confirm the published image installs cleanly for self-hosters (ideally on a clean
+machine):
+```bash
+curl -fsSL https://raw.githubusercontent.com/cassandra/ucfp/master/install.sh | bash
+```
+
+### 7. Deploy to the production droplet
 With the image published, deploy it to the droplet one validated step at a time.
 Prerequisite: the one-time [Droplet Setup](../project/droplet-setup.md) is done. The
 examples use the `ucfp-prod` SSH alias and `/opt/ucfp` path from that setup.
@@ -105,22 +121,6 @@ examples use the `ucfp-prod` SSH alias and `/opt/ucfp` path from that setup.
    curl https://example.com/health    # JSON including the version you just deployed
    ```
    If anything looks wrong, see [Rollback Process](rollback-process.md).
-
-### 6. Validate the self-host install (optional)
-Confirm the published image installs cleanly for self-hosters (ideally on a clean
-machine):
-```bash
-curl -fsSL https://raw.githubusercontent.com/cassandra/ucfp/master/install.sh | bash
-```
-
-### 7. Open the next development version on `staging`
-```bash
-git checkout staging
-# Edit VERSION -> next anticipated version with a -dev suffix, e.g. 1.5.0-dev
-git add VERSION
-git commit -m "Bump version to v1.5.0-dev"
-git push origin staging
-```
 
 ## Post-Release
 - **Refine the release notes** on the GitHub release page.
