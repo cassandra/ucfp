@@ -271,7 +271,7 @@ class OrganizationInvitation( TimestampedModel ):
     # #223). Each key holds the recipient identity only while the invitation is
     # WAITING (and present), NULL otherwise, so historical / re-sent invitations
     # are exempt. The email key is lower-cased to keep pending-email identity
-    # case-insensitive, matching the previous Lower() constraint.
+    # case-insensitive.
     pending_email_key = models.GeneratedField(
         expression = models.Case(
             models.When(

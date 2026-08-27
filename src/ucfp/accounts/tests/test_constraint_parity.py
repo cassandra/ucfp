@@ -17,8 +17,8 @@ from ucfp.accounts.models import AccountRecord, BooksOfAccountRecord
 class AccountUniquenessConstraintTests( TestCase ):
 
     def setUp( self ):
-        organization = Organization.objects.create( name = 'Constraint Test' )
-        self.books = BooksOfAccountRecord.objects.create( organization = organization )
+        self.organization = Organization.objects.create( name = 'Constraint Test' )
+        self.books = BooksOfAccountRecord.objects.create( organization = self.organization )
 
     def _account( self, name = 'A', **kwargs ) -> AccountRecord:
         return AccountRecord.objects.create( books = self.books, name = name, **kwargs )
@@ -57,10 +57,21 @@ class AccountUniquenessConstraintTests( TestCase ):
     def test_root_accounts_of_different_types_allowed( self ):
         self._account( account_type = AccountType.ASSET )
         self._account( account_type = AccountType.LIABILITY )    # different type -> allowed
+        self.assertEqual( AccountRecord.objects.filter( books = self.books ).count(), 2 )
 
     def test_non_root_accounts_of_same_type_allowed( self ):
         root = self._account( account_type = AccountType.ASSET )
         self._account( account_type = AccountType.ASSET, parent = root )
         self._account( account_type = AccountType.ASSET, parent = root )   # children -> key NULL -> exempt
+        # The root and both same-type children coexist (3 of the type in the books).
         self.assertEqual(
-            AccountRecord.objects.filter( books = self.books, parent = root ).count(), 2 )
+            AccountRecord.objects.filter( books = self.books, account_type = AccountType.ASSET ).count(), 3 )
+
+    def test_same_handle_and_root_type_allowed_in_different_books( self ):
+        # The uniqueness is scoped per books; the same handle and root type are
+        # allowed in a different BooksOfAccountRecord.
+        other_books = BooksOfAccountRecord.objects.create( organization = self.organization )
+        self._account( handle = 'cash', account_type = AccountType.ASSET )
+        AccountRecord.objects.create(
+            books = other_books, name = 'A', handle = 'cash', account_type = AccountType.ASSET )
+        self.assertEqual( AccountRecord.objects.filter( handle = 'cash' ).count(), 2 )

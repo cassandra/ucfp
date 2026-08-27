@@ -161,8 +161,8 @@ class AccountRecord( TimestampedModel ):
     )
     # DB-computed key = account_type for a root account (parent IS NULL), NULL
     # otherwise, so a plain UniqueConstraint enforces "one root per type per books"
-    # on every backend. This replaces a partial UniqueConstraint, which MySQL
-    # silently drops (see #223); NULL keys (non-root rows) stay exempt.
+    # on every backend. A partial UniqueConstraint would work but MySQL silently
+    # drops it (see #223); NULL keys (non-root rows) stay exempt.
     root_account_type_key = models.GeneratedField(
         expression = models.Case(
             models.When( parent__isnull = True, then = models.F( 'account_type' ) ),

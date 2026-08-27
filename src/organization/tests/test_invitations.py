@@ -160,6 +160,77 @@ class InvitationDatabaseConstraintTestCase( BaseTestCase ):
                 )
         return
 
+    def test_db_case_insensitive_pending_email_rejected(self):
+        # The generated key lower-cases the email, so two pending invitations whose
+        # emails differ only in case collide at the DB layer (on both backends).
+        OrganizationInvitation.objects.create(
+            organization = self.organization,
+            email_address = 'Case@example.com',
+            organization_role = OrganizationRole.MEMBER,
+        )
+        with self.assertRaises( IntegrityError ):
+            with transaction.atomic():
+                OrganizationInvitation.objects.create(
+                    organization = self.organization,
+                    email_address = 'case@example.com',
+                    organization_role = OrganizationRole.MEMBER,
+                )
+        return
+
+    def test_waiting_and_non_waiting_same_email_coexist(self):
+        # A non-WAITING invitation drops out of the key (NULL), so it coexists with
+        # a WAITING one for the same org+email -- history is exempt.
+        OrganizationInvitation.objects.create(
+            organization = self.organization,
+            email_address = 'hist@example.com',
+            organization_role = OrganizationRole.MEMBER,
+            status = OrganizationInvitationStatus.DECLINED,
+        )
+        OrganizationInvitation.objects.create(
+            organization = self.organization,
+            email_address = 'hist@example.com',
+            organization_role = OrganizationRole.MEMBER,
+        )
+        self.assertEqual(
+            OrganizationInvitation.objects.filter(
+                organization = self.organization, email_address = 'hist@example.com' ).count(), 2 )
+        return
+
+    def test_waiting_and_non_waiting_same_user_coexist(self):
+        recipient = self.User.objects.create_user( email = 'huser@example.com', password = 'x' )
+        OrganizationInvitation.objects.create(
+            organization = self.organization,
+            invited_user = recipient,
+            organization_role = OrganizationRole.MEMBER,
+            status = OrganizationInvitationStatus.DECLINED,
+        )
+        OrganizationInvitation.objects.create(
+            organization = self.organization,
+            invited_user = recipient,
+            organization_role = OrganizationRole.MEMBER,
+        )
+        self.assertEqual(
+            OrganizationInvitation.objects.filter(
+                organization = self.organization, invited_user = recipient ).count(), 2 )
+        return
+
+    def test_same_pending_email_allowed_in_different_org(self):
+        # Uniqueness is scoped per organization.
+        other_org = Organization.objects.create_for_owner( self.inviter, name = 'Beta' )
+        OrganizationInvitation.objects.create(
+            organization = self.organization,
+            email_address = 'shared@example.com',
+            organization_role = OrganizationRole.MEMBER,
+        )
+        OrganizationInvitation.objects.create(
+            organization = other_org,
+            email_address = 'shared@example.com',
+            organization_role = OrganizationRole.MEMBER,
+        )
+        self.assertEqual(
+            OrganizationInvitation.objects.filter( email_address = 'shared@example.com' ).count(), 2 )
+        return
+
 
 class InvitationAcceptTestCase( BaseTestCase ):
 
