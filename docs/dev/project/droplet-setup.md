@@ -16,43 +16,56 @@ reservation) -- is done with the shared **`droplet-ops`** repo, whose README is
 authoritative. A droplet can host several apps side by side this way. This document
 covers only what is ucfp-specific: the production config, backups, and notes.
 
-## 1. Host prerequisites (via `droplet-ops`)
+## Prerequisites
 
-On the droplet, from a clone of `droplet-ops` (see its README for the detail):
+Provision the host and register ucfp first, with the shared **`droplet-ops`** repo
+(its README and runbooks are authoritative). That registration is what supplies the
+inputs step 1 needs: the **DB credentials**, and — on a shared droplet — the **host
+port** and **redis index** reserved for ucfp.
 
-- A VM with the firewall open to **22** (your IP), **80**, and **443**, sized for
-  co-hosting (~2 GB RAM floor). DNS **A records** for ucfp's domain → the droplet IP
-  (the apex can't be a CNAME). Optional: host resource alerts (CPU / mem / disk).
-- **Fresh host only:** `./provision-host.sh` (Docker, docker-compose, nginx+certbot,
-  MySQL, redis). Skip on a droplet already hosting another app.
-- **Register ucfp:** `./add-app.sh ucfp <domain> <port> <redis-index> [admin-email]`
-  — creates `ucfp_prod` + a least-privilege user, the nginx vhost, the TLS cert, and
-  `/opt/ucfp`, and prints the generated DB password plus the exact `UCFP_APP_PORT` /
-  `UCFP_REDIS_DB_INDEX` / `UCFP_DB_*` values for the production config below. A
-  dedicated droplet can use the defaults (port 8000, redis index 0); the database is
-  created with the `utf8mb4_unicode_ci` collation (see Notes).
-
-If the GHCR package is private, authenticate the droplet once (a public package
-needs no login):
+If ucfp's GHCR image is private, log the droplet in once (a public image needs no
+login):
 ```bash
 echo <GITHUB_PAT> | docker login ghcr.io -u <github-username> --password-stdin
 ```
 
-## 2. Prepare the production config
+## 1. Prepare the production config
 
 Production secrets are hand-maintained under `.private/env/` (gitignored;
 `env-generate.py` deliberately refuses production). Use
 [`deploy/droplet/droplet.env.example`](../../../deploy/droplet/droplet.env.example)
 as the template.
 
+Generate the four per-deployment secrets. Each produces **shell-safe, URL-safe**
+output (no quotes, spaces, `$`, or backticks), so it drops into the `export` form
+without escaping:
+
+```bash
+# UCFP_FIELD_ENCRYPTION_KEY -- Fernet key: 32 random bytes, url-safe base64
+python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode('ascii'))"
+
+# DJANGO_SECRET_KEY -- 50 url-safe chars
+python3 -c "import secrets; print(secrets.token_urlsafe(50)[:50])"
+
+# DJANGO_SUPERUSER_PASSWORD -- the /admin login (~22 url-safe chars)
+python3 -c "import secrets; print(secrets.token_urlsafe(16))"
+
+# UCFP_SECRET_URL_PREFIX_UUID -- opaque path segment hiding /admin/ and /env/
+python3 -c "from uuid import uuid4; print(uuid4().hex)"
+```
+
+Two values are **not** generated here -- carry them over: `UCFP_DB_PASSWORD` (printed
+by the add-app step above) and `UCFP_EMAIL_API_KEY` (the Resend key from the email
+setup). The rest (`DJANGO_SUPERUSER_EMAIL`, the from-address, `UCFP_EXTRA_HOST_URLS`)
+are chosen values, not secrets.
+
 - `.private/env/production.sh` -- the shell-`export` form (source of truth; also
   deployed to the droplet as `ucfp.sh` for the backup cron). Set the MySQL
   `UCFP_DB_*`, `UCFP_BUNDLED_REDIS=false`, `UCFP_SUPPRESS_AUTHENTICATION=false`,
-  email, `UCFP_FIELD_ENCRYPTION_KEY`, the S3 backup bucket
-  (`UCFP_BACKUP_S3_BUCKET`), and `UCFP_EXTRA_HOST_URLS=https://example.com` (its
+  email, `UCFP_FIELD_ENCRYPTION_KEY`, and `UCFP_EXTRA_HOST_URLS=https://example.com` (its
   first entry becomes `SITE_DOMAIN` and feeds `ALLOWED_HOSTS`/CSP). On a **shared**
   droplet also set `UCFP_APP_PORT` and `UCFP_REDIS_DB_INDEX` to the port and index
-  `add-app.sh` reserved (step 1) -- these keep ucfp off the other apps' host port and
+  the add-app runbook reserved (see Prerequisites) -- these keep ucfp off the other apps' host port and
   redis keyspace. On a dedicated droplet the defaults (8000, 0) apply.
 - Convert it to the compose `env_file` format the deploy step ships:
   ```bash
@@ -63,23 +76,29 @@ as the template.
 The release deploy steps reach the droplet over SSH -- a `~/.ssh/config` alias
 (e.g. `ucfp-prod`) or `root@<droplet-ip>` is the host they target.
 
-## 3. Set up backups
+## 2. Set up backups
 
-`deploy/droplet/do-droplet-backup.sh` (cron on the droplet) dumps MySQL to S3,
-reading `UCFP_BACKUP_S3_BUCKET` from the deployed `/opt/ucfp/ucfp.sh`. One-time, on
-the droplet:
+ucfp's `deploy/droplet/do-ucfp-backup.sh` (deployed to `/opt/ucfp`) dumps MySQL to
+S3 — the bucket/prefix are set in the script, and it reads the `UCFP_DB_*` credentials
+from the deployed `/opt/ucfp/ucfp.sh`. It relies on the droplet's shared **AWS CLI + S3
+credentials** — a host-level, once-per-droplet setup done via droplet-ops'
+`runbooks/setup-backups.md`. With that in place, schedule ucfp's job at its registry
+backup slot (**03:30** -- staggered so co-hosted apps don't dump concurrently):
+
 ```bash
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
-apt install -y unzip && unzip awscliv2.zip && ./aws/install
-/bin/rm -rf aws awscliv2.zip
-aws configure                 # IAM key/secret with PutObject on the bucket
-crontab -e                    # e.g.:  0 3 * * * /opt/ucfp/do-droplet-backup.sh
+scp deploy/droplet/do-ucfp-backup.sh cassandrahq.com:/tmp/do-ucfp-backup.sh
+```
+
+```bash
+ssh cassandrahq.com
+sudo cp /tmp/do-ucfp-backup.sh /opt/ucfp/do-ucfp-backup.sh
+crontab -e                    # ucfp's 03:30 registry slot:  30 3 * * * /opt/ucfp/do-ucfp-backup.sh
 ```
 
 ## Notes
 
-- **Database collation** (`utf8mb4_unicode_ci`, the collation `add-app.sh` creates
-  the database with): case- and accent-insensitive, and kept that way deliberately.
+- **Database collation** (`utf8mb4_unicode_ci`, the collation the add-app runbook
+  creates the database with): case- and accent-insensitive, and kept that way deliberately.
   The self-host (SQLite) lane is case-sensitive; the two lanes have disjoint
   users/data, so they are **not** made to match. Audited under issue #223 -- no
   field requires case-sensitivity: sign-in tokens are validated in Python (never a
@@ -88,8 +107,10 @@ crontab -e                    # e.g.:  0 3 * * * /opt/ucfp/do-droplet-backup.sh
   machine-minted lower-case account `handle`. Caveat: that `handle` uniqueness is
   safe only because handles are machine-minted lower-case; if they ever become
   user-entered free text (e.g. case-distinct symbols), revisit its collation.
-- **Outbound SMTP** is blocked by some hosts (DigitalOcean included). Sign-in
-  depends on email, so use an SMTP provider/port that works from the host.
+- **Outbound SMTP** is blocked by some hosts (DigitalOcean included), so the cloud
+  lane (`ucfp.settings.production`) sends email through **Resend's HTTP API** via
+  Anymail, not SMTP -- driven by `UCFP_EMAIL_API_KEY` and a verified sender. Sign-in
+  depends on email, so both must be set (see the droplet-ops `setup-email` runbook).
 - **Testing against MySQL**: dev and CI default to SQLite. Because SQLite and MySQL
   differ subtly, run the suite against a local MySQL before a release that touches
   models or migrations (point the same `UCFP_DB_*` at a local MySQL). On macOS,
@@ -101,7 +122,7 @@ crontab -e                    # e.g.:  0 3 * * * /opt/ucfp/do-droplet-backup.sh
   ```
 
 ## Related Documentation
-- Host provisioning + per-app setup (VM, firewall, DNS, services, `add-app.sh`): the **`droplet-ops`** repo
+- Host provisioning + per-app setup (VM, firewall, DNS, services, the add-app runbook): the **`droplet-ops`** repo
 - Deploy releases onto this host: [Release Process](../workflow/release-process.md)
 - Self-host deployment: [Deployment](../../Deployment.md)
 - GitHub repository configuration: [GitHub Setup](github-setup.md)

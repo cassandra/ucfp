@@ -1,18 +1,17 @@
 #!/bin/bash
 #
 # Droplet MySQL backup -> S3 (run from cron on the droplet).
-# Sources the deployed env (UCFP_DB_*) and uploads a gzipped mysqldump.
-#
-# The S3 destination is operator-specific: define UCFP_BACKUP_S3_BUCKET (and
-# optionally UCFP_BACKUP_S3_PREFIX) in the deployed /opt/ucfp/ucfp.sh, which is
-# sourced below, so the bucket name stays out of the repo.
+# Sources the deployed env (UCFP_DB_*) for DB credentials and uploads a gzipped
+# mysqldump. The S3 destination is app-specific and non-secret, so it is set in the
+# Config block below rather than pulled from the env.
 
 set -e
 
 . /opt/ucfp/ucfp.sh
 
-S3_BUCKET="${UCFP_BACKUP_S3_BUCKET:?Set UCFP_BACKUP_S3_BUCKET in /opt/ucfp/ucfp.sh}"
-S3_PREFIX="${UCFP_BACKUP_S3_PREFIX:-ucfp/mysql-backups}"
+# Config -- app-specific, not secret.
+S3_BUCKET='pomdp'
+S3_PREFIX='landfall/mysql-backups'
 
 TODAY=$(date +%A)         # e.g., Monday, Tuesday
 DAY=$(date +%d)           # e.g., 01, 15
