@@ -61,6 +61,8 @@ CREATE DATABASE ucfp_prod CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER ucfp_prod_user@localhost IDENTIFIED BY 'change-me';
 GRANT ALL PRIVILEGES ON ucfp_prod.* TO ucfp_prod_user@localhost;
 ```
+The `utf8mb4_unicode_ci` collation is a deliberate, audited choice -- see the
+Notes section.
 
 If the GHCR package is private, authenticate the droplet once so it can pull the
 image (a public package needs no login):
@@ -122,6 +124,16 @@ DigitalOcean: *Manage -> Monitoring -> Create Resource Alert*. Any equivalent wo
 
 ## Notes
 
+- **Database collation** (`utf8mb4_unicode_ci`, set in the `CREATE DATABASE`
+  above): case- and accent-insensitive, and kept that way deliberately. The
+  self-host (SQLite) lane is case-sensitive; the two lanes have disjoint
+  users/data, so they are **not** made to match. Audited under issue #223 -- no
+  field requires case-sensitivity: sign-in tokens are validated in Python (never a
+  DB equality lookup), emails are stored lower-cased (case-insensitive identity is
+  desired), and every unique text column is a UUID, an enum value, or a
+  machine-minted lower-case account `handle`. Caveat: that `handle` uniqueness is
+  safe only because handles are machine-minted lower-case; if they ever become
+  user-entered free text (e.g. case-distinct symbols), revisit its collation.
 - **Outbound SMTP** is blocked by some hosts (DigitalOcean included). Sign-in
   depends on email, so use an SMTP provider/port that works from the host.
 - **Testing against MySQL**: dev and CI default to SQLite. Because SQLite and MySQL

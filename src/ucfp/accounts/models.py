@@ -159,24 +159,37 @@ class AccountRecord( TimestampedModel ):
         blank = True,
         default = None,
     )
+    # DB-computed key = account_type for a root account (parent IS NULL), NULL
+    # otherwise, so a plain UniqueConstraint enforces "one root per type per books"
+    # on every backend. A partial UniqueConstraint would work but MySQL silently
+    # drops it (see #223); NULL keys (non-root rows) stay exempt.
+    root_account_type_key = models.GeneratedField(
+        expression = models.Case(
+            models.When( parent__isnull = True, then = models.F( 'account_type' ) ),
+        ),
+        output_field = models.CharField( max_length = 64 ),
+        db_persist = True,
+    )
 
     class Meta:
         verbose_name = 'Account'
         verbose_name_plural = 'Accounts'
         constraints = [
             models.UniqueConstraint(
-                fields = [ 'books', 'account_type' ],
-                condition = models.Q( parent__isnull = True ),
+                fields = [ 'books', 'root_account_type_key' ],
                 name = 'unique_root_account_per_type',
             ),
+            # Unconditional on purpose: system_role and handle are nullable, and
+            # every backend already exempts NULL rows from a unique index, so this
+            # is equivalent to a "WHERE ... IS NOT NULL" partial index -- without
+            # the condition, which MySQL silently drops (see #223). Do not re-add a
+            # condition here.
             models.UniqueConstraint(
                 fields = [ 'books', 'system_role' ],
-                condition = models.Q( system_role__isnull = False ),
                 name = 'unique_system_account_role_per_books',
             ),
             models.UniqueConstraint(
                 fields = [ 'books', 'handle' ],
-                condition = models.Q( handle__isnull = False ),
                 name = 'unique_account_handle_per_books',
             ),
         ]
