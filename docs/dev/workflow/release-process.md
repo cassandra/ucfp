@@ -89,7 +89,7 @@ curl -fsSL https://raw.githubusercontent.com/cassandra/ucfp/master/install.sh | 
 ### 7. Deploy to the production droplet
 With the image published, deploy it to the droplet one validated step at a time.
 Prerequisite: the one-time [Droplet Setup](../project/droplet-setup.md) is done. The
-examples use the `ucfp-prod` SSH alias and `/opt/ucfp` path from that setup.
+examples use the `cassandrahq.com` SSH alias and `/opt/ucfp` path from that setup.
 
 1. **Convert the env file** (local) — only if `production.sh` changed:
    ```bash
@@ -98,27 +98,27 @@ examples use the `ucfp-prod` SSH alias and `/opt/ucfp` path from that setup.
    ```
 2. **Ship the config** and confirm it landed:
    ```bash
-   scp .private/env/docker-compose.production.env  ucfp-prod:/opt/ucfp/ucfp.env
-   scp .private/env/production.sh                   ucfp-prod:/opt/ucfp/ucfp.sh
-   scp deploy/droplet/docker-compose.production.yml ucfp-prod:/opt/ucfp/docker-compose.yml
-   ssh ucfp-prod 'ls -l /opt/ucfp'
+   scp .private/env/docker-compose.production.env  cassandrahq.com:/opt/ucfp/ucfp.env
+   scp .private/env/production.sh                   cassandrahq.com:/opt/ucfp/ucfp.sh
+   scp deploy/droplet/docker-compose.production.yml cassandrahq.com:/opt/ucfp/docker-compose.yml
+   ssh cassandrahq.com 'ls -l /opt/ucfp'
    ```
 3. **Pull the released image** on the droplet:
    ```bash
-   ssh ucfp-prod "docker pull ghcr.io/cassandra/ucfp:$(cat VERSION)"
+   ssh cassandrahq.com "docker pull ghcr.io/cassandra/ucfp:latest"
    ```
 4. **Restart** with the new image. `up -d` recreates the changed container in place
    (no separate `down`, so no downtime gap); migrations and collectstatic run from
    the entrypoint on start. `UCFP_VERSION` is passed inline so the compose file pins
    the exact released image:
    ```bash
-   ssh ucfp-prod "cd /opt/ucfp && UCFP_VERSION=$(cat VERSION) docker-compose up -d"
-   ssh ucfp-prod 'docker ps'          # container up and healthy?
+   ssh cassandrahq.com "cd /opt/ucfp && docker-compose up -d"
+   ssh cassandrahq.com 'docker ps'          # container up and healthy?
    ```
 5. **Verify** the live site:
    ```bash
-   curl -I https://example.com
-   curl https://example.com/health    # JSON including the version you just deployed
+   curl -I https://landfall.cassandrahq.com
+   curl https://landfall.cassandrahq.com/health    # JSON including the version you just deployed
    ```
    If anything looks wrong, see [Rollback Process](rollback-process.md).
 
