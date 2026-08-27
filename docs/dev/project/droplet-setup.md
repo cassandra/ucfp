@@ -14,11 +14,25 @@ real authentication, and TLS (`deploy/droplet/droplet.env.example` is the
 reference surface). The steps are provider-agnostic; **DigitalOcean** (whose term
 for a VM is a "droplet") via the `doctl` CLI is the worked example.
 
+> **Host provisioning lives in the shared `droplet-ops` repo, not here.** A droplet
+> may host several apps side by side (each on its own domain) sharing one host
+> MySQL, redis, Docker, and nginx. That singleton host state -- installing the
+> shared services, and per-app DB/user, nginx vhost, TLS cert, and port/redis-index
+> assignment -- is owned by `droplet-ops` so app repos do not each carry a
+> conflicting copy. This document covers only the ucfp-specific configuration; it
+> defers the host and per-app plumbing to `droplet-ops` (`provision-host.sh` and
+> `add-app.sh`). If ucfp is the only app on a dedicated droplet, the defaults
+> (port 8000, redis index 0) apply and nothing special is needed.
+
 ## 1. Create the host and firewall
 
+*Skip this and step 3's provisioning if you are adding ucfp to a droplet that is
+already provisioned and hosting another app -- go straight to step 3's `add-app.sh`.*
+
 Everything runs on one box -- the app container, MySQL, and redis share the host,
-so ~2 GB RAM is a reasonable floor. A single host with nginx terminating TLS avoids
-paying for a separate load balancer and managed DB/cache.
+so ~2 GB RAM is a reasonable floor (more if co-hosting several apps). A single host
+with nginx terminating TLS avoids paying for a separate load balancer and managed
+DB/cache.
 
 ```bash
 doctl auth init                       # one-time: paste a personal access token
@@ -49,20 +63,34 @@ dig NS example.com        # nameservers delegated?
 dig example.com           # resolves to <droplet-ip>?
 ```
 
-## 3. Provision the host
+## 3. Provision the host and register ucfp
 
-Run `deploy/droplet/do-droplet-init.sh <domain> [admin-email]` on the fresh host. It
-installs Docker, an nginx + certbot TLS reverse proxy, MySQL, redis, and
-docker-compose, and creates `/opt/ucfp`.
+Both steps use the shared `droplet-ops` repo (clone it onto the droplet). Its
+README carries the authoritative details.
 
-Create the database and a least-privilege user:
-```sql
-CREATE DATABASE ucfp_prod CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER ucfp_prod_user@localhost IDENTIFIED BY 'change-me';
-GRANT ALL PRIVILEGES ON ucfp_prod.* TO ucfp_prod_user@localhost;
+**Fresh droplet only** -- install the shared services once (skip on a droplet
+already hosting another app):
+```bash
+./provision-host.sh          # Docker, docker-compose, nginx+certbot, MySQL, redis
 ```
-The `utf8mb4_unicode_ci` collation is a deliberate, audited choice -- see the
-Notes section.
+
+**Every droplet** -- register ucfp. This reserves ucfp's port and redis index
+(rejecting collisions with any co-hosted app), creates the `ucfp_prod` database and
+a least-privilege `ucfp_prod_user`, installs the nginx vhost, obtains the TLS cert
+via certbot, and creates `/opt/ucfp`:
+```bash
+# ./add-app.sh <app> <domain> <port> <redis-index> [admin-email]
+./add-app.sh ucfp example.com 8000 0 admin@example.com     # dedicated droplet: defaults
+# On a shared droplet, pick a free port + index from droplet-ops/registry.tsv, e.g.:
+# ./add-app.sh ucfp ucfp.example.com 8001 1 admin@example.com
+```
+`add-app.sh` prints the generated DB password once and the exact
+`DJANGO_SERVER_PORT` / `UCFP_REDIS_DB_INDEX` / `UCFP_DB_*` values to put in the
+production env (step 4). It creates the database with the `utf8mb4_unicode_ci`
+collation -- a deliberate, audited choice; see the Notes section. TLS uses an
+HTTP-only vhost first so the ACME challenge can be served, then `certbot --nginx`
+injects the HTTPS server block; confirm automatic renewal with
+`certbot renew --dry-run`. DNS (step 2) must resolve to the host before this runs.
 
 If the GHCR package is private, authenticate the droplet once so it can pull the
 image (a public package needs no login):
@@ -70,19 +98,7 @@ image (a public package needs no login):
 echo <GITHUB_PAT> | docker login ghcr.io -u <github-username> --password-stdin
 ```
 
-## 4. Obtain the TLS certificate
-
-`do-droplet-init.sh` writes an **HTTP-only** nginx config on purpose -- it lets the
-ACME challenge be served and avoids referencing a certificate that does not exist
-yet. Once DNS resolves (step 2), issue the cert; `certbot --nginx` injects the HTTPS
-server block:
-```bash
-certbot --nginx -d example.com -d www.example.com \
-    --expand --non-interactive --agree-tos -m admin@example.com
-certbot renew --dry-run               # confirm automatic renewal works
-```
-
-## 5. Prepare the production config
+## 4. Prepare the production config
 
 Production secrets are hand-maintained under `.private/env/` (gitignored;
 `env-generate.py` deliberately refuses production). Use
@@ -94,7 +110,10 @@ as the template.
   `UCFP_DB_*`, `UCFP_BUNDLED_REDIS=false`, `UCFP_SUPPRESS_AUTHENTICATION=false`,
   email, `UCFP_FIELD_ENCRYPTION_KEY`, the S3 backup bucket
   (`UCFP_BACKUP_S3_BUCKET`), and `UCFP_EXTRA_HOST_URLS=https://example.com` (its
-  first entry becomes `SITE_DOMAIN` and feeds `ALLOWED_HOSTS`/CSP).
+  first entry becomes `SITE_DOMAIN` and feeds `ALLOWED_HOSTS`/CSP). On a **shared**
+  droplet also set `DJANGO_SERVER_PORT` and `UCFP_REDIS_DB_INDEX` to the port and
+  index `add-app.sh` reserved (step 3) -- these keep ucfp off the other apps' host
+  port and redis keyspace. On a dedicated droplet the defaults (8000, 0) apply.
 - Convert it to the compose `env_file` format the deploy step ships:
   ```bash
   python3 deploy/droplet/docker-compose-env-convert.py \
@@ -104,7 +123,7 @@ as the template.
 The release deploy steps reach the droplet over SSH -- the `ucfp-prod` alias from
 step 1 (or `root@<droplet-ip>`) is the host they target.
 
-## 6. Set up backups
+## 5. Set up backups
 
 `deploy/droplet/do-droplet-backup.sh` (cron on the droplet) dumps MySQL to S3,
 reading `UCFP_BACKUP_S3_BUCKET` from the deployed `/opt/ucfp/ucfp.sh`. One-time, on
@@ -117,7 +136,7 @@ aws configure                 # IAM key/secret with PutObject on the bucket
 crontab -e                    # e.g.:  0 3 * * * /opt/ucfp/do-droplet-backup.sh
 ```
 
-## 7. Monitoring (optional)
+## 6. Monitoring (optional)
 
 Set host-level resource alerts (CPU / memory / disk sustained above ~70%). On
 DigitalOcean: *Manage -> Monitoring -> Create Resource Alert*. Any equivalent works.
