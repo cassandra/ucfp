@@ -80,9 +80,11 @@ a least-privilege `ucfp_prod_user`, installs the nginx vhost, obtains the TLS ce
 via certbot, and creates `/opt/ucfp`:
 ```bash
 # ./add-app.sh <app> <domain> <port> <redis-index> [admin-email]
-./add-app.sh ucfp example.com 8000 0 admin@example.com     # dedicated droplet: defaults
-# On a shared droplet, pick a free port + index from droplet-ops/registry.tsv, e.g.:
-# ./add-app.sh ucfp ucfp.example.com 8001 1 admin@example.com
+# Shared droplet, ucfp on its own subdomain (pick a free port + index from
+# droplet-ops/registry.tsv; subdomains take no www, the default):
+./add-app.sh ucfp ucfp.example.com 8001 1 admin@example.com
+# Dedicated droplet on a bare apex domain that should also answer on www:
+# ADD_APP_WWW=1 ./add-app.sh ucfp example.com 8000 0 admin@example.com
 ```
 `add-app.sh` prints the generated DB password once and the exact
 `DJANGO_SERVER_PORT` / `UCFP_REDIS_DB_INDEX` / `UCFP_DB_*` values to put in the
