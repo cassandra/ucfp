@@ -25,6 +25,8 @@ Individual accounts and cost basis are later drill-downs. Reads `accounts_form`.
           {% for field in group.fields %}
           {% include 'inputs/interview/_field_row.html' with field=field %}
           {% endfor %}
+          {% empty %}
+          <em class="text-muted" >Retirement accounts will go here once you add an individual.</em>
           {% endfor %}
         </div>
       </div>

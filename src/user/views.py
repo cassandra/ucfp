@@ -323,7 +323,6 @@ class UserAccountView( View ):
         return render( request, 'user/pages/account.html', _account_context() )
 
 
-@method_decorator( require_authentication_enabled, name = 'dispatch' )
 class ConvertToGuestView( View ):
     """Convert an Anonymous visitor into a Guest and forward them into the app: create their email-less
     Guest account, log them in, then redirect. The single conversion mechanism, so account creation lives
@@ -333,6 +332,11 @@ class ConvertToGuestView( View ):
     An already-signed-in visitor is left as-is (no second account). The default forwards a fresh Guest to
     `settings.GUEST_START_URL` to begin entering their own data; a subclass tailors a different entry (e.g.
     the example-data tour) by overriding `after_conversion` and `landing_url`.
+
+    Deliberately *not* gated by `require_authentication_enabled`: this is the onboarding entry (the tour and
+    "Add My Data"), not a sign-in / account-linking flow. Self-hosted (`SUPPRESS_AUTHENTICATION`) the request
+    already carries the singleton owner, so `_converted_user` mints nothing and the subclasses just forward
+    that user into the example preview or their own data -- both coherent with no sign-in.
     """
 
     def post( self, request, *args, **kwargs ):

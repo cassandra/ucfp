@@ -16,6 +16,10 @@ background; only a row added/removed or a negative value re-renders here. The se
       <tbody class="{{ AppConst.ROWSET_CLASS }}">
         {% for row in possessions_form.rows %}
         {% include 'inputs/interview/sections/_possession_row.html' with row=row names=possessions_form.names type_choices=possessions_form.type_choices %}
+        {% empty %}
+        <tr><td colspan="4">
+          <em class="text-muted" >No possessions have been added yet.</em>
+        </td></tr>
         {% endfor %}
         <template class="{{ AppConst.ROWSET_TEMPLATE_CLASS }}">{% include 'inputs/interview/sections/_possession_row.html' with row=None names=possessions_form.names type_choices=possessions_form.type_choices %}</template>
       </tbody>

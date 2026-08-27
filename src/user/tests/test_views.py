@@ -9,7 +9,9 @@ from django.urls import reverse
 from common.redis_client import get_redis_client
 from notify.models import UnsubscribedEmail
 from notify.views import resubscribe_url_for
-from organization.models import Organization
+from organization.enums import OrganizationRole
+from organization.models import Organization, OrganizationMember
+from ucfp.onboarding.constants import EXAMPLE_ORGANIZATION_NAME, EXAMPLE_ORGANIZATION_UUID
 from user.magic_code_generator import MagicCodeGenerator
 from user.signin_manager import SigninManager
 from testing.view_test_base import SyncViewTestCase
@@ -384,7 +386,10 @@ class TestAuthEndpointsDisabledSelfHosted(SyncViewTestCase):
     """Under self-hosted (SUPPRESS_AUTHENTICATION) the sign-in / account-linking endpoints are rejected
     with an explanatory 400 -- there is no sign-in in a single-user deployment. The guard is on dispatch,
     so it fires for any method (a GET of a POST-only endpoint is a 400, not a 405) and before the view
-    body runs (so e.g. attach_email never attaches)."""
+    body runs (so e.g. attach_email never attaches).
+
+    The onboarding *entry* points (start_tour, add_my_data) are deliberately NOT in this set: they are not
+    sign-in flows, and they work self-hosted -- see `TestOnboardingEntrySelfHosted`."""
 
     def _assert_rejected( self, response ):
         self.assertEqual( 400, response.status_code )
@@ -400,17 +405,42 @@ class TestAuthEndpointsDisabledSelfHosted(SyncViewTestCase):
         url = reverse('magic_link', kwargs = { 'user_uuid': str( self.user.uuid ), 'token': 'x' })
         self._assert_rejected( self.client.get( url ) )
 
-    def test_add_my_data_is_rejected( self ):
-        # The anonymous -> Guest graduation (ConvertToGuestView) is disabled self-hosted, via the
-        # require_authentication_enabled guard the AddMyDataView subclass inherits.
-        self._assert_rejected( self.client.post( reverse('add_my_data') ) )
-
     def test_attach_email_is_rejected_before_attaching( self ):
         response = self.client.post( reverse('attach_email'), { 'email': 'new@example.com' } )
 
         self._assert_rejected( response )
         # The dispatch guard fired before the view body, so nothing was claimed.
         self.assertFalse( User.objects.filter( pending_email = 'new@example.com' ).exists() )
+
+
+@override_settings(SUPPRESS_AUTHENTICATION=True)
+class TestOnboardingEntrySelfHosted(TestCase):
+    """The onboarding entry points (add_my_data, start_tour) work self-hosted -- they subclass
+    `ConvertToGuestView`, which is deliberately NOT behind the `require_authentication_enabled` gate.
+    Self-hosted the middleware supplies the singleton owner, so these mint no new account and simply
+    forward that user into their own data or the example preview. Regression guard: an over-broad gate on
+    the base once rejected both with a 400 (#194)."""
+
+    def test_add_my_data_forwards_the_self_hosted_owner_to_their_profile( self ):
+        # No force_login: the self-hosted middleware supplies the singleton owner, who already owns their
+        # household. "Add My Data" must land on the Profile to start entering data, not a 400.
+        response = self.client.post( reverse( 'add_my_data' ) )
+
+        self.assertRedirects( response, reverse( 'flow_profile' ), fetch_redirect_response = False )
+        self.assertEqual( User.objects.count(), 1 )              # the singleton owner, no second account
+        self.assertEqual( Organization.objects.count(), 1 )     # their existing household, none minted
+
+    def test_start_tour_joins_the_self_hosted_owner_to_the_example( self ):
+        example = Organization.objects.create(
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+
+        response = self.client.post( reverse( 'start_tour' ) )
+
+        self.assertEqual( response.status_code, 302 )           # entered the tour, not rejected with a 400
+        member = OrganizationMember.objects.get( organization = example )
+        self.assertEqual( member.organization_role, OrganizationRole.VIEWER )   # read-only preview
+        self.assertEqual(
+            self.client.session.get( 'current_organization_uuid' ), str( EXAMPLE_ORGANIZATION_UUID ) )
 
 
 class TestUserSignoutView(CloudAuthViewTest):

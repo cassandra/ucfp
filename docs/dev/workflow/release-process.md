@@ -42,7 +42,7 @@ git pull origin staging
 # Edit VERSION  -> e.g. 1.4.0
 # Add a CHANGELOG.md line describing the release
 git add VERSION CHANGELOG.md
-git commit -m "Bump version to v1.4.0"
+git commit -m "Bump version to v0.0.1"
 git push origin staging
 ```
 
@@ -59,14 +59,14 @@ git push origin master
 
 ### 3. Create the GitHub Release
 ```bash
-gh release create v1.4.0 --target master --title "v1.4.0" --generate-notes
+gh release create v0.0.1 --target master --title "v0.0.1" --generate-notes
 ```
-Or via the web UI: new release, tag `v1.4.0` (new), target `master`, generate
+Or via the web UI: new release, tag `v0.0.1` (new), target `master`, generate
 notes, set as latest, publish.
 
 ### 4. Verify the workflows
 On the Actions page, confirm both succeeded:
-- **Build and Publish Docker Image** -> `ghcr.io/cassandra/ucfp:v1.4.0` and
+- **Build and Publish Docker Image** -> `ghcr.io/cassandra/ucfp:v0.0.1` and
   `:latest` exist in the registry.
 - **Create Release Assets** -> `ucfp.zip` is attached to the release.
 

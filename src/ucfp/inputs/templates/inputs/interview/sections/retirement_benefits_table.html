@@ -20,6 +20,10 @@ amount) re-renders. WHEN each benefit is claimed is the separate Retirement (Pla
           <td>{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
           <td class="text-muted align-middle">{{ row.cadence }}</td>
         </tr>
+        {% empty %}
+        <tr><td colspan="4">
+          <em class="text-muted" >Retirement accounts will go here once you add an individual.</em>
+        </td></tr>
         {% endfor %}
       </tbody>
     </table>
