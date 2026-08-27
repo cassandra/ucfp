@@ -330,15 +330,16 @@ CONSTANCE_CONFIG = {
     'DOWN_FOR_MAINTENANCE': ( False, 'Should we force the down for maintenance page to show?' ),
 }
 
-REDIS_HOST = ENV.REDIS_HOST
-REDIS_PORT = ENV.REDIS_PORT
+REDIS_HOST     = ENV.REDIS_HOST
+REDIS_PORT     = ENV.REDIS_PORT
+REDIS_DB_INDEX = ENV.REDIS_DB_INDEX
 
 CACHES = {
     'default': {
         # 'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
         'LOCATION': [
-            f'redis://{REDIS_HOST}:{REDIS_PORT}',
+            f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_INDEX}',
         ],
         "KEY_PREFIX": 'main:',
     }

@@ -76,9 +76,12 @@ _ENV_SPEC = (
     # Media path.
     _EnvVarSpec( 'MEDIA_ROOT'               , ENV_PREFIX + 'MEDIA_PATH' ),
 
-    # Redis.
+    # Redis. REDIS_DB_INDEX selects the logical database index, which is how two
+    # apps sharing one host Redis stay isolated (a shared KEY_PREFIX cannot, since
+    # the same image bakes the same prefix). Default 0 preserves single-app behavior.
     _EnvVarSpec( 'REDIS_HOST'               , ENV_PREFIX + 'REDIS_HOST', str, 'localhost' ),
     _EnvVarSpec( 'REDIS_PORT'               , ENV_PREFIX + 'REDIS_PORT', int, 6379 ),
+    _EnvVarSpec( 'REDIS_DB_INDEX'           , ENV_PREFIX + 'REDIS_DB_INDEX', int, 0 ),
 
     # Email.
     _EnvVarSpec( 'EMAIL_SUBJECT_PREFIX'     , ENV_PREFIX + 'EMAIL_SUBJECT_PREFIX', str, '' ),
@@ -152,6 +155,7 @@ class EnvironmentSettings:
     MEDIA_ROOT                 : str           = None
     REDIS_HOST                 : str           = 'localhost'
     REDIS_PORT                 : int           = 6379
+    REDIS_DB_INDEX             : int           = 0
     SUPPRESS_AUTHENTICATION    : bool          = False
     BUNDLED_REDIS              : bool          = False
     FIELD_ENCRYPTION_KEYS      : Tuple[ str ]  = field( default_factory = tuple )

@@ -16,6 +16,7 @@ class EnvironmentHomeView(View):
             'DATABASES_NAME_PATH': settings.DATABASES['default']['NAME'],
             'REDIS_HOST': settings.REDIS_HOST,
             'REDIS_PORT': settings.REDIS_PORT,
+            'REDIS_DB_INDEX': settings.REDIS_DB_INDEX,
             'MEDIA_ROOT': settings.MEDIA_ROOT,
             'DEFAULT_FROM_EMAIL': settings.DEFAULT_FROM_EMAIL,
             'SERVER_EMAIL': settings.SERVER_EMAIL,

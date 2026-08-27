@@ -15,6 +15,16 @@ else
     rm -f /etc/supervisor/conf.d/redis.conf
 fi
 
+# The container's nginx listens on DJANGO_SERVER_PORT (default 8000). Templating it
+# here -- rather than baking a fixed port into docker_nginx.conf -- lets several
+# app containers share one host under `network_mode: host` by each taking a
+# distinct port. The config file ships with :8000 so it stays valid for the
+# build-time `nginx -t`; this rewrites the listen directives before nginx starts.
+APP_PORT="${DJANGO_SERVER_PORT:-8000}"
+echo "Configuring nginx to listen on port ${APP_PORT}..."
+sed -i -E "s/(listen[[:space:]]+[^;]+):[0-9]+;/\1:${APP_PORT};/" \
+    /etc/nginx/sites-available/default
+
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 

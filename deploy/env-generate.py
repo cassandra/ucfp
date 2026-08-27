@@ -150,6 +150,7 @@ class EnvironmentGenerator:
             ( 'UCFP_BUNDLED_REDIS', 'true' ),
             ( 'UCFP_REDIS_HOST', '127.0.0.1' ),
             ( 'UCFP_REDIS_PORT', '6379' ),
+            ( 'UCFP_REDIS_DB_INDEX', '0' ),
         ] ),
         ( 'Authentication',
           'optional; "true" disables login for simple single-user setups', [
@@ -249,6 +250,7 @@ class EnvironmentGenerator:
             'UCFP_BUNDLED_REDIS': 'true',
             'UCFP_REDIS_HOST': '127.0.0.1',
             'UCFP_REDIS_PORT': '6379',
+            'UCFP_REDIS_DB_INDEX': '0',
             'UCFP_EMAIL_SUBJECT_PREFIX': self._env_config.email_subject_prefix,
             'UCFP_EXTRA_HOST_URLS': '',  # To be filled in manually if/when running beyond localhost
             'UCFP_EXTRA_CSP_URLS': '',  # To be filled in manually if/when running beyond localhost
