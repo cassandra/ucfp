@@ -21,6 +21,10 @@ fi
 # distinct port. The config file ships with :8000 so it stays valid for the
 # build-time `nginx -t`; this rewrites the listen directives before nginx starts.
 APP_PORT="${DJANGO_SERVER_PORT:-8000}"
+if ! [[ "${APP_PORT}" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: DJANGO_SERVER_PORT='${APP_PORT}' is not a positive integer." >&2
+    exit 1
+fi
 echo "Configuring nginx to listen on port ${APP_PORT}..."
 sed -i -E "s/(listen[[:space:]]+[^;]+):[0-9]+;/\1:${APP_PORT};/" \
     /etc/nginx/sites-available/default
