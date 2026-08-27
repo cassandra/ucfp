@@ -91,4 +91,7 @@ class AuthenticationMiddleware:
                 or ( resolver_match.url_name in self.EXEMPT_VIEW_URL_NAMES )):
             return self.get_response( request )
 
+        if settings.DEBUG and request.path.startswith( '/testing' ):
+            return self.get_response( request )
+            
         return HttpResponseRedirect( reverse( 'home' ) )
