@@ -69,7 +69,9 @@ Settled model decisions:
 ## Target Users & Deployment Modes
 
 - **Primary (now):** the user's own financial-planning needs.
-- **Aspirational (if it turns out well):** open-source it, supporting two modes:
+- **Aspirational (if it turns out well):** release it publicly as free,
+  source-available software (free for noncommercial use under the PolyForm
+  Noncommercial License; commercial use by separate license), supporting two modes:
   - **Self-hosted** — for people who want to keep their financial data private.
   - **Public, free, hosted instance** — for people who want access without
     self-hosting.
