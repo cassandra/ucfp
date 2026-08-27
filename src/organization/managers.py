@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 # The reserved name of the organization owned by the self-hosted singleton Guest -- the sole account
 # under `SUPPRESS_AUTHENTICATION` (a self-hosted single-user run). The name doubles as the lookup key,
 # and is shown to that user as their household's name.
-_SELF_HOSTED_ORGANIZATION_NAME = 'My Organization'
+_SELF_HOSTED_ORGANIZATION_NAME = 'My Household'
 
 # Prefix of the auto-provisioned personal-household name (`user-<uuid>`) assigned
 # when a user has no organization. It embeds the user's UUID -- deliberately not
@@ -89,7 +89,7 @@ class OrganizationManager( models.Manager ):
         """The singleton Guest that owns the reserved self-hosted organization -- the sole account
         under `SUPPRESS_AUTHENTICATION` (a self-hosted single-user run).
 
-        Created on first use (an email-less Guest owning a `My Organization` household) and found
+        Created on first use (an email-less Guest owning a `My Household`) and found
         thereafter by that reserved name. This replaces the former shared, *memberless* organization:
         the self-hosted user is now a real account owning a normal organization, so downstream code
         treats it exactly like any other authenticated user rather than as an anonymous special case.
