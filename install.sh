@@ -220,7 +220,7 @@ create_env_file() {
 
 # Core Django Settings
 DJANGO_SETTINGS_MODULE=ucfp.settings.local
-DJANGO_SERVER_PORT=8000
+UCFP_APP_PORT=8000
 DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
 
 # Admin User (for Django admin interface)

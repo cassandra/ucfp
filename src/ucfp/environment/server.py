@@ -56,10 +56,14 @@ _ENV_SPEC = (
 
     # Core Django settings -- standard names, intentionally NOT project-prefixed.
     _EnvVarSpec( 'DJANGO_SETTINGS_MODULE'   , 'DJANGO_SETTINGS_MODULE' ),
-    _EnvVarSpec( 'DJANGO_SERVER_PORT'       , 'DJANGO_SERVER_PORT', int, 8000 ),
     _EnvVarSpec( 'SECRET_KEY'               , 'DJANGO_SECRET_KEY' ),
     _EnvVarSpec( 'DJANGO_SUPERUSER_EMAIL'   , 'DJANGO_SUPERUSER_EMAIL' ),
     _EnvVarSpec( 'DJANGO_SUPERUSER_PASSWORD', 'DJANGO_SUPERUSER_PASSWORD' ),
+
+    # The TCP port the app's HTTP endpoint is served on -- the dev runserver, and
+    # the container's nginx (templated in at startup). Project-prefixed because it
+    # spans dev and gunicorn/nginx deployments, not just Django's dev server.
+    _EnvVarSpec( 'APP_PORT'                 , ENV_PREFIX + 'APP_PORT', int, 8000 ),
 
     # Database selection: SQLite (file-based) or MySQL (server-based). Both are
     # optional here; validate_database_config() (from get()) requires at least one
@@ -135,7 +139,7 @@ class EnvironmentSettings:
     # arguments should have a non-None value (empty string, zero, etc.)
     #
     DJANGO_SETTINGS_MODULE     : str           = None
-    DJANGO_SERVER_PORT         : int           = 8000
+    APP_PORT                   : int           = 8000
     VERSION                    : str           = 'unknown'
     SECRET_KEY                 : str           = None
     DJANGO_SUPERUSER_EMAIL     : str           = None
@@ -280,8 +284,8 @@ class EnvironmentSettings:
             'localhost',
         ]
         cors_allowed_origins_list = [
-            f'http://127.0.0.1:{env_settings.DJANGO_SERVER_PORT}',
-            f'http://localhost:{env_settings.DJANGO_SERVER_PORT}',
+            f'http://127.0.0.1:{env_settings.APP_PORT}',
+            f'http://localhost:{env_settings.APP_PORT}',
         ]
 
         extra_host_urls_str = cls.get_env_variable( ENV_PREFIX + 'EXTRA_HOST_URLS', '' )
