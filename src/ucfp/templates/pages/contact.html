@@ -22,12 +22,15 @@
     <span class="mr-3">{% icon 'globe' color='primary' %}</span>
     <span><strong>Self-hosting &amp; source.</strong> Everything lives in the
       <a href="https://github.com/cassandra/ucfp" target="_blank" rel="noopener">repository</a>.</span></li>
-  <li class="d-flex">
+  <li class="mb-3 d-flex">
     <span class="mr-3">{% icon 'info-circle' color='primary' %}</span>
     <span><strong>Account, sign-in, or privacy.</strong> For anything you'd rather not post publicly, such
       as trouble signing in, account access, or a privacy matter, email
       <a href="mailto:hello@pomdp.com">hello@pomdp.com</a>.</span></li>
+  <li class="d-flex">
+    <span class="mr-3">{% icon 'star' color='primary' %}</span>
+    <span><strong>Show your support.</strong> {% settings_value 'SITE_NAME' %} is free to use; if it has
+      helped you and you'd like to say thanks, you can
+      <a href="https://ko-fi.com/pomdp" target="_blank" rel="noopener">buy me a coffee</a>.</span></li>
 </ul>
-{% comment %}Natural home for an optional "buy me a coffee" style support link (About + Contact only).
-Not added until a link is provided.{% endcomment %}
 {% endblock %}

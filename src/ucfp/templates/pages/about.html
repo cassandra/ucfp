@@ -30,8 +30,11 @@
   upsell, no ads, and no reason to touch your data. Where other tools give you a crippled free version, a
   stream of marketing email, and a constant nudge to upgrade, {% settings_value 'SITE_NAME' %} simply stays
   out of your way.</p>
-{% comment %}Natural home for an optional "buy me a coffee" style support link (About + Contact only, never
-the home page). Not added until a link is provided.{% endcomment %}
+{% comment %}Support link (About + Contact only, never the home page). A plain outbound link to Ko-fi, not
+their embeddable widget, so the no-tracker promise and the CSP stay intact.{% endcomment %}
+<p class="mt-3 mb-2">If {% settings_value 'SITE_NAME' %} has been useful to you and you'd like to say
+  thanks, it's appreciated but never expected:</p>
+<a href="https://ko-fi.com/pomdp" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">&#9749; Buy me a coffee</a>
 
 <h5 class="text-primary mt-4">Your data is yours</h5>
 <p>There are no ads and no trackers, we never sell or share your information, and we email you only to send
