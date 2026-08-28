@@ -86,6 +86,13 @@ machine):
 curl -fsSL https://raw.githubusercontent.com/cassandra/ucfp/master/install.sh | bash
 ```
 
+Cleanup self-hosted test (to prepare for next time):
+```bash
+docker stop ucfp
+docker rm ucfp
+/bin/rm -fr ~/.ucfp/
+```
+
 ### 7. Deploy to the production droplet
 With the image published, deploy it to the droplet one validated step at a time.
 Prerequisite: the one-time [Droplet Setup](../project/droplet-setup.md) is done. The
