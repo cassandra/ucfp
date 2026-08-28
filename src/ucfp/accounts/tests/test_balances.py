@@ -172,3 +172,19 @@ class BooksOfAccountRepositoryTests(TestCase):
         self.assertEqual( len( large_queries ), len( small_queries ) )
         # Accounts, transactions, and the single prefetched entries query: a small fixed bound.
         self.assertLessEqual( len( small_queries ), 4 )
+
+    def test_save_query_count_does_not_scale_with_transactions(self):
+        """Capturing a run writes the journal in a few bulk inserts, not a row per transaction and a row
+        per entry -- the regression guard on the write-side N+1 that dominated a forecast run's persist.
+        Accounts stay per-row (a self-FK, and few of them); only the journal is bulk, so a 20x journal
+        must not mean 20x the writes."""
+        repository = BooksOfAccountRepository()
+        with CaptureQueriesContext( connection ) as small_queries:
+            self._save_books_with_transactions( repository, transactions = 2 )
+        with CaptureQueriesContext( connection ) as large_queries:
+            self._save_books_with_transactions( repository, transactions = 40 )
+        # The journal's two bulk inserts do not grow with row count at these sizes, so 20x the
+        # transactions adds no per-row writes -- the counts stay effectively flat.
+        self.assertLessEqual( len( large_queries ) - len( small_queries ), 2 )
+        # Well under the row-at-a-time count (~130 writes for the 40-transaction books).
+        self.assertLessEqual( len( large_queries ), 30 )

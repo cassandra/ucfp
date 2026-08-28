@@ -54,12 +54,22 @@ class BooksOfAccountRepository:
     def save( self, books : BooksOfAccount, organization : Organization ) -> BooksOfAccountRecord:
         """Persist `books` for `organization` as a new record graph, returning the root.
 
-        Accounts are written parents-first (the domain builds them in that order), so each
-        child's parent record exists when it is referenced; transactions and their entries
-        follow, mapping each domain account to the record just created for it."""
+        Accounts are written parents-first (the domain builds them in that order), so each child's
+        parent record exists when it is referenced; the journal -- transactions and their entries --
+        follows, mapping each domain account to the record just created for it."""
         books.assert_unique_handles()
-        books_record = BooksOfAccountRecord.objects.create(
+        books_record      = BooksOfAccountRecord.objects.create(
             organization = organization, label = books.label )
+        record_by_account = self._save_accounts( books, books_record )
+        self._save_journal( books, books_record, record_by_account )
+        return books_record
+
+    def _save_accounts( self, books : BooksOfAccount,
+                        books_record : BooksOfAccountRecord ) -> dict:
+        """Persist the accounts parents-first and return the domain-account -> record map. Left as
+        individual inserts: an account carries a self-FK to its parent (so a bulk insert would need the
+        rows ordered into parentless-first layers), and a run has only a hundred-odd accounts, so the
+        row-at-a-time cost here is negligible -- unlike the journal below."""
         record_by_account = dict()
         for account in books.accounts:
             parent_record = record_by_account[ account.parent ] if account.parent is not None else None
@@ -81,24 +91,43 @@ class BooksOfAccountRepository:
                 display_placement = _placement_json( account.display_placement ),
             )
             continue
-        for txn in books.transactions:
-            txn_record = TransactionRecord.objects.create(
+        return record_by_account
+
+    def _save_journal( self, books : BooksOfAccount, books_record : BooksOfAccountRecord,
+                       record_by_account : dict ) -> None:
+        """Persist the transactions and their entries in two bulk inserts, rather than a row per
+        transaction and a row per entry. A run's journal is thousands of rows, so the row-at-a-time
+        pattern was the dominant cost of capturing a run; `bulk_create` collapses it to a handful of
+        statements. It backfills each transaction record's primary key (MySQL, and SQLite >= 3.35), so
+        the entries can reference the transaction just written.
+
+        The read-only write-guard (`organization.write_guard`) is a `pre_save` receiver, which
+        `bulk_create` does not emit -- but a forbidden write is already refused at the `books_record`
+        insert (the first write of this atomic save), rolling the whole capture back before it reaches
+        these rows, so the guard's guarantee holds without a per-row signal here."""
+        transaction_records = [
+            TransactionRecord(
                 books            = books_record,
                 uuid             = txn.transaction_uuid,
                 transaction_date = txn.transaction_date,
                 description      = txn.description,
             )
-            for entry in txn.entries:
-                EntryRecord.objects.create(
-                    transaction     = txn_record,
-                    account         = record_by_account[ entry.account ],
-                    amount          = entry.amount,
-                    entry_direction = entry.entry_direction,
-                    description     = entry.description,
-                )
-                continue
-            continue
-        return books_record
+            for txn in books.transactions
+        ]
+        TransactionRecord.objects.bulk_create( transaction_records )
+        entry_records = [
+            EntryRecord(
+                transaction     = transaction_record,
+                account         = record_by_account[ entry.account ],
+                amount          = entry.amount,
+                entry_direction = entry.entry_direction,
+                description     = entry.description,
+            )
+            for txn, transaction_record in zip( books.transactions, transaction_records )
+            for entry in txn.entries
+        ]
+        EntryRecord.objects.bulk_create( entry_records )
+        return
 
     def load( self, books_record : BooksOfAccountRecord ) -> BooksOfAccount:
         """Rebuild the domain `BooksOfAccount` from a stored record graph."""
