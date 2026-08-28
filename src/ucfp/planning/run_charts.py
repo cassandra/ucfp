@@ -84,7 +84,7 @@ def net_worth_chart( run : ProjectionRun, books : BooksOfAccount, *,
                      width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
     """A single net-worth line over the run's timeline (defaults to a sparkline)."""
     spans  = run_period_spans( run )
-    ledger = Bookkeeper( books ).ledger
+    ledger = Bookkeeper( books ).snapshot_ledger
     series = [ LineChartSeries(
         values = [ float( ledger.net_worth( through = span.end_date )) for span in spans ],
         label  = _NET_WORTH_LABEL,
@@ -99,7 +99,7 @@ def balances_chart( run : ProjectionRun, books : BooksOfAccount, *,
     timeline: end-of-period balances (stock) on a shared scale. Net worth is listed
     first so it paints on top where it coincides with assets (small liabilities)."""
     spans  = run_period_spans( run )
-    ledger = Bookkeeper( books ).ledger
+    ledger = Bookkeeper( books ).snapshot_ledger
 
     def balance( account_type ):    # stock: end-of-period balance
         return [ float( ledger.type_total( account_type, through = span.end_date ))
@@ -121,7 +121,7 @@ def flows_chart( run : ProjectionRun, books : BooksOfAccount, *,
     their own scale, kept separate from the balances, which are orders of magnitude
     larger and would otherwise crush these to the baseline."""
     spans  = run_period_spans( run )
-    ledger = Bookkeeper( books ).ledger
+    ledger = Bookkeeper( books ).snapshot_ledger
 
     def flow( account_type ):       # flow: movement within the period
         return [ float( ledger.type_flow( account_type, start = span.start_date, end = span.end_date ))
@@ -148,7 +148,7 @@ def column_chart( run : ProjectionRun, books : BooksOfAccount, column_key : Book
     """
     spans      = run_period_spans( run )
     bookkeeper = Bookkeeper( books )
-    ledger     = bookkeeper.ledger
+    ledger     = bookkeeper.snapshot_ledger
     chart      = bookkeeper.chart
     catalog    = BooksTableColumnCatalog.build( chart )
 

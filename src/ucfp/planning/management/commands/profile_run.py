@@ -154,9 +154,12 @@ def _profile_pass( record : ProjectionRunRecord, *, expand : bool, render : bool
                                lambda : BooksTableColumnCatalog.build( bookkeeper.chart ) )
     spans      = run_period_spans( run )
     definition = _lens( catalog, expand = expand )
+    # The snapshot ledger, mirroring `run_books_table_context`: a captured run's books are immutable, so
+    # the table reads cumulative balances rather than rescanning postings per cell.
+    ledger     = bookkeeper.snapshot_ledger
     table      = walk.measure(
         'build table',
-        lambda : build_books_table( bookkeeper.ledger, bookkeeper.chart, spans, definition, catalog ) )
+        lambda : build_books_table( ledger, bookkeeper.chart, spans, definition, catalog ) )
     walk.measure( 'run_outcome', lambda : run_outcome( run, books ) )
     walk.measure( 'balances sparkline', lambda : balances_chart( run, books, chrome = CHROME_SPARKLINE ) )
     if render:

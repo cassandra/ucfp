@@ -37,7 +37,7 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
     period, not the horizon; net worth is computed live from the already-loaded books -- never cached --
     keeping the books the one source of truth (a captured run is immutable, so the live figure is stable)."""
     frame  = run.frame
-    ledger = Bookkeeper( books ).ledger
+    ledger = Bookkeeper( books ).snapshot_ledger
     steps  = run.result.steps
     lasted = not run.result.stopped_early
     end_date = frame.end_date if lasted else steps[ -1 ].end_date
