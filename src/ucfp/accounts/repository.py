@@ -108,7 +108,10 @@ class BooksOfAccountRepository:
             self._build_account( record, records_by_id, account_by_id )
             continue
         transactions = list()
-        for txn_record in books_record.transactions.all():
+        # Prefetch the entries in one bulk query rather than a query per transaction: a run's books holds
+        # thousands of transactions, so the naive per-transaction fetch is an N+1 that dominates the
+        # display-path reload. `entry_record.account_id` is the stored FK column, needing no further query.
+        for txn_record in books_record.transactions.prefetch_related( 'entries' ):
             entries = [
                 Entry(
                     account         = account_by_id[ entry_record.account_id ],
