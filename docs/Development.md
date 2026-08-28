@@ -1,6 +1,10 @@
 <img src="assets/logo.png" alt="App Logo" width="128">
 
-# Development Guide for Contributors
+# Development Guide
+
+For those who want to work on Landfall itself. This page covers what you need and
+where to start; the detailed guides live under [`dev/`](dev/). If you just want to
+use Landfall, see the [Self-Hosting Guide](SelfHosting.md) instead.
 
 ## Requirements and Dependencies
 
