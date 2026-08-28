@@ -50,7 +50,7 @@ submit this same form, so the setup and its actions are one connected unit. Its 
 this hub is general long-term forecasting, where yearly is the only sensible interval (the engine still
 supports finer granularity for the features that need it). An in-progress exploration is a separate state
 shown below -- it does not use this form.{% endcomment %}
-<form method="post" class="forecast-setup mt-3">
+<form method="post" data-synchronous="true" class="forecast-setup mt-3">
   {% csrf_token %}
   <input type="hidden" name="interval" value="year">
   <div class="card">
@@ -70,7 +70,7 @@ workspace itself, not repeated here.{% endcomment %}
   <span class="mr-3 my-1">Exploration in progress &mdash; <strong>{{ resume.source.label }}</strong>.</span>
   {% comment %}Explore is a heavily edit-dependent sandbox; a read-only member is kept out of it (the
   entry is inert) rather than shown a mostly-disabled workspace.{% endcomment %}
-  <a href="{% url 'explore' %}" class="btn btn-primary btn-sm my-1 edit-only">Resume</a>
+  <a href="{% url 'explore' %}" data-synchronous="true" class="btn btn-primary btn-sm my-1 edit-only">Resume</a>
 </div>
 {% endif %}
 {% elif not drift_scenarios %}
@@ -85,7 +85,7 @@ workspace itself, not repeated here.{% endcomment %}
 <div class="list-group">
   {% for row in saved_runs %}
   <div class="list-group-item d-flex align-items-center">
-    <a href="{% url 'run_results' row.result.run.uuid %}" class="flex-grow-1 text-body text-decoration-none">
+    <a href="{% url 'run_results' row.result.run.uuid %}" data-synchronous="true" class="flex-grow-1 text-body text-decoration-none">
       {{ row.result.run.label }}
       <span class="text-muted small d-block">
         {% if row.result.run.source_label and row.result.run.source_label != row.result.run.label %}from {{ row.result.run.source_label }} &middot; {% endif %}

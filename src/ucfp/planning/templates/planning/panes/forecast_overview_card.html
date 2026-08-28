@@ -23,7 +23,7 @@ ForecastOverview) and `currency`.
       </div>
       <div class="overview-card-actions">
         {% if overview.has_run %}
-        <a href="{% url 'run_results' overview.card.run_uuid %}" class="btn btn-primary btn-sm">View run</a>
+        <a href="{% url 'run_results' overview.card.run_uuid %}" data-synchronous="true" class="btn btn-primary btn-sm">View run</a>
         {% endif %}
         <a href="{% url 'financial_forecast' %}" class="btn btn-outline-primary btn-sm">Forecast Hub</a>
       </div>

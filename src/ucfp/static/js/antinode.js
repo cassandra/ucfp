@@ -1136,7 +1136,20 @@ function synchronousSubmitHandler() {
     showLoadingInterstitial();
     $( this ).find( 'button[type="submit"]' ).prop('disabled', true);
 }
-    
+
+// The synchronous counterpart to asyncClickHandler: an ``<a data-synchronous>`` keeps its normal full-page
+// navigation (no preventDefault), but shows the loading interstitial on click so a slow destination page
+// gives immediate "request received" feedback instead of a dead pause. The spinner rides on the outgoing
+// page until the browser swaps in the destination, which discards it. Skipped for a modified or non-primary
+// click (Cmd/Ctrl/Shift/Alt or middle button), which opens a new tab/window and leaves this page in place --
+// showing a spinner that would never clear.
+function synchronousClickHandler( event ) {
+    if ( event.which > 1 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ) {
+        return;
+    }
+    showLoadingInterstitial();
+}
+
 //====================
 // Adding handlers that look at special HTML tag attributes to determine
 // which ones want to be done ansynchonously (aka, AJAX)
@@ -1155,6 +1168,7 @@ jQuery(function($) {
     $('body').on('click', 'div[data-async]', asyncClickHandler );
     $('body').on('click', 'form[data-async] button', lastButtonClickHandler );
     $('body').on('submit', 'form[data-synchronous]', synchronousSubmitHandler );
+    $('body').on('click', 'a[data-synchronous]', synchronousClickHandler );
 
     // This is to support auto-submitting from SELECT elements asnychronously.
     //

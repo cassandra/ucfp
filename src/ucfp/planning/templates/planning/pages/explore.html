@@ -167,7 +167,7 @@ tweaks and refreshes the output below. Placed at the foot of the inputs, it is t
 editing -- and it keeps the outcome and table directly beneath it rather than below a wall of inputs, so a
 first-time visitor sees the run and this CTA without hunting.
 {% endcomment %}
-<form method="post" action="{% url 'explore' %}" class="d-flex align-items-center mb-4">
+<form method="post" action="{% url 'explore' %}" data-synchronous="true" class="d-flex align-items-center mb-4">
   {% csrf_token %}
   <button type="submit" class="btn btn-cta edit-only">{% icon 'rotate' size='sm' css_class='mr-1' %}Re-run</button>
   <span class="text-muted small ml-3">Re-run the forecast with your latest changes.</span>
@@ -184,7 +184,7 @@ a saved run's page. Re-run lives with the inputs above; the selected run is the 
     <div class="d-flex align-items-center flex-wrap my-1 mr-auto">
       <span class="text-muted small mr-2">Run history</span>
       {% for result in transient_runs %}
-      <a href="{% url 'explore' %}?run={{ result.run.uuid }}"
+      <a href="{% url 'explore' %}?run={{ result.run.uuid }}" data-synchronous="true"
          class="badge badge-pill border p-2 mr-1 {% if result.pk == selected.pk %}badge-primary{% else %}badge-light text-dark{% endif %}"
          title="View this run's output">{{ result.label }}</a>
       {% endfor %}

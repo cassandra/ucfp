@@ -64,7 +64,7 @@
           <span class="tour-group-label">What You Get</span>
           <span class="tour-group-steps">
             <a class="tour-step {% if tour_active_step == 4 %}is-active{% endif %}"
-               href="{% url 'tour_forecast' %}"
+               href="{% url 'tour_forecast' %}" data-synchronous="true"
                {% if tour_active_step == 4 %}aria-current="step"{% endif %}>
               <span class="tour-step-num">4</span><span class="tour-step-label">Forecast</span></a>
           </span>
