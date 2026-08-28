@@ -12,13 +12,13 @@ surface). Once this is done, each release is deployed as the final step of the
 **Host provisioning is not covered here.** Standing up the droplet -- the VM, its
 firewall, the shared MySQL / redis / Docker / nginx, and ucfp's per-app
 registration (its database, nginx vhost, TLS cert, and port / redis-index
-reservation) -- is done with the shared **`droplet-ops`** repo, whose README is
+reservation) -- is done with the shared **`hosting-ops`** repo, whose README is
 authoritative. A droplet can host several apps side by side this way. This document
 covers only what is ucfp-specific: the production config, backups, and notes.
 
 ## Prerequisites
 
-Provision the host and register ucfp first, with the shared **`droplet-ops`** repo
+Provision the host and register ucfp first, with the shared **`hosting-ops`** repo
 (its README and runbooks are authoritative). That registration is what supplies the
 inputs step 1 needs: the **DB credentials**, and — on a shared droplet — the **host
 port** and **redis index** reserved for ucfp.
@@ -81,8 +81,8 @@ The release deploy steps reach the droplet over SSH -- a `~/.ssh/config` alias
 ucfp's `deploy/droplet/do-ucfp-backup.sh` (deployed to `/opt/ucfp`) dumps MySQL to
 S3 — the bucket/prefix are set in the script, and it reads the `UCFP_DB_*` credentials
 from the deployed `/opt/ucfp/ucfp.sh`. It relies on the droplet's shared **AWS CLI + S3
-credentials** — a host-level, once-per-droplet setup done via droplet-ops'
-`runbooks/setup-backups.md`. With that in place, schedule ucfp's job at its registry
+credentials** — a host-level, once-per-droplet setup done via hosting-ops'
+`providers/digitalocean/runbooks/setup-backups.md`. With that in place, schedule ucfp's job at its registry
 backup slot (**03:30** -- staggered so co-hosted apps don't dump concurrently):
 
 ```bash
@@ -110,7 +110,7 @@ crontab -e                    # ucfp's 03:30 registry slot:  30 3 * * * /opt/ucf
 - **Outbound SMTP** is blocked by some hosts (DigitalOcean included), so the cloud
   lane (`ucfp.settings.production`) sends email through **Resend's HTTP API** via
   Anymail, not SMTP -- driven by `UCFP_EMAIL_API_KEY` and a verified sender. Sign-in
-  depends on email, so both must be set (see the droplet-ops `setup-email` runbook).
+  depends on email, so both must be set (see the hosting-ops `setup-email` runbook).
 - **Testing against MySQL**: dev and CI default to SQLite. Because SQLite and MySQL
   differ subtly, run the suite against a local MySQL before a release that touches
   models or migrations (point the same `UCFP_DB_*` at a local MySQL). On macOS,
@@ -122,7 +122,7 @@ crontab -e                    # ucfp's 03:30 registry slot:  30 3 * * * /opt/ucf
   ```
 
 ## Related Documentation
-- Host provisioning + per-app setup (VM, firewall, DNS, services, the add-app runbook): the **`droplet-ops`** repo
+- Host provisioning + per-app setup (VM, firewall, DNS, services, the add-app runbook): the **`hosting-ops`** repo
 - Deploy releases onto this host: [Release Process](../workflow/release-process.md)
 - Self-host deployment: [Deployment](../../Deployment.md)
 - GitHub repository configuration: [GitHub Setup](github-setup.md)
