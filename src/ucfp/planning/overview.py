@@ -20,12 +20,12 @@ from common.line_chart import CHROME_FULL
 from organization.models import Organization
 
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.state import completed_profile
 
 from .enums import PlanningFeature
 from .gating import partition_scenarios, scenario_started
+from .run_books_cache import load_run_books
 from .models import PlanningResultRecord
 from .run_charts import net_worth_chart as build_net_worth_chart
 from .schemas import ProjectionRun
@@ -37,7 +37,7 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
     period, not the horizon; net worth is computed live from the already-loaded books -- never cached --
     keeping the books the one source of truth (a captured run is immutable, so the live figure is stable)."""
     frame  = run.frame
-    ledger = Bookkeeper( books ).ledger
+    ledger = Bookkeeper( books ).snapshot_ledger
     steps  = run.result.steps
     lasted = not run.result.stopped_early
     end_date = frame.end_date if lasted else steps[ -1 ].end_date
@@ -219,7 +219,7 @@ def _run_card( result : PlanningResultRecord ) -> ForecastRunCard:
     the latter from a single books load through `run_outcome` (one run's books -- the dashboard's only
     projection load). Horizon comes from the parsed frame, so it is right even if the run stopped early."""
     run     = from_json_data( ProjectionRun, result.run.data )
-    books   = BooksOfAccountRepository().load( result.run.books )
+    books   = load_run_books( result.run.books )
     summary = run_outcome( run, books )[ 'summary' ]
     frame   = run.frame
     end     = summary[ 'end' ]

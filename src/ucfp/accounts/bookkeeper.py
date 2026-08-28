@@ -22,7 +22,7 @@ from .constants import DEFAULT_ROOT_ACCOUNT_NAMES
 from .enums import AccountType, AssetClass, SideType, SystemAccountRole
 from .exceptions import MissingAccountError, TransactionImbalanceError
 from .journal import Journal
-from .ledger import Ledger
+from .ledger import Ledger, SnapshotLedger
 from .money_utils import format_money, quantize_money
 from .schemas import Handle
 
@@ -57,6 +57,14 @@ class Bookkeeper:
     @property
     def ledger( self ) -> Ledger:
         return Ledger( self )
+
+    @property
+    def snapshot_ledger( self ) -> SnapshotLedger:
+        """A `SnapshotLedger` over these books -- the fast read view for **immutable** books (a captured
+        run's reloaded books). It precomputes cumulative balances so the display path's many balance and
+        flow queries across period boundaries are lookups, not rescans. Not for books still being posted
+        to: those must read through the live `ledger`, which reflects every posting as it lands."""
+        return SnapshotLedger( self )
 
     @property
     def journal( self ) -> Journal:

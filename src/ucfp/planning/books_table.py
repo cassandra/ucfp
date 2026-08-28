@@ -71,7 +71,7 @@ def _fragment_context( bookkeeper : Bookkeeper, catalog : BooksTableColumnCatalo
     spans = run_period_spans( run )
     return {
         'books_table' : build_books_table(
-            bookkeeper.ledger, bookkeeper.chart, spans, definition, catalog ),
+            bookkeeper.snapshot_ledger, bookkeeper.chart, spans, definition, catalog ),
         **_age_column_context( run ),
     }
 

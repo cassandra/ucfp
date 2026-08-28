@@ -8,7 +8,9 @@ The `CurrencyConverter` (kept for the future import boundary) is pure and tested
 from datetime import date
 from decimal import Decimal
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from organization.models import Organization
 from ucfp.accounts.books import BooksOfAccount
@@ -136,3 +138,53 @@ class BooksOfAccountRepositoryTests(TestCase):
         self.assertEqual( loaded_txn.description, 'Opening balances' )
         self.assertEqual( loaded_txn.transaction_uuid, original_txn.transaction_uuid )
         reader.assert_balanced()
+
+    def _save_books_with_transactions( self, repository, *, transactions : int ):
+        """A saved books whose journal holds `transactions` balanced postings -- the fixture for the
+        query-count guard, letting one shape be reloaded at two sizes."""
+        bookkeeper = Bookkeeper( BooksOfAccount( label = 'Journal' ) )
+        bookkeeper.build_standard_chart()
+        chart   = bookkeeper.chart
+        cash    = bookkeeper.create_holding( chart.root( AccountType.ASSET ), 'Cash', AssetClass.CASH )
+        opening = chart.system_account( SystemAccountRole.OPENING_BALANCES )
+        for index in range( transactions ):
+            bookkeeper.record(
+                date( 2026, 1, 1 ),
+                [ ( cash, Decimal( '-1000' ) ), ( opening, Decimal( '1000' ) ) ],
+                description = f'Deposit {index}',
+            )
+            continue
+        organization = Organization.objects.create( name = f'Journal {transactions}' )
+        return repository.save( bookkeeper.books, organization )
+
+    def test_load_query_count_does_not_scale_with_transactions(self):
+        """The reload issues a fixed, small number of queries however many transactions the books holds
+        -- the regression guard on the N+1 (one entries query per transaction) that dominated the
+        run-display reload before the entries were prefetched."""
+        repository = BooksOfAccountRepository()
+        small = self._save_books_with_transactions( repository, transactions = 2 )
+        large = self._save_books_with_transactions( repository, transactions = 20 )
+        with CaptureQueriesContext( connection ) as small_queries:
+            repository.load( small )
+        with CaptureQueriesContext( connection ) as large_queries:
+            repository.load( large )
+        # Constant across a 10x transaction count -- the reload no longer issues a query per transaction.
+        self.assertEqual( len( large_queries ), len( small_queries ) )
+        # Accounts, transactions, and the single prefetched entries query: a small fixed bound.
+        self.assertLessEqual( len( small_queries ), 4 )
+
+    def test_save_query_count_does_not_scale_with_transactions(self):
+        """Capturing a run writes the journal in a few bulk inserts, not a row per transaction and a row
+        per entry -- the regression guard on the write-side N+1 that dominated a forecast run's persist.
+        Accounts stay per-row (a self-FK, and few of them); only the journal is bulk, so a 20x journal
+        must not mean 20x the writes."""
+        repository = BooksOfAccountRepository()
+        with CaptureQueriesContext( connection ) as small_queries:
+            self._save_books_with_transactions( repository, transactions = 2 )
+        with CaptureQueriesContext( connection ) as large_queries:
+            self._save_books_with_transactions( repository, transactions = 40 )
+        # The journal's two bulk inserts do not grow with row count at these sizes, so 20x the
+        # transactions adds no per-row writes -- the counts stay effectively flat.
+        self.assertLessEqual( len( large_queries ) - len( small_queries ), 2 )
+        # Well under the row-at-a-time count (~130 writes for the 40-transaction books).
+        self.assertLessEqual( len( large_queries ), 30 )

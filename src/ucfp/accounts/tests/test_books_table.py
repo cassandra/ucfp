@@ -13,8 +13,10 @@ from uuid import UUID
 
 from common.date_span import DateSpan
 
+from ucfp.accounts.books import Account
 from ucfp.accounts.bookkeeper import Bookkeeper
-from ucfp.accounts.enums import AccountType, AssetClass, SystemAccountRole
+from ucfp.accounts.enums import (
+    AccountType, AssetClass, ExpenseTaxClass, IncomeTaxClass, SystemAccountRole )
 from ucfp.accounts.books_table import (
     BooksColumnKey, BooksDerivedFigure, BooksLeafColumn, BooksSummaryColumn, BooksTableColumn,
     BooksTableColumnCatalog, BooksTableDefinition, _empty_op_keys, _render_columns, build_books_table )
@@ -418,6 +420,84 @@ class BuildBooksTableEmptyColumnsTest( unittest.TestCase ):
         revealed = build_books_table(
             bookkeeper.ledger, chart, spans, definition.reveal( unused_key ), catalog )
         self.assertFalse( { c.column.label : c.empty for c in revealed.columns }[ 'Unused' ] )
+
+
+class BuildBooksTableSnapshotEquivalenceTest( unittest.TestCase ):
+    """The table the display path shows (built through `SnapshotLedger`) is cell-for-cell identical to
+    one built through the live `Ledger`. The live Ledger is the oracle: this pins that swapping in the
+    precomputing snapshot ledger -- what `run_books_table_context` actually hands `build_books_table` --
+    changed no figure, so the table tests over the live ledger still describe what the user sees."""
+
+    def _books( self ):
+        bookkeeper = Bookkeeper()
+        bookkeeper.build_standard_chart()
+        chart      = bookkeeper.chart
+        asset_root = chart.root( AccountType.ASSET )
+        cash       = bookkeeper.create_holding( asset_root, 'Cash', AssetClass.CASH )
+        stocks     = bookkeeper.create_holding( asset_root, 'Brokerage', AssetClass.STOCKS )
+        # Revenue/expense leaves must carry their tax class, or the catalog leaves them out of the
+        # Income/Expense columns entirely (real captured accounts always classify them) -- without it the
+        # flow columns would be empty and this test would never exercise the ledger's flow path.
+        wages      = bookkeeper.add_account( Account(
+            name = 'Wages', parent = chart.root( AccountType.REVENUE ),
+            income_tax_class = IncomeTaxClass.WAGES ) )
+        grocery    = bookkeeper.add_account( Account(
+            name = 'Groceries', parent = chart.root( AccountType.EXPENSE ),
+            expense_tax_class = ExpenseTaxClass.LIVING ) )
+        opening    = chart.system_account( SystemAccountRole.OPENING_BALANCES )
+        valuation  = chart.valuation_of( stocks )
+        unrealized = chart.system_account( SystemAccountRole.UNREALIZED_GAINS )
+        # A mix of balance stock and within-period flows across several dates, plus a mid-run
+        # appreciation, so the table carries asset/liability balances, revenue/expense flows, and net
+        # worth -- the whole spread of column kinds the ledger feeds. Signs are credit-positive: a debit
+        # to an asset (negative) funds it, a credit to revenue (positive) is income.
+        bookkeeper.record( date( 2026, 1, 1 ), [ ( cash, Decimal( '-100000' ) ),
+                                                 ( stocks, Decimal( '-400000' ) ),
+                                                 ( opening, Decimal( '500000' ) ) ] )
+        bookkeeper.record( date( 2026, 6, 15 ), [ ( cash, Decimal( '-3000' ) ), ( wages, Decimal( '3000' ) ) ] )
+        bookkeeper.record( date( 2027, 1, 1 ), [ ( cash, Decimal( '250' ) ), ( grocery, Decimal( '-250' ) ) ] )
+        bookkeeper.record( date( 2027, 1, 1 ), [ ( valuation, Decimal( '-40000' ) ),
+                                                 ( unrealized, Decimal( '40000' ) ) ] )
+        bookkeeper.record( date( 2028, 3, 10 ), [ ( cash, Decimal( '-1200' ) ), ( wages, Decimal( '1200' ) ) ] )
+        return bookkeeper, chart
+
+    def _fully_expanded( self, catalog, definition ):
+        for _round in range( 20 ):
+            widened = definition
+            for key in definition.column_keys:
+                if isinstance( catalog.get( key ), BooksSummaryColumn ):
+                    widened = widened.expand( catalog, key )
+                continue
+            if widened.column_keys == definition.column_keys:
+                return definition
+            definition = widened
+            continue
+        return definition
+
+    def test_snapshot_table_matches_live_table_cell_for_cell( self ):
+        bookkeeper, chart = self._books()
+        catalog    = BooksTableColumnCatalog.build( chart )
+        definition = self._fully_expanded( catalog, catalog.default_definition().adapt( catalog ) )
+        # Opening row (zero-length, day before the first period) then three year-end periods -- the
+        # balance-through and flow-over-window boundaries the snapshot index must land on exactly.
+        spans = [ DateSpan( date( 2025, 12, 31 ), date( 2025, 12, 31 ) ),
+                  DateSpan( date( 2026, 1, 1 ), date( 2026, 12, 31 ) ),
+                  DateSpan( date( 2027, 1, 1 ), date( 2027, 12, 31 ) ),
+                  DateSpan( date( 2028, 1, 1 ), date( 2028, 12, 31 ) ) ]
+
+        live     = build_books_table( bookkeeper.ledger, chart, spans, definition, catalog )
+        snapshot = build_books_table( bookkeeper.snapshot_ledger, chart, spans, definition, catalog )
+
+        self.assertGreater( len( snapshot.columns ), 1 )   # the fixture really did build a table
+        self.assertEqual( [ column.op_key for column in snapshot.columns ],
+                          [ column.op_key for column in live.columns ] )
+        self.assertEqual( [ ( column.empty, column.removed ) for column in snapshot.columns ],
+                          [ ( column.empty, column.removed ) for column in live.columns ] )
+        live_cells     = [ [ ( cell.value, cell.empty, cell.removed ) for cell in row.cells ]
+                           for row in live.rows ]
+        snapshot_cells = [ [ ( cell.value, cell.empty, cell.removed ) for cell in row.cells ]
+                           for row in snapshot.rows ]
+        self.assertEqual( snapshot_cells, live_cells )
 
 
 if __name__ == '__main__':
