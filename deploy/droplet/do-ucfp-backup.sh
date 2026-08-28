@@ -42,3 +42,19 @@ aws s3 cp "$DUMPFILE" "s3://${S3_BUCKET}/${S3_PREFIX}/${FILENAME}"
 
 # Cleanup
 rm "$DUMPFILE"
+
+# Prune the dated (YYYY-MM-DD) snapshots older than the retention window. The weekday
+# dailies self-rotate by name (each weekday overwrites last week's) and are already
+# bounded; only these dated snapshots accumulate. This bound is what the Privacy and
+# Terms pages promise ("backups kept up to 90 days"), so keep the two in sync. Runs
+# best-effort: a prune failure must never fail the backup itself.
+RETENTION_DAYS=90
+CUTOFF=$(date -d "-${RETENTION_DAYS} days" +%Y-%m-%d)
+aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/" \
+    | awk '{print $4}' \
+    | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.sql\.gz$' \
+    | while read -r key; do
+        if [[ "${key%.sql.gz}" < "$CUTOFF" ]]; then
+            aws s3 rm "s3://${S3_BUCKET}/${S3_PREFIX}/${key}" || true
+        fi
+    done || true

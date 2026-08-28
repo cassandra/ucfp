@@ -5,27 +5,39 @@
 {% comment %}
   The public home/landing page -- shown at the site root to *everyone* (HomeView), regardless of account
   state, so it stays reachable and a signed-in user can always return here to keep exploring. No app
-  navbar; a plain site header, feature detail, the self-hosted option, and a standard site footer. An
-  anonymous visitor gets the marketing intro + "see how it works"; a signed-in user also gets a path on to
-  their Dashboard (or to "Add my data" when the example is all they have).
+  navbar; a slim top utility bar (Sign in) for anonymous visitors, a plain site header, the two feature
+  pillars, a closing conversion band, and a standard site footer. An anonymous visitor gets
+  the marketing intro + "see how it works"; a signed-in user also gets a path on to their Dashboard (or to
+  "Add my data" when the example is all they have).
 {% endcomment %}
 
 {% block content %}
+{% comment %}Slim top utility bar: a quiet, always-visible sign-in for returning users, kept out of the
+hero so it doesn't compete with the gold CTA. Anonymous-only -- a self-hosted single-user instance never
+renders as anonymous, and a signed-in visitor has no use for "Sign in". (Self-hosting is pitched in the
+closing band, not here.){% endcomment %}
+{% if home_cta == 'anonymous' %}
+<div class="border-bottom">
+  <div class="container d-flex justify-content-end align-items-center py-2">
+    <a href="{% url 'user_signin' %}">Sign in</a>
+  </div>
+</div>
+{% endif %}
+
 <header class="text-center py-4">
   <div class="container">
     <img class="img-fluid mb-4" style="max-height: 72px" src="{% static 'img/app-logo-h200.png' %}"
          alt="{% settings_value 'SITE_NAME' %}">
-    <h1 class="display-4 text-primary font-weight-bold mb-2">Can you retire?</h1>
-    <p class="lead text-muted mb-4">Find out for free.</p>
+    <h1 class="display-4 text-primary font-weight-bold mb-2">When can you retire?</h1>
+    <p class="lead text-muted mb-4">Find out. For free.</p>
     {% comment %}One gold action per visitor state (see `onboarding.home_cta`): an anonymous visitor is
     invited to learn how it works; a Guest with only the read-only example graduates to their own plan; a
     user with their own org is pointed at their dashboard. "See how it works" recedes to an outline once it
     is no longer the focal action.{% endcomment %}
     {% if home_cta == 'anonymous' %}
     <a href="{% url 'explain' %}" class="btn btn-cta btn-lg">See how it works</a>
-    <p class="small text-muted mt-3 mb-0">No account needed to look around &mdash; add your email only when
-      you want to save your work. No password, no marketing.
-      <a href="{% url 'user_signin' %}">Already have an account?</a></p>
+    <p class="small text-muted mt-3 mb-0">No account needed, no passwords, no marketing, no tracking.
+      Privacy first.</p>
     {% elif home_cta == 'example_only' %}
     <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
       {% csrf_token %}
@@ -47,46 +59,38 @@
     <div class="row justify-content-center">
       <div class="col-lg-8 text-center">
         <h2 class="h3 mb-3">One model for all your financial planning</h2>
-        <p class="text-muted mb-0">Most calculators answer a single question at a single moment.
-          {% settings_value 'SITE_NAME' %} replaces the tangle of spreadsheets with one robust,
-          double-entry model so you can see whether your
-          money lasts, and keep your plan honest against reality as it unfolds.</p>
+        <p class="text-muted mb-0">{% settings_value 'SITE_NAME' %} brings your whole financial picture
+          into one robust, double-entry model. It is better structured than a spreadsheet and catches the
+          hard-to-find errors that spreadsheets let slip, so you can trust what your plan tells you.</p>
       </div>
     </div>
 
-    <div class="row mt-5">
-      <div class="col-md-4 mb-4 mb-md-0">
+    {% comment %}The two feature pillars, co-equal: the Forecast you get back, and the Explore loop that
+    lets you vary inputs and watch it move. Two centered cards (col-md-5 with justify-content-center) so
+    the pair sits balanced rather than filling the row edge to edge.{% endcomment %}
+    <div class="row justify-content-center mt-5">
+      <div class="col-md-5 mb-4 mb-md-0">
         <div class="card h-100 border-0 shadow">
           <div class="card-body text-center">
-            {% icon 'clock' size='xxl' color='primary' %}
-            <h3 class="h5 mt-3">Retirement</h3>
-            <p class="text-muted small mb-0">Long-horizon budgeting: how much you need, and when you can stop working.</p>
+            {% icon 'forecast' size='xxl' color='primary' %}
+            <h3 class="h5 mt-3">Forecast</h3>
+            <p class="text-muted small mb-0">Project your finances year by year into the future. Every
+              figure is fully drillable, down to the account and the transaction, so you see why it is
+              what it is.</p>
           </div>
         </div>
       </div>
-      <div class="col-md-4 mb-4 mb-md-0">
+      <div class="col-md-5">
         <div class="card h-100 border-0 shadow">
           <div class="card-body text-center">
-            {% icon 'shield' size='xxl' color='primary' %}
-            <h3 class="h5 mt-3">Social Security timing</h3>
-            <p class="text-muted small mb-0">Compare claiming strategies to find the one that pays you most.</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="card h-100 border-0 shadow">
-          <div class="card-body text-center">
-            {% icon 'dollar-sign' size='xxl' color='primary' %}
-            <h3 class="h5 mt-3">Near-term cash flow</h3>
-            <p class="text-muted small mb-0">The next twelve months at fine granularity, so nothing catches you short.</p>
+            {% icon 'zoom' size='xxl' color='primary' %}
+            <h3 class="h5 mt-3">Explore</h3>
+            <p class="text-muted small mb-0">Change a plan or an assumption and watch the forecast move.
+              Ask &ldquo;what if I retire two years earlier?&rdquo; and see the answer at once.</p>
           </div>
         </div>
       </div>
     </div>
-
-    <p class="text-center text-muted small mt-4 mb-0">
-      Sanity-checked &middot; Private, no marketing &middot; Past, present &amp; future in one model
-    </p>
   </div>
 </section>
 
@@ -96,11 +100,12 @@ action competing with the hero's -- so it shows only to an anonymous visitor.{% 
 {% if home_cta == 'anonymous' %}
 <section class="text-center py-4 bg-primary text-white">
   <div class="container">
-    <h2 class="h3 mb-3">See your number.</h2>
-    <a href="{% url 'explain' %}" class="btn btn-cta btn-lg">See how it works — it's free</a>
-    <p class="small mt-3 mb-0">Free, no password to remember. Prefer to keep your data private?
-      {% settings_value 'SITE_NAME' %} is source-available:
-      <a class="text-white font-weight-bold" target="_blank" href="https://github.com/cassandra/ucfp">self-host your own computer</a>.</p>
+    <h2 class="h3 mb-3">See your forecast, free.</h2>
+    <a href="{% url 'explain' %}" class="btn btn-cta btn-lg">See how it works</a>
+    <p class="mt-3 mb-0">Want your data to stay entirely on your own machine?
+      {% settings_value 'SITE_NAME' %} is fully source-available, so you can
+      <a class="text-white font-weight-bold" target="_blank" rel="noopener" href="https://github.com/cassandra/ucfp">self-host your own private instance</a>
+      and nothing leaves your machine.</p>
   </div>
 </section>
 {% endif %}

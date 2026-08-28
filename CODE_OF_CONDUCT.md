@@ -16,6 +16,8 @@ In short: **Be a decent human being.**
 
 Life is too short for negativity - let's keep this a great place to collaborate.
 
+To report a concern, email <hello@pomdp.com>.
+
 ---
 
 > "Criticism comes easier than craftsmanship."

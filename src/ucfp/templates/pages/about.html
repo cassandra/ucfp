@@ -2,7 +2,9 @@
 {% load common_tags %}
 {% block head_title %}About · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
-  Public about page. DRAFT starting point -- refine the story/positioning as the product settles.
+  Public about page. Carries the canonical positioning: the two pillars (Forecast / Explore), the
+  "why it's free" story, the privacy stance, and the "can you trust it?" answer that points to Terms.
+  Keep it aligned with the home page and FAQ; the strong legal disclaimer lives in Terms, not here.
 {% endcomment %}
 
 {% block page_title %}About {% settings_value 'SITE_NAME' %}&trade;{% endblock %}
@@ -10,32 +12,46 @@
 {% block public_content %}
 <p class="lead text-center text-muted mb-4">A single, well-modeled home for your financial planning.</p>
 
-<p>Most people answer "can I retire?" with a tangle of spreadsheets that grow unwieldy and hard to trust.
-  {% settings_value 'SITE_NAME' %} replaces them with one robust, double-entry model that spans your past,
-  present, and future &mdash; so you can see whether your money lasts, and keep your plan honest against
-  reality as it unfolds.</p>
+<p>Most people answer "when can I retire?" one of two ways: with a tangle of spreadsheets that grow
+  unwieldy and hard to trust, or by paying a professional to run the numbers for them.
+  {% settings_value 'SITE_NAME' %} gives you a third option: one robust, double-entry model you run
+  yourself. It is better structured than a spreadsheet and catches the hard-to-find errors those
+  spreadsheets hide, and unlike a one-off paid analysis it is yours to re-run, adjust, and explore whenever
+  you like, for free.</p>
 
-<p>It brings several planning perspectives together over one shared model: long-horizon
-  <strong>retirement</strong> budgeting, near-term <strong>cash flow</strong>, and
-  <strong>Social Security</strong> timing &mdash; each a different lens on the same finances, at a
-  different timescale.</p>
+<p>Two things sit at the center of it. {% settings_value 'SITE_NAME' %} <strong>forecasts</strong> your
+  finances year by year into the future, fully drillable down to the account and the transaction. And it
+  lets you <strong>explore</strong>: change a plan or an assumption and watch the forecast move, so you can
+  weigh a decision before you make it.</p>
 
-<p>{% settings_value 'SITE_NAME' %} is built and maintained independently &mdash; by someone who wanted a
-  single, trustworthy model for their own long-term planning, not a company chasing growth at your
-  expense.</p>
+<h5 class="text-primary mt-4">Why it's free</h5>
+<p>I built {% settings_value 'SITE_NAME' %} because I needed it myself, and I'd rather share something
+  useful than lock it away. I'm not trying to make money from it, which is exactly why there's nothing to
+  upsell, no ads, and no reason to touch your data. Where other tools give you a crippled free version, a
+  stream of marketing email, and a constant nudge to upgrade, {% settings_value 'SITE_NAME' %} simply stays
+  out of your way.</p>
+{% comment %}Support link (About + Contact only, never the home page). A plain outbound link to Ko-fi, not
+their embeddable widget, so the no-tracker promise and the CSP stay intact.{% endcomment %}
+<p class="mt-3 mb-2">If {% settings_value 'SITE_NAME' %} has been useful to you and you'd like to say
+  thanks, it's appreciated but never expected:</p>
+<a href="https://ko-fi.com/pomdp" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">&#9749; Buy me a coffee</a>
 
-<p>So your data stays yours. There are no ads and no trackers, we never sell or share your information,
-  and we email you only to send a sign-in code or an essential notice &mdash; never marketing. Our
-  <a href="{% url 'privacy' %}">privacy approach</a> spells out the rest, including how your data is
-  protected and how to remove it.</p>
-
-<p>{% settings_value 'SITE_NAME' %} is source-available. Use the free hosted version, or
+<h5 class="text-primary mt-4">Your data is yours</h5>
+<p>There are no ads and no trackers, we never sell or share your information, and we email you only to send
+  a sign-in code or an essential notice, never marketing. You do not even need to hand over an email to use
+  it. Our <a href="{% url 'privacy' %}">privacy approach</a> spells out the rest,
+  including how your data is protected and how to remove it. And because {% settings_value 'SITE_NAME' %} is
+  source-available, you can
   <a href="https://github.com/cassandra/ucfp" target="_blank" rel="noopener">self-host your own private
-  instance</a> to keep your data entirely on your own machine.</p>
+  instance</a> and keep your data entirely on your own machine.</p>
 
-<p class="text-muted small">{% settings_value 'SITE_NAME' %} is a planning tool, not financial advice: its
-  forecasts are estimates based on the numbers and assumptions you provide. For decisions that matter,
-  check with a qualified professional.</p>
+<h5 class="text-primary mt-4">Can you trust it?</h5>
+<p>Trust it, but verify it. No forecasting tool is perfect, and {% settings_value 'SITE_NAME' %}'s numbers
+  are only as good as the figures and assumptions you give it. What it does give you is transparency: every
+  result is fully drillable, so you can follow the reasoning year by year and account by account rather than
+  taking a single number on faith. Before a decision that matters, satisfy yourself the numbers are right,
+  and consider checking with a qualified professional. The <a href="{% url 'terms' %}">Terms of Service</a>
+  cover this in full: {% settings_value 'SITE_NAME' %} is a planning tool, not financial advice.</p>
 
 <div class="text-center mt-4 mb-5">
   <a href="{% url 'explain' %}" class="btn btn-cta">See how it works</a>

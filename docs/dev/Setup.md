@@ -24,6 +24,7 @@ This script will:
 - Create and activate a Python virtual environment
 - Install all required packages
 - Initialize the database
+- Seed the default parameter sets and the read-only example household
 - Run validation tests
 
 The script is interactive and will prompt you for necessary information. It's safe to run multiple times if needed.
@@ -42,6 +43,8 @@ cd src
 ./manage.py check
 ./manage.py migrate
 ./manage.py bootstrap
+./manage.py seed_parameter_sets
+./manage.py seed_example_org
 ./manage.py runserver
 ```
 
@@ -77,7 +80,7 @@ cd ucfp
 git config --global user.name "${YOUR_NAME}"
 git config --global user.email "${YOUR_EMAIL}"
 
-git remote add upstream https://github.com/cassandra/ufcp.git
+git remote add upstream https://github.com/cassandra/ucfp.git
 ```
 
 Your "origin" should already be pointing to your forked repository, but check this and the "upstream" settings:
@@ -87,8 +90,8 @@ git remote -v
 # Expect
 origin    https://github.com/${YOURUSERNAME}/ucfp.git (fetch)
 origin    https://github.com/${YOURUSERNAME}/ucfp.git (push)
-upstream  https://github.com/cassandra/ucfp-app.git (fetch)
-upstream  https://github.com/cassandra/ucfp-app.git (push)
+upstream  https://github.com/cassandra/ucfp.git (fetch)
+upstream  https://github.com/cassandra/ucfp.git (push)
 ```
 
 If your origin is not set properly, re-verify after setting with:
@@ -135,6 +138,14 @@ cd $PROJ_DIR/src
 ./manage.py check
 ./manage.py migrate
 ./manage.py bootstrap
+```
+
+Seed the default parameter sets (tax law / economic outlook) and the read-only
+example household with its forecast. Order matters — the example run needs the
+parameter sets present first — and both commands are idempotent.
+``` shell
+./manage.py seed_parameter_sets
+./manage.py seed_example_org
 ```
 
 It is a good idea to run the tests to validate that you can and that the installation seem fine.
