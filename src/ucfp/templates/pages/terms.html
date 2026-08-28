@@ -2,12 +2,13 @@
 {% load common_tags %}
 {% block head_title %}Terms · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
-  Public terms page. DRAFT -- review the wording, the legal entity, the effective date, and the contact
-  with counsel before any public launch. The "not financial advice" disclaimer is essential for a
-  planning tool and should not be removed.
+  Public terms page. Owner-maintained content. The "Not financial advice" and "Nature of forecasts"
+  disclaimers, and the liability/indemnification sections, are essential for a planning tool and should
+  not be weakened.
 
   The "Deleting your data" section matches #160 (self-service account & household deletion, implemented);
-  its wording should stay consistent with that behavior, and be reviewed with counsel before launch.
+  keep its wording consistent with that behavior. The backup-retention wording matches the 90-day prune
+  in deploy/droplet/do-ucfp-backup.sh; keep the two in sync.
 {% endcomment %}
 
 {% block page_title %}Terms of Service{% endblock %}
@@ -24,6 +25,13 @@
   legal advice</strong>. Outcomes are not guaranteed. Consult a qualified professional before making
   decisions, and verify any figure that matters against authoritative sources.</p>
 
+<h5 class="text-primary mt-4">Nature of forecasts</h5>
+<p>{% settings_value 'SITE_NAME' %}'s forecasts are hypothetical, illustrative projections based on the
+  figures and assumptions you provide. An output such as a projected retirement age or year is not a
+  guarantee, prediction, or promise of any actual result, and real outcomes will differ. The projections
+  are only as good as the inputs behind them; {% settings_value 'SITE_NAME' %} is not responsible for
+  results based on inaccurate, incomplete, or out-of-date information you enter.</p>
+
 <h5 class="text-primary mt-4">Age requirements</h5>
 <p>You must be at least 18 years old to use the Service. You are responsible for all activity under your
   account.</p>
@@ -38,20 +46,26 @@
   store and process it solely to provide the Service to you. You represent that you have the right to
   provide the information you enter.</p>
 
+<h5 class="text-primary mt-4">The software</h5>
+<p>These Terms govern your use of the hosted Service, not the software behind it.
+  {% settings_value 'SITE_NAME' %}'s source code is available separately under its own licence, the
+  PolyForm Noncommercial License; your use of the code is governed by that licence, which you can read in
+  the <a href="https://github.com/cassandra/ucfp/blob/master/LICENSE.md" target="_blank" rel="noopener">LICENSE
+  file</a> in our repository.</p>
+
 <h5 class="text-primary mt-4">Deleting your data</h5>
 <p>You may delete your account at any time from your account page. Deleting your account permanently
   erases your account and all data in every household you own, including households you share with others;
   when you delete your account you may choose to keep a shared household for its remaining owners instead.
   You may also delete or leave an individual household, or remove individual records as you work. Deletion
-  takes effect immediately; residual copies may persist in routine backups until they expire, and we
-  retain only what the law requires.</p>
+  takes effect immediately in the live Service. We keep encrypted backups only for disaster recovery,
+  retain them for up to 90 days, and never use them to restore an account you have deleted.</p>
 
 <h5 class="text-primary mt-4">Prohibited conduct</h5>
 <p>You agree not to:</p>
 <ul>
   <li>Use the Service for any unlawful purpose</li>
   <li>Attempt to gain unauthorized access to the Service or other users' accounts</li>
-  <li>Reverse engineer, decompile, or extract source code from the Service, except to the extent this restriction is prohibited by law</li>
   <li>Use automated tools to scrape or disrupt the Service</li>
   <li>Interfere with the proper functioning of the Service</li>
 </ul>
@@ -65,11 +79,35 @@
   consequential, or punitive damages, including loss of data or financial loss, arising from your use of
   the Service.</p>
 
+<h5 class="text-primary mt-4">Indemnification</h5>
+<p>You agree to indemnify and hold harmless {% settings_value 'SITE_NAME' %} and POMDP, LLC from any
+  claims, losses, or expenses (including reasonable legal fees) arising from your use of the Service, your
+  breach of these Terms, or your reliance on the Service's outputs for an actual financial decision.</p>
+
+<h5 class="text-primary mt-4">Termination</h5>
+<p>We may suspend or end your access to the Service at any time, with or without notice. You may stop using
+  the Service at any time and delete your account as described above. The sections that by their nature
+  should outlast your use, including Not financial advice, Nature of forecasts, Disclaimer of warranties,
+  Limitation of liability, and Indemnification, continue to apply after termination.</p>
+
+<h5 class="text-primary mt-4">Governing law</h5>
+<p>These Terms are governed by the laws of the State of Texas, without regard to its conflict-of-laws
+  rules. Any dispute relating to the Service or these Terms will be brought exclusively in the state or
+  federal courts located in Texas, and you consent to their jurisdiction.</p>
+
 <h5 class="text-primary mt-4">Changes to these Terms</h5>
 <p>We may update these Terms; material changes will be posted here with a new effective date. Continued
   use after changes take effect constitutes acceptance.</p>
 
-<div class="text-center text-muted mt-4 pt-3 border-top">
+<h5 class="text-primary mt-4">Severability</h5>
+<p>If any provision of these Terms is held invalid or unenforceable, the remaining provisions stay in full
+  effect.</p>
+
+<h5 class="text-primary mt-4">Entire agreement</h5>
+<p>These Terms, together with the <a href="{% url 'privacy' %}">Privacy Policy</a>, are the entire
+  agreement between you and us regarding the Service and supersede any prior understandings.</p>
+
+<div class="text-center text-muted mt-4 pt-3 mb-4 border-top">
   <p class="mb-1"><strong>Effective date:</strong> August 2026</p>
   <p class="mb-0"><strong>Contact:</strong> <a href="{% url 'contact' %}">reach us here</a>.</p>
 </div>

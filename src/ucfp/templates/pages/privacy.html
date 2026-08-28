@@ -2,14 +2,14 @@
 {% load common_tags %}
 {% block head_title %}Privacy · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% comment %}
-  Public privacy page. DRAFT -- review the wording, the effective date, the data-controller/legal entity,
-  and the contact with counsel before any public launch. Adapted for a financial-planning app (your
-  financial data is yours).
+  Public privacy page. Owner-maintained content, for a financial-planning app (your financial data is
+  yours).
 
   The deletion (#160) and encryption (#159) statements describe implemented behavior; keep them
   consistent with it. The encryption claim is deliberately honest: the figures are encrypted at rest
-  and there is no routine operator path to them, but the server holds the key to build the forecast --
-  so it does not claim we cannot decrypt. Self-hosting is the answer for anyone who needs that.
+  and there is no routine operator path to them, but the server holds the key to build the forecast, so
+  it does not claim we cannot decrypt. Self-hosting is the answer for anyone who needs that. The
+  backup-retention wording matches the 90-day prune in deploy/droplet/do-ucfp-backup.sh; keep them in sync.
 {% endcomment %}
 
 {% block page_title %}Privacy Policy{% endblock %}
@@ -22,8 +22,9 @@
 <ol class="pl-4">
   <li class="mb-3">
     <strong class="text-primary">We only collect what you give us.</strong>
-    Your email address is required to sign in. Everything else &mdash; the accounts, income, expenses,
-    and plans you enter &mdash; is stored only because you chose to enter it.
+    You do not need an account to use {% settings_value 'SITE_NAME' %}; the one optional detail we ask for
+    is an email, and only if you want to sign in and reach your data from any device. Everything else (the
+    accounts, income, expenses, and plans you enter) is stored only because you chose to enter it.
   </li>
   <li class="mb-3">
     <strong class="text-primary">We use your data only to provide the service.</strong>
@@ -32,15 +33,16 @@
   <li class="mb-3">
     <strong class="text-primary">No passwords, and email used only when necessary.</strong>
     We never store a password. You sign in with a one-time code we email you, and we use your address
-    only to send those codes and the occasional essential service notice &mdash; never marketing.
+    only to send those codes and the occasional essential service notice, never marketing.
   </li>
   <li class="mb-3">
     <strong class="text-primary">Your data is encrypted, in transit and at rest.</strong>
-    Your connection is protected with HTTPS, and the sensitive figures you enter &mdash; your balances
-    and amounts, and the profile and plans that hold them &mdash; are encrypted where they are stored,
-    so they stay protected even if the storage or a backup were ever exposed. Our servers build your
-    forecast, so the service can decrypt your figures to do that and nothing else; we have built it so
-    that no one running it has a routine way to browse them &mdash; no admin screen, no logs.
+    Your connection is protected with HTTPS, and the figures you enter (your balances and amounts, and
+    the profile and plans that hold them) are encrypted where they are stored, so they stay protected
+    even if the storage or a backup were ever exposed. Our servers build your forecast, so the service
+    can decrypt your figures to do that and nothing else; we have built it so that no one running it has
+    a routine way to browse them: no admin screen, no logs. No system is perfectly secure, so while we
+    protect your data with strong measures, we cannot promise absolute security.
   </li>
   <li class="mb-3">
     <strong class="text-primary">We don't track you.</strong>
@@ -51,17 +53,30 @@
     Your information stays between you and the service. It is never sold or shared for marketing.
   </li>
   <li class="mb-3">
+    <strong class="text-primary">The providers we rely on see only what they must.</strong>
+    To run the hosted service we use a small number of providers, such as cloud hosting and email delivery.
+    Each receives only what it needs to do its job, none are advertisers, and self-hosting avoids them
+    entirely.
+  </li>
+  <li class="mb-3">
     <strong class="text-primary">You can delete everything yourself, anytime.</strong>
-    From your account page you can permanently delete your account and all your data &mdash; immediately,
-    no "contact us and wait". This deletes the data in every household you own, including any you share
+    From your account page you can permanently delete your account and all your data immediately, with no
+    "contact us and wait". This deletes the data in every household you own, including any you share
     with others; when you delete your account you can choose to keep a shared household for its other
     owners instead. You can also delete or leave individual households, or remove records as you work.
+    Deletion is immediate; we keep encrypted backups only for disaster recovery, for up to 90 days, and
+    never use them to restore a deleted account.
   </li>
   <li class="mb-3">
     <strong class="text-primary">You can keep your data on your own machine.</strong>
     {% settings_value 'SITE_NAME' %} is source-available. For the strongest privacy, run your own private
-    instance &mdash; your data stays on your computer and never reaches us. Either way, the code is open
+    instance, and your data stays entirely on your own machine. Either way, the code is open
     for anyone to inspect to ensure your data stays yours.
+  </li>
+  <li class="mb-3">
+    <strong class="text-primary">It's meant for adults.</strong>
+    {% settings_value 'SITE_NAME' %} is intended for people 18 and older. We do not knowingly collect
+    information from children.
   </li>
   <li class="mb-3">
     <strong class="text-primary">We only use necessary cookies.</strong>
@@ -69,7 +84,11 @@
   </li>
 </ol>
 
-<div class="text-center text-muted mt-4 pt-3 border-top">
+<p class="text-muted small">We may update this policy from time to time; any material change will be posted
+  here with a new effective date.</p>
+
+<div class="text-center text-muted mt-4 pt-3 mb-4 border-top">
+  <p class="mb-1">{% settings_value 'SITE_NAME' %} is operated by POMDP, LLC.</p>
   <p class="mb-1"><strong>Effective date:</strong> August 2026</p>
   <p class="mb-0"><strong>Contact:</strong>
     <a href="{% url 'contact' %}">reach us here</a>.</p>
