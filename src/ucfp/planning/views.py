@@ -26,7 +26,6 @@ from common.line_chart import CHROME_FULL, CHROME_SPARKLINE
 
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.books_table import BooksColumnKey
-from ucfp.accounts.repository import BooksOfAccountRepository
 from ucfp.inputs.drift import plans_drift, plans_home_rent_drift, plans_loan_terms_drift
 from ucfp.inputs.enums import UsageRole
 from ucfp.inputs.mixins import InputGatedMixin
@@ -39,6 +38,7 @@ from ucfp.inputs.scenarios.exploration import (
 from ucfp.inputs.scenarios.repository import load_scenario, scenarios_for
 
 from .books_table import apply_run_books_operation, run_books_table_context
+from .run_books_cache import load_run_books
 from .enums import PlanningFeature
 from .explore import delete_runs, run_working_scenario, start_fresh_exploration, transient_runs
 from .explore_diff import describe_changes, value_changes
@@ -278,7 +278,7 @@ class RunResultsView( View ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run = from_json_data( ProjectionRun, record.data )
-        books = BooksOfAccountRepository().load( record.books )
+        books = load_run_books( record.books )
         dated_notices = [ ( step.end_date.year, notice )
                           for step in run.result.steps for notice in step.notices ]
         worst_severity = max( ( notice.severity for _, notice in dated_notices ),
@@ -362,7 +362,7 @@ class RunChartsModalView( ModalView ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run   = from_json_data( ProjectionRun, record.data )
-        books = BooksOfAccountRepository().load( record.books )
+        books = load_run_books( record.books )
         context = {
             'record'         : record,
             'balances_chart' : balances_chart(
@@ -389,7 +389,7 @@ class RunColumnChartModalView( ModalView ):
         if not token:
             raise Http404( 'No column specified.' )
         run   = from_json_data( ProjectionRun, record.data )
-        books = BooksOfAccountRepository().load( record.books )
+        books = load_run_books( record.books )
         try:
             chart = column_chart( run, books, BooksColumnKey( token ), width = 720, height = 320 )
         except ValueError as error:
@@ -496,7 +496,7 @@ class ExploreView( InputGatedMixin, View ):
 
     def _context( self, request, source, runs, selected, forms, drift, profile_drift ) -> dict:
         run     = from_json_data( ProjectionRun, selected.run.data )
-        books   = BooksOfAccountRepository().load( selected.run.books )
+        books   = load_run_books( selected.run.books )
         context = {
             'input_state'    : request.input_state,
             'source'         : source,        # the saved scenario being explored (its name, the save target)
@@ -714,7 +714,7 @@ class ProjectionRunBooksTableView( PermitsReadonlyMutation, View ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run = from_json_data( ProjectionRun, record.data )
-        books = BooksOfAccountRepository().load( record.books )
+        books = load_run_books( record.books )
         context = apply_run_books_operation(
             request, run, books, request.POST.get( 'op' ), request.POST.get( 'column' ) )
         context[ 'record' ] = record
@@ -733,7 +733,7 @@ class BooksTableJournalView( ModalView ):
     def get( self, request, run_uuid, account_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
-        bookkeeper = Bookkeeper( BooksOfAccountRepository().load( record.books ) )
+        bookkeeper = Bookkeeper( load_run_books( record.books ) )
         account = bookkeeper.chart.account_by_uuid( account_uuid )
         if account is None:
             raise Http404( 'No such account in this run.' )
