@@ -13,6 +13,7 @@ urlpatterns = [
 
     path( 'start-tour', views.StartTourView.as_view(), name = 'start_tour' ),
     path( 'add-my-data', views.AddMyDataView.as_view(), name = 'add_my_data' ),
+    path( 'go-to-dashboard', views.GoToOwnDashboardView.as_view(), name = 'go_to_dashboard' ),
     path( 'tour/profile/<str:section>/', views.TourProfileView.as_view(), name = 'tour_profile' ),
     path( 'tour/scenario/<str:section>/', views.TourScenarioView.as_view(), name = 'tour_scenario' ),
     path( 'tour/forecast/', views.TourForecastView.as_view(), name = 'tour_forecast' ),

@@ -361,7 +361,7 @@ class HomeCtaStateTest( TestCase ):
         response = self.client.get( reverse( 'home' ) )
 
         self.assertEqual( HomeCtaState.OWN_ORG.value, response.context[ 'home_cta' ] )
-        self.assertContains( response, reverse( 'dashboard' ) )
+        self.assertContains( response, reverse( 'go_to_dashboard' ) )   # the CTA that lands on the dashboard
         self.assertNotContains( response, reverse( 'add_my_data' ) )
         self.assertEqual( 1, self._gold_count( response ) )
 
@@ -372,7 +372,7 @@ class HomeCtaStateTest( TestCase ):
         response = self.client.get( reverse( 'home' ) )
 
         self.assertEqual( HomeCtaState.OWN_ORG.value, response.context[ 'home_cta' ] )
-        self.assertContains( response, reverse( 'dashboard' ) )
+        self.assertContains( response, reverse( 'go_to_dashboard' ) )   # the CTA that lands on the dashboard
         self.assertNotContains( response, reverse( 'user_signin' ) )
 
 
@@ -399,3 +399,55 @@ class DashboardEarlyUserTest( TestCase ):
         response = self.client.get( reverse( 'dashboard' ) )
 
         self.assertFalse( response.context[ 'offer_add_my_data' ] )
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class GoToOwnDashboardTest( TestCase ):
+    """`GoToOwnDashboardView`: the home "Go to your dashboard" CTA lands on the dashboard, switching the
+    session off the read-only example when the visitor is still on it (e.g. arrived from the tour), but
+    leaving a deliberately-selected own household alone. Exercises the preserve-current behavior of
+    `ensure_own_organization`."""
+
+    def _current( self ):
+        return self.client.session.get( 'current_organization_uuid' )
+
+    def test_switches_off_the_example_to_the_users_own_org( self ):
+        user = User.objects.create_user( email = 'o@x.test' )
+        own = Organization.objects.create_for_owner( user, 'Mine' )
+        Organization.objects.create( uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+        self.client.force_login( user )
+        self.client.post( reverse( 'start_tour' ) )               # arrive from the tour: current = example
+        self.assertEqual( self._current(), str( EXAMPLE_ORGANIZATION_UUID ) )   # precondition
+
+        response = self.client.post( reverse( 'go_to_dashboard' ) )
+
+        self.assertRedirects( response, reverse( 'dashboard' ), fetch_redirect_response = False )
+        self.assertEqual( self._current(), str( own.uuid ) )      # switched to their own org
+        self.assertTrue(                                          # example membership is never revoked
+            OrganizationMember.objects.filter(
+                user = user, organization__uuid = EXAMPLE_ORGANIZATION_UUID ).exists() )
+
+    def test_leaves_a_deliberately_chosen_household_untouched( self ):
+        # A multi-org owner on their non-default household must not be reset to the default one.
+        user = User.objects.create_user( email = 'o@x.test' )
+        Organization.objects.create_for_owner( user, 'First' )
+        second = Organization.objects.create_for_owner( user, 'Second' )
+        self.client.force_login( user )
+        session = self.client.session
+        session[ 'current_organization_uuid' ] = str( second.uuid )
+        session.save()
+
+        response = self.client.post( reverse( 'go_to_dashboard' ) )
+
+        self.assertRedirects( response, reverse( 'dashboard' ), fetch_redirect_response = False )
+        self.assertEqual( self._current(), str( second.uuid ) )   # unchanged, not reset to the default
+
+    def test_get_does_not_switch_the_session( self ):
+        # POST-only, so a crawled GET never mutates the org selection.
+        user = User.objects.create_user( email = 'o@x.test' )
+        Organization.objects.create_for_owner( user, 'Mine' )
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'go_to_dashboard' ) )
+
+        self.assertEqual( 405, response.status_code )

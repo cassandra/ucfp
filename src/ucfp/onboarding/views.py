@@ -135,6 +135,19 @@ class AddMyDataView( ConvertToGuestView ):
         return
 
 
+class GoToOwnDashboardView( View ):
+    """The home "Go to your dashboard" action for a user who has their own organization. Ensures the session
+    is on that own org before landing on the dashboard: a visitor who reached Home from the tour still has
+    the read-only example selected, and a CTA that says *your* dashboard must show their own data, not the
+    example. `ensure_own_organization` leaves a deliberately chosen household alone and only corrects the
+    example case, and the example stays reachable via the org switcher (membership in it is never revoked).
+    POST-only, matching the other org-switch CTAs, so a crawled GET never mutates the session."""
+
+    def post( self, request, *args, **kwargs ):
+        ensure_own_organization( request, request.user )
+        return HttpResponseRedirect( resolve_url( 'dashboard' ) )
+
+
 # The tour's four-step backbone, numbered for the shell's step-nav (Profile -> Plans -> Assumptions ->
 # Forecast). The three input flows map by name; the Forecast step is supplied by `TourForecastView`.
 _TOUR_STEP_BY_FLOW = { 'profile': 1, 'plans': 2, 'assumptions': 3 }

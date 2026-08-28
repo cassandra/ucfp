@@ -54,11 +54,27 @@ def working_organization( user : 'UserType' ) -> 'Organization | None':
 
 
 def ensure_own_organization( request, user : 'UserType' ) -> 'Organization':
-    """Ensure the user is in an organization of their own (not the example), switching the session to it --
-    creating a fresh owned one only when the example (or nothing) is all they have. The one explicit
-    provisioning point, called by "Add My Data" so a visitor graduates from previewing the example to
-    entering their own data."""
-    organization = working_organization( user ) or Organization.objects.create_default_for_user( user )
+    """Ensure the session is on an organization of the user's own -- one they belong to other than the
+    read-only example -- and return it. A valid non-example org already selected is *kept* (a deliberately
+    chosen household is not disturbed); only when the current selection is the example, empty, or stale is it
+    switched to the user's default own org, creating one when the example (or nothing) is all they have.
+    Called wherever a visitor moves from previewing the example into their own data ("Add My Data", "Go to
+    your dashboard")."""
+    organization = ( _selected_own_organization( request, user )
+                     or working_organization( user )
+                     or Organization.objects.create_default_for_user( user ) )
     request.session_state.set_current_organization( str( organization.uuid ) )
     request.session_state.to_session( request )
     return organization
+
+
+def _selected_own_organization( request, user : 'UserType' ) -> 'Organization | None':
+    """The session's currently-selected organization when it is a real, non-example membership of `user` --
+    an own org already in effect, which `ensure_own_organization` therefore leaves alone -- else None (the
+    example org, no selection, or a stale one the user no longer belongs to)."""
+    selected_uuid = request.session_state.current_organization_uuid
+    if ( not selected_uuid ) or ( str( selected_uuid ) == str( EXAMPLE_ORGANIZATION_UUID ) ):
+        return None
+    membership = OrganizationMember.objects.filter(
+        user = user, organization__uuid = selected_uuid ).select_related( 'organization' ).first()
+    return membership.organization if membership else None
