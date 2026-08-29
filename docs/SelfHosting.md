@@ -16,13 +16,13 @@ By default a self-hosted instance runs in **single-user mode**: there is no sign
 the whole app is simply yours, and all data lives on your machine. This is the right
 mode for a personal instance on your own computer or a trusted home network. If you
 want multiple people to have separate, authenticated accounts, see
-[Multi-user mode](#multi-user-mode) — and the [Security guide](../SECURITY.md) for
+[Multi-user mode](#multi-user-mode), and the [Security guide](../SECURITY.md) for
 the security posture of each mode.
 
 ## Prerequisites
 
-- **Docker** — installed and running ([Get Docker](https://docs.docker.com/get-docker/))
-- **Python 3.11+** — for secure credential generation (usually pre-installed)
+- **Docker**: installed and running ([Get Docker](https://docs.docker.com/get-docker/))
+- **Python 3.11+**: for secure credential generation (usually pre-installed)
 
 ## Quick install
 
@@ -35,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/cassandra/ucfp/master/install.sh | 
 It verifies Docker is running, creates your data directories under `~/.ucfp/`,
 generates secure credentials, and downloads and starts the app.
 
-When it finishes, open **[http://localhost:9666](http://localhost:9666)** — in the
+When it finishes, open **[http://localhost:9666](http://localhost:9666)**. In the
 default single-user mode you are taken straight in, with no sign-in. The installer
 also prints **admin credentials**; these are for the Django admin interface at
 `/admin/` (site administration), not for signing into the app. Save them somewhere
@@ -61,7 +61,7 @@ docker ps | grep ucfp     # status / health
 
 ## Updating
 
-Run the update script — it pulls the latest image and recreates the container,
+Run the update script. It pulls the latest image and recreates the container,
 preserving your data:
 
 ```shell
@@ -96,12 +96,12 @@ rm -rf ~/.ucfp/
 
 **Can't reach it from other devices on your network?**
 By default the app only accepts requests to `localhost`. To reach it from another
-device, set `UCFP_EXTRA_HOST_URLS` — see [Network access](#network-access) below.
+device, set `UCFP_EXTRA_HOST_URLS`. See [Network access](#network-access) below.
 An `Invalid HTTP_HOST header` error in the logs is the tell-tale sign.
 
 **Sign-in emails not sending (multi-user mode)?**
 Passwordless sign-in depends on email delivery. Configure the `UCFP_EMAIL_*`
-settings — see [Email configuration](#email-configuration).
+settings. See [Email configuration](#email-configuration).
 
 More questions are answered in the [FAQ](FAQ.md).
 
@@ -109,7 +109,7 @@ More questions are answered in the [FAQ](FAQ.md).
 
 # Advanced configuration
 
-Everything below is optional — a default single-machine install needs none of it.
+Everything below is optional: a default single-machine install needs none of it.
 
 ## Network access
 
@@ -123,8 +123,8 @@ UCFP_EXTRA_HOST_URLS="http://192.168.1.100:9666 http://home-server:9666"
 ```
 
 Multiple URLs are space-separated. Restart after saving (`docker restart ucfp`). If
-you see `Invalid HTTP_HOST header` errors in the logs, this is the setting you need —
-note it requires the full URL, not just a hostname.
+you see `Invalid HTTP_HOST header` errors in the logs, this is the setting you need.
+Note it requires the full URL, not just a hostname.
 
 ## Start automatically on reboot
 
@@ -145,7 +145,7 @@ UCFP_SUPPRESS_AUTHENTICATION=false
 This works just like the hosted service: sign-in is required and passwordless (a
 one-time code emailed to each person), so you must also configure
 [email](#email-configuration). Accounts are created automatically as people visit and
-add their email — there is nothing to provision by hand — and each user's data is
+add their email (there is nothing to provision by hand), and each user's data is
 isolated from every other user's. See the [Security guide](../SECURITY.md) for the
 full picture.
 
@@ -164,15 +164,15 @@ UCFP_EMAIL_USE_TLS=true
 
 ## External database or Redis
 
-The standard install is self-contained — SQLite plus a Redis bundled inside the
-container — and needs no external services. To use your own instead, edit
+The standard install is self-contained (SQLite plus a Redis bundled inside the
+container) and needs no external services. To use your own instead, edit
 `~/.ucfp/env/local.env`:
 
-- **External MySQL/MariaDB** — fill in all five `UCFP_DB_*` variables (`UCFP_DB_HOST`,
+- **External MySQL/MariaDB**: fill in all five `UCFP_DB_*` variables (`UCFP_DB_HOST`,
   `UCFP_DB_PORT`, `UCFP_DB_NAME`, `UCFP_DB_USER`, `UCFP_DB_PASSWORD`). MySQL then
   takes precedence over `UCFP_DB_PATH`, so you need not clear it. Leaving them blank
   keeps the default SQLite.
-- **External Redis** — set `UCFP_BUNDLED_REDIS=false` and point `UCFP_REDIS_HOST` /
+- **External Redis**: set `UCFP_BUNDLED_REDIS=false` and point `UCFP_REDIS_HOST` /
   `UCFP_REDIS_PORT` at your server. The container then does not run its own Redis.
 
 Restart after editing (`docker restart ucfp`).
@@ -180,7 +180,7 @@ Restart after editing (`docker restart ucfp`).
 ## Using docker compose directly
 
 `install.sh` writes a compose file at `~/.ucfp/docker-compose.yml`, so you can use
-compose verbs instead of the `docker …` commands above — they are equivalent:
+compose verbs instead of the `docker …` commands above. They are equivalent:
 
 ```shell
 cd ~/.ucfp
@@ -200,15 +200,15 @@ adopt these commands later.
 To run Landfall from a compose stack you already manage, rather than via `install.sh`,
 copy these reference files from the repository root into your stack:
 
-- [`docker-compose.example.yml`](../docker-compose.example.yml) — minimal service
+- [`docker-compose.example.yml`](../docker-compose.example.yml): minimal service
   definition for the published image, with volumes and env file
-- [`local.env.example`](../local.env.example) — the full env-var surface with
+- [`local.env.example`](../local.env.example): the full env-var surface with
   placeholder values and inline documentation
 
 Fill in the placeholders in `local.env`, then start the app with your usual compose
 commands.
 
 > **Env-file format note:** docker compose's `env_file` parser is **not** the same as
-> a shell-sourced env file — no `export`, no shell-style quoting, no `${VAR}`
+> a shell-sourced env file: no `export`, no shell-style quoting, no `${VAR}`
 > interpolation. `local.env.example` is already in the correct format; do not adapt a
 > shell-sourced env file by hand without removing those features.

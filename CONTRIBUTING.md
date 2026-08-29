@@ -11,15 +11,15 @@ you can contribute is simply **using it and saying what works and what doesn't**
 This is the heart of it. Software built without real use tends to solve the wrong
 problems, so your experience is genuinely useful.
 
-- **Try it** — use the hosted version at
+- **Try it**: use the hosted version at
   [landfall.cassandrahq.com](https://landfall.cassandrahq.com), or run your own with
   the [Self-Hosting Guide](docs/SelfHosting.md).
-- **Report a bug or request a feature** — open an issue on
+- **Report a bug or request a feature**: open an issue on
   [GitHub](https://github.com/cassandra/ucfp/issues). Clear steps to reproduce, or a
   concrete description of the problem you're trying to solve, help the most.
-- **Ask a question** — use GitHub Discussions.
+- **Ask a question**: use GitHub Discussions.
 
-For anything private — account, sign-in, or a security matter — see
+For anything private (account, sign-in, or a security matter), see
 [SECURITY.md](SECURITY.md) rather than filing a public issue.
 
 ## Contributing code
@@ -36,5 +36,5 @@ Whichever way you take part, please keep interactions kind and constructive, per
 ## License
 
 By contributing, you agree that your contributions are licensed under the project's
-terms — the **PolyForm Noncommercial License 1.0.0**. See [LICENSE.md](LICENSE.md)
+terms: the **PolyForm Noncommercial License 1.0.0**. See [LICENSE.md](LICENSE.md)
 for the full text.

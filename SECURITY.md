@@ -3,7 +3,7 @@
 # Security
 
 Landfall can run in two authentication modes with different security postures. Which
-one you want depends on how you use it — a private instance on your own machine, or a
+one you want depends on how you use it: a private instance on your own machine, or a
 shared instance with separate accounts. The `UCFP_SUPPRESS_AUTHENTICATION` setting
 selects between them.
 
@@ -14,9 +14,9 @@ even if the storage or a backup were ever exposed.
 ## Single-user mode (no authentication)
 
 This is the default when you self-host (`UCFP_SUPPRESS_AUTHENTICATION=true`). Every
-request is served as a single implicit user who owns one household — there is no
-sign-in. It is meant for a **local, trusted machine or network** — the computer or
-LAN of the person whose finances it holds — and should **not** be exposed directly to
+request is served as a single implicit user who owns one household. There is no
+sign-in. It is meant for a **local, trusted machine or network** (the computer or
+LAN of the person whose finances it holds) and should **not** be exposed directly to
 the public Internet, since anyone who can reach it has full access. Data stays on the
 host (SQLite plus media under `~/.ucfp/`).
 
