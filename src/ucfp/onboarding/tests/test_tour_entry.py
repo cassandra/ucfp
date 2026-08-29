@@ -241,7 +241,7 @@ class FeaturePageAddMyDataTest( TestCase ):
     -- there is nothing of *theirs* to save yet. Once they own an org, neither prompt shows. Pinned to cloud
     mode: the example-only state cannot arise self-hosted, where the singleton always owns its org."""
 
-    _CTA_COPY   = "add your own to build your real plan"
+    _CTA_COPY   = "Add your own to build your real plan"
     _EMAIL_COPY = "add an email so you don't lose it"
 
     def _profile_url( self ):
