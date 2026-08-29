@@ -98,8 +98,8 @@ class BooksOfAccountRepository:
         """Persist the transactions and their entries in two bulk inserts, rather than a row per
         transaction and a row per entry. A run's journal is thousands of rows, so the row-at-a-time
         pattern was the dominant cost of capturing a run; `bulk_create` collapses it to a handful of
-        statements. It backfills each transaction record's primary key (MySQL, and SQLite >= 3.35), so
-        the entries can reference the transaction just written.
+        statements. Between the two inserts the transactions' primary keys are read back by uuid, which
+        is what lets each entry point at the transaction just written (see `_transaction_id_by_uuid`).
 
         The read-only write-guard (`organization.write_guard`) is a `pre_save` receiver, which
         `bulk_create` does not emit -- but a forbidden write is already refused at the `books_record`
@@ -115,19 +115,33 @@ class BooksOfAccountRepository:
             for txn in books.transactions
         ]
         TransactionRecord.objects.bulk_create( transaction_records )
+        transaction_id_by_uuid = self._transaction_id_by_uuid( books_record )
         entry_records = [
             EntryRecord(
-                transaction     = transaction_record,
+                transaction_id  = transaction_id_by_uuid[ txn.transaction_uuid ],
                 account         = record_by_account[ entry.account ],
                 amount          = entry.amount,
                 entry_direction = entry.entry_direction,
                 description     = entry.description,
             )
-            for txn, transaction_record in zip( books.transactions, transaction_records )
+            for txn in books.transactions
             for entry in txn.entries
         ]
         EntryRecord.objects.bulk_create( entry_records )
         return
+
+    def _transaction_id_by_uuid( self, books_record : BooksOfAccountRecord ) -> dict:
+        """The stored primary key of each of this books' transactions, keyed by the uuid the domain
+        minted, read back in one query.
+
+        The entries cannot take their key from the in-memory records `bulk_create` just inserted:
+        `bulk_create` backfills primary keys only where the backend can return rows from a bulk insert
+        (PostgreSQL, MariaDB 10.5+, SQLite >= 3.35) -- plain MySQL, which the deployment runs, cannot,
+        leaving those records key-less. Reading the keys back costs one constant-size query on a path
+        that just saved thousands of rows, and it resolves the link through the transaction's own
+        identity rather than through a key the insert may or may not have supplied."""
+        return dict(
+            TransactionRecord.objects.filter( books = books_record ).values_list( 'uuid', 'id' ) )
 
     def load( self, books_record : BooksOfAccountRecord ) -> BooksOfAccount:
         """Rebuild the domain `BooksOfAccount` from a stored record graph."""
