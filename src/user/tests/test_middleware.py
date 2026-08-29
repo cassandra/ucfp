@@ -153,3 +153,33 @@ class TestAuthenticationMiddleware(BaseTestCase):
         self.assertIn('notify_email_unsubscribe', exempt_urls)
         self.assertIn('health', exempt_urls)
         # 'admin' is exempted separately, via the resolver app_name check.
+
+
+@override_settings(SUPPRESS_AUTHENTICATION=False)
+class PublicPagesAnonymousAccessTest(TestCase):
+    """With authentication enabled, the login-free public content pages must be reachable by an
+    anonymous visitor -- a 200, not the redirect-to-home the auth middleware gives protected views.
+    This guards the EXEMPT_VIEW_URL_NAMES allowlist end to end: adding a new public page without
+    registering it (or dropping an existing one) would silently bounce anonymous visitors to home,
+    and a broken template would surface here as a non-200 too."""
+
+    PUBLIC_PAGE_URL_NAMES = [
+        'home',
+        'about',
+        'compare',
+        'contact',
+        'privacy',
+        'terms',
+        'explain',
+    ]
+
+    def test_public_pages_reachable_when_anonymous(self):
+        for url_name in self.PUBLIC_PAGE_URL_NAMES:
+            with self.subTest( url_name = url_name ):
+                response = self.client.get( reverse( url_name ) )
+                self.assertEqual(
+                    200, response.status_code,
+                    f"'{url_name}' should be reachable by an anonymous visitor, "
+                    f"got HTTP {response.status_code}"
+                )
+        return

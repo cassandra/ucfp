@@ -83,3 +83,15 @@ and consider confirming it with a qualified professional. See the
 No. Landfall is a planning and educational tool, not financial, investment, tax, or
 legal advice, and its forecasts are not guaranteed. See the
 [Terms of Service](https://landfall.cassandrahq.com/terms) for details.
+
+## How does Landfall compare to other tools?
+
+There are other capable tools, and for some people they're the better
+choice.  ProjectionLab is very good but its free version is fairly limited,
+Boldin is a more established platform with human advisors available but its
+free version is similarly restricted, plus it has all the privacy issues and
+annoyances you see in so many platforms that have a money-first
+ethos. Landfall's focus is being free, private, and no-hassle. Since they
+all have a free tier, the easy answer is to try a couple and see what
+fits. We keep an honest side-by-side — grid and all — on the [How Landfall
+compares](https://landfall.cassandrahq.com/compare) page.

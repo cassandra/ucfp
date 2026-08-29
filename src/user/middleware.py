@@ -53,6 +53,7 @@ class AuthenticationMiddleware:
         'home',
         'home_index',
         'about',
+        'compare',
         'contact',
         'privacy',
         'terms',
