@@ -2,6 +2,7 @@
 
 # Change Log
 
+- v0.0.7 : August 28, 2026 : UX Improvements: icons, onboarding flows, month-only inputs and display
 - v0.0.6 : August 28, 2026 : Fixed forcast run bug
 - v0.0.5 : August 28, 2026 : Performance improvements for forecast run and table display
 - v0.0.4 : August 27, 2026 : Added and revised content to markdown and web pages
