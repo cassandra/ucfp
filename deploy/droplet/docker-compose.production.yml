@@ -1,15 +1,17 @@
 # UCFP -- droplet/cloud production compose file.
 #
-# Deployed to the droplet by deploy/droplet/deploy-prod.sh (which scp's this file
-# as docker-compose.yml alongside the converted env file ucfp.env). It runs the
-# SAME published image as the self-host lane; the cloud behavior comes entirely
-# from ucfp.env (UCFP_BUNDLED_REDIS=false so it uses the host redis, and the
-# UCFP_DB_* MySQL variables so it uses the host MySQL). network_mode: host lets
+# Deployed to the droplet as docker-compose.yml (alongside the converted env file
+# ucfp.env) by the release deploy step -- see docs/dev/workflow/release-process.md.
+# It runs the SAME published image as the self-host lane; the cloud behavior comes
+# entirely from ucfp.env (UCFP_BUNDLED_REDIS=false so it uses the host redis, and
+# the UCFP_DB_* MySQL variables so it uses the host MySQL). network_mode: host lets
 # the container reach the host's MySQL and redis on localhost, and lets the host
 # nginx reverse-proxy to the container on :8000.
 #
-# UCFP_VERSION is supplied by deploy-prod.sh (from the VERSION file) so the exact
-# released image is pinned; :-latest is only a fallback.
+# The droplet tracks :latest -- deploy pulls :latest and restarts, so both lanes
+# ship the same tag. UCFP_VERSION is normally unset (hence the :-latest fallback);
+# set it only to pin a specific tag in an emergency, e.g. the rollback stopgap in
+# docs/dev/workflow/rollback-process.md.
 #
 # No healthcheck: stanza -- the Dockerfile defines one (HEALTHCHECK on /health).
 version: '3.8'
