@@ -21,7 +21,7 @@ from ucfp.environment.constants import AppConst
 from ucfp.inputs.loan_fieldset import LoanTermsFieldsMixin, loan_terms_initial
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.profile.schemas import AssetProfile, Debt, PropertyProfile
-from ucfp.inputs.widgets import IsoDateInput
+from ucfp.inputs.widgets import MonthField
 
 
 def _minted_handle( profile, prefix : str ) -> str:
@@ -126,9 +126,9 @@ class PropertyForm( LoanTermsFieldsMixin, StyledFormMixin, forms.Form ):
     purchase_price   = MoneyField( label = 'Purchase price', min_value = 0, required = False )
     building_basis   = MoneyField(
         label = 'Building value at purchase, excludes land', min_value = 0, required = False )
-    acquisition_date = forms.DateField(
-        label = 'Purchase date', required = False,
-        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_PAST ) )
+    acquisition_date = MonthField(
+        context = AppConst.DATE_CONTEXT_PAST,
+        label = 'Purchase date', required = False )
     mortgage_balance = MoneyField(
         label = 'Mortgage balance owed', min_value = 0, required = False,
         css_class = AppConst.LOAN_BALANCE_CLASS )

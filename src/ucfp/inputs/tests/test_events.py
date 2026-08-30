@@ -468,52 +468,52 @@ class GeneralPaymentFormTests( unittest.TestCase ):
         return form.build_event()
 
     def test_a_purpose_becomes_the_event_label( self ):
-        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'label': '  College Tuition  ' } )
+        event = self._built( { 'amount': '40000', 'date': '2030-08', 'label': '  College Tuition  ' } )
         self.assertEqual( event.label, 'College Tuition' )      # trimmed
         self.assertEqual( event.kind, EventKind.GENERAL_PAYMENT )
 
     def test_a_blank_purpose_leaves_the_label_empty( self ):
-        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'recurring': 'once' } )
+        event = self._built( { 'amount': '40000', 'date': '2030-08', 'recurring': 'once' } )
         self.assertEqual( event.label, '' )
 
     def test_the_recurring_toggle_reads_the_cadence_and_end( self ):
         event = self._built( {
-            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring',
-            'recur_count': '1', 'recur_unit': 'YEAR', 'finish': '2035-08-01' } )
+            'amount': '40000', 'date': '2032-08', 'recurring': 'recurring',
+            'recur_count': '1', 'recur_unit': 'YEAR', 'finish': '2035-08' } )
         self.assertEqual( event.interval, Duration( 1, TimeUnit.YEAR ) )
-        self.assertEqual( event.finish, date( 2035, 8, 1 ) )
+        self.assertEqual( event.finish, date( 2035, 8, 15 ) )
 
     def test_the_toggle_off_yields_a_one_time_event( self ):
         # Window fields present but the toggle off -> one-time (no interval, no finish read).
         event = self._built( {
-            'amount': '40000', 'date': '2030-08-01', 'recurring': 'once', 'finish': '2035-08-01' } )
+            'amount': '40000', 'date': '2030-08', 'recurring': 'once', 'finish': '2035-08' } )
         self.assertIsNone( event.interval )
         self.assertIsNone( event.finish )
 
     def test_a_blank_cadence_falls_back_to_the_yearly_default( self ):
         event = self._built( {
-            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring', 'finish': '2035-08-01' } )
+            'amount': '40000', 'date': '2032-08', 'recurring': 'recurring', 'finish': '2035-08' } )
         self.assertEqual( event.interval, Duration( 1, TimeUnit.YEAR ) )
 
     def test_a_recurring_payment_requires_an_end_date( self ):
-        form = self._form( { 'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring' } )
+        form = self._form( { 'amount': '40000', 'date': '2032-08', 'recurring': 'recurring' } )
         self.assertFalse( form.is_valid() )
         self.assertIn( 'finish', form.errors )
 
     def test_the_end_date_must_not_precede_the_start( self ):
         form = self._form( {
-            'amount': '40000', 'date': '2032-08-01', 'recurring': 'recurring', 'finish': '2030-08-01' } )
+            'amount': '40000', 'date': '2032-08', 'recurring': 'recurring', 'finish': '2030-08' } )
         self.assertFalse( form.is_valid() )
         self.assertIn( 'finish', form.errors )
 
     def test_a_checked_inflation_box_indexes_the_payment( self ):
         event = self._built( {
-            'amount': '40000', 'date': '2030-08-01', 'recurring': 'once', 'inflation_indexed': 'on' } )
+            'amount': '40000', 'date': '2030-08', 'recurring': 'once', 'inflation_indexed': 'on' } )
         self.assertTrue( event.inflation_indexed )
 
     def test_an_unchecked_inflation_box_fixes_the_payment( self ):
         # An unchecked checkbox is absent from the POST -> the payment is fixed in nominal terms.
-        event = self._built( { 'amount': '40000', 'date': '2030-08-01', 'recurring': 'once' } )
+        event = self._built( { 'amount': '40000', 'date': '2030-08', 'recurring': 'once' } )
         self.assertFalse( event.inflation_indexed )
 
 
@@ -583,13 +583,13 @@ class EventEditFormTests( unittest.TestCase ):
     resubmitting an unchanged form rebuilds the identical event (an idempotent edit)."""
 
     _EVENT = PlanEvent(
-        kind = EventKind.GENERAL_PAYMENT, date = date( 2032, 8, 1 ), amount = Decimal( '40000' ),
-        label = 'College Tuition', interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2035, 8, 1 ),
+        kind = EventKind.GENERAL_PAYMENT, date = date( 2032, 8, 15 ), amount = Decimal( '40000' ),
+        label = 'College Tuition', interval = Duration( 1, TimeUnit.YEAR ), finish = date( 2035, 8, 15 ),
         inflation_indexed = False )
     # The unchanged resubmission of `_EVENT`: inflation is omitted (an unchecked box) to keep it fixed.
-    _UNCHANGED = { 'label': 'College Tuition', 'amount': '40000', 'date': '2032-08-01',
+    _UNCHANGED = { 'label': 'College Tuition', 'amount': '40000', 'date': '2032-08',
                    'recurring': 'recurring', 'recur_count': '1', 'recur_unit': 'YEAR',
-                   'finish': '2035-08-01' }
+                   'finish': '2035-08' }
 
     def _form( self, event, data = None ):
         return EventForm(
@@ -599,11 +599,11 @@ class EventEditFormTests( unittest.TestCase ):
         form = self._form( self._EVENT )
         self.assertEqual( form.fields[ 'label' ].initial, 'College Tuition' )
         self.assertEqual( form.fields[ 'amount' ].initial, Decimal( '40000' ) )
-        self.assertEqual( form.fields[ 'date' ].initial, date( 2032, 8, 1 ) )
+        self.assertEqual( form.fields[ 'date' ].initial, date( 2032, 8, 15 ) )
         self.assertEqual( form.fields[ 'recurring' ].initial, 'recurring' )
         self.assertEqual( ( form.fields[ 'recur_count' ].initial, form.fields[ 'recur_unit' ].initial ),
                           ( 1, 'YEAR' ) )
-        self.assertEqual( form.fields[ 'finish' ].initial, date( 2035, 8, 1 ) )
+        self.assertEqual( form.fields[ 'finish' ].initial, date( 2035, 8, 15 ) )
         self.assertFalse( form.fields[ 'inflation_indexed' ].initial )
 
     def test_a_one_time_indexed_event_seeds_the_toggles_accordingly( self ):

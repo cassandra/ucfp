@@ -5,8 +5,9 @@
   The login-free "How does <SITE_NAME> work?" page (ExplainView). It teaches the app's four-step
   backbone -- three inputs the visitor provides (Profile, Plans, Assumptions) and the one Forecast the
   model returns -- as a stepper, then funnels to the example-data tour ("Take a tour") or the
-  convert-to-Guest graduation ("Try it now"). The two CTAs are co-equal (both .btn-primary, no gold):
-  gold is reserved for the Forecast payoff step, the page's single accent. `tour_available` /
+  convert-to-Guest graduation, whose label tracks the onboarding state ("Try it now" / "Start planning" /
+  "Go to your dashboard"). The two CTAs are co-equal (both .btn-primary, no gold): gold is reserved for the
+  Forecast payoff step, the page's single accent. `tour_available` /
   `authentication_enabled` (from the view) gate, for a self-hosted instance, the tour CTA (the example
   is often unseeded) and the "free, no sign-up" reassurance (a cloud-only concept -- a self-hosted
   instance is the user's own server).
@@ -23,11 +24,17 @@
              alt="{% settings_value 'SITE_NAME' %}">
       </a>
       <h1 class="explain-title">How does {% settings_value 'SITE_NAME' %} work?</h1>
-      <p class="explain-lead">Tell {% settings_value 'SITE_NAME' %} three things &mdash;
+      <p class="explain-lead">Tell {% settings_value 'SITE_NAME' %} three things:
         <strong>who you are</strong>, <strong>what you&rsquo;re planning and spending</strong>, and
-        <strong>what you expect from the economy</strong> &mdash; and it projects your finances year by
+        <strong>what you expect from the economy</strong>. It projects your finances year by
         year, from today into the future.</p>
 
+      {% comment %}Two co-equal CTAs (both .btn-primary, no gold -- gold is reserved for the Forecast payoff
+      step). "Take a tour" is offered whenever the example is seeded. The graduation CTA adapts to the
+      visitor's onboarding state (see `onboarding.state`), so a returning visitor is not re-solicited to
+      "try" what they have already begun: a cold visitor is invited to "Try it now"; a visitor who has begun
+      but has only the example graduates with "Start planning"; a user with their own plan is sent to their
+      dashboard.{% endcomment %}
       <div class="explain-cta">
         {% if tour_available %}
         <form method="post" action="{% url 'start_tour' %}" class="d-inline">
@@ -35,14 +42,26 @@
           <button type="submit" class="btn btn-primary btn-lg">Take a tour</button>
         </form>
         {% endif %}
+        {% if onboarding_state == 'own_org' %}
+        <form method="post" action="{% url 'go_to_dashboard' %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-lg">Go to your dashboard</button>
+        </form>
+        {% elif onboarding_state == 'example_only' %}
+        <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-lg">Start planning</button>
+        </form>
+        {% else %}
         <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
           {% csrf_token %}
           <button type="submit" class="btn btn-primary btn-lg">Try it now</button>
         </form>
+        {% endif %}
       </div>
 
       {% if authentication_enabled %}
-      <p class="explain-signin small text-muted">Free to use &mdash; no sign-up required.</p>
+      <p class="explain-signin small text-muted">Free to use. No sign-up required.</p>
       {% endif %}
     </div>
   </header>
@@ -70,7 +89,7 @@
           <div class="explain-step">
             <span class="explain-node">2</span>
             <h2 class="explain-step-title">Your plans</h2>
-            <p class="explain-step-desc">Your spending and the moves you&rsquo;re weighing &mdash; living
+            <p class="explain-step-desc">Your spending and the moves you&rsquo;re weighing: living
               expenses, retirement age, vehicle replacements, and debt payoff.</p>
             <span class="explain-shot">
               <img src="{% static 'img/explain/step-2-plans.png' %}" alt="Choosing your plans" loading="lazy">
@@ -79,8 +98,8 @@
           <div class="explain-step">
             <span class="explain-node">3</span>
             <h2 class="explain-step-title">Your assumptions</h2>
-            <p class="explain-step-desc">The economic backdrop the forecast runs against &mdash;
-              inflation, investment returns, and growth.</p>
+            <p class="explain-step-desc">The economic backdrop the forecast runs against: inflation,
+              investment returns, and growth.</p>
             <span class="explain-shot">
               <img src="{% static 'img/explain/step-3-assumptions.png' %}" alt="Setting your assumptions" loading="lazy">
             </span>

@@ -24,7 +24,7 @@ def _apply( **fields ) -> Vehicle:
     """Submit a complete vehicle (the given fields over sensible required defaults) and return the
     materialized `Vehicle` the form writes."""
     data = QueryDict( mutable = True )
-    submitted = { 'name': 'Car', 'purchase_date': '2030-01-01', 'purchase_price': '35,000',
+    submitted = { 'name': 'Car', 'purchase_date': '2030-01', 'purchase_price': '35,000',
                   'recurrence_years': '7' }
     submitted.update( fields )
     data.update( submitted )

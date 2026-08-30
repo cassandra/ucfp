@@ -12,8 +12,8 @@ from common.request_utils import is_ajax
 
 from ucfp.inputs.mixins import InputGatedMixin
 from ucfp.planning.overview import forecast_overview
-from ucfp.onboarding.home_cta import home_cta_state
-from ucfp.onboarding.membership import example_organization
+from ucfp.onboarding import reconciliation_service
+from ucfp.onboarding.membership import example_organization, working_organization
 from ucfp.privacy_consent import PrivacyConsent
 
 
@@ -180,8 +180,9 @@ class HomeView( View ):
     """
 
     def get( self, request, *args, **kwargs ):
-        return render( request, 'pages/home.html', {
-            'home_cta': home_cta_state( request ).value } )
+        # The onboarding state the hero branches on is injected globally by the onboarding context
+        # processor, shared with the explanation and tour surfaces, so this view stays a bare render.
+        return render( request, 'pages/home.html', {} )
 
 
 class ExplainView( View ):
@@ -208,7 +209,20 @@ class DashboardView( InputGatedMixin, View ):
 
     def get( self, request, *args, **kwargs ):
         return render( request, 'pages/dashboard.html', {
-            'forecast_overview': forecast_overview( request.organization ) } )
+            'forecast_overview'   : forecast_overview( request.organization ),
+            'offer_account_signin': self._offer_account_signin( request ) } )
+
+    @staticmethod
+    def _offer_account_signin( request ) -> bool:
+        """Whether to offer a Guest the "already have an account?" sign-in here. It rescues the *accidental
+        Guest* -- someone with an existing account who was funnelled into a throwaway one before finding the
+        sign-in path. Cloud-only (self-hosting has no sign-in), Guests only (a Verified user is already
+        signed in), and only when there is no plan content worth keeping -- the same signal the sign-in
+        collision flow uses to adopt an existing account silently, so the offer shows exactly when signing in
+        would lose nothing (a Guest who has begun real work keeps the recovery path on their account page)."""
+        if settings.SUPPRESS_AUTHENTICATION or ( not request.user.is_guest ):
+            return False
+        return not reconciliation_service.has_plan_content( working_organization( request.user ) )
 
 
 class ManifestView( View ):

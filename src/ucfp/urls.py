@@ -34,6 +34,7 @@ urlpatterns = [
 
     # Public content pages (login-free; linked from the shared footer).
     path( 'about', TemplateView.as_view( template_name = 'pages/about.html' ), name = 'about' ),
+    path( 'compare', TemplateView.as_view( template_name = 'pages/compare.html' ), name = 'compare' ),
     path( 'contact', TemplateView.as_view( template_name = 'pages/contact.html' ), name = 'contact' ),
     path( 'privacy', TemplateView.as_view( template_name = 'pages/privacy.html' ), name = 'privacy' ),
     path( 'privacy/accept', views.PrivacyAcceptView.as_view(), name = 'privacy_accept' ),

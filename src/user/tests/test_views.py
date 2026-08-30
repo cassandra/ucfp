@@ -66,11 +66,19 @@ class TestUserSigninView(CloudAuthViewTest):
         self.assertSuccessResponse( response )
         self.assertTemplateRendered( response, 'user/pages/signin.html' )
 
-    def test_get_when_authenticated_redirects_home(self, _mock_send):
+    def test_get_when_verified_redirects_home(self, _mock_send):
         self.client.force_login( self.user )
         response = self.client.get( reverse('user_signin') )
         self.assertEqual( 302, response.status_code )
         self.assertEqual( reverse('home'), response.url )
+
+    def test_get_when_guest_redirects_to_the_guest_signin(self, _mock_send):
+        # An accidental Guest who reaches the returning-user form is routed to their own sign-in page --
+        # the sister form that signs them into an existing account -- not dead-ended at home.
+        self.client.force_login( User.objects.create_guest() )
+        response = self.client.get( reverse('user_signin') )
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('guest_signin'), response.url )
 
     def test_post_without_email_is_bad_request(self, _mock_send):
         self.assertEqual( 400, self.client.post( reverse('user_signin'), {} ).status_code )
@@ -103,6 +111,37 @@ class TestUserSigninView(CloudAuthViewTest):
         self.client.post( reverse('user_signin'), { 'email': 'Mixed.Case@Example.COM' } )
         guest = User.objects.exclude( pk = self.user.pk ).get()
         self.assertEqual( 'mixed.case@example.com', guest.pending_email )
+
+
+class TestGuestSigninView(CloudAuthViewTest):
+    """The Guest "sign in to an existing account" page: a Guest-only sister of the returning-user sign-in.
+    Anonymous and Verified visitors are routed away; a Guest sees a form that reuses the account-linking
+    action (`attach_email`), so the existing reconcile flow proves ownership and adopts the account."""
+
+    def test_anonymous_is_sent_to_the_ordinary_signin(self):
+        response = self.client.get( reverse('guest_signin') )
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('user_signin'), response.url )
+
+    def test_verified_user_is_sent_home(self):
+        self.client.force_login( self.user )
+        response = self.client.get( reverse('guest_signin') )
+        self.assertEqual( 302, response.status_code )
+        self.assertEqual( reverse('home'), response.url )
+
+    def test_guest_sees_the_form_posting_to_the_account_linking_action(self):
+        guest = User.objects.create_guest()
+        self.client.force_login( guest )
+        response = self.client.get( reverse('guest_signin') )
+        self.assertSuccessResponse( response )
+        self.assertTemplateRendered( response, 'user/pages/guest_signin.html' )
+        self.assertContains( response, reverse('attach_email') )   # reuses the reconcile-capable flow
+
+    @override_settings(SUPPRESS_AUTHENTICATION=True)
+    def test_disabled_when_self_hosted(self):
+        guest = User.objects.create_guest()
+        self.client.force_login( guest )
+        self.assertEqual( 400, self.client.get( reverse('guest_signin') ).status_code )
 
 
 # Deliberately NOT mocking send_magic_email: this exercises the real send so the unsubscribe block

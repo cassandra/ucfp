@@ -46,7 +46,7 @@ class SubjectsApplyInvariantTests( unittest.TestCase ):
         # the Stocks/Bonds homes the default sweep needs.
         data = QueryDict( mutable = True )
         data[ 'subject_name' ]      = 'Alice'
-        data[ 'subject_birthdate' ] = '1970-01-01'
+        data[ 'subject_birthdate' ] = '1970-01'
         form = SubjectsForm( data, profile = Profile(), plans = Plans() )
         self.assertTrue( form.is_valid(), form.errors )
         updated, _plans = form.apply( Profile(), Plans() )

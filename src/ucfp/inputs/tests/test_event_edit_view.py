@@ -50,7 +50,7 @@ class EventEditViewTest( TestCase ):
 
     def test_a_valid_edit_replaces_the_event_at_its_index_and_persists( self ):
         response = self._post_edit(
-            0, { 'label': 'College Tuition', 'amount': '55000', 'date': '2030-08-01',
+            0, { 'label': 'College Tuition', 'amount': '55000', 'date': '2030-08',
                  'recurring': 'once' } )
         self.assertEqual( response.status_code, 200 )
         events = self._stored_events()
@@ -62,15 +62,15 @@ class EventEditViewTest( TestCase ):
         # Recurring with an end before the start fails validation, so nothing is persisted.
         before   = self._stored_events()
         response = self._post_edit(
-            0, { 'label': 'College Tuition', 'amount': '55000', 'date': '2032-08-01',
+            0, { 'label': 'College Tuition', 'amount': '55000', 'date': '2032-08',
                  'recurring': 'recurring', 'recur_count': '1', 'recur_unit': 'YEAR',
-                 'finish': '2030-08-01' } )
+                 'finish': '2030-08' } )
         self.assertEqual( response.status_code, 200 )
         self.assertEqual( self._stored_events(), before )              # unchanged
 
     def test_an_out_of_range_index_is_a_no_op( self ):
         before   = self._stored_events()
-        response = self._post_edit( 9, { 'amount': '1', 'date': '2030-08-01', 'recurring': 'once' } )
+        response = self._post_edit( 9, { 'amount': '1', 'date': '2030-08', 'recurring': 'once' } )
         self.assertEqual( response.status_code, 200 )
         self.assertEqual( self._stored_events(), before )
 

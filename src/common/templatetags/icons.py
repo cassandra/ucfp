@@ -107,7 +107,6 @@ AVAILABLE_ICONS = {
     'sync',
     'tasks',
     'times-circle',
-    'trash',
     'triangle-right',
     'undo',
     'unlink',

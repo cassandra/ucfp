@@ -1,53 +1,65 @@
-# Project Phase: Hardening Toward First Release
+# Project Phase: Released — Protecting Live Data and Stability
 
-> **Status: pre-release, hardening.** The basic models and flows have converged
-> into a good working system. We are now gearing up for a first release by
-> *hardening* it — real tests, disciplined reviews, and UI/UX polish. It is still
-> pre-release: there is no production data yet, so schema and migrations stay
-> flexible until v1. This document governs the project until that first release;
-> the constraints here are phase-specific and will tighten (or invert) at release.
+> **Status: released, in maintenance and evolution.** The first public release is
+> out. There is now real, persisted user data we are unwilling to discard, so the
+> greenfield freedom is gone: schema changes require migrations, and we actively
+> guard against regressions. The core model and main flows are stable; the work now
+> is evolving the product *carefully* — new features, fixes, and polish — without
+> breaking existing data or behavior. This document governs the project in its
+> released phase and supersedes the earlier pre-release/hardening posture.
 
 ## Why this document exists
 
-To establish the assumptions that hold *right now* — a converged-but-unreleased
-codebase moving out of rapid prototyping and into hardening — so that advice,
-code, and review stay aligned with where the project actually is. It heads off two
-opposite mistakes: treating this like mature, released software (premature data
-migrations, back-compat shims), **and** treating it like the earlier
-throwaway-prototype phase (skipping tests, deferring UI polish, reworking the core
-model on a whim).
+To establish the assumptions that hold *right now* — a **released** codebase with
+live users and durable data — so that advice, code, and review stay aligned with
+where the project actually is. The earlier greenfield latitude (destructive schema
+changes, "recreate the dev DB" as a migration strategy, deferring back-compat) is
+**gone**. This document heads off carrying that pre-release posture forward, while
+keeping the standards that were already in force (real tests, disciplined reviews,
+UI/UX polish, well-factored design).
 
 ## What this phase is
 
-- A pre-release project **approaching its first release**. The core domain model
+- A **released** project with real users and persisted data. The core domain model
   (the double-entry foundation, the input aggregates, the forecast engine) and the
-  main user flows have **converged** — we have a good working system and are no
-  longer re-litigating the fundamentals each iteration.
-- Built from a code template, now substantially adapted into our own application.
-  Remaining template code may still be reshaped where it serves the design.
-- The work now is **hardening and completing**: filling feature gaps, tightening
-  quality with tests and reviews, and raising the UI to release quality — on a
-  stable foundation, not by churning the core.
+  main user flows are **stable** — we are no longer re-litigating the fundamentals.
+- Originally built from a code template, now substantially our own application.
+- The work now is **careful evolution**: adding features, fixing bugs, and
+  continuing UI/UX polish on a stable, live foundation — without breaking existing
+  data or behavior.
 
 ## Operating directives for this phase
 
-### Still pre-release: schema and data stay flexible
+### Released: schema and data are now durable
 
-- There is **no production deployment and no data we are unwilling to discard**.
-- Schema and models may still change destructively; **recreating the development
-  database is an acceptable "migration strategy"** until the first release.
-- Do **not** add data migrations, backfills, or compatibility shims for old data
-  yet. This is the **one remaining greenfield freedom, and it ends at v1** — so
-  when a change would be painful to make *after* release, prefer getting the shape
-  right now rather than banking on future flexibility.
+- There **is** production data we are unwilling to discard. Recreating a database
+  is **no longer** an acceptable migration strategy.
+- **Every schema or model change ships with a proper migration.** Prefer
+  forward-safe, reversible migrations; write data migrations / backfills to carry
+  existing rows across a change rather than dropping or orphaning them.
+- **No destructive or lossy changes without an explicit, deliberate migration path.**
+  Renames, type changes, and removals must preserve existing data.
+- **Back-compat matters now.** Where a change affects data written by an earlier
+  release (captured runs, stored inputs, persisted outputs), preserve or migrate it;
+  do not silently invalidate it.
+- Because getting a shape wrong is now costly to reverse, design changes to
+  persisted structures deliberately — the room to "just reshape it later" is gone.
+
+### Guard against regressions
+
+- Existing flows and stable behavior are a contract with live users. Changes must
+  not break them; **tests protect them** and are expected to stay green.
+- Add a **regression test with every bug fix** (unchanged from before, now
+  non-negotiable).
+- Take extra care with anything touching persisted data — captured runs, stored
+  inputs, materialized projection outputs — where a regression can corrupt or
+  invalidate real user data, not just misbehave transiently.
 
 ### Test as you build
 
-- The model has settled, so tests written now **document and protect** real
-  behavior rather than ossifying decisions we intend to revisit.
-- **Default: write tests** for new and changed logic, and add a **regression
-  test** with every bug fix. `docs/dev/testing/testing-guidelines.md` is now fully
-  in force — focus on high-value tests (business logic, calculations, data
+- Tests written now **document and protect** real, released behavior.
+- **Default: write tests** for new and changed logic. `docs/dev/testing/testing-guidelines.md`
+  is fully in force — focus on high-value tests (business logic, calculations, data
   integrity, meaningful edge cases), not trivial getters or ORM internals.
 - Backfill tests for critical, stable paths as you touch them; you need not stop to
   retrofit exhaustive coverage of untouched code.
@@ -57,25 +69,25 @@ model on a whim).
 
 - Per the Prime Directive, we still optimize for a well-factored design, not the
   fastest working code.
-- Reworking earlier or template code to get the design right remains expected — we
-  are hardening a foundation, not papering over it.
+- Reworking earlier or template code to get the design right remains expected — but
+  now such rework must be delivered through migrations that preserve live data, not
+  by recreating the database.
 
 ### UI and UX polish are in scope
 
-- Improving styling, layout, accessibility, and interaction quality is now
-  first-class, release-preparation work — not a premature concern to defer. Use the
-  `frontend-dev` agent and the frontend guidelines.
+- Improving styling, layout, accessibility, and interaction quality remains
+  first-class work. Use the `frontend-dev` agent and the frontend guidelines.
 
-### Performance: still measure before optimizing
+### Performance: measure before optimizing
 
 - No speculative performance tuning, caching layers, or scaling work without a
-  measured need. Hardening is about correctness, tests, and UX first; performance
-  work follows real measurement.
+  measured need. With real usage now, prefer measuring against actual traffic and
+  data volumes when a performance concern arises.
 
 ## What still applies (do not relax these)
 
-- **The Prime Directive — well-factored code — is not suspended.** Hardening is not
-  a license for sloppy structure; if anything, review scrutiny rises now.
+- **The Prime Directive — well-factored code — is not suspended.** A live product
+  raises review scrutiny, it does not lower it.
 - **Reviews and quality gates are expected.** `make check` (lint + test +
   env-drift) must pass, and the `/review` discipline (parallel expert agents,
   adversarial verification) applies before a PR.
@@ -87,10 +99,9 @@ model on a whim).
 
 ## Exit criteria (when to revisit this document)
 
-The "core model has stabilized" and "rapid iteration" triggers have already been
-met — this document reflects that transition. The remaining trigger is the release
-itself. Revisit — and largely retire or invert — this file when:
+This document reflects the **released** phase and replaces the earlier pre-release
+one. Revisit it when the project's posture shifts again — for example:
 
-- We cut the **first public release**: the schema/data-flexibility freedom ends,
-  and migrations plus back-compat become real obligations.
-- **Real users or persisted data** exist that we are unwilling to discard.
+- A **major version or architectural change** that deliberately breaks compatibility
+  and warrants its own migration and deprecation strategy.
+- A change in deployment or data-ownership model that alters the constraints above.

@@ -20,7 +20,7 @@ from ucfp.inputs.events import CARD_ROLE
 from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind
 from ucfp.inputs.plans.schemas import CreditCardPlan, PlanEvent
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.widgets import IsoDateInput
+from ucfp.inputs.widgets import MonthDateInput, MonthField
 
 
 # The modes whose plan includes a one-time payoff, surfaced in the events list as a CARD_PAYOFF.
@@ -76,10 +76,10 @@ class CreditCardPlanForm( forms.Form ):
             label = 'Monthly payment', required = False, min_value = 0,
             initial = plan.monthly_payment if plan is not None else None,
             css_class = AppConst.CREDIT_CARD_MONTHLY_CLASS )
-        self.fields[ self._date_field( card.handle ) ] = forms.DateField(
+        self.fields[ self._date_field( card.handle ) ] = MonthField(
             label = 'Target date', required = False,
             initial = plan.target_date if plan is not None else None,
-            widget = IsoDateInput( attrs = { 'class' : AppConst.CREDIT_CARD_DATE_CLASS } ) )
+            widget = MonthDateInput( attrs = { 'class' : AppConst.CREDIT_CARD_DATE_CLASS } ) )
 
     @staticmethod
     def _mode_choices() -> list:

@@ -79,7 +79,7 @@ class VehicleDispositionFormTests( unittest.TestCase ):
 
     def test_a_sell_records_a_dated_sale( self ):
         plans = _apply( _profile( ( 'vehicle-1', 'Sedan' ) ), Plans(), 'vehicle-1',
-                        kind = 'SELL', sale_date = '2032-06-01' )
+                        kind = 'SELL', sale_date = '2032-06' )
         self.assertEqual( len( _dispositions( plans ) ), 1 )
         disposition = _dispositions( plans )[ 0 ]
         self.assertEqual( disposition.vehicle_handle, 'vehicle-1' )
@@ -89,7 +89,7 @@ class VehicleDispositionFormTests( unittest.TestCase ):
 
     def test_a_replace_records_a_successor_carrying_the_current_name( self ):
         plans = _apply( _profile( ( 'vehicle-1', 'Old Sedan' ) ), Plans(), 'vehicle-1',
-                        kind = 'REPLACE', sale_date = '2032-06-01', purchase_price = '40,000',
+                        kind = 'REPLACE', sale_date = '2032-06', purchase_price = '40,000',
                         recurrence_years = '8', payment_method = 'CASH' )
         disposition = _dispositions( plans )[ 0 ]
         self.assertIs( disposition.kind, VehicleDispositionKind.REPLACE )
@@ -111,7 +111,7 @@ class VehicleDispositionFormTests( unittest.TestCase ):
         other    = VehicleDisposition( vehicle_handle = 'vehicle-2', kind = VehicleDispositionKind.SELL )
         existing = Plans( vehicle_plan = VehiclePlan( dispositions = [ other ] ) )
         profile  = _profile( ( 'vehicle-1', 'Sedan' ), ( 'vehicle-2', 'Truck' ) )
-        plans    = _apply( profile, existing, 'vehicle-1', kind = 'SELL', sale_date = '2033-01-01' )
+        plans    = _apply( profile, existing, 'vehicle-1', kind = 'SELL', sale_date = '2033-01' )
         handles  = { d.vehicle_handle for d in _dispositions( plans ) }
         self.assertEqual( handles, { 'vehicle-1', 'vehicle-2' } )
 
@@ -266,7 +266,7 @@ class VehicleLoanTermsTests( unittest.TestCase ):
 
     def test_terms_persist_alongside_a_disposition( self ):
         plans = _apply( _financed_profile(), Plans(), 'vehicle-1', kind = 'SELL',
-                        sale_date = '2032-06-01', loan_rate = '6', loan_months = '48' )
+                        sale_date = '2032-06', loan_rate = '6', loan_months = '48' )
         self.assertEqual( len( _dispositions( plans ) ), 1 )             # the sale...
         self.assertEqual( len( plans.loan_repayments ), 1 )             # ...and the loan terms both saved
 
@@ -418,17 +418,17 @@ class LeasedDispositionFormTests( unittest.TestCase ):
 
     def test_a_return_with_terms_records_the_current_lease( self ):
         plans = _leased_apply( _leased_profile( ( 'lease-1', 'Sedan' ) ), Plans(), 'lease-1',
-                               kind = 'RETURN', monthly = '400', lease_end = '2029-01-01' )
+                               kind = 'RETURN', monthly = '400', lease_end = '2029-01' )
         disposition = _leased_dispositions( plans )[ 0 ]
         self.assertIs( disposition.kind, LeaseDispositionKind.RETURN )
         self.assertEqual( disposition.monthly, Decimal( '400' ) )
-        self.assertEqual( disposition.lease_end, date( 2029, 1, 1 ) )
+        self.assertEqual( disposition.lease_end, date( 2029, 1, 15 ) )
         self.assertIsNone( disposition.successor )
 
     def test_a_buy_with_cash_records_a_cash_successor_carrying_the_lease_name( self ):
         # The kind fixes the successor's payment method -- no payment field is submitted.
         plans = _leased_apply( _leased_profile( ( 'lease-1', 'Leased Sedan' ) ), Plans(), 'lease-1',
-                               kind = 'BUY_CASH', monthly = '400', lease_end = '2029-01-01',
+                               kind = 'BUY_CASH', monthly = '400', lease_end = '2029-01',
                                purchase_price = '30,000', recurrence_years = '7' )
         disposition = _leased_dispositions( plans )[ 0 ]
         self.assertIs( disposition.kind, LeaseDispositionKind.BUY_CASH )
@@ -440,7 +440,7 @@ class LeasedDispositionFormTests( unittest.TestCase ):
     def test_a_renew_records_a_lease_successor( self ):
         # Renew implies the lease payment type -- its successor is a LEASE, from the kind, not a picker.
         plans = _leased_apply( _leased_profile( ( 'lease-1', 'Sedan' ) ), Plans(), 'lease-1',
-                               kind = 'RENEW', monthly = '400', lease_end = '2029-01-01',
+                               kind = 'RENEW', monthly = '400', lease_end = '2029-01',
                                monthly_payment = '450', recurrence_years = '3' )
         successor = _leased_dispositions( plans )[ 0 ].successor
         self.assertIs( successor.payment_method, PaymentMethod.LEASE )

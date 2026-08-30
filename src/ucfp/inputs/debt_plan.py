@@ -23,7 +23,7 @@ from ucfp.inputs.loan_fieldset import seeded_repayment_terms
 from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import LoanPrepayment, LoanRepayment, PlanEvent
 from ucfp.inputs.profile.enums import DebtKind
-from ucfp.inputs.widgets import IsoDateInput
+from ucfp.inputs.widgets import MonthField
 
 
 class DebtPlanForm( forms.Form ):
@@ -74,9 +74,8 @@ class DebtPlanForm( forms.Form ):
             label = 'Extra/month', required = False, min_value = 0,
             css_class = AppConst.LOAN_EXTRA_CLASS,
             initial = extra_annual / 12 if extra_annual else None )
-        self.fields[ self._payoff_field( debt.handle ) ] = forms.DateField(
-            label = 'Pay off by', required = False,
-            widget = IsoDateInput(), initial = payoff_date )
+        self.fields[ self._payoff_field( debt.handle ) ] = MonthField(
+            label = 'Pay off by', required = False, initial = payoff_date )
 
     @staticmethod
     def _rate_field( handle : str ) -> str:

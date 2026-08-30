@@ -114,10 +114,10 @@ examples use the `cassandrahq.com` SSH alias and `/opt/ucfp` path from that setu
    ```bash
    ssh cassandrahq.com "docker pull ghcr.io/cassandra/ucfp:latest"
    ```
-4. **Restart** with the new image. `up -d` recreates the changed container in place
-   (no separate `down`, so no downtime gap); migrations and collectstatic run from
-   the entrypoint on start. `UCFP_VERSION` is passed inline so the compose file pins
-   the exact released image:
+4. **Restart** with the new image. The droplet tracks `:latest`, so the pull above
+   already fetched the released image; `up -d` recreates the changed container in
+   place from it (no separate `down`, so no downtime gap). Migrations and
+   collectstatic run from the entrypoint on start:
    ```bash
    ssh cassandrahq.com "cd /opt/ucfp && docker-compose up -d"
    ssh cassandrahq.com 'docker ps'          # container up and healthy?

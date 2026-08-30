@@ -22,6 +22,10 @@ urlpatterns = [
           views.UserSigninView.as_view(),
           name = 'user_signin' ),
 
+    path( 'signin/existing',
+          views.GuestSigninView.as_view(),
+          name = 'guest_signin' ),
+
     path( 'magic/code',
           views.MagicCodeView.as_view(),
           name = 'magic_code' ),

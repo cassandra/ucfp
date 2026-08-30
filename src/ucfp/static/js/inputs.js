@@ -60,21 +60,32 @@ window.App.Inputs = (function () {
         return parseInt( dateIso.split( '-' )[0], 10 ) - parseInt( birthIso.split( '-' )[0], 10 );
     }
 
+    // A month-resolution date field holds only YYYY-MM (its day is normalized server-side), so trim a
+    // full ISO date to match before writing it -- otherwise the field and its picker disagree on format.
+    function toFieldResolution( $date, iso ) {
+        if ( $date.attr( dataAttr( C.DATE_PRECISION_DATA_ATTR ) ) === C.DATE_PRECISION_MONTH ) {
+            return iso.slice( 0, 7 );   // 'YYYY-MM'
+        }
+        return iso;
+    }
+
     function fillDateFromAge( $age ) {
         const birth = birthdateFor( $age );
         const age = parseInt( $age.val(), 10 );
         if ( birth && ! isNaN( age ) ) {
             const $date = $( '#' + $age.attr( dataAttr( C.DATE_FIELD_DATA_ATTR ) ) );
-            $date.val( atAge( birth, age ) );
+            $date.val( toFieldResolution( $date, atAge( birth, age ) ) );
             syncPickerToValue( $date );   // the picker keeps its own date model; teach it the new value
         }
     }
 
+    // Age tracks the year, so both a full date and a month (YYYY-MM) drive it -- `ageOf` reads only the
+    // year part. Accept either shape so a month-resolution date still refreshes its paired age.
     function refreshAgeFromDate( $date ) {
         const birth = birthdateFor( $date );
         const iso = $date.val();
         const $age = $( '#' + $date.attr( dataAttr( C.AGE_FIELD_DATA_ATTR ) ) );
-        if ( birth && /^\d{4}-\d{2}-\d{2}$/.test( iso ) ) { $age.val( ageOf( iso, birth ) ); }
+        if ( birth && /^\d{4}-\d{2}(-\d{2})?$/.test( iso ) ) { $age.val( ageOf( iso, birth ) ); }
         else if ( ! iso ) { $age.val( '' ); }
     }
 
@@ -202,12 +213,19 @@ window.App.Inputs = (function () {
     // Dates here routinely sit years out (or decades back), so every context opens on the
     // decade-of-years view (startView 2): reaching a far year is a couple of clicks (and a decade
     // arrow to jump ten years) rather than months of paging. Past-facing contexts additionally cap at
-    // today.
-    function datepickerOptions( context ) {
+    // today. Precision is a second, independent axis: a month-resolution field stops at the month grid
+    // and formats to YYYY-MM (its day is normalized server-side), whatever its context.
+    function datepickerOptions( $field ) {
+        const context = $field.attr( dataAttr( C.DATE_CONTEXT_DATA_ATTR ) );
+        const options = Object.assign( {}, DATEPICKER_BASE, { startView : 2 } );
         if ( context === C.DATE_CONTEXT_BIRTHDATE || context === C.DATE_CONTEXT_PAST ) {
-            return Object.assign( {}, DATEPICKER_BASE, { endDate : '+0d', startView : 2 } );
+            options.endDate = '+0d';
         }
-        return Object.assign( {}, DATEPICKER_BASE, { startView : 2 } );
+        if ( $field.attr( dataAttr( C.DATE_PRECISION_DATA_ATTR ) ) === C.DATE_PRECISION_MONTH ) {
+            options.minViewMode = 'months';
+            options.format      = 'yyyy-mm';
+        }
+        return options;
     }
 
     // A private flag (data-dp-enhanced) marks inputs already wired, so re-scanning after an antinode
@@ -225,7 +243,7 @@ window.App.Inputs = (function () {
         if ( ! $.fn.datepicker ) { return; }
         eachDateField( $scope || $( document.body ), function ( $field ) {
             if ( $field.data( ENHANCED_FLAG ) ) { return; }
-            $field.datepicker( datepickerOptions( $field.attr( dataAttr( C.DATE_CONTEXT_DATA_ATTR ) ) ) );
+            $field.datepicker( datepickerOptions( $field ) );
             $field.data( ENHANCED_FLAG, true );
         } );
     }

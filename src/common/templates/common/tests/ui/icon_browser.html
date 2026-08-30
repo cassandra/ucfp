@@ -1,0 +1,132 @@
+{% extends "pages/base.html" %}
+{% load icons %}
+{% block head_title %}Common: Icon Browser{% endblock %}
+
+{% block content %}
+<div class="container-fluid m-4">
+
+  <h2 class="text-info">Icon Browser</h2>
+  <p class="text-muted">{{ total_icons }} icons</p>
+
+  <div class="row mb-4">
+    <div class="col-12">
+      <h3 class="text-primary">All Available Icons</h3>
+      <p>Every icon in <code>AVAILABLE_ICONS</code>, shown at size <code>xl</code> with no color override:</p>
+
+      <div class="row">
+        {% for icon_name in icon_name_list %}
+        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12 mb-3">
+          <div class="card">
+            <div class="card-body text-center">
+              <div class="mb-2">
+                {% icon icon_name size="xl" %}
+              </div>
+              <small class="text-muted">{{ icon_name }}</small>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-12">
+      <h3 class="text-primary">Size Variations</h3>
+      <p>The same icon (<code>plus</code>) in every available size:</p>
+
+      <div class="row">
+        {% for size in size_list %}
+        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12 mb-3">
+          <div class="card">
+            <div class="card-body text-center">
+              <div class="mb-2">
+                {% icon "plus" size=size %}
+              </div>
+              <small class="text-muted">{{ size }}</small>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-12">
+      <h3 class="text-primary">Color Variations</h3>
+      <p>The same icon (<code>save</code>) in every available semantic color:</p>
+
+      <div class="row">
+        {% for color in color_list %}
+        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12 mb-3">
+          <div class="card">
+            <div class="card-body text-center">
+              <div class="mb-2">
+                {% icon "save" size="xl" color=color %}
+              </div>
+              <small class="text-muted">{{ color }}</small>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-12">
+      <h3 class="text-primary">Usage Examples</h3>
+      <p>Common icon usage patterns with the <code>icon-left</code> / <code>icon-right</code> spacing helpers:</p>
+
+      <div class="row">
+        <div class="col-12">
+          <h4>Buttons with Icons</h4>
+          <div class="mb-3">
+            <button class="btn btn-primary">
+              {% icon "plus" css_class="icon-left" %}
+              Add New Item
+            </button>
+
+            <button class="btn btn-secondary">
+              {% icon "edit" css_class="icon-left" %}
+              Edit
+            </button>
+
+            <button class="btn btn-success">
+              {% icon "save" css_class="icon-left" %}
+              Save Changes
+            </button>
+
+            <button class="btn btn-danger">
+              {% icon "delete" %}
+            </button>
+          </div>
+
+          <h4>Navigation Controls</h4>
+          <div class="mb-3">
+            <button class="btn btn-outline-secondary">
+              {% icon "chevron-left" css_class="icon-right" %}
+              Previous
+            </button>
+
+            <button class="btn btn-outline-secondary">
+              Next
+              {% icon "chevron-right" css_class="icon-left" %}
+            </button>
+
+            <button class="btn btn-outline-secondary">
+              {% icon "chevron-double-left" %}
+            </button>
+
+            <button class="btn btn-outline-secondary">
+              {% icon "chevron-double-right" %}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

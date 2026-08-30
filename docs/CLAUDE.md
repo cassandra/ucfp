@@ -8,15 +8,16 @@ In all code we write, we strive for extremely well factored code. We are thought
 
 ## Current Project Phase (transient)
 
-This project is **pre-release, in a hardening phase**: the core model and main
-flows have converged into a good working system, and we are gearing up for a first
-release with real tests, disciplined reviews, and UI polish. It is still
-pre-release — no production data yet, so schema and migrations stay flexible until
-v1. The two imported documents below establish the *current* assumptions; they are
-**transient** and will tighten or retire at first release. Read them before either
-proposing mature-software patterns (data migrations, back-compat shims) **or**
-assuming the earlier prototype posture (skipping tests, deferring UI polish,
-churning the core model).
+This project is **released and in maintenance/evolution**: the core model and main
+flows converged and shipped in the first public release. There is now real,
+persisted user data we are unwilling to discard, so schema changes require
+migrations and we actively guard against regressions. The earlier greenfield
+freedom (destructive schema changes, recreating the dev DB as a "migration
+strategy") no longer applies. The two imported documents below establish the
+*current* assumptions; they are **transient** and evolve with the project. Read
+them before either carrying forward the old pre-release posture (skipping
+migrations, churning the core model, deferring back-compat) **or** over-rotating
+into heavyweight process the project has not asked for.
 
 @dev/project/project-phase.md
 @dev/project/project-goals.md

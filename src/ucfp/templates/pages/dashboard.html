@@ -22,6 +22,17 @@
 </div>
 {% endif %}
 
+{% comment %}The accidental-Guest rescue: a quiet, info-level offer to sign into an existing account, shown
+only when this Guest has nothing saved yet (`offer_account_signin` -- the same "nothing worth keeping"
+signal the sign-in collision flow uses, so signing in here loses nothing). It links to the Guest sign-in
+page, a sister of the returning-user sign-in for someone who arrived as a Guest by accident.{% endcomment %}
+{% if offer_account_signin %}
+<div class="alert alert-info d-flex align-items-center" role="status">
+  <span>Already have an account? <a href="{% url 'guest_signin' %}" class="alert-link">Sign in to it</a>
+    to pick up where you left off.</span>
+</div>
+{% endif %}
+
 <h1 class="h3 mb-4">Overview</h1>
 
 {% include 'planning/panes/forecast_overview_card.html' with overview=forecast_overview %}

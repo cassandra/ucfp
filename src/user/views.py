@@ -100,12 +100,15 @@ def _account_context():
 
 
 class RedirectAuthenticatedUserMixin:
-    """Send an already-authenticated user to the home page instead of showing the sign-in form
-    they don't need. A Guest counts as authenticated, so it applies here: a Guest adds an email
-    through their account page, not the returning-user sign-in form."""
+    """Route a signed-in visitor away from the returning-user sign-in form, which is meant for a visitor with
+    no live session. A Verified user is already signed in, so they go home. A Guest is sent to the Guest
+    sign-in page (`guest_signin`) -- its sister form, which signs them into an existing account and reconciles
+    their trial -- rather than bounced home with no way forward, the accidental-Guest trap."""
 
     def dispatch( self, request, *args, **kwargs ):
         if request.user.is_authenticated:
+            if request.user.is_guest:
+                return HttpResponseRedirect( reverse( 'guest_signin' ) )
             return HttpResponseRedirect( reverse( 'home' ) )
         return super().dispatch( request, *args, **kwargs )
 
@@ -154,6 +157,32 @@ class UserSigninView( RedirectAuthenticatedUserMixin, View ):
         if unsubscribed is not None:
             return unsubscribed
         return HttpResponseRedirect( reverse( 'magic_code' ) )
+
+
+@method_decorator( require_authentication_enabled, name = 'dispatch' )
+class GuestSigninView( View ):
+    """The Guest's "sign in to an existing account" page -- a sister of the returning-user sign-in
+    (`UserSigninView`) for the *accidental Guest*: someone who already had an account but was funnelled into
+    a throwaway Guest before finding the sign-in path. It renders the email form; submitting it reuses the
+    account-linking action (`AttachEmailView` -> magic code -> collision reconcile), which proves ownership
+    of the existing account and, when the Guest has nothing worth keeping, adopts it silently.
+
+    Gated to its audience: an anonymous visitor belongs on the ordinary sign-in page, and a Verified user is
+    already signed in (an edge case reachable only by typing the URL) -- each is redirected away rather than
+    shown a form that does not fit them, leaving a Guest as the only visitor who sees it.
+    """
+
+    def dispatch( self, request, *args, **kwargs ):
+        if not request.user.is_authenticated:
+            return HttpResponseRedirect( reverse( 'user_signin' ) )
+        if request.user.is_verified:
+            return HttpResponseRedirect( reverse( 'home' ) )
+        return super().dispatch( request, *args, **kwargs )
+
+    def get( self, request, *args, **kwargs ):
+        return render( request, 'user/pages/guest_signin.html', {
+            'email_not_configured': not EmailSender.is_email_configured(),
+        } )
 
 
 @method_decorator( require_authentication_enabled, name = 'dispatch' )

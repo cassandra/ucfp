@@ -49,8 +49,8 @@
         {% if request.organization %}
         <li class="nav-item d-flex align-items-center">
           <a class="nav-link current-household" href="{% url 'organization_settings' %}"
-             aria-label="Current household {{ request.organization.display_name }} &mdash; open Settings"
-             title="Current household &mdash; open Settings">{{ request.organization.display_name }}</a>
+             aria-label="Current household {{ request.organization.display_name }}, open Settings"
+             title="Current household, open Settings">{{ request.organization.display_name }}</a>
           {% if not can_edit_organization %}
           <span class="readonly-badge" title="You have read-only access to this household">Read-only</span>
           {% endif %}

@@ -4,12 +4,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 from user import collision
 
 from ucfp.inputs.profile.repository import save_profile
 from ucfp.inputs.profile.schemas import Profile, SubjectProfile
-from ucfp.onboarding.reconciliation_service import sole_organization
+from ucfp.onboarding.constants import EXAMPLE_ORGANIZATION_UUID
+from ucfp.onboarding.membership import join_example_org, working_organization
 
 User = get_user_model()
 
@@ -30,8 +32,19 @@ def _verified_with_org( email ):
     return user
 
 
+def _example_org_with_content():
+    owner = User.objects.create_user( email = 'example-owner@example.com' )
+    organization = Organization.objects.create(
+        name = 'Example Household', uuid = EXAMPLE_ORGANIZATION_UUID )
+    organization.members.create( user = owner, organization_role = OrganizationRole.OWNER )
+    save_profile( organization, Profile(
+        subjects = [ SubjectProfile( handle = 'subject', name = 'Sample Household',
+                                     birthdate = date( 1980, 1, 1 ) ) ] ) )
+    return organization
+
+
 def _give_content( user ):
-    save_profile( sole_organization( user ), Profile(
+    save_profile( working_organization( user ), Profile(
         subjects = [ SubjectProfile( handle = 'subject', name = 'Alice',
                                      birthdate = date( 1980, 1, 1 ) ) ] ) )
 
@@ -66,6 +79,25 @@ class SigninCollisionViewTest(TestCase):
         self.assertFalse( User.objects.filter( pk = guest.pk ).exists() )   # dropped
         self.assertEqual( _auth_user_id( self.client ), str( target.pk ) )   # existing account adopted
 
+    def test_tour_only_guest_is_silently_superseded(self):
+        # The reported edge case: a returning visitor who only wandered the tour is a VIEWER of the
+        # example org but created nothing of their own. The populated example must not read as a
+        # conflict -- they are adopted into the existing account without a prompt, example untouched.
+        example = _example_org_with_content()
+        guest = User.objects.create_guest()             # no own org, only the example VIEWER membership
+        join_example_org( guest )
+        target = _verified_with_org( 'e@example.com' )
+        self.client.force_login( guest )
+        self._stash_target( target )
+
+        response = self.client.get( reverse('signin_collision') )
+
+        self.assertEqual( 302, response.status_code )                       # no choice screen
+        self.assertFalse( User.objects.filter( pk = guest.pk ).exists() )   # dropped
+        self.assertEqual( _auth_user_id( self.client ), str( target.pk ) )   # existing account adopted
+        self.assertTrue( OrganizationMember.objects.filter(                  # example ownership intact
+            organization = example, organization_role = OrganizationRole.OWNER, is_active = True ).exists() )
+
     def test_guest_with_content_is_offered_the_choice(self):
         guest = _guest_with_org()
         _give_content( guest )
@@ -82,7 +114,7 @@ class SigninCollisionViewTest(TestCase):
     def test_keep_current_rehomes_and_signs_in(self):
         guest = _guest_with_org()
         _give_content( guest )
-        guest_org = sole_organization( guest )
+        guest_org = working_organization( guest )
         target = _verified_with_org( 'e@example.com' )
         self.client.force_login( guest )
         self._stash_target( target )
@@ -92,21 +124,21 @@ class SigninCollisionViewTest(TestCase):
         self.assertEqual( 302, response.status_code )
         self.assertFalse( User.objects.filter( pk = guest.pk ).exists() )
         self.assertEqual( _auth_user_id( self.client ), str( target.pk ) )
-        self.assertEqual( guest_org, sole_organization( target ) )           # target owns the guest's work
+        self.assertEqual( guest_org, working_organization( target ) )           # target owns the guest's work
 
     def test_discard_current_signs_into_the_existing_account(self):
         guest = _guest_with_org()
         _give_content( guest )
-        guest_org = sole_organization( guest )
+        guest_org = working_organization( guest )
         target = _verified_with_org( 'e@example.com' )
-        target_org = sole_organization( target )
+        target_org = working_organization( target )
         self.client.force_login( guest )
         self._stash_target( target )
 
         self.client.post( reverse('signin_collision'), { 'choice': 'discard_current' } )
 
         self.assertEqual( _auth_user_id( self.client ), str( target.pk ) )
-        self.assertEqual( target_org, sole_organization( target ) )          # existing plan kept
+        self.assertEqual( target_org, working_organization( target ) )          # existing plan kept
         self.assertEqual( 0, OrganizationMember.objects.filter( organization = guest_org ).count() )
 
     def test_decide_later_leaves_the_guest_untouched(self):

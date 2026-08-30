@@ -1,3 +1,3 @@
 <svg class="{{ class_attr }}" viewBox="0 0 24 24" fill="currentColor" {{ accessibility_attrs }}>
-  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+  <path d="M20 4h-5V3H9v1H4v2h16z M6 7h12l-1.2 12.2a1.5 1.5 0 0 1-1.5 1.3H8.7a1.5 1.5 0 0 1-1.5-1.3z M9 10v8h1v-8z M11.5 10v8h1v-8z M14 10v8h1v-8z"/>
 </svg>

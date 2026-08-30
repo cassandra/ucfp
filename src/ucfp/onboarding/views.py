@@ -22,7 +22,7 @@ from ucfp.planning.views import RunResultsView
 
 from . import reconciliation_service
 from .constants import EXAMPLE_ORGANIZATION_UUID, EXAMPLE_SCENARIO_UUID
-from .membership import ensure_own_organization, join_example_org, example_organization
+from .membership import ensure_own_organization, join_example_org, example_organization, working_organization
 
 
 @method_decorator( require_authentication_enabled, name = 'dispatch' )
@@ -42,16 +42,15 @@ class SigninCollisionView( View ):
         if target is None:
             return self._done( request )
 
-        current = reconciliation_service.organization_summary(
-            reconciliation_service.sole_organization( guest ) )
+        current = reconciliation_service.organization_summary( working_organization( guest ) )
         if not current.has_content:
-            # Nothing worth keeping: adopt the existing account without asking.
+            # Nothing worth keeping (including a Guest who only ever viewed the read-only example):
+            # adopt the existing account without asking.
             reconciliation_service.discard_current_keep_previous( guest, target )
             collision.clear_collision_target( request )
             return self._sign_in( request, target )
 
-        existing = reconciliation_service.organization_summary(
-            reconciliation_service.sole_organization( target ) )
+        existing = reconciliation_service.organization_summary( working_organization( target ) )
         # Each option is a card the person can pick directly: keeping the current work re-homes it onto
         # the existing account; keeping the existing account's plan discards the current work.
         return render( request, 'onboarding/signin_collision.html', {

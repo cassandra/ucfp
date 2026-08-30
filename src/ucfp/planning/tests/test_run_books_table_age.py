@@ -56,8 +56,8 @@ class RunBooksTableAgeColumnTest( SimpleTestCase ):
     def test_opening_row_shows_opening_in_place_of_its_date( self ):
         html = _table( show_age = True )
         self.assertIn( '>opening</span>', html )
-        self.assertNotIn( '2025-12-31', html )        # the opening date is replaced, not appended
-        self.assertIn( '2026-12-31', html )           # a real interval still shows its date
+        self.assertNotIn( '2025-12', html )           # the opening date is replaced, not appended
+        self.assertIn( '2026-12', html )              # a real interval still shows its date (YYYY-MM)
 
     def test_missing_birthdate_leaves_the_age_cells_blank( self ):
         html = _table( show_age = True, birthdate = None )

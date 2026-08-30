@@ -30,7 +30,7 @@ from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.vehicle import VehiclePurchaseForm, vehicles_context
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
 from ucfp.inputs.vehicle_handles import loan_debt_handle
-from ucfp.inputs.widgets import IsoDateInput
+from ucfp.inputs.widgets import MonthField
 
 
 def _current_vehicles( profile ) -> list:
@@ -129,7 +129,7 @@ class VehicleDispositionForm( VehiclePurchaseForm ):
         initial = VehicleDispositionKind.KEEP.name,
         widget = forms.RadioSelect(
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
-    sale_date = forms.DateField( label = 'Sell or replace on', required = False, widget = IsoDateInput() )
+    sale_date = MonthField( label = 'Sell or replace on', required = False )
     # The current loan (an owned, financed vehicle only): its planned repayment terms. Rate and monthly are
     # two views of one amortization over `loan_months` (the rate is stored; the monthly is a no-JS
     # back-solve). Shown only when financed; the rate/term seed from the Profile contract facts until a
@@ -387,7 +387,7 @@ class LeasedVehicleDispositionForm( VehiclePurchaseForm ):
         widget = forms.RadioSelect(
             attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
     monthly   = MoneyField( label = 'Monthly lease payment', min_value = 0, required = False )
-    lease_end = forms.DateField( label = 'Lease ends', required = False, widget = IsoDateInput() )
+    lease_end = MonthField( label = 'Lease ends', required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         self._handle  = handle

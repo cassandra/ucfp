@@ -1,0 +1,163 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% load icons %}
+{% block head_title %}How {% settings_value 'SITE_NAME' %} compares · {% settings_value 'SITE_NAME' %}{% endblock %}
+
+{% block page_title %}How {% settings_value 'SITE_NAME' %} compares{% endblock %}
+
+{% block public_content %}
+<p>
+  {% settings_value 'SITE_NAME' %} isn't the only way to plan your finances, and it isn't right for
+  everyone. There are several good tools in this space, and the best one for you depends on what you care
+  about: price, privacy, simplicity, depth, or maturity. {% settings_value 'SITE_NAME' %} is built
+  for people who want planning that's <strong>free, private, and
+  no-hassle</strong>. If that's you, you'll probably like it.
+</p>
+
+<p>Below is the landscape as we see it. Look at the table, think about what matters
+  to <em>you</em>, and pick the one that fits. </p>
+
+<div class="table-responsive">
+  <table class="table table-bordered align-middle mb-2">
+    {% comment %}Cell conventions: a check (success) marks a capability a tool has or something it gives
+    away free; a slash (muted) marks its absence; a dollar (warning) marks a paid-only feature; the clock
+    marks something planned but not yet shipped. Icon-only cells (Yes/No) carry an aria_label; icon+word
+    cells let the word carry the meaning, so the icon stays decorative. The "account" row is phrased as
+    "start without an account" so a check consistently reads as a plus in every row.{% endcomment %}
+    <thead class="thead-light">
+      <tr>
+        <th scope="col" style="min-width: 11rem;"></th>
+        <th scope="col" class="text-center text-primary font-weight-bold">{% settings_value 'SITE_NAME' %}</th>
+        <th scope="col" class="text-center">ProjectionLab</th>
+        <th scope="col" class="text-center">Boldin</th>
+        <th scope="col" class="text-center">Appleseed</th>
+      </tr>
+    </thead>
+    <tbody class="text-center">
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Free version</th>
+        <td class="text-success">Unlimited</td>
+        <td class="text-muted">Limited</td>
+        <td class="text-muted">Limited</td>
+        <td class="text-success">Unlimited</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Full features</th>
+        <td class="text-success font-weight-bold">Free</td>
+        <td>$120+/yr</td>
+        <td>$140+/yr</td>
+        <td class="text-success font-weight-bold">Free</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Web app</th>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Source-available / self-hostable</th>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+        <td>{% icon "circle-slash" size="lg" color="muted" aria_label="No" %}</td>
+        <td>{% icon "circle-slash" size="lg" color="muted" aria_label="No" %}</td>
+        <td>{% icon "circle-slash" size="lg" color="muted" aria_label="No" %}</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Start without an account</th>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+        <td>{% icon "circle-slash" size="lg" color="muted" aria_label="No" %}</td>
+        <td>{% icon "circle-slash" size="lg" color="muted" aria_label="No" %}</td>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Third-party ad / tracking</th>
+        <td class="text-success">None</td>
+        <td class="text-muted">Light</td>
+        <td class="text-error">Heavy</td>
+        <td class="text-warning">Moderate</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Core projection (net worth, cash flow)</th>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+        <td>{% icon "check-circle" size="lg" color="success" aria_label="Yes" %}</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Monte Carlo (market-risk) simulation</th>
+        <td class="text-muted">{% icon "clock" size="lg" color="muted" css_class="" %}<br />Planned</td>
+        <td>{% icon "check-circle" size="lg" color="success" css_class="" %}<br />Free</td>
+        <td>{% icon "dollar-sign" size="lg" color="warning" css_class="" %}<br />Paid</td>
+        <td>{% icon "check-circle" size="lg" color="success" css_class="" %}<br />Free</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Tax / cash-flow detail in the free tier</th>
+        <td>{% icon "check-circle" size="lg" color="success" css_class="" %}<br />Free</td>
+        <td>{% icon "dollar-sign" size="lg" color="warning" css_class="" %}<br />Paid</td>
+        <td>{% icon "dollar-sign" size="lg" color="warning" css_class="" %}<br />Paid</td>
+        <td>{% icon "minus-circle" size="lg" color="warning" css_class="" %}<br />Partial</td>
+      </tr>
+      <tr>
+        <th scope="row" class="text-left font-weight-normal">Maturity</th>
+        <td class="text-muted">Newest</td>
+        <td class="text-muted">Established</td>
+        <td class="text-muted">Oldest</td>
+        <td class="text-muted">New</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h5 class="text-primary mt-4">Which one is probably right for you</h5>
+
+<p><strong>If you want free, private, and no-hassle</strong>, {% settings_value 'SITE_NAME' %} is a good fit.
+  It's still filling in features that the more established tools already have, but there's no account to
+  create, no upgrade prompts, and the free version isn't held back to sell you a paid one.</p>
+
+<p><strong>If you want the deepest, most flexible do-it-yourself modeling</strong> and don't mind paying a
+  modest yearly fee, ProjectionLab is excellent: a mature, thoughtfully built tool with a generous
+  free tier that's also unusually respectful of your privacy for a paid product.</p>
+
+<p><strong>If you want the most established, comprehensive platform, with the option to talk to a financial
+  planner in the same place</strong>, Boldin offers the most depth and history, and has human help available
+  at additional cost. It's also the priciest once you go beyond the free tier.</p>
+
+<p><strong>If you want a quick, free projection with no signup</strong>, Appleseed is a newer, lightweight
+  option, and if you decide you'd like professional help, it can connect you with an advisor.</p>
+
+<p>There's no single answer to which tool is right for you. A private, no-hassle planner, a polished paid
+  product, and a full-service platform with advisors are just <em>different answers to different needs</em>.
+  Since each has a free tier, trying a few costs you nothing.</p>
+
+{% comment %}Secondary landscape: deliberately below the main comparison and styled lighter (small/muted) so
+it never competes with the three head-to-head tools. Grouped by purpose rather than listed per-product --
+categories age slower than specifics, and most of these do a different job than a full planner. Only tools
+we actually evaluated are described from experience; the rest are characterized by their well-known category
+(e.g. advisor software), not a hands-on verdict. See data/docs/competitors/others-considered.md for the full
+survey and notes.{% endcomment %}
+<h5 class="text-primary mt-4">Other tools you might come across</h5>
+<p class="mb-2">We focused above on the three tools most directly comparable to
+  {% settings_value 'SITE_NAME' %}. There's a wider field, but each of these serves a narrower or different
+  purpose:</p>
+<ul class="">
+  <li><strong>Quick calculators:</strong> FIRECalc, Coast FIRE, and the free calculators from Fidelity
+    and Schwab answer a single question (&ldquo;do I have enough?&rdquo;) in one screen. Handy for a
+    gut-check, not a full plan you can drill into.</li>
+  <li><strong>Specialist planners:</strong> TPAW and Maxifi are full tools built around a particular
+    philosophy (variable retirement spending; economics-style consumption smoothing). Great if that approach
+    fits how you think.</li>
+  <li><strong>Big-institution tools:</strong> Empower (formerly Personal Capital) and brokerage
+    planners are free, but expect a heavier signup and more data collection, and they exist partly to
+    introduce you to the firm's paid products or advisors.</li>
+  <li><strong>Professional advisor software:</strong> eMoney, MoneyGuide, RightCapital and similar are
+    powerful, but sold to financial advisors to use with clients rather than to you directly.</li>
+  <li><strong>Budgeting apps:</strong> YNAB and Monarch track day-to-day spending rather than forecast
+    the long term; they complement a planner rather than replace one.</li>
+</ul>
+
+<p class="text-muted small mt-4">Facts last checked: August 2026.</p>
+
+<div class="text-center mt-4 mb-5">
+  <a href="{% url 'explain' %}" class="btn btn-cta">See how {% settings_value 'SITE_NAME' %} works</a>
+</div>
+{% endblock %}

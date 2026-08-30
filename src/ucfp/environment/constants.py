@@ -50,6 +50,13 @@ class AppConst:
     DATE_CONTEXT_PAST      = 'past'       # no future dates; fast year navigation
     DATE_CONTEXT_BIRTHDATE = 'birthdate'  # a past date bounded at today
 
+    # A date input's resolution, orthogonal to the planning context above: a
+    # month-resolution field solicits only year+month (the stored day is
+    # normalized server-side), so its picker opens on a month grid rather than
+    # days. Absent = full day precision. Read by inputs.js.
+    DATE_PRECISION_DATA_ATTR = 'date-precision'
+    DATE_PRECISION_MONTH     = 'month'
+
     # Data-attribute tokens (jQuery .data() keys; prepend ``data-`` for raw
     # HTML) wiring one date/age field to its partner and to its subject's
     # (fixed) birthdate.

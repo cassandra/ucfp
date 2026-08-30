@@ -21,9 +21,10 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from organization.enums import OrganizationRole
-from organization.models import Organization, OrganizationMember
+from organization.models import Organization
 
 from ucfp.inputs.profile.repository import latest_profile, load_profile
+from ucfp.onboarding.membership import working_organization
 
 if TYPE_CHECKING:
     # The project's user model, for annotations only -- these accounts are `CustomUser`
@@ -44,9 +45,12 @@ class OrganizationSummary:
         return bool( self.subject_names or self.accounts )
 
 
-def organization_summary( organization : Organization ) -> OrganizationSummary:
+def organization_summary( organization : Organization | None ) -> OrganizationSummary:
     """`organization`'s latest Profile reduced to its identifying facts: named household members and
-    accounts carrying a non-zero opening balance. No profile summarizes to empty."""
+    accounts carrying a non-zero opening balance. No organization (the user's only membership is the
+    read-only example) and no profile both summarize to empty."""
+    if organization is None:
+        return OrganizationSummary()
     record = latest_profile( organization )
     if record is None:
         return OrganizationSummary()
@@ -57,37 +61,42 @@ def organization_summary( organization : Organization ) -> OrganizationSummary:
     return OrganizationSummary( subject_names = subject_names, accounts = accounts )
 
 
-def sole_organization( user : UserType ) -> Organization:
-    """The single organization `user` belongs to. Guests and freshly-verified accounts own exactly
-    one; this returns the first active membership's organization."""
-    membership = OrganizationMember.objects.for_user( user ).select_related( 'organization' ).first()
-    if membership is None:
-        # The "exactly one organization" invariant is broken -- fail loudly here rather than let a
-        # `None` dereference surface as an opaque AttributeError deep in the reconcile transaction.
-        raise RuntimeError( f'Account {user.pk} belongs to no organization; reconcile assumes exactly one.' )
-    return membership.organization
+def has_plan_content( organization : Organization | None ) -> bool:
+    """Whether `organization` holds a plan worth keeping -- a named household member or a funded account.
+    The single "is there anything to lose?" test, shared by the two places that must agree on it: the
+    sign-in collision flow adopts an existing account *silently* when this is false, and the dashboard
+    offers a Guest the "already have an account?" sign-in only when it is false -- so the offer appears
+    exactly when signing in would lose nothing."""
+    return organization_summary( organization ).has_content
 
 
 @transaction.atomic
 def keep_current_discard_previous( guest : UserType, target : UserType ):
-    """Re-home the Guest's plan onto `target`: `target` becomes sole owner of the Guest's organization,
-    its own previous organization is orphaned (retained, ownerless), and the Guest account is removed.
-    `target` ends owning exactly one organization -- the Guest's work."""
-    guest_organization = sole_organization( guest )
-    previous_organization = sole_organization( target )
-    _transfer_sole_ownership( guest_organization, target )
-    _orphan_organization( previous_organization )
+    """Re-home the Guest's plan onto `target`: `target` becomes sole owner of the Guest's own
+    organization, its own previous organization is orphaned (retained, ownerless), and the Guest account
+    is removed. `target` ends owning exactly one organization -- the Guest's work. The read-only example
+    org (a VIEWER membership either side may hold) is never a party here: `working_organization` excludes
+    it, so it is neither transferred nor orphaned."""
+    guest_organization = working_organization( guest )
+    previous_organization = working_organization( target )
+    if guest_organization is not None:
+        _transfer_sole_ownership( guest_organization, target )
+    if previous_organization is not None:
+        _orphan_organization( previous_organization )
     guest.delete()
     return
 
 
 @transaction.atomic
 def discard_current_keep_previous( guest : UserType, target : UserType ):
-    """Keep `target`'s existing plan and drop the Guest: the Guest's organization is orphaned
+    """Keep `target`'s existing plan and drop the Guest: the Guest's own organization is orphaned
     (retained, ownerless) and the Guest account removed. `target` is untouched here (nothing moves onto
     it) but kept in the signature for symmetry with `keep_current_discard_previous`, so the two
-    resolutions are called the same way."""
-    _orphan_organization( sole_organization( guest ) )
+    resolutions are called the same way. A Guest whose only membership is the read-only example has no
+    own organization to orphan (`working_organization` returns None); only the Guest account is removed."""
+    guest_organization = working_organization( guest )
+    if guest_organization is not None:
+        _orphan_organization( guest_organization )
     guest.delete()
     return
 

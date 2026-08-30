@@ -6,10 +6,11 @@
   `app_content` region (and the `main_container_class` override), so the real feature pages can render
   inside it via the swappable base -- but it carries the tour's own chrome instead of the app navbar. A
   two-tier header: a top bar (logo escape hatch, a centered "guided tour" marker so the example context is
-  clear, and the "Start planning" graduation) over a prominent nav that is the tour's main navigation and
+  clear, and the graduation CTA) over a prominent nav that is the tour's main navigation and
   mirrors the Explain page's three labelled boxes -- Current Facts (Profile), Future Scenario (Plans +
   Assumptions, the two parts of a Scenario), and What You Get (Forecast). The active step
-  (`tour_active_step`, 1-4, from the view) is lit; the one gold action here is "Start planning".
+  (`tour_active_step`, 1-4, from the view) is lit; the one gold action here is the graduation CTA, which
+  tracks the onboarding state ("Start planning", or "Go to your dashboard" once they have their own plan).
 {% endcomment %}
 
 {% block content %}
@@ -24,16 +25,27 @@
           <img src="{% static 'img/app-logo-h64.png' %}" height="26" alt="{% settings_value 'SITE_NAME' %}">
         </a>
         <span class="tour-badge">Guided tour &middot; example data</span>
+        {% comment %}The one gold action, adapting to the onboarding state (see `onboarding.state`): a visitor
+        still on the example graduates with "Start planning", while a user who already has their own plan is
+        sent to their dashboard rather than re-invited to start one. An anonymous visitor never reaches the
+        tour (a Guest is minted at entry), so no anonymous branch is needed.{% endcomment %}
+        {% if onboarding_state == 'own_org' %}
+        <form method="post" action="{% url 'go_to_dashboard' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-cta btn-sm">Go to your dashboard</button>
+        </form>
+        {% else %}
         <form method="post" action="{% url 'add_my_data' %}" class="m-0">
           {% csrf_token %}
           <button type="submit" class="btn btn-cta btn-sm">Start planning</button>
         </form>
+        {% endif %}
       </div>
 
       {% comment %}The main tour navigation, mirroring the Explain page's three labelled boxes: Current
       Facts (Profile), Future Scenario (Plans + Assumptions -- both enter the one tour_scenario view at each
       flow's first section), and What You Get (Forecast, which resolves the example run itself). Neutral
-      labels only -- the tour's single gold action is "Start planning". The active chip is lit by
+      labels only -- the tour's single gold action is the graduation CTA above. The active chip is lit by
       `tour_active_step`, so the scenario view lights whichever of Plans/Assumptions is showing.{% endcomment %}
       <nav class="tour-nav" aria-label="Tour steps">
         <span class="tour-group tour-group--facts" role="group" aria-label="Current Facts">
@@ -73,14 +85,14 @@
 
       {% if tour_active_step %}
       <p class="tour-step-desc">
-        {% if tour_active_step == 1 %}The household snapshot the whole forecast is built on &mdash; the
+        {% if tour_active_step == 1 %}The household snapshot the whole forecast is built on: the
           people, accounts, and property. This is what you&rsquo;d fill in for yourself.
-        {% elif tour_active_step == 2 %}Part of your Scenario &mdash; your spending and the moves you&rsquo;re
-          weighing: living, home, and vehicle expenses, plus retirement age, vehicle replacements, and debt
+        {% elif tour_active_step == 2 %}Part of your Scenario: your spending and the moves you&rsquo;re
+          weighing, from living, home, and vehicle expenses to retirement age, vehicle replacements, and debt
           payoff.
-        {% elif tour_active_step == 3 %}The rest of your Scenario &mdash; the economic assumptions the
+        {% elif tour_active_step == 3 %}The rest of your Scenario: the economic assumptions the
           forecast runs against, like inflation and investment returns.
-        {% elif tour_active_step == 4 %}The forecast this example produces &mdash; net worth and cash flow year
+        {% elif tour_active_step == 4 %}The forecast this example produces: net worth and cash flow year
           by year. Scroll the table, and use the column controls to change the view.
         {% endif %}
       </p>
