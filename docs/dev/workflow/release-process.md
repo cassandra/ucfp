@@ -119,6 +119,7 @@ examples use the `cassandrahq.com` SSH alias and `/opt/ucfp` path from that setu
    place from it (no separate `down`, so no downtime gap). Migrations and
    collectstatic run from the entrypoint on start:
    ```bash
+   ssh cassandrahq.com "cd /opt/ucfp && docker-compose down"
    ssh cassandrahq.com "cd /opt/ucfp && docker-compose up -d"
    ssh cassandrahq.com 'docker ps'          # container up and healthy?
    ```
