@@ -5,8 +5,9 @@
   The login-free "How does <SITE_NAME> work?" page (ExplainView). It teaches the app's four-step
   backbone -- three inputs the visitor provides (Profile, Plans, Assumptions) and the one Forecast the
   model returns -- as a stepper, then funnels to the example-data tour ("Take a tour") or the
-  convert-to-Guest graduation ("Try it now"). The two CTAs are co-equal (both .btn-primary, no gold):
-  gold is reserved for the Forecast payoff step, the page's single accent. `tour_available` /
+  convert-to-Guest graduation, whose label tracks the onboarding state ("Try it now" / "Start planning" /
+  "Go to your dashboard"). The two CTAs are co-equal (both .btn-primary, no gold): gold is reserved for the
+  Forecast payoff step, the page's single accent. `tour_available` /
   `authentication_enabled` (from the view) gate, for a self-hosted instance, the tour CTA (the example
   is often unseeded) and the "free, no sign-up" reassurance (a cloud-only concept -- a self-hosted
   instance is the user's own server).
@@ -28,6 +29,12 @@
         <strong>what you expect from the economy</strong>. It projects your finances year by
         year, from today into the future.</p>
 
+      {% comment %}Two co-equal CTAs (both .btn-primary, no gold -- gold is reserved for the Forecast payoff
+      step). "Take a tour" is offered whenever the example is seeded. The graduation CTA adapts to the
+      visitor's onboarding state (see `onboarding.state`), so a returning visitor is not re-solicited to
+      "try" what they have already begun: a cold visitor is invited to "Try it now"; a visitor who has begun
+      but has only the example graduates with "Start planning"; a user with their own plan is sent to their
+      dashboard.{% endcomment %}
       <div class="explain-cta">
         {% if tour_available %}
         <form method="post" action="{% url 'start_tour' %}" class="d-inline">
@@ -35,10 +42,22 @@
           <button type="submit" class="btn btn-primary btn-lg">Take a tour</button>
         </form>
         {% endif %}
+        {% if onboarding_state == 'own_org' %}
+        <form method="post" action="{% url 'go_to_dashboard' %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-lg">Go to your dashboard</button>
+        </form>
+        {% elif onboarding_state == 'example_only' %}
+        <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-lg">Start planning</button>
+        </form>
+        {% else %}
         <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
           {% csrf_token %}
           <button type="submit" class="btn btn-primary btn-lg">Try it now</button>
         </form>
+        {% endif %}
       </div>
 
       {% if authentication_enabled %}

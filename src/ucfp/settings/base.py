@@ -157,7 +157,7 @@ TEMPLATES = [
                 'ucfp.environment.context_processors.shared_constants',
                 'organization.context_processors.current_currency',
                 'organization.context_processors.can_edit_organization',
-                'ucfp.onboarding.context_processors.add_my_data_offer',
+                'ucfp.onboarding.context_processors.onboarding_context',
             ],
         },
     },

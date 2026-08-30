@@ -61,6 +61,15 @@ def organization_summary( organization : Organization | None ) -> OrganizationSu
     return OrganizationSummary( subject_names = subject_names, accounts = accounts )
 
 
+def has_plan_content( organization : Organization | None ) -> bool:
+    """Whether `organization` holds a plan worth keeping -- a named household member or a funded account.
+    The single "is there anything to lose?" test, shared by the two places that must agree on it: the
+    sign-in collision flow adopts an existing account *silently* when this is false, and the dashboard
+    offers a Guest the "already have an account?" sign-in only when it is false -- so the offer appears
+    exactly when signing in would lose nothing."""
+    return organization_summary( organization ).has_content
+
+
 @transaction.atomic
 def keep_current_discard_previous( guest : UserType, target : UserType ):
     """Re-home the Guest's plan onto `target`: `target` becomes sole owner of the Guest's own

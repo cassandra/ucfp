@@ -64,6 +64,7 @@ class AuthenticationMiddleware:
         'start_tour',
         'add_my_data',
         'user_signin',
+        'guest_signin',
         'magic_code',
         'magic_link',
         'bad_request',

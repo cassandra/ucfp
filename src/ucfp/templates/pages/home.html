@@ -14,9 +14,10 @@
 {% block content %}
 {% comment %}Slim top utility bar: a quiet, always-visible sign-in for returning users, kept out of the
 hero so it doesn't compete with the gold CTA. Anonymous-only -- a self-hosted single-user instance never
-renders as anonymous, and a signed-in visitor has no use for "Sign in". (Self-hosting is pitched in the
-closing band, not here.){% endcomment %}
-{% if home_cta == 'anonymous' %}
+renders as anonymous, and a signed-in visitor (Guest or Verified) has no use for it here: a Guest who
+already has an account is offered the sign-in path on the dashboard, once they land in the app. (Self-hosting
+is pitched in the closing band, not here.){% endcomment %}
+{% if onboarding_state == 'anonymous' %}
 <div class="border-bottom">
   <div class="container d-flex justify-content-end align-items-center py-2">
     <a href="{% url 'user_signin' %}">Sign in</a>
@@ -30,15 +31,15 @@ closing band, not here.){% endcomment %}
          alt="{% settings_value 'SITE_NAME' %}">
     <h1 class="display-4 text-primary font-weight-bold mb-2">When can you retire?</h1>
     <p class="lead text-muted mb-4">Find out. For free.</p>
-    {% comment %}One gold action per visitor state (see `onboarding.home_cta`): an anonymous visitor is
-    invited to learn how it works; a Guest with only the read-only example graduates to their own plan; a
+    {% comment %}One gold action per onboarding state (see `onboarding.state`): an anonymous visitor is
+    invited to learn how it works; a visitor with only the read-only example graduates to their own plan; a
     user with their own org is pointed at their dashboard. "See how it works" recedes to an outline once it
     is no longer the focal action.{% endcomment %}
-    {% if home_cta == 'anonymous' %}
+    {% if onboarding_state == 'anonymous' %}
     <a href="{% url 'explain' %}" class="btn btn-cta btn-lg">See how it works</a>
     <p class="small text-muted mt-3 mb-0">No account needed, no passwords, no marketing, no tracking.
       Privacy first.</p>
-    {% elif home_cta == 'example_only' %}
+    {% elif onboarding_state == 'example_only' %}
     <form method="post" action="{% url 'add_my_data' %}" class="d-inline">
       {% csrf_token %}
       <button type="submit" class="btn btn-cta btn-lg">Start planning</button>
@@ -97,7 +98,7 @@ closing band, not here.){% endcomment %}
 {% comment %}The closing conversion band is anonymous-visitor marketing (the value pitch, the free/no-password
 reassurance, the self-host option). A signed-in user is past this -- and its gold CTA would be a second gold
 action competing with the hero's -- so it shows only to an anonymous visitor.{% endcomment %}
-{% if home_cta == 'anonymous' %}
+{% if onboarding_state == 'anonymous' %}
 <section class="text-center py-4 bg-primary text-white">
   <div class="container">
     <h2 class="h3 mb-3">See your forecast, free.</h2>

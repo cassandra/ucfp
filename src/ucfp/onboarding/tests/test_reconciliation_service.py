@@ -76,6 +76,25 @@ class OrganizationSummaryTest(TestCase):
         self.assertFalse( service.organization_summary( organization ).has_content )
 
 
+class HasPlanContentTest(TestCase):
+    """`has_plan_content` -- the shared "is there anything worth keeping?" predicate the collision flow and
+    the dashboard's accidental-Guest sign-in offer both key on. It is the `has_content` of the org's summary,
+    with None (no own org) reading as empty."""
+
+    def test_false_for_no_organization(self):
+        self.assertFalse( service.has_plan_content( None ) )
+
+    def test_false_for_an_empty_org(self):
+        self.assertFalse( service.has_plan_content( working_organization( _guest_with_org() ) ) )
+
+    def test_true_once_a_named_subject_exists(self):
+        organization = working_organization( _guest_with_org() )
+        save_profile( organization, Profile( subjects = [ SubjectProfile(
+            handle = 'subject', name = 'Alice', birthdate = date( 1980, 1, 1 ) ) ] ) )
+
+        self.assertTrue( service.has_plan_content( organization ) )
+
+
 class ReconciliationOpsTest(TestCase):
 
     def test_keep_current_rehomes_guest_org_and_drops_the_guest(self):

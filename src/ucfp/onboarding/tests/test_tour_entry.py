@@ -2,6 +2,8 @@
 and lands on the Profile step -- the *real* interview (`InterviewView`) rendered under the tour shell,
 not the app nav. An anonymous visitor is minted a Guest first; a signed-in visitor is used as-is (no
 conversion, no blocking). Unavailable when the example org is not seeded."""
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 from django.urls import reverse
@@ -10,8 +12,10 @@ from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 
 from ucfp.inputs.interview import first_section_of_flow
+from ucfp.inputs.profile.repository import save_profile
+from ucfp.inputs.profile.schemas import Profile, SubjectProfile
 from ucfp.onboarding.constants import EXAMPLE_ORGANIZATION_NAME, EXAMPLE_ORGANIZATION_UUID
-from ucfp.onboarding.home_cta import HomeCtaState
+from ucfp.onboarding.state import OnboardingState
 from ucfp.onboarding.membership import join_example_org
 from ucfp.onboarding.seeding import _seed_records, seed_example_org
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
@@ -314,9 +318,9 @@ class ExplainGatingTest( TestCase ):
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
-class HomeCtaStateTest( TestCase ):
-    """The site root (`/`, HomeView) stays reachable for everyone and resolves one of three visitor states
-    (`onboarding.home_cta`): an anonymous visitor learns how it works, an early user (only the read-only
+class HomeOnboardingCtaTest( TestCase ):
+    """The site root (`/`, HomeView) stays reachable for everyone and resolves one of three onboarding states
+    (`onboarding.state`): an anonymous visitor learns how it works, an early user (only the read-only
     example) starts their own plan, an owner goes to their dashboard. The self-hosted singleton is always an
     owner. A *signed-in* visitor must never see two competing gold actions (the former bug); an anonymous
     visitor legitimately sees the same "See how it works" action repeated in the closing marketing band.
@@ -332,7 +336,7 @@ class HomeCtaStateTest( TestCase ):
     def test_anonymous_visitor_learns_how_it_works( self ):
         response = self.client.get( reverse( 'home' ) )
 
-        self.assertEqual( HomeCtaState.ANONYMOUS.value, response.context[ 'home_cta' ] )
+        self.assertEqual( OnboardingState.ANONYMOUS.value, response.context[ 'onboarding_state' ] )
         self.assertContains( response, reverse( 'explain' ) )
         self.assertContains( response, reverse( 'user_signin' ) )        # the "already have an account?" line
         self.assertNotContains( response, reverse( 'dashboard' ) )
@@ -344,10 +348,11 @@ class HomeCtaStateTest( TestCase ):
 
         response = self.client.get( reverse( 'home' ) )
 
-        self.assertEqual( HomeCtaState.EXAMPLE_ONLY.value, response.context[ 'home_cta' ] )
+        self.assertEqual( OnboardingState.EXAMPLE_ONLY.value, response.context[ 'onboarding_state' ] )
         self.assertContains( response, reverse( 'add_my_data' ) )
         self.assertNotContains( response, reverse( 'dashboard' ) )
         self.assertEqual( 1, self._gold_count( response ) )             # one gold, not two (the fixed bug)
+        self.assertNotContains( response, reverse( 'user_signin' ) )    # the home sign-in bar is anonymous-only
 
     def test_owner_is_pointed_to_the_dashboard( self ):
         # The realistic owner is also auto-joined to the example as a VIEWER, so this exercises the
@@ -360,10 +365,11 @@ class HomeCtaStateTest( TestCase ):
 
         response = self.client.get( reverse( 'home' ) )
 
-        self.assertEqual( HomeCtaState.OWN_ORG.value, response.context[ 'home_cta' ] )
+        self.assertEqual( OnboardingState.OWN_ORG.value, response.context[ 'onboarding_state' ] )
         self.assertContains( response, reverse( 'go_to_dashboard' ) )   # the CTA that lands on the dashboard
         self.assertNotContains( response, reverse( 'add_my_data' ) )
         self.assertEqual( 1, self._gold_count( response ) )
+        self.assertNotContains( response, reverse( 'user_signin' ) )    # a Verified owner has no use for it
 
     @override_settings( SUPPRESS_AUTHENTICATION = True )
     def test_self_hosted_singleton_is_an_owner( self ):
@@ -371,7 +377,7 @@ class HomeCtaStateTest( TestCase ):
         # OWN_ORG with no anonymous chrome.
         response = self.client.get( reverse( 'home' ) )
 
-        self.assertEqual( HomeCtaState.OWN_ORG.value, response.context[ 'home_cta' ] )
+        self.assertEqual( OnboardingState.OWN_ORG.value, response.context[ 'onboarding_state' ] )
         self.assertContains( response, reverse( 'go_to_dashboard' ) )   # the CTA that lands on the dashboard
         self.assertNotContains( response, reverse( 'user_signin' ) )
 
@@ -399,6 +405,47 @@ class DashboardEarlyUserTest( TestCase ):
         response = self.client.get( reverse( 'dashboard' ) )
 
         self.assertFalse( response.context[ 'offer_add_my_data' ] )
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class DashboardAccountSigninOfferTest( TestCase ):
+    """The dashboard rescues an *accidental Guest* -- one who has an existing account but was funnelled into a
+    throwaway one before finding the sign-in path -- with a quiet "already have an account?" sign-in. It is
+    offered only while the Guest has nothing worth keeping (the collision flow's own "no content" signal, so
+    signing in loses nothing); a Guest who has begun real work, and a Verified user, do not see it. Cloud
+    mode: the offer is meaningless self-hosted."""
+
+    def test_offered_to_a_guest_with_nothing_saved( self ):
+        guest = User.objects.create_guest()
+        Organization.objects.create_for_owner( guest, 'Mine' )
+        self.client.force_login( guest )
+
+        response = self.client.get( reverse( 'dashboard' ) )
+
+        self.assertTrue( response.context[ 'offer_account_signin' ] )
+        self.assertContains( response, reverse( 'guest_signin' ) )
+
+    def test_not_offered_once_the_guest_has_entered_content( self ):
+        guest = User.objects.create_guest()
+        organization = Organization.objects.create_for_owner( guest, 'Mine' )
+        save_profile( organization, Profile( subjects = [ SubjectProfile(
+            handle = 'subject', name = 'Alice', birthdate = date( 1980, 1, 1 ) ) ] ) )
+        self.client.force_login( guest )
+
+        response = self.client.get( reverse( 'dashboard' ) )
+
+        self.assertFalse( response.context[ 'offer_account_signin' ] )
+        self.assertNotContains( response, reverse( 'guest_signin' ) )
+
+    def test_not_offered_to_a_verified_user( self ):
+        user = User.objects.create_user( email = 'o@x.test' )
+        Organization.objects.create_for_owner( user, 'Mine' )
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'dashboard' ) )
+
+        self.assertFalse( response.context[ 'offer_account_signin' ] )
+        self.assertNotContains( response, reverse( 'guest_signin' ) )
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
@@ -451,3 +498,77 @@ class GoToOwnDashboardTest( TestCase ):
         response = self.client.get( reverse( 'go_to_dashboard' ) )
 
         self.assertEqual( 405, response.status_code )
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class ExplainCtaStateTest( TestCase ):
+    """The Explain page's graduation CTA tracks the shared onboarding state (`onboarding.state`), so it stops
+    soliciting a returning visitor to "try" what they have already begun: a cold visitor is invited to "Try
+    it now", a visitor still on the example graduates with "Start planning", and a user with their own plan
+    is sent to their dashboard. Pinned to cloud mode: the anonymous and example-only states cannot arise
+    self-hosted, where the singleton always owns its org."""
+
+    def test_anonymous_visitor_is_invited_to_try_it_now( self ):
+        response = self.client.get( reverse( 'explain' ) )
+
+        self.assertContains( response, 'Try it now' )
+        self.assertContains( response, reverse( 'add_my_data' ) )
+        self.assertNotContains( response, reverse( 'go_to_dashboard' ) )
+
+    def test_example_only_visitor_graduates_with_start_planning( self ):
+        Organization.objects.create( uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+        self.client.post( reverse( 'start_tour' ) )              # a guest whose only org is the example
+
+        response = self.client.get( reverse( 'explain' ) )
+
+        self.assertContains( response, 'Start planning' )
+        self.assertContains( response, reverse( 'add_my_data' ) )
+        self.assertNotContains( response, 'Try it now' )
+        self.assertNotContains( response, reverse( 'go_to_dashboard' ) )
+
+    def test_owner_is_pointed_to_their_dashboard( self ):
+        user = User.objects.create_user( email = 'o@x.test' )
+        Organization.objects.create_for_owner( user, 'Mine' )
+        self.client.force_login( user )
+
+        response = self.client.get( reverse( 'explain' ) )
+
+        self.assertContains( response, reverse( 'go_to_dashboard' ) )
+        self.assertNotContains( response, reverse( 'add_my_data' ) )
+        self.assertNotContains( response, 'Try it now' )
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class TourGraduationCtaTest( TestCase ):
+    """The tour shell's one gold action tracks the shared onboarding state (`onboarding.state`): a visitor
+    still on the example graduates with "Start planning", while a user who already has their own plan is
+    sent to their dashboard rather than re-invited to start one. Pinned to cloud mode: the example-only
+    state cannot arise self-hosted."""
+
+    def _tour_profile_url( self ):
+        return reverse( 'tour_profile', kwargs = { 'section': first_section_of_flow( 'profile' ).key } )
+
+    def test_example_only_guest_sees_start_planning( self ):
+        _seed_records( Organization.objects.create(
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME ) )
+        self.client.post( reverse( 'start_tour' ) )              # guest VIEWER, current-org = example
+
+        response = self.client.get( self._tour_profile_url() )
+
+        self.assertContains( response, 'Start planning' )
+        self.assertContains( response, reverse( 'add_my_data' ) )
+        self.assertNotContains( response, reverse( 'go_to_dashboard' ) )
+
+    def test_owner_on_the_tour_is_sent_to_their_dashboard( self ):
+        _seed_records( Organization.objects.create(
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME ) )
+        user = User.objects.create_user( email = 'o@x.test' )
+        Organization.objects.create_for_owner( user, 'Mine' )    # their own plan, so state is OWN_ORG
+        self.client.force_login( user )
+        self.client.post( reverse( 'start_tour' ) )              # browse the example: current-org = example
+
+        response = self.client.get( self._tour_profile_url() )
+
+        self.assertContains( response, reverse( 'go_to_dashboard' ) )
+        self.assertNotContains( response, 'Start planning' )
+        self.assertNotContains( response, reverse( 'add_my_data' ) )

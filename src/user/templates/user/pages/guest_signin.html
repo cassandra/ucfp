@@ -1,0 +1,45 @@
+{% extends "pages/interstitial_page.html" %}
+{% comment %}
+  The Guest "sign in to your existing account" page (GuestSigninView) -- a sister of the returning-user
+  signin.html for someone who arrived as a Guest by accident. The form posts to `attach_email`, the same
+  account-linking action the account page uses: entering the email of an existing account sends a one-time
+  code *to that account*, and confirming it reconciles this Guest's trial with it (adopted silently when the
+  trial holds nothing worth keeping). Gated to Guests by the view.
+{% endcomment %}
+
+{% block interstitial_content %}
+<div>
+  {% if email_not_configured %}
+  <div class="alert alert-danger">
+    <div class="h4">Email Not Configured</div>
+    <p>
+      The email settings are not properly configured. The Sign In feature requires email to work.
+    </p>
+    <p class="font-weight-bold">
+      You will not be able to sign in unless you disable the Sign In feature or properly configure the email settings.
+    </p>
+  </div>
+  {% endif %}
+  <form class="signin-form" method="post"
+        action="{% url 'attach_email' %}"
+        data-synchronous="true">
+    {% csrf_token %}
+    <div class="h3 text-center mb-0">Sign in to your existing account</div>
+    <p class="small text-muted text-center mt-3 mb-0">
+      Enter the email of your existing account and we'll send a one-time sign-in code to it — no password.
+      You'll pick up right where you left off.
+    </p>
+    <input type="email"
+           name="email"
+           value=""
+           class="form-control form-control-lg mt-3"
+           autofocus="autofocus"
+           placeholder="e-mail address" required="" id="signin-email"/>
+    <button id="signin-button"
+            role="button" type="submit"
+            class="btn btn-lg btn-cta mt-4">
+      <b>Email me a code</b>
+    </button>
+  </form>
+</div>
+{% endblock %}
