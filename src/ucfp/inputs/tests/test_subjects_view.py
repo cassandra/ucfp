@@ -41,7 +41,7 @@ class SubjectsViewPartnerDropTests( TestCase ):
     def _drop_partner_request( self ):
         """A Subjects auto-save POST with only the primary filled -- i.e. the partner removed."""
         data = QueryDict( mutable = True )
-        data.update( { 'subject_name': 'Alice', 'subject_birthdate': '1970-01-01' } )
+        data.update( { 'subject_name': 'Alice', 'subject_birthdate': '1970-01' } )
         request = self.factory.post( '/inputs/interview/subjects/edit/', data )
         request.organization  = self.organization
         request.session_state = SessionState()
@@ -85,9 +85,9 @@ class SubjectsViewPartnerFactPruningTests( TestCase ):
     def _post( self, *, with_partner ):
         """A Subjects auto-save POST with the primary filled and the partner present or removed."""
         data = QueryDict( mutable = True )
-        data.update( { 'subject_name': 'Alice', 'subject_birthdate': '1970-01-01' } )
+        data.update( { 'subject_name': 'Alice', 'subject_birthdate': '1970-01' } )
         if with_partner:
-            data.update( { 'partner_name': 'Bob', 'partner_birthdate': '1972-02-02' } )
+            data.update( { 'partner_name': 'Bob', 'partner_birthdate': '1972-02' } )
         request = self.factory.post( '/inputs/interview/subjects/edit/', data )
         request.organization  = self.organization
         request.session_state = SessionState()

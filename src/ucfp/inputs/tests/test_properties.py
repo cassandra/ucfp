@@ -63,12 +63,12 @@ class PropertyTypeTests( SimpleTestCase ):
         result = _apply(
             Profile(), handle = 'property-1', property_type = 'RENTAL_COMMERCIAL', name = 'Shopfront',
             value = '300,000', purchase_price = '250,000', building_basis = '200,000',
-            acquisition_date = '2010-05-01' )
+            acquisition_date = '2010-05' )
         asset = result.assets[ 0 ]
         self.assertEqual( asset.asset_class, AssetClass.REAL_ESTATE_RENTAL )
         self.assertEqual( asset.property.property_type, RealPropertyType.COMMERCIAL )
         self.assertEqual( asset.property.depreciable_basis, Decimal( '200000' ) )
-        self.assertEqual( asset.property.acquisition_date, date( 2010, 5, 1 ) )
+        self.assertEqual( asset.property.acquisition_date, date( 2010, 5, 15 ) )
 
     def test_a_second_home_materializes_a_second_home_holding_with_no_profile( self ):
         result = _apply(

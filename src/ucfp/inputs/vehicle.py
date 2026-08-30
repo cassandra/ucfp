@@ -20,7 +20,7 @@ from ucfp.inputs.builtin_assumptions import BUILTIN_ASSUMPTIONS
 from ucfp.inputs.plans.enums import PaymentMethod
 from ucfp.inputs.plans.schemas import Vehicle, VehiclePlan
 from ucfp.inputs.vehicle_expenses import plan_has_content, vehicle_plan_of
-from ucfp.inputs.widgets import IsoDateInput
+from ucfp.inputs.widgets import MonthField
 
 
 # A fresh vehicle's seeded typicals -- the values a new row starts from, which the user then adjusts.
@@ -112,8 +112,8 @@ class VehiclePurchaseForm( StyledFormMixin, forms.Form ):
     recurrence_years = forms.IntegerField(
         label = 'Replace every (years)', min_value = 1, required = False,
         widget = forms.NumberInput( attrs = { 'class' : 'input-count' } ) )   # a year count, a digit or two
-    end_date         = forms.DateField(
-        label = 'Stop replacing by', required = False, widget = IsoDateInput(),
+    end_date         = MonthField(
+        label = 'Stop replacing by', required = False,
         help_text = 'Blank = no end.' )
     # `monthly_payment` serves loan and lease; `lease_end_payment` is the lease's turn-in cost.
     # `down_payment` serves both too, but its label differs by method (a loan's "Down payment" vs a
@@ -200,8 +200,8 @@ class VehicleForm( VehiclePurchaseForm ):
     _REQUIRED = ( 'name', 'purchase_date', 'purchase_price', 'recurrence_years' )
 
     name          = forms.CharField( label = 'Name', max_length = 100, required = False )
-    purchase_date = forms.DateField(
-        label = 'Next purchase date', required = False, widget = IsoDateInput() )
+    purchase_date = MonthField(
+        label = 'Next purchase date', required = False )
 
     def __init__( self, data = None, *, profile = None, plans = None, handle = None ):
         # `profile` is unused here (a net-new vehicle has no link to a current one -- that is the

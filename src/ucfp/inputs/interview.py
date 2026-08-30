@@ -54,7 +54,7 @@ from .recurring_expenses import RecurringExpensesForm, merged_recurring_expenses
 from .vehicle import vehicles_context
 from .vehicle_disposition import all_dispositions_context, vehicle_plan_cards
 from .vehicle_expenses import VehicleExpensesForm, merged_vehicle_costs
-from .widgets import IsoDateInput, StateRateSelect, percent_str
+from .widgets import MonthField, StateRateSelect, percent_str
 
 
 class Aggregate( Enum ):
@@ -96,13 +96,13 @@ class SubjectsForm( StyledFormMixin, forms.Form ):
     """
 
     subject_name      = forms.CharField( label = 'Name', max_length = 100, required = False )
-    subject_birthdate = forms.DateField(
-        label = 'Birthdate', required = False,
-        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
+    subject_birthdate = MonthField(
+        context = AppConst.DATE_CONTEXT_BIRTHDATE,
+        label = 'Birthdate', required = False )
     partner_name      = forms.CharField( label = 'Name', max_length = 100, required = False )
-    partner_birthdate = forms.DateField(
-        label = 'Birthdate', required = False,
-        widget = IsoDateInput( context = AppConst.DATE_CONTEXT_BIRTHDATE ) )
+    partner_birthdate = MonthField(
+        context = AppConst.DATE_CONTEXT_BIRTHDATE,
+        label = 'Birthdate', required = False )
     us_state          = forms.ChoiceField(
         label = 'State', required = False,
         choices = [ ( '', _STATE_NONE_LABEL ) ] + USState.choices(),

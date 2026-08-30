@@ -50,9 +50,9 @@ class ExpectedLifetimeTests( unittest.TestCase ):
     def test_all_three_elections_land_together( self ):
         # ss / pension / lifetime all write onto one RetirementTiming via `replace`; submitting them
         # together guards against one election clobbering another.
-        timing = self._apply( s0_ss_from = '2027-01-01', s0_pen_from = '2025-06-01', s0_life_age = '90' )
-        self.assertEqual( timing.government_pension_claiming_date, date( 2027, 1, 1 ) )
-        self.assertEqual( timing.pension_start, date( 2025, 6, 1 ) )
+        timing = self._apply( s0_ss_from = '2027-01', s0_pen_from = '2025-06', s0_life_age = '90' )
+        self.assertEqual( timing.government_pension_claiming_date, date( 2027, 1, 15 ) )
+        self.assertEqual( timing.pension_start, date( 2025, 6, 15 ) )
         self.assertEqual( timing.expected_lifetime, date( 2050, 1, 1 ) )
 
     def test_an_implausible_age_is_rejected( self ):

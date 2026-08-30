@@ -22,7 +22,7 @@ from django import forms
 from ucfp.environment.constants import AppConst
 from ucfp.inputs.plans.schemas import IncomeTiming, RetirementTiming
 from ucfp.inputs.profile.schemas import IncomeFlow, SubjectProfile
-from ucfp.inputs.widgets import IsoDateInput
+from ucfp.inputs.widgets import MonthDateInput, MonthField
 
 
 class RetirementForm( forms.Form ):
@@ -105,12 +105,12 @@ class RetirementForm( forms.Form ):
             subject.birthdate )
 
     @staticmethod
-    def _date_field( initial : Optional[ date ], aria_label : str ) -> forms.DateField:
-        """A window/election date field, labelled for assistive tech (the pane shows only a visual
-        caption, so each input carries its own `aria-label`)."""
-        return forms.DateField(
+    def _date_field( initial : Optional[ date ], aria_label : str ) -> MonthField:
+        """A month-resolution window/election date field, labelled for assistive tech (the pane shows
+        only a visual caption, so each input carries its own `aria-label`)."""
+        return MonthField(
             required = False, initial = initial,
-            widget = IsoDateInput( attrs = { 'aria-label' : aria_label } ) )
+            widget = MonthDateInput( attrs = { 'aria-label' : aria_label } ) )
 
     def _age_field( self, on : Optional[ date ], birthdate : date,
                     aria_label : str ) -> forms.IntegerField:
@@ -124,7 +124,7 @@ class RetirementForm( forms.Form ):
         """Tag a date/age pair so `inputs.js` keeps them in sync from the subject's fixed birthdate. The
         shared hooks come from `AppConst` so the client and this markup cannot drift."""
         shared = { f'data-{AppConst.BIRTHDATE_DATA_ATTR}' : birthdate.isoformat() }
-        # The date already carries `form-control js-date` from IsoDateInput, so only add the sync
+        # The date already carries `form-control js-date` from MonthDateInput, so only add the sync
         # attributes here -- setting `class` would drop the control styling. The age is a plain
         # NumberInput, so it gets both the control class and its sync class.
         self.fields[ date_key ].widget.attrs.update(

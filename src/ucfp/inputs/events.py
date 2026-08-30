@@ -35,7 +35,7 @@ from ucfp.inputs.plans.enums import CreditCardPlanMode, EventKind, VehicleDispos
 from ucfp.inputs.plans.schemas import PlanEvent
 from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.vehicle_handles import vehicle_loan_handle
-from ucfp.inputs.widgets import IsoDateInput
+from ucfp.inputs.widgets import MonthField
 from ucfp.parameter_sets.enums import CadenceDomain
 
 
@@ -746,8 +746,8 @@ class EventForm( forms.Form ):
         if event_type.has_amount:
             self.fields[ 'amount' ] = MoneyField(
                 label = 'Amount', min_value = 0, initial = event.amount if event else None )
-        self.fields[ 'date' ] = forms.DateField(
-            label = 'Date', initial = event.date if event else None, widget = IsoDateInput() )
+        self.fields[ 'date' ] = MonthField(
+            label = 'Date', initial = event.date if event else None )
         if event_type.has_recurrence:
             # A one-time/recurring toggle (a `js-switch` control): 'recurring' reveals the cadence + finish
             # date, turning the single `date` into the window start. The cadence is seeded to a yearly
@@ -759,9 +759,8 @@ class EventForm( forms.Form ):
                 widget = forms.RadioSelect(
                     attrs = { 'class' : f'{AppConst.SWITCH_CONTROL_CLASS} form-check-input' } ) )
             add_cadence_fields( self, _RECUR_PREFIX, self._seeded_interval(), _RECUR_DOMAIN )
-            self.fields[ 'finish' ] = forms.DateField(
-                label = 'Until', required = False, initial = event.finish if event else None,
-                widget = IsoDateInput() )
+            self.fields[ 'finish' ] = MonthField(
+                label = 'Until', required = False, initial = event.finish if event else None )
         if event_type.has_inflation:
             # On by default: the amount is read as today's dollars and grown to nominal. Unchecked fixes it
             # in nominal terms (the entered figure is paid as-is each occurrence).

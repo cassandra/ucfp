@@ -106,7 +106,7 @@ Each header is tinted by its top-level group and drill depth (see css/books_tabl
     <tbody>
       {% for row in books_table.rows %}
       <tr{% if forloop.first %} class="bt-opening"{% endif %}>
-        <td class="bt-period-cell text-nowrap">{% if forloop.first %}<span class="text-muted small">opening</span>{% else %}{{ row.span.end_date|date:"Y-m-d" }}{% endif %}</td>
+        <td class="bt-period-cell text-nowrap">{% if forloop.first %}<span class="text-muted small">opening</span>{% else %}{{ row.span.end_date|date:"Y-m" }}{% endif %}</td>
         {% if show_age %}<td class="bt-age-cell text-right text-nowrap">{{ row.span.end_date|age_on:age_birthdate }}</td>{% endif %}
         {% for cell in row.cells %}
         {% if cell.removed or cell.empty %}
