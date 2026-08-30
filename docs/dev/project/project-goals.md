@@ -1,10 +1,10 @@
 # Project Goals & Requirements
 
-> **Status: stabilizing.** The core model and main flows have converged, so this
-> is far less volatile than it was, though it still evolves as features are added.
-> It captures *what* we are building and *why*, and is paired with
-> [project-phase.md](project-phase.md), which captures the *how* and *when*
-> constraints of the current (hardening) phase.
+> **Status: released, evolving.** The core model and main flows have converged and
+> shipped in the first public release, so this is far less volatile than it was,
+> though it still evolves as features are added. It captures *what* we are building
+> and *why*, and is paired with [project-phase.md](project-phase.md), which captures
+> the *how* and *when* constraints of the current (released) phase.
 
 ## Problem & Purpose
 
@@ -59,10 +59,10 @@ Settled model decisions:
 
 ## Target Users & Deployment Modes
 
-- **Primary (now):** the user's own financial-planning needs.
-- **Aspirational:** release it publicly as free,
-  source-available software (free for noncommercial use under the PolyForm
-  Noncommercial License; commercial use by separate license), supporting two modes:
+- **Primary:** the user's own financial-planning needs.
+- **Public (now released):** available publicly as free, source-available software
+  (free for noncommercial use under the PolyForm Noncommercial License; commercial
+  use by separate license), supporting two modes:
   - **Self-hosted** — for people who want to keep their financial data private.
   - **Public, free, hosted instance** — for people who want access without
     self-hosting.
