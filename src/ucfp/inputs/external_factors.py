@@ -8,6 +8,7 @@ stored here, not the library.
 """
 from dataclasses import dataclass, fields, replace
 from decimal import Decimal
+from typing import Optional
 
 from django import forms
 
@@ -23,10 +24,31 @@ from .assumptions.defaults import DEFAULT_TAX_FORECAST_TYPE, default_economics, 
 @dataclass( frozen = True )
 class _Factor:
     """One economic factor as the user sees it: the engine `EconomicParameters` field it edits, a human
-    `label`, and a one-line `help`. Presentation only -- decoupled from the engine field order."""
-    field : str
-    label : str
-    help  : str
+    `label`, and a one-line `help`. Presentation only -- decoupled from the engine field order. The
+    optional bounds mark a *bounded share* (0-100%, whole) apart from an open-ended growth rate, and are
+    honoured wherever the factor is edited (§8 and the Explore dials) -- one source, no per-field branch."""
+    field          : str
+    label          : str
+    help           : str
+    min_value      : Optional[ int ] = None
+    max_value      : Optional[ int ] = None
+    decimal_places : Optional[ int ] = None
+
+    def percent_field( self, *, required : bool = True ) -> PercentField:
+        """A `PercentField` for editing this factor, carrying its bounds (unbounded for a growth rate)."""
+        bounds = { name : value for name, value in (
+            ( 'min_value', self.min_value ), ( 'max_value', self.max_value ),
+            ( 'decimal_places', self.decimal_places ) ) if value is not None }
+        return PercentField( label = self.label, required = required, **bounds )
+
+
+# The Social Security funding-shortfall knobs. The benefits-payable share is an ordinary percent factor
+# (so it rides the shared factor list into §8 and the Explore dials); the effective year is a bespoke
+# integer field, edited only here (§8), paired into the same display group.
+_FUNDING_GROUP         = 'Social Security funding'
+_FUNDING_PAYABLE_FIELD = 'social_security_benefits_payable'
+_FUNDING_YEAR_FIELD    = 'social_security_reduction_year'
+_FUNDING_YEAR_LABEL    = 'Effective year'
 
 
 # The economic factors grouped and ordered deliberately for the pane -- the most-adjusted "what-if"
@@ -54,6 +76,11 @@ _FACTOR_GROUPS = (
                  'Annual growth of gross rental income.' ),
         _Factor( 'medical_inflation', 'Medical inflation',
                  'Inflation on medical and health-insurance costs, usually above general inflation.' ) ) ),
+    ( _FUNDING_GROUP, (
+        _Factor( _FUNDING_PAYABLE_FIELD, 'Social Security benefits payable',
+                 'Retained share of scheduled Social Security benefits if the trust-fund shortfall is not '
+                 'addressed (commonly cited around 75%). 100% assumes no reduction.',
+                 min_value = 0, max_value = 100, decimal_places = 0 ), ) ),
     ( 'Interest & yields', (
         _Factor( 'savings_interest', 'Savings interest',
                  'Yield on cash and savings balances.' ),
@@ -103,9 +130,20 @@ class ExternalFactorsForm( forms.Form ):
         super().__init__( data, initial = self._initial( assumptions ) )
         economics = self._seed( assumptions )
         for factor in _ALL_FACTORS:
-            field = PercentField( label = factor.label )
-            field.initial = getattr( economics, factor.field ).fraction * Decimal( '100' )
-            self.fields[ factor.field ] = field
+            self.fields[ factor.field ] = self._factor_field( factor, economics )
+        self.fields[ _FUNDING_YEAR_FIELD ] = forms.IntegerField(
+            label = _FUNDING_YEAR_LABEL, min_value = 2020, max_value = 2100,
+            initial = economics.social_security_reduction_year,
+            widget = forms.NumberInput( attrs = { 'class' : 'form-control' } ) )
+
+    @staticmethod
+    def _factor_field( factor, economics ) -> PercentField:
+        """The factor's percent field, seeded from `economics` -- its bounds ride on the `_Factor`, so a
+        bounded share renders (and validates) whole and 0-100 without a per-field branch here."""
+        field   = factor.percent_field()
+        percent = getattr( economics, factor.field ).fraction * Decimal( '100' )
+        field.initial = percent.quantize( Decimal( '1' ) ) if factor.decimal_places == 0 else percent
+        return field
 
     @staticmethod
     def _seed( assumptions ) -> EconomicParameters:
@@ -122,16 +160,26 @@ class ExternalFactorsForm( forms.Form ):
     @property
     def factor_groups( self ) -> list:
         """The factors grouped in display order for the pane -- each group's label and its rows
-        (label, help, and bound field)."""
-        return [ { 'label': group,
-                   'factors': [ { 'label': factor.label, 'help': factor.help,
-                                  'field': self[ factor.field ] }
-                                for factor in factors ] }
-                 for group, factors in _FACTOR_GROUPS ]
+        (label, help, and bound field). The Social Security funding group carries the effective-year
+        field as an extra row, paired with its benefits-payable percent."""
+        groups = list()
+        for group, factors in _FACTOR_GROUPS:
+            rows = [ { 'label': factor.label, 'help': factor.help, 'field': self[ factor.field ] }
+                     for factor in factors ]
+            if group == _FUNDING_GROUP:
+                rows.append( { 'field': self[ _FUNDING_YEAR_FIELD ],
+                               'help': 'The year the reduction takes effect. Only applies if benefits '
+                                       'payable is below 100%.' } )
+            groups.append( { 'label': group, 'factors': rows } )
+        return groups
 
     def apply( self, profile, assumptions ):
-        economics = EconomicParameters( **{
-            factor.field: Rate.percent( self.cleaned_data[ factor.field ] ) for factor in _ALL_FACTORS } )
+        # Replace onto the seed (not a fresh build) so the economics fields the form does not edit -- the
+        # window -- are preserved across a save; the funding year is set explicitly (not a rate factor).
+        economics = replace(
+            self._seed( assumptions ),
+            social_security_reduction_year = self.cleaned_data[ _FUNDING_YEAR_FIELD ],
+            **{ factor.field: Rate.percent( self.cleaned_data[ factor.field ] ) for factor in _ALL_FACTORS } )
         tax_type = StatuteForecastType.from_name( self.cleaned_data[ 'forecast_type' ] )
         return profile, replace(
             assumptions, economics = economics,

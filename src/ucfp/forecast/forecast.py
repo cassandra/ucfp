@@ -712,7 +712,8 @@ class Forecast:
             if windowed_amount is None:
                 continue
             factor = self._income_growth_factor( stream.income_tax_class, span.start_date.year )
-            amount = windowed_amount.amount * factor * year_fraction
+            payable = self._benefit_payable_factor( stream.income_tax_class, span.start_date.year )
+            amount = windowed_amount.amount * factor * payable * year_fraction
             account = self._baseline.income_accounts.account_for( stream.subject, stream.income_tax_class )
             lines.append( IncomeLine( account = account, gross_amount = amount, source = stream.name ) )
             continue
@@ -964,6 +965,20 @@ class Forecast:
     def _income_growth_factor( self, income_tax_class : IncomeTaxClass, target_year : int ) -> Decimal:
         return self._cumulative_factor(
             target_year, lambda segment : segment.income_growth_rate( income_tax_class ) )
+
+    def _benefit_payable_factor( self, income_tax_class : IncomeTaxClass, target_year : int ) -> Decimal:
+        """The retained share of a Social Security benefit in `target_year` under the funding-shortfall
+        assumption: the outlook's `social_security_benefits_payable` once `target_year` reaches its
+        `social_security_reduction_year`, else 1. A per-period step -- not a compounding rate -- applied
+        alongside the COLA in `_income_stream_lines_for`; 1 for every other income class. Both knobs are
+        read from the target-year outlook segment, so (as with the COLA) a multi-segment outlook keys the
+        step to the segment in effect that year -- today the outlook is a single constant segment."""
+        if income_tax_class is not IncomeTaxClass.SOCIAL_SECURITY:
+            return Decimal( '1' )
+        segment = self._parameters.economic_outlook.parameters_at( date( target_year, 1, 1 ) )
+        if target_year < segment.social_security_reduction_year:
+            return Decimal( '1' )
+        return segment.social_security_benefits_payable.fraction
 
     def _expense_inflation_factor( self, expense_tax_class : ExpenseTaxClass, target_year : int ) -> Decimal:
         return self._cumulative_factor(

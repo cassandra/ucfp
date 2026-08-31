@@ -8,14 +8,26 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from common.dataclass_json import from_json_data
 from common.date_window import DateWindow
-from common.rate import Rate
+from common.rate import FULL_RATE, Rate
 from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
 
 FIVE_PERCENT = Rate( Decimal( '0.05' ) )
 THREE_PERCENT = Rate( Decimal( '0.03' ) )
+
+
+class BackCompatTests( unittest.TestCase ):
+    """The funding-shortfall fields default so records written before they existed keep full benefits."""
+
+    def test_json_without_the_funding_fields_deserializes_to_the_defaults( self ):
+        # a pre-#243 EconomicParameters payload -- a rate, but no funding keys.
+        economics = from_json_data( EconomicParameters, { 'inflation': { 'fraction': '0.03' } } )
+        self.assertEqual( economics.inflation, Rate( Decimal( '0.03' ) ) )          # the stored rate survives
+        self.assertEqual( economics.social_security_benefits_payable, FULL_RATE )   # 100% -> no reduction
+        self.assertEqual( economics.social_security_reduction_year, 2032 )
 
 
 class AssetRateMappingTests( unittest.TestCase ):
