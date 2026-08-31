@@ -1239,37 +1239,31 @@ window.App.Inputs = (function () {
             flagPropertyOverrides( $( this ).closest( 'tr' ) );
         } );
 
-        // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike
-        // the delegated handlers above) they must be (re)applied to whatever DOM is present: once
-        // now, and again after each antinode render for swapped-in content. Pickers are also torn
-        // down before a subtree is removed. AN is absent under the test harness, so guard it.
-        enhanceDates( $( document.body ) );
-        enhanceOptionalSections( $( document.body ) );
-        enhanceSwitches( $( document.body ) );
-        enhanceResidenceOptions( $( document.body ) );
-        enhanceCreditCards( $( document.body ) );
-        enhanceLoans( $( document.body ) );
-        enhanceVehicleFinance( $( document.body ) );
-        enhanceStateAutofill( $( document.body ) );
-        enhanceCopySource( $( document.body ) );
-        enhancePairCombine( $( document.body ) );
-        enhanceMoneyInputs( $( document.body ) );
-        neutralizeReadOnly( $( document.body ) );       // last: disable the enhanced controls if read-only
+        // Pickers, optional-section state, switch state, and money grouping attach to concrete elements,
+        // so (unlike the delegated handlers above) they must be (re)applied to whatever DOM is present.
+        // Pickers are also torn down before a subtree is removed. AN is absent under the test harness, so
+        // guard it.
+        function applyEnhancers( $scope ) {
+            enhanceDates( $scope );
+            enhanceOptionalSections( $scope );
+            enhanceSwitches( $scope );
+            enhanceResidenceOptions( $scope );
+            enhanceCreditCards( $scope );
+            enhanceLoans( $scope );
+            enhanceVehicleFinance( $scope );
+            enhanceStateAutofill( $scope );
+            enhanceCopySource( $scope );
+            enhancePairCombine( $scope );
+            enhanceMoneyInputs( $scope );
+            neutralizeReadOnly( $scope );               // last: disable the enhanced controls if read-only
+        }
+        applyEnhancers( $( document.body ) );           // once now, for the initial page
         if ( window.AN ) {
-            AN.addAfterAsyncRenderFunction( function () {
-                enhanceDates( $( document.body ) );
-                enhanceOptionalSections( $( document.body ) );
-                enhanceSwitches( $( document.body ) );
-                enhanceResidenceOptions( $( document.body ) );
-                enhanceCreditCards( $( document.body ) );
-                enhanceLoans( $( document.body ) );
-                enhanceVehicleFinance( $( document.body ) );
-                enhanceStateAutofill( $( document.body ) );
-                enhanceCopySource( $( document.body ) );
-                enhancePairCombine( $( document.body ) );
-                enhanceMoneyInputs( $( document.body ) );
-                neutralizeReadOnly( $( document.body ) );
-            } );
+            // After each antinode render, for swapped-in content; and again after a modal opens -- a modal's
+            // content is inserted AFTER the after-render pass, so it needs its own pass or its enhanced
+            // controls (e.g. money grouping) stay raw.
+            AN.addAfterAsyncRenderFunction( function () { applyEnhancers( $( document.body ) ); } );
+            AN.addAfterModalRenderFunction( function () { applyEnhancers( $( document.body ) ); } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }
     } );
