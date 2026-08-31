@@ -158,6 +158,12 @@ class BenefitApplyViewTests( TestCase ):
         self._confirm( PARTNER_SUBJECT_HANDLE, '' )
         self.assertNotIn( PARTNER_SUBJECT_HANDLE, self._saved_benefits() )
 
+    def test_an_invalid_confirm_leaves_the_stored_entitlement_untouched( self ):
+        # Regression: an invalid benefit (negative -> fails MoneyField min_value) must NOT fall through to
+        # a clear and destroy the persisted $2,000 figure. A bad submission is a no-op, not a wipe.
+        self._confirm( PARTNER_SUBJECT_HANDLE, '-100' )
+        self.assertEqual( self._saved_benefits()[ PARTNER_SUBJECT_HANDLE ], Decimal( '2000' ) )
+
     def test_an_unknown_subject_is_not_found( self ):
         from django.http import Http404
         with self.assertRaises( Http404 ):

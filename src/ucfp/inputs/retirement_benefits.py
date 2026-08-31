@@ -13,10 +13,10 @@ from django import forms
 
 from common.forms import MoneyField
 
-from ucfp.environment.constants import AppConst
 from ucfp.accounts.enums import IncomeTaxClass
-from ucfp.jurisdiction.government_pension import GovernmentPension
+from ucfp.environment.constants import AppConst
 from ucfp.inputs.profile.schemas import GovernmentPensionEntitlement, PensionEntitlement
+from ucfp.jurisdiction.government_pension import GovernmentPension
 
 # The age a pension's base is quoted at. Unused until off-normal-start reduction terms exist; a fixed
 # placeholder here, since the start age is a plan (the Retirement section), not a fact.
@@ -47,8 +47,9 @@ class SocialSecurityEstimatorForm( forms.Form ):
         super().__init__( *args, **kwargs )
         # Mark the income input for the calculator's debounced recompute (inputs.js): as the user types, it
         # posts the recompute form, which swaps the benefit field while the modal stays open.
-        income = self.fields[ 'income' ].widget
-        income.attrs[ 'class' ] = f'{income.attrs.get( "class", "" )} {AppConst.SS_ESTIMATE_INCOME_CLASS}'.strip()
+        income   = self.fields[ 'income' ].widget
+        existing = income.attrs.get( 'class', '' )
+        income.attrs[ 'class' ] = f'{existing} {AppConst.SS_ESTIMATE_INCOME_CLASS}'.strip()
 
 
 class RetirementBenefitsForm( forms.Form ):
@@ -66,8 +67,9 @@ class RetirementBenefitsForm( forms.Form ):
                            for pension in ( profile.pensions if profile is not None else [] ) }
         # Whether to offer the benefit calculator beside the Social Security cell -- a jurisdiction
         # capability asked of the facade, never a jurisdiction test here (the input layer stays neutral).
-        self._can_estimate = profile is not None and \
-            GovernmentPension( profile.jurisdiction_type ).has_benefit_estimator()
+        self._can_estimate = bool(
+            profile is not None
+            and GovernmentPension( profile.jurisdiction_type ).has_benefit_estimator() )
         for m, subject in enumerate( self._subjects ):
             self._add_entitlement_fields( m, subject )
 

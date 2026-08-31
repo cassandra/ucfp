@@ -2009,16 +2009,22 @@ class SocialSecurityBenefitApplyView( View ):
     """`.../retirement-benefits/estimate/<handle>/apply/` -- the calculator's Confirm. Writes the chosen
     benefit as the subject's Social Security entitlement fact (a blank clears it), then re-renders the
     benefits table so the cell shows it; the modal closes on return (its Confirm form is not marked
-    stay-in-modal). Only this one subject's entitlement is touched -- the calculator edits one person."""
+    stay-in-modal). Only this one subject's entitlement is touched -- the calculator edits one person. An
+    invalid benefit leaves the stored entitlement untouched -- a bad submission never destroys it."""
 
     def post( self, request, handle ):
         profile, plans = _current_profile_and_plans( request )
         if not any( subject.handle == handle for subject in profile.subjects ):
             raise Http404( f'No subject {handle!r} in the current profile.' )
         submitted = SocialSecurityEstimatorForm( request.POST )
-        monthly   = submitted.cleaned_data.get( 'fra_benefit' ) if submitted.is_valid() else None
-        profile   = applied_government_benefit( profile, handle, monthly )
-        _save_profile_and_plans( request, profile, plans )
+        # A blank benefit is valid (the field is optional) and clears the entitlement; a value sets it.
+        # Only a valid form writes: an invalid benefit (e.g. a negative) must NOT fall through to a clear,
+        # which would silently destroy a stored figure. On invalid we skip the write and re-render the
+        # table unchanged.
+        if submitted.is_valid():
+            profile = applied_government_benefit(
+                profile, handle, submitted.cleaned_data.get( 'fra_benefit' ) )
+            _save_profile_and_plans( request, profile, plans )
         pane = render_to_string(
             RetirementBenefitsView.template,
             { RetirementBenefitsView.context_name: RetirementBenefitsForm( profile = profile ) },
