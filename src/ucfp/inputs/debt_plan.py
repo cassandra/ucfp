@@ -26,6 +26,20 @@ from ucfp.inputs.profile.enums import DebtKind
 from ucfp.inputs.widgets import MonthField
 
 
+def debt_plan_debts( profile ) -> list:
+    """The amortizing debts the Debt plan owns -- every amortizing debt except auto loans, whose repayment
+    is authored in the Vehicle plan instead. The single home for the Debt-plan side of the amortizing-debt
+    partition, so the section's editor, its default-repayment seeding, and any future consumer agree."""
+    return [ debt for debt in profile.debts
+             if debt.kind.is_amortizing and debt.kind is not DebtKind.AUTO ]
+
+
+def vehicle_plan_debts( profile ) -> list:
+    """The amortizing debts the Vehicle plan owns -- the auto loans (each an existing current-vehicle loan).
+    The sibling of `debt_plan_debts`; together they partition the amortizing debts with no overlap."""
+    return [ debt for debt in profile.debts if debt.kind is DebtKind.AUTO ]
+
+
 class DebtPlanForm( forms.Form ):
     """The repayment terms for each amortizing debt, as one auto-saving pane: per debt an interest
     rate, a remaining term in months, optional extra principal per month, and an optional full-payoff
@@ -37,13 +51,11 @@ class DebtPlanForm( forms.Form ):
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         super().__init__( data )
-        amortizing = ( [ debt for debt in profile.debts if debt.kind.is_amortizing ]
-                       if profile is not None else [] )
         # Non-auto amortizing debts are editable here; auto loans are authored in the Vehicle plan and
         # shown read-only with a pointer. `apply` rebuilds only the editable debts' repayments, so an auto
         # loan's repayment (and anything else) is left intact.
-        self._editable   = [ debt for debt in amortizing if debt.kind is not DebtKind.AUTO ]
-        self._auto       = [ debt for debt in amortizing if debt.kind is DebtKind.AUTO ]
+        self._editable   = debt_plan_debts( profile ) if profile is not None else []
+        self._auto       = vehicle_plan_debts( profile ) if profile is not None else []
         self._repayments = { r.debt_handle : r for r in ( plans.loan_repayments if plans else [] ) }
         extra   = { p.loan_handle : p.annual_amount for p in ( plans.prepayments if plans else [] ) }
         payoffs = self._payoff_dates( plans )

@@ -21,7 +21,7 @@ from decimal import Decimal
 from typing import Optional
 
 from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
-from ucfp.inputs.profile.schemas import LoanTerms, Profile
+from ucfp.inputs.profile.schemas import Debt, LoanTerms, Profile
 from ucfp.inputs.expenses import is_renting
 from ucfp.inputs.property_expenses import property_handles_for, set_home_rent
 from ucfp.inputs.vehicle_expenses import plan_has_content
@@ -224,6 +224,29 @@ def _with_snapshot( plans: Plans, debt_handle: str, terms: Optional[ LoanTerms ]
     """The snapshots with this debt's refreshed to the given terms (the others untouched)."""
     others = [ s for s in plans.loan_terms_snapshots if s.debt_handle != debt_handle ]
     return others + [ snapshot_of( debt_handle, terms ) ]
+
+
+def seeded_repayments( plans: Plans, debts: list[ Debt ] ) -> Plans:
+    """Seed a default contract-following repayment for each of `debts` that lacks one and whose terms
+    resolve a repayment -- the write that persists the pre-filled defaults when a plan section is walked.
+    An already-planned debt is left untouched (a walk never overrides an existing plan); a debt with
+    incomplete terms (no rate/term) seeds nothing, so it still reads as a real gap. Each seeded debt's
+    snapshot is (re)written fresh from the seeded contract -- replacing any orphan snapshot left by an
+    earlier reset -- so it matches the repayment and introduces no drift."""
+    planned    = { repayment.debt_handle for repayment in plans.loan_repayments }
+    repayments = list( plans.loan_repayments )
+    snapshots  = list( plans.loan_terms_snapshots )
+    for debt in debts:
+        if debt.handle in planned:
+            continue
+        repayment = _repayment_from_terms( debt.handle, debt.terms )
+        if repayment is None:
+            continue
+        repayments.append( repayment )
+        snapshots = [ s for s in snapshots if s.debt_handle != debt.handle ]
+        snapshots.append( snapshot_of( debt.handle, debt.terms ) )
+        planned.add( debt.handle )
+    return replace( plans, loan_repayments = repayments, loan_terms_snapshots = snapshots )
 
 
 # --- Home-rent drift (value drift) ---------------------------------------
