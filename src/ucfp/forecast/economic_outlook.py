@@ -46,9 +46,9 @@ class EconomicParameters:
     pension_cola                 : Rate = ZERO_RATE   # PENSION streams
     rental_increase              : Rate = ZERO_RATE   # GROSS_RENTAL streams
     # A funding-shortfall assumption (the "2032 cliff"): the retained share of scheduled Social Security
-    # benefits payable from `social_security_reduction_year` on (100% = no reduction, the default). Applied
-    # as a today's-dollars step on the realized benefit schedule in the planning layer, before tax and
-    # composing with the COLA above -- NOT a growth rate, so it is absent from `income_growth_rate`.
+    # benefits payable from `social_security_reduction_year` on (100% = no reduction, the default). The
+    # forecast engine applies it as a per-period step on the benefit, before tax and composing with the
+    # COLA above -- NOT a growth rate, so it is absent from `income_growth_rate`.
     social_security_benefits_payable : Rate = FULL_RATE
     social_security_reduction_year   : int  = 2032
 

@@ -970,7 +970,9 @@ class Forecast:
         """The retained share of a Social Security benefit in `target_year` under the funding-shortfall
         assumption: the outlook's `social_security_benefits_payable` once `target_year` reaches its
         `social_security_reduction_year`, else 1. A per-period step -- not a compounding rate -- applied
-        alongside the COLA in `_income_stream_lines_for`; 1 for every other income class."""
+        alongside the COLA in `_income_stream_lines_for`; 1 for every other income class. Both knobs are
+        read from the target-year outlook segment, so (as with the COLA) a multi-segment outlook keys the
+        step to the segment in effect that year -- today the outlook is a single constant segment."""
         if income_tax_class is not IncomeTaxClass.SOCIAL_SECURITY:
             return Decimal( '1' )
         segment = self._parameters.economic_outlook.parameters_at( date( target_year, 1, 1 ) )

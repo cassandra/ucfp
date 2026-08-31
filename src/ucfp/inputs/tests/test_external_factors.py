@@ -5,11 +5,13 @@ The engine behaviour of the reduction is tested in `forecast/tests/test_income.p
 input layer -- that the two knobs reach the stored economics unharmed.
 """
 import unittest
+from datetime import date
 from decimal import Decimal
 
 from django.http import QueryDict
 from django.test import SimpleTestCase
 
+from common.date_window import DateWindow
 from common.rate import Rate
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.inputs.assumptions.defaults import DEFAULT_TAX_FORECAST_TYPE
@@ -62,6 +64,17 @@ class ExternalFactorsFundingTests( SimpleTestCase ):
         economics = self._apply( inflation = 4, **{ _PAYABLE: 80 } )
         self.assertEqual( economics.inflation, Rate.percent( Decimal( '4' ) ) )               # the rate edit
         self.assertEqual( economics.social_security_benefits_payable, Rate.percent( Decimal( '80' ) ) )
+        self.assertEqual( economics.social_security_reduction_year, 2032 )                    # year untouched
+
+    def test_apply_preserves_the_unedited_window( self ):
+        # the reason apply replaces onto the seed rather than building fresh: fields the form never
+        # edits (the outlook window) must survive a save.
+        window    = DateWindow( start = date( 2030, 1, 1 ) )
+        seed      = EconomicParameters( window = window )
+        form      = ExternalFactorsForm( _data( seed ), assumptions = Assumptions( economics = seed ) )
+        self.assertTrue( form.is_valid(), form.errors )
+        _profile, assumptions = form.apply( None, Assumptions( economics = seed ) )
+        self.assertEqual( assumptions.economics.window, window )
 
     def test_benefits_payable_is_bounded_to_0_100( self ):
         for bad in ( 150, -10 ):

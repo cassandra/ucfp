@@ -15,7 +15,7 @@ from decimal import Decimal
 
 from django import forms
 
-from common.forms import MoneyField, PercentField
+from common.forms import MoneyField
 from common.rate import Rate
 from common.recurrence import TimeUnit
 
@@ -128,7 +128,7 @@ class EconomicAssumptionsExploreForm( forms.Form ):
         chosen      = set( selected ) if selected is not None else set( _DEFAULT_RATE_FIELDS )
         self._rows  = list()
         for factor in ECONOMIC_FACTORS:
-            field         = PercentField( required = False, label = factor.label )
+            field         = factor.percent_field( required = False )   # carries the factor's bounds
             field.initial = ( getattr( economics, factor.field ).fraction * 100 ) if economics is not None else None
             self.fields[ factor.field ] = field
             self._rows.append( { 'handle' : factor.field, 'label' : factor.label, 'field' : self[ factor.field ],

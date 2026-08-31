@@ -8,7 +8,8 @@ one more control. Reads `factors_form`.
 <div id="external-factors">
   <form method="post" action="{% url 'external_factors' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    <h6>Economic factors <span class="text-muted font-weight-normal small">(percent per year)</span></h6>
+    <h6>Economic factors <span class="text-muted font-weight-normal small">(annual rates, except where
+      noted)</span></h6>
     <div class="assumption-list mt-2">
       {% for group in factors_form.factor_groups %}
       <div class="font-weight-bold border-bottom pb-1 mt-3 mb-2">{{ group.label }}</div>

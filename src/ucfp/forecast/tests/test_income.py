@@ -281,6 +281,12 @@ class SocialSecurityReductionTests( unittest.TestCase ):
         self.assertEqual(                                                              # + 2028 + 2029 at 75%
             self._balance( result, IncomeTaxClass.SOCIAL_SECURITY, date( 2029, 12, 31 ) ), Decimal( '105000' ) )
 
+    def test_a_reduction_year_at_the_forecast_start_reduces_every_year( self ):
+        # the default-2032 case for anyone forecasting from the reduction year on: no full years at all.
+        result = _run_ss_reduction_forecast( Rate.percent( Decimal( '75' ) ), 2026 )   # start year, no COLA
+        self.assertEqual(                                                              # 4 x 22500, all reduced
+            self._balance( result, IncomeTaxClass.SOCIAL_SECURITY, date( 2029, 12, 31 ) ), Decimal( '90000' ) )
+
     def test_full_benefits_payable_is_a_noop( self ):
         result = _run_ss_reduction_forecast( FULL_RATE, 2028 )
         self.assertEqual(

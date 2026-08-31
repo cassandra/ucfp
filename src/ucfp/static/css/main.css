@@ -710,15 +710,19 @@ a.interview-part:hover {
     vertical-align: middle;
 }
 
-/* Percent inputs carry a % affix (always an input-group), so their up/down spinners are noise --
-   nobody nudges a rate a unit at a time. Suppress the spinners on affixed number inputs. (Money is a
-   text input, so it has no spinners to begin with.) */
+/* The assumption-list number inputs (percent rates in an input-group, and the bare funding year)
+   carry up/down spinners that are noise -- nobody nudges these a unit at a time. Suppress them across
+   the whole list so the affixed percents and the plain year read alike. (Money is a text input, so it
+   has no spinners to begin with.) */
 .input-group input[type="number"]::-webkit-inner-spin-button,
-.input-group input[type="number"]::-webkit-outer-spin-button {
+.input-group input[type="number"]::-webkit-outer-spin-button,
+.assumption-list input[type="number"]::-webkit-inner-spin-button,
+.assumption-list input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
-.input-group input[type="number"] {
+.input-group input[type="number"],
+.assumption-list input[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;
 }
