@@ -3,8 +3,10 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from ucfp.jurisdiction.us.parameters import SocialSecurityBenefitFormula, federal_2026
 from ucfp.jurisdiction.us.social_security import (
-    full_retirement_age_months, realized_annual_benefit, spousal_excess_annual_benefit )
+    estimated_pia_monthly, estimated_pia_monthly_current, full_retirement_age_months,
+    realized_annual_benefit, spousal_excess_annual_benefit )
 
 
 class FullRetirementAgeTest( unittest.TestCase ):
@@ -113,3 +115,59 @@ class SpousalExcessTest( unittest.TestCase ):
         # claiming below 62 is not allowed, so a much-younger spouse floors at the 62 reduction.
         self.assertEqual( self._spousal( '2000', '0', 1960, 59 ),
                           self._spousal( '2000', '0', 1960, 62 ) )
+
+
+class EstimatedPiaTest( unittest.TestCase ):
+    """The PIA estimate from covered wages via the benefit formula. Round bend points ($1,000 / $6,000)
+    and a $120,000 wage base are injected so the tier anchors are exact and independent of the projected
+    statutory figures. AIME = capped annual wage / 12."""
+
+    _FORMULA   = SocialSecurityBenefitFormula( Decimal( '1000' ), Decimal( '6000' ) )
+    _WAGE_BASE = Decimal( '120000' )
+
+    def _pia( self, annual_wage ):
+        return estimated_pia_monthly( Decimal( annual_wage ), self._FORMULA, self._WAGE_BASE )
+
+    def test_zero_wage_is_zero_pia( self ):
+        self.assertEqual( self._pia( '0' ), Decimal( '0' ) )
+
+    def test_wholly_in_the_first_tier_pays_90_percent( self ):
+        # $6,000/yr -> AIME $500 (< first bend) -> 90% * 500.
+        self.assertEqual( self._pia( '6000' ), Decimal( '450' ) )
+
+    def test_at_the_first_bend_point( self ):
+        # $12,000/yr -> AIME $1,000 (= first bend) -> 90% * 1000.
+        self.assertEqual( self._pia( '12000' ), Decimal( '900' ) )
+
+    def test_into_the_second_tier_adds_32_percent( self ):
+        # $24,000/yr -> AIME $2,000 -> 90%*1000 + 32%*1000 = 900 + 320.
+        self.assertEqual( self._pia( '24000' ), Decimal( '1220' ) )
+
+    def test_into_the_third_tier_adds_15_percent( self ):
+        # $96,000/yr -> AIME $8,000 -> 90%*1000 + 32%*5000 + 15%*2000 = 900 + 1600 + 300.
+        self.assertEqual( self._pia( '96000' ), Decimal( '2800' ) )
+
+    def test_wage_above_the_base_is_capped( self ):
+        # earnings over the wage base are not covered, so $200,000 pays the same as the $120,000 base.
+        self.assertEqual( self._pia( '200000' ), self._pia( '120000' ) )
+
+
+class EstimatedPiaCurrentTest( unittest.TestCase ):
+    """The base-year wrapper the facade calls -- it must read the co-located statutory figures rather
+    than any hard-coded value, so it stays correct when the annual figures are refreshed."""
+
+    def test_it_uses_the_base_year_bend_points_and_wage_base( self ):
+        params = federal_2026()
+        expected = estimated_pia_monthly(
+            Decimal( '80000' ), params.ss_benefit_formula, params.fica_rules.ss_wage_base )
+        self.assertEqual( estimated_pia_monthly_current( Decimal( '80000' ) ), expected )
+
+    def test_the_base_year_defines_the_benefit_formula( self ):
+        formula = federal_2026().ss_benefit_formula
+        self.assertLess( formula.first_bend, formula.second_bend )
+
+    def test_bend_points_index_forward_with_the_cola_factor( self ):
+        base    = federal_2026().ss_benefit_formula
+        indexed = federal_2026().indexed( Decimal( '2' ) ).ss_benefit_formula
+        self.assertEqual( indexed.first_bend, base.first_bend * 2 )
+        self.assertEqual( indexed.second_bend, base.second_bend * 2 )

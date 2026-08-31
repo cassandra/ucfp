@@ -10,15 +10,29 @@ the Social Security COLA over the horizon.
 
 Spousal benefits are modeled (see `spousal_excess_annual_benefit`). Not modeled: the earnings test
 before FRA; and survivor benefits.
+
+`estimated_pia_monthly` runs the other direction -- it *estimates* a PIA from a subject's covered
+wages (the SSA benefit formula) for the FRA-benefit estimator, where the claiming schedule above then
+takes over. Its bend points are wage-indexed year to year and so live with the other annual figures in
+`parameters.py`; the 90 / 32 / 15 percent marginal rates are structural to the formula and live here.
 """
 from datetime import date
 from decimal import Decimal
 
 from common.datetime_utils import elapsed_months
 
+from .parameters import SocialSecurityBenefitFormula, federal_2026
+
 _EARLY_BREAKPOINT  = 36        # months early at which the reduction rate steps down
 _DELAY_CEILING_AGE = 70        # delayed-retirement credits stop accruing at age 70
 _MIN_CLAIMING_AGE_MONTHS = 62 * 12   # spousal benefits cannot be claimed before age 62
+
+# The structural marginal replacement rates of the PIA formula: 90% of AIME up to the first bend point,
+# 32% between the bends, 15% above the second. Fixed in the benefit formula (not projected year to year),
+# so they live here with the math; the bend points they apply to are the annual figures in `parameters.py`.
+_PIA_RATE_FIRST  = Decimal( '0.90' )
+_PIA_RATE_SECOND = Decimal( '0.32' )
+_PIA_RATE_THIRD  = Decimal( '0.15' )
 
 
 def realized_annual_benefit(
@@ -56,6 +70,31 @@ def full_retirement_age_months( birth_year : int ) -> int:
     if birth_year <= 1959:
         return 66 * 12 + ( birth_year - 1954 ) * 2
     return 67 * 12
+
+
+def estimated_pia_monthly(
+        annual_covered_wage : Decimal, benefit_formula : SocialSecurityBenefitFormula,
+        wage_base : Decimal ) -> Decimal:
+    """Estimate the monthly PIA (the benefit at full retirement age) from a subject's annual covered
+    wage, via the SSA benefit formula. The wage is capped at the Social Security `wage_base` (earnings
+    above it are not covered) and spread over twelve months to stand in for AIME -- a typical-career-year
+    proxy in today's dollars, which holds because wages and benefits both track wage/price growth. The
+    formula then applies 90% of AIME up to the first bend point, 32% between the bends, and 15% above the
+    second. Pure: the bend points and wage base are passed in (the annual figures from `parameters.py`),
+    not read here."""
+    aime   = min( annual_covered_wage, wage_base ) / Decimal( 12 )
+    first  = min( aime, benefit_formula.first_bend )
+    second = max( Decimal( 0 ), min( aime, benefit_formula.second_bend ) - benefit_formula.first_bend )
+    third  = max( Decimal( 0 ), aime - benefit_formula.second_bend )
+    return _PIA_RATE_FIRST * first + _PIA_RATE_SECOND * second + _PIA_RATE_THIRD * third
+
+
+def estimated_pia_monthly_current( annual_covered_wage : Decimal ) -> Decimal:
+    """`estimated_pia_monthly` using the current base-year statutory figures -- the entry point the
+    jurisdiction facade calls, so callers estimate in today's dollars without handling the parameters."""
+    params = federal_2026()
+    return estimated_pia_monthly(
+        annual_covered_wage, params.ss_benefit_formula, params.fica_rules.ss_wage_base )
 
 
 def _adjustment_factor( birth_year : int, claiming_age_months : int ) -> Decimal:
