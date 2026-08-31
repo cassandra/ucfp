@@ -602,11 +602,15 @@ class Forecast:
         self._expense_streams = list( self._parameters.expense_streams )
         self._income_items    = list( self._parameters.income_items )
         self._income_streams  = list( self._parameters.income_streams )
-        # Social Security is computed per interval (couple-aware) rather than pre-baked into streams.
+        # Social Security is computed per interval (couple-aware) rather than pre-baked into streams; a
+        # subject removal (death) drives the survivor step-up inside the calculation.
         self._government_pension = GovernmentPension( self._parameters.statute.jurisdiction_type )
+        ss_deaths = { str( removal.subject_handle ): removal.event_date
+                      for removal in self._parameters.subject_removals }
         self._ss_members = [
             HouseholdMember( entitlement.subject.handle, entitlement.subject.birthdate,
-                             entitlement.pia_monthly, entitlement.claiming_date )
+                             entitlement.pia_monthly, entitlement.claiming_date,
+                             ss_deaths.get( str( entitlement.subject.handle ) ) )
             for entitlement in self._parameters.social_security ]
         # Whole-property sales reported by earlier periods, each ( handle, sale_date, rent_after ). Two
         # jobs: a rental sold in a prior tax YEAR is dropped from the tax context (it no longer

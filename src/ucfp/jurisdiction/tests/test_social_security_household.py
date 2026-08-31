@@ -16,11 +16,12 @@ from ucfp.jurisdiction.social_security_household import HouseholdMember, househo
 _US = GovernmentPension( JurisdictionType.US_FEDERAL )
 
 
-def _member( handle, birth_year, pia = None, claim_year = None ):
+def _member( handle, birth_year, pia = None, claim_year = None, death_year = None ):
     return HouseholdMember(
         handle, date( birth_year, 1, 1 ),
         None if pia is None else Decimal( pia ),
-        None if claim_year is None else date( claim_year, 1, 1 ) )
+        None if claim_year is None else date( claim_year, 1, 1 ),
+        None if death_year is None else date( death_year, 1, 1 ) )
 
 
 def _benefits( on_year, *members ):
@@ -63,6 +64,30 @@ class HouseholdBenefitTest( unittest.TestCase ):
 
     def test_no_entitlements_yields_no_benefit( self ):
         self.assertEqual( _benefits( 2028, _member( 'a', 1960 ), _member( 'b', 1962 ) ), {} )
+
+
+class HouseholdSurvivorTest( unittest.TestCase ):
+    """After the first death the survivor takes the larger of the two own benefits (spousal ends); the
+    decedent is gone the year after their death."""
+
+    def test_survivor_takes_the_larger_benefit_after_the_higher_earner_dies( self ):
+        hi = _member( 'hi', 1960, '3000', 2027, death_year = 2030 )
+        lo = _member( 'lo', 1960, '1000', 2027 )
+        self.assertEqual( _benefits( 2030, hi, lo )[ 'lo' ], Decimal( '18000' ) )   # both alive through 2030
+        self.assertEqual( _benefits( 2031, hi, lo )[ 'lo' ], Decimal( '36000' ) )   # survivor -> higher benefit
+        self.assertEqual( _benefits( 2031, hi, lo )[ 'hi' ], Decimal( '0' ) )       # decedent stops
+
+    def test_higher_earner_unaffected_when_the_lower_earner_dies( self ):
+        hi = _member( 'hi', 1960, '3000', 2027 )
+        lo = _member( 'lo', 1960, '1000', 2027, death_year = 2030 )
+        self.assertEqual( _benefits( 2031, hi, lo )[ 'hi' ], Decimal( '36000' ) )   # keeps own
+        self.assertEqual( _benefits( 2031, hi, lo )[ 'lo' ], Decimal( '0' ) )
+
+    def test_non_earning_spouse_becomes_a_survivor_on_the_earner_death( self ):
+        earner = _member( 'earner', 1960, '2400', 2027, death_year = 2030 )
+        spouse = _member( 'spouse', 1962 )
+        self.assertEqual( _benefits( 2028, earner, spouse )[ 'spouse' ], Decimal( '12000' ) )   # spousal, alive
+        self.assertEqual( _benefits( 2031, earner, spouse )[ 'spouse' ], Decimal( '28800' ) )   # survivor: own
 
 
 if __name__ == '__main__':
