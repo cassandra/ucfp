@@ -1,0 +1,31 @@
+{% extends "modals/action_with_cancel.html" %}
+{% comment %}
+The Social Security FRA-benefit calculator, opened from the Retirement benefits table beside a subject's
+benefit cell. The income form seeds from the subject's entered wages; editing the income recomputes the
+estimate in place (auto-submits to `ss_benefit_estimate`, swapping #ss-estimator-fra, staying in the
+modal). Nothing is saved until Confirm: that submits the benefit to `ss_benefit_apply`, which writes the
+entitlement fact and returns the re-rendered benefits table, and the modal closes (no data-stay-in-modal).
+The benefit field is editable, so a user who knows their figure can just type it and Confirm.
+{% endcomment %}
+
+{% block title_text %}Estimate {{ subject_name }}&rsquo;s Social Security benefit{% endblock %}
+
+{% block body %}
+<form method="post" action="{% url 'ss_benefit_estimate' subject_handle %}"
+      data-async="#ss-estimator-fra" data-stay-in-modal="true">
+  {% csrf_token %}
+  <div class="form-group">
+    <label for="{{ form.income.id_for_label }}">Average annual income</label>
+    {{ form.income }}
+  </div>
+</form>
+<form id="ss-estimator-confirm" method="post" action="{% url 'ss_benefit_apply' subject_handle %}"
+      data-async="#{{ table_target }}">
+  {% csrf_token %}
+  {% include "inputs/modals/social_security_estimator_fra.html" %}
+</form>
+{% endblock %}
+
+{% block action_right %}
+<button type="submit" form="ss-estimator-confirm" class="btn btn-primary">Confirm</button>
+{% endblock %}

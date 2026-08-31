@@ -1,16 +1,19 @@
+{% load icons %}
 {% comment %}
 The Retirement benefits table (id=retirement-benefits-table), auto-saved. One row per subject per benefit
 -- Social Security (benefit at full retirement age) and pension (base benefit) -- amount only, no
 add/remove: the count is set by the people, not edited here. Same Attribution / Income Source / Amount /
 Per shape as the Incomes table. Edits save in the background; only a genuine input error (a negative
-amount) re-renders. WHEN each benefit is claimed is the separate Retirement (Plans) section.
+amount) re-renders. The Social Security row offers an Estimate calculator (where the jurisdiction has one,
+via row.estimate_handle) that opens a modal and, on Confirm, writes the benefit and re-renders this table.
+WHEN each benefit is claimed is the separate Retirement (Plans) section.
 {% endcomment %}
 <div id="retirement-benefits-table">
   <form method="post" action="{% url 'retirement_benefits' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <table class="table table-sm w-auto">
       <thead>
-        <tr><th>Attribution</th><th>Income Source</th><th>Amount</th><th>Per</th></tr>
+        <tr><th>Attribution</th><th>Income Source</th><th>Amount</th><th>Per</th><th></th></tr>
       </thead>
       <tbody>
         {% for row in benefits_form.entitlement_rows %}
@@ -19,9 +22,13 @@ amount) re-renders. WHEN each benefit is claimed is the separate Retirement (Pla
           <td class="align-middle">{{ row.name }}{% if row.note %}<span class="text-muted small d-block">{{ row.note }}</span>{% endif %}</td>
           <td>{{ row.amount }}{% if row.amount.errors %}<span class="text-danger small d-block">{{ row.amount.errors|join:" " }}</span>{% endif %}</td>
           <td class="text-muted align-middle">{{ row.cadence }}</td>
+          <td class="align-middle pl-3">
+            {% if row.estimate_handle %}<a role="button" class="btn btn-link btn-sm p-0 text-nowrap"
+               href="{% url 'ss_benefit_estimate' row.estimate_handle %}" data-async="modal"
+               aria-label="Estimate {{ row.subject_name }}&rsquo;s Social Security benefit">{% icon "calculator" css_class="icon-left" %}Estimate</a>{% endif %}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="4">
+        <tr><td colspan="5">
           <em class="text-muted" >Retirement accounts will go here once you add an individual.</em>
         </td></tr>
         {% endfor %}

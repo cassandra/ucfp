@@ -1041,6 +1041,33 @@ window.App.Inputs = (function () {
             $( this ).removeClass( 'is-invalid' ).siblings( '.invalid-feedback' ).remove();
         } );
 
+        // Social Security calculator: recompute the benefit estimate from the income as the user types.
+        // The benefit is derived server-side (the statutory formula is not duplicated here), so the income
+        // posts its recompute form -- debounced while typing, and immediately on blur -- but only when the
+        // value actually changed, so a plain tab-through (or a grouping-only reformat) makes no request.
+        // The last submitted digits live on the input, so reopening the modal starts fresh.
+        const ssIncomeField = 'input' + classSelector( C.SS_ESTIMATE_INCOME_CLASS );
+        let ssEstimateTimer = null;
+        function recomputeSsEstimate( input ) {
+            if ( !input.form ) { return; }               // modal already closed (e.g. Confirm won the race)
+            const digits = ( input.value || '' ).replace( /[^0-9.]/g, '' );
+            const seen   = input.dataset.ssEstimateSeen !== undefined
+                ? input.dataset.ssEstimateSeen
+                : ( input.defaultValue || '' ).replace( /[^0-9.]/g, '' );
+            if ( digits === seen ) { return; }           // unchanged since last recompute -> no request
+            input.dataset.ssEstimateSeen = digits;
+            $( input.form ).trigger( 'submit' );         // antinode posts it and swaps the benefit field
+        }
+        $( 'body' ).on( 'input', ssIncomeField, function () {
+            clearTimeout( ssEstimateTimer );
+            const input = this;
+            ssEstimateTimer = setTimeout( function () { recomputeSsEstimate( input ); }, 600 );
+        } );
+        $( 'body' ).on( 'focusout', ssIncomeField, function () {
+            clearTimeout( ssEstimateTimer );
+            recomputeSsEstimate( this );
+        } );
+
         // Draw-order reorder (Cash Plan): the up/down buttons move a row within its list and save.
         // Each row carries a hidden draw_order input, so the form then serializes the classes in the
         // new priority order; re-rank the badges so the numbering matches. No-op at the list ends.
@@ -1212,37 +1239,31 @@ window.App.Inputs = (function () {
             flagPropertyOverrides( $( this ).closest( 'tr' ) );
         } );
 
-        // Pickers, optional-section state, and switch state attach to concrete elements, so (unlike
-        // the delegated handlers above) they must be (re)applied to whatever DOM is present: once
-        // now, and again after each antinode render for swapped-in content. Pickers are also torn
-        // down before a subtree is removed. AN is absent under the test harness, so guard it.
-        enhanceDates( $( document.body ) );
-        enhanceOptionalSections( $( document.body ) );
-        enhanceSwitches( $( document.body ) );
-        enhanceResidenceOptions( $( document.body ) );
-        enhanceCreditCards( $( document.body ) );
-        enhanceLoans( $( document.body ) );
-        enhanceVehicleFinance( $( document.body ) );
-        enhanceStateAutofill( $( document.body ) );
-        enhanceCopySource( $( document.body ) );
-        enhancePairCombine( $( document.body ) );
-        enhanceMoneyInputs( $( document.body ) );
-        neutralizeReadOnly( $( document.body ) );       // last: disable the enhanced controls if read-only
+        // Pickers, optional-section state, switch state, and money grouping attach to concrete elements,
+        // so (unlike the delegated handlers above) they must be (re)applied to whatever DOM is present.
+        // Pickers are also torn down before a subtree is removed. AN is absent under the test harness, so
+        // guard it.
+        function applyEnhancers( $scope ) {
+            enhanceDates( $scope );
+            enhanceOptionalSections( $scope );
+            enhanceSwitches( $scope );
+            enhanceResidenceOptions( $scope );
+            enhanceCreditCards( $scope );
+            enhanceLoans( $scope );
+            enhanceVehicleFinance( $scope );
+            enhanceStateAutofill( $scope );
+            enhanceCopySource( $scope );
+            enhancePairCombine( $scope );
+            enhanceMoneyInputs( $scope );
+            neutralizeReadOnly( $scope );               // last: disable the enhanced controls if read-only
+        }
+        applyEnhancers( $( document.body ) );           // once now, for the initial page
         if ( window.AN ) {
-            AN.addAfterAsyncRenderFunction( function () {
-                enhanceDates( $( document.body ) );
-                enhanceOptionalSections( $( document.body ) );
-                enhanceSwitches( $( document.body ) );
-                enhanceResidenceOptions( $( document.body ) );
-                enhanceCreditCards( $( document.body ) );
-                enhanceLoans( $( document.body ) );
-                enhanceVehicleFinance( $( document.body ) );
-                enhanceStateAutofill( $( document.body ) );
-                enhanceCopySource( $( document.body ) );
-                enhancePairCombine( $( document.body ) );
-                enhanceMoneyInputs( $( document.body ) );
-                neutralizeReadOnly( $( document.body ) );
-            } );
+            // After each antinode render, for swapped-in content; and again after a modal opens -- a modal's
+            // content is inserted AFTER the after-render pass, so it needs its own pass or its enhanced
+            // controls (e.g. money grouping) stay raw.
+            AN.addAfterAsyncRenderFunction( function () { applyEnhancers( $( document.body ) ); } );
+            AN.addAfterModalRenderFunction( function () { applyEnhancers( $( document.body ) ); } );
             AN.addBeforeContentRemovalFunction( function ( $subtree ) { destroyDates( $subtree ); } );
         }
     } );

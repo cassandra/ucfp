@@ -52,6 +52,23 @@ class SocialSecurityThresholds:
 
 
 @dataclass( frozen = True )
+class SocialSecurityBenefitFormula:
+    """The two monthly bend points of the PIA (primary insurance amount) formula -- the AIME levels at
+    which the replacement rate steps down. The 90% / 32% / 15% marginal rates themselves are structural
+    to the benefit formula (not projected), so they live with the estimator in `us.social_security`; the
+    bend points are wage-indexed each year and so belong here with the other annually-updated figures."""
+
+    first_bend  : Decimal
+    second_bend : Decimal
+
+    def indexed( self, factor : Decimal ) -> 'SocialSecurityBenefitFormula':
+        """These bend points scaled by the cumulative COLA `factor` -- the wage-indexing proxy the
+        Scenario uses for the other wage-indexed figures (e.g. the Social Security wage base)."""
+        return replace(
+            self, first_bend = self.first_bend * factor, second_bend = self.second_bend * factor )
+
+
+@dataclass( frozen = True )
 class ItemizedRules:
     """Floors and caps applied when totalling itemized deductions: the medical-
     expense AGI floor (only the excess is deductible), the SALT cap (state/local
@@ -153,6 +170,7 @@ class TaxParameters:
     ltcg_brackets           : dict[ FilingStatus, BracketTable ]
     standard_deduction      : dict[ FilingStatus, StandardDeduction ]
     ss_thresholds           : dict[ FilingStatus, SocialSecurityThresholds ]
+    ss_benefit_formula      : SocialSecurityBenefitFormula
     itemized_rules          : ItemizedRules
     capital_loss_offset_cap : Decimal
     section_121_exclusion   : dict[ FilingStatus, Decimal ]
@@ -171,8 +189,9 @@ class TaxParameters:
         """This baseline projected forward by a cumulative COLA `factor`: the inflation-indexed
         figures scale; the statutorily fixed ones stay put (so they bite harder over time, which
         is the real effect). INDEXED: the ordinary and LTCG brackets, the standard deduction, the
-        retirement contribution limits, the Social Security wage base, and the ACA poverty
-        guideline. NOT INDEXED (fixed in statute): the SS benefit-taxability thresholds, the NIIT
+        retirement contribution limits, the Social Security wage base, the PIA benefit-formula bend
+        points, and the ACA poverty guideline. NOT INDEXED (fixed in statute): the SS
+        benefit-taxability thresholds, the NIIT
         and Additional Medicare thresholds, the capital-loss offset cap, the section 121 home-sale
         exclusion, the SALT cap, and the passive-activity allowance -- and every rate, ratio, and
         age."""
@@ -184,6 +203,7 @@ class TaxParameters:
                                     for status, table in self.ltcg_brackets.items() },
             standard_deduction  = { status : deduction.indexed( factor )
                                     for status, deduction in self.standard_deduction.items() },
+            ss_benefit_formula  = self.ss_benefit_formula.indexed( factor ),
             contribution_limits = self.contribution_limits.indexed( factor ),
             fica_rules          = self.fica_rules.indexed( factor ),
             aca                 = self.aca.indexed( factor ) )
@@ -239,6 +259,10 @@ def federal_2026() -> TaxParameters:
             FilingStatus.MARRIED_JOINT : SocialSecurityThresholds( d( '32000' ), d( '44000' ) ),
             FilingStatus.SINGLE : SocialSecurityThresholds( d( '25000' ), d( '34000' ) ),
         },
+        # PIA bend points are monthly AIME breakpoints, wage-indexed each year. These are the projected
+        # 2026 figures (the 2025 bend points were $1,226 / $7,391), consistent with the other projected
+        # 2026 values here; refresh from SSA's official annual announcement.
+        ss_benefit_formula = SocialSecurityBenefitFormula( d( '1275' ), d( '7687' ) ),
         # SALT cap is the temporary OBBBA amount, $40,400 for 2026 (indexed 1% a year from the
         # $40,000 2025 base). Its high-income phasedown -- reduce by 30% of MAGI over $505,000,
         # floored at $10,000 -- is not modeled; the flat cap here is the no-phasedown case.

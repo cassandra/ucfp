@@ -9,6 +9,7 @@ The remaining views are the sub-editors each section pane drills into.
 """
 from collections import Counter
 from dataclasses import replace
+from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import BadRequest
@@ -27,6 +28,8 @@ from common import antinode
 from common.exceptions import DataNotAvailableError
 from common.async_view import ModalView
 from common.request_utils import is_ajax
+
+from ucfp.jurisdiction.government_pension import GovernmentPension
 
 from ucfp.inputs.profile.repository import (
     advance_profile, create_profile, latest_profile, load_profile, save_profile )
@@ -72,7 +75,8 @@ from .debt_plan import DebtPlanForm
 from .debts import DebtForm, _minted_debt_handle, debt_heading, debts_context, delete_debt
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
-from .retirement_benefits import RetirementBenefitsForm
+from .retirement_benefits import (
+    RetirementBenefitsForm, SocialSecurityEstimatorForm, applied_government_benefit, subject_wage_total )
 from .properties import (
     PossessionsForm, PropertyForm, _minted_handle, delete_property, properties_context,
     property_heading )
@@ -1945,6 +1949,87 @@ class RetirementBenefitsView( SelfSavingPaneView ):
         profile, plans = form.apply( profile, plans )
         _save_profile_and_plans( request, profile, plans )
         return False                                            # fixed row set -- never re-renders
+
+
+_SS_ESTIMATOR_TEMPLATE     = 'inputs/modals/social_security_estimator.html'
+_SS_ESTIMATOR_FRA_TEMPLATE = 'inputs/modals/social_security_estimator_fra.html'
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class SocialSecurityEstimatorModalView( ModalView ):
+    """`/inputs/interview/retirement-benefits/estimate/<handle>/` -- the FRA-benefit calculator the
+    Retirement benefits table opens beside a subject's Social Security cell. It seeds the average income
+    from the subject's summed wages and shows the estimated monthly benefit at full retirement age (GET),
+    recomputing that estimate as the user adjusts the income while the modal stays open (POST). Available
+    only where the jurisdiction has an estimator -- the same gate the table's opener applies."""
+
+    def get_template_name( self ):
+        return _SS_ESTIMATOR_TEMPLATE
+
+    def get( self, request, handle ):
+        subject, pension, income = self._resolve( request, handle )
+        form = SocialSecurityEstimatorForm( initial = {
+            'income' : income, 'fra_benefit' : pension.estimate_entitlement( income ) } )
+        return self.modal_response( request, context = {
+            'form' : form, 'subject_handle' : handle, 'subject_name' : subject.name,
+            'table_target' : RetirementBenefitsView.target } )
+
+    def post( self, request, handle ):
+        _subject, pension, _income = self._resolve( request, handle )
+        income  = self._submitted_income( request )
+        rendered = SocialSecurityEstimatorForm( initial = {
+            'fra_benefit' : pension.estimate_entitlement( income ) } )
+        content = render_to_string( _SS_ESTIMATOR_FRA_TEMPLATE, { 'form' : rendered }, request = request )
+        return antinode.response( replace_map = { 'ss-estimator-fra' : content } )
+
+    def _resolve( self, request, handle ):
+        """The subject, the jurisdiction pension facade, and the subject's summed wages -- 404 for an
+        unknown subject, or for a jurisdiction with no estimator (so the endpoint mirrors the opener's
+        gate rather than returning a bad estimate)."""
+        profile, _plans = _current_profile_and_plans( request )
+        subject = next( ( candidate for candidate in profile.subjects if candidate.handle == handle ), None )
+        if subject is None:
+            raise Http404( f'No subject {handle!r} in the current profile.' )
+        pension = GovernmentPension( profile.jurisdiction_type )
+        if not pension.has_benefit_estimator():
+            raise Http404( 'The current jurisdiction has no Social Security benefit estimator.' )
+        return subject, pension, subject_wage_total( profile, handle )
+
+    @staticmethod
+    def _submitted_income( request ) -> Decimal:
+        """The posted income parsed through the form's money field -- a blank or unparseable value falls
+        back to zero, so the recompute always yields an estimate rather than erroring mid-interaction."""
+        submitted = SocialSecurityEstimatorForm( request.POST )
+        income    = submitted.cleaned_data.get( 'income' ) if submitted.is_valid() else None
+        return income if income is not None else Decimal( 0 )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class SocialSecurityBenefitApplyView( View ):
+    """`.../retirement-benefits/estimate/<handle>/apply/` -- the calculator's Confirm. Writes the chosen
+    benefit as the subject's Social Security entitlement fact (a blank clears it), then re-renders the
+    benefits table so the cell shows it; the modal closes on return (its Confirm form is not marked
+    stay-in-modal). Only this one subject's entitlement is touched -- the calculator edits one person. An
+    invalid benefit leaves the stored entitlement untouched -- a bad submission never destroys it."""
+
+    def post( self, request, handle ):
+        profile, plans = _current_profile_and_plans( request )
+        if not any( subject.handle == handle for subject in profile.subjects ):
+            raise Http404( f'No subject {handle!r} in the current profile.' )
+        submitted = SocialSecurityEstimatorForm( request.POST )
+        # A blank benefit is valid (the field is optional) and clears the entitlement; a value sets it.
+        # Only a valid form writes: an invalid benefit (e.g. a negative) must NOT fall through to a clear,
+        # which would silently destroy a stored figure. On invalid we skip the write and re-render the
+        # table unchanged.
+        if submitted.is_valid():
+            profile = applied_government_benefit(
+                profile, handle, submitted.cleaned_data.get( 'fra_benefit' ) )
+            _save_profile_and_plans( request, profile, plans )
+        pane = render_to_string(
+            RetirementBenefitsView.template,
+            { RetirementBenefitsView.context_name: RetirementBenefitsForm( profile = profile ) },
+            request = request )
+        return antinode.response( replace_map = { RetirementBenefitsView.target: pane } )
 
 
 class RetirementView( SelfSavingPaneView ):

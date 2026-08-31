@@ -41,6 +41,10 @@ class AppConst:
     DATE_FIELD_CLASS = 'js-date'    # a date input: enhanced with a date picker
     AGE_FIELD_CLASS  = 'js-age'     # the age input beside a date in a date/age pair
     MONEY_INPUT_CLASS = 'js-money'  # a money input: grouped with thousands separators as it is typed
+    # The Social Security calculator's income input: its benefit estimate is recomputed server-side, so
+    # this input posts its recompute form as the user types (debounced on idle, and on blur). Read by
+    # inputs.js.
+    SS_ESTIMATE_INCOME_CLASS = 'js-ss-estimate-income'
 
     # A date input's planning context, which tunes where its picker opens and
     # how far it ranges (dates here are routinely decades from today, so the
