@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from common.date_window import DateWindow
-from common.rate import ZERO_RATE, Rate
+from common.rate import FULL_RATE, ZERO_RATE, Rate
 from common.schedule import Schedule
 from ucfp.accounts.enums import AssetClass, ExpenseTaxClass, IncomeTaxClass
 from ucfp.period.parameters import AssetRates
@@ -45,6 +45,12 @@ class EconomicParameters:
     social_security_cola         : Rate = ZERO_RATE   # SOCIAL_SECURITY streams
     pension_cola                 : Rate = ZERO_RATE   # PENSION streams
     rental_increase              : Rate = ZERO_RATE   # GROSS_RENTAL streams
+    # A funding-shortfall assumption (the "2032 cliff"): the retained share of scheduled Social Security
+    # benefits payable from `social_security_reduction_year` on (100% = no reduction, the default). Applied
+    # as a today's-dollars step on the realized benefit schedule in the planning layer, before tax and
+    # composing with the COLA above -- NOT a growth rate, so it is absent from `income_growth_rate`.
+    social_security_benefits_payable : Rate = FULL_RATE
+    social_security_reduction_year   : int  = 2032
 
     def asset_rates( self ) -> AssetRates:
         """Resolve into the Period's per-`AssetClass` growth and distribution rates. A class

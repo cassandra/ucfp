@@ -54,6 +54,10 @@ _FACTOR_GROUPS = (
                  'Annual growth of gross rental income.' ),
         _Factor( 'medical_inflation', 'Medical inflation',
                  'Inflation on medical and health-insurance costs, usually above general inflation.' ) ) ),
+    ( 'Social Security funding', (
+        _Factor( 'social_security_benefits_payable', 'Social Security benefits payable',
+                 'Retained share of scheduled Social Security benefits if the trust-fund shortfall is not '
+                 'addressed (commonly cited around 75%). 100% assumes no reduction.' ), ) ),
     ( 'Interest & yields', (
         _Factor( 'savings_interest', 'Savings interest',
                  'Yield on cash and savings balances.' ),
@@ -130,7 +134,9 @@ class ExternalFactorsForm( forms.Form ):
                  for group, factors in _FACTOR_GROUPS ]
 
     def apply( self, profile, assumptions ):
-        economics = EconomicParameters( **{
+        # replace onto the seed (not a fresh build) so the non-rate economics fields the form does not
+        # edit -- the funding effective year, the window -- are preserved across a save.
+        economics = replace( self._seed( assumptions ), **{
             factor.field: Rate.percent( self.cleaned_data[ factor.field ] ) for factor in _ALL_FACTORS } )
         tax_type = StatuteForecastType.from_name( self.cleaned_data[ 'forecast_type' ] )
         return profile, replace(

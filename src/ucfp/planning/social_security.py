@@ -10,7 +10,8 @@ non-earning spouse cannot claim earlier and a younger one claims early rather th
 Pure and jurisdiction-neutral: the statutory amounts come from `GovernmentPension` (the US rules live
 behind it), while the pairing, the both-collecting window, and the non-earning-spouse default are the
 neutral orchestration here. Decoupled from `IncomeStream`, so the Social Security timing feature can
-sweep claiming dates over it. Survivor benefits are not modeled.
+sweep claiming dates over it. Survivor benefits are not modeled. (The funding-shortfall reduction is a
+per-period economic factor the engine applies alongside the COLA, not a realization concern here.)
 """
 from dataclasses import dataclass
 from datetime import date, timedelta

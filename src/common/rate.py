@@ -50,3 +50,6 @@ class Rate:
 
 
 ZERO_RATE = Rate( Decimal( '0' ) )
+# 100% as a Rate -- a `.fraction` of 1, so using it as a multiplier (`amount * fraction`) is a no-op.
+# The identity value for a retained-share factor (e.g. the Social Security benefits-payable assumption).
+FULL_RATE = Rate( Decimal( '1' ) )
