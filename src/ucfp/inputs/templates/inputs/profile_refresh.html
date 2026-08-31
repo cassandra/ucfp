@@ -1,0 +1,25 @@
+{% extends "pages/top_page.html" %}
+{% load common_tags %}
+{% block head_title %}Profile · {% settings_value 'SITE_NAME' %}{% endblock %}
+{% comment %}
+The profile-review prompt (FlowEntryView, flow='profile'), shown when the saved profile predates the
+current month. A profile is a point-in-time snapshot, so a new month means balances, values and loan terms
+have moved on -- the user reviews them before editing or forecasting. Acknowledging POSTs back to
+flow_profile, which advances the snapshot into the current month (carrying the facts forward and reopening
+the volatile sections for review) and drops the user into that refreshed walk.
+{% endcomment %}
+{% block page_title %}Profile{% endblock %}
+{% block page_subtitle %}
+{% if profile_updated %}<p class="text-muted small mb-0">as of {{ profile_updated|date:"F Y" }}</p>{% endif %}
+{% endblock %}
+{% block page_body %}
+<div class="alert alert-info" role="status">
+  <p class="mb-0">A new month has begun since your profile was last set. Its balances, values and loan terms
+  are a snapshot in time, so give them a look and update anything that has changed before you plan or
+  forecast against them.</p>
+</div>
+<form method="post" action="{% url 'flow_profile' %}" data-synchronous="true">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-cta">Review &amp; update my profile</button>
+</form>
+{% endblock %}

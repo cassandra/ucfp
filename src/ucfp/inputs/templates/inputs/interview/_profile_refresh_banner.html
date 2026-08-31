@@ -1,0 +1,19 @@
+{% comment %}
+The profile-freshness advisory, shown on the Scenarios / Plans / Assumptions surfaces when the shared
+profile predates the current month (see `profile_refresh_required`). Advisory only: these surfaces stay
+usable -- running a forecast is gated at the hub. The banner already *is* the review message, so its CTA
+POSTs straight to `flow_profile` (the same acknowledgment the Profile-page prompt makes): that advances the
+snapshot and drops the user into the refreshed review, rather than routing them to the prompt to read the
+same message and click a second time. `data-synchronous` forces a full navigation (the POST redirects), not
+an async swap. The accent `btn-cta` sets it apart from a plain info notice.
+{% endcomment %}
+{% if profile_refresh_required %}
+<div class="alert alert-info d-md-flex align-items-center mt-3 mb-0" role="status">
+  <span class="mr-md-3 mb-2 mb-md-0">Your profile is from {{ profile_refresh_effective_date|date:"F Y" }} —
+  review it so your plans reflect today's figures.</span>
+  <form method="post" action="{% url 'flow_profile' %}" data-synchronous="true" class="ml-md-auto">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-cta btn-sm text-nowrap">Review profile</button>
+  </form>
+</div>
+{% endif %}

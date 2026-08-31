@@ -29,7 +29,7 @@ from common.async_view import ModalView
 from common.request_utils import is_ajax
 
 from ucfp.inputs.profile.repository import (
-    create_profile, latest_profile, load_profile, save_profile )
+    advance_profile, create_profile, latest_profile, load_profile, save_profile )
 from ucfp.inputs.plans.repository import (
     create_plans, latest_plans, load_plans, plans_for, rename_plans, save_plans )
 from ucfp.inputs.assumptions.repository import (
@@ -49,7 +49,7 @@ from .interview import (
     first_section_of_flow, flow_of, flow_title, next_section_after, section_for )
 from .enums import UsageRole
 from .models import AssumptionsRecord, PlansRecord, ScenarioRecord
-from .mixins import GuestReminderMixin
+from .mixins import GuestReminderMixin, profile_refresh_required
 from .state import (
     assumptions_completion_blockers, assumptions_is_complete, completed_assumptions, completed_plans,
     completed_profile, plans_completion_blockers, plans_is_complete, profile_advisories,
@@ -110,6 +110,10 @@ class ScenariosHomeView( View ):
         profile          = load_profile( profile_record ) if profile_record is not None else None
         scenario_rows    = self._scenario_rows(
             scenarios, profile, plans_uses, assumptions_uses, *complete_ids )
+        # The profile-freshness advisory: scenarios run off the profile, so note when it is from an earlier
+        # month and link to its review (advisory here -- running is gated at the hub).
+        refresh_required = profile_refresh_required( request )
+        refresh_date     = latest_profile( organization ).effective_date if refresh_required else None
         return render( request, _SCENARIOS_TEMPLATE, {
             'active_nav'       : 'scenarios',
             # Building a scenario needs a completed profile first, so the page leads with the profile gate.
@@ -117,6 +121,8 @@ class ScenariosHomeView( View ):
             'scenarios'        : scenario_rows,
             # A household keeps at least one scenario, so its sole scenario's delete control is suppressed.
             'can_delete_scenario' : len( scenarios ) > 1,
+            'profile_refresh_required'       : refresh_required,
+            'profile_refresh_effective_date' : refresh_date,
         } )
 
     @staticmethod
@@ -590,9 +596,19 @@ class FlowEntryView( View ):
     profile's straddle sections (Property, Income) write their shared, profile-derived data into the
     Default's Plans rather than minting a stray one."""
 
+    _REFRESH_TEMPLATE = 'inputs/profile_refresh.html'
+
     flow = None
 
     def get( self, request ):
+        # An aged profile is refreshed by an explicit, acknowledged advance -- so entering the Profile flow
+        # with an outdated snapshot lands on the review prompt instead of the editor, keeping the user off
+        # the stale-dated record until they advance it (Plans/Assumptions are advisory-only, so they fall
+        # through).
+        if self.flow == 'profile' and profile_refresh_required( request ):
+            # `profile_refresh_required` already established a complete (hence present) latest profile.
+            return render( request, self._REFRESH_TEMPLATE,
+                           { 'profile_updated': latest_profile( request.organization ).effective_date } )
         # A standalone flow is not a scenario build. Clear any build scope left over from an abandoned
         # build, so a lone Plans edit does not wrongly chain into Assumptions (nor show the build
         # breadcrumb, nor finish on the Scenarios page). The scenario build enters through
@@ -613,6 +629,17 @@ class FlowEntryView( View ):
         if first is None:
             raise Http404( f'No sections in flow {self.flow!r}.' )
         return redirect( 'interview_section', section = first.key )
+
+    def post( self, request ):
+        """Acknowledge the review prompt: advance the profile into the current month (carrying the facts
+        forward, reopening the volatile sections) and re-enter the Profile flow -- now current-dated, so
+        `get` walks the refreshed snapshot. Only the Profile flow prompts; a stray POST elsewhere 404s.
+        Idempotent via `advance_profile`, so a double submit does not duplicate the month."""
+        if self.flow != 'profile':
+            raise Http404( f'Flow {self.flow!r} has no review prompt to acknowledge.' )
+        if profile_refresh_required( request ):            # advance only a complete, outdated profile;
+            advance_profile( request.organization )        # an in-progress one is never copied
+        return redirect( 'flow_profile' )
 
 
 def _select( request, field, record ):
@@ -725,6 +752,12 @@ class InterviewView( GuestReminderMixin, View ):
 
     def get( self, request, section ):
         current  = self._live_section( section )
+        # A profile section must not be walked while the snapshot is outdated: presenting it would
+        # acknowledge it against the prior month's (immutable) record. Route to the Profile page's review
+        # prompt, which advances first. Plans/Assumptions sections fall through -- they carry only the
+        # advisory banner (below), never a block.
+        if flow_of( current ) == 'profile' and profile_refresh_required( request ):
+            return redirect( 'flow_profile' )
         self._seed_and_acknowledge( request, current )         # presenting the section is the acknowledgment
         profile, other = self._load( request, current )
         sections = self._flow_sections( profile, flow_of( current ) )
@@ -949,6 +982,8 @@ class InterviewView( GuestReminderMixin, View ):
             'loan_terms_drift'     : self._plans_loan_terms_drift( request, flow ),
             # The sibling home-rent drift banner: the Profile rent changed since the plan's rent seeded.
             'home_rent_drift'      : self._plans_home_rent_drift( request, flow ),
+            # The profile-freshness advisory banner for a Plans/Assumptions page (see the method).
+            **self._profile_refresh_notice( request, flow ),
             # The rail header: the completion badge(s) and, in a build, the Plans/Assumptions part switch.
             **rail,
             # The current flow's blocker/advisory notices for the detail banner below the heading.
@@ -964,6 +999,17 @@ class InterviewView( GuestReminderMixin, View ):
         context[ 'show_guest_email_banner' ] = self.show_guest_reminder( request, current_flow_complete )
         context['current_flow_complete'] = current_flow_complete
         return context
+
+    @staticmethod
+    def _profile_refresh_notice( request, flow ) -> dict:
+        """The profile-freshness advisory for a component flow -- whether the shared profile is outdated and
+        the month it is from, for the Plans/Assumptions advisory banner. Empty on the profile flow (which is
+        redirected to its review prompt instead) so the banner never competes with the prompt."""
+        if flow == 'profile' or not profile_refresh_required( request ):
+            return { 'profile_refresh_required': False }
+        latest = latest_profile( request.organization )
+        return { 'profile_refresh_required': True,
+                 'profile_refresh_effective_date': latest.effective_date if latest is not None else None }
 
     @staticmethod
     def _plans_drift( request, flow ):
@@ -1051,14 +1097,16 @@ class InterviewView( GuestReminderMixin, View ):
 
     @staticmethod
     def _profile_status( request, flow ) -> dict:
-        """The Profile flow's detail notices -- when it was last updated, the blocker reasons (once walked),
+        """The Profile flow's detail notices -- the snapshot's as-of month, the blocker reasons (once walked),
         and the advisories (once complete). Empty for the component flows. The completion badge is the rail
         header's; this feeds only the detail banner below the heading."""
         if flow != 'profile':
             return dict()
         record = latest_profile( request.organization )
         return {
-            'profile_updated' : record.updated_datetime if record is not None else None,
+            # The snapshot's *effective* month (its "as of"), not the row's auto-updated timestamp: the facts
+            # hold as of this month, which is what a re-run and the freshness check both key on.
+            'profile_updated' : record.effective_date if record is not None else None,
             # Non-empty only once every section is walked but the profile is still incomplete -- the reasons
             # to show then, in the danger detail banner.
             'profile_blockers': profile_completion_blockers( record ) if record is not None else [],

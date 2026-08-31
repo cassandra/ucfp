@@ -4,14 +4,38 @@
 organization and attaches its `InputState`, so both the view and its template can branch on how much
 of the Profile/Plans/Assumptions bundle is set up. A view that does not gate simply does not inherit
 it (and keeps decorating its own dispatch with `ensure_organization`).
+
+`profile_refresh_required` is the shared freshness gate every freshness surface reads: the org's profile
+predates the current month *and* the current user can act on it.
 """
 from django.conf import settings
 from django.utils.decorators import method_decorator
 
 from organization.decorators import ensure_organization
 
-from ucfp.inputs.state import completed_profile, input_state
+from ucfp.inputs.profile.repository import current_effective_date, latest_profile
+from ucfp.inputs.state import completed_profile, input_state, profile_is_complete
 from ucfp.onboarding.membership import is_example_organization
+
+
+def profile_refresh_required( request ) -> bool:
+    """Whether the request's organization has an outdated profile the current user should refresh -- the
+    gate every freshness surface reads. True only for a *complete* profile predating the current month: a
+    still-in-progress profile is finished in place, never advanced -- a user who has not completed it has
+    run nothing and has no snapshot to protect (so `completed_profile`, not mere existence, is the test).
+    Carved out for a read-only member (who cannot advance it) and the read-only example org (whose aged
+    sample is not the user's to refresh). Safe on a request with no organization."""
+    organization = getattr( request, 'organization', None )
+    if organization is None or not getattr( request, 'organization_can_write', True ):
+        return False
+    if is_example_organization( organization ):
+        return False
+    latest = latest_profile( organization )
+    # Cheap date test before the completeness one, which loads (decrypts) the profile: a current-month
+    # profile -- the common case -- short-circuits here and never pays the decrypt.
+    return ( latest is not None
+             and latest.effective_date < current_effective_date()
+             and profile_is_complete( latest ) )
 
 
 class InputGatedMixin:

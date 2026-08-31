@@ -12,7 +12,7 @@ from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
 
 from ucfp.inputs.interview import first_section_of_flow
-from ucfp.inputs.profile.repository import save_profile
+from ucfp.inputs.profile.repository import latest_profile, load_profile, save_profile
 from ucfp.inputs.profile.schemas import Profile, SubjectProfile
 from ucfp.onboarding.constants import EXAMPLE_ORGANIZATION_NAME, EXAMPLE_ORGANIZATION_UUID
 from ucfp.onboarding.state import OnboardingState
@@ -277,7 +277,15 @@ class FeaturePageAddMyDataTest( TestCase ):
 
     def test_owner_sees_neither_prompt( self ):
         user = User.objects.create_user( email = 'o@x.test' )
-        _seed_records( Organization.objects.create_for_owner( user, 'Mine' ) )   # a profile to render
+        organization = Organization.objects.create_for_owner( user, 'Mine' )
+        _seed_records( organization )                                           # a profile to render
+        # The seed helper dates the profile to January (the example-org snapshot convention); a real owner's
+        # is current-month. Re-home it so the profile-freshness gate -- which redirects an *outdated* profile
+        # to its review prompt -- does not intercept this add-my-data test.
+        seeded  = latest_profile( organization )
+        current = save_profile( organization, load_profile( seeded ) )
+        current.acknowledged_sections = list( seeded.acknowledged_sections )
+        current.save()
         self.client.force_login( user )
 
         response = self.client.get( self._profile_url() )
