@@ -23,6 +23,7 @@ from common.widgets import PercentInput
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.environment.constants import AppConst
+from ucfp.inputs.compatibility import seeded_repayments
 from ucfp.inputs.loan_fieldset import LoanTermsFieldsMixin, loan_terms_initial
 from ucfp.inputs.profile.enums import DebtKind, HousingTenure
 from ucfp.inputs.profile.schemas import (
@@ -36,7 +37,7 @@ from ucfp.jurisdiction.us.subdivision_tax import USState
 
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
-from .debt_plan import DebtPlanForm
+from .debt_plan import DebtPlanForm, debt_plan_debts, vehicle_plan_debts
 from .debts import debts_context
 from .events import EventsForm
 from .external_factors import ExternalFactorsSectionForm
@@ -762,10 +763,13 @@ class DebtsSectionForm:
 
 
 class DebtPlanSectionForm:
-    """§ Debt plan L0 -- the pane. A no-op section form: the amortizing loans' repayment terms and
-    the credit cards' paydown strategies are each edited and saved through their own async view
-    (`DebtPlanView`, `CreditCardView`), so Next just advances. It exposes both forms, which read
-    the declared debts."""
+    """§ Debt plan L0 -- the pane. The amortizing loans' repayment terms and the credit cards' paydown
+    strategies are each edited and saved through their own async view (`DebtPlanView`, `CreditCardView`).
+    It owns the non-auto amortizing debts (`debt_plan_debts`); walking the section seeds their default
+    repayments (see `seeded_repayments`), so accepting the pre-filled defaults persists them. It exposes
+    both forms, which read the declared debts."""
+
+    seeds_on_render = True
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -783,7 +787,7 @@ class DebtPlanSectionForm:
         return CreditCardPlanForm( profile = self._profile, plans = self._plans )
 
     def apply( self, profile, plans ):
-        return profile, plans
+        return profile, seeded_repayments( plans, debt_plan_debts( profile ) )
 
 
 class HomeExpensesSectionForm:
@@ -816,8 +820,12 @@ class VehiclePlanSectionForm:
     (retain/sell/replace), per current leased vehicle its end-of-term plan (return/renew/buy), plus any
     net-new future vehicles. The dispositions are managed by `VehicleDispositionView` /
     `LeasedVehicleDispositionView` and the net-new list by `VehicleFormView` / `VehicleDeleteView`, each
-    saving on its own, so Next just advances. The shared per-car running costs are a separate section --
-    `VehicleExpensesSectionForm`."""
+    saving on its own. It owns the auto loans (`vehicle_plan_debts`); walking the section seeds their default
+    repayments (see `seeded_repayments`), so accepting the pre-filled defaults persists them -- a retained
+    financed vehicle needs no disposition record (absent means Retain). The shared per-car running costs are
+    a separate section -- `VehicleExpensesSectionForm`."""
+
+    seeds_on_render = True
 
     def __init__( self, data = None, *, profile = None, plans = None ):
         self._profile = profile
@@ -836,7 +844,7 @@ class VehiclePlanSectionForm:
         return vehicle_plan_cards( self._profile, self._plans )
 
     def apply( self, profile, plans ):
-        return profile, plans
+        return profile, seeded_repayments( plans, vehicle_plan_debts( profile ) )
 
 
 class VehicleExpensesSectionForm:
