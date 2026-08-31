@@ -28,7 +28,7 @@ from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.accounts.books_table import BooksColumnKey
 from ucfp.inputs.drift import plans_drift, plans_home_rent_drift, plans_loan_terms_drift
 from ucfp.inputs.enums import UsageRole
-from ucfp.inputs.mixins import InputGatedMixin
+from ucfp.inputs.mixins import InputGatedMixin, profile_refresh_required
 from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.state import completed_profile
@@ -126,9 +126,13 @@ class FinancialForecastView( InputGatedMixin, View ):
     one. Setup flows land on the Scenarios page when done; the user returns via the nav."""
 
     def get( self, request ):
+        if profile_refresh_required( request ):            # an aged profile is reviewed before it is run
+            return redirect( 'flow_profile' )
         return render( request, _HUB_TEMPLATE, self._context( request ) )
 
     def post( self, request ):                             # "Run forecast": project a complete scenario
+        if profile_refresh_required( request ):            # do not run against a stale snapshot
+            return redirect( 'flow_profile' )
         organization   = request.organization
         profile_record = completed_profile( organization )
         complete, _drift_blocked, _in_progress = self._scenarios( organization, profile_record )

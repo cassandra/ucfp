@@ -931,6 +931,12 @@ SUBJECTS_STEP         = 'subjects'
 INCOME_STEP           = 'income'
 EXTERNAL_FACTORS_STEP = 'external-factors'
 
+# The profile sections whose facts do not decay as the calendar advances, so their reviewed state is
+# carried across a month advance rather than cleared for re-review. People (subjects, filing basis) is
+# the one such section: everything else -- balances, values, incomes, debts -- is a point-in-time figure
+# the user should re-check.
+PROFILE_STICKY_SECTION_KEYS = frozenset( { SUBJECTS_STEP } )
+
 
 # The interview's order. A section with a form is live; the rest are declared so the stepper shows
 # the full path ahead.
@@ -1068,6 +1074,31 @@ def flow_of( section : Section ) -> str:
 
 def flow_title( flow_key : str ) -> str:
     return next( title for key, title in FLOWS if key == flow_key )
+
+
+def flow_reviewed( profile : Profile, record, flow : str ) -> bool:
+    """Whether `record` has had every applicable, live section of `flow` reviewed -- the completeness a
+    component or the profile shares (a scenario's overall run-readiness adds cross-input checks). Lives with
+    the section spine so both `state` and the lower `profile.repository` can read it without either importing
+    the other. `record` is any input record (Profile/Plans/Assumptions), read only for its acknowledgments."""
+    acknowledged = record.acknowledged_section_keys
+    return all(
+        section.key in acknowledged
+        for section in applicable_sections( profile )
+        if flow_of( section ) == flow and section.form is not None )
+
+
+def profile_complete( profile : Profile, record ) -> bool:
+    """Whether `record` is a fully set-up profile: every profile-flow section reviewed AND the profile-level
+    facts a forecast must not silently assume -- a filing status (a person) and a housing choice
+    (own/rent/neither, not an unanswered `None` the engine would read as no housing cost). The single
+    definition of a *complete* profile, so `state`'s readiness gate and `profile.repository` (which treats an
+    *incomplete* profile as an in-progress build) cannot drift into weaker/stronger notions of "done" -- a
+    walk alone is not enough. Callers pass the loaded profile, since this layer cannot load it (that would
+    import `repository`)."""
+    return ( flow_reviewed( profile, record, 'profile' )
+             and profile.filing_status is not None
+             and profile.home_tenure is not None )
 
 
 def sections_in_flow( flow_key : str ) -> list:

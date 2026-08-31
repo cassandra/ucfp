@@ -15,7 +15,7 @@ from organization.models import Organization
 
 from ucfp.accounts.enums import AssetClass
 from ucfp.inputs.assumptions.repository import assumptions_for, load_assumptions
-from ucfp.inputs.interview import AccountsForm, applicable_sections, flow_of
+from ucfp.inputs.interview import AccountsForm, flow_reviewed, profile_complete
 from ucfp.inputs.models import ProfileRecord
 from ucfp.inputs.plans.repository import load_plans, plans_for
 from ucfp.inputs.profile.enums import HousingTenure
@@ -85,14 +85,10 @@ def completed_profile( organization : Organization ) -> Optional[ ProfileRecord 
 
 
 def profile_is_complete( record : ProfileRecord ) -> bool:
-    """Whether `record` is a fully set-up profile: every applicable, live profile-flow section reviewed,
-    plus the profile-level facts a forecast should not silently assume -- a filing status (a person) and a
-    housing choice (own/rent/neither, rather than an unanswered `None` the engine would treat as no housing
-    cost)."""
-    profile = load_profile( record )
-    return ( flow_reviewed( profile, record, 'profile' )
-             and profile.filing_status is not None
-             and profile.home_tenure is not None )
+    """Whether `record` is a fully set-up profile -- the shared `interview.profile_complete` predicate over
+    the record's loaded facts (every profile-flow section reviewed, plus a filing status and a housing
+    choice). One definition, so this gate and `profile.repository`'s in-progress test cannot disagree."""
+    return profile_complete( load_profile( record ), record )
 
 
 def profile_completion_blockers( record : ProfileRecord ) -> list[ str ]:
@@ -228,12 +224,3 @@ def assumptions_completion_blockers( profile : Profile, record ) -> list[ str ]:
         return [ 'Set the external factors (economic outlook and tax projection).' ]
     return []
 
-
-def flow_reviewed( profile : Profile, record, flow : str ) -> bool:
-    """Whether `record` has had every applicable, live section of `flow` reviewed -- the completeness a
-    component or the profile shares (a scenario's overall run-readiness adds cross-input checks)."""
-    acknowledged = record.acknowledged_section_keys
-    return all(
-        section.key in acknowledged
-        for section in applicable_sections( profile )
-        if flow_of( section ) == flow and section.form is not None )
