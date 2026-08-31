@@ -1,0 +1,31 @@
+{% extends "modals/action_with_cancel.html" %}
+{% comment %}
+The Social Security FRA-benefit calculator, opened from the Retirement benefits table beside a subject's
+benefit cell. Shows the subject's average annual income (seeded from their entered wages) and the
+estimated monthly benefit at full retirement age; editing the income recomputes the estimate in place --
+the form auto-submits to `ss_benefit_estimate`, swapping #ss-estimator-fra, and stays in the modal
+(`data-stay-in-modal`). The "Use this estimate" action is wired in a later phase.
+{% endcomment %}
+
+{% block title_text %}Estimate Social Security benefit{% endblock %}
+
+{% block body %}
+<p class="text-muted small mb-3">We estimate {{ subject_name }}&rsquo;s Social Security benefit at full
+  retirement age from their entered wages, using the SSA benefit formula. Adjust the income to explore,
+  or type a benefit you already know.</p>
+<form method="post" action="{% url 'ss_benefit_estimate' subject_handle %}"
+      data-async="#ss-estimator-fra" data-stay-in-modal>
+  {% csrf_token %}
+  <div class="form-group">
+    <label for="{{ form.income.id_for_label }}">Average annual income</label>
+    {{ form.income }}
+    <small class="form-text text-muted">Summed from {{ subject_name }}&rsquo;s entered wages.</small>
+  </div>
+  {% include "inputs/modals/social_security_estimator_fra.html" %}
+</form>
+{% endblock %}
+
+{% block action_right %}
+{% comment %} Wired in the next phase: fills the table's benefit cell from the estimate. {% endcomment %}
+<button type="button" class="btn btn-primary" disabled>Use this estimate</button>
+{% endblock %}

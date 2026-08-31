@@ -1,0 +1,11 @@
+{% comment %}
+The estimated FRA-benefit field of the Social Security calculator, wrapped in its swap target
+(id=ss-estimator-fra) so the income-driven recompute can replace just this field while the modal stays
+open. Rendered inside the calculator form on open, and returned on its own by the recompute POST.
+{% endcomment %}
+<div id="ss-estimator-fra" class="form-group mt-3">
+  <label for="{{ form.fra_benefit.id_for_label }}">Estimated monthly benefit at full retirement age</label>
+  {{ form.fra_benefit }}
+  <small class="form-text text-muted">Estimated from the SSA benefit formula &mdash; edit to enter a
+    figure you already know.</small>
+</div>

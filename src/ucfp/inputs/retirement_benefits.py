@@ -7,16 +7,45 @@ stated benefit *amount*; WHEN each is claimed is a plan, set in the Retirement (
 One Social Security and one pension cell per subject, their count fixed by the household.
 """
 from dataclasses import replace
+from decimal import Decimal
 
 from django import forms
 
 from common.forms import MoneyField
 
+from ucfp.accounts.enums import IncomeTaxClass
 from ucfp.inputs.profile.schemas import GovernmentPensionEntitlement, PensionEntitlement
 
 # The age a pension's base is quoted at. Unused until off-normal-start reduction terms exist; a fixed
 # placeholder here, since the start age is a plan (the Retirement section), not a fact.
 _PENSION_NORMAL_AGE = 65
+
+
+def subject_wage_total( profile, subject_handle : str ) -> Decimal:
+    """The subject's total annual covered wages -- the sum of their WAGES income flows. Household income
+    (rent, other) is not attributed to a person, so it is excluded; only a person's own wages count toward
+    a Social Security benefit. The seed for the FRA-benefit estimate."""
+    return sum(
+        ( flow.amount for flow in profile.income_flows
+          if flow.subject_handle == subject_handle and flow.income_tax_class == IncomeTaxClass.WAGES ),
+        Decimal( 0 ) )
+
+
+class SocialSecurityEstimatorForm( forms.Form ):
+    """The FRA-benefit calculator's two fields: the average annual income (seeded from the subject's summed
+    wages) and the resulting estimated monthly benefit at full retirement age. The income drives the
+    estimate -- editing it recomputes the benefit -- and the benefit stays editable so the user can enter a
+    figure they already know. Rendering and parsing only; the estimate itself comes from the jurisdiction
+    facade (`GovernmentPension`)."""
+
+    income      = MoneyField( required = False, min_value = 0 )
+    fra_benefit = MoneyField( required = False, min_value = 0 )
+
+    def __init__( self, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
+        # Editing the income auto-submits the calculator form (antinode `onchange-async`), which recomputes
+        # and swaps the benefit field while the modal stays open.
+        self.fields[ 'income' ].widget.attrs[ 'onchange-async' ] = 'true'
 
 
 class RetirementBenefitsForm( forms.Form ):
