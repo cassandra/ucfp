@@ -11,7 +11,7 @@ jurisdiction is keyed on `JurisdictionType` for now (the existing jurisdiction d
 `jurisdiction/` generalizes beyond tax, that becomes a first-class jurisdiction concept.
 """
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from ucfp.accounts.enums import IncomeTaxClass
 
@@ -59,10 +59,12 @@ class GovernmentPension:
 
     def estimate_entitlement( self, annual_covered_wage : Decimal ) -> Decimal:
         """Estimate the monthly benefit at the jurisdiction's normal retirement age (the US PIA) from a
-        subject's annual covered wage, in today's dollars -- the seed for the entitlement fact. Callers
-        gate on `has_benefit_estimator`; a jurisdiction without one raises."""
+        subject's annual covered wage, in today's dollars -- the seed for the entitlement fact. Rounded to
+        whole dollars: it is an approximation, and whole dollars is the precision it is entered and shown
+        at. Callers gate on `has_benefit_estimator`; a jurisdiction without one raises."""
         if self._jurisdiction is JurisdictionType.US_FEDERAL:
-            return us_social_security.estimated_pia_monthly_current( annual_covered_wage )
+            estimate = us_social_security.estimated_pia_monthly_current( annual_covered_wage )
+            return estimate.quantize( Decimal( '1' ), rounding = ROUND_HALF_UP )
         raise NotImplementedError(
             f'No government pension benefit estimator for jurisdiction {self._jurisdiction}.' )
 

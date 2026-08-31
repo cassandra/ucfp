@@ -47,6 +47,8 @@ urlpatterns = [
           name = 'retirement_benefits' ),
     path( 'interview/retirement-benefits/estimate/<str:handle>/',
           views.SocialSecurityEstimatorModalView.as_view(), name = 'ss_benefit_estimate' ),
+    path( 'interview/retirement-benefits/estimate/<str:handle>/apply/',
+          views.SocialSecurityBenefitApplyView.as_view(), name = 'ss_benefit_apply' ),
     path( 'interview/debt/add/', views.DebtFormView.as_view(), name = 'debt_add' ),
     path( 'interview/debt/plan/', views.DebtPlanView.as_view(), name = 'debt_plan' ),
     path( 'interview/debt/cards/', views.CreditCardView.as_view(), name = 'credit_card_plan' ),

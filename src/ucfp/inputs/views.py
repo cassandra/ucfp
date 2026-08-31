@@ -76,7 +76,7 @@ from .debts import DebtForm, _minted_debt_handle, debt_heading, debts_context, d
 from .events import EventForm, events_context, handler_for, menu_context
 from .income import IncomeTableForm
 from .retirement_benefits import (
-    RetirementBenefitsForm, SocialSecurityEstimatorForm, subject_wage_total )
+    RetirementBenefitsForm, SocialSecurityEstimatorForm, applied_government_benefit, subject_wage_total )
 from .properties import (
     PossessionsForm, PropertyForm, _minted_handle, delete_property, properties_context,
     property_heading )
@@ -1971,7 +1971,8 @@ class SocialSecurityEstimatorModalView( ModalView ):
         form = SocialSecurityEstimatorForm( initial = {
             'income' : income, 'fra_benefit' : pension.estimate_entitlement( income ) } )
         return self.modal_response( request, context = {
-            'form' : form, 'subject_handle' : handle, 'subject_name' : subject.name } )
+            'form' : form, 'subject_handle' : handle, 'subject_name' : subject.name,
+            'table_target' : RetirementBenefitsView.target } )
 
     def post( self, request, handle ):
         _subject, pension, _income = self._resolve( request, handle )
@@ -2001,6 +2002,28 @@ class SocialSecurityEstimatorModalView( ModalView ):
         submitted = SocialSecurityEstimatorForm( request.POST )
         income    = submitted.cleaned_data.get( 'income' ) if submitted.is_valid() else None
         return income if income is not None else Decimal( 0 )
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class SocialSecurityBenefitApplyView( View ):
+    """`.../retirement-benefits/estimate/<handle>/apply/` -- the calculator's Confirm. Writes the chosen
+    benefit as the subject's Social Security entitlement fact (a blank clears it), then re-renders the
+    benefits table so the cell shows it; the modal closes on return (its Confirm form is not marked
+    stay-in-modal). Only this one subject's entitlement is touched -- the calculator edits one person."""
+
+    def post( self, request, handle ):
+        profile, plans = _current_profile_and_plans( request )
+        if not any( subject.handle == handle for subject in profile.subjects ):
+            raise Http404( f'No subject {handle!r} in the current profile.' )
+        submitted = SocialSecurityEstimatorForm( request.POST )
+        monthly   = submitted.cleaned_data.get( 'fra_benefit' ) if submitted.is_valid() else None
+        profile   = applied_government_benefit( profile, handle, monthly )
+        _save_profile_and_plans( request, profile, plans )
+        pane = render_to_string(
+            RetirementBenefitsView.template,
+            { RetirementBenefitsView.context_name: RetirementBenefitsForm( profile = profile ) },
+            request = request )
+        return antinode.response( replace_map = { RetirementBenefitsView.target: pane } )
 
 
 class RetirementView( SelfSavingPaneView ):

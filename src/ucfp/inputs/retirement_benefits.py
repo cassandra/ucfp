@@ -13,7 +13,9 @@ from django import forms
 
 from common.forms import MoneyField
 
+from ucfp.environment.constants import AppConst
 from ucfp.accounts.enums import IncomeTaxClass
+from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.inputs.profile.schemas import GovernmentPensionEntitlement, PensionEntitlement
 
 # The age a pension's base is quoted at. Unused until off-normal-start reduction terms exist; a fixed
@@ -43,9 +45,10 @@ class SocialSecurityEstimatorForm( forms.Form ):
 
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
-        # Editing the income auto-submits the calculator form (antinode `onchange-async`), which recomputes
-        # and swaps the benefit field while the modal stays open.
-        self.fields[ 'income' ].widget.attrs[ 'onchange-async' ] = 'true'
+        # Mark the income input for the calculator's debounced recompute (inputs.js): as the user types, it
+        # posts the recompute form, which swaps the benefit field while the modal stays open.
+        income = self.fields[ 'income' ].widget
+        income.attrs[ 'class' ] = f'{income.attrs.get( "class", "" )} {AppConst.SS_ESTIMATE_INCOME_CLASS}'.strip()
 
 
 class RetirementBenefitsForm( forms.Form ):
@@ -61,6 +64,10 @@ class RetirementBenefitsForm( forms.Form ):
                            for entitlement in ( profile.government_pension if profile is not None else [] ) }
         self._pension  = { pension.subject_handle: pension
                            for pension in ( profile.pensions if profile is not None else [] ) }
+        # Whether to offer the benefit calculator beside the Social Security cell -- a jurisdiction
+        # capability asked of the facade, never a jurisdiction test here (the input layer stays neutral).
+        self._can_estimate = profile is not None and \
+            GovernmentPension( profile.jurisdiction_type ).has_benefit_estimator()
         for m, subject in enumerate( self._subjects ):
             self._add_entitlement_fields( m, subject )
 
@@ -88,10 +95,13 @@ class RetirementBenefitsForm( forms.Form ):
         for m, subject in enumerate( self._subjects ):
             rows.append( { 'subject_name' : subject.name, 'name' : 'Social Security',
                            'amount' : self[ self._key( m, 'ssamt' ) ], 'cadence' : 'month',
-                           'note' : 'benefit at full retirement age' } )
+                           'note' : 'benefit at full retirement age',
+                           # The subject the calculator estimates for -- present only where the
+                           # jurisdiction has an estimator, so the table shows the opener just there.
+                           'estimate_handle' : subject.handle if self._can_estimate else None } )
             rows.append( { 'subject_name' : subject.name, 'name' : 'Pension',
                            'amount' : self[ self._key( m, 'penamt' ) ], 'cadence' : 'year',
-                           'note' : 'base benefit' } )
+                           'note' : 'base benefit', 'estimate_handle' : None } )
         return rows
 
     def apply( self, profile, plans ):
@@ -116,3 +126,15 @@ class RetirementBenefitsForm( forms.Form ):
                     subject_handle = subject.handle, base_annual_amount = amount,
                     normal_start_age = _PENSION_NORMAL_AGE ) )
         return pensions
+
+
+def applied_government_benefit( profile, subject_handle : str, monthly ):
+    """`profile` with one subject's Social Security entitlement set to `monthly` (a blank/None clears it),
+    every other subject's entitlement left untouched -- the targeted write the calculator's Confirm makes.
+    Distinct from `RetirementBenefitsForm.apply`, which rewrites the whole table from a full submission."""
+    kept = [ entitlement for entitlement in profile.government_pension
+             if entitlement.subject_handle != subject_handle ]
+    if monthly is not None:
+        kept.append( GovernmentPensionEntitlement(
+            subject_handle = subject_handle, monthly_at_normal_age = monthly ) )
+    return replace( profile, government_pension = kept )

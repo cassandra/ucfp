@@ -15,7 +15,7 @@ from ucfp.inputs.income import IncomeTableForm
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.profile.schemas import (
     GovernmentPensionEntitlement, IncomeFlow, PensionEntitlement, Profile, SubjectProfile )
-from ucfp.inputs.retirement_benefits import RetirementBenefitsForm
+from ucfp.inputs.retirement_benefits import RetirementBenefitsForm, applied_government_benefit
 from ucfp.inputs.views import RetirementBenefitsView
 
 
@@ -102,6 +102,36 @@ class RetirementBenefitsApplyTests( SimpleTestCase ):
     def test_a_negative_benefit_is_a_genuine_error( self ):
         form = RetirementBenefitsForm( self._post( ss = '-100' ), profile = _profile() )
         self.assertFalse( form.is_valid() )
+
+
+class EstimateOpenerTest( SimpleTestCase ):
+    """The Social Security row offers the calculator where the jurisdiction has an estimator; the pension
+    row never does. Gated on the facade capability, so no jurisdiction literal lives in the input layer."""
+
+    def test_the_ss_row_carries_the_estimate_handle_the_pension_row_does_not( self ):
+        rows = RetirementBenefitsForm( profile = _profile() ).entitlement_rows
+        self.assertEqual( rows[ 0 ][ 'estimate_handle' ], 'you' )   # Social Security
+        self.assertIsNone( rows[ 1 ][ 'estimate_handle' ] )         # Pension
+
+
+class AppliedGovernmentBenefitTest( SimpleTestCase ):
+    """The targeted write the calculator's Confirm makes -- one subject's entitlement, others untouched."""
+
+    def test_it_sets_only_the_target_subject( self ):
+        profile = Profile(
+            subjects = [ SubjectProfile( 'you', 'You', date( 1960, 1, 1 ) ),
+                         SubjectProfile( 'partner', 'Partner', date( 1962, 1, 1 ) ) ],
+            government_pension = [
+                GovernmentPensionEntitlement( subject_handle = 'partner', monthly_at_normal_age = Decimal( '2000' ) ) ] )
+        updated = applied_government_benefit( profile, 'you', Decimal( '2900' ) )
+        self.assertEqual(
+            { e.subject_handle: e.monthly_at_normal_age for e in updated.government_pension },
+            { 'partner': Decimal( '2000' ), 'you': Decimal( '2900' ) } )
+
+    def test_a_none_benefit_clears_the_subjects_entitlement( self ):
+        profile = _profile( government_pension = [
+            GovernmentPensionEntitlement( subject_handle = 'you', monthly_at_normal_age = Decimal( '2900' ) ) ] )
+        self.assertEqual( applied_government_benefit( profile, 'you', None ).government_pension, [] )
 
 
 class IncomeLeavesBenefitsAloneTest( SimpleTestCase ):

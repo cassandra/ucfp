@@ -16,11 +16,12 @@ class BenefitEstimatorTest( unittest.TestCase ):
     def test_us_advertises_a_benefit_estimator( self ):
         self.assertTrue( self._pension.has_benefit_estimator() )
 
-    def test_it_estimates_the_us_pia_for_a_covered_wage( self ):
-        # the facade delegates to the US estimator (today's-dollars PIA), so the two must agree.
-        self.assertEqual(
-            self._pension.estimate_entitlement( Decimal( '80000' ) ),
-            estimated_pia_monthly_current( Decimal( '80000' ) ) )
+    def test_it_estimates_the_us_pia_rounded_to_whole_dollars( self ):
+        # the facade delegates to the US estimator, then rounds the approximate PIA to whole dollars.
+        expected = estimated_pia_monthly_current( Decimal( '80000' ) ).quantize( Decimal( '1' ) )
+        estimate = self._pension.estimate_entitlement( Decimal( '80000' ) )
+        self.assertEqual( estimate, expected )
+        self.assertEqual( estimate, estimate.to_integral_value() )   # no fractional dollars
 
     def test_a_higher_wage_estimates_a_higher_benefit( self ):
         self.assertLess(
