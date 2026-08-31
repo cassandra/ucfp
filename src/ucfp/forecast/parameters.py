@@ -149,7 +149,8 @@ class WindowedAmount:
 @dataclass( frozen = True )
 class IncomeStream:
     """A smooth received income for one subject over an existence `window` -- wages, a pension
-    (`ORDINARY`), Social Security, or gross rental -- the rate counterpart of `ExpenseStream`.
+    (`ORDINARY`), or gross rental -- the rate counterpart of `ExpenseStream`. (Social Security is not a
+    stream: the engine computes its couple-aware benefit per interval from `SocialSecurityEntitlement`.)
     `amounts` is the gross level in forecast-start ("today's") dollars, stepping over time with
     life stage; the Forecast grows it to nominal by the income class's rate (the COLA lives in
     the Economic Outlook, per class), prorates it evenly across each interval, and gates it to
@@ -163,6 +164,19 @@ class IncomeStream:
     window           : DateWindow         = DateWindow()
     source_handle    : Optional[ Handle ] = None
     name             : Optional[ str ]    = None   # the source's own label, for the posting memo
+
+
+@dataclass( frozen = True )
+class SocialSecurityEntitlement:
+    """One subject's Social Security facts for the engine: their `pia_monthly` (the benefit at full
+    retirement age) and `claiming_date`, or None for each when not entered (a non-earning spouse). The
+    engine computes the couple-aware benefit per interval -- the own claim-adjusted benefit, the lower
+    earner's spousal top-up once both collect, and (on a death) the survivor benefit -- rather than reading
+    a pre-baked stream, keeping the statutory couple logic and its timing in the engine."""
+
+    subject       : Subject
+    pia_monthly   : Optional[ Decimal ] = None
+    claiming_date : Optional[ date ]    = None
 
 
 @dataclass( frozen = True )
@@ -673,6 +687,7 @@ class ForecastParameters:
     assets            : list[ AssetParameters ]              = field( default_factory = list )
     economic_outlook  : EconomicOutlook                      = field( default_factory = EconomicOutlook )
     income_streams    : list[ IncomeStream ]                 = field( default_factory = list )
+    social_security   : list[ SocialSecurityEntitlement ]    = field( default_factory = list )
     income_items      : list[ IncomeItem ]                   = field( default_factory = list )
     expense_items     : list[ ExpenseItem ]                  = field( default_factory = list )
     expense_streams   : list[ ExpenseStream ]                = field( default_factory = list )

@@ -21,6 +21,7 @@ from ucfp.forecast.parameters import (
     ForecastParameters,
     IncomeItem,
     IncomeStream,
+    SocialSecurityEntitlement,
     Subject,
     WindowedAmount,
 )
@@ -264,6 +265,57 @@ class IncomeForecastTests( unittest.TestCase ):
         # 30000 + 30000*1.02 + 30000*1.02^2 = 30000 + 30600 + 31212
         self.assertEqual(
             reader.ledger.natural_balance( alice_ss, through = date( 2028, 12, 31 ) ), Decimal( '91812' ) )
+
+
+def _run_ss_household_forecast( entitlements, end_year = 2029, cola = ZERO_RATE ):
+    """A household whose Social Security is computed by the engine per interval from entitlement facts
+    (not pre-baked streams), over 2026-`end_year`."""
+    parameters = ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( end_year, 12, 31 ),
+        filing_status = FilingStatus.MARRIED_JOINT,
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+        subjects      = [ entitlement.subject for entitlement in entitlements ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
+        economic_outlook = EconomicOutlook.constant( EconomicParameters( social_security_cola = cola ) ),
+        social_security  = entitlements,
+    )
+    return Forecast( parameters ).run()
+
+
+_ALICE = Subject( 'Alice', date( 1960, 1, 1 ), 'alice' )   # higher earner, FRA 67
+_BOB   = Subject( 'Bob', date( 1960, 1, 1 ), 'bob' )       # lower earner, FRA 67
+
+
+class SocialSecurityHouseholdForecastTests( unittest.TestCase ):
+    """The engine computes couple-aware Social Security per interval from the entitlement facts -- own,
+    the lower earner's spousal top-up, and the both-collecting timing -- posting per subject."""
+
+    def _ss_year( self, result, handle, year ):
+        reader  = Bookkeeper( result.books )
+        account = reader.chart.income_account( IncomeTaxClass.SOCIAL_SECURITY, owner_handle = handle )
+        ledger  = reader.ledger
+        return ( ledger.natural_balance( account, through = date( year, 12, 31 ) )
+                 - ledger.natural_balance( account, through = date( year - 1, 12, 31 ) ) )
+
+    def test_own_and_spousal_when_both_claim_at_fra( self ):
+        result = _run_ss_household_forecast( [
+            SocialSecurityEntitlement( _ALICE, Decimal( '3000' ), date( 2027, 1, 1 ) ),
+            SocialSecurityEntitlement( _BOB, Decimal( '1000' ), date( 2027, 1, 1 ) ) ] )
+        self.assertEqual( self._ss_year( result, 'alice', 2026 ), Decimal( '0' ) )        # before claim
+        self.assertEqual( self._ss_year( result, 'alice', 2028 ), Decimal( '36000' ) )    # own, 3000*12
+        # Bob: own 12000 + spousal excess (1500-1000)*12 = 6000, both collecting from 2027.
+        self.assertEqual( self._ss_year( result, 'bob', 2026 ), Decimal( '0' ) )
+        self.assertEqual( self._ss_year( result, 'bob', 2028 ), Decimal( '18000' ) )
+
+    def test_spousal_top_up_starts_when_both_are_collecting( self ):
+        # Bob claims own at FRA in 2027; Alice (higher) delays to 2030 -> Bob's spousal begins in 2030.
+        result = _run_ss_household_forecast( [
+            SocialSecurityEntitlement( _ALICE, Decimal( '3000' ), date( 2030, 1, 1 ) ),
+            SocialSecurityEntitlement( _BOB, Decimal( '1000' ), date( 2027, 1, 1 ) ) ], end_year = 2031 )
+        self.assertEqual( self._ss_year( result, 'bob', 2028 ), Decimal( '12000' ) )      # own only
+        self.assertEqual( self._ss_year( result, 'bob', 2031 ), Decimal( '18000' ) )      # own + spousal
 
 
 class SocialSecurityReductionTests( unittest.TestCase ):
