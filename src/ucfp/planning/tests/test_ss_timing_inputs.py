@@ -11,6 +11,7 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, override_setti
 from django.urls import reverse
 
 from common.rate import Rate
+from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.planning.ss_timing import Assumptions
 from ucfp.planning.ss_timing_forms import (
     HOUSEHOLD_COUPLE, HOUSEHOLD_SINGLE, SocialSecurityTimingForm,
@@ -104,9 +105,9 @@ class InputsViewTest( TestCase ):
         # The route is in the auth middleware's exempt set, so an anonymous GET reaches the view (200)
         # rather than being redirected to sign in. The default assumptions are stubbed to avoid the
         # seeded-parameter-set DB read (seeding is a deploy step, not a test fixture).
-        with patch( 'ucfp.planning.ss_timing_views._default_assumptions',
-                    return_value = Assumptions( inflation = Rate( Decimal( '0.025' ) ),
-                                                cola = Rate( Decimal( '0.025' ) ) ) ):
+        with patch( 'ucfp.planning.ss_timing_prefill.default_economics',
+                    return_value = EconomicParameters( inflation = Rate( Decimal( '0.025' ) ),
+                                                       social_security_cola = Rate( Decimal( '0.025' ) ) ) ):
             response = self.client.get( reverse( 'ss_timing' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Compare claiming ages' )

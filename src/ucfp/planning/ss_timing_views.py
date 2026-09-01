@@ -2,18 +2,16 @@
 
 These are public `View`s (no `ensure_organization`, no login) -- the calculator works for an anonymous
 visitor or a signed-in one. Inputs are held in the session (`ss_timing_inputs`), NOT the database, so a
-visit leaves no saved profile or scenario. The inputs page prefills from the last session entry, falling
-back to the system default economic assumptions; a signed-in user's Profile/scenario prefill is layered
-on in a later phase. Submitting persists the inputs and redirects to the results, which runs the sweep.
+visit leaves no saved profile or scenario. The inputs page prefills from the last session entry, else
+from a signed-in visitor's Profile and scenario, else the system defaults (see `ss_timing_prefill`).
+Submitting persists the inputs and redirects to the results, which runs the sweep.
 """
 from django.shortcuts import redirect, render
 from django.views.generic import View
 
-from ucfp.inputs.assumptions.defaults import default_economics
-
-from .ss_timing import Assumptions, compare_claiming_strategies
-from .ss_timing_forms import (
-    SocialSecurityTimingForm, claimants_and_assumptions, default_inputs )
+from .ss_timing import compare_claiming_strategies
+from .ss_timing_forms import SocialSecurityTimingForm, claimants_and_assumptions
+from .ss_timing_prefill import build_prefill
 
 
 class SocialSecurityTimingInputsView( View ):
@@ -24,15 +22,19 @@ class SocialSecurityTimingInputsView( View ):
 
     def get( self, request ):
         remembered = request.session_state.ss_timing_inputs
-        initial    = remembered or default_inputs( _default_assumptions() )
-        form       = SocialSecurityTimingForm( initial = initial )
+        if remembered:
+            form = SocialSecurityTimingForm( initial = remembered )
+            return render( request, self.template_name, { 'form' : form, 'remembered' : True } )
+        prefill = build_prefill( request )
+        form    = SocialSecurityTimingForm( initial = prefill.initial )
         return render( request, self.template_name,
-                       { 'form' : form, 'prefilled' : bool( remembered ) } )
+                       { 'form' : form, 'from_profile' : prefill.from_profile,
+                         'assumptions_source' : prefill.assumptions_source } )
 
     def post( self, request ):
         form = SocialSecurityTimingForm( request.POST )
         if not form.is_valid():
-            return render( request, self.template_name, { 'form' : form, 'prefilled' : False } )
+            return render( request, self.template_name, { 'form' : form } )
         request.session_state.ss_timing_inputs = form.cleaned_inputs()
         request.session_state.to_session( request )
         return redirect( 'ss_timing_results' )
@@ -56,14 +58,3 @@ class SocialSecurityTimingResultsView( View ):
                        { 'comparison' : comparison, 'best' : best,
                          'claimants' : comparison.claimants,
                          'best_pairs' : list( zip( comparison.claimants, best.claim_ages ) ) } )
-
-
-def _default_assumptions() -> Assumptions:
-    """The system default economic assumptions as the calculator's `Assumptions` -- the anonymous
-    fallback when the visitor has no stored inputs. Reads the seeded Expected economic-outlook preset."""
-    economics = default_economics()
-    return Assumptions(
-        inflation        = economics.inflation,
-        cola             = economics.social_security_cola,
-        benefits_payable = economics.social_security_benefits_payable,
-        reduction_year   = economics.social_security_reduction_year )
