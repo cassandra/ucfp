@@ -1,0 +1,39 @@
+{% extends "modals/action_with_cancel.html" %}
+{% comment %}
+  The "how this is calculated" modal for the selected strategy: the SSA terms and their values (from the
+  jurisdiction facade, so they match the ranked numbers). Opened from the detail's button (data-async=modal);
+  the Cancel control dismisses it. Context: `terms`, `claim_pairs`, `reference_url`.
+{% endcomment %}
+
+{% block title_text %}How this is calculated{% endblock %}
+
+{% block body %}
+<p class="text-muted small">
+  For the selected strategy &mdash;
+  {% for earner, age in claim_pairs %}{{ earner.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+</p>
+<div class="table-responsive">
+  <table class="table table-sm mb-0">
+    <thead>
+      <tr>
+        <th>Term</th><th>Symbol</th><th class="text-right">Value</th><th>Meaning</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for term in terms %}
+        <tr>
+          <td>{{ term.label }}</td>
+          <td><code>{{ term.symbol }}</code></td>
+          <td class="text-right text-nowrap">{{ term.value }}</td>
+          <td class="text-muted small">{{ term.meaning }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-muted small mt-3 mb-0">
+  Terms and reduction factors follow SSA policy &mdash;
+  see <a href="{{ reference_url }}" target="_blank" rel="noopener">ssa.gov</a>. Benefits are shown in
+  today&rsquo;s dollars before the COLA and any funding reduction, which the comparison applies each year.
+</p>
+{% endblock %}

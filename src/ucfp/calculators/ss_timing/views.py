@@ -18,17 +18,18 @@ from common.async_view import ModalView
 from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
 
-from . import results
+from . import methodology, results
 from .compute import (
     CLAIM_AGES, compare_claiming_strategies, compute_strategy, strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions
 from .prefill import build_prefill
 
-_PERSON_COUNT       = 2
-_ESTIMATOR_TEMPLATE = 'calculators/ss_timing/modals/estimator.html'
-_ESTIMATE_FRAGMENT  = 'calculators/ss_timing/modals/benefit_estimate.html'
-_PIA_INPUT_TEMPLATE = 'calculators/ss_timing/modals/pia_input.html'
-_DETAIL_TEMPLATE    = 'calculators/ss_timing/_detail.html'
+_PERSON_COUNT         = 2
+_ESTIMATOR_TEMPLATE   = 'calculators/ss_timing/modals/estimator.html'
+_ESTIMATE_FRAGMENT    = 'calculators/ss_timing/modals/benefit_estimate.html'
+_PIA_INPUT_TEMPLATE   = 'calculators/ss_timing/modals/pia_input.html'
+_DETAIL_TEMPLATE      = 'calculators/ss_timing/_detail.html'
+_METHODOLOGY_TEMPLATE = 'calculators/ss_timing/modals/methodology.html'
 
 
 class InputsView( View ):
@@ -97,6 +98,26 @@ class StrategyDetailView( View ):
         content  = render_to_string(
             _DETAIL_TEMPLATE, _detail_context( _by_earning( claimants ), strategy ), request = request )
         return antinode.response( replace_map = { 'ss-detail' : content } )
+
+
+class MethodologyModalView( ModalView ):
+    """The "how this is calculated" modal for one claiming combination -- the SSA terms and values behind
+    the strategy currently shown in the detail. Login-free; reads the stored inputs, not a saved plan."""
+
+    def get_template_name( self ):
+        return _METHODOLOGY_TEMPLATE
+
+    def get( self, request, combo ):
+        inputs = request.session_state.ss_timing_inputs
+        if not inputs:
+            raise Http404( 'No calculator inputs in this session.' )
+        claimants, _assumptions = claimants_and_assumptions( inputs )
+        earners    = _by_earning( claimants )
+        claim_ages = _parse_combo( combo, len( claimants ) )
+        return self.modal_response( request, context = {
+            'terms'         : methodology.methodology( earners, claim_ages ),
+            'claim_pairs'   : list( zip( earners, claim_ages ) ),
+            'reference_url' : methodology.REFERENCE_URL } )
 
 
 class BenefitEstimatorModalView( ModalView ):
@@ -168,6 +189,7 @@ def _detail_context( earners, strategy ) -> dict:
         'earners'     : earners,
         'is_couple'   : len( earners ) == 2,
         'strategy'    : strategy,
+        'combo'       : results.combo_of( strategy.claim_ages ),
         'claim_pairs' : list( zip( earners, strategy.claim_ages ) ),
         'rows'        : strategy_year_details( tuple( earners ), strategy ) }
 

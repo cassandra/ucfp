@@ -9,6 +9,8 @@
     <div class="ss-eyebrow">
       {% for earner, age in claim_pairs %}{{ earner.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}{% endfor %}
     </div>
+    <a role="button" class="btn btn-outline-secondary btn-sm" data-async="modal"
+       href="{% url 'calculators:ss_timing:methodology' combo %}">Show how this is calculated</a>
   </div>
   <div class="table-responsive">
     <table class="ss-years">
