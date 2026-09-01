@@ -1,0 +1,57 @@
+{% load humanize %}
+{% comment %}
+  The year-by-year Social Security detail for the selected strategy -- the antinode swap target
+  (#ss-detail). The claim ages lead the header (connecting the table to the chosen cell). Columns split
+  each year into the earners' own / spousal / survivor parts (higher earner first) beside the nominal
+  Total and its present value; the first-death row is highlighted. Column headers stick on scroll.
+  Context: `earners`, `is_couple`, `strategy`, `combo`, `claim_pairs`, `rows`.
+{% endcomment %}
+<div id="ss-detail">
+  <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+    <h5 class="mb-0">
+      {% for earner, age in claim_pairs %}{{ earner.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </h5>
+    <a role="button" class="btn btn-outline-secondary btn-sm" data-async="modal"
+       href="{% url 'calculators:ss_timing:methodology' combo %}">Show how this is calculated</a>
+  </div>
+  <div class="ss-years-scroll">
+    <table class="ss-years">
+      <thead>
+        <tr>
+          <th>Year (age{% if is_couple %}s{% endif %})</th>
+          <th>{{ earners.0.name }} (own)</th>
+          {% if is_couple %}
+            <th>{{ earners.1.name }} (own)</th>
+            <th>Spousal</th>
+            <th>Survivor</th>
+          {% endif %}
+          <th>Total</th>
+          <th>PV</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr{% if row.is_transition %} class="transition"{% endif %}>
+            <td>{{ row.year }} ({{ row.ages_label }})</td>
+            <td>{% include "calculators/ss_timing/_amount.html" with value=row.members.0.own %}</td>
+            {% if is_couple %}
+              <td>{% include "calculators/ss_timing/_amount.html" with value=row.members.1.own %}</td>
+              <td>{% include "calculators/ss_timing/_amount.html" with value=row.members.1.spousal %}</td>
+              <td>{% include "calculators/ss_timing/_amount.html" with value=row.survivor %}</td>
+            {% endif %}
+            <td>${{ row.household|floatformat:0|intcomma }}</td>
+            <td>${{ row.present_value|floatformat:0|intcomma }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Lifetime total</td>
+          {% if is_couple %}<td colspan="4"></td>{% else %}<td></td>{% endif %}
+          <td>${{ strategy.raw_total|floatformat:0|intcomma }}</td>
+          <td>${{ strategy.present_value|floatformat:0|intcomma }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>

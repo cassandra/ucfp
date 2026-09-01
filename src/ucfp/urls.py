@@ -54,6 +54,7 @@ urlpatterns = [
     path( 'inputs/', include( 'ucfp.inputs.urls' )),
     path( 'plan/', include( 'ucfp.planning.urls' )),
     path( 'run/', include( 'ucfp.planning.run_urls' )),
+    path( 'calculators/', include( 'ucfp.calculators.urls' )),
 
     # Custom error pages
     path( '400.html', views.bad_request_response, name = 'bad_request' ),

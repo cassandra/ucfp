@@ -21,7 +21,9 @@ from ucfp.forecast.parameters import (
     ForecastParameters,
     IncomeItem,
     IncomeStream,
+    SocialSecurityEntitlement,
     Subject,
+    SubjectRemoval,
     WindowedAmount,
 )
 from ucfp.jurisdiction.enums import FilingStatus, StatuteForecastType, JurisdictionType
@@ -264,6 +266,80 @@ class IncomeForecastTests( unittest.TestCase ):
         # 30000 + 30000*1.02 + 30000*1.02^2 = 30000 + 30600 + 31212
         self.assertEqual(
             reader.ledger.natural_balance( alice_ss, through = date( 2028, 12, 31 ) ), Decimal( '91812' ) )
+
+
+def _run_ss_household_forecast( entitlements, end_year = 2029, cola = ZERO_RATE, removals = () ):
+    """A household whose Social Security is computed by the engine per interval from entitlement facts
+    (not pre-baked streams), over 2026-`end_year`. `removals` are deaths driving the survivor transition."""
+    parameters = ForecastParameters(
+        start_date    = date( 2026, 1, 1 ),
+        end_date      = date( end_year, 12, 31 ),
+        filing_status = FilingStatus.MARRIED_JOINT,
+        statute  = StatuteProfile( JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+        subjects      = [ entitlement.subject for entitlement in entitlements ],
+        assets        = [
+            AssetParameters( 'Cash', AssetClass.CASH, Decimal( '10000' ), Decimal( '10000' ) ) ],
+        economic_outlook = EconomicOutlook.constant( EconomicParameters( social_security_cola = cola ) ),
+        social_security  = entitlements,
+        subject_removals = list( removals ),
+    )
+    return Forecast( parameters ).run()
+
+
+_ALICE = Subject( 'Alice', date( 1960, 1, 1 ), 'alice' )   # higher earner, FRA 67
+_BOB   = Subject( 'Bob', date( 1960, 1, 1 ), 'bob' )       # lower earner, FRA 67
+
+
+class SocialSecurityHouseholdForecastTests( unittest.TestCase ):
+    """The engine computes couple-aware Social Security per interval from the entitlement facts -- own,
+    the lower earner's spousal top-up, and the both-collecting timing -- posting per subject."""
+
+    def _ss_year( self, result, handle, year ):
+        reader  = Bookkeeper( result.books )
+        account = reader.chart.income_account( IncomeTaxClass.SOCIAL_SECURITY, owner_handle = handle )
+        ledger  = reader.ledger
+        return ( ledger.natural_balance( account, through = date( year, 12, 31 ) )
+                 - ledger.natural_balance( account, through = date( year - 1, 12, 31 ) ) )
+
+    def test_own_and_spousal_when_both_claim_at_fra( self ):
+        result = _run_ss_household_forecast( [
+            SocialSecurityEntitlement( _ALICE, Decimal( '3000' ), date( 2027, 1, 1 ) ),
+            SocialSecurityEntitlement( _BOB, Decimal( '1000' ), date( 2027, 1, 1 ) ) ] )
+        self.assertEqual( self._ss_year( result, 'alice', 2026 ), Decimal( '0' ) )        # before claim
+        self.assertEqual( self._ss_year( result, 'alice', 2028 ), Decimal( '36000' ) )    # own, 3000*12
+        # Bob: own 12000 + spousal excess (1500-1000)*12 = 6000, both collecting from 2027.
+        self.assertEqual( self._ss_year( result, 'bob', 2026 ), Decimal( '0' ) )
+        self.assertEqual( self._ss_year( result, 'bob', 2028 ), Decimal( '18000' ) )
+
+    def test_spousal_top_up_starts_when_both_are_collecting( self ):
+        # Bob claims own at FRA in 2027; Alice (higher) delays to 2030 -> Bob's spousal begins in 2030.
+        result = _run_ss_household_forecast( [
+            SocialSecurityEntitlement( _ALICE, Decimal( '3000' ), date( 2030, 1, 1 ) ),
+            SocialSecurityEntitlement( _BOB, Decimal( '1000' ), date( 2027, 1, 1 ) ) ], end_year = 2031 )
+        self.assertEqual( self._ss_year( result, 'bob', 2028 ), Decimal( '12000' ) )      # own only
+        self.assertEqual( self._ss_year( result, 'bob', 2031 ), Decimal( '18000' ) )      # own + spousal
+
+    def _household_ss_year( self, result, year ):
+        # Total Social Security booked across the household that year (robust to the engine retitling a
+        # decedent's accounts to the survivor on death -- per-person attribution is a results-layer concern).
+        reader   = Bookkeeper( result.books )
+        accounts = [ account for account in result.books.accounts
+                     if account.income_tax_class == IncomeTaxClass.SOCIAL_SECURITY ]
+
+        def through( y ):
+            return sum( ( reader.ledger.natural_balance( account, through = date( y, 12, 31 ) )
+                          for account in accounts ), Decimal( '0' ) )
+        return through( year ) - through( year - 1 )
+
+    def test_survivor_steps_up_after_the_higher_earner_dies( self ):
+        # Alice (higher) dies in 2028: she collects through the death year, then the household drops to the
+        # survivor benefit -- Bob steps up from his own+spousal to Alice's larger benefit.
+        result = _run_ss_household_forecast( [
+            SocialSecurityEntitlement( _ALICE, Decimal( '3000' ), date( 2027, 1, 1 ) ),
+            SocialSecurityEntitlement( _BOB, Decimal( '1000' ), date( 2027, 1, 1 ) ) ],
+            end_year = 2031, removals = [ SubjectRemoval( date( 2028, 1, 1 ), 'alice' ) ] )
+        self.assertEqual( self._household_ss_year( result, 2028 ), Decimal( '54000' ) )   # 36000+18000, both
+        self.assertEqual( self._household_ss_year( result, 2029 ), Decimal( '36000' ) )   # survivor only
 
 
 class SocialSecurityReductionTests( unittest.TestCase ):

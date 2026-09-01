@@ -1,0 +1,9 @@
+{% comment %}
+  The estimated benefit field, wrapped in its swap target (id=benefit-estimate) so the income-driven
+  recompute can replace just this field while the modal stays open. Rendered inside the confirm form on
+  open, and returned on its own by the recompute POST.
+{% endcomment %}
+<div id="benefit-estimate" class="form-group mb-0">
+  <label for="{{ form.benefit.id_for_label }}">Estimated monthly benefit</label>
+  {{ form.benefit }}
+</div>

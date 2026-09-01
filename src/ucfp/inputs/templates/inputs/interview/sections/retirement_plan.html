@@ -1,10 +1,17 @@
+{% load icons %}
 {% comment %}
 The Retirement Plan section (Plans flow): the income/entitlement *timing* -- when income and benefits start
 and stop, including when Social Security and any pension begin -- managed by its own async view
 (`RetirementView`) outside the section's Next form. It reads the income facts and entitlements from the
 Profile (Income, People) and writes only the Plans. The recurring contributions are the separate Retirement
-Contributions section.
+Contributions section. The info prompt points to the Social Security Timing calculator, which compares
+claiming ages to inform the Social Security claim set below (a one-way pointer -- it writes nothing here).
 {% endcomment %}
+<div class="alert alert-info py-2 px-3 small" role="status">
+  {% icon 'info-circle' size='sm' css_class='mr-1' %}Not sure when to claim Social Security? Compare every
+  claiming age with the
+  <a href="{% url 'calculators:ss_timing:inputs' %}">Social Security Timing calculator</a>.
+</div>
 <p class="text-muted">Set when income and benefits start and stop -- including when Social Security and any
   pension begin. Enter an age or an exact date for any point; leave an income's window blank to run it
   across the whole plan.</p>

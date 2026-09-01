@@ -25,9 +25,14 @@ from common.dataclass_json import from_json_data, to_json_data
 
 from organization.models import Organization
 
+from ucfp.jurisdiction.enums import FilingStatus
+from ucfp.session_facts import SessionFacts
+
 from ..interview import PROFILE_STICKY_SECTION_KEYS, profile_complete
 from ..models import ProfileRecord
-from .schemas import Profile
+from .schemas import (
+    PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, GovernmentPensionEntitlement, Profile,
+    SubjectProfile )
 
 
 def load_profile( record: ProfileRecord ) -> Profile:
@@ -133,13 +138,54 @@ def profile_is_outdated( organization: Organization ) -> bool:
     return latest is not None and latest.effective_date < current_effective_date()
 
 
-def create_profile( organization: Organization ) -> ProfileRecord:
-    """Mint a new profile for `organization` and return its record -- the single, extensible
-    place that decides a new profile's initial content."""
-    return save_profile( organization, _initial_profile() )
+def create_profile( organization: Organization,
+                    session_facts: Optional[ SessionFacts ] = None ) -> ProfileRecord:
+    """Mint a new profile for `organization` and return its record -- the single, extensible place that
+    decides a new profile's initial content. `session_facts`, when given, seeds the brand-new profile with
+    the household facts a visitor entered into the login-free tools before starting their own plan."""
+    return save_profile( organization, _initial_profile( session_facts ) )
 
 
-def _initial_profile() -> Profile:
-    """The content a newly created profile starts from -- empty for now; the extension point
-    for pre-seeded defaults or carrying a prior month forward later."""
-    return Profile()
+def _initial_profile( session_facts: Optional[ SessionFacts ] = None ) -> Profile:
+    """The content a newly created profile starts from: seeded from `session_facts` when a visitor has
+    entered household facts into the tools, else empty. A profile is only ever created when the household
+    has none yet, so this seed fills a blank slate -- it never overwrites facts the user has entered."""
+    if session_facts is None or not session_facts.people:
+        return Profile()
+    return _profile_from_facts( session_facts )
+
+
+# Placeholder display names for a seeded person -- clearly review-me. The carry-over knows birth years and
+# benefits but never a real name, so the People step shows these for the user to replace.
+_SEED_HANDLES = ( PRIMARY_SUBJECT_HANDLE, PARTNER_SUBJECT_HANDLE )
+_SEED_NAMES   = ( 'You', 'Partner' )
+
+
+def _profile_from_facts( session_facts: SessionFacts ) -> Profile:
+    """A brand-new profile seeded from a visitor's `session_facts`: a subject per person (birthdate the
+    first of their birth year, a placeholder review-me name), the filing status the household implies, and
+    a government-pension entitlement wherever a benefit amount was entered. A person carries a birthdate,
+    so a person with no birth year (and any after it) seeds nothing. The expected lifetime has no Profile
+    home yet, so it is not seeded."""
+    subjects     = list()
+    entitlements = list()
+    for index, person in enumerate( session_facts.people[ :2 ] ):
+        if person.birth_year is None:
+            break
+        handle = _SEED_HANDLES[ index ]
+        subjects.append( SubjectProfile(
+            handle = handle, name = _SEED_NAMES[ index ], birthdate = date( person.birth_year, 1, 1 ) ) )
+        if person.government_pension_monthly is not None:
+            entitlements.append( GovernmentPensionEntitlement(
+                subject_handle = handle, monthly_at_normal_age = person.government_pension_monthly ) )
+    if not subjects:
+        return Profile()
+    return Profile(
+        subjects           = subjects,
+        filing_status      = _seed_filing_status( len( subjects ) ),
+        government_pension = entitlements )
+
+
+def _seed_filing_status( subject_count: int ) -> FilingStatus:
+    """The filing status a seeded household implies -- joint with a partner, single otherwise."""
+    return FilingStatus.MARRIED_JOINT if subject_count > 1 else FilingStatus.SINGLE

@@ -1,0 +1,118 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags humanize %}
+{% comment %}
+  The Social Security claiming comparison: household + assumptions recap (with an Adjust link back to the
+  inputs), the claiming-age heatmap and ranked list (click either to drill in), and the year-by-year
+  detail for the selected strategy. Cells and ranked rows carry `data-combo`; clicking swaps the detail
+  (antinode) and moves the gold selection (ss_timing.js). Present value is explained at the foot. Context:
+  `earners` (higher first), `is_couple`, `cola_lag_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
+  `is_reduced`, `axis_ages`, `heatmap`, `ranked`, plus the merged detail context.
+{% endcomment %}
+
+{% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
+{% block page_title %}Social Security claiming comparison{% endblock %}
+{% block public_container_max_width %}1140px{% endblock %}
+
+{% block public_content %}
+{% comment %}The signed-in breadcrumb sits at the top -- wayfinding, not a pitch, so it does not compete with
+the results. An anonymous visitor has no app to return to; their onward path is the upsell lower down, at
+the seam just after the results.{% endcomment %}
+{% include "calculators/ss_timing/_dashboard_breadcrumb.html" %}
+<div class="ss-results">
+
+  <div class="row">
+    <div class="col-md-7 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div class="ss-eyebrow">Household</div>
+          <a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-secondary btn-sm">Adjust</a>
+        </div>
+        <div class="row">
+          {% for earner in earners %}
+            <div class="col ss-person">
+              <div class="font-weight-bold">{{ earner.name }}{% if is_couple %}
+                <span class="ss-role">· {% if forloop.first %}higher earner{% else %}lower earner{% endif %}</span>{% endif %}</div>
+              <div class="text-muted small mt-1">PIA ${{ earner.pia_monthly|floatformat:0|intcomma }}/mo · through age {{ earner.expected_lifetime }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div></div>
+    </div>
+    <div class="col-md-5 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-2">Assumptions</div>
+        <span class="ss-chip"><span class="k">Inflation</span><b>{{ inflation_pct }}</b></span>
+        {% if is_reduced %}<span class="ss-chip"><span class="k">Benefits</span><b>{{ payable_pct }} from {{ reduction_year }}</b></span>{% endif %}
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-8 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-1">Lifetime benefit by claiming age{% if is_couple %}s{% endif %}</div>
+        {% include "calculators/ss_timing/_heatmap.html" %}
+        <div class="ss-hm-legend"><span>Lower</span><span class="bar"></span><span>Higher</span>
+          <span class="ml-auto" style="color:#b07d05">&#9733; best · click any cell</span></div>
+      </div></div>
+    </div>
+    <div class="col-lg-4 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-2">Top strategies</div>
+        <div class="table-responsive">
+          <table class="ss-rank">
+            <thead><tr>
+              <th></th><th>{% if is_couple %}Ages{% else %}Age{% endif %}</th>
+              <th class="num">Total</th><th class="num">Present<br>value</th>
+            </tr></thead>
+            <tbody>
+              {% for row in ranked %}
+                <tr class="rank-row{% if row.is_best %} best{% endif %}{% if row.is_selected %} sel{% endif %}"
+                    data-combo="{{ row.combo }}" tabindex="0" role="button"
+                    aria-label="Show the year-by-year detail for claiming at {{ row.ages|join:' and ' }}">
+                  <td class="rk">{{ row.rank }}</td>
+                  <td>{{ row.ages|join:" / " }}</td>
+                  <td class="num">${{ row.raw_total|floatformat:0|intcomma }}</td>
+                  <td class="num">${{ row.present_value|floatformat:0|intcomma }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <small class="text-muted d-block mt-2">Present value converts total to today&rsquo;s dollars.</small>
+      </div></div>
+    </div>
+  </div>
+
+  {% comment %}The onward path for an anonymous visitor, placed at the seam between the results (the answer)
+  and the year-by-year detail (the supporting depth): a slim band nudging them to the full planner, since
+  claiming timing is one piece of a whole retirement plan. A signed-in visitor already has the app and gets
+  the breadcrumb up top instead.{% endcomment %}
+  {% if onboarding_state == 'anonymous' %}
+  <div class="ss-onward d-flex flex-wrap align-items-center justify-content-between mb-3 p-3">
+    <p class="mb-2 mb-sm-0 mr-sm-3">Claiming timing is one piece of your retirement. See how it fits with
+      the rest of your plan.</p>
+    <a href="{% url 'explain' %}" class="btn btn-primary text-nowrap">See how it works</a>
+  </div>
+  {% endif %}
+
+  <div class="card mb-3"><div class="card-body">
+    {% include "calculators/ss_timing/_detail.html" %}
+  </div></div>
+
+  <div class="text-muted small">
+    <p>
+      <strong>Total</strong> is the sum of every year&rsquo;s benefit as paid (grown by the SS
+      adjustment). <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars by
+      discounting each future year at inflation, so money far in the future counts for what it is worth
+      now.
+    </p>
+    <p class="mb-0">
+      The Social Security cost-of-living adjustment (the &ldquo;SS adjustment&rdquo; above) is modeled at
+      about {{ cola_lag_pct }} below inflation, its long-run pattern &mdash; so benefits keep most, but not
+      quite all, of their purchasing power over time. Set the inflation rate to match how fast you expect
+      prices to rise; the adjustment follows from it.
+    </p>
+  </div>
+</div>
+{% endblock %}

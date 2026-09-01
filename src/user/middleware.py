@@ -89,7 +89,11 @@ class AuthenticationMiddleware:
         except Resolver404:
             return self.get_response( request )
 
+        # The Social Security timing calculator is login-free: exempt its whole feature namespace rather
+        # than each route by name. This is per-feature, not per-app -- a calculator is not public just
+        # because it lives under `calculators`.
         if (( resolver_match.app_name == 'admin' )
+                or ( resolver_match.namespace == 'calculators:ss_timing' )
                 or ( resolver_match.url_name in self.EXEMPT_VIEW_URL_NAMES )):
             return self.get_response( request )
 

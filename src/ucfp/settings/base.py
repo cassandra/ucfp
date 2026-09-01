@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     'ucfp.parameter_sets',
     'ucfp.inputs',
     'ucfp.planning',
+    'ucfp.calculators',
     'ucfp.onboarding',
     'ucfp.environment',
 ]
@@ -291,6 +292,7 @@ PIPELINE = {
                 'css/bootstrap-datepicker.standalone.min.css',
                 'css/main.css',
                 'css/books_table.css',
+                'css/ss_timing.css',
             ),
             'output_filename': 'css/css_head.css',
         },
@@ -305,6 +307,7 @@ PIPELINE = {
                 'js/bootstrap-datepicker.min.js',
                 'js/main.js',
                 'js/inputs.js',
+                'js/ss_timing.js',
             ),
             'output_filename': 'js/js_before_content.js',
         },

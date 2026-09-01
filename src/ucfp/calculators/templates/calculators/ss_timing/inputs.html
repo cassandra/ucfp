@@ -1,0 +1,91 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% comment %}
+  The login-free Social Security claiming calculator inputs. Collects one or two people (birth year, PIA,
+  expected lifetime) and the economic assumptions, then posts to itself; on success it redirects to the
+  results. ss_timing.js (bundled) hides the partner card for a one-person household, initialises the
+  year-only birth-year picker, and focuses the error summary on a failed submit.
+{% endcomment %}
+
+{% block head_title %}Social Security claiming calculator · {% settings_value 'SITE_NAME' %}{% endblock %}
+{% block page_title %}When should you claim Social Security?{% endblock %}
+
+{% block public_content %}
+{% include "calculators/ss_timing/_dashboard_breadcrumb.html" %}
+<p class="text-muted text-center mb-4">
+  Compare the lifetime Social Security benefit for each claiming age from 62 to 70.
+</p>
+
+{% if from_profile %}
+  <div class="alert alert-info" role="status">
+    Prefilled from your profile{% if assumptions_source %} and {{ assumptions_source }}{% endif %} &mdash;
+    add each person&rsquo;s expected lifetime to run the comparison. Nothing here changes your saved data.
+  </div>
+{% endif %}
+
+<form method="post" data-synchronous="true" novalidate>
+  {% csrf_token %}
+  {% comment %}A single error summary at the top of the form: the per-field errors below are easy to miss,
+  so on a failed submit this says plainly why the page came back and points to the highlighted fields. Any
+  cross-field (non-field) errors are shown here too.{% endcomment %}
+  {% if form.errors %}
+    <div class="alert alert-danger" role="alert" id="ss-error-summary" tabindex="-1">
+      <strong>Something needs fixing.</strong> Please review the highlighted fields below and try again.
+      {{ form.non_field_errors }}
+    </div>
+  {% endif %}
+
+  <fieldset class="form-group">
+    <legend class="h6">Who&rsquo;s planning?</legend>
+    <div class="btn-group btn-group-toggle" data-toggle="buttons" id="household-choice">
+      {% for radio in form.household %}
+        <label class="btn btn-outline-primary {% if radio.data.selected %}active{% endif %}">
+          {{ radio.tag }} {{ radio.choice_label }}
+        </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="card-deck">
+    <div class="card" id="person-0"><div class="card-body">
+      <h2 class="h6 text-muted">Individual</h2>
+      {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life index=0 %}
+    </div></div>
+    <div class="card" id="person-1"><div class="card-body">
+      <h2 class="h6 text-muted">Partner</h2>
+      {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life index=1 %}
+    </div></div>
+  </div>
+
+  <div class="card mt-4"><div class="card-body">
+    <h2 class="h6 text-muted">Economic assumptions</h2>
+    <div class="row">
+      <div class="col-md-4 mb-2 mb-md-0">
+        <div class="d-flex align-items-center">
+          <label class="mb-0 mr-2" for="{{ form.inflation.id_for_label }}">{{ form.inflation.label }}</label>
+          <div style="width:6.5rem">{{ form.inflation }}</div>
+        </div>
+        {% include "calculators/ss_timing/_field_errors.html" with field=form.inflation %}
+      </div>
+      <div class="col-md-8">
+        <div class="d-flex flex-wrap align-items-center">
+          <label class="mb-1 mr-2" for="{{ form.benefits_payable.id_for_label }}">Reduce to</label>
+          <div class="mr-2 mb-1" style="width:6.5rem">{{ form.benefits_payable }}</div>
+          <label class="mb-1 mr-2" for="{{ form.reduction_year.id_for_label }}">starting</label>
+          <div class="mb-1" style="width:7rem">{{ form.reduction_year }}</div>
+        </div>
+        {% include "calculators/ss_timing/_field_errors.html" with field=form.benefits_payable %}
+        {% include "calculators/ss_timing/_field_errors.html" with field=form.reduction_year %}
+        <small class="form-text text-muted">
+          Social Security&rsquo;s trust funds are projected to run short in the 2030s; without action,
+          scheduled benefits could be cut. Model that here: 100% leaves benefits unreduced.
+        </small>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="mt-4">
+    <button type="submit" class="btn btn-primary btn-lg">Compare claiming ages</button>
+  </div>
+</form>
+{% endblock %}

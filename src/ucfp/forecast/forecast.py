@@ -61,6 +61,8 @@ from ucfp.jurisdiction.law import Statute
 from ucfp.jurisdiction.subsidized_health import SubsidizedHealthEnrollment
 from ucfp.jurisdiction.context import TaxContext, TaxSubject
 from ucfp.jurisdiction.property import TaxProperty
+from ucfp.jurisdiction.government_pension import GovernmentPension
+from ucfp.jurisdiction.social_security_household import HouseholdMember, household_benefits
 
 from .economic_outlook import EconomicParameters
 from .parameters import (
@@ -432,6 +434,9 @@ class BaselineBuilder:
         for item in self._parameters.income_items:
             self._income_accounts.account_for( item.subject, item.income_tax_class )
             continue
+        for entitlement in self._parameters.social_security:
+            self._income_accounts.account_for( entitlement.subject, IncomeTaxClass.SOCIAL_SECURITY )
+            continue
         return
 
     def _create_expense_accounts( self, bookkeeper : Bookkeeper ) -> None:
@@ -597,6 +602,16 @@ class Forecast:
         self._expense_streams = list( self._parameters.expense_streams )
         self._income_items    = list( self._parameters.income_items )
         self._income_streams  = list( self._parameters.income_streams )
+        # Social Security is computed per interval (couple-aware) rather than pre-baked into streams; a
+        # subject removal (death) drives the survivor step-up inside the calculation.
+        self._government_pension = GovernmentPension( self._parameters.statute.jurisdiction_type )
+        ss_deaths = { str( removal.subject_handle ): removal.event_date
+                      for removal in self._parameters.subject_removals }
+        self._ss_members = [
+            HouseholdMember( entitlement.subject.handle, entitlement.subject.birthdate,
+                             entitlement.pia_monthly, entitlement.claiming_date,
+                             ss_deaths.get( str( entitlement.subject.handle ) ) )
+            for entitlement in self._parameters.social_security ]
         # Whole-property sales reported by earlier periods, each ( handle, sale_date, rent_after ). Two
         # jobs: a rental sold in a prior tax YEAR is dropped from the tax context (it no longer
         # depreciates), and the sales of the CURRENT tax year that landed in earlier sub-periods are
@@ -698,7 +713,33 @@ class Forecast:
         occurrence-based items (placed by their cadence). The income counterpart of
         `_expense_lines_for`."""
         return ( self._income_stream_lines_for( span, year_fraction )
-                 + self._income_item_lines_for( span ) )
+                 + self._income_item_lines_for( span )
+                 + self._social_security_lines_for( span, year_fraction ) )
+
+    def _social_security_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
+        """The couple-aware Social Security benefit for the interval, posted per subject to their SS
+        account. Computed each period from the entitlement facts -- the own claim-adjusted benefit plus the
+        lower earner's spousal top-up once both collect (survivor on a death, a later phase) -- then grown by
+        the COLA and scaled by the funding-payable factor, exactly as the stream path grows income, and
+        prorated to the interval's share of the year. Keeping the couple math and its timing here (not in
+        materialization) is why Social Security is not a pre-baked stream."""
+        if not self._ss_members:
+            return list()
+        benefits = household_benefits( self._ss_members, self._government_pension, span.start_date )
+        factor   = self._income_growth_factor( IncomeTaxClass.SOCIAL_SECURITY, span.start_date.year )
+        payable  = self._benefit_payable_factor( IncomeTaxClass.SOCIAL_SECURITY, span.start_date.year )
+        lines = list()
+        for entitlement in self._parameters.social_security:
+            benefit = benefits.get( entitlement.subject.handle, Decimal( '0' ) )
+            if benefit <= 0:
+                continue
+            account = self._baseline.income_accounts.account_for(
+                entitlement.subject, IncomeTaxClass.SOCIAL_SECURITY )
+            lines.append( IncomeLine(
+                account = account, gross_amount = benefit * factor * payable * year_fraction,
+                source = IncomeTaxClass.SOCIAL_SECURITY.label ) )
+            continue
+        return lines
 
     def _income_stream_lines_for( self, span : DateSpan, year_fraction : Decimal ) -> list[ IncomeLine ]:
         """Resolve the income streams active this interval into IncomeLines: take each stream's

@@ -89,13 +89,12 @@ class DashboardViewTests( TestCase ):
         self.assertContains( response, '<polyline' )
         self.assertContains( response, reverse( 'run_results', args = [ self._latest_run_uuid() ] ) )
 
-    def test_coming_soon_features_render_as_placeholders( self ):
+    def test_calculators_subnav_links_to_the_ss_timing_calculator( self ):
         response = self._get()
-        # Named placeholders (reserved for future summaries), styled by the inert card class.
-        self.assertContains( response, 'overview-soon-card' )
-        self.assertContains( response, 'Retirement Timing' )
-        self.assertContains( response, 'Social Security' )
-        self.assertContains( response, 'Cash Flow' )
+        # The signed-in home for the standalone calculators; no more "coming soon" teasers.
+        self.assertContains( response, 'Social Security Timing' )
+        self.assertContains( response, reverse( 'calculators:ss_timing:inputs' ) )
+        self.assertNotContains( response, 'overview-soon-card' )     # the soon placeholders are gone
 
     def _latest_run_uuid( self ):
         return PlanningResultRecord.objects.get( organization = self.org ).run.uuid

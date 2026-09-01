@@ -806,8 +806,7 @@ class InterviewView( GuestReminderMixin, View ):
             return current_plans_record( request )
         if flow == 'assumptions':
             return current_assumptions_record( request )
-        return latest_profile( request.organization ) or _mint_or_explain(
-            request, create_profile, 'Profile' )
+        return latest_profile( request.organization ) or _mint_profile( request )
 
     def post( self, request, section ):
         current = self._live_section( section )
@@ -898,8 +897,7 @@ class InterviewView( GuestReminderMixin, View ):
             f'Section {section.key!r} edits both Plans and Assumptions; the single-other dispatch '
             'supports at most one non-profile aggregate per section.' )
         organization = request.organization
-        profile_record = latest_profile( organization ) or _mint_or_explain(
-            request, create_profile, 'Profile' )
+        profile_record = latest_profile( organization ) or _mint_profile( request )
         profile = load_profile( profile_record )
         if Aggregate.PLANS in section.aggregates:
             return profile, load_plans( current_plans_record( request ) )
@@ -1441,6 +1439,17 @@ def _mint_or_explain( request, mint, label ):
     return mint( request.organization )
 
 
+def _mint_profile( request ):
+    """The household's first profile, seeded from any facts the visitor carried in from the login-free
+    tools (see `ucfp.session_facts`). Routed through `_mint_or_explain` so a read-only member gets the
+    plain 'no profile yet' message rather than a generic authorization error. Reached only when the
+    household has no profile at all, so the seed always fills a blank slate."""
+    return _mint_or_explain(
+        request,
+        lambda organization: create_profile( organization, request.session_state.session_facts ),
+        'Profile' )
+
+
 def current_plans_record( request ):
     """The Plans record the user is editing: the session-selected one (scoped to the org), else the
     latest, minting one if the org has none. The single resolver every plans surface loads and saves
@@ -1470,7 +1479,7 @@ def current_assumptions_record( request ):
 def _current_profile( request ):
     """The user's current Profile -- the latest month's, creating one if the org has none yet."""
     organization = request.organization
-    record = latest_profile( organization ) or _mint_or_explain( request, create_profile, 'Profile' )
+    record = latest_profile( organization ) or _mint_profile( request )
     return load_profile( record )
 
 

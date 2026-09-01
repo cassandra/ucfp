@@ -8,7 +8,7 @@
 {% endcomment %}
 
 {% block content %}
-<div class="container py-4" style="max-width: 760px;">
+<div class="container py-4" style="max-width: {% block public_container_max_width %}760px{% endblock %};">
   <div class="text-center mb-4">
     <a href="{% url 'home' %}">
       <img src="{% static 'img/app-logo-h200.png' %}" alt="{% settings_value 'SITE_NAME' %}" style="max-height: 56px;">

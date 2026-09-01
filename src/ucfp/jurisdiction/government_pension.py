@@ -51,6 +51,15 @@ class GovernmentPension:
         raise NotImplementedError(
             f'No spousal benefit schedule for jurisdiction {self._jurisdiction}.' )
 
+    def normal_retirement_age_months( self, birthdate : date ) -> int:
+        """The age, in months, at which a person born on `birthdate` reaches the jurisdiction's normal
+        retirement age (the US full retirement age) -- the reference point the claim adjustment is measured
+        against, surfaced for the methodology explanation."""
+        if self._jurisdiction is JurisdictionType.US_FEDERAL:
+            return us_social_security.full_retirement_age_months( birthdate.year )
+        raise NotImplementedError(
+            f'No normal retirement age for jurisdiction {self._jurisdiction}.' )
+
     def has_benefit_estimator( self ) -> bool:
         """Whether this jurisdiction can estimate a normal-age benefit from covered wages -- the
         capability callers gate the FRA-benefit estimator on, so they never test the jurisdiction

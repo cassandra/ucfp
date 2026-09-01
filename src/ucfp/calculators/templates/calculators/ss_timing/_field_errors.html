@@ -1,0 +1,3 @@
+{% comment %}A field's validation errors in danger styling, wrapped in the container the input's
+`aria-describedby` points at (see InputsForm.flag_invalid_fields). Context: `field` (a bound form field).
+{% endcomment %}{% if field.errors %}<div id="{{ field.auto_id }}-errors">{% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>{% endif %}
