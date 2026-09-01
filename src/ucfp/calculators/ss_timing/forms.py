@@ -15,6 +15,8 @@ from django import forms
 from common.forms import MoneyField, PercentField, StyledFormMixin
 from common.rate import Rate
 
+from ucfp.session_facts import PersonFacts, SessionFacts
+
 from .compute import EARLIEST_CLAIM_AGE, Assumptions, Claimant
 
 HOUSEHOLD_SINGLE = 'single'
@@ -83,37 +85,42 @@ class InputsForm( StyledFormMixin, forms.Form ):
                 self.add_error( field_name, 'A birth year cannot be in the future.' )
         return cleaned
 
-    def cleaned_inputs( self ) -> dict:
-        """The validated values as a JSON-serializable dict (Decimals stringified) -- the shape persisted
-        to the session and re-read as both the results' domain inputs and this form's next prefill. The
-        partner keys are present only for a couple, so the household kind is recoverable from the dict."""
-        data   = self.cleaned_data
-        inputs = {
-            'household'        : data[ 'household' ],
-            's0_birth_year'    : data[ 's0_birth_year' ],
-            's0_pia'           : str( data[ 's0_pia' ] ),
-            's0_life'          : data[ 's0_life' ],
+    def session_facts( self ) -> SessionFacts:
+        """The household facts as a neutral `SessionFacts` -- one person for a single household, two for a
+        couple. These are the facts that can seed a Profile; the run assumptions are kept apart (see
+        `assumptions_inputs`), so this bag stays feature-neutral."""
+        people = [ self._person_facts( 0 ) ]
+        if self.cleaned_data[ 'household' ] == HOUSEHOLD_COUPLE:
+            people.append( self._person_facts( 1 ) )
+        return SessionFacts( people = people )
+
+    def _person_facts( self, index : int ) -> PersonFacts:
+        data = self.cleaned_data
+        return PersonFacts(
+            birth_year                 = data[ f's{index}_birth_year' ],
+            government_pension_monthly = data[ f's{index}_pia' ],
+            life_expectancy            = data[ f's{index}_life' ] )
+
+    def assumptions_inputs( self ) -> dict:
+        """The validated run assumptions as a JSON-serializable dict (percents stringified) -- the
+        SS-specific session slot, re-read as this form's next prefill and the results' economic inputs."""
+        data = self.cleaned_data
+        return {
             'inflation'        : str( data[ 'inflation' ] ),
             'benefits_payable' : str( data[ 'benefits_payable' ] ),
             'reduction_year'   : data[ 'reduction_year' ] }
-        if data[ 'household' ] == HOUSEHOLD_COUPLE:
-            inputs.update( {
-                's1_birth_year' : data[ 's1_birth_year' ],
-                's1_pia'        : str( data[ 's1_pia' ] ),
-                's1_life'       : data[ 's1_life' ] } )
-        return inputs
 
 
-def claimants_and_assumptions( inputs : dict ) -> tuple[ list[ Claimant ], Assumptions ]:
-    """The compute core's typed inputs from a stored form dict: one `Claimant` (two for a couple, keyed by
-    the partner fields being present) and the `Assumptions` from the rates and the funding reduction."""
-    claimants = [ _claimant( inputs, 0 ) ]
-    if inputs.get( 'household' ) == HOUSEHOLD_COUPLE:
-        claimants.append( _claimant( inputs, 1 ) )
+def claimants_and_assumptions( facts : SessionFacts,
+                               assumptions_inputs : dict ) -> tuple[ list[ Claimant ], Assumptions ]:
+    """The compute core's typed inputs from the stored session slots: a `Claimant` per person in `facts`
+    (higher earner derived later, in the compute core) and the `Assumptions` from the stored rates and the
+    funding reduction."""
+    claimants   = [ _claimant( person, index ) for index, person in enumerate( facts.people ) ]
     assumptions = Assumptions.from_inflation(
-        inflation        = _rate_from_percent( inputs[ 'inflation' ] ),
-        benefits_payable = _rate_from_percent( inputs[ 'benefits_payable' ] ),
-        reduction_year   = int( inputs[ 'reduction_year' ] ) )
+        inflation        = _rate_from_percent( assumptions_inputs[ 'inflation' ] ),
+        benefits_payable = _rate_from_percent( assumptions_inputs[ 'benefits_payable' ] ),
+        reduction_year   = int( assumptions_inputs[ 'reduction_year' ] ) )
     return claimants, assumptions
 
 
@@ -128,12 +135,12 @@ def default_inputs( assumptions : Assumptions ) -> dict:
         'reduction_year'   : assumptions.reduction_year }
 
 
-def _claimant( inputs : dict, index : int ) -> Claimant:
+def _claimant( person : PersonFacts, index : int ) -> Claimant:
     return Claimant(
         name              = _PERSON_NAMES[ index ],
-        birth_year        = int( inputs[ f's{index}_birth_year' ] ),
-        pia_monthly       = Decimal( str( inputs[ f's{index}_pia' ] ) ),
-        expected_lifetime = int( inputs[ f's{index}_life' ] ) )
+        birth_year        = int( person.birth_year ),
+        pia_monthly       = Decimal( str( person.government_pension_monthly ) ),
+        expected_lifetime = int( person.life_expectancy ) )
 
 
 def _rate_from_percent( percent ) -> Rate:

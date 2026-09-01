@@ -16,6 +16,7 @@ from ucfp.calculators.ss_timing.forms import (
     HOUSEHOLD_COUPLE, HOUSEHOLD_SINGLE, InputsForm,
     claimants_and_assumptions, default_inputs )
 from ucfp.forecast.economic_outlook import EconomicParameters
+from ucfp.session_facts import PersonFacts, SessionFacts
 from ucfp.session_state import SessionState
 
 _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
@@ -48,7 +49,7 @@ class FormValidationTest( SimpleTestCase ):
     def test_a_single_household_ignores_the_blank_partner_fields( self ):
         form = InputsForm( data = _single_data() )
         self.assertTrue( form.is_valid(), form.errors )
-        self.assertNotIn( 's1_pia', form.cleaned_inputs() )
+        self.assertEqual( len( form.session_facts().people ), 1 )     # no partner captured
 
     def test_a_future_birth_year_is_rejected( self ):
         form = InputsForm( data = _single_data( s0_birth_year = '3000' ) )
@@ -58,10 +59,11 @@ class FormValidationTest( SimpleTestCase ):
 
 class FormMappingTest( SimpleTestCase ):
 
-    def test_cleaned_inputs_map_to_two_claimants_and_the_assumptions( self ):
+    def test_the_form_maps_to_two_claimants_and_the_assumptions( self ):
         form = InputsForm( data = _couple_data() )
         self.assertTrue( form.is_valid(), form.errors )
-        claimants, assumptions = claimants_and_assumptions( form.cleaned_inputs() )
+        claimants, assumptions = claimants_and_assumptions(
+            form.session_facts(), form.assumptions_inputs() )
         self.assertEqual( [ c.name for c in claimants ], [ 'Individual', 'Partner' ] )
         self.assertEqual( claimants[ 0 ].birth_year, 1960 )
         self.assertEqual( claimants[ 1 ].pia_monthly, Decimal( '1200' ) )
@@ -73,7 +75,8 @@ class FormMappingTest( SimpleTestCase ):
     def test_a_single_household_maps_to_one_claimant( self ):
         form = InputsForm( data = _single_data() )
         self.assertTrue( form.is_valid(), form.errors )
-        claimants, _assumptions = claimants_and_assumptions( form.cleaned_inputs() )
+        claimants, _assumptions = claimants_and_assumptions(
+            form.session_facts(), form.assumptions_inputs() )
         self.assertEqual( len( claimants ), 1 )
 
     def test_default_inputs_seed_the_assumption_percents( self ):
@@ -87,15 +90,21 @@ class FormMappingTest( SimpleTestCase ):
 
 class SessionRoundTripTest( SimpleTestCase ):
 
-    def test_ss_timing_inputs_survive_a_session_round_trip( self ):
+    def test_session_facts_and_assumptions_survive_a_session_round_trip( self ):
         request = RequestFactory().get( '/' )
         request.session = _SessionStore()
         state = SessionState.from_session( request )
-        state.ss_timing_inputs = { 'household' : HOUSEHOLD_SINGLE, 's0_birth_year' : 1960 }
+        state.session_facts = SessionFacts( people = [ PersonFacts(
+            birth_year = 1960, government_pension_monthly = Decimal( '2000' ), life_expectancy = 85 ) ] )
+        state.ss_timing_assumptions = dict( _ASSUMPTIONS )
         state.to_session( request )
         restored = SessionState.from_session( request )
-        self.assertEqual(
-            restored.ss_timing_inputs, { 'household' : HOUSEHOLD_SINGLE, 's0_birth_year' : 1960 } )
+        self.assertFalse( restored.session_facts.is_couple )
+        person = restored.session_facts.people[ 0 ]
+        self.assertEqual( person.birth_year, 1960 )
+        self.assertEqual( person.government_pension_monthly, Decimal( '2000' ) )   # money survives as Decimal
+        self.assertEqual( person.life_expectancy, 85 )
+        self.assertEqual( restored.ss_timing_assumptions, _ASSUMPTIONS )
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )

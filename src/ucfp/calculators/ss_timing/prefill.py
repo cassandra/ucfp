@@ -1,15 +1,18 @@
 """Prefill for the Social Security claiming calculator's inputs form.
 
-The form works for anyone, but a signed-in visitor with a saved Profile should not retype what the app
-already knows. This resolves the form's initial values, best-effort and read-only:
+The form works for anyone, but no one should retype what a prior visit or a saved Profile already holds.
+This resolves the form's initial values, best-effort and read-only, from the highest-priority source that
+has each part:
 
-- People default to each Profile person's birth year and PIA (the primary, then the partner). The
-  expected lifetime is always left blank -- it is not a Profile fact yet (deferred to issue #14).
-- Assumptions default to the visitor's current scenario's economics, then their most recent saved
-  scenario's, then the seeded system defaults.
+- People come from this session's `SessionFacts` first (what the visitor last entered here, including the
+  expected lifetime), else from a signed-in visitor's saved Profile (birth year and PIA per person; the
+  expected lifetime is left blank -- not a Profile fact yet, deferred to issue #14), else blank.
+- Assumptions come from this session's stored run assumptions first (`ss_timing_assumptions`), else the
+  visitor's current scenario's economics, then their most recent saved scenario's, then the seeded system
+  defaults.
 
-Anonymous visitors -- and signed-in ones with no profile or scenario -- fall through to blank people and
-the system default assumptions. Nothing here writes: the form never changes the saved Profile or scenario.
+Anonymous visitors -- and signed-in ones with no prior entry, profile, or scenario -- fall through to
+blank people and the system default assumptions. Nothing here writes: the form never changes saved data.
 """
 from dataclasses import dataclass
 
@@ -40,16 +43,52 @@ class Prefill:
 
 
 def build_prefill( request ) -> Prefill:
-    """The form's initial values for `request`: the people from a signed-in visitor's Profile (blank for
-    anonymous), and the assumptions from their scenario or the system defaults. Best-effort -- any missing
-    piece falls back rather than failing, since the calculator must open for anyone."""
-    organization        = _organization( request )
-    economics, source   = _scenario_economics( request, organization )
-    initial             = default_inputs( _assumptions( economics ) )
-    people, household, from_profile = _people( _profile( organization ) )
+    """The form's initial values for `request`: the people from this session's facts, else a signed-in
+    visitor's Profile (blank for a fresh anonymous visit); the assumptions from this session, else a
+    scenario, else the system defaults. Best-effort -- any missing piece falls back rather than failing,
+    since the calculator must open for anyone."""
+    organization                    = _organization( request )
+    economics_initial, source       = _economics_initial( request, organization )
+    people, household, from_profile = _people( request, organization )
+    initial = dict( economics_initial )
     initial.update( people )
     initial[ 'household' ] = household
     return Prefill( initial = initial, from_profile = from_profile, assumptions_source = source )
+
+
+def _economics_initial( request, organization ) -> tuple[ dict, str ]:
+    """The assumption fields' initial values and a source label: this session's stored run assumptions
+    first (re-prefilled exactly, with no source note), else the fields seeded from a scenario or the system
+    defaults."""
+    stored = request.session_state.ss_timing_assumptions
+    if stored:
+        return stored, None
+    economics, source = _scenario_economics( request, organization )
+    return default_inputs( _assumptions( economics ) ), source
+
+
+def _people( request, organization ) -> tuple[ dict, str, bool ]:
+    """The people fields, the household kind, and whether they came from the saved Profile: this session's
+    `SessionFacts` first (never `from_profile`), else the signed-in visitor's Profile, else blank."""
+    facts = request.session_state.session_facts
+    if facts.people:
+        return _people_from_facts( facts )
+    return _people_from_profile( _profile( organization ) )
+
+
+def _people_from_facts( facts ) -> tuple[ dict, str, bool ]:
+    """The people fields from this session's facts -- each person's birth year, PIA, and expected lifetime,
+    whatever was entered -- and the household kind by whether a partner is present."""
+    initial = dict()
+    for index, person in enumerate( facts.people[ :2 ] ):
+        if person.birth_year is not None:
+            initial[ f's{index}_birth_year' ] = person.birth_year
+        if person.government_pension_monthly is not None:
+            initial[ f's{index}_pia' ] = str( person.government_pension_monthly )
+        if person.life_expectancy is not None:
+            initial[ f's{index}_life' ] = person.life_expectancy
+    household = HOUSEHOLD_COUPLE if facts.is_couple else HOUSEHOLD_SINGLE
+    return initial, household, False
 
 
 def _organization( request ):
@@ -68,10 +107,11 @@ def _profile( organization ):
     return load_profile( record ) if record is not None else None
 
 
-def _people( profile ) -> tuple[ dict, str, bool ]:
-    """The people fields from a Profile: each person's birth year and PIA (the expected lifetime is left
-    blank -- not a Profile fact yet), the household kind by whether there is a partner, and whether any
-    people were prefilled. Blank people and a couple default when there is no profile."""
+def _people_from_profile( profile ) -> tuple[ dict, str, bool ]:
+    """The people fields from a saved Profile: each person's birth year and PIA (the expected lifetime is
+    left blank -- not a Profile fact yet), the household kind by whether there is a partner, and
+    `from_profile` True when any were prefilled. Blank people and a couple default when there is no
+    profile."""
     if profile is None or not profile.subjects:
         return {}, HOUSEHOLD_COUPLE, False
     pia_by_handle = {

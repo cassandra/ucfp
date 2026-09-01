@@ -4,6 +4,7 @@ from typing import Optional
 from django.http import HttpRequest
 
 from ucfp.accounts.books_table import BooksTableDefinition
+from ucfp.session_facts import SessionFacts
 
 
 def _int_or_none( value ) -> Optional[ int ]:
@@ -121,10 +122,17 @@ class SessionState:
     # shown again this session (see ucfp.privacy_consent).
     cookies_acknowledged : bool = False
 
-    # The last inputs entered on the (login-free) Social Security claiming calculator, so a return visit
-    # re-prefills them on this device. A plain dict of the form's raw values -- NOT org-scoped, so it
-    # works for an anonymous visitor with no organization (see ucfp.calculators.ss_timing.views).
-    ss_timing_inputs : dict = field( default_factory = dict )
+    # Feature-neutral household facts a visitor has entered into the login-free tools (birth years, benefit
+    # amounts, an expected lifetime), so a tool can re-prefill them and a brand-new Profile can be seeded
+    # from them. NOT org-scoped -- it works for an anonymous visitor with no organization. The neutral bag
+    # and its Profile mapping live in ucfp.session_facts / the profile repository, not here.
+    session_facts : SessionFacts = field( default_factory = SessionFacts )
+
+    # The economic assumptions a visitor last ran the Social Security claiming calculator under (inflation,
+    # the benefit reduction and its year), so a return visit re-prefills them. Feature-specific to that
+    # calculator and kept as its raw form values -- the household facts it also collects live in
+    # `session_facts` (see ucfp.calculators.ss_timing).
+    ss_timing_assumptions : dict = field( default_factory = dict )
 
     def set_current_organization( self, organization_uuid : Optional[ str ] ) -> None:
         """Make `organization_uuid` the current organization.
@@ -222,7 +230,8 @@ class SessionState:
         request.session[ 'forecast_duration_years' ] = self.forecast_duration_years
         request.session[ 'forecast_interval' ] = self.forecast_interval
         request.session[ 'cookies_acknowledged' ] = self.cookies_acknowledged
-        request.session[ 'ss_timing_inputs' ] = self.ss_timing_inputs
+        request.session[ 'session_facts' ] = self.session_facts.to_storage()
+        request.session[ 'ss_timing_assumptions' ] = self.ss_timing_assumptions
         return
 
     @staticmethod
@@ -243,4 +252,5 @@ class SessionState:
             forecast_duration_years = _int_or_none( request.session.get( 'forecast_duration_years' ) ),
             forecast_interval = request.session.get( 'forecast_interval' ),
             cookies_acknowledged = bool( request.session.get( 'cookies_acknowledged', False ) ),
-            ss_timing_inputs = request.session.get( 'ss_timing_inputs' ) or {} )
+            session_facts = SessionFacts.from_storage( request.session.get( 'session_facts' ) ),
+            ss_timing_assumptions = request.session.get( 'ss_timing_assumptions' ) or {} )

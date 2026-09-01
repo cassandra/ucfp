@@ -1,10 +1,11 @@
 """The login-free Social Security claiming calculator pages: the inputs form and the results.
 
 These are public `View`s (no `ensure_organization`, no login) -- the calculator works for an anonymous
-visitor or a signed-in one. Inputs are held in the session (`ss_timing_inputs`), NOT the database, so a
-visit leaves no saved profile or scenario. The inputs page prefills from the last session entry, else
-from a signed-in visitor's Profile and scenario, else the system defaults (see `prefill`).
-Submitting persists the inputs and redirects to the results, which runs the sweep.
+visitor or a signed-in one. Inputs are held in the session, NOT the database, so a visit leaves no saved
+profile or scenario: the household facts in the neutral `session_facts` slot, the run assumptions in
+`ss_timing_assumptions` (see `ucfp.session_state`). The inputs page prefills from the last session entry,
+else from a signed-in visitor's Profile and scenario, else the system defaults (see `prefill`).
+Submitting persists both and redirects to the results, which runs the sweep.
 """
 from decimal import Decimal
 
@@ -41,10 +42,6 @@ class InputsView( View ):
     template_name = 'calculators/ss_timing/inputs.html'
 
     def get( self, request ):
-        remembered = request.session_state.ss_timing_inputs
-        if remembered:
-            form = InputsForm( initial = remembered )
-            return render( request, self.template_name, { 'form' : form, 'remembered' : True } )
         prefill = build_prefill( request )
         form    = InputsForm( initial = prefill.initial )
         return render( request, self.template_name,
@@ -55,7 +52,8 @@ class InputsView( View ):
         form = InputsForm( request.POST )
         if not form.is_valid():
             return render( request, self.template_name, { 'form' : form } )
-        request.session_state.ss_timing_inputs = form.cleaned_inputs()
+        request.session_state.session_facts         = form.session_facts()
+        request.session_state.ss_timing_assumptions = form.assumptions_inputs()
         request.session_state.to_session( request )
         return redirect( 'calculators:ss_timing:results' )
 
@@ -68,10 +66,10 @@ class ResultsView( View ):
     template_name = 'calculators/ss_timing/results.html'
 
     def get( self, request ):
-        inputs = request.session_state.ss_timing_inputs
-        if not inputs:
+        resolved = _session_claimants_and_assumptions( request )
+        if resolved is None:
             return redirect( 'calculators:ss_timing:inputs' )
-        claimants, assumptions = claimants_and_assumptions( inputs )
+        claimants, assumptions = resolved
         comparison = compare_claiming_strategies( claimants, assumptions )
         selected   = comparison.best
         combo      = results.combo_of( selected.claim_ages )
@@ -94,10 +92,10 @@ class StrategyDetailView( View ):
     year-by-year detail partial. `combo` is the claim ages joined ('67' or '70-64')."""
 
     def get( self, request, combo ):
-        inputs = request.session_state.ss_timing_inputs
-        if not inputs:
+        resolved = _session_claimants_and_assumptions( request )
+        if resolved is None:
             raise Http404( 'No calculator inputs in this session.' )
-        claimants, assumptions = claimants_and_assumptions( inputs )
+        claimants, assumptions = resolved
         strategy = compute_strategy( claimants, _parse_combo( combo, len( claimants ) ), assumptions )
         content  = render_to_string(
             _DETAIL_TEMPLATE, _detail_context( _by_earning( claimants ), strategy ), request = request )
@@ -112,10 +110,10 @@ class MethodologyModalView( ModalView ):
         return _METHODOLOGY_TEMPLATE
 
     def get( self, request, combo ):
-        inputs = request.session_state.ss_timing_inputs
-        if not inputs:
+        resolved = _session_claimants_and_assumptions( request )
+        if resolved is None:
             raise Http404( 'No calculator inputs in this session.' )
-        claimants, _assumptions = claimants_and_assumptions( inputs )
+        claimants, _assumptions = resolved
         earners    = _by_earning( claimants )
         claim_ages = _parse_combo( combo, len( claimants ) )
         return self.modal_response( request, context = {
@@ -160,6 +158,17 @@ class BenefitEstimateApplyView( View ):
         field   = InputsForm( initial = { f's{index}_pia' : str( benefit ) } )[ f's{index}_pia' ]
         content = render_to_string( _PIA_INPUT_TEMPLATE, { 'field' : field }, request = request )
         return antinode.response( replace_map = { f'pia-input-{index}' : content } )
+
+
+def _session_claimants_and_assumptions( request ):
+    """The compute core's claimants and assumptions from this session's stored slots, or None when the
+    visitor has not run the calculator yet (no household facts or no run assumptions) -- the single gate
+    the results, drill-in, and methodology views share to send a bare visit back to the form."""
+    facts       = request.session_state.session_facts
+    assumptions = request.session_state.ss_timing_assumptions
+    if not facts.people or not assumptions:
+        return None
+    return claimants_and_assumptions( facts, assumptions )
 
 
 def _pension() -> GovernmentPension:
