@@ -33,39 +33,16 @@ page, a sister of the returning-user sign-in for someone who arrived as a Guest 
 </div>
 {% endif %}
 
-<h1 class="h3 mb-4">Overview</h1>
+<h1 class="h3 mb-2">Overview</h1>
+
+{% comment %}
+A quiet "Calculators" sub-nav under the title -- the signed-in home for the standalone calculators, kept
+off the main app navbar (which stays the built planning perspectives). Add links here as calculators ship.
+{% endcomment %}
+<nav class="mb-4" aria-label="Calculators">
+  <span class="text-uppercase text-muted small font-weight-bold mr-2">Calculators</span>
+  <a href="{% url 'calculators:ss_timing:inputs' %}">Social Security Timing</a>
+</nav>
 
 {% include 'planning/panes/forecast_overview_card.html' with overview=forecast_overview %}
-
-<h2 class="overview-soon-heading">More perspectives</h2>
-<div class="row overview-soon-row">
-  <div class="col-md-4 mb-3">
-    <div class="card overview-soon-card h-100">
-      <div class="card-body">
-        <span class="feature-disc feature-disc--muted">{% icon 'clock' size='lg' %}</span>
-        <h3 class="h6 mb-1">Retirement Timing <span class="badge badge-secondary align-middle">soon</span></h3>
-        <p class="text-muted small mb-0">Compare when you can retire and how much you need to get there.</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4 mb-3">
-    <div class="card overview-soon-card h-100">
-      <div class="card-body">
-        <span class="feature-disc feature-disc--muted">{% icon 'shield' size='lg' %}</span>
-        <h3 class="h6 mb-1">Social Security <span class="badge badge-secondary align-middle">soon</span></h3>
-        <p class="text-muted small mb-0">Find the claiming strategy that pays you the most over your lifetime.</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4 mb-3">
-    <div class="card overview-soon-card h-100">
-      <div class="card-body">
-        <span class="feature-disc feature-disc--muted">{% icon 'dollar-sign' size='lg' %}</span>
-        <h3 class="h6 mb-1">Cash Flow <span class="badge badge-secondary align-middle">soon</span></h3>
-        <p class="text-muted small mb-0">Plan the next twelve months at fine granularity, so nothing catches
-          you short.</p>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
