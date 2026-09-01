@@ -4,15 +4,16 @@ The form works for anyone, but no one should retype what a prior visit or a save
 This resolves the form's initial values, best-effort and read-only, from the highest-priority source that
 has each part:
 
-- People come from this session's `SessionFacts` first (what the visitor last entered here, including the
-  expected lifetime), else from a signed-in visitor's saved Profile (birth year and PIA per person; the
-  expected lifetime is left blank -- not a Profile fact yet, deferred to issue #14), else blank.
-- Assumptions come from this session's stored run assumptions first (`ss_timing_assumptions`), else the
-  visitor's current scenario's economics, then their most recent saved scenario's, then the seeded system
-  defaults.
+- People are facts, so a signed-in visitor's saved Profile is authoritative: it is used whenever it holds
+  people (birth year and PIA per person; the expected lifetime is left blank -- not a Profile fact yet,
+  deferred to issue #14), and a prior session entry never overrides it. Only with no Profile people does
+  this session's `SessionFacts` fill in (including the expected lifetime it captured); failing that, blank.
+- Assumptions are "what if" knobs, not facts, so this session's stored run assumptions come first
+  (`ss_timing_assumptions` -- the last set used), else the visitor's current scenario's economics, then
+  their most recent saved scenario's, then the seeded system defaults.
 
-Anonymous visitors -- and signed-in ones with no prior entry, profile, or scenario -- fall through to
-blank people and the system default assumptions. Nothing here writes: the form never changes saved data.
+Anonymous visitors -- and signed-in ones with no profile -- fall through to `SessionFacts` (or blank) for
+people and the system defaults for assumptions. Nothing here writes: the form never changes saved data.
 """
 from dataclasses import dataclass
 
@@ -43,8 +44,8 @@ class Prefill:
 
 
 def build_prefill( request ) -> Prefill:
-    """The form's initial values for `request`: the people from this session's facts, else a signed-in
-    visitor's Profile (blank for a fresh anonymous visit); the assumptions from this session, else a
+    """The form's initial values for `request`: the people from a signed-in visitor's Profile, else this
+    session's facts (blank for a fresh anonymous visit); the assumptions from this session, else a
     scenario, else the system defaults. Best-effort -- any missing piece falls back rather than failing,
     since the calculator must open for anyone."""
     organization                    = _organization( request )
@@ -68,12 +69,18 @@ def _economics_initial( request, organization ) -> tuple[ dict, str ]:
 
 
 def _people( request, organization ) -> tuple[ dict, str, bool ]:
-    """The people fields, the household kind, and whether they came from the saved Profile: this session's
-    `SessionFacts` first (never `from_profile`), else the signed-in visitor's Profile, else blank."""
+    """The people fields, the household kind, and whether they came from the saved Profile. People are
+    facts, so a signed-in visitor's Profile is authoritative: it is used whenever it holds people, and a
+    prior "what if" session entry never overrides it (nor leaks in from another org or an anonymous visit).
+    Only when there is no Profile -- or it holds no people -- does this session's `SessionFacts` fill in;
+    failing that, blank."""
+    profile_people = _people_from_profile( _profile( organization ) )
+    if profile_people[ 0 ]:                     # a non-empty initial dict -> the Profile held people
+        return profile_people
     facts = request.session_state.session_facts
     if facts.people:
         return _people_from_facts( facts )
-    return _people_from_profile( _profile( organization ) )
+    return profile_people                       # blank people, default household, from_profile False
 
 
 def _people_from_facts( facts ) -> tuple[ dict, str, bool ]:
@@ -92,11 +99,18 @@ def _people_from_facts( facts ) -> tuple[ dict, str, bool ]:
 
 
 def _organization( request ):
-    """The signed-in visitor's default organization, or None for an anonymous visitor (or one with no
-    membership). Non-creating -- prefill never provisions an organization as a side effect."""
+    """The organization the prefill reads from: the one the session currently has selected (so switching
+    households changes what prefills), else the visitor's default landing org. Resolves the selection the
+    same membership-checked way `ensure_organization` does (`active_membership_for`), but non-creating and
+    tolerant of no user -- prefill must open for anyone and never provisions an organization."""
     user = request.user
     if not user.is_authenticated:
         return None
+    selected_uuid = request.session_state.current_organization_uuid
+    if selected_uuid is not None:
+        membership = OrganizationMember.objects.active_membership_for( user, selected_uuid )
+        if membership is not None:
+            return membership.organization
     return OrganizationMember.objects.default_organization_for( user )
 
 

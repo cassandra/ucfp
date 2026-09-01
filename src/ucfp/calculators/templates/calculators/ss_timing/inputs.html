@@ -18,8 +18,8 @@
 
 {% if from_profile %}
   <div class="alert alert-info" role="status">
-    Prefilled from your profile and {{ assumptions_source }} &mdash; add each person&rsquo;s expected
-    lifetime to run the comparison. Nothing here changes your saved data.
+    Prefilled from your profile{% if assumptions_source %} and {{ assumptions_source }}{% endif %} &mdash;
+    add each person&rsquo;s expected lifetime to run the comparison. Nothing here changes your saved data.
   </div>
 {% endif %}
 

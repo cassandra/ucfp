@@ -25,6 +25,7 @@ from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, GovernmentPensionEntitlement, Profile, SubjectProfile )
 from ucfp.inputs.scenarios.repository import create_scenario
 from ucfp.calculators.ss_timing.prefill import build_prefill
+from ucfp.session_facts import PersonFacts, SessionFacts
 from ucfp.session_state import SessionState
 
 _DEFAULT_ECONOMICS = 'ucfp.calculators.ss_timing.prefill.default_economics'
@@ -92,6 +93,44 @@ class PrefillPeopleTest( TestCase ):
         self.assertEqual( prefill.assumptions_source, 'system defaults' )
         self.assertNotIn( 's0_birth_year', prefill.initial )
 
+    def _build_with_facts( self, user, facts ):
+        request = self._request( user )
+        request.session_state = SessionState( session_facts = facts )
+        with patch( _DEFAULT_ECONOMICS, return_value = EconomicParameters() ):
+            return build_prefill( request )
+
+    def test_the_profile_takes_precedence_over_session_facts( self ):
+        # A signed-in visitor's Profile is authoritative for people; a prior session entry (here from a
+        # different household) must not override or leak into it.
+        save_profile( self.organization, _couple_profile() )
+        prefill = self._build_with_facts( self.user, SessionFacts( people = [
+            PersonFacts( birth_year = 1901, government_pension_monthly = Decimal( '99' ) ) ] ) )
+        self.assertTrue( prefill.from_profile )
+        self.assertEqual( prefill.initial[ 's0_birth_year' ], 1960 )    # the profile, not the session 1901
+
+    def test_session_facts_fill_in_when_the_profile_has_no_people( self ):
+        # No profile saved for this org: the session facts fall through, including the expected lifetime
+        # the Profile structurally cannot hold.
+        prefill = self._build_with_facts( self.user, SessionFacts( people = [
+            PersonFacts( birth_year = 1958, life_expectancy = 82 ) ] ) )
+        self.assertFalse( prefill.from_profile )
+        self.assertEqual( prefill.initial[ 's0_birth_year' ], 1958 )
+        self.assertEqual( prefill.initial[ 's0_life' ], 82 )
+
+    def test_the_session_selected_org_drives_the_prefill_not_the_default( self ):
+        # A visitor who owns two households: default_organization_for lands on the earliest (a couple), but
+        # once they switch households the calculator must follow the selected org (a single person).
+        save_profile( self.organization, _couple_profile() )                    # the default landing org
+        selected = Organization.objects.create_default_for_user( self.user )    # a second, later-created org
+        save_profile( selected, Profile(
+            subjects = [ SubjectProfile( PRIMARY_SUBJECT_HANDLE, 'Sam', date( 1975, 1, 1 ) ) ] ) )
+        request = self._request( self.user )
+        request.session_state = SessionState( current_organization_uuid = str( selected.uuid ) )
+        with patch( _DEFAULT_ECONOMICS, return_value = EconomicParameters() ):
+            prefill = build_prefill( request )
+        self.assertEqual( prefill.initial[ 'household' ], 'single' )            # the selected org ...
+        self.assertEqual( prefill.initial[ 's0_birth_year' ], 1975 )           # ... not the default couple
+
 
 class PrefillAssumptionsTest( TestCase ):
     """Where the assumptions are drawn from: the most recent saved scenario's economics, labelled by its
@@ -148,14 +187,16 @@ class PrefillThroughTheViewTest( TestCase ):
         self.assertContains( response, 'value="1960"' )
         self.assertContains( response, 'value="3000"' )
 
-    def test_a_remembered_session_entry_wins_over_the_profile( self ):
+    def test_the_profile_wins_over_a_remembered_session_entry( self ):
+        # People are facts: a signed-in visitor's Profile is authoritative, so a prior what-if session
+        # entry never overrides it. (The assumption knobs, being what-ifs, are still remembered.)
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
             'household' : 'single', 's0_birth_year' : '1955', 's0_pia' : '900', 's0_life' : '85',
             'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' } )
         response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
-        self.assertContains( response, 'value="1955"' )              # the remembered entry
-        self.assertNotContains( response, 'value="1960"' )           # not the profile
-        self.assertNotContains( response, 'Prefilled from your profile' )
+        self.assertContains( response, 'value="1960"' )              # the profile people win ...
+        self.assertNotContains( response, 'value="1955"' )           # ... not the session entry
+        self.assertContains( response, 'Prefilled from your profile' )
 
     def test_submitting_does_not_change_the_saved_profile( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
