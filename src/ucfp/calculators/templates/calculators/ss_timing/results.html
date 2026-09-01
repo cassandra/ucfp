@@ -1,5 +1,5 @@
 {% extends "pages/base_public.html" %}
-{% load common_tags static %}
+{% load common_tags humanize static %}
 {% comment %}
   The Social Security claiming comparison: household + assumptions recap (with an Adjust link back to the
   inputs), the claiming-age heatmap and ranked list (click either to drill in), and the year-by-year
@@ -28,7 +28,7 @@
             <div class="col ss-person">
               <div class="font-weight-bold">{{ earner.name }}{% if is_couple %}
                 <span class="ss-role">· {% if forloop.first %}higher earner{% else %}lower earner{% endif %}</span>{% endif %}</div>
-              <div class="text-muted small mt-1">PIA ${{ earner.pia_monthly|floatformat:0 }}/mo · through age {{ earner.expected_lifetime }}</div>
+              <div class="text-muted small mt-1">PIA ${{ earner.pia_monthly|floatformat:0|intcomma }}/mo · through age {{ earner.expected_lifetime }}</div>
             </div>
           {% endfor %}
         </div>
@@ -59,7 +59,7 @@
         <div class="table-responsive">
           <table class="ss-rank">
             <thead><tr>
-              <th></th>{% for earner in earners %}<th>{{ earner.name }}</th>{% endfor %}
+              <th></th><th>{% if is_couple %}Ages{% else %}Age{% endif %}</th>
               <th class="num">Total</th><th class="num">PV</th>
             </tr></thead>
             <tbody>
@@ -67,9 +67,9 @@
                 <tr class="rank-row{% if row.is_best %} best{% endif %}{% if row.is_selected %} sel{% endif %}"
                     data-combo="{{ row.combo }}">
                   <td class="rk">{{ row.rank }}</td>
-                  {% for age in row.ages %}<td>{{ age }}</td>{% endfor %}
-                  <td class="num">${{ row.raw_total|floatformat:0 }}</td>
-                  <td class="num">${{ row.present_value|floatformat:0 }}</td>
+                  <td>{{ row.ages|join:" / " }}</td>
+                  <td class="num">${{ row.raw_total|floatformat:0|intcomma }}</td>
+                  <td class="num">${{ row.present_value|floatformat:0|intcomma }}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -88,8 +88,7 @@
       <strong>Total</strong> is the sum of every year&rsquo;s benefit as paid (grown by the SS
       adjustment). <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars by
       discounting each future year at inflation, so money far in the future counts for what it is worth
-      now &mdash; a fairer basis for weighing an earlier, smaller stream against a later, larger one.
-      Neither is more &ldquo;correct&rdquo;; use whichever matches how you think about future money.
+      now.
     </p>
     <p class="mb-0">
       The Social Security cost-of-living adjustment (the &ldquo;SS adjustment&rdquo; above) is modeled at

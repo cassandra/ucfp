@@ -12,8 +12,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
 
-# The SSA age-reduction / delayed-credit reference the modal links to.
-REFERENCE_URL = 'https://www.ssa.gov/benefits/retirement/planner/agereduction.html'
+# The SSA research note that defines these terms (PIA, reduction/credit factors, spousal and survivor
+# benefits) -- the reference the methodology modal links to.
+REFERENCE_URL = 'https://www.ssa.gov/policy/docs/rsnotes/rsn2017-01.html'
 
 _GOVERNMENT_PENSION = GovernmentPension( JurisdictionType.US_FEDERAL )
 

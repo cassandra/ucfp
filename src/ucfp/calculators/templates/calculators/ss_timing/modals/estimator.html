@@ -1,17 +1,17 @@
 {% extends "modals/action_with_cancel.html" %}
 {% comment %}
-  The login-free PIA estimator, opened beside a person's benefit field on the calculator. Entering an
-  average annual income and pressing Calculate recomputes the estimate in place (posts to `estimate`,
-  swapping #benefit-estimate, staying in the modal). "Use this amount" submits the confirm form to
-  `estimate_apply`, which writes the benefit into the page's PIA input (#pia-input-<index>) and, with no
-  data-stay-in-modal, closes the modal. The benefit stays editable, so a known figure can just be typed.
+  The login-free PIA estimator, opened beside a person's benefit field. Entering an average annual income
+  and pressing Calculate recomputes the estimate in place (posts to `estimate`, swapping #benefit-estimate,
+  staying in the modal). "Use this amount" submits the confirm form to `estimate_apply`, which writes the
+  benefit into the page's PIA input (#pia-input-<index>) and closes the modal. The benefit stays editable.
 {% endcomment %}
 
-{% block title_text %}Estimate the benefit at full retirement age{% endblock %}
+{% block title_text %}SS Benefit Estimator{% endblock %}
 
 {% block body %}
-<p class="text-muted">Enter your average annual income and we&rsquo;ll estimate your monthly Social
-Security benefit at full retirement age. You can adjust the estimate before using it.</p>
+<p class="text-muted small">Enter an average annual income to estimate the monthly benefit at full
+retirement age. Adjust the estimate before using it if you like.</p>
+
 <form method="post" action="{% url 'calculators:ss_timing:estimate' index %}"
       data-async="#benefit-estimate" data-stay-in-modal="true">
   {% csrf_token %}
@@ -19,8 +19,11 @@ Security benefit at full retirement age. You can adjust the estimate before usin
     <label for="{{ form.income.id_for_label }}">Average annual income</label>
     {{ form.income }}
   </div>
-  <button type="submit" class="btn btn-outline-primary btn-sm">Calculate estimate</button>
+  <div class="form-group">
+    <button type="submit" class="btn btn-outline-primary">Calculate estimate</button>
+  </div>
 </form>
+
 <form id="benefit-estimate-confirm" method="post"
       action="{% url 'calculators:ss_timing:estimate_apply' index %}"
       data-async="#pia-input-{{ index }}">

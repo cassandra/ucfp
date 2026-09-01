@@ -1,3 +1,4 @@
-{% comment %}A dollar amount rounded to whole dollars, or an em-dash when it is zero (a part not paid
-that year). Context: `value` (a Decimal).{% endcomment %}
-{% if value %}${{ value|floatformat:0 }}{% else %}<span class="zero">&mdash;</span>{% endif %}
+{% load humanize %}
+{% comment %}A dollar amount rounded to whole dollars with thousands separators, or an em-dash when it is
+zero (a part not paid that year). Context: `value` (a Decimal).{% endcomment %}
+{% if value %}${{ value|floatformat:0|intcomma }}{% else %}<span class="zero">&mdash;</span>{% endif %}

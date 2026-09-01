@@ -1,3 +1,4 @@
+{% load humanize %}
 {% comment %}
   The year-by-year Social Security detail for the selected strategy -- the antinode swap target
   (#ss-detail). The claim ages lead the header (connecting the table to the chosen cell). Columns split
@@ -38,8 +39,8 @@
               <td>{% include "calculators/ss_timing/_amount.html" with value=row.members.1.spousal %}</td>
               <td>{% include "calculators/ss_timing/_amount.html" with value=row.survivor %}</td>
             {% endif %}
-            <td>${{ row.household|floatformat:0 }}</td>
-            <td>${{ row.present_value|floatformat:0 }}</td>
+            <td>${{ row.household|floatformat:0|intcomma }}</td>
+            <td>${{ row.present_value|floatformat:0|intcomma }}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -47,8 +48,8 @@
         <tr>
           <td>Lifetime total</td>
           {% if is_couple %}<td colspan="4"></td>{% else %}<td></td>{% endif %}
-          <td>${{ strategy.raw_total|floatformat:0 }}</td>
-          <td>${{ strategy.present_value|floatformat:0 }}</td>
+          <td>${{ strategy.raw_total|floatformat:0|intcomma }}</td>
+          <td>${{ strategy.present_value|floatformat:0|intcomma }}</td>
         </tr>
       </tfoot>
     </table>
