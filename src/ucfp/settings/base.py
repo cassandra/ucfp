@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     'ucfp.parameter_sets',
     'ucfp.inputs',
     'ucfp.planning',
+    'ucfp.calculators',
     'ucfp.onboarding',
     'ucfp.environment',
 ]

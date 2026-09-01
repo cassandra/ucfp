@@ -15,7 +15,7 @@ from django import forms
 from common.forms import MoneyField, PercentField, StyledFormMixin
 from common.rate import Rate
 
-from .ss_timing import EARLIEST_CLAIM_AGE, Assumptions, Claimant
+from .compute import EARLIEST_CLAIM_AGE, Assumptions, Claimant
 
 HOUSEHOLD_SINGLE = 'single'
 HOUSEHOLD_COUPLE = 'couple'
@@ -27,7 +27,7 @@ _PERSON_NAMES  = ( 'You', 'Spouse or partner' )
 _OLDEST_AGE    = 120
 
 
-class SocialSecurityTimingForm( StyledFormMixin, forms.Form ):
+class InputsForm( StyledFormMixin, forms.Form ):
     """One or two people's claiming facts plus the economic assumptions. The partner fields are optional
     at the field level and required in `clean` only when the household is a couple, so switching to
     "Just me" leaves them blank without a validation wall."""

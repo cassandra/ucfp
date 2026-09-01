@@ -9,7 +9,7 @@ import unittest
 from decimal import Decimal
 
 from common.rate import Rate
-from ucfp.planning.ss_timing import Assumptions, Claimant, compare_claiming_strategies
+from ucfp.calculators.ss_timing.compute import Assumptions, Claimant, compare_claiming_strategies
 
 
 def _assumptions( inflation = '0.03', cola = '0.02' ) -> Assumptions:

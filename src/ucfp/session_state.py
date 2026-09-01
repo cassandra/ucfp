@@ -123,7 +123,7 @@ class SessionState:
 
     # The last inputs entered on the (login-free) Social Security claiming calculator, so a return visit
     # re-prefills them on this device. A plain dict of the form's raw values -- NOT org-scoped, so it
-    # works for an anonymous visitor with no organization (see ucfp.planning.ss_timing_views).
+    # works for an anonymous visitor with no organization (see ucfp.calculators.ss_timing.views).
     ss_timing_inputs : dict = field( default_factory = dict )
 
     def set_current_organization( self, organization_uuid : Optional[ str ] ) -> None:

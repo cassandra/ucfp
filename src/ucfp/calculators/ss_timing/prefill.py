@@ -22,8 +22,8 @@ from ucfp.inputs.models import ScenarioRecord
 from ucfp.inputs.profile.repository import latest_profile, load_profile
 from ucfp.inputs.scenarios.repository import latest_scenario
 
-from .ss_timing import Assumptions
-from .ss_timing_forms import HOUSEHOLD_COUPLE, HOUSEHOLD_SINGLE, default_inputs
+from .compute import Assumptions
+from .forms import HOUSEHOLD_COUPLE, HOUSEHOLD_SINGLE, default_inputs
 
 _DEFAULT_SOURCE = 'system defaults'
 

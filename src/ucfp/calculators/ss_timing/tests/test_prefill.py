@@ -24,10 +24,10 @@ from ucfp.inputs.profile.repository import latest_profile, load_profile, save_pr
 from ucfp.inputs.profile.schemas import (
     PARTNER_SUBJECT_HANDLE, PRIMARY_SUBJECT_HANDLE, GovernmentPensionEntitlement, Profile, SubjectProfile )
 from ucfp.inputs.scenarios.repository import create_scenario
-from ucfp.planning.ss_timing_prefill import build_prefill
+from ucfp.calculators.ss_timing.prefill import build_prefill
 from ucfp.session_state import SessionState
 
-_DEFAULT_ECONOMICS = 'ucfp.planning.ss_timing_prefill.default_economics'
+_DEFAULT_ECONOMICS = 'ucfp.calculators.ss_timing.prefill.default_economics'
 
 
 def _couple_profile() -> Profile:
@@ -143,23 +143,23 @@ class PrefillThroughTheViewTest( TestCase ):
 
     def test_the_signed_in_form_renders_prefilled_from_the_profile( self ):
         with patch( _DEFAULT_ECONOMICS, return_value = EconomicParameters() ):
-            response = self.client.get( reverse( 'ss_timing' ) )
+            response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Prefilled from your profile' )
         self.assertContains( response, 'value="1960"' )
         self.assertContains( response, 'value="3000"' )
 
     def test_a_remembered_session_entry_wins_over_the_profile( self ):
-        self.client.post( reverse( 'ss_timing' ), {
+        self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
             'household' : 'single', 's0_birth_year' : '1955', 's0_pia' : '900', 's0_life' : '85',
             'cola' : '2.5', 'discount' : '2.5', 'benefits_payable' : '100' } )
-        response = self.client.get( reverse( 'ss_timing' ) )
+        response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertContains( response, 'value="1955"' )              # the remembered entry
         self.assertNotContains( response, 'value="1960"' )           # not the profile
         self.assertNotContains( response, 'Prefilled from your profile' )
 
     def test_submitting_does_not_change_the_saved_profile( self ):
-        self.client.post( reverse( 'ss_timing' ), {
+        self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
             'household' : 'couple',
             's0_birth_year' : '1900', 's0_pia' : '1', 's0_life' : '70',
             's1_birth_year' : '1901', 's1_pia' : '2', 's1_life' : '71',
