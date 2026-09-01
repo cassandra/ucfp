@@ -50,27 +50,28 @@
 
   <div class="card mt-4"><div class="card-body">
     <h2 class="h6 text-muted">Economic assumptions</h2>
-    <div class="form-row">
-      <div class="form-group col-sm-6 col-md-4">
-        <label for="{{ form.inflation.id_for_label }}">{{ form.inflation.label }}</label>
-        {{ form.inflation }}
+    <div class="row">
+      <div class="col-md-4 mb-2 mb-md-0">
+        <div class="d-flex align-items-center">
+          <label class="mb-0 mr-2" for="{{ form.inflation.id_for_label }}">{{ form.inflation.label }}</label>
+          <div style="width:6.5rem">{{ form.inflation }}</div>
+        </div>
         {% include "calculators/ss_timing/_field_errors.html" with field=form.inflation %}
       </div>
-    </div>
-    <div class="form-group mb-0">
-      <label class="mb-1">Funding reduction</label>
-      <div class="form-inline">
-        <span class="mr-2">Reduce benefits to</span>
-        <div style="max-width:8rem">{{ form.benefits_payable }}</div>
-        <span class="mx-2">starting in</span>
-        <div style="max-width:6.5rem">{{ form.reduction_year }}</div>
+      <div class="col-md-8">
+        <div class="d-flex flex-wrap align-items-center">
+          <span class="mr-2 mb-1">Reduce to</span>
+          <div class="mr-2 mb-1" style="width:6.5rem">{{ form.benefits_payable }}</div>
+          <span class="mr-2 mb-1">starting</span>
+          <div class="mb-1" style="width:7rem">{{ form.reduction_year }}</div>
+        </div>
+        {% include "calculators/ss_timing/_field_errors.html" with field=form.benefits_payable %}
+        {% include "calculators/ss_timing/_field_errors.html" with field=form.reduction_year %}
+        <small class="form-text text-muted">
+          Social Security&rsquo;s trust funds are projected to run short in the 2030s; without action,
+          scheduled benefits could be cut. Model that here: 100% leaves benefits unreduced.
+        </small>
       </div>
-      {% include "calculators/ss_timing/_field_errors.html" with field=form.benefits_payable %}
-      {% include "calculators/ss_timing/_field_errors.html" with field=form.reduction_year %}
-      <small class="form-text text-muted">
-        Social Security&rsquo;s trust funds are projected to run short in the 2030s; without action,
-        scheduled benefits could be cut. Model that here &mdash; 100% leaves benefits unreduced.
-      </small>
     </div>
   </div></div>
 

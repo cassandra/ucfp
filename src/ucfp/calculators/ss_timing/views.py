@@ -77,7 +77,6 @@ class ResultsView( View ):
         combo      = results.combo_of( selected.claim_ages )
         context    = {
             'axis_ages'      : CLAIM_AGES,
-            'cola_pct'       : _percent( assumptions.cola ),
             'cola_lag_pct'   : _percent( COLA_INFLATION_LAG ),
             'inflation_pct'  : _percent( assumptions.inflation ),
             'payable_pct'    : _percent( assumptions.benefits_payable ),

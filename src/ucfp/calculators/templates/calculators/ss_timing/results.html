@@ -37,7 +37,6 @@
     <div class="col-md-5 mb-3">
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-2">Assumptions</div>
-        <span class="ss-chip"><span class="k">SS adjustment</span><b>{{ cola_pct }}</b></span>
         <span class="ss-chip"><span class="k">Inflation</span><b>{{ inflation_pct }}</b></span>
         {% if is_reduced %}<span class="ss-chip"><span class="k">Benefits</span><b>{{ payable_pct }} from {{ reduction_year }}</b></span>{% endif %}
       </div></div>
@@ -60,7 +59,7 @@
           <table class="ss-rank">
             <thead><tr>
               <th></th><th>{% if is_couple %}Ages{% else %}Age{% endif %}</th>
-              <th class="num">Total</th><th class="num">PV</th>
+              <th class="num">Total</th><th class="num">Present<br>value</th>
             </tr></thead>
             <tbody>
               {% for row in ranked %}
@@ -75,6 +74,7 @@
             </tbody>
           </table>
         </div>
+        <small class="text-muted d-block mt-2">Present value converts total to today&rsquo;s dollars.</small>
       </div></div>
     </div>
   </div>

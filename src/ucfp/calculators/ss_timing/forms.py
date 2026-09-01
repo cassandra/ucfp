@@ -63,7 +63,7 @@ class InputsForm( StyledFormMixin, forms.Form ):
                                    min_value = Decimal( '0' ), required = False )
     s1_life          = forms.IntegerField( label = 'Expected lifetime', min_value = EARLIEST_CLAIM_AGE,
                                            max_value = _OLDEST_AGE, required = False )
-    inflation        = PercentField( label = 'Annual inflation', min_value = Decimal( '0' ) )
+    inflation        = PercentField( label = 'Inflation', min_value = Decimal( '0' ) )
     benefits_payable = PercentField( label = 'Reduce benefits to', min_value = Decimal( '0' ),
                                      max_value = Decimal( '100' ) )
     reduction_year   = forms.IntegerField( label = 'starting in', min_value = 2025, max_value = 2100 )
