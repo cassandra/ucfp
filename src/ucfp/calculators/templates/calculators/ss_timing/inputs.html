@@ -3,8 +3,8 @@
 {% comment %}
   The login-free Social Security claiming calculator inputs. Collects one or two people (birth year, PIA,
   expected lifetime) and the economic assumptions, then posts to itself; on success it redirects to the
-  results. A small script hides the partner card for a one-person household and initialises the year-only
-  birth-year picker (bootstrap-datepicker, loaded globally).
+  results. ss_timing.js (bundled) hides the partner card for a one-person household, initialises the
+  year-only birth-year picker, and focuses the error summary on a failed submit.
 {% endcomment %}
 
 {% block head_title %}Social Security claiming calculator · {% settings_value 'SITE_NAME' %}{% endblock %}
@@ -29,7 +29,7 @@
   so on a failed submit this says plainly why the page came back and points to the highlighted fields. Any
   cross-field (non-field) errors are shown here too.{% endcomment %}
   {% if form.errors %}
-    <div class="alert alert-danger" role="alert">
+    <div class="alert alert-danger" role="alert" id="ss-error-summary" tabindex="-1">
       <strong>Something needs fixing.</strong> Please review the highlighted fields below and try again.
       {{ form.non_field_errors }}
     </div>
@@ -69,9 +69,9 @@
       </div>
       <div class="col-md-8">
         <div class="d-flex flex-wrap align-items-center">
-          <span class="mr-2 mb-1">Reduce to</span>
+          <label class="mb-1 mr-2" for="{{ form.benefits_payable.id_for_label }}">Reduce to</label>
           <div class="mr-2 mb-1" style="width:6.5rem">{{ form.benefits_payable }}</div>
-          <span class="mr-2 mb-1">starting</span>
+          <label class="mb-1 mr-2" for="{{ form.reduction_year.id_for_label }}">starting</label>
           <div class="mb-1" style="width:7rem">{{ form.reduction_year }}</div>
         </div>
         {% include "calculators/ss_timing/_field_errors.html" with field=form.benefits_payable %}
@@ -88,22 +88,4 @@
     <button type="submit" class="btn btn-primary btn-lg">Compare claiming ages</button>
   </div>
 </form>
-
-<script>
-  ( function () {
-    var choice  = document.getElementById( 'household-choice' );
-    var partner = document.getElementById( 'person-1' );
-    function sync() {
-      var selected = choice.querySelector( 'input:checked' );
-      partner.style.display = ( selected && selected.value === 'couple' ) ? '' : 'none';
-    }
-    choice.addEventListener( 'change', sync );
-    sync();
-    if ( window.jQuery && jQuery.fn.datepicker ) {
-      jQuery( '.js-year-picker' ).datepicker( {
-        format: 'yyyy', minViewMode: 'years', maxViewMode: 'years',
-        autoclose: true, startDate: '1900', endDate: new Date() } );
-    }
-  } )();
-</script>
 {% endblock %}

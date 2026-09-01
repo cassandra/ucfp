@@ -24,6 +24,20 @@ def _year_map( strategy ) -> dict:
     return { benefit.year: benefit.nominal for benefit in strategy.year_benefits }
 
 
+class AssumptionsFromInflationTest( unittest.TestCase ):
+    """`Assumptions.from_inflation` derives the SS cost-of-living adjustment as inflation less a fixed lag,
+    floored at zero so a low inflation rate never feeds the engine a negative COLA."""
+
+    def test_the_cola_is_inflation_less_the_lag( self ):
+        assumptions = Assumptions.from_inflation( inflation = Rate( Decimal( '0.025' ) ) )
+        self.assertEqual( assumptions.cola, Rate( Decimal( '0.022' ) ) )          # 2.5% - 0.3%
+
+    def test_the_cola_floors_at_zero_below_the_lag( self ):
+        self.assertEqual( Assumptions.from_inflation( inflation = ZERO_RATE ).cola, ZERO_RATE )
+        below_lag = Assumptions.from_inflation( inflation = Rate( Decimal( '0.001' ) ) )   # under the lag
+        self.assertEqual( below_lag.cola, ZERO_RATE )                             # floored, not negative
+
+
 class ClaimingSweepShapeTest( unittest.TestCase ):
 
     def test_a_couple_sweeps_the_full_nine_by_nine_grid( self ):

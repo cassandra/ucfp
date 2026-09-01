@@ -5,8 +5,8 @@ This resolves the form's initial values, best-effort and read-only, from the hig
 has each part:
 
 - People are facts, so a signed-in visitor's saved Profile is authoritative: it is used whenever it holds
-  people (birth year and PIA per person; the expected lifetime is left blank -- not a Profile fact yet,
-  deferred to issue #14), and a prior session entry never overrides it. Only with no Profile people does
+  people (birth year and PIA per person; the expected lifetime is left blank -- not a Profile fact yet),
+  and a prior session entry never overrides it. Only with no Profile people does
   this session's `SessionFacts` fill in (including the expected lifetime it captured); failing that, blank.
 - Assumptions are "what if" knobs, not facts, so this session's stored run assumptions come first
   (`ss_timing_assumptions` -- the last set used), else the visitor's current scenario's economics, then

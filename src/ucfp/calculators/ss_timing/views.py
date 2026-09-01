@@ -24,7 +24,7 @@ from . import methodology, results
 from .compute import (
     CLAIM_AGES, COLA_INFLATION_LAG, compare_claiming_strategies, compute_strategy,
     strategy_year_details )
-from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions
+from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions, is_runnable
 from .prefill import build_prefill
 
 _PERSON_COUNT         = 2
@@ -51,6 +51,7 @@ class InputsView( View ):
     def post( self, request ):
         form = InputsForm( request.POST )
         if not form.is_valid():
+            form.flag_invalid_fields()
             return render( request, self.template_name, { 'form' : form } )
         request.session_state.session_facts         = form.session_facts()
         request.session_state.ss_timing_assumptions = form.assumptions_inputs()
@@ -59,9 +60,9 @@ class InputsView( View ):
 
 
 class ResultsView( View ):
-    """The public results page: runs the claiming sweep over the stored inputs and shows the ranking. A
-    visit with no stored inputs (a bookmark, a cleared session) is sent back to the form. Phase 5 replaces
-    the minimal rendering here with the heatmap, ranked list, year detail, and methodology modal."""
+    """The public results page: runs the claiming sweep over the stored inputs and renders the heatmap,
+    ranked list, and year-by-year detail (with the methodology modal). A visit with no runnable stored
+    household (a bookmark, a cleared session) is sent back to the form."""
 
     template_name = 'calculators/ss_timing/results.html'
 
@@ -162,11 +163,12 @@ class BenefitEstimateApplyView( View ):
 
 def _session_claimants_and_assumptions( request ):
     """The compute core's claimants and assumptions from this session's stored slots, or None when the
-    visitor has not run the calculator yet (no household facts or no run assumptions) -- the single gate
-    the results, drill-in, and methodology views share to send a bare visit back to the form."""
+    session does not hold a runnable household -- no entry yet, or a partial/oversized one left by another
+    tool sharing `SessionFacts`. The single gate the results, drill-in, and methodology views share to send
+    such a visit back to the form rather than erroring mid-compute."""
     facts       = request.session_state.session_facts
     assumptions = request.session_state.ss_timing_assumptions
-    if not facts.people or not assumptions:
+    if not is_runnable( facts, assumptions ):
         return None
     return claimants_and_assumptions( facts, assumptions )
 

@@ -1,11 +1,11 @@
 {% extends "pages/base_public.html" %}
-{% load common_tags humanize static %}
+{% load common_tags humanize %}
 {% comment %}
   The Social Security claiming comparison: household + assumptions recap (with an Adjust link back to the
   inputs), the claiming-age heatmap and ranked list (click either to drill in), and the year-by-year
   detail for the selected strategy. Cells and ranked rows carry `data-combo`; clicking swaps the detail
   (antinode) and moves the gold selection (ss_timing.js). Present value is explained at the foot. Context:
-  `earners` (higher first), `is_couple`, `cola_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
+  `earners` (higher first), `is_couple`, `cola_lag_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
   `is_reduced`, `axis_ages`, `heatmap`, `ranked`, plus the merged detail context.
 {% endcomment %}
 
@@ -68,7 +68,8 @@ the seam just after the results.{% endcomment %}
             <tbody>
               {% for row in ranked %}
                 <tr class="rank-row{% if row.is_best %} best{% endif %}{% if row.is_selected %} sel{% endif %}"
-                    data-combo="{{ row.combo }}">
+                    data-combo="{{ row.combo }}" tabindex="0" role="button"
+                    aria-label="Show the year-by-year detail for claiming at {{ row.ages|join:' and ' }}">
                   <td class="rk">{{ row.rank }}</td>
                   <td>{{ row.ages|join:" / " }}</td>
                   <td class="num">${{ row.raw_total|floatformat:0|intcomma }}</td>
@@ -114,6 +115,4 @@ the seam just after the results.{% endcomment %}
     </p>
   </div>
 </div>
-
-<script src="{% static 'js/ss_timing.js' %}"></script>
 {% endblock %}

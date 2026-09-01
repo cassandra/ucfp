@@ -17,7 +17,7 @@ from common.rate import Rate
 from ucfp.calculators.ss_timing.compute import Assumptions
 from ucfp.calculators.ss_timing.forms import (
     HOUSEHOLD_COUPLE, HOUSEHOLD_SINGLE, InputsForm,
-    claimants_and_assumptions, default_inputs )
+    claimants_and_assumptions, default_inputs, is_runnable )
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.session_facts import PersonFacts, SessionFacts
 from ucfp.session_state import SessionState
@@ -114,6 +114,53 @@ class SessionRoundTripTest( SimpleTestCase ):
         self.assertEqual( person.life_expectancy, 85 )
         self.assertEqual( restored.ss_timing_assumptions, _ASSUMPTIONS )
 
+    def test_a_benefit_less_person_round_trips_with_no_benefit( self ):
+        # A visitor who enters a birth year but skips the benefit: the None must survive the JSON round
+        # trip (the `None if ... else str()` write branch and the None read branch), not become '' or '0'.
+        request = RequestFactory().get( '/' )
+        request.session = _SessionStore()
+        state = SessionState.from_session( request )
+        state.session_facts = SessionFacts( people = [ PersonFacts( birth_year = 1959 ) ] )
+        state.to_session( request )
+        person = SessionState.from_session( request ).session_facts.people[ 0 ]
+        self.assertEqual( person.birth_year, 1959 )
+        self.assertIsNone( person.government_pension_monthly )
+        self.assertIsNone( person.life_expectancy )
+
+    def test_malformed_stored_facts_read_back_as_none_rather_than_raising( self ):
+        # The session is JSON-backed and could hold a bad value; from_storage tolerates it (returns None)
+        # rather than raising, so a corrupt session never 500s the page.
+        facts = SessionFacts.from_storage( { 'people': [
+            { 'birth_year': 'nineteen', 'government_pension_monthly': 'lots', 'life_expectancy': None } ] } )
+        person = facts.people[ 0 ]
+        self.assertIsNone( person.birth_year )
+        self.assertIsNone( person.government_pension_monthly )
+
+
+class RunnableGateTest( SimpleTestCase ):
+    """`is_runnable` guards the results views against a partial or oversized household -- `SessionFacts` is
+    a neutral, cross-tool bag, so the sweep must not assume the SS form filled every field."""
+
+    def _complete_person( self ) -> PersonFacts:
+        return PersonFacts( birth_year = 1960, government_pension_monthly = Decimal( '2000' ),
+                            life_expectancy = 85 )
+
+    def test_a_complete_single_household_is_runnable( self ):
+        facts = SessionFacts( people = [ self._complete_person() ] )
+        self.assertTrue( is_runnable( facts, dict( _ASSUMPTIONS ) ) )
+
+    def test_a_person_missing_a_claiming_fact_is_not_runnable( self ):
+        partial = PersonFacts( birth_year = 1960, life_expectancy = 85 )      # no benefit
+        self.assertFalse( is_runnable( SessionFacts( people = [ partial ] ), dict( _ASSUMPTIONS ) ) )
+
+    def test_more_than_two_people_is_not_runnable( self ):
+        people = [ self._complete_person() for _ in range( 3 ) ]
+        self.assertFalse( is_runnable( SessionFacts( people = people ), dict( _ASSUMPTIONS ) ) )
+
+    def test_no_people_or_missing_assumptions_are_not_runnable( self ):
+        self.assertFalse( is_runnable( SessionFacts(), dict( _ASSUMPTIONS ) ) )
+        self.assertFalse( is_runnable( SessionFacts( people = [ self._complete_person() ] ), {} ) )
+
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
 class InputsViewTest( TestCase ):
@@ -148,6 +195,8 @@ class InputsViewTest( TestCase ):
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'is required', status_code = 200 )
         self.assertContains( response, 'Something needs fixing' )        # the top-of-form error summary
+        self.assertContains( response, 'is-invalid' )                    # the erroring field is highlighted
+        self.assertContains( response, 'aria-describedby="id_s0_pia-errors"' )   # wired to its error list
 
     def test_a_submission_is_remembered_and_prefills_the_returning_form( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), _single_data() )

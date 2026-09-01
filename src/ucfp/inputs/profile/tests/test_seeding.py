@@ -59,6 +59,21 @@ class ProfileSeedFromFactsTest( TestCase ):
         self.assertEqual( profile.filing_status, FilingStatus.SINGLE )
         self.assertEqual( profile.government_pension, [] )                         # no benefit -> none seeded
 
+    def test_a_partner_without_a_birth_year_seeds_a_single_household( self ):
+        # SessionFacts is feature-neutral; a tool could hand us a partner with no birth year. A person
+        # carries a birthdate, so the partner (and anything after) seeds nothing -- one subject, filing
+        # single -- rather than a nameless dateless partner or a couple.
+        facts   = SessionFacts( people = [ PersonFacts( birth_year = 1960 ),
+                                           PersonFacts( government_pension_monthly = Decimal( '1200' ) ) ] )
+        profile = load_profile( create_profile( self._organization(), facts ) )
+        self.assertEqual( len( profile.subjects ), 1 )
+        self.assertEqual( profile.filing_status, FilingStatus.SINGLE )
+
+    def test_a_primary_without_a_birth_year_seeds_an_empty_profile( self ):
+        facts   = SessionFacts( people = [ PersonFacts( government_pension_monthly = Decimal( '3000' ) ) ] )
+        profile = load_profile( create_profile( self._organization(), facts ) )
+        self.assertEqual( profile, Profile() )                                    # no birthdate -> nothing
+
     def test_empty_facts_seed_an_empty_profile( self ):
         profile = load_profile( create_profile( self._organization(), SessionFacts() ) )
         self.assertEqual( profile, Profile() )

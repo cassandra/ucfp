@@ -110,12 +110,49 @@ class InputsForm( StyledFormMixin, forms.Form ):
             'benefits_payable' : str( data[ 'benefits_payable' ] ),
             'reduction_year'   : data[ 'reduction_year' ] }
 
+    def flag_invalid_fields( self ) -> None:
+        """Mark each erroring field's widget invalid for re-render: Bootstrap `is-invalid` (so the error
+        summary's "highlighted fields" actually highlight) plus the ARIA a screen reader needs --
+        `aria-invalid` and `aria-describedby` pointing at the field's error list (`_field_errors.html`
+        renders that list under `{id}-errors`). Call before rendering a failed submit."""
+        for name in self.errors:
+            if name not in self.fields:
+                continue                                    # a non-field ('__all__') error has no widget
+            attrs = self.fields[ name ].widget.attrs
+            attrs[ 'class' ]            = ( attrs.get( 'class', '' ) + ' is-invalid' ).strip()
+            attrs[ 'aria-invalid' ]     = 'true'
+            attrs[ 'aria-describedby' ] = f'{ self[ name ].auto_id }-errors'
+
+
+# The per-person facts a claimant needs, and the run-assumption keys -- the completeness contract the
+# results views gate on (see `is_runnable`). They mirror what `_claimant` and `claimants_and_assumptions`
+# read below, so an incomplete household never reaches the unguarded int()/Decimal() conversions.
+_CLAIMANT_FACTS  = ( 'birth_year', 'government_pension_monthly', 'life_expectancy' )
+_ASSUMPTION_KEYS = ( 'inflation', 'benefits_payable', 'reduction_year' )
+
+
+def is_runnable( facts : SessionFacts, assumptions_inputs : dict ) -> bool:
+    """Whether the stored session facts and assumptions form a household the sweep can actually run: one or
+    two people, each carrying every claiming fact, and all three run assumptions present. `SessionFacts` is
+    a neutral, cross-tool bag, so another tool could leave a partial or oversized household here; the public
+    results and drill-in views gate on this to send such a visit back to the form rather than erroring
+    mid-compute."""
+    if len( facts.people ) not in ( 1, 2 ):
+        return False
+    if not all( _person_is_complete( person ) for person in facts.people ):
+        return False
+    return all( assumptions_inputs.get( key ) not in ( None, '' ) for key in _ASSUMPTION_KEYS )
+
+
+def _person_is_complete( person : PersonFacts ) -> bool:
+    return all( getattr( person, fact ) is not None for fact in _CLAIMANT_FACTS )
+
 
 def claimants_and_assumptions( facts : SessionFacts,
                                assumptions_inputs : dict ) -> tuple[ list[ Claimant ], Assumptions ]:
     """The compute core's typed inputs from the stored session slots: a `Claimant` per person in `facts`
     (higher earner derived later, in the compute core) and the `Assumptions` from the stored rates and the
-    funding reduction."""
+    funding reduction. Assumes a runnable household (see `is_runnable`), which the views verify first."""
     claimants   = [ _claimant( person, index ) for index, person in enumerate( facts.people ) ]
     assumptions = Assumptions.from_inflation(
         inflation        = _rate_from_percent( assumptions_inputs[ 'inflation' ] ),
