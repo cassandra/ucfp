@@ -6,6 +6,7 @@ from django.urls import include, path, re_path
 from django.views.generic.base import RedirectView, TemplateView
 
 from . import views
+from ucfp.planning import ss_timing_views
 
 urlpatterns = [
 
@@ -31,6 +32,12 @@ urlpatterns = [
     # Onboarding page for a visitor with no account (login-free): Explain introduces the app and funnels
     # into the tour ("Take a Tour") or the convert-to-Guest graduation ("Add my data").
     path( 'explain', views.ExplainView.as_view(), name = 'explain' ),
+
+    # The login-free Social Security claiming calculator (anonymous or signed-in); see ss_timing_views.
+    path( 'social-security/', ss_timing_views.SocialSecurityTimingInputsView.as_view(),
+          name = 'ss_timing' ),
+    path( 'social-security/results/', ss_timing_views.SocialSecurityTimingResultsView.as_view(),
+          name = 'ss_timing_results' ),
 
     # Public content pages (login-free; linked from the shared footer).
     path( 'about', TemplateView.as_view( template_name = 'pages/about.html' ), name = 'about' ),

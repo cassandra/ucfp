@@ -1,0 +1,23 @@
+{% comment %}
+  One person's three claiming fields (birth year, PIA, expected lifetime), shared by both people on the
+  calculator form. The including template passes `birth_year`, `pia`, and `life` bound fields. The PIA
+  field will gain the #235 "Estimate" helper in a later phase.
+{% endcomment %}
+<div class="form-group">
+  <label for="{{ birth_year.id_for_label }}">{{ birth_year.label }}</label>
+  {{ birth_year }}
+  <small class="form-text text-muted">Sets full retirement age and the calendar year for each claim age.</small>
+  {{ birth_year.errors }}
+</div>
+<div class="form-group">
+  <label for="{{ pia.id_for_label }}">{{ pia.label }}</label>
+  {{ pia }}
+  <small class="form-text text-muted">The monthly benefit at full retirement age.</small>
+  {{ pia.errors }}
+</div>
+<div class="form-group mb-0">
+  <label for="{{ life.id_for_label }}">{{ life.label }}</label>
+  {{ life }}
+  <small class="form-text text-muted">Expected lifetime &mdash; the single biggest factor here.</small>
+  {{ life.errors }}
+</div>

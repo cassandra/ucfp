@@ -1,0 +1,44 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% comment %}
+  Minimal results for the Social Security claiming calculator: the top-ranked strategy and the full
+  ranking by lifetime present value. Phase 5 replaces this with the heatmap, year-by-year detail, and the
+  methodology modal. `comparison` is a ss_timing.Comparison; `best` its top strategy.
+{% endcomment %}
+
+{% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
+{% block page_title %}Your claiming comparison{% endblock %}
+
+{% block public_content %}
+<div class="alert alert-success">
+  <strong>Best strategy:</strong>
+  {% for claimant, age in best_pairs %}
+    {{ claimant.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}
+  {% endfor %}
+  &mdash; lifetime present value ${{ best.present_value|floatformat:0 }}
+  (raw ${{ best.raw_total|floatformat:0 }}).
+</div>
+
+<table class="table table-sm">
+  <thead>
+    <tr>
+      <th>Rank</th>
+      {% for claimant in claimants %}<th>{{ claimant.name }} claims at</th>{% endfor %}
+      <th class="text-right">Present value</th>
+      <th class="text-right">Raw total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for strategy in comparison.ranked %}
+      <tr{% if strategy == best %} class="table-success"{% endif %}>
+        <td>{{ forloop.counter }}</td>
+        {% for age in strategy.claim_ages %}<td>{{ age }}</td>{% endfor %}
+        <td class="text-right">${{ strategy.present_value|floatformat:0 }}</td>
+        <td class="text-right">${{ strategy.raw_total|floatformat:0 }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<a href="{% url 'ss_timing' %}" class="btn btn-outline-primary">Change your entries</a>
+{% endblock %}

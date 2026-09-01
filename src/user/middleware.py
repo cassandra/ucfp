@@ -61,6 +61,8 @@ class AuthenticationMiddleware:
         'notify_email_resubscribe',
         'privacy_accept',
         'explain',
+        'ss_timing',
+        'ss_timing_results',
         'start_tour',
         'add_my_data',
         'user_signin',

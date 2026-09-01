@@ -121,6 +121,11 @@ class SessionState:
     # shown again this session (see ucfp.privacy_consent).
     cookies_acknowledged : bool = False
 
+    # The last inputs entered on the (login-free) Social Security claiming calculator, so a return visit
+    # re-prefills them on this device. A plain dict of the form's raw values -- NOT org-scoped, so it
+    # works for an anonymous visitor with no organization (see ucfp.planning.ss_timing_views).
+    ss_timing_inputs : dict = field( default_factory = dict )
+
     def set_current_organization( self, organization_uuid : Optional[ str ] ) -> None:
         """Make `organization_uuid` the current organization.
 
@@ -217,6 +222,7 @@ class SessionState:
         request.session[ 'forecast_duration_years' ] = self.forecast_duration_years
         request.session[ 'forecast_interval' ] = self.forecast_interval
         request.session[ 'cookies_acknowledged' ] = self.cookies_acknowledged
+        request.session[ 'ss_timing_inputs' ] = self.ss_timing_inputs
         return
 
     @staticmethod
@@ -236,4 +242,5 @@ class SessionState:
             forecast_start_from = request.session.get( 'forecast_start_from' ),
             forecast_duration_years = _int_or_none( request.session.get( 'forecast_duration_years' ) ),
             forecast_interval = request.session.get( 'forecast_interval' ),
-            cookies_acknowledged = bool( request.session.get( 'cookies_acknowledged', False ) ) )
+            cookies_acknowledged = bool( request.session.get( 'cookies_acknowledged', False ) ),
+            ss_timing_inputs = request.session.get( 'ss_timing_inputs' ) or {} )

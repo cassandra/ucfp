@@ -1,0 +1,100 @@
+{% extends "pages/base_public.html" %}
+{% load common_tags %}
+{% comment %}
+  The login-free Social Security claiming calculator inputs. Collects one or two people (birth year, PIA,
+  expected lifetime) and the economic assumptions, then posts to itself; on success it redirects to the
+  results. Fields are styled by StyledFormMixin. A small script hides the partner card for a "Just me"
+  household. The #235 "Estimate" helper on each PIA field is wired in a later phase.
+{% endcomment %}
+
+{% block head_title %}Social Security claiming calculator · {% settings_value 'SITE_NAME' %}{% endblock %}
+{% block page_title %}When should you claim Social Security?{% endblock %}
+
+{% block public_content %}
+<p class="text-muted text-center mb-4">
+  Compare every claiming age from 62 to 70 to see which gives the most in lifetime benefits. No account
+  needed &mdash; fill in a few details and we&rsquo;ll do the math.
+</p>
+
+{% if prefilled %}
+  <div class="alert alert-info" role="status">
+    We&rsquo;ve prefilled your last entries on this device. Change anything to explore a what-if.
+  </div>
+{% endif %}
+
+<form method="post" data-synchronous="true" novalidate>
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <fieldset class="form-group">
+    <legend class="h6">Who&rsquo;s planning?</legend>
+    <div class="btn-group btn-group-toggle" data-toggle="buttons" id="household-choice">
+      {% for radio in form.household %}
+        <label class="btn btn-outline-primary {% if radio.data.selected %}active{% endif %}">
+          {{ radio.tag }} {{ radio.choice_label }}
+        </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="card-deck">
+    <div class="card" id="person-0">
+      <div class="card-body">
+        <h2 class="h6 text-muted">You (primary)</h2>
+        {% include "planning/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life %}
+      </div>
+    </div>
+    <div class="card" id="person-1">
+      <div class="card-body">
+        <h2 class="h6 text-muted">Spouse or partner</h2>
+        {% include "planning/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life %}
+      </div>
+    </div>
+  </div>
+
+  <details class="mt-4">
+    <summary class="h6">Economic assumptions</summary>
+    <div class="form-row mt-3">
+      <div class="form-group col-md-4">
+        <label for="{{ form.cola.id_for_label }}">{{ form.cola.label }}</label>
+        {{ form.cola }}
+        <small class="form-text text-muted">Cost-of-living raise on benefits.</small>
+        {{ form.cola.errors }}
+      </div>
+      <div class="form-group col-md-4">
+        <label for="{{ form.discount.id_for_label }}">{{ form.discount.label }}</label>
+        {{ form.discount }}
+        <small class="form-text text-muted">Discounts future dollars to today.</small>
+        {{ form.discount.errors }}
+      </div>
+      <div class="form-group col-md-4">
+        <label for="{{ form.benefits_payable.id_for_label }}">{{ form.benefits_payable.label }}</label>
+        {{ form.benefits_payable }}
+        <small class="form-text text-muted">100% = no funding reduction.</small>
+        {{ form.benefits_payable.errors }}
+      </div>
+    </div>
+  </details>
+
+  <div class="mt-4">
+    <button type="submit" class="btn btn-primary btn-lg">Compare claiming ages</button>
+    <span class="form-text text-muted d-inline-block ml-2">We&rsquo;ll remember your entries on this device.</span>
+  </div>
+</form>
+
+<script>
+  ( function () {
+    var choice = document.getElementById( 'household-choice' );
+    var partner = document.getElementById( 'person-1' );
+    function sync() {
+      var selected = choice.querySelector( 'input:checked' );
+      partner.style.display = ( selected && selected.value === 'couple' ) ? '' : 'none';
+    }
+    choice.addEventListener( 'change', sync );
+    sync();
+  } )();
+</script>
+{% endblock %}
