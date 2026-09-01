@@ -1,0 +1,238 @@
+"""Social Security claiming-strategy comparison: sweep the age-62..70 claiming grid and rank the
+strategies by lifetime benefit, via the forecast engine.
+
+The couple-aware benefit -- each person's own, the lower earner's spousal top-up once both collect,
+and the survivor step-up after a death -- lives in the engine
+(`jurisdiction.social_security_household`, invoked per period). This module is the specialized,
+Social-Security-only materialization above it: from a household's claiming facts it builds a
+stripped `ForecastParameters` (subjects + Social Security entitlements + expected-lifetime removals +
+the economic outlook), runs one forecast per claiming combination, and reduces each run's booked
+Social Security to a lifetime total -- the nominal ("raw") sum and its present value.
+
+Every strategy runs over one shared horizon -- from the earliest age-62 claim in the household to the
+last expected death -- so early claiming's extra years and late claiming's larger checks are weighed
+on equal footing. Present value discounts each year's benefit at the general inflation assumption
+(the app's "today's dollars" convention, `overview._in_start_year_dollars`), so a run whose COLA
+trails inflation is normalized against one whose does not; the discount base is the start (age-62)
+year, shared by every strategy.
+"""
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+from itertools import product
+
+from common.rate import FULL_RATE, Rate
+from ucfp.accounts.bookkeeper import Bookkeeper
+from ucfp.accounts.enums import AssetClass, IncomeTaxClass
+from ucfp.forecast.economic_outlook import EconomicOutlook, EconomicParameters
+from ucfp.forecast.forecast import Forecast, ForecastResult
+from ucfp.forecast.parameters import (
+    AssetParameters, ForecastParameters, SocialSecurityEntitlement, Subject, SubjectRemoval )
+from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
+from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
+
+
+EARLIEST_CLAIM_AGE = 62
+LATEST_CLAIM_AGE   = 70
+CLAIM_AGES         = tuple( range( EARLIEST_CLAIM_AGE, LATEST_CLAIM_AGE + 1 ) )
+
+
+@dataclass( frozen = True )
+class Claimant:
+    """One person's Social Security facts for the comparison: their `name`, `birth_year`, monthly
+    PIA (`pia_monthly` -- the benefit at full retirement age, in start-year dollars) and
+    `expected_lifetime` -- the age through which they are assumed to live, after which their benefit
+    ends. Birthdays are modeled on January 1, so a claiming age lands on an exact date."""
+
+    name              : str
+    birth_year        : int
+    pia_monthly       : Decimal
+    expected_lifetime : int
+
+    @property
+    def birthdate( self ) -> date:
+        """The modeled birthdate -- January 1 of the birth year, so a claiming age is an exact age."""
+        return date( self.birth_year, 1, 1 )
+
+
+@dataclass( frozen = True )
+class Assumptions:
+    """The economic backdrop the comparison projects under: general `inflation` (the present-value
+    discount), the Social Security `cola` (annual benefit growth), and the funding-shortfall
+    reduction -- `benefits_payable`, the retained share of scheduled benefits from `reduction_year`
+    on (the full rate = no reduction, the default)."""
+
+    inflation        : Rate
+    cola             : Rate
+    benefits_payable : Rate = FULL_RATE
+    reduction_year   : int  = 2032
+
+
+@dataclass( frozen = True )
+class YearBenefit:
+    """One year of a strategy: the household's total Social Security that year, `nominal` (as paid --
+    COLA-grown and shortfall-reduced) and `present_value` (discounted to start-year dollars)."""
+
+    year          : int
+    nominal       : Decimal
+    present_value : Decimal
+
+
+@dataclass( frozen = True )
+class Strategy:
+    """One claiming combination and its lifetime outcome. `claim_ages` is the age each claimant
+    files, ordered higher earner first (the heatmap's two axes for a couple; a single value for one
+    person). `raw_total` is the nominal lifetime sum; `present_value` discounts it to start-year
+    dollars -- the figure strategies are ranked by. `year_benefits` is the year-by-year detail."""
+
+    claim_ages    : tuple[ int, ... ]
+    raw_total     : Decimal
+    present_value : Decimal
+    year_benefits : tuple[ YearBenefit, ... ]
+
+
+@dataclass( frozen = True )
+class Comparison:
+    """The full sweep: the `claimants` (higher earner first) and every `Strategy` over the 62..70
+    grid (9 for one person, 81 for a couple). `best` and `ranked` are derived so the heatmap and the
+    ranked list read one settled result."""
+
+    claimants  : tuple[ Claimant, ... ]
+    strategies : tuple[ Strategy, ... ]
+
+    @property
+    def best( self ) -> Strategy:
+        """The strategy with the greatest present value -- the one the results page marks."""
+        return max( self.strategies, key = lambda strategy: strategy.present_value )
+
+    @property
+    def ranked( self ) -> tuple[ Strategy, ... ]:
+        """Strategies from best to worst by present value -- the ranked-list order."""
+        return tuple( sorted(
+            self.strategies, key = lambda strategy: strategy.present_value, reverse = True ) )
+
+
+def compare_claiming_strategies(
+        claimants : list[ Claimant ], assumptions : Assumptions ) -> Comparison:
+    """Sweep the 62..70 claiming grid for `claimants` (one person or a couple) and rank the
+    strategies by lifetime present value. Each combination is a full engine run over the shared
+    horizon; the couple's spousal and survivor benefits, the COLA, and the funding-shortfall
+    reduction all come from the engine. Claimants are ordered by PIA (higher earner first), the
+    orientation the results grid reads."""
+    if not 1 <= len( claimants ) <= 2:
+        raise ValueError(
+            f'A Social Security comparison covers one person or a couple; got {len( claimants )}.' )
+    earners      = tuple( sorted(
+        claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
+    horizon      = _Horizon.for_household( earners )
+    combinations = product( CLAIM_AGES, repeat = len( earners ) )
+    strategies   = tuple(
+        _run_strategy( earners, claim_ages, assumptions, horizon )
+        for claim_ages in combinations )
+    return Comparison( claimants = earners, strategies = strategies )
+
+
+@dataclass( frozen = True )
+class _Horizon:
+    """The shared projection span every strategy runs over: from the earliest age-62 claim in the
+    household to the last expected death. One horizon keeps the strategies comparable -- early
+    claiming's extra years and late claiming's larger checks are weighed against the same end."""
+
+    start_year : int
+    end_year   : int
+
+    @classmethod
+    def for_household( cls, claimants : tuple[ Claimant, ... ] ) -> '_Horizon':
+        start = min( claimant.birth_year + EARLIEST_CLAIM_AGE for claimant in claimants )
+        end   = max( claimant.birth_year + claimant.expected_lifetime for claimant in claimants )
+        return cls( start_year = start, end_year = end )
+
+
+def _run_strategy(
+        earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions, horizon : _Horizon ) -> Strategy:
+    """One claiming combination: build its Social-Security-only forecast, run it, and reduce the
+    booked benefit to per-year and lifetime totals (nominal and present value)."""
+    parameters    = _forecast_parameters( earners, claim_ages, assumptions, horizon )
+    result        = Forecast( parameters ).run()
+    year_benefits = _year_benefits( result, assumptions, horizon )
+    raw_total     = sum( ( benefit.nominal for benefit in year_benefits ), Decimal( '0' ) )
+    present_value = sum( ( benefit.present_value for benefit in year_benefits ), Decimal( '0' ) )
+    return Strategy(
+        claim_ages = claim_ages, raw_total = raw_total,
+        present_value = present_value, year_benefits = year_benefits )
+
+
+def _forecast_parameters(
+        earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions, horizon : _Horizon ) -> ForecastParameters:
+    """The stripped, Social-Security-only forecast for one claiming combination: a subject and SS
+    entitlement per claimant (claiming at their swept age), an expected-lifetime removal each, a
+    single cash hub for the benefits to land in, and the economic outlook -- no other income, assets,
+    or expenses, so only the Social Security lines carry value."""
+    subjects     = [ Subject( claimant.name, claimant.birthdate, handle = _handle( index ) )
+                     for index, claimant in enumerate( earners ) ]
+    entitlements = [
+        SocialSecurityEntitlement(
+            subject, claimant.pia_monthly, date( claimant.birth_year + age, 1, 1 ) )
+        for subject, claimant, age in zip( subjects, earners, claim_ages ) ]
+    removals     = [
+        SubjectRemoval(
+            date( claimant.birth_year + claimant.expected_lifetime, 1, 1 ), subject.handle )
+        for subject, claimant in zip( subjects, earners ) ]
+    return ForecastParameters(
+        start_date       = date( horizon.start_year, 1, 1 ),
+        end_date         = date( horizon.end_year, 12, 31 ),
+        filing_status    = FilingStatus.MARRIED_JOINT if len( earners ) == 2 else FilingStatus.SINGLE,
+        statute          = StatuteProfile(
+            JurisdictionType.US_FEDERAL, TaxProjection( StatuteForecastType.CURRENT_LAW ) ),
+        subjects         = subjects,
+        assets           = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ) ],
+        social_security  = entitlements,
+        subject_removals = removals,
+        economic_outlook = EconomicOutlook.constant( EconomicParameters(
+            inflation                        = assumptions.inflation,
+            social_security_cola             = assumptions.cola,
+            social_security_benefits_payable = assumptions.benefits_payable,
+            social_security_reduction_year   = assumptions.reduction_year ) ) )
+
+
+def _handle( index : int ) -> str:
+    """A stable subject handle for the `index`-th earner (higher earner first) -- keys the subject to
+    its Social Security account and its expected-lifetime removal."""
+    return f'claimant-{index}'
+
+
+def _year_benefits(
+        result : ForecastResult, assumptions : Assumptions,
+        horizon : _Horizon ) -> tuple[ YearBenefit, ... ]:
+    """Each year's household Social Security from the run's books, nominal and present-valued. The
+    nominal figure is the total booked to the Social Security revenue accounts that year; present
+    value discounts it to start-year dollars at the inflation assumption."""
+    cumulative = _cumulative_social_security( result )
+    inflation  = assumptions.inflation.fraction
+    benefits   = list()
+    previous   = cumulative( horizon.start_year - 1 )
+    for year in range( horizon.start_year, horizon.end_year + 1 ):
+        through  = cumulative( year )
+        nominal  = through - previous
+        previous = through
+        discount = ( Decimal( '1' ) + inflation ) ** ( year - horizon.start_year )
+        benefits.append( YearBenefit(
+            year = year, nominal = nominal, present_value = nominal / discount ) )
+        continue
+    return tuple( benefits )
+
+
+def _cumulative_social_security( result : ForecastResult ):
+    """A reader of the run's cumulative Social Security through a year-end -- summed across the
+    household's Social Security revenue accounts (both members', including any retitled to the
+    survivor on a death). A closure so a strategy's year loop reuses one books/ledger load."""
+    reader   = Bookkeeper( result.books )
+    accounts = [ account for account in result.books.accounts
+                 if account.income_tax_class == IncomeTaxClass.SOCIAL_SECURITY ]
+
+    def through( year : int ) -> Decimal:
+        return sum( ( reader.ledger.natural_balance( account, through = date( year, 12, 31 ) )
+                      for account in accounts ), Decimal( '0' ) )
+    return through
