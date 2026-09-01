@@ -18,7 +18,9 @@ from common.async_view import ModalView
 from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
 
-from .compute import compare_claiming_strategies
+from . import results
+from .compute import (
+    CLAIM_AGES, compare_claiming_strategies, compute_strategy, strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions
 from .prefill import build_prefill
 
@@ -26,6 +28,7 @@ _PERSON_COUNT       = 2
 _ESTIMATOR_TEMPLATE = 'calculators/ss_timing/modals/estimator.html'
 _ESTIMATE_FRAGMENT  = 'calculators/ss_timing/modals/benefit_estimate.html'
 _PIA_INPUT_TEMPLATE = 'calculators/ss_timing/modals/pia_input.html'
+_DETAIL_TEMPLATE    = 'calculators/ss_timing/_detail.html'
 
 
 class InputsView( View ):
@@ -67,11 +70,33 @@ class ResultsView( View ):
             return redirect( 'calculators:ss_timing:inputs' )
         claimants, assumptions = claimants_and_assumptions( inputs )
         comparison = compare_claiming_strategies( claimants, assumptions )
-        best       = comparison.best
-        return render( request, self.template_name,
-                       { 'comparison' : comparison, 'best' : best,
-                         'claimants' : comparison.claimants,
-                         'best_pairs' : list( zip( comparison.claimants, best.claim_ages ) ) } )
+        selected   = comparison.best
+        combo      = results.combo_of( selected.claim_ages )
+        context    = {
+            'axis_ages'   : CLAIM_AGES,
+            'cola_pct'    : _percent( assumptions.cola ),
+            'discount_pct': _percent( assumptions.inflation ),
+            'payable_pct' : _percent( assumptions.benefits_payable ),
+            'heatmap'     : results.heatmap( comparison, combo ),
+            'ranked'      : results.ranked( comparison, combo ) }
+        context.update( _detail_context( comparison.claimants, selected ) )
+        return render( request, self.template_name, context )
+
+
+class StrategyDetailView( View ):
+    """The drill-in for one claiming combination -- the antinode target the heatmap and ranked list swap
+    into. Recomputes just that strategy (one engine run) rather than the whole sweep, then returns the
+    year-by-year detail partial. `combo` is the claim ages joined ('67' or '70-64')."""
+
+    def get( self, request, combo ):
+        inputs = request.session_state.ss_timing_inputs
+        if not inputs:
+            raise Http404( 'No calculator inputs in this session.' )
+        claimants, assumptions = claimants_and_assumptions( inputs )
+        strategy = compute_strategy( claimants, _parse_combo( combo, len( claimants ) ), assumptions )
+        content  = render_to_string(
+            _DETAIL_TEMPLATE, _detail_context( _by_earning( claimants ), strategy ), request = request )
+        return antinode.response( replace_map = { 'ss-detail' : content } )
 
 
 class BenefitEstimatorModalView( ModalView ):
@@ -134,3 +159,38 @@ def _submitted_amount( request, field : str ) -> Decimal:
     form  = BenefitEstimateForm( request.POST )
     value = form.cleaned_data.get( field ) if form.is_valid() else None
     return value if value is not None else Decimal( '0' )
+
+
+def _detail_context( earners, strategy ) -> dict:
+    """The year-by-year detail table's context for `strategy` -- the earners (higher first) for the column
+    labels and the per-year rows apportioned into own/spousal/survivor."""
+    return {
+        'earners'     : earners,
+        'is_couple'   : len( earners ) == 2,
+        'strategy'    : strategy,
+        'claim_pairs' : list( zip( earners, strategy.claim_ages ) ),
+        'rows'        : strategy_year_details( tuple( earners ), strategy ) }
+
+
+def _by_earning( claimants ):
+    """Claimants ordered higher earner first (by PIA) -- the order the detail columns read."""
+    return tuple( sorted( claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
+
+
+def _percent( rate ) -> str:
+    """A Rate as a trimmed percent string for the assumptions chips -- Rate(0.025) -> '2.5%',
+    Rate(1) -> '100%'. Fixed-point format so a whole percent does not render in scientific notation."""
+    value = ( rate.fraction * Decimal( '100' ) ).normalize()
+    return f'{ format( value, "f" ) }%'
+
+
+def _parse_combo( combo : str, count : int ) -> tuple[ int, ... ]:
+    """The claim ages from a URL combo key ('67' or '70-64'), validated against the household size and the
+    62..70 range -- a bad key is a 404 rather than a mis-drawn table."""
+    try:
+        ages = tuple( int( part ) for part in combo.split( '-' ) )
+    except ValueError:
+        raise Http404( f'Bad claim-age combo {combo!r}.' )
+    if len( ages ) != count or any( age not in CLAIM_AGES for age in ages ):
+        raise Http404( f'Claim-age combo {combo!r} does not match the household.' )
+    return ages

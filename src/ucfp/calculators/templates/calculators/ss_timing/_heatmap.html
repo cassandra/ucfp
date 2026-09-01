@@ -1,0 +1,31 @@
+{% comment %}
+  The claiming-age heatmap. Couple: rows = higher earner's claim age, columns = lower earner's. Single: one
+  strip of ages. Each cell links (antinode) to its strategy detail; results.js moves the gold selection.
+  Context: `heatmap` (rows of results.HeatCell), `axis_ages`, `is_couple`, `earners`.
+{% endcomment %}
+<div class="ss-hm-wrap">
+{% if is_couple %}
+  <div class="d-flex">
+    <div class="ss-eyebrow d-flex align-items-center justify-content-center px-1"
+         style="writing-mode:vertical-rl;transform:rotate(180deg)">{{ earners.0.name }} claims at</div>
+    <div class="flex-grow-1">
+      <div class="ss-hm-grid">
+        <div class="ss-hm-corner"></div>
+        {% for age in axis_ages %}<div class="ss-hm-collabel">{{ age }}</div>{% endfor %}
+        {% for row in heatmap %}
+          <div class="ss-hm-rowlabel">{{ row.0.higher_age }}</div>
+          {% for cell in row %}{% include "calculators/ss_timing/_heatcell.html" %}{% endfor %}
+        {% endfor %}
+      </div>
+      <div class="ss-eyebrow text-center mt-2">{{ earners.1.name }} claims at (age)</div>
+    </div>
+  </div>
+{% else %}
+  <div class="ss-hm-strip">
+    {% for cell in heatmap.0 %}{% include "calculators/ss_timing/_heatcell.html" %}{% endfor %}
+  </div>
+  <div class="ss-hm-strip mt-1">
+    {% for age in axis_ages %}<div class="ss-hm-collabel">{{ age }}</div>{% endfor %}
+  </div>
+{% endif %}
+</div>

@@ -1,44 +1,98 @@
 {% extends "pages/base_public.html" %}
-{% load common_tags %}
+{% load common_tags static %}
 {% comment %}
-  Minimal results for the Social Security claiming calculator: the top-ranked strategy and the full
-  ranking by lifetime present value. Phase 5 replaces this with the heatmap, year-by-year detail, and the
-  methodology modal. `comparison` is a ss_timing.Comparison; `best` its top strategy.
+  The Social Security timing results: household + assumptions recap, the claiming-age heatmap and ranked
+  list (click either to drill in), and the year-by-year detail for the selected strategy. The heatmap
+  cells and ranked rows carry `data-combo`; clicking swaps the detail (antinode) and moves the gold
+  selection (results.js). Context: `earners` (higher first), `is_couple`, `assumptions`, `axis_ages`,
+  `heatmap`, `ranked`, plus the detail context merged in (`strategy`, `claim_pairs`, `rows`).
 {% endcomment %}
 
 {% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
-{% block page_title %}Your claiming comparison{% endblock %}
+{% block page_title %}Social Security claiming strategy{% endblock %}
 
 {% block public_content %}
-<div class="alert alert-success">
-  <strong>Best strategy:</strong>
-  {% for claimant, age in best_pairs %}
-    {{ claimant.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}
-  {% endfor %}
-  &mdash; lifetime present value ${{ best.present_value|floatformat:0 }}
-  (raw ${{ best.raw_total|floatformat:0 }}).
+<div class="ss-results">
+  <p class="text-muted text-center mb-4">
+    Comparing every claiming age from 62 to 70{% if is_couple %} for both of you{% endif %} to find the
+    combination with the greatest lifetime benefit in today&rsquo;s dollars.
+  </p>
+
+  <div class="row">
+    <div class="col-md-7 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-2">Household</div>
+        <div class="row">
+          {% for earner in earners %}
+            <div class="col ss-person">
+              <div class="ss-role">{% if is_couple %}{% if forloop.first %}Higher earner{% else %}Lower earner{% endif %}{% else %}You{% endif %}</div>
+              <div class="font-weight-bold">{{ earner.name }}</div>
+              <div class="text-muted small mt-1">
+                PIA ${{ earner.pia_monthly|floatformat:0 }}/mo · plan through {{ earner.expected_lifetime }}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div></div>
+    </div>
+    <div class="col-md-5 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-2">Assumptions</div>
+        <span class="ss-chip"><span class="k">COLA</span><b>{{ cola_pct }}</b></span>
+        <span class="ss-chip"><span class="k">PV discount</span><b>{{ discount_pct }}</b></span>
+        <span class="ss-chip"><span class="k">Benefits payable</span><b>{{ payable_pct }}</b></span>
+        <p class="text-muted small mt-2 mb-0">
+          Benefits grow with the COLA and are discounted to present value at inflation &mdash; the same
+          assumptions your forecast runs under.
+        </p>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-8 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-1">Lifetime benefit by claiming age{% if is_couple %}s{% endif %}
+          <span class="text-muted font-weight-normal">&mdash; present value, deeper is more</span></div>
+        {% include "calculators/ss_timing/_heatmap.html" %}
+        <div class="ss-hm-legend"><span>Lower</span><span class="bar"></span><span>Higher</span>
+          <span class="ml-auto" style="color:#b07d05">&#9733; best &middot; click any cell</span></div>
+      </div></div>
+    </div>
+    <div class="col-lg-4 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-2">Top strategies</div>
+        <table class="ss-rank">
+          <thead><tr>
+            <th></th>{% for earner in earners %}<th>{{ earner.name }}</th>{% endfor %}<th class="num">PV total</th>
+          </tr></thead>
+          <tbody>
+            {% for row in ranked %}
+              <tr class="rank-row{% if row.is_best %} best{% endif %}{% if row.is_selected %} sel{% endif %}"
+                  data-combo="{{ row.combo }}">
+                <td class="rk">{{ row.rank }}</td>
+                {% for age in row.ages %}<td>{{ age }}</td>{% endfor %}
+                <td class="num">${{ row.present_value|floatformat:0 }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="card mb-3"><div class="card-body">
+    <div class="ss-eyebrow mb-2">Year-by-year Social Security income</div>
+    {% include "calculators/ss_timing/_detail.html" %}
+    <p class="text-muted small mt-2 mb-0">
+      Income only &mdash; this comparison never touches taxes, assets, or your saved runs.
+      {% if is_couple %}The highlighted row is the first death, where the survivor steps up to the larger
+      of the two benefits.{% endif %}
+    </p>
+  </div></div>
+
+  <a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-primary">Change your entries</a>
 </div>
 
-<table class="table table-sm">
-  <thead>
-    <tr>
-      <th>Rank</th>
-      {% for claimant in claimants %}<th>{{ claimant.name }} claims at</th>{% endfor %}
-      <th class="text-right">Present value</th>
-      <th class="text-right">Raw total</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for strategy in comparison.ranked %}
-      <tr{% if strategy == best %} class="table-success"{% endif %}>
-        <td>{{ forloop.counter }}</td>
-        {% for age in strategy.claim_ages %}<td>{{ age }}</td>{% endfor %}
-        <td class="text-right">${{ strategy.present_value|floatformat:0 }}</td>
-        <td class="text-right">${{ strategy.raw_total|floatformat:0 }}</td>
-      </tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-primary">Change your entries</a>
+<script src="{% static 'js/ss_timing.js' %}"></script>
 {% endblock %}

@@ -118,6 +118,16 @@ class YearDetail:
     present_value : Decimal
     is_transition : bool
 
+    @property
+    def survivor( self ) -> Decimal:
+        """The survivor benefit that year (whichever member is the survivor; zero while both live)."""
+        return sum( ( member.survivor for member in self.members ), Decimal( '0' ) )
+
+    @property
+    def ages_label( self ) -> str:
+        """The household's ages that year -- '68' for one person, '68 & 66' for a couple."""
+        return ' & '.join( str( age ) for age in self.ages )
+
 
 @dataclass( frozen = True )
 class Strategy:
@@ -171,6 +181,16 @@ def compare_claiming_strategies(
         _run_strategy( earners, claim_ages, assumptions, horizon )
         for claim_ages in combinations )
     return Comparison( claimants = earners, strategies = strategies )
+
+
+def compute_strategy(
+        claimants : list[ Claimant ], claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions ) -> Strategy:
+    """One strategy for a chosen claiming combination (the higher earner's age first) -- the results page's
+    drill-in recompute, a single engine run rather than the whole sweep. Claimants are ordered by PIA, so
+    `claim_ages` aligns to the heatmap's axes."""
+    earners = tuple( sorted( claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
+    return _run_strategy( earners, claim_ages, assumptions, _Horizon.for_household( earners ) )
 
 
 def strategy_year_details(

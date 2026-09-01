@@ -9,6 +9,7 @@ app_name = 'ss_timing'
 urlpatterns = [
     path( '', views.InputsView.as_view(), name = 'inputs' ),
     path( 'results/', views.ResultsView.as_view(), name = 'results' ),
+    path( 'results/detail/<str:combo>/', views.StrategyDetailView.as_view(), name = 'detail' ),
     path( 'estimate/<int:index>/', views.BenefitEstimatorModalView.as_view(), name = 'estimate' ),
     path( 'estimate/<int:index>/apply/', views.BenefitEstimateApplyView.as_view(),
           name = 'estimate_apply' ),

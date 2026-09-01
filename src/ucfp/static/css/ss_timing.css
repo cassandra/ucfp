@@ -1,0 +1,84 @@
+/* Social Security timing calculator -- results page: the claiming-age heatmap, the ranked list, and the
+   year-by-year detail table. Scoped under .ss-results so it never touches other pages sharing the bundle. */
+
+.ss-results .ss-eyebrow {
+    font-size: .72rem; letter-spacing: .09em; text-transform: uppercase;
+    color: #6c7a89; font-weight: 600;
+}
+
+/* -- context cards (household + assumptions) -- */
+.ss-results .ss-person + .ss-person { border-left: 1px solid #e6ebf0; padding-left: 1rem; }
+.ss-results .ss-role {
+    font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #8996a4; font-weight: 600;
+}
+.ss-results .ss-chip {
+    display: inline-flex; gap: .4rem; align-items: baseline;
+    background: #f0f4f8; border: 1px solid #e1e8ef; border-radius: .5rem;
+    padding: .3rem .6rem; font-size: .85rem; margin: 0 .35rem .35rem 0;
+}
+.ss-results .ss-chip .k { color: #6c7a89; }
+
+/* -- heatmap -- */
+.ss-hm-wrap { overflow-x: auto; }
+.ss-hm-grid { display: grid; grid-template-columns: auto repeat(9, minmax(30px, 1fr)); gap: 3px; min-width: 430px; }
+.ss-hm-strip { display: grid; grid-template-columns: repeat(9, minmax(34px, 1fr)); gap: 3px; max-width: 430px; }
+.ss-hm-corner, .ss-hm-collabel, .ss-hm-rowlabel {
+    display: flex; align-items: center; justify-content: center;
+    font-size: .72rem; color: #6c7a89; font-weight: 600;
+}
+.ss-hm-cell {
+    aspect-ratio: 1 / .84; border-radius: 5px; border: 1px solid transparent;
+    display: block; cursor: pointer; position: relative; transition: transform .08s ease, box-shadow .08s ease;
+}
+.ss-hm-cell:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(20, 40, 60, .22); z-index: 2; }
+.ss-hm-cell:focus-visible { outline: 2px solid #16202e; outline-offset: 1px; z-index: 3; }
+.ss-hm-cell.sel {
+    box-shadow: 0 0 0 3px #b07d05, 0 5px 16px rgba(176, 125, 5, .45);
+    transform: scale(1.1); z-index: 4; border-color: #b07d05;
+}
+.ss-hm-cell.best::after {
+    content: "\2605"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: .7rem; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+/* sequential ramp, light -> deep teal (7 buckets) */
+.ss-hm-cell.hm-b0 { background: #eef4f7; }
+.ss-hm-cell.hm-b1 { background: #d3e5ec; }
+.ss-hm-cell.hm-b2 { background: #aed0dd; }
+.ss-hm-cell.hm-b3 { background: #82b7c8; }
+.ss-hm-cell.hm-b4 { background: #559cb1; }
+.ss-hm-cell.hm-b5 { background: #2f7e96; }
+.ss-hm-cell.hm-b6 { background: #0e4b61; }
+.ss-hm-legend { display: flex; align-items: center; gap: .5rem; margin-top: .9rem; font-size: .78rem; color: #6c7a89; }
+.ss-hm-legend .bar {
+    height: 9px; width: 130px; border-radius: 5px;
+    background: linear-gradient(90deg, #eef4f7, #0e4b61);
+}
+
+/* -- ranked list -- */
+.ss-rank { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.ss-rank th {
+    text-align: left; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase;
+    color: #8996a4; font-weight: 600; padding: 0 .5rem .45rem; border-bottom: 1px solid #e6ebf0;
+}
+.ss-rank th.num, .ss-rank td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ss-rank td { padding: .45rem .5rem; border-bottom: 1px solid #eef1f4; cursor: pointer; }
+.ss-rank tr:hover td { background: #f4f7fa; }
+.ss-rank tr.sel td { background: #e6f1f5; }
+.ss-rank tr.best td:first-child { box-shadow: inset 3px 0 0 #b07d05; }
+.ss-rank .rk { color: #8996a4; font-weight: 600; }
+
+/* -- year-by-year detail -- */
+.ss-years { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.ss-years th {
+    text-align: right; font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; color: #8996a4;
+    font-weight: 600; padding: .55rem .8rem; border-bottom: 1px solid #e6ebf0; white-space: nowrap; background: #f4f7fa;
+}
+.ss-years th:first-child, .ss-years td:first-child { text-align: left; }
+.ss-years td { text-align: right; padding: .4rem .8rem; border-bottom: 1px solid #eef1f4; white-space: nowrap; }
+.ss-years td:first-child { color: #6c7a89; }
+.ss-years .zero { color: #aab4bf; }
+.ss-years tr.transition td { background: #fbf1d9; }
+.ss-years tr.transition .tag {
+    font-size: .62rem; letter-spacing: .04em; text-transform: uppercase; color: #b07d05; font-weight: 700; margin-left: .3rem;
+}
+.ss-years tfoot td { font-weight: 700; border-top: 2px solid #cdd8e2; background: #f4f7fa; }

@@ -138,8 +138,9 @@ class ResultsViewTest( TestCase ):
             self.client.get( reverse( 'calculators:ss_timing:results' ) ),
             reverse( 'calculators:ss_timing:inputs' ), fetch_redirect_response = False )
 
-    def test_results_rank_the_strategies_after_a_submission( self ):
+    def test_results_render_the_comparison_after_a_submission( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), _single_data() )
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
         self.assertEqual( response.status_code, 200 )
-        self.assertContains( response, 'Best strategy' )
+        self.assertContains( response, 'Top strategies' )
+        self.assertContains( response, 'Year-by-year Social Security income' )

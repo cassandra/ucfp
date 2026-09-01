@@ -292,6 +292,7 @@ PIPELINE = {
                 'css/bootstrap-datepicker.standalone.min.css',
                 'css/main.css',
                 'css/books_table.css',
+                'css/ss_timing.css',
             ),
             'output_filename': 'css/css_head.css',
         },
