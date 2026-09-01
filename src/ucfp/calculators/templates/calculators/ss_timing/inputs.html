@@ -11,6 +11,7 @@
 {% block page_title %}When should you claim Social Security?{% endblock %}
 
 {% block public_content %}
+{% include "calculators/ss_timing/_dashboard_breadcrumb.html" %}
 <p class="text-muted text-center mb-4">
   Compare the lifetime Social Security benefit for each claiming age from 62 to 70.
 </p>
@@ -24,7 +25,15 @@
 
 <form method="post" data-synchronous="true" novalidate>
   {% csrf_token %}
-  {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+  {% comment %}A single error summary at the top of the form: the per-field errors below are easy to miss,
+  so on a failed submit this says plainly why the page came back and points to the highlighted fields. Any
+  cross-field (non-field) errors are shown here too.{% endcomment %}
+  {% if form.errors %}
+    <div class="alert alert-danger" role="alert">
+      <strong>Something needs fixing.</strong> Please review the highlighted fields below and try again.
+      {{ form.non_field_errors }}
+    </div>
+  {% endif %}
 
   <fieldset class="form-group">
     <legend class="h6">Who&rsquo;s planning?</legend>

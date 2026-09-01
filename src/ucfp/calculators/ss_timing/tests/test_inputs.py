@@ -7,8 +7,11 @@ from importlib import import_module
 from unittest.mock import patch
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+
+from organization.models import Organization
 
 from common.rate import Rate
 from ucfp.calculators.ss_timing.compute import Assumptions
@@ -19,7 +22,12 @@ from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.session_facts import PersonFacts, SessionFacts
 from ucfp.session_state import SessionState
 
+User = get_user_model()
+
 _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
+
+_STUB_ECONOMICS = EconomicParameters( inflation = Rate( Decimal( '0.025' ) ),
+                                      social_security_cola = Rate( Decimal( '0.025' ) ) )
 
 _ASSUMPTIONS = { 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
 
@@ -115,11 +123,21 @@ class InputsViewTest( TestCase ):
         # (200) rather than being redirected to sign in. The default assumptions are stubbed to avoid the
         # seeded-parameter-set DB read (seeding is a deploy step, not a test fixture).
         with patch( 'ucfp.calculators.ss_timing.prefill.default_economics',
-                    return_value = EconomicParameters( inflation = Rate( Decimal( '0.025' ) ),
-                                                       social_security_cola = Rate( Decimal( '0.025' ) ) ) ):
+                    return_value = _STUB_ECONOMICS ):
             response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Compare claiming ages' )
+        self.assertNotContains( response, 'aria-label="breadcrumb"' )    # no app to return to
+
+    def test_a_signed_in_visitor_sees_the_dashboard_breadcrumb( self ):
+        user = User.objects.create_user( email = 'owner@x.test', password = 'x' )
+        Organization.objects.create_for_owner( user, name = 'Mine' )
+        self.client.force_login( user )
+        with patch( 'ucfp.calculators.ss_timing.prefill.default_economics',
+                    return_value = _STUB_ECONOMICS ):
+            response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
+        self.assertContains( response, 'aria-label="breadcrumb"' )
+        self.assertContains( response, reverse( 'dashboard' ) )
 
     def test_a_valid_submission_persists_and_redirects_to_the_results( self ):
         response = self.client.post( reverse( 'calculators:ss_timing:inputs' ), _single_data() )
@@ -129,6 +147,7 @@ class InputsViewTest( TestCase ):
         response = self.client.post( reverse( 'calculators:ss_timing:inputs' ), _single_data( s0_pia = '' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'is required', status_code = 200 )
+        self.assertContains( response, 'Something needs fixing' )        # the top-of-form error summary
 
     def test_a_submission_is_remembered_and_prefills_the_returning_form( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), _single_data() )

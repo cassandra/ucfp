@@ -14,14 +14,10 @@
 {% block public_container_max_width %}1140px{% endblock %}
 
 {% block public_content %}
-{% comment %}A quiet breadcrumb back into the app for a signed-in visitor -- wayfinding, not a pitch, so it
-sits at the top rather than competing with the results. An anonymous visitor has no app to return to; their
-onward path is the upsell lower down, at the seam just after the results.{% endcomment %}
-{% if onboarding_state != 'anonymous' %}
-<nav class="ss-crumb mb-3" aria-label="breadcrumb">
-  <a href="{% url 'dashboard' %}">&larr; Dashboard</a>
-</nav>
-{% endif %}
+{% comment %}The signed-in breadcrumb sits at the top -- wayfinding, not a pitch, so it does not compete with
+the results. An anonymous visitor has no app to return to; their onward path is the upsell lower down, at
+the seam just after the results.{% endcomment %}
+{% include "calculators/ss_timing/_dashboard_breadcrumb.html" %}
 <div class="ss-results">
 
   <div class="row">
