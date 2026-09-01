@@ -68,10 +68,11 @@ is pitched in the closing band, not here.){% endcomment %}
 
     {% comment %}The two feature pillars, co-equal: the Forecast you get back, and the Explore loop that
     lets you vary inputs and watch it move. Two centered cards (col-md-5 with justify-content-center) so
-    the pair sits balanced rather than filling the row edge to edge.{% endcomment %}
+    the pair sits balanced rather than filling the row edge to edge. Both link to the explain page (as the
+    hero's "See how it works" does), so the whole card is a way in.{% endcomment %}
     <div class="row justify-content-center mt-5">
       <div class="col-md-5 mb-4 mb-md-0">
-        <div class="card h-100 border-0 shadow">
+        <a href="{% url 'explain' %}" class="card h-100 border-0 shadow text-reset text-decoration-none">
           <div class="card-body text-center">
             {% icon 'forecast' size='xxl' color='primary' %}
             <h3 class="h5 mt-3">Forecast</h3>
@@ -79,17 +80,39 @@ is pitched in the closing band, not here.){% endcomment %}
               figure is fully drillable, down to the account and the transaction, so you see why it is
               what it is.</p>
           </div>
-        </div>
+        </a>
       </div>
       <div class="col-md-5">
-        <div class="card h-100 border-0 shadow">
+        <a href="{% url 'explain' %}" class="card h-100 border-0 shadow text-reset text-decoration-none">
           <div class="card-body text-center">
             {% icon 'zoom' size='xxl' color='primary' %}
             <h3 class="h5 mt-3">Explore</h3>
             <p class="text-muted small mb-0">Change a plan or an assumption and watch the forecast move.
               Ask &ldquo;what if I retire two years earlier?&rdquo; and see the answer at once.</p>
           </div>
-        </div>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% comment %}A subordinate "Calculators" tier below the two flagship pillars: standalone, no-signup tools
+that lead toward the forecast rather than sitting co-equal with it. Live and clickable; a quieter heading,
+a single centered card (while there is only one), a lighter shadow, and an xl (not xxl) icon keep it
+visually secondary to the pillars.{% endcomment %}
+<section class="py-5">
+  <div class="container">
+    <h2 class="text-uppercase text-muted small font-weight-bold text-center mb-3" style="letter-spacing: .08em">Calculators</h2>
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <a href="{% url 'calculators:ss_timing:inputs' %}" class="card h-100 shadow-sm text-reset text-decoration-none">
+          <div class="card-body text-center">
+            {% icon 'calculator' size='xl' color='primary' %}
+            <h3 class="h6 mt-2 mb-1">Social Security Timing</h3>
+            <p class="text-muted small mb-0">Find the claiming strategy that pays you the most over your
+              lifetime. No account needed.</p>
+          </div>
+        </a>
       </div>
     </div>
   </div>
