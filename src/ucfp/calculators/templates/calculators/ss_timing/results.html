@@ -83,13 +83,21 @@
     {% include "calculators/ss_timing/_detail.html" %}
   </div></div>
 
-  <p class="text-muted small">
-    <strong>Total</strong> is the sum of every year&rsquo;s benefit as paid (grown by the SS adjustment).
-    <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars by discounting each future
-    year at inflation, so money far in the future counts for what it is worth now &mdash; a fairer basis
-    for weighing an earlier, smaller stream against a later, larger one. Neither is more
-    &ldquo;correct&rdquo;; use whichever matches how you think about future money.
-  </p>
+  <div class="text-muted small">
+    <p>
+      <strong>Total</strong> is the sum of every year&rsquo;s benefit as paid (grown by the SS
+      adjustment). <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars by
+      discounting each future year at inflation, so money far in the future counts for what it is worth
+      now &mdash; a fairer basis for weighing an earlier, smaller stream against a later, larger one.
+      Neither is more &ldquo;correct&rdquo;; use whichever matches how you think about future money.
+    </p>
+    <p class="mb-0">
+      The Social Security cost-of-living adjustment (the &ldquo;SS adjustment&rdquo; above) is modeled at
+      about {{ cola_lag_pct }} below inflation, its long-run pattern &mdash; so benefits keep most, but not
+      quite all, of their purchasing power over time. Set the inflation rate to match how fast you expect
+      prices to rise; the adjustment follows from it.
+    </p>
+  </div>
 </div>
 
 <script src="{% static 'js/ss_timing.js' %}"></script>

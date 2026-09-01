@@ -63,7 +63,6 @@ class InputsForm( StyledFormMixin, forms.Form ):
                                    min_value = Decimal( '0' ), required = False )
     s1_life          = forms.IntegerField( label = 'Expected lifetime', min_value = EARLIEST_CLAIM_AGE,
                                            max_value = _OLDEST_AGE, required = False )
-    cola             = PercentField( label = 'Annual SS adjustment', min_value = Decimal( '0' ) )
     inflation        = PercentField( label = 'Annual inflation', min_value = Decimal( '0' ) )
     benefits_payable = PercentField( label = 'Reduce benefits to', min_value = Decimal( '0' ),
                                      max_value = Decimal( '100' ) )
@@ -94,7 +93,6 @@ class InputsForm( StyledFormMixin, forms.Form ):
             's0_birth_year'    : data[ 's0_birth_year' ],
             's0_pia'           : str( data[ 's0_pia' ] ),
             's0_life'          : data[ 's0_life' ],
-            'cola'             : str( data[ 'cola' ] ),
             'inflation'        : str( data[ 'inflation' ] ),
             'benefits_payable' : str( data[ 'benefits_payable' ] ),
             'reduction_year'   : data[ 'reduction_year' ] }
@@ -112,9 +110,8 @@ def claimants_and_assumptions( inputs : dict ) -> tuple[ list[ Claimant ], Assum
     claimants = [ _claimant( inputs, 0 ) ]
     if inputs.get( 'household' ) == HOUSEHOLD_COUPLE:
         claimants.append( _claimant( inputs, 1 ) )
-    assumptions = Assumptions(
+    assumptions = Assumptions.from_inflation(
         inflation        = _rate_from_percent( inputs[ 'inflation' ] ),
-        cola             = _rate_from_percent( inputs[ 'cola' ] ),
         benefits_payable = _rate_from_percent( inputs[ 'benefits_payable' ] ),
         reduction_year   = int( inputs[ 'reduction_year' ] ) )
     return claimants, assumptions
@@ -126,7 +123,6 @@ def default_inputs( assumptions : Assumptions ) -> dict:
     Only the assumption fields carry a value; the people are left for the visitor to fill."""
     return {
         'household'        : HOUSEHOLD_COUPLE,
-        'cola'             : _percent_from_rate( assumptions.cola ),
         'inflation'        : _percent_from_rate( assumptions.inflation ),
         'benefits_payable' : _percent_from_rate( assumptions.benefits_payable ),
         'reduction_year'   : assumptions.reduction_year }

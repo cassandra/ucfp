@@ -20,7 +20,7 @@ from ucfp.session_state import SessionState
 
 _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
 
-_ASSUMPTIONS = { 'cola' : '2.5', 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
+_ASSUMPTIONS = { 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
 
 
 def _single_data( ** overrides ) -> dict:
@@ -66,7 +66,7 @@ class FormMappingTest( SimpleTestCase ):
         self.assertEqual( claimants[ 0 ].birth_year, 1960 )
         self.assertEqual( claimants[ 1 ].pia_monthly, Decimal( '1200' ) )
         self.assertEqual( claimants[ 1 ].expected_lifetime, 90 )
-        self.assertEqual( assumptions.cola, Rate( Decimal( '0.025' ) ) )
+        self.assertEqual( assumptions.cola, Rate( Decimal( '0.022' ) ) )     # inflation less the 0.3% lag
         self.assertEqual( assumptions.inflation, Rate( Decimal( '0.025' ) ) )       # the discount percent
         self.assertEqual( assumptions.benefits_payable, Rate( Decimal( '1' ) ) )    # 100%
 
@@ -81,7 +81,7 @@ class FormMappingTest( SimpleTestCase ):
             inflation = Rate( Decimal( '0.03' ) ), cola = Rate( Decimal( '0.02' ) ) ) )
         self.assertEqual( seeded[ 'household' ], HOUSEHOLD_COUPLE )
         self.assertEqual( seeded[ 'inflation' ], '3' )               # 0.03 -> '3'
-        self.assertEqual( seeded[ 'cola' ], '2' )
+        self.assertNotIn( 'cola', seeded )                           # COLA is derived, not an input
         self.assertNotIn( 's0_birth_year', seeded )                  # people are left blank
 
 

@@ -55,11 +55,6 @@
     </div>
     <div class="form-row">
       <div class="form-group col-sm-6 col-md-4">
-        <label for="{{ form.cola.id_for_label }}">{{ form.cola.label }}</label>
-        {{ form.cola }}
-        {% include "calculators/ss_timing/_field_errors.html" with field=form.cola %}
-      </div>
-      <div class="form-group col-sm-6 col-md-4">
         <label for="{{ form.inflation.id_for_label }}">{{ form.inflation.label }}</label>
         {{ form.inflation }}
         {% include "calculators/ss_timing/_field_errors.html" with field=form.inflation %}

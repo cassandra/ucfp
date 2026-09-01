@@ -121,15 +121,14 @@ class PrefillAssumptionsTest( TestCase ):
             inflation = Rate( Decimal( '0.02' ) ), social_security_cola = Rate( Decimal( '0.04' ) ) ) )
         prefill = build_prefill( self._request() )
         self.assertEqual( prefill.assumptions_source, 'your scenario “Baseline”' )
-        self.assertEqual( prefill.initial[ 'cola' ], '4' )            # 0.04 -> '4'
         self.assertEqual( prefill.initial[ 'inflation' ], '2' )       # from the scenario inflation
 
     def test_falls_back_to_the_system_defaults_without_a_scenario( self ):
         with patch( _DEFAULT_ECONOMICS, return_value = EconomicParameters(
-                social_security_cola = Rate( Decimal( '0.025' ) ) ) ):
+                inflation = Rate( Decimal( '0.025' ) ) ) ):
             prefill = build_prefill( self._request() )
         self.assertEqual( prefill.assumptions_source, 'system defaults' )
-        self.assertEqual( prefill.initial[ 'cola' ], '2.5' )
+        self.assertEqual( prefill.initial[ 'inflation' ], '2.5' )
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
@@ -152,7 +151,7 @@ class PrefillThroughTheViewTest( TestCase ):
     def test_a_remembered_session_entry_wins_over_the_profile( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
             'household' : 'single', 's0_birth_year' : '1955', 's0_pia' : '900', 's0_life' : '85',
-            'cola' : '2.5', 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' } )
+            'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' } )
         response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertContains( response, 'value="1955"' )              # the remembered entry
         self.assertNotContains( response, 'value="1960"' )           # not the profile
@@ -163,7 +162,7 @@ class PrefillThroughTheViewTest( TestCase ):
             'household' : 'couple',
             's0_birth_year' : '1900', 's0_pia' : '1', 's0_life' : '70',
             's1_birth_year' : '1901', 's1_pia' : '2', 's1_life' : '71',
-            'cola' : '9', 'inflation' : '9', 'benefits_payable' : '50', 'reduction_year' : '2033' } )
+            'inflation' : '9', 'benefits_payable' : '50', 'reduction_year' : '2033' } )
         profile = load_profile( latest_profile( self.organization ) )
         self.assertEqual( profile.subjects[ 0 ].birthdate, date( 1960, 1, 1 ) )
         self.assertEqual( profile.government_pension[ 0 ].monthly_at_normal_age, Decimal( '3000' ) )

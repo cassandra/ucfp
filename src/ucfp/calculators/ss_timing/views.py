@@ -21,7 +21,8 @@ from ucfp.jurisdiction.government_pension import GovernmentPension
 
 from . import methodology, results
 from .compute import (
-    CLAIM_AGES, compare_claiming_strategies, compute_strategy, strategy_year_details )
+    CLAIM_AGES, COLA_INFLATION_LAG, compare_claiming_strategies, compute_strategy,
+    strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions
 from .prefill import build_prefill
 
@@ -77,6 +78,7 @@ class ResultsView( View ):
         context    = {
             'axis_ages'      : CLAIM_AGES,
             'cola_pct'       : _percent( assumptions.cola ),
+            'cola_lag_pct'   : _percent( COLA_INFLATION_LAG ),
             'inflation_pct'  : _percent( assumptions.inflation ),
             'payable_pct'    : _percent( assumptions.benefits_payable ),
             'reduction_year' : assumptions.reduction_year,

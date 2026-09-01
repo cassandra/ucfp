@@ -48,6 +48,11 @@ CLAIM_AGES         = tuple( range( EARLIEST_CLAIM_AGE, LATEST_CLAIM_AGE + 1 ) )
 # stateless, so a single instance serves the per-person breakdown split.
 _GOVERNMENT_PENSION = GovernmentPension( JurisdictionType.US_FEDERAL )
 
+# The Social Security COLA (tied to CPI-W) has historically trailed general inflation; rather than ask for
+# both, the calculator takes one inflation figure and derives the COLA as inflation less this lag. A single
+# familiar input, at the cost of a fixed assumed gap (see the results page's methodology note).
+COLA_INFLATION_LAG = Rate( Decimal( '0.003' ) )
+
 
 @dataclass( frozen = True )
 class Claimant:
@@ -78,6 +83,16 @@ class Assumptions:
     cola             : Rate
     benefits_payable : Rate = FULL_RATE
     reduction_year   : int  = 2032
+
+    @classmethod
+    def from_inflation( cls, inflation : Rate, benefits_payable : Rate = FULL_RATE,
+                        reduction_year : int = 2032 ) -> 'Assumptions':
+        """Assumptions from a single inflation figure: the SS COLA is derived as inflation less the
+        historical lag (`COLA_INFLATION_LAG`), floored at zero, so the visitor sets one familiar number
+        rather than two rates that co-vary."""
+        cola = max( inflation.fraction - COLA_INFLATION_LAG.fraction, Decimal( '0' ) )
+        return cls( inflation = inflation, cola = Rate( cola ),
+                    benefits_payable = benefits_payable, reduction_year = reduction_year )
 
 
 @dataclass( frozen = True )
