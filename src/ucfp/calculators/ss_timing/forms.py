@@ -27,6 +27,16 @@ _PERSON_NAMES  = ( 'You', 'Spouse or partner' )
 _OLDEST_AGE    = 120
 
 
+class BenefitEstimateForm( StyledFormMixin, forms.Form ):
+    """The benefit estimator's two fields: an average annual income and the monthly benefit at full
+    retirement age it implies. The income drives the estimate (the jurisdiction facade computes it); the
+    benefit stays editable so someone who already knows their figure can type it. Rendering and parsing
+    only -- both are optional so a mid-interaction recompute never errors on a blank."""
+
+    income  = MoneyField( required = False, min_value = Decimal( '0' ) )
+    benefit = MoneyField( required = False, min_value = Decimal( '0' ) )
+
+
 class InputsForm( StyledFormMixin, forms.Form ):
     """One or two people's claiming facts plus the economic assumptions. The partner fields are optional
     at the field level and required in `clean` only when the household is a couple, so switching to

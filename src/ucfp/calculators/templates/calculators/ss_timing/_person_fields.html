@@ -1,7 +1,8 @@
 {% comment %}
   One person's three claiming fields (birth year, PIA, expected lifetime), shared by both people on the
-  calculator form. The including template passes `birth_year`, `pia`, and `life` bound fields. The PIA
-  field will gain the #235 "Estimate" helper in a later phase.
+  calculator form. The including template passes `birth_year`, `pia`, `life`, and `index` (0 the primary,
+  1 the partner). The PIA input is the estimator's swap target: its wrapper id pairs with the "Estimate"
+  helper beside it, which the confirm re-renders in place.
 {% endcomment %}
 <div class="form-group">
   <label for="{{ birth_year.id_for_label }}">{{ birth_year.label }}</label>
@@ -11,7 +12,12 @@
 </div>
 <div class="form-group">
   <label for="{{ pia.id_for_label }}">{{ pia.label }}</label>
-  {{ pia }}
+  <div class="d-flex align-items-start">
+    <span id="pia-input-{{ index }}" class="flex-grow-1">{{ pia }}</span>
+    <a role="button" class="btn btn-link btn-sm ml-2 text-nowrap" data-async="modal"
+       href="{% url 'calculators:ss_timing:estimate' index %}"
+       aria-label="Estimate the benefit at full retirement age">Estimate</a>
+  </div>
   <small class="form-text text-muted">The monthly benefit at full retirement age.</small>
   {{ pia.errors }}
 </div>
