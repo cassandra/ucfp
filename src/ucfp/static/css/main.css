@@ -1035,6 +1035,12 @@ body.has-cookie-notice {
     background-color: #e9ecef;
 }
 
+/* A lighter band for the subordinate calculators tier -- midway between white and the flagship
+   feature band, so its card still lifts off the background but reads a step below the pillars. */
+.calculators-band {
+    background-color: #f4f6f7;
+}
+
 
 /* =========================================================================
    Explain page ("How does <SITE_NAME> work?") -- the three-box story
