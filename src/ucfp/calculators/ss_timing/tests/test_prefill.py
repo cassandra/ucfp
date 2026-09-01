@@ -99,14 +99,27 @@ class PrefillPeopleTest( TestCase ):
         with patch( _DEFAULT_ECONOMICS, return_value = EconomicParameters() ):
             return build_prefill( request )
 
-    def test_the_profile_takes_precedence_over_session_facts( self ):
-        # A signed-in visitor's Profile is authoritative for people; a prior session entry (here from a
-        # different household) must not override or leak into it.
+    def test_the_profile_wins_each_field_it_has_over_session_facts( self ):
+        # People are facts: where the Profile has a value it wins, so a prior session entry (here from a
+        # different household) neither overrides nor leaks into a saved fact.
         save_profile( self.organization, _couple_profile() )
         prefill = self._build_with_facts( self.user, SessionFacts( people = [
             PersonFacts( birth_year = 1901, government_pension_monthly = Decimal( '99' ) ) ] ) )
         self.assertTrue( prefill.from_profile )
         self.assertEqual( prefill.initial[ 's0_birth_year' ], 1960 )    # the profile, not the session 1901
+        self.assertEqual( prefill.initial[ 's0_pia' ], '3000' )         # the profile, not the session 99
+
+    def test_session_facts_fill_the_fields_the_profile_lacks( self ):
+        # Best effort, field by field: the Profile supplies birth year + PIA but has no home for the
+        # expected lifetime, so the session facts fill it while the Profile still wins the fields it has.
+        save_profile( self.organization, _couple_profile() )
+        prefill = self._build_with_facts( self.user, SessionFacts( people = [
+            PersonFacts( birth_year = 1901, life_expectancy = 88 ),
+            PersonFacts( birth_year = 1902, life_expectancy = 90 ) ] ) )
+        self.assertEqual( prefill.initial[ 's0_birth_year' ], 1960 )    # profile wins ...
+        self.assertEqual( prefill.initial[ 's0_pia' ], '3000' )
+        self.assertEqual( prefill.initial[ 's0_life' ], 88 )           # ... session fills the gap
+        self.assertEqual( prefill.initial[ 's1_life' ], 90 )
 
     def test_session_facts_fill_in_when_the_profile_has_no_people( self ):
         # No profile saved for this org: the session facts fall through, including the expected lifetime

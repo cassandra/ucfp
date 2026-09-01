@@ -4,10 +4,11 @@ The form works for anyone, but no one should retype what a prior visit or a save
 This resolves the form's initial values, best-effort and read-only, from the highest-priority source that
 has each part:
 
-- People are facts, so a signed-in visitor's saved Profile is authoritative: it is used whenever it holds
-  people (birth year and PIA per person; the expected lifetime is left blank -- not a Profile fact yet),
-  and a prior session entry never overrides it. Only with no Profile people does
-  this session's `SessionFacts` fill in (including the expected lifetime it captured); failing that, blank.
+- People are prefilled best effort, field by field: each field takes the saved Profile's value where it
+  has one (people are facts, so the Profile wins -- birth year and PIA per person; it has no home for the
+  expected lifetime), else this session's `SessionFacts` (which fills the expected lifetime, and any field
+  the Profile lacks), else blank. So a prior session entry never overrides a saved fact, but still supplies
+  what the Profile cannot.
 - Assumptions are "what if" knobs, not facts, so this session's stored run assumptions come first
   (`ss_timing_assumptions` -- the last set used), else the visitor's current scenario's economics, then
   their most recent saved scenario's, then the seeded system defaults.
@@ -44,10 +45,10 @@ class Prefill:
 
 
 def build_prefill( request ) -> Prefill:
-    """The form's initial values for `request`: the people from a signed-in visitor's Profile, else this
-    session's facts (blank for a fresh anonymous visit); the assumptions from this session, else a
-    scenario, else the system defaults. Best-effort -- any missing piece falls back rather than failing,
-    since the calculator must open for anyone."""
+    """The form's initial values for `request`: the people merged field by field from a signed-in visitor's
+    Profile then this session's facts (blank for a fresh anonymous visit); the assumptions from this
+    session, else a scenario, else the system defaults. Best-effort -- any missing piece falls back rather
+    than failing, since the calculator must open for anyone."""
     organization                    = _organization( request )
     economics_initial, source       = _economics_initial( request, organization )
     people, household, from_profile = _people( request, organization )
@@ -69,18 +70,23 @@ def _economics_initial( request, organization ) -> tuple[ dict, str ]:
 
 
 def _people( request, organization ) -> tuple[ dict, str, bool ]:
-    """The people fields, the household kind, and whether they came from the saved Profile. People are
-    facts, so a signed-in visitor's Profile is authoritative: it is used whenever it holds people, and a
-    prior "what if" session entry never overrides it (nor leaks in from another org or an anonymous visit).
-    Only when there is no Profile -- or it holds no people -- does this session's `SessionFacts` fill in;
-    failing that, blank."""
-    profile_people = _people_from_profile( _profile( organization ) )
-    if profile_people[ 0 ]:                     # a non-empty initial dict -> the Profile held people
-        return profile_people
-    facts = request.session_state.session_facts
-    if facts.people:
-        return _people_from_facts( facts )
-    return profile_people                       # blank people, default household, from_profile False
+    """The people fields, the household kind, and whether any came from the saved Profile. Best effort and
+    field by field: each field takes the Profile's value where it has one -- people are facts, so the
+    Profile wins and a prior "what if" session entry never overrides it -- else this session's
+    `SessionFacts` (which also carries the expected lifetime the Profile has no home for), else blank. The
+    household kind follows the Profile when it holds people, else the session, else the couple default."""
+    facts                             = request.session_state.session_facts
+    profile_fields, profile_household, from_profile = _people_from_profile( _profile( organization ) )
+    facts_fields, facts_household, _  = _people_from_facts( facts )
+    initial = dict( facts_fields )
+    initial.update( profile_fields )            # a Profile value wins each field it has; facts fill the rest
+    if from_profile:
+        household = profile_household
+    elif facts.people:
+        household = facts_household
+    else:
+        household = HOUSEHOLD_COUPLE            # the blank-form default
+    return initial, household, from_profile
 
 
 def _people_from_facts( facts ) -> tuple[ dict, str, bool ]:
