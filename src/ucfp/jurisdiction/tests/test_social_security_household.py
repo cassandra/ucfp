@@ -11,7 +11,8 @@ from decimal import Decimal
 
 from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
-from ucfp.jurisdiction.social_security_household import HouseholdMember, household_benefits
+from ucfp.jurisdiction.social_security_household import (
+    HouseholdMember, household_benefit_breakdown, household_benefits )
 
 _US = GovernmentPension( JurisdictionType.US_FEDERAL )
 
@@ -26,6 +27,10 @@ def _member( handle, birth_year, pia = None, claim_year = None, death_year = Non
 
 def _benefits( on_year, *members ):
     return household_benefits( list( members ), _US, date( on_year, 1, 1 ) )
+
+
+def _breakdown( on_year, *members ):
+    return household_benefit_breakdown( list( members ), _US, date( on_year, 1, 1 ) )
 
 
 class HouseholdBenefitTest( unittest.TestCase ):
@@ -74,7 +79,7 @@ class HouseholdSurvivorTest( unittest.TestCase ):
         hi = _member( 'hi', 1960, '3000', 2027, death_year = 2030 )
         lo = _member( 'lo', 1960, '1000', 2027 )
         self.assertEqual( _benefits( 2030, hi, lo )[ 'lo' ], Decimal( '18000' ) )   # both alive through 2030
-        self.assertEqual( _benefits( 2031, hi, lo )[ 'lo' ], Decimal( '36000' ) )   # survivor -> higher benefit
+        self.assertEqual( _benefits( 2031, hi, lo )[ 'lo' ], Decimal( '36000' ) )   # survivor -> higher
         self.assertEqual( _benefits( 2031, hi, lo )[ 'hi' ], Decimal( '0' ) )       # decedent stops
 
     def test_higher_earner_unaffected_when_the_lower_earner_dies( self ):
@@ -86,8 +91,42 @@ class HouseholdSurvivorTest( unittest.TestCase ):
     def test_non_earning_spouse_becomes_a_survivor_on_the_earner_death( self ):
         earner = _member( 'earner', 1960, '2400', 2027, death_year = 2030 )
         spouse = _member( 'spouse', 1962 )
-        self.assertEqual( _benefits( 2028, earner, spouse )[ 'spouse' ], Decimal( '12000' ) )   # spousal, alive
-        self.assertEqual( _benefits( 2031, earner, spouse )[ 'spouse' ], Decimal( '28800' ) )   # survivor: own
+        self.assertEqual( _benefits( 2028, earner, spouse )[ 'spouse' ], Decimal( '12000' ) )   # spousal
+        self.assertEqual( _benefits( 2031, earner, spouse )[ 'spouse' ], Decimal( '28800' ) )   # survivor
+
+
+class BenefitBreakdownTest( unittest.TestCase ):
+    """The own / spousal / survivor split (`household_benefit_breakdown`); its per-member totals are what
+    `household_benefits` returns."""
+
+    def test_a_couple_splits_into_own_and_the_lower_spousal( self ):
+        hi, lo = _member( 'hi', 1960, '3000', 2027 ), _member( 'lo', 1960, '1000', 2027 )
+        parts = _breakdown( 2028, hi, lo )
+        self.assertEqual( parts[ 'hi' ].own, Decimal( '36000' ) )       # higher: own only
+        self.assertEqual( parts[ 'hi' ].spousal, Decimal( '0' ) )
+        self.assertEqual( parts[ 'lo' ].own, Decimal( '12000' ) )       # lower: own 1000*12
+        self.assertEqual( parts[ 'lo' ].spousal, Decimal( '6000' ) )    # + spousal excess (half 3000 - 1000)
+        self.assertEqual( parts[ 'lo' ].total, Decimal( '18000' ) )
+
+    def test_the_survivor_part_replaces_own_and_spousal_after_a_death( self ):
+        hi = _member( 'hi', 1960, '3000', 2027, death_year = 2030 )
+        lo = _member( 'lo', 1960, '1000', 2027 )
+        parts = _breakdown( 2031, hi, lo )
+        self.assertEqual( parts[ 'lo' ].own, Decimal( '0' ) )
+        self.assertEqual( parts[ 'lo' ].spousal, Decimal( '0' ) )
+        self.assertEqual( parts[ 'lo' ].survivor, Decimal( '36000' ) )  # steps up to the higher benefit
+
+    def test_a_non_earning_spouse_is_pure_spousal( self ):
+        earner, spouse = _member( 'earner', 1960, '2400', 2027 ), _member( 'spouse', 1962 )
+        parts = _breakdown( 2028, earner, spouse )
+        self.assertEqual( parts[ 'spouse' ].own, Decimal( '0' ) )
+        self.assertEqual( parts[ 'spouse' ].spousal, Decimal( '12000' ) )
+
+    def test_totals_match_household_benefits( self ):
+        hi, lo = _member( 'hi', 1960, '3000', 2027 ), _member( 'lo', 1960, '1000', 2022 )
+        parts   = _breakdown( 2028, hi, lo )
+        totals  = _benefits( 2028, hi, lo )
+        self.assertEqual( { h: p.total for h, p in parts.items() }, totals )
 
 
 if __name__ == '__main__':

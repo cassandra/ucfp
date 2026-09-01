@@ -15,6 +15,12 @@ on equal footing. Present value discounts each year's benefit at the general inf
 (the app's "today's dollars" convention, `overview._in_start_year_dollars`), so a run whose COLA
 trails inflation is normalized against one whose does not; the discount base is the start (age-62)
 year, shared by every strategy.
+
+For the results drill-in, `strategy_year_details` apportions each year's engine household total into the
+members' own / spousal / survivor parts. Because the COLA and reduction scale the whole benefit uniformly,
+the parts' ratios are overlay-free: the split comes from the jurisdiction breakdown while the totals stay
+the engine's -- so no economic overlay is reproduced here, and the per-person figures never read the books
+(sidestepping the engine's account-retitling on a death).
 """
 from dataclasses import dataclass
 from datetime import date
@@ -29,12 +35,18 @@ from ucfp.forecast.forecast import Forecast, ForecastResult
 from ucfp.forecast.parameters import (
     AssetParameters, ForecastParameters, SocialSecurityEntitlement, Subject, SubjectRemoval )
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
+from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
+from ucfp.jurisdiction.social_security_household import HouseholdMember, household_benefit_breakdown
 
 
 EARLIEST_CLAIM_AGE = 62
 LATEST_CLAIM_AGE   = 70
 CLAIM_AGES         = tuple( range( EARLIEST_CLAIM_AGE, LATEST_CLAIM_AGE + 1 ) )
+
+# The calculator is US-only (the FRA/PIA rules behind the benefit are the US ones); the facade is
+# stateless, so a single instance serves the per-person breakdown split.
+_GOVERNMENT_PENSION = GovernmentPension( JurisdictionType.US_FEDERAL )
 
 
 @dataclass( frozen = True )
@@ -76,6 +88,35 @@ class YearBenefit:
     year          : int
     nominal       : Decimal
     present_value : Decimal
+
+
+@dataclass( frozen = True )
+class MemberYear:
+    """One member's nominal Social Security in a year, split into its parts -- own, spousal, and survivor.
+    Either the own(+spousal) pair or the survivor is non-zero (the survivor benefit replaces own and
+    spousal at the first death)."""
+
+    own      : Decimal
+    spousal  : Decimal
+    survivor : Decimal
+
+    @property
+    def total( self ) -> Decimal:
+        return self.own + self.spousal + self.survivor
+
+
+@dataclass( frozen = True )
+class YearDetail:
+    """One year of a strategy for the drill-in table: each member's nominal parts (aligned to the earners,
+    higher first), each member's age, the `household` total and its `present_value` (both the engine's),
+    and `is_transition` -- the first-death year where the survivor benefit begins."""
+
+    year          : int
+    ages          : tuple[ int, ... ]
+    members       : tuple[ MemberYear, ... ]
+    household     : Decimal
+    present_value : Decimal
+    is_transition : bool
 
 
 @dataclass( frozen = True )
@@ -130,6 +171,59 @@ def compare_claiming_strategies(
         _run_strategy( earners, claim_ages, assumptions, horizon )
         for claim_ages in combinations )
     return Comparison( claimants = earners, strategies = strategies )
+
+
+def strategy_year_details(
+        earners : tuple[ Claimant, ... ], strategy : Strategy ) -> tuple[ YearDetail, ... ]:
+    """The selected strategy's year-by-year table: each year's engine household total apportioned into the
+    members' own / spousal / survivor parts. The COLA and funding reduction are uniform scalings, so the
+    parts' ratios are overlay-free -- the split comes from the jurisdiction breakdown while the totals stay
+    the engine's. `earners` are the comparison's claimants (higher earner first)."""
+    members       = _household_members( earners, strategy.claim_ages )
+    details       = list()
+    seen_survivor = False
+    for benefit in strategy.year_benefits:
+        breakdown    = household_benefit_breakdown( members, _GOVERNMENT_PENSION, date( benefit.year, 1, 1 ) )
+        today_total  = sum( ( part.total for part in breakdown.values() ), Decimal( '0' ) )
+        member_years = tuple(
+            _apportion( breakdown.get( _handle( index ) ), benefit.nominal, today_total )
+            for index in range( len( members ) ) )
+        has_survivor = any( member.survivor > 0 for member in member_years )
+        details.append( YearDetail(
+            year          = benefit.year,
+            ages          = tuple( benefit.year - earner.birth_year for earner in earners ),
+            members       = member_years,
+            household     = benefit.nominal,
+            present_value = benefit.present_value,
+            is_transition = has_survivor and not seen_survivor ) )
+        seen_survivor = seen_survivor or has_survivor
+        continue
+    return tuple( details )
+
+
+def _household_members(
+        earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ] ) -> list[ HouseholdMember ]:
+    """The jurisdiction calculator's members for this combination -- each earner claiming at their swept
+    age and leaving at their expected lifetime -- handles index-keyed to the earners (higher first), the
+    same keys the forecast used, so the breakdown reads back in that order."""
+    return [
+        HouseholdMember(
+            subject_handle = _handle( index ),
+            birthdate      = earner.birthdate,
+            pia_monthly    = earner.pia_monthly,
+            claiming_date  = date( earner.birth_year + age, 1, 1 ),
+            death_date     = date( earner.birth_year + earner.expected_lifetime, 1, 1 ) )
+        for index, ( earner, age ) in enumerate( zip( earners, claim_ages ) ) ]
+
+
+def _apportion( part, household_nominal : Decimal, today_total : Decimal ) -> MemberYear:
+    """A member's nominal parts: their today's-dollars own/spousal/survivor scaled to the engine's nominal
+    household total by their share of it. Empty when no benefit is paid that year (nothing to apportion)."""
+    if part is None or today_total == 0:
+        return MemberYear( Decimal( '0' ), Decimal( '0' ), Decimal( '0' ) )
+    scale = household_nominal / today_total       # = COLA x reduction, carried by the engine's nominal total
+    return MemberYear(
+        own = part.own * scale, spousal = part.spousal * scale, survivor = part.survivor * scale )
 
 
 @dataclass( frozen = True )

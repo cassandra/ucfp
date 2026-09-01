@@ -8,8 +8,11 @@ exact date; horizons are kept short to keep an 81-run couple sweep fast.
 import unittest
 from decimal import Decimal
 
-from common.rate import Rate
-from ucfp.calculators.ss_timing.compute import Assumptions, Claimant, compare_claiming_strategies
+from common.rate import Rate, ZERO_RATE
+from ucfp.calculators.ss_timing.compute import (
+    Assumptions, Claimant, compare_claiming_strategies, strategy_year_details )
+
+_NO_OVERLAY = Assumptions( inflation = ZERO_RATE, cola = ZERO_RATE )
 
 
 def _assumptions( inflation = '0.03', cola = '0.02' ) -> Assumptions:
@@ -109,6 +112,59 @@ class ClaimingSweepSurvivorTest( unittest.TestCase ):
         claimed_early = _year_map( self._strategy( comparison, 62, 67 ) )
         claimed_late  = _year_map( self._strategy( comparison, 70, 67 ) )
         self.assertGreater( claimed_late[ 2032 ], claimed_early[ 2032 ] )
+
+
+class StrategyDetailTest( unittest.TestCase ):
+    """The year-by-year drill-in: each year's engine household total apportioned into the members' own /
+    spousal / survivor parts (higher earner first). With no overlay the nominal parts equal the today's
+    statutory amounts, so they can be asserted directly."""
+
+    def _rows( self, household, assumptions, claim_ages ) -> dict:
+        comparison = compare_claiming_strategies( household, assumptions )
+        strategy   = next( s for s in comparison.strategies if s.claim_ages == claim_ages )
+        return { row.year: row for row in strategy_year_details( comparison.claimants, strategy ) }
+
+    def test_the_parts_reconcile_to_the_engine_household_total_each_year( self ):
+        # Under a real overlay (COLA + reduction) the apportioned parts reconcile to the engine total, to
+        # within its per-posting cent rounding -- the split is exact in ratio, the total stays the engine's.
+        couple      = [ Claimant( 'Higher', 1960, Decimal( '3000' ), 72 ),
+                        Claimant( 'Lower', 1962, Decimal( '1200' ), 84 ) ]
+        assumptions = Assumptions(
+            inflation = Rate( Decimal( '0.03' ) ), cola = Rate( Decimal( '0.02' ) ),
+            benefits_payable = Rate( Decimal( '0.80' ) ), reduction_year = 2034 )
+        for row in self._rows( couple, assumptions, ( 67, 67 ) ).values():
+            parts = sum( ( member.total for member in row.members ), Decimal( '0' ) )
+            self.assertLess( abs( parts - row.household ), Decimal( '0.05' ) )
+
+    def test_a_both_alive_year_splits_into_own_and_the_lower_spousal( self ):
+        couple     = [ Claimant( 'Higher', 1960, Decimal( '3000' ), 72 ),
+                       Claimant( 'Lower', 1960, Decimal( '1000' ), 84 ) ]
+        both_alive = self._rows( couple, _NO_OVERLAY, ( 67, 67 ) )[ 2028 ]
+        self.assertEqual( both_alive.ages, ( 68, 68 ) )
+        self.assertEqual( both_alive.members[ 0 ].own, Decimal( '36000' ) )      # higher: own only
+        self.assertEqual( both_alive.members[ 0 ].spousal, Decimal( '0' ) )
+        self.assertEqual( both_alive.members[ 1 ].own, Decimal( '12000' ) )      # lower: own
+        self.assertEqual( both_alive.members[ 1 ].spousal, Decimal( '6000' ) )   # + spousal excess
+
+    def test_the_survivor_year_is_flagged_and_carries_the_survivor_part( self ):
+        couple = [ Claimant( 'Higher', 1960, Decimal( '3000' ), 70 ),            # dies 2030
+                   Claimant( 'Lower', 1960, Decimal( '1000' ), 85 ) ]
+        rows   = self._rows( couple, _NO_OVERLAY, ( 67, 67 ) )
+        survivor_year = rows[ 2031 ]
+        self.assertTrue( survivor_year.is_transition )                          # the first survivor year
+        self.assertEqual( survivor_year.members[ 1 ].survivor, Decimal( '36000' ) )
+        self.assertEqual( survivor_year.members[ 1 ].own, Decimal( '0' ) )
+        self.assertEqual( survivor_year.members[ 0 ].total, Decimal( '0' ) )    # the decedent
+        self.assertFalse( rows[ 2032 ].is_transition )                         # only the first is flagged
+
+    def test_a_single_person_detail_has_one_own_only_member( self ):
+        comparison = compare_claiming_strategies(
+            [ Claimant( 'Solo', 1960, Decimal( '2000' ), 80 ) ], _NO_OVERLAY )
+        strategy = next( s for s in comparison.strategies if s.claim_ages == ( 67, ) )
+        rows     = { row.year: row for row in strategy_year_details( comparison.claimants, strategy ) }
+        self.assertEqual( len( rows[ 2028 ].members ), 1 )
+        self.assertEqual( rows[ 2028 ].members[ 0 ].own, Decimal( '24000' ) )   # 2000 * 12
+        self.assertFalse( any( row.is_transition for row in rows.values() ) )   # no survivor for one person
 
 
 if __name__ == '__main__':

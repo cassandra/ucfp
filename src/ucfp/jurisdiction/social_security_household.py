@@ -12,6 +12,9 @@ here. The engine calls this per interval -- applying the COLA and the funding-sh
 result, and owning the timing -- so no schedules are built here; the benefit is a today's-dollars amount on a
 date. On a death (from a member's `death_date`) the survivor receives the larger of their own and the
 decedent's own benefit, and the decedent's own + spousal end -- the survivor transition.
+
+`household_benefit_breakdown` returns each member's benefit split into its own / spousal / survivor parts (a
+per-person view the claiming calculator uses); `household_benefits` is the per-member totals the engine books.
 """
 from dataclasses import dataclass
 from datetime import date
@@ -47,32 +50,70 @@ class _Claim:
     death_date     : Optional[ date ] = None
 
 
+@dataclass( frozen = True )
+class MemberBenefit:
+    """One member's annual Social Security on a date, split into its statutory parts (today's dollars): the
+    member's own claim-adjusted benefit, the lower earner's spousal excess once both collect, and the
+    survivor benefit after the other's death. Either the own(+spousal) pair or the survivor is non-zero,
+    never both -- the survivor benefit replaces own and spousal at the first death."""
+
+    own      : Decimal = Decimal( '0' )
+    spousal  : Decimal = Decimal( '0' )
+    survivor : Decimal = Decimal( '0' )
+
+    @property
+    def total( self ) -> Decimal:
+        """What the member actually receives that year -- the sum of the parts."""
+        return self.own + self.spousal + self.survivor
+
+
+def household_benefit_breakdown(
+        members : list[ HouseholdMember ], government_pension : GovernmentPension,
+        on_date : date ) -> dict[ str, MemberBenefit ]:
+    """Each member's annual Social Security on `on_date` (today's dollars), keyed by `subject_handle` and
+    split into own / spousal / survivor parts -- the couple logic exposed for a per-person view. Own is the
+    claim-adjusted benefit once claimed; the lower earner adds the spousal excess once both collect; after
+    the first death the survivor's parts are replaced by the survivor benefit (the larger of the two own
+    benefits), and a member is gone the year after their death. A member not yet collecting has empty parts;
+    a member with no entitlement yields none, except a non-earning spouse in a couple whose partner has one.
+    `household_benefits` is the per-member totals of this."""
+    active = _active_claims( members )
+    breakdown = { claim.subject_handle: MemberBenefit() for claim in active }
+    if len( active ) == 1:
+        solo = active[ 0 ]
+        if not _has_died( solo, on_date ):
+            breakdown[ solo.subject_handle ] = MemberBenefit(
+                own = _own_benefit( solo, government_pension, on_date ) )
+        return breakdown
+    if len( active ) == 2:
+        higher, lower = sorted( active, key = lambda claim: claim.pia_monthly, reverse = True )
+        higher_dead, lower_dead = _has_died( higher, on_date ), _has_died( lower, on_date )
+        if higher_dead and not lower_dead:
+            breakdown[ lower.subject_handle ] = MemberBenefit(
+                survivor = _survivor_benefit( lower, higher, government_pension, on_date ) )
+        elif lower_dead and not higher_dead:
+            breakdown[ higher.subject_handle ] = MemberBenefit(
+                survivor = _survivor_benefit( higher, lower, government_pension, on_date ) )
+        elif not higher_dead and not lower_dead:
+            breakdown[ higher.subject_handle ] = MemberBenefit(
+                own = _own_benefit( higher, government_pension, on_date ) )
+            breakdown[ lower.subject_handle ] = MemberBenefit(
+                own     = _own_benefit( lower, government_pension, on_date ),
+                spousal = _spousal_excess( lower, higher, government_pension, on_date ) )
+        # both gone: no benefit (the plan has ended).
+    return breakdown
+
+
 def household_benefits(
         members : list[ HouseholdMember ], government_pension : GovernmentPension,
         on_date : date ) -> dict[ str, Decimal ]:
-    """Each member's annual Social Security benefit (today's dollars) on `on_date`, keyed by
-    `subject_handle`: their own claim-adjusted benefit once they have claimed, plus -- for the lower earner
-    of a couple -- the spousal top-up once both are collecting. After the first death the survivor receives
-    the larger of their own and the decedent's own benefit (spousal top-ups end); a member is gone the year
-    after their death. Not-yet-collecting is 0; a member with no entitlement yields no benefit, except a
-    non-earning spouse in a couple whose partner has one."""
-    active = _active_claims( members )
-    benefits = { claim.subject_handle: Decimal( 0 ) for claim in active }
-    if len( active ) == 1:
-        if not _has_died( active[ 0 ], on_date ):
-            benefits[ active[ 0 ].subject_handle ] = _own_benefit( active[ 0 ], government_pension, on_date )
-        return benefits
-    if len( active ) == 2:
-        higher, lower = sorted( active, key = lambda claim: claim.pia_monthly, reverse = True )
-        if _has_died( higher, on_date ) and not _has_died( lower, on_date ):
-            benefits[ lower.subject_handle ] = _survivor_benefit( lower, higher, government_pension, on_date )
-        elif _has_died( lower, on_date ) and not _has_died( higher, on_date ):
-            benefits[ higher.subject_handle ] = _survivor_benefit( higher, lower, government_pension, on_date )
-        elif not _has_died( higher, on_date ) and not _has_died( lower, on_date ):
-            benefits[ higher.subject_handle ] = _own_benefit( higher, government_pension, on_date )
-            benefits[ lower.subject_handle ]  = _lower_benefit( lower, higher, government_pension, on_date )
-        # both gone: no benefit (the plan has ended).
-    return benefits
+    """Each member's total annual Social Security benefit (today's dollars) on `on_date`, keyed by
+    `subject_handle` -- the sum of their own, spousal, and survivor parts (see
+    `household_benefit_breakdown`). The forecast engine books this per interval; the calculator's
+    per-person view reads the breakdown instead."""
+    return { handle: benefit.total
+             for handle, benefit in household_benefit_breakdown(
+                 members, government_pension, on_date ).items() }
 
 
 def _has_died( claim : _Claim, on_date : date ) -> bool:
@@ -85,8 +126,9 @@ def _survivor_benefit(
         survivor : _Claim, decedent : _Claim, government_pension : GovernmentPension,
         on_date : date ) -> Decimal:
     """The survivor's benefit after the first death: the larger of their own claim-adjusted benefit (once
-    they have claimed) and the decedent's own claim-adjusted benefit -- so delaying the higher earner buys a
-    larger survivor benefit. Spousal top-ups end; a non-earning decedent (zero PIA) leaves the survivor's own."""
+    they have claimed) and the decedent's own claim-adjusted benefit -- so delaying the higher earner buys
+    a larger survivor benefit. Spousal top-ups end; a non-earning decedent (zero PIA) leaves the survivor's
+    own."""
     survivor_own = _own_benefit( survivor, government_pension, on_date )
     decedent_own = government_pension.realized_annual_benefit(
         decedent.pia_monthly, decedent.birthdate, decedent.claiming_date )
@@ -101,17 +143,17 @@ def _own_benefit( claim : _Claim, government_pension : GovernmentPension, on_dat
         claim.pia_monthly, claim.birthdate, claim.claiming_date )
 
 
-def _lower_benefit(
+def _spousal_excess(
         lower : _Claim, higher : _Claim, government_pension : GovernmentPension, on_date : date ) -> Decimal:
-    """The lower earner's benefit: their own once claimed, plus the spousal excess once both are collecting
-    (the later of the two claiming dates). The excess floors at zero (own already meets half the higher)."""
-    own = _own_benefit( lower, government_pension, on_date )
+    """The lower earner's spousal top-up -- the excess over their own benefit -- once both are collecting
+    (the later of the two claiming dates), else 0. Floors at zero when their own already meets half the
+    higher earner's."""
     excess = government_pension.spousal_excess_annual_benefit(
         higher.pia_monthly, lower.pia_monthly, lower.birthdate, lower.claiming_date )
     both_collecting = max( lower.claiming_date, higher.claiming_date )
     if excess > 0 and on_date >= both_collecting:
-        return own + excess
-    return own
+        return excess
+    return Decimal( 0 )
 
 
 def _active_claims( members : list[ HouseholdMember ] ) -> list[ _Claim ]:
