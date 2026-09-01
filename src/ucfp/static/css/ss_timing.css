@@ -87,3 +87,11 @@
     font-size: .62rem; letter-spacing: .04em; text-transform: uppercase; color: #b07d05; font-weight: 700; margin-left: .3rem;
 }
 .ss-years tfoot td { font-weight: 700; border-top: 2px solid #cdd8e2; background: #f4f7fa; }
+
+/* -- onward path (anonymous upsell) & breadcrumb -- */
+/* A slim band at the results/detail seam: the light calculators surface (matching the home band) with a
+   soft border, so it reads as a gentle nudge at a natural pause, not a card competing with the results. */
+.ss-onward {
+    background: #f4f6f7; border: 1px solid #dee2e6; border-radius: .5rem;
+}
+.ss-crumb { font-size: .9rem; }

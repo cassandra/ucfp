@@ -14,6 +14,14 @@
 {% block public_container_max_width %}1140px{% endblock %}
 
 {% block public_content %}
+{% comment %}A quiet breadcrumb back into the app for a signed-in visitor -- wayfinding, not a pitch, so it
+sits at the top rather than competing with the results. An anonymous visitor has no app to return to; their
+onward path is the upsell lower down, at the seam just after the results.{% endcomment %}
+{% if onboarding_state != 'anonymous' %}
+<nav class="ss-crumb mb-3" aria-label="breadcrumb">
+  <a href="{% url 'dashboard' %}">&larr; Dashboard</a>
+</nav>
+{% endif %}
 <div class="ss-results">
 
   <div class="row">
@@ -78,6 +86,18 @@
       </div></div>
     </div>
   </div>
+
+  {% comment %}The onward path for an anonymous visitor, placed at the seam between the results (the answer)
+  and the year-by-year detail (the supporting depth): a slim band nudging them to the full planner, since
+  claiming timing is one piece of a whole retirement plan. A signed-in visitor already has the app and gets
+  the breadcrumb up top instead.{% endcomment %}
+  {% if onboarding_state == 'anonymous' %}
+  <div class="ss-onward d-flex flex-wrap align-items-center justify-content-between mb-3 p-3">
+    <p class="mb-2 mb-sm-0 mr-sm-3">Claiming timing is one piece of your retirement. See how it fits with
+      the rest of your plan.</p>
+    <a href="{% url 'explain' %}" class="btn btn-primary text-nowrap">See how it works</a>
+  </div>
+  {% endif %}
 
   <div class="card mb-3"><div class="card-body">
     {% include "calculators/ss_timing/_detail.html" %}

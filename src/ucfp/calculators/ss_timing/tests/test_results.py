@@ -5,11 +5,16 @@ Comparison (no engine); the view tests drive the real sweep through the session.
 import json
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
+from organization.models import Organization
+
 from ucfp.calculators.ss_timing import results
 from ucfp.calculators.ss_timing.compute import Claimant, Comparison, Strategy
+
+User = get_user_model()
 
 _HIGHER = Claimant( 'Higher', 1960, Decimal( '3000' ), 85 )
 _LOWER  = Claimant( 'Lower', 1962, Decimal( '1000' ), 88 )
@@ -104,3 +109,30 @@ class ResultsRenderTest( TestCase ):
             reverse( 'calculators:ss_timing:detail', args = [ '99-99' ] ) ).status_code, 404 )
         self.assertEqual( self.client.get(                                  # single arity for a couple
             reverse( 'calculators:ss_timing:detail', args = [ '67' ] ) ).status_code, 404 )
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class ResultsPathBackTest( TestCase ):
+    """The onward path from this standalone calculator, split by purpose: an anonymous visitor gets a
+    conversion upsell to the full planner, placed at the results/detail seam; a signed-in visitor gets a
+    quiet dashboard breadcrumb at the top -- wayfinding, not a pitch."""
+
+    def _submit_and_get( self ):
+        self.client.post( reverse( 'calculators:ss_timing:inputs' ), _couple_form_data() )
+        return self.client.get( reverse( 'calculators:ss_timing:results' ) )
+
+    def test_an_anonymous_visitor_is_upsold_to_the_full_planner( self ):
+        response = self._submit_and_get()
+        self.assertContains( response, 'ss-onward' )                    # the upsell band
+        self.assertContains( response, reverse( 'explain' ) )
+        self.assertContains( response, 'See how it works' )
+        self.assertNotContains( response, 'aria-label="breadcrumb"' )   # no signed-in breadcrumb
+
+    def test_a_signed_in_visitor_gets_a_dashboard_breadcrumb( self ):
+        user = User.objects.create_user( email = 'owner@x.test', password = 'x' )
+        Organization.objects.create_for_owner( user, name = 'Mine' )
+        self.client.force_login( user )
+        response = self._submit_and_get()
+        self.assertContains( response, 'aria-label="breadcrumb"' )      # the breadcrumb nav
+        self.assertContains( response, reverse( 'dashboard' ) )
+        self.assertNotContains( response, 'ss-onward' )                 # no anonymous upsell band
