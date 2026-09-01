@@ -64,14 +64,14 @@ class HeatmapViewModelTest( SimpleTestCase ):
         self.assertEqual( rows[ 0 ].rank, 1 )
         self.assertTrue( rows[ 0 ].is_best )
         self.assertEqual( rows[ 0 ].ages, ( 70, 70 ) )
-        self.assertEqual( len( rows ), 8 )                  # _RANK_LIMIT
+        self.assertEqual( len( rows ), 10 )                 # _RANK_LIMIT
 
 
 def _couple_form_data() -> dict:
     return { 'household' : 'couple',
              's0_birth_year' : '1960', 's0_pia' : '3000', 's0_life' : '84',
              's1_birth_year' : '1962', 's1_pia' : '1200', 's1_life' : '88',
-             'cola' : '2.5', 'discount' : '2.5', 'benefits_payable' : '100' }
+             'cola' : '2.5', 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
@@ -95,7 +95,7 @@ class ResultsRenderTest( TestCase ):
             HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
         self.assertEqual( response.status_code, 200 )
         detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
-        self.assertIn( 'Household', detail )
+        self.assertIn( 'Total', detail )
         self.assertIn( 'Lifetime total', detail )
 
     def test_a_bad_or_mismatched_combo_is_not_found( self ):

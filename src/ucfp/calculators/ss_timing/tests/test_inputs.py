@@ -20,7 +20,7 @@ from ucfp.session_state import SessionState
 
 _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
 
-_ASSUMPTIONS = { 'cola' : '2.5', 'discount' : '2.5', 'benefits_payable' : '100' }
+_ASSUMPTIONS = { 'cola' : '2.5', 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
 
 
 def _single_data( ** overrides ) -> dict:
@@ -62,7 +62,7 @@ class FormMappingTest( SimpleTestCase ):
         form = InputsForm( data = _couple_data() )
         self.assertTrue( form.is_valid(), form.errors )
         claimants, assumptions = claimants_and_assumptions( form.cleaned_inputs() )
-        self.assertEqual( [ c.name for c in claimants ], [ 'You', 'Spouse or partner' ] )
+        self.assertEqual( [ c.name for c in claimants ], [ 'Individual', 'Partner' ] )
         self.assertEqual( claimants[ 0 ].birth_year, 1960 )
         self.assertEqual( claimants[ 1 ].pia_monthly, Decimal( '1200' ) )
         self.assertEqual( claimants[ 1 ].expected_lifetime, 90 )
@@ -80,7 +80,7 @@ class FormMappingTest( SimpleTestCase ):
         seeded = default_inputs( Assumptions(
             inflation = Rate( Decimal( '0.03' ) ), cola = Rate( Decimal( '0.02' ) ) ) )
         self.assertEqual( seeded[ 'household' ], HOUSEHOLD_COUPLE )
-        self.assertEqual( seeded[ 'discount' ], '3' )                # 0.03 -> '3'
+        self.assertEqual( seeded[ 'inflation' ], '3' )               # 0.03 -> '3'
         self.assertEqual( seeded[ 'cola' ], '2' )
         self.assertNotIn( 's0_birth_year', seeded )                  # people are left blank
 
@@ -124,8 +124,7 @@ class InputsViewTest( TestCase ):
     def test_a_submission_is_remembered_and_prefills_the_returning_form( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), _single_data() )
         response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
-        self.assertContains( response, 'prefilled your last entries' )
-        self.assertContains( response, 'value="1960"' )
+        self.assertContains( response, 'value="1960"' )        # the remembered birth year prefills
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
@@ -143,4 +142,4 @@ class ResultsViewTest( TestCase ):
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Top strategies' )
-        self.assertContains( response, 'Year-by-year Social Security income' )
+        self.assertContains( response, 'Lifetime total' )

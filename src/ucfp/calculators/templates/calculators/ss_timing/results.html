@@ -1,35 +1,34 @@
 {% extends "pages/base_public.html" %}
 {% load common_tags static %}
 {% comment %}
-  The Social Security timing results: household + assumptions recap, the claiming-age heatmap and ranked
-  list (click either to drill in), and the year-by-year detail for the selected strategy. The heatmap
-  cells and ranked rows carry `data-combo`; clicking swaps the detail (antinode) and moves the gold
-  selection (results.js). Context: `earners` (higher first), `is_couple`, `assumptions`, `axis_ages`,
-  `heatmap`, `ranked`, plus the detail context merged in (`strategy`, `claim_pairs`, `rows`).
+  The Social Security claiming comparison: household + assumptions recap (with an Adjust link back to the
+  inputs), the claiming-age heatmap and ranked list (click either to drill in), and the year-by-year
+  detail for the selected strategy. Cells and ranked rows carry `data-combo`; clicking swaps the detail
+  (antinode) and moves the gold selection (ss_timing.js). Present value is explained at the foot. Context:
+  `earners` (higher first), `is_couple`, `cola_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
+  `is_reduced`, `axis_ages`, `heatmap`, `ranked`, plus the merged detail context.
 {% endcomment %}
 
 {% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
-{% block page_title %}Social Security claiming strategy{% endblock %}
+{% block page_title %}Social Security claiming comparison{% endblock %}
+{% block public_container_max_width %}1140px{% endblock %}
 
 {% block public_content %}
 <div class="ss-results">
-  <p class="text-muted text-center mb-4">
-    Comparing every claiming age from 62 to 70{% if is_couple %} for both of you{% endif %} to find the
-    combination with the greatest lifetime benefit in today&rsquo;s dollars.
-  </p>
 
   <div class="row">
     <div class="col-md-7 mb-3">
       <div class="card h-100"><div class="card-body">
-        <div class="ss-eyebrow mb-2">Household</div>
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div class="ss-eyebrow">Household</div>
+          <a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-secondary btn-sm">Adjust</a>
+        </div>
         <div class="row">
           {% for earner in earners %}
             <div class="col ss-person">
-              <div class="ss-role">{% if is_couple %}{% if forloop.first %}Higher earner{% else %}Lower earner{% endif %}{% else %}You{% endif %}</div>
-              <div class="font-weight-bold">{{ earner.name }}</div>
-              <div class="text-muted small mt-1">
-                PIA ${{ earner.pia_monthly|floatformat:0 }}/mo · plan through {{ earner.expected_lifetime }}
-              </div>
+              <div class="font-weight-bold">{{ earner.name }}{% if is_couple %}
+                <span class="ss-role">· {% if forloop.first %}higher earner{% else %}lower earner{% endif %}</span>{% endif %}</div>
+              <div class="text-muted small mt-1">PIA ${{ earner.pia_monthly|floatformat:0 }}/mo · through age {{ earner.expected_lifetime }}</div>
             </div>
           {% endfor %}
         </div>
@@ -38,13 +37,9 @@
     <div class="col-md-5 mb-3">
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-2">Assumptions</div>
-        <span class="ss-chip"><span class="k">COLA</span><b>{{ cola_pct }}</b></span>
-        <span class="ss-chip"><span class="k">PV discount</span><b>{{ discount_pct }}</b></span>
-        <span class="ss-chip"><span class="k">Benefits payable</span><b>{{ payable_pct }}</b></span>
-        <p class="text-muted small mt-2 mb-0">
-          Benefits grow with the COLA and are discounted to present value at inflation &mdash; the same
-          assumptions your forecast runs under.
-        </p>
+        <span class="ss-chip"><span class="k">SS adjustment</span><b>{{ cola_pct }}</b></span>
+        <span class="ss-chip"><span class="k">Inflation</span><b>{{ inflation_pct }}</b></span>
+        {% if is_reduced %}<span class="ss-chip"><span class="k">Benefits</span><b>{{ payable_pct }} from {{ reduction_year }}</b></span>{% endif %}
       </div></div>
     </div>
   </div>
@@ -52,46 +47,49 @@
   <div class="row">
     <div class="col-lg-8 mb-3">
       <div class="card h-100"><div class="card-body">
-        <div class="ss-eyebrow mb-1">Lifetime benefit by claiming age{% if is_couple %}s{% endif %}
-          <span class="text-muted font-weight-normal">&mdash; present value, deeper is more</span></div>
+        <div class="ss-eyebrow mb-1">Lifetime benefit by claiming age{% if is_couple %}s{% endif %}</div>
         {% include "calculators/ss_timing/_heatmap.html" %}
         <div class="ss-hm-legend"><span>Lower</span><span class="bar"></span><span>Higher</span>
-          <span class="ml-auto" style="color:#b07d05">&#9733; best &middot; click any cell</span></div>
+          <span class="ml-auto" style="color:#b07d05">&#9733; best · click any cell</span></div>
       </div></div>
     </div>
     <div class="col-lg-4 mb-3">
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-2">Top strategies</div>
-        <table class="ss-rank">
-          <thead><tr>
-            <th></th>{% for earner in earners %}<th>{{ earner.name }}</th>{% endfor %}<th class="num">PV total</th>
-          </tr></thead>
-          <tbody>
-            {% for row in ranked %}
-              <tr class="rank-row{% if row.is_best %} best{% endif %}{% if row.is_selected %} sel{% endif %}"
-                  data-combo="{{ row.combo }}">
-                <td class="rk">{{ row.rank }}</td>
-                {% for age in row.ages %}<td>{{ age }}</td>{% endfor %}
-                <td class="num">${{ row.present_value|floatformat:0 }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="ss-rank">
+            <thead><tr>
+              <th></th>{% for earner in earners %}<th>{{ earner.name }}</th>{% endfor %}
+              <th class="num">Total</th><th class="num">PV</th>
+            </tr></thead>
+            <tbody>
+              {% for row in ranked %}
+                <tr class="rank-row{% if row.is_best %} best{% endif %}{% if row.is_selected %} sel{% endif %}"
+                    data-combo="{{ row.combo }}">
+                  <td class="rk">{{ row.rank }}</td>
+                  {% for age in row.ages %}<td>{{ age }}</td>{% endfor %}
+                  <td class="num">${{ row.raw_total|floatformat:0 }}</td>
+                  <td class="num">${{ row.present_value|floatformat:0 }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div></div>
     </div>
   </div>
 
   <div class="card mb-3"><div class="card-body">
-    <div class="ss-eyebrow mb-2">Year-by-year Social Security income</div>
     {% include "calculators/ss_timing/_detail.html" %}
-    <p class="text-muted small mt-2 mb-0">
-      Income only &mdash; this comparison never touches taxes, assets, or your saved runs.
-      {% if is_couple %}The highlighted row is the first death, where the survivor steps up to the larger
-      of the two benefits.{% endif %}
-    </p>
   </div></div>
 
-  <a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-primary">Change your entries</a>
+  <p class="text-muted small">
+    <strong>Total</strong> is the sum of every year&rsquo;s benefit as paid (grown by the SS adjustment).
+    <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars by discounting each future
+    year at inflation, so money far in the future counts for what it is worth now &mdash; a fairer basis
+    for weighing an earlier, smaller stream against a later, larger one. Neither is more
+    &ldquo;correct&rdquo;; use whichever matches how you think about future money.
+  </p>
 </div>
 
 <script src="{% static 'js/ss_timing.js' %}"></script>

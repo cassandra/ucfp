@@ -68,10 +68,14 @@
 .ss-rank .rk { color: #8996a4; font-weight: 600; }
 
 /* -- year-by-year detail -- */
+.ss-years-scroll {
+    max-height: 460px; overflow: auto; border: 1px solid #e6ebf0; border-radius: .5rem;
+}
 .ss-years { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
 .ss-years th {
     text-align: right; font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; color: #8996a4;
-    font-weight: 600; padding: .55rem .8rem; border-bottom: 1px solid #e6ebf0; white-space: nowrap; background: #f4f7fa;
+    font-weight: 600; padding: .55rem .8rem; border-bottom: 1px solid #e6ebf0; white-space: nowrap;
+    background: #f4f7fa; position: sticky; top: 0; z-index: 1;   /* headers stay visible on scroll */
 }
 .ss-years th:first-child, .ss-years td:first-child { text-align: left; }
 .ss-years td { text-align: right; padding: .4rem .8rem; border-bottom: 1px solid #eef1f4; white-space: nowrap; }

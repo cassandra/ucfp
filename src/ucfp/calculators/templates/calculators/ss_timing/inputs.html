@@ -3,8 +3,8 @@
 {% comment %}
   The login-free Social Security claiming calculator inputs. Collects one or two people (birth year, PIA,
   expected lifetime) and the economic assumptions, then posts to itself; on success it redirects to the
-  results. Fields are styled by StyledFormMixin. A small script hides the partner card for a "Just me"
-  household. The #235 "Estimate" helper on each PIA field is wired in a later phase.
+  results. A small script hides the partner card for a one-person household and initialises the year-only
+  birth-year picker (bootstrap-datepicker, loaded globally).
 {% endcomment %}
 
 {% block head_title %}Social Security claiming calculator · {% settings_value 'SITE_NAME' %}{% endblock %}
@@ -12,27 +12,19 @@
 
 {% block public_content %}
 <p class="text-muted text-center mb-4">
-  Compare every claiming age from 62 to 70 to see which gives the most in lifetime benefits. No account
-  needed &mdash; fill in a few details and we&rsquo;ll do the math.
+  Compare the lifetime Social Security benefit for each claiming age from 62 to 70.
 </p>
 
-{% if remembered %}
+{% if from_profile %}
   <div class="alert alert-info" role="status">
-    We&rsquo;ve prefilled your last entries on this device. Change anything to explore a what-if.
-  </div>
-{% elif from_profile %}
-  <div class="alert alert-info" role="status">
-    Prefilled from your profile and {{ assumptions_source }}. Nothing here changes your saved data
-    &mdash; just add each person&rsquo;s expected lifetime to run the comparison.
+    Prefilled from your profile and {{ assumptions_source }} &mdash; add each person&rsquo;s expected
+    lifetime to run the comparison. Nothing here changes your saved data.
   </div>
 {% endif %}
 
 <form method="post" data-synchronous="true" novalidate>
   {% csrf_token %}
-
-  {% if form.non_field_errors %}
-    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-  {% endif %}
+  {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
 
   <fieldset class="form-group">
     <legend class="h6">Who&rsquo;s planning?</legend>
@@ -46,55 +38,58 @@
   </fieldset>
 
   <div class="card-deck">
-    <div class="card" id="person-0">
-      <div class="card-body">
-        <h2 class="h6 text-muted">You (primary)</h2>
-        {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life index=0 %}
-      </div>
-    </div>
-    <div class="card" id="person-1">
-      <div class="card-body">
-        <h2 class="h6 text-muted">Spouse or partner</h2>
-        {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life index=1 %}
-      </div>
-    </div>
+    <div class="card" id="person-0"><div class="card-body">
+      <h2 class="h6 text-muted">Individual</h2>
+      {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life index=0 %}
+    </div></div>
+    <div class="card" id="person-1"><div class="card-body">
+      <h2 class="h6 text-muted">Partner</h2>
+      {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life index=1 %}
+    </div></div>
   </div>
 
-  <details class="mt-4">
-    <summary class="h6">Economic assumptions
-      {% if assumptions_source %}<small class="text-muted font-weight-normal">&mdash; {{ assumptions_source }}</small>{% endif %}
-    </summary>
-    <div class="form-row mt-3">
-      <div class="form-group col-md-4">
+  <div class="card mt-4"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="h6 mb-0">Economic assumptions</h2>
+      {% if assumptions_source %}<small class="text-muted">{{ assumptions_source }}</small>{% endif %}
+    </div>
+    <div class="form-row">
+      <div class="form-group col-sm-6 col-md-4">
         <label for="{{ form.cola.id_for_label }}">{{ form.cola.label }}</label>
         {{ form.cola }}
-        <small class="form-text text-muted">Cost-of-living raise on benefits.</small>
-        {{ form.cola.errors }}
+        {% include "calculators/ss_timing/_field_errors.html" with field=form.cola %}
       </div>
-      <div class="form-group col-md-4">
-        <label for="{{ form.discount.id_for_label }}">{{ form.discount.label }}</label>
-        {{ form.discount }}
-        <small class="form-text text-muted">Discounts future dollars to today.</small>
-        {{ form.discount.errors }}
-      </div>
-      <div class="form-group col-md-4">
-        <label for="{{ form.benefits_payable.id_for_label }}">{{ form.benefits_payable.label }}</label>
-        {{ form.benefits_payable }}
-        <small class="form-text text-muted">100% = no funding reduction.</small>
-        {{ form.benefits_payable.errors }}
+      <div class="form-group col-sm-6 col-md-4">
+        <label for="{{ form.inflation.id_for_label }}">{{ form.inflation.label }}</label>
+        {{ form.inflation }}
+        {% include "calculators/ss_timing/_field_errors.html" with field=form.inflation %}
       </div>
     </div>
-  </details>
+    <div class="form-group mb-0">
+      <label class="mb-1">Funding reduction</label>
+      <div class="form-inline">
+        <span class="mr-2">Reduce benefits to</span>
+        <div style="max-width:8rem">{{ form.benefits_payable }}</div>
+        <span class="mx-2">starting in</span>
+        <div style="max-width:6.5rem">{{ form.reduction_year }}</div>
+      </div>
+      {% include "calculators/ss_timing/_field_errors.html" with field=form.benefits_payable %}
+      {% include "calculators/ss_timing/_field_errors.html" with field=form.reduction_year %}
+      <small class="form-text text-muted">
+        Social Security&rsquo;s trust funds are projected to run short in the 2030s; without action,
+        scheduled benefits could be cut. Model that here &mdash; 100% leaves benefits unreduced.
+      </small>
+    </div>
+  </div></div>
 
   <div class="mt-4">
     <button type="submit" class="btn btn-primary btn-lg">Compare claiming ages</button>
-    <span class="form-text text-muted d-inline-block ml-2">We&rsquo;ll remember your entries on this device.</span>
   </div>
 </form>
 
 <script>
   ( function () {
-    var choice = document.getElementById( 'household-choice' );
+    var choice  = document.getElementById( 'household-choice' );
     var partner = document.getElementById( 'person-1' );
     function sync() {
       var selected = choice.querySelector( 'input:checked' );
@@ -102,6 +97,11 @@
     }
     choice.addEventListener( 'change', sync );
     sync();
+    if ( window.jQuery && jQuery.fn.datepicker ) {
+      jQuery( '.js-year-picker' ).datepicker( {
+        format: 'yyyy', minViewMode: 'years', maxViewMode: 'years',
+        autoclose: true, startDate: '1900', endDate: new Date() } );
+    }
   } )();
 </script>
 {% endblock %}

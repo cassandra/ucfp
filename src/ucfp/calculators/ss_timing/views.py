@@ -15,6 +15,7 @@ from django.views.generic import View
 
 from common import antinode
 from common.async_view import ModalView
+from common.rate import FULL_RATE
 from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
 
@@ -74,12 +75,14 @@ class ResultsView( View ):
         selected   = comparison.best
         combo      = results.combo_of( selected.claim_ages )
         context    = {
-            'axis_ages'   : CLAIM_AGES,
-            'cola_pct'    : _percent( assumptions.cola ),
-            'discount_pct': _percent( assumptions.inflation ),
-            'payable_pct' : _percent( assumptions.benefits_payable ),
-            'heatmap'     : results.heatmap( comparison, combo ),
-            'ranked'      : results.ranked( comparison, combo ) }
+            'axis_ages'      : CLAIM_AGES,
+            'cola_pct'       : _percent( assumptions.cola ),
+            'inflation_pct'  : _percent( assumptions.inflation ),
+            'payable_pct'    : _percent( assumptions.benefits_payable ),
+            'reduction_year' : assumptions.reduction_year,
+            'is_reduced'     : assumptions.benefits_payable != FULL_RATE,
+            'heatmap'        : results.heatmap( comparison, combo ),
+            'ranked'         : results.ranked( comparison, combo ) }
         context.update( _detail_context( comparison.claimants, selected ) )
         return render( request, self.template_name, context )
 

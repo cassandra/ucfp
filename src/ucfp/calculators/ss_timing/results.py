@@ -12,19 +12,20 @@ from typing import Optional
 
 from .compute import CLAIM_AGES, Comparison
 
-_HEAT_BUCKETS = 7    # sequential-ramp intensity levels (matched by the .hm-b0..6 classes in the stylesheet)
-_RANK_LIMIT   = 8    # rows in the "Top strategies" list
+_HEAT_BUCKETS = 7     # sequential-ramp intensity levels (matched by the .hm-b0..6 classes in the stylesheet)
+_RANK_LIMIT   = 10    # rows in the "Top strategies" list
 
 
 @dataclass( frozen = True )
 class HeatCell:
-    """One heatmap cell: a claiming combination, its lifetime present value, and its ramp `bucket`
-    (0 lowest .. `_HEAT_BUCKETS`-1 highest). `combo` keys the drill-in; `is_best` marks the optimum,
-    `is_selected` the cell whose detail is shown."""
+    """One heatmap cell: a claiming combination, its lifetime totals (nominal `raw_total` and
+    `present_value`), and its ramp `bucket` (0 lowest .. `_HEAT_BUCKETS`-1 highest, shaded by present
+    value). `combo` keys the drill-in; `is_best` marks the optimum, `is_selected` the shown cell."""
 
     combo         : str
     higher_age    : int
     lower_age     : Optional[ int ]
+    raw_total     : Decimal
     present_value : Decimal
     bucket        : int
     is_best       : bool
@@ -33,12 +34,14 @@ class HeatCell:
 
 @dataclass( frozen = True )
 class RankRow:
-    """One row of the ranked list: its `rank` (1 = best), the claiming `ages` (higher first), and the
-    lifetime present value. `combo` keys the drill-in; `is_best` / `is_selected` mirror the heatmap."""
+    """One row of the ranked list: its `rank` (1 = best), the claiming `ages` (higher first), and both
+    lifetime totals (`raw_total` and `present_value`). `combo` keys the drill-in; `is_best` /
+    `is_selected` mirror the heatmap."""
 
     rank          : int
     combo         : str
     ages          : tuple[ int, ... ]
+    raw_total     : Decimal
     present_value : Decimal
     is_best       : bool
     is_selected   : bool
@@ -70,7 +73,7 @@ def ranked( comparison : Comparison, selected_combo : str ) -> list[ RankRow ]:
         combo = combo_of( strategy.claim_ages )
         rows.append( RankRow(
             rank = rank, combo = combo, ages = strategy.claim_ages,
-            present_value = strategy.present_value,
+            raw_total = strategy.raw_total, present_value = strategy.present_value,
             is_best = combo == best, is_selected = combo == selected_combo ) )
     return rows
 
@@ -82,6 +85,7 @@ def _cell( claim_ages, by_combo, bucket, best_combo, selected_combo ) -> HeatCel
         combo         = combo,
         higher_age    = claim_ages[ 0 ],
         lower_age     = claim_ages[ 1 ] if len( claim_ages ) == 2 else None,
+        raw_total     = strategy.raw_total,
         present_value = strategy.present_value,
         bucket        = bucket( strategy.present_value ),
         is_best       = combo == best_combo,

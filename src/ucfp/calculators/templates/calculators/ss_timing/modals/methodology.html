@@ -1,17 +1,19 @@
-{% extends "modals/action_with_cancel.html" %}
+{% extends "modals/action_done.html" %}
 {% comment %}
   The "how this is calculated" modal for the selected strategy: the SSA terms and their values (from the
   jurisdiction facade, so they match the ranked numbers). Opened from the detail's button (data-async=modal);
-  the Cancel control dismisses it. Context: `terms`, `claim_pairs`, `reference_url`.
+  the centred DONE button (from the action_done base) dismisses it. Context: `terms`, `claim_pairs`,
+  `reference_url`.
 {% endcomment %}
+
+{% block modal_dialog_class %}modal-lg{% endblock %}
 
 {% block title_text %}How this is calculated{% endblock %}
 
 {% block body %}
-<p class="text-muted small">
-  For the selected strategy &mdash;
-  {% for earner, age in claim_pairs %}{{ earner.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}{% endfor %}.
-</p>
+<h5 class="mb-3">
+  {% for earner, age in claim_pairs %}{{ earner.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}{% endfor %}
+</h5>
 <div class="table-responsive">
   <table class="table table-sm mb-0">
     <thead>
@@ -32,8 +34,8 @@
   </table>
 </div>
 <p class="text-muted small mt-3 mb-0">
-  Terms and reduction factors follow SSA policy &mdash;
-  see <a href="{{ reference_url }}" target="_blank" rel="noopener">ssa.gov</a>. Benefits are shown in
-  today&rsquo;s dollars before the COLA and any funding reduction, which the comparison applies each year.
+  These are today&rsquo;s-dollar amounts, before the annual SS adjustment. The reduction and delayed-credit
+  factors follow SSA policy &mdash; see
+  <a href="{{ reference_url }}" target="_blank" rel="noopener">SSA&rsquo;s benefit-reduction rules on ssa.gov</a>.
 </p>
 {% endblock %}

@@ -5,5 +5,5 @@
 <a class="ss-hm-cell hm-b{{ cell.bucket }}{% if cell.is_best %} best{% endif %}{% if cell.is_selected %} sel{% endif %}"
    data-combo="{{ cell.combo }}" data-async="#ss-detail"
    href="{% url 'calculators:ss_timing:detail' cell.combo %}"
-   aria-label="{% if cell.lower_age %}Higher earner claims at {{ cell.higher_age }}, lower at {{ cell.lower_age }}{% else %}Claim at {{ cell.higher_age }}{% endif %}, present value ${{ cell.present_value|floatformat:0 }}"
-   title="{% if cell.lower_age %}Higher {{ cell.higher_age }}, lower {{ cell.lower_age }}{% else %}Age {{ cell.higher_age }}{% endif %} — ${{ cell.present_value|floatformat:0 }} PV"></a>
+   aria-label="{% if cell.lower_age %}Higher earner claims at {{ cell.higher_age }}, lower at {{ cell.lower_age }}{% else %}Claim at {{ cell.higher_age }}{% endif %}, total ${{ cell.raw_total|floatformat:0 }}, present value ${{ cell.present_value|floatformat:0 }}"
+   title="{% if cell.lower_age %}Higher {{ cell.higher_age }}, lower {{ cell.lower_age }}{% else %}Age {{ cell.higher_age }}{% endif %} — Total ${{ cell.raw_total|floatformat:0 }} · PV ${{ cell.present_value|floatformat:0 }}"></a>

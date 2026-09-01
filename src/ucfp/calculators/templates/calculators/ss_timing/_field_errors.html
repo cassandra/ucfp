@@ -1,0 +1,2 @@
+{% comment %}A field's validation errors in danger styling. Context: `field` (a bound form field).{% endcomment %}
+{% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
