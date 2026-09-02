@@ -2,10 +2,11 @@
 {% load common_tags %}
 {% comment %}
   The login-free Social Security claiming calculator inputs. Collects one or two people (birth year, PIA,
-  expected lifetime) and the economic assumptions (inflation, expected asset return, funding reduction),
-  then posts to itself; on success it redirects to the results. ss_timing.js (bundled) hides the partner
-  column for a one-person household, initialises the year-only birth-year picker, keeps the asset-return
-  "above inflation" and default hints in sync, and focuses the error summary on a failed submit.
+  and either an estimated or a specific life expectancy) and the economic assumptions (inflation, expected
+  asset return, funding reduction), then posts to itself; on success it redirects to the results.
+  ss_timing.js (bundled) hides the partner column for a one-person household, initialises the year-only
+  birth-year picker, keeps the asset-return hints in sync, and focuses the error summary on a failed
+  submit; the life-expectancy mode reveal is the shared inputs.js js-switch, not bespoke here.
 {% endcomment %}
 
 {% block head_title %}Social Security claiming calculator · {% settings_value 'SITE_NAME' %}{% endblock %}
