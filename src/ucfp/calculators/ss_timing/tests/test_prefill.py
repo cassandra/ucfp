@@ -204,7 +204,8 @@ class PrefillThroughTheViewTest( TestCase ):
         # People are facts: a signed-in visitor's Profile is authoritative, so a prior what-if session
         # entry never overrides it. (The assumption knobs, being what-ifs, are still remembered.)
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
-            'household' : 'single', 's0_birth_year' : '1955', 's0_pia' : '900', 's0_life' : '85',
+            'household' : 'single', 'life_expectancy_mode' : 'specific',
+            's0_birth_year' : '1955', 's0_pia' : '900', 's0_life' : '85',
             'inflation' : '2.5', 'expected_return' : '4.5',
             'benefits_payable' : '100', 'reduction_year' : '2033' } )
         response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
@@ -214,7 +215,7 @@ class PrefillThroughTheViewTest( TestCase ):
 
     def test_submitting_does_not_change_the_saved_profile( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
-            'household' : 'couple',
+            'household' : 'couple', 'life_expectancy_mode' : 'specific',
             's0_birth_year' : '1900', 's0_pia' : '1', 's0_life' : '70',
             's1_birth_year' : '1901', 's1_pia' : '2', 's1_life' : '71',
             'inflation' : '9', 'expected_return' : '11',

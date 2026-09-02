@@ -100,6 +100,10 @@ def _people_from_facts( facts ) -> tuple[ dict, str, bool ]:
             initial[ f's{index}_pia' ] = str( person.government_pension_monthly )
         if person.life_expectancy is not None:
             initial[ f's{index}_life' ] = person.life_expectancy
+        if person.sex is not None:
+            initial[ f's{index}_sex' ] = person.sex
+        if person.longevity_setback is not None:
+            initial[ f's{index}_longevity' ] = str( person.longevity_setback )
     household = HOUSEHOLD_COUPLE if facts.is_couple else HOUSEHOLD_SINGLE
     return initial, household, False
 

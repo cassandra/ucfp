@@ -16,9 +16,10 @@ from django import forms
 from common.forms import MoneyField, PercentField, StyledFormMixin
 from common.rate import Rate
 
+from ucfp.environment.constants import AppConst
 from ucfp.session_facts import PersonFacts, SessionFacts
 
-from .compute import EARLIEST_CLAIM_AGE, Assumptions, Claimant
+from .compute import EARLIEST_CLAIM_AGE, Assumptions, Claimant, LifeExpectancyBasis, Sex
 
 HOUSEHOLD_SINGLE = 'single'
 HOUSEHOLD_COUPLE = 'couple'
@@ -28,6 +29,26 @@ _HOUSEHOLD_CHOICES = [ ( HOUSEHOLD_SINGLE, 'One person' ),
 # derived by PIA in the compute core, so a person keeps its identity whichever way the earners sort.
 _PERSON_NAMES  = ( 'Individual', 'Partner' )
 _OLDEST_AGE    = 120
+
+# How long each person is assumed to live -- the household-level choice that drives the `js-switch` on the
+# form (estimate from the mortality tables, or enter a specific age each). Actuarial is the default.
+LIFE_MODE_ACTUARIAL = 'actuarial'
+LIFE_MODE_SPECIFIC  = 'specific'
+_LIFE_MODE_CHOICES  = [ ( LIFE_MODE_ACTUARIAL, 'Estimate it for me' ),
+                        ( LIFE_MODE_SPECIFIC, 'Enter specific ages' ) ]
+
+# The longevity radio (actuarial mode): how a person expects to differ from average, carried as the
+# mortality setback in years the compute core applies (positive = frailer / shorter life). Average is the
+# default; Shorter / Longer shift by a few years so the estimate is calibratable without a specific age.
+_LONGEVITY_SETBACK = 3
+_LONGEVITY_AVERAGE = '0'
+_LONGEVITY_CHOICES = [ ( str( _LONGEVITY_SETBACK ), 'Shorter' ),
+                       ( _LONGEVITY_AVERAGE, 'Average' ),
+                       ( str( -_LONGEVITY_SETBACK ), 'Longer' ) ]
+
+# The mortality-table radio (actuarial mode), framed as which table to read rather than a demographic
+# question: neither option is preselected, so leaving it blank blends the male and female curves.
+_SEX_CHOICES = [ ( Sex.FEMALE.value, 'Female' ), ( Sex.MALE.value, 'Male' ) ]
 
 
 def _year_widget() -> forms.TextInput:
@@ -55,17 +76,33 @@ class InputsForm( StyledFormMixin, forms.Form ):
 
     household        = forms.ChoiceField( choices = _HOUSEHOLD_CHOICES, initial = HOUSEHOLD_COUPLE,
                                           widget = forms.RadioSelect )
+    # The life-expectancy mode is the js-switch control (see the switch guidelines in inputs.js): its value
+    # reveals the actuarial radios or the specific-age field per person. Expected lifetime is required in
+    # `clean` only under the specific mode, so switching to the estimate never walls on a blank age.
+    life_expectancy_mode = forms.ChoiceField(
+        choices = _LIFE_MODE_CHOICES, initial = LIFE_MODE_ACTUARIAL,
+        widget = forms.RadioSelect( attrs = { 'class': AppConst.SWITCH_CONTROL_CLASS } ) )
     s0_birth_year    = forms.IntegerField( label = 'Birth year', min_value = 1900, widget = _year_widget() )
     s0_pia           = MoneyField( label = 'Benefit at full retirement age (PIA)',
                                    min_value = Decimal( '0' ) )
-    s0_life          = forms.IntegerField( label = 'Expected lifetime',
+    s0_life          = forms.IntegerField( label = 'Expected lifetime', required = False,
                                            min_value = EARLIEST_CLAIM_AGE, max_value = _OLDEST_AGE )
+    s0_sex           = forms.ChoiceField( label = 'Mortality table', choices = _SEX_CHOICES,
+                                          required = False, widget = forms.RadioSelect )
+    s0_longevity     = forms.ChoiceField( label = 'Life expectancy', choices = _LONGEVITY_CHOICES,
+                                          required = False, initial = _LONGEVITY_AVERAGE,
+                                          widget = forms.RadioSelect )
     s1_birth_year    = forms.IntegerField( label = 'Birth year', min_value = 1900, required = False,
                                            widget = _year_widget() )
     s1_pia           = MoneyField( label = 'Benefit at full retirement age (PIA)',
                                    min_value = Decimal( '0' ), required = False )
     s1_life          = forms.IntegerField( label = 'Expected lifetime', min_value = EARLIEST_CLAIM_AGE,
                                            max_value = _OLDEST_AGE, required = False )
+    s1_sex           = forms.ChoiceField( label = 'Mortality table', choices = _SEX_CHOICES,
+                                          required = False, widget = forms.RadioSelect )
+    s1_longevity     = forms.ChoiceField( label = 'Life expectancy', choices = _LONGEVITY_CHOICES,
+                                          required = False, initial = _LONGEVITY_AVERAGE,
+                                          widget = forms.RadioSelect )
     inflation        = PercentField( label = 'Inflation', min_value = Decimal( '0' ) )
     expected_return  = PercentField( label = 'Expected asset return', min_value = Decimal( '0' ) )
     benefits_payable = PercentField( label = 'Reduce benefits to', min_value = Decimal( '0' ),
@@ -74,12 +111,21 @@ class InputsForm( StyledFormMixin, forms.Form ):
 
     def clean( self ) -> dict:
         """Enforce the couple's partner fields and reject a future birth year -- rules that span fields or
-        need today's date, so they live here rather than on a single field."""
-        cleaned = super().clean()
-        if cleaned.get( 'household' ) == HOUSEHOLD_COUPLE:
-            for part in ( 'birth_year', 'pia', 'life' ):
+        need today's date, so they live here rather than on a single field. The expected lifetime is
+        required only under the specific-age mode; the actuarial mode derives it from the mortality tables,
+        so its fields stay blank without a validation wall."""
+        cleaned   = super().clean()
+        is_couple = cleaned.get( 'household' ) == HOUSEHOLD_COUPLE
+        specific  = cleaned.get( 'life_expectancy_mode' ) == LIFE_MODE_SPECIFIC
+        if is_couple:
+            for part in ( 'birth_year', 'pia' ):
                 if cleaned.get( f's1_{part}' ) in ( None, '' ):
                     self.add_error( f's1_{part}', 'Enter this for the partner.' )
+        if specific:
+            if cleaned.get( 's0_life' ) in ( None, '' ):
+                self.add_error( 's0_life', 'Enter an expected lifetime.' )
+            if is_couple and cleaned.get( 's1_life' ) in ( None, '' ):
+                self.add_error( 's1_life', 'Enter this for the partner.' )
         this_year = date.today().year
         for field_name in ( 's0_birth_year', 's1_birth_year' ):
             birth_year = cleaned.get( field_name )
@@ -107,17 +153,21 @@ class InputsForm( StyledFormMixin, forms.Form ):
         return PersonFacts(
             birth_year                 = data[ f's{index}_birth_year' ],
             government_pension_monthly = data[ f's{index}_pia' ],
-            life_expectancy            = data[ f's{index}_life' ] )
+            life_expectancy            = data.get( f's{index}_life' ),
+            sex                        = data.get( f's{index}_sex' ) or None,
+            longevity_setback          = _setback_of( data.get( f's{index}_longevity' ) ) )
 
     def assumptions_inputs( self ) -> dict:
         """The validated run assumptions as a JSON-serializable dict (percents stringified) -- the
-        SS-specific session slot, re-read as this form's next prefill and the results' economic inputs."""
+        SS-specific session slot, re-read as this form's next prefill and the results' economic inputs.
+        Carries the life-expectancy mode too, since it steers how the results are computed."""
         data = self.cleaned_data
         return {
-            'inflation'        : str( data[ 'inflation' ] ),
-            'expected_return'  : str( data[ 'expected_return' ] ),
-            'benefits_payable' : str( data[ 'benefits_payable' ] ),
-            'reduction_year'   : data[ 'reduction_year' ] }
+            'inflation'            : str( data[ 'inflation' ] ),
+            'expected_return'      : str( data[ 'expected_return' ] ),
+            'benefits_payable'     : str( data[ 'benefits_payable' ] ),
+            'reduction_year'       : data[ 'reduction_year' ],
+            'life_expectancy_mode' : data[ 'life_expectancy_mode' ] }
 
     def flag_invalid_fields( self ) -> None:
         """Mark each erroring field's widget invalid for re-render: Bootstrap `is-invalid` (so the error
@@ -133,55 +183,71 @@ class InputsForm( StyledFormMixin, forms.Form ):
             attrs[ 'aria-describedby' ] = f'{ self[ name ].auto_id }-errors'
 
 
-# The per-person facts a claimant needs, and the run-assumption keys -- the completeness contract the
+# The per-person facts a claimant always needs, and the run-assumption keys -- the completeness contract the
 # results views gate on (see `is_runnable`). They mirror what `_claimant` and `claimants_and_assumptions`
-# read below, so an incomplete household never reaches the unguarded int()/Decimal() conversions.
-_CLAIMANT_FACTS  = ( 'birth_year', 'government_pension_monthly', 'life_expectancy' )
-_ASSUMPTION_KEYS = ( 'inflation', 'benefits_payable', 'reduction_year' )
+# read below, so an incomplete household never reaches the unguarded int()/Decimal() conversions. The
+# expected lifetime is required on top of these only under the specific-age mode (the actuarial mode derives
+# it), so it is checked separately rather than listed here.
+_CORE_CLAIMANT_FACTS = ( 'birth_year', 'government_pension_monthly' )
+_ASSUMPTION_KEYS     = ( 'inflation', 'benefits_payable', 'reduction_year' )
 
 
 def is_runnable( facts : SessionFacts, assumptions_inputs : dict ) -> bool:
     """Whether the stored session facts and assumptions form a household the sweep can actually run: one or
-    two people, each carrying every claiming fact, and all three run assumptions present. `SessionFacts` is
-    a neutral, cross-tool bag, so another tool could leave a partial or oversized household here; the public
-    results and drill-in views gate on this to send such a visit back to the form rather than erroring
-    mid-compute."""
+    two people, each carrying every claiming fact the mode needs (the expected lifetime only in specific
+    mode), and all three run assumptions present. `SessionFacts` is a neutral, cross-tool bag, so another
+    tool could leave a partial or oversized household here; the public results and drill-in views gate on
+    this to send such a visit back to the form rather than erroring mid-compute."""
     if len( facts.people ) not in ( 1, 2 ):
         return False
-    if not all( _person_is_complete( person ) for person in facts.people ):
+    specific = _stored_mode( assumptions_inputs ) == LIFE_MODE_SPECIFIC
+    if not all( _person_is_complete( person, specific ) for person in facts.people ):
         return False
     return all( assumptions_inputs.get( key ) not in ( None, '' ) for key in _ASSUMPTION_KEYS )
 
 
-def _person_is_complete( person : PersonFacts ) -> bool:
-    return all( getattr( person, fact ) is not None for fact in _CLAIMANT_FACTS )
+def _person_is_complete( person : PersonFacts, specific : bool ) -> bool:
+    facts = _CORE_CLAIMANT_FACTS + ( ( 'life_expectancy', ) if specific else () )
+    return all( getattr( person, fact ) is not None for fact in facts )
 
 
-def claimants_and_assumptions( facts : SessionFacts,
-                               assumptions_inputs : dict ) -> tuple[ list[ Claimant ], Assumptions ]:
+def _stored_mode( assumptions_inputs : dict ) -> str:
+    """The life-expectancy mode stored for a session, defaulting to specific for a session written before
+    the mode existed (its behavior then) -- a fresh form seeds actuarial via `default_inputs` instead."""
+    return assumptions_inputs.get( 'life_expectancy_mode' ) or LIFE_MODE_SPECIFIC
+
+
+def claimants_and_assumptions(
+        facts : SessionFacts,
+        assumptions_inputs : dict ) -> tuple[ list[ Claimant ], Assumptions, LifeExpectancyBasis ]:
     """The compute core's typed inputs from the stored session slots: a `Claimant` per person in `facts`
-    (higher earner derived later, in the compute core) and the `Assumptions` from the stored rates and the
-    funding reduction. Assumes a runnable household (see `is_runnable`), which the views verify first."""
+    (higher earner derived later, in the compute core), the `Assumptions` from the stored rates and the
+    funding reduction, and the `LifeExpectancyBasis` the stored mode selects. Assumes a runnable household
+    (see `is_runnable`), which the views verify first."""
+    basis       = ( LifeExpectancyBasis.ACTUARIAL if _stored_mode( assumptions_inputs ) == LIFE_MODE_ACTUARIAL
+                    else LifeExpectancyBasis.SPECIFIC )
     claimants   = [ _claimant( person, index ) for index, person in enumerate( facts.people ) ]
     assumptions = Assumptions.from_inflation(
         inflation        = _rate_from_percent( assumptions_inputs[ 'inflation' ] ),
         benefits_payable = _rate_from_percent( assumptions_inputs[ 'benefits_payable' ] ),
         reduction_year   = int( assumptions_inputs[ 'reduction_year' ] ),
         expected_return  = _optional_rate_from_percent( assumptions_inputs.get( 'expected_return' ) ) )
-    return claimants, assumptions
+    return claimants, assumptions, basis
 
 
 def default_inputs( assumptions : Assumptions ) -> dict:
     """The blank form's prefill: a couple household with empty people and the assumption fields seeded from
     `assumptions` (the anonymous system defaults, or a signed-in scenario's -- resolved by the caller). The
-    expected return defaults to a conservative safe real rate above inflation (see
-    `_default_expected_return_percent`); the people are left for the visitor to fill."""
+    life-expectancy mode defaults to the actuarial estimate (the product default); the expected return
+    defaults to a conservative safe real rate above inflation (see `_default_expected_return_percent`); the
+    people are left for the visitor to fill."""
     return {
-        'household'        : HOUSEHOLD_COUPLE,
-        'inflation'        : _percent_from_rate( assumptions.inflation ),
-        'expected_return'  : _default_expected_return_percent( assumptions.inflation ),
-        'benefits_payable' : _percent_from_rate( assumptions.benefits_payable ),
-        'reduction_year'   : assumptions.reduction_year }
+        'household'            : HOUSEHOLD_COUPLE,
+        'life_expectancy_mode' : LIFE_MODE_ACTUARIAL,
+        'inflation'            : _percent_from_rate( assumptions.inflation ),
+        'expected_return'      : _default_expected_return_percent( assumptions.inflation ),
+        'benefits_payable'     : _percent_from_rate( assumptions.benefits_payable ),
+        'reduction_year'       : assumptions.reduction_year }
 
 
 def _claimant( person : PersonFacts, index : int ) -> Claimant:
@@ -189,7 +255,28 @@ def _claimant( person : PersonFacts, index : int ) -> Claimant:
         name              = _PERSON_NAMES[ index ],
         birth_year        = int( person.birth_year ),
         pia_monthly       = Decimal( str( person.government_pension_monthly ) ),
-        expected_lifetime = int( person.life_expectancy ) )
+        expected_lifetime = None if person.life_expectancy is None else int( person.life_expectancy ),
+        sex               = _sex_of( person.sex ),
+        setback           = person.longevity_setback or 0 )
+
+
+def _setback_of( value ) -> int:
+    """A longevity radio value as the integer mortality setback, defaulting to 0 (average) when blank or
+    unparseable -- so the actuarial estimate always has a well-defined shift."""
+    try:
+        return int( value )
+    except ( TypeError, ValueError ):
+        return 0
+
+
+def _sex_of( value ) -> Optional[ Sex ]:
+    """A stored sex string mapped to the compute core's `Sex`, or None (the blended table) when unset or
+    unrecognized."""
+    if value == Sex.FEMALE.value:
+        return Sex.FEMALE
+    if value == Sex.MALE.value:
+        return Sex.MALE
+    return None
 
 
 # The default expected return, as a real rate above inflation: a conservative, TIPS-anchored safe real

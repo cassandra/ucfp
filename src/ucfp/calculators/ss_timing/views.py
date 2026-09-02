@@ -70,8 +70,8 @@ class ResultsView( View ):
         resolved = _session_claimants_and_assumptions( request )
         if resolved is None:
             return redirect( 'calculators:ss_timing:inputs' )
-        claimants, assumptions = resolved
-        comparison  = cached_comparison( claimants, assumptions )
+        claimants, assumptions, basis = resolved
+        comparison  = cached_comparison( claimants, assumptions, basis )
         selected    = comparison.best
         combo       = results.combo_of( selected.claim_ages )
         real_return        = Rate( assumptions.discount_rate.fraction - assumptions.inflation.fraction )
@@ -101,8 +101,9 @@ class StrategyDetailView( View ):
         resolved = _session_claimants_and_assumptions( request )
         if resolved is None:
             raise Http404( 'No calculator inputs in this session.' )
-        claimants, assumptions = resolved
-        strategy = compute_strategy( claimants, _parse_combo( combo, len( claimants ) ), assumptions )
+        claimants, assumptions, basis = resolved
+        strategy = compute_strategy(
+            claimants, _parse_combo( combo, len( claimants ) ), assumptions, basis )
         content  = render_to_string(
             _DETAIL_TEMPLATE,
             _detail_context( earners_of( claimants ), strategy, _is_opportunity_cost( assumptions ) ),
@@ -121,7 +122,7 @@ class MethodologyModalView( ModalView ):
         resolved = _session_claimants_and_assumptions( request )
         if resolved is None:
             raise Http404( 'No calculator inputs in this session.' )
-        claimants, _assumptions = resolved
+        claimants, _assumptions, _basis = resolved
         earners    = earners_of( claimants )
         claim_ages = _parse_combo( combo, len( claimants ) )
         return self.modal_response( request, context = {

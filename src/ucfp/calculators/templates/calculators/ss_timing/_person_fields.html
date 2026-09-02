@@ -1,8 +1,10 @@
 {% comment %}
-  One person's three claiming fields (birth year, PIA, expected lifetime), shared by both people on the
-  calculator form. The including template passes `birth_year`, `pia`, `life`, and `index` (0 the primary,
-  1 the partner). The PIA input is the estimator's swap target; the "Estimate" helper beside it opens the
-  benefit estimator modal.
+  One person's claiming fields, shared by both people on the calculator form. The including template passes
+  `birth_year`, `pia`, `life`, `sex`, `longevity`, and `index` (0 the primary, 1 the partner). Birth year
+  and PIA are always shown; the life-expectancy inputs are the two js-switch case blocks the household mode
+  reveals -- the actuarial radios (life expectancy relative to average, and which mortality table) under
+  "actuarial", or the specific expected-lifetime field under "specific". The PIA input is the estimator's
+  swap target; the "Estimate" helper beside it opens the benefit estimator modal.
 {% endcomment %}
 <div class="form-group">
   <label for="{{ birth_year.id_for_label }}">{{ birth_year.label }}</label>
@@ -19,7 +21,25 @@
   </div>
   {% include "calculators/ss_timing/_field_errors.html" with field=pia %}
 </div>
-<div class="form-group mb-0">
+
+{% comment %}Actuarial case: life expectancy relative to average, and which mortality table (optional -- an
+unset table blends both).{% endcomment %}
+<div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="actuarial">
+  <fieldset class="form-group">
+    <legend class="col-form-label pt-0 mb-1">{{ longevity.label }}</legend>
+    {% include "calculators/ss_timing/_radio_toggle.html" with field=longevity size="sm" %}
+    <small class="form-text text-muted">Relative to average for someone your age.</small>
+  </fieldset>
+  <fieldset class="form-group mb-0">
+    <legend class="col-form-label pt-0 mb-1">
+      {{ sex.label }} <span class="text-muted font-weight-normal">(optional)</span></legend>
+    {% include "calculators/ss_timing/_radio_toggle.html" with field=sex size="sm" %}
+    <small class="form-text text-muted">Leave unset to blend both tables.</small>
+  </fieldset>
+</div>
+
+{% comment %}Specific case: an exact expected age.{% endcomment %}
+<div class="form-group mb-0" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="specific">
   <label for="{{ life.id_for_label }}">{{ life.label }}</label>
   {{ life }}
   {% include "calculators/ss_timing/_field_errors.html" with field=life %}

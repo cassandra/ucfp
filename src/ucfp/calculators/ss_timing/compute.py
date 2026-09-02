@@ -81,15 +81,15 @@ class Claimant:
     """One person's Social Security facts for the comparison: their `name`, `birth_year`, monthly
     PIA (`pia_monthly` -- the benefit at full retirement age, in start-year dollars) and
     `expected_lifetime` -- the age through which they are assumed to live, after which their benefit
-    ends (the SPECIFIC basis). `sex` and `setback` drive the ACTUARIAL basis instead: the survival curve
-    to weight by, and a shift of the mortality lookup age in years (positive = frailer/shorter life,
-    negative = healthier/longer) for a claimant who expects to differ from average. Birthdays are modeled
-    on January 1, so a claiming age lands on an exact date."""
+    ends (the SPECIFIC basis; None, and unused, under ACTUARIAL). `sex` and `setback` drive the ACTUARIAL
+    basis instead: the survival curve to weight by, and a shift of the mortality lookup age in years
+    (positive = frailer/shorter life, negative = healthier/longer) for a claimant who expects to differ
+    from average. Birthdays are modeled on January 1, so a claiming age lands on an exact date."""
 
     name              : str
     birth_year        : int
     pia_monthly       : Decimal
-    expected_lifetime : int
+    expected_lifetime : Optional[ int ] = None
     sex               : Optional[ Sex ] = None
     setback           : int             = 0
 
