@@ -1,4 +1,4 @@
-{% extends "pages/base_public.html" %}
+{% extends "pages/top_page.html" %}
 {% load common_tags %}
 {% comment %}
   The login-free Social Security claiming calculator inputs. Collects one or two people (birth year, PIA,
@@ -11,13 +11,10 @@
 
 {% block head_title %}Social Security claiming calculator · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% block page_title %}When should you claim Social Security?{% endblock %}
+{% block page_subtitle %}<p class="text-muted mb-4">Compare the lifetime Social Security benefit for each
+  claiming age from 62 to 70.</p>{% endblock %}
 
-{% block public_content %}
-{% include "calculators/ss_timing/_dashboard_breadcrumb.html" %}
-<p class="text-muted text-center mb-4">
-  Compare the lifetime Social Security benefit for each claiming age from 62 to 70.
-</p>
-
+{% block page_body %}
 <form method="post" data-synchronous="true" novalidate>
   {% csrf_token %}
   {% comment %}A single error summary at the top of the form: the per-field errors below are easy to miss,

@@ -1,9 +1,0 @@
-{% comment %}A quiet breadcrumb back into the app for a signed-in visitor -- wayfinding, not a pitch, shown
-only when the visitor has an app to return to (any state but anonymous). The calculator's inputs and
-results pages share it, so the one markup lives in one place. Relies on the global `onboarding_state`
-context processor.{% endcomment %}
-{% if onboarding_state != 'anonymous' %}
-<nav class="ss-crumb mb-3" aria-label="breadcrumb">
-  <a href="{% url 'dashboard' %}">&larr; Dashboard</a>
-</nav>
-{% endif %}

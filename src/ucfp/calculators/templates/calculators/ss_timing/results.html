@@ -1,4 +1,4 @@
-{% extends "pages/base_public.html" %}
+{% extends "pages/top_page.html" %}
 {% load common_tags humanize %}
 {% comment %}
   The Social Security claiming comparison, results first: the claiming-age heatmap and ranked list (click
@@ -15,13 +15,8 @@
 
 {% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% block page_title %}Social Security claiming comparison{% endblock %}
-{% block public_container_max_width %}1140px{% endblock %}
 
-{% block public_content %}
-{% comment %}The signed-in breadcrumb sits at the top -- wayfinding, not a pitch, so it does not compete with
-the results. An anonymous visitor has no app to return to; their onward path is the upsell lower down, after
-the recap and before the year-by-year depth.{% endcomment %}
-{% include "calculators/ss_timing/_dashboard_breadcrumb.html" %}
+{% block page_body %}
 <div class="ss-results">
 
   {% comment %}The results lead -- the heatmap of the whole claiming-age landscape and the ranked list.

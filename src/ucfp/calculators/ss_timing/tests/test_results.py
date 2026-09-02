@@ -245,8 +245,8 @@ class ActuarialResultsTest( TestCase ):
 @override_settings( SUPPRESS_AUTHENTICATION = False )
 class ResultsPathBackTest( TestCase ):
     """The onward path from this standalone calculator, split by purpose: an anonymous visitor gets a
-    conversion upsell to the full planner, placed at the results/detail seam; a signed-in visitor gets a
-    quiet dashboard breadcrumb at the top -- wayfinding, not a pitch."""
+    conversion upsell to the full planner, placed at the results/detail seam; a signed-in visitor gets the
+    full app navbar (with Dashboard) and no upsell -- they are already inside the app."""
 
     def _submit_and_get( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), _couple_form_data() )
@@ -259,11 +259,11 @@ class ResultsPathBackTest( TestCase ):
         self.assertContains( response, 'See how it works' )
         self.assertNotContains( response, 'aria-label="breadcrumb"' )   # no signed-in breadcrumb
 
-    def test_a_signed_in_visitor_gets_a_dashboard_breadcrumb( self ):
+    def test_a_signed_in_visitor_gets_the_app_navbar_not_an_upsell( self ):
         user = User.objects.create_user( email = 'owner@x.test', password = 'x' )
         Organization.objects.create_for_owner( user, name = 'Mine' )
         self.client.force_login( user )
         response = self._submit_and_get()
-        self.assertContains( response, 'aria-label="breadcrumb"' )      # the breadcrumb nav
-        self.assertContains( response, reverse( 'dashboard' ) )
-        self.assertNotContains( response, 'ss-onward' )                 # no anonymous upsell band
+        self.assertContains( response, reverse( 'dashboard' ) )         # the full app nav ...
+        self.assertNotContains( response, 'aria-label="breadcrumb"' )   # ... no breadcrumb band-aid ...
+        self.assertNotContains( response, 'ss-onward' )                 # ... and no anonymous upsell band

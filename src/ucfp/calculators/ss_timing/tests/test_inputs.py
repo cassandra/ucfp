@@ -278,17 +278,21 @@ class InputsViewTest( TestCase ):
         self.assertContains( response, 'Compare claiming ages' )
         self.assertContains( response, 'Expected asset return' )         # the opportunity-cost input ...
         self.assertContains( response, 'value="4.5"' )                   # ... default = inflation + 2% real
-        self.assertNotContains( response, 'aria-label="breadcrumb"' )    # no app to return to
+        self.assertContains( response, reverse( 'user_signin' ) )        # the anonymous app bar offers Sign in
+        self.assertNotContains( response, reverse( 'dashboard' ) )       # but none of the signed-in nav items
 
-    def test_a_signed_in_visitor_sees_the_dashboard_breadcrumb( self ):
+    def test_a_signed_in_visitor_gets_the_app_navbar( self ):
         user = User.objects.create_user( email = 'owner@x.test', password = 'x' )
         Organization.objects.create_for_owner( user, name = 'Mine' )
         self.client.force_login( user )
         with patch( 'ucfp.calculators.ss_timing.prefill.default_economics',
                     return_value = _STUB_ECONOMICS ):
             response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
-        self.assertContains( response, 'aria-label="breadcrumb"' )
+        # The calculator now renders in the app shell, so a signed-in visitor keeps the full app nav
+        # (Dashboard, Profile) instead of being dropped onto a bare page with a "back to Dashboard" crumb.
         self.assertContains( response, reverse( 'dashboard' ) )
+        self.assertContains( response, reverse( 'flow_profile' ) )
+        self.assertNotContains( response, 'aria-label="breadcrumb"' )
 
     def test_a_valid_submission_persists_and_redirects_to_the_results( self ):
         response = self.client.post( reverse( 'calculators:ss_timing:inputs' ), _single_data() )
