@@ -38,6 +38,59 @@ class AssumptionsFromInflationTest( unittest.TestCase ):
         self.assertEqual( below_lag.cola, ZERO_RATE )                             # floored, not negative
 
 
+class OpportunityCostDiscountTest( unittest.TestCase ):
+    """Present value discounts at the visitor's expected investment return when given -- pricing in the
+    opportunity cost of deferring benefits -- else at inflation. A higher discount weighs earlier benefits
+    more, so it pulls the best claiming age earlier without collapsing to a corner."""
+
+    def _solo( self, life = 90 ) -> list:
+        return [ Claimant( 'Solo', 1960, Decimal( '2000' ), life ) ]
+
+    def test_the_discount_rate_is_the_expected_return_else_inflation( self ):
+        inflation = Rate( Decimal( '0.03' ) )
+        self.assertEqual( Assumptions( inflation = inflation, cola = ZERO_RATE ).discount_rate, inflation )
+        with_return = Assumptions( inflation = inflation, cola = ZERO_RATE,
+                                   expected_return = Rate( Decimal( '0.06' ) ) )
+        self.assertEqual( with_return.discount_rate, Rate( Decimal( '0.06' ) ) )
+
+    def test_a_higher_expected_return_discounts_a_deferred_strategy_harder( self ):
+        base = compare_claiming_strategies(
+            self._solo(), Assumptions.from_inflation( inflation = Rate( Decimal( '0.03' ) ) ) )
+        priced = compare_claiming_strategies( self._solo(), Assumptions.from_inflation(
+            inflation = Rate( Decimal( '0.03' ) ), expected_return = Rate( Decimal( '0.08' ) ) ) )
+        claim_70_base   = next( s for s in base.strategies if s.claim_ages == ( 70, ) )
+        claim_70_priced = next( s for s in priced.strategies if s.claim_ages == ( 70, ) )
+        self.assertEqual( claim_70_base.raw_total, claim_70_priced.raw_total )     # same nominal benefits ...
+        self.assertLess( claim_70_priced.present_value, claim_70_base.present_value )   # ... discounted more
+
+    def test_an_expected_return_of_inflation_leaves_the_best_unchanged( self ):
+        # Setting the expected return equal to inflation is the zero-real-opportunity-cost view -- identical
+        # to leaving it unset, so the recommended age does not move.
+        inflation = Rate( Decimal( '0.03' ) )
+        unset = compare_claiming_strategies(
+            self._solo(), Assumptions.from_inflation( inflation = inflation ) )
+        equal = compare_claiming_strategies(
+            self._solo(),
+            Assumptions.from_inflation( inflation = inflation, expected_return = inflation ) )
+        self.assertEqual( equal.best.claim_ages, unset.best.claim_ages )
+
+    def test_a_high_expected_return_moves_the_best_claim_age_earlier( self ):
+        inflation_only = compare_claiming_strategies(
+            self._solo(), Assumptions.from_inflation( inflation = Rate( Decimal( '0.03' ) ) ) )
+        opportunity    = compare_claiming_strategies( self._solo(), Assumptions.from_inflation(
+            inflation = Rate( Decimal( '0.03' ) ), expected_return = Rate( Decimal( '0.08' ) ) ) )
+        self.assertLess( opportunity.best.claim_ages[ 0 ], inflation_only.best.claim_ages[ 0 ] )
+
+    def test_a_moderate_return_gives_an_interior_best_not_a_corner( self ):
+        # A middling real return (~3%) with average longevity optimizes to an age strictly inside 62..70 --
+        # the opportunity cost shaves the delay rather than collapsing to "claim as early as possible".
+        comparison = compare_claiming_strategies( self._solo( life = 86 ), Assumptions.from_inflation(
+            inflation = Rate( Decimal( '0.025' ) ), expected_return = Rate( Decimal( '0.055' ) ) ) )
+        best_age = comparison.best.claim_ages[ 0 ]
+        self.assertGreater( best_age, 62 )
+        self.assertLess( best_age, 70 )
+
+
 class ClaimingSweepShapeTest( unittest.TestCase ):
 
     def test_a_couple_sweeps_the_full_nine_by_nine_grid( self ):

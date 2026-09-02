@@ -11,10 +11,12 @@ Social Security to a lifetime total -- the nominal ("raw") sum and its present v
 
 Every strategy runs over one shared horizon -- from the earliest age-62 claim in the household to the
 last expected death -- so early claiming's extra years and late claiming's larger checks are weighed
-on equal footing. Present value discounts each year's benefit at the general inflation assumption
-(the app's "today's dollars" convention, `overview._in_start_year_dollars`), so a run whose COLA
-trails inflation is normalized against one whose does not; the discount base is the start (age-62)
-year, shared by every strategy.
+on equal footing. Present value discounts each year's benefit at the assumptions' `discount_rate` -- the
+visitor's expected investment return when one is given, else general inflation (the app's "today's
+dollars" convention, `overview._in_start_year_dollars`). Discounting at the expected return prices in the
+opportunity cost of deferring benefits (money drawn from savings to bridge the wait forfeits its
+compounding); discounting at inflation is the zero-real-opportunity-cost view. The discount base is the
+start (age-62) year, shared by every strategy.
 
 For the results drill-in, `strategy_year_details` apportions each year's engine household total into the
 members' own / spousal / survivor parts. Because the COLA and reduction scale the whole benefit uniformly,
@@ -26,6 +28,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from itertools import product
+from typing import Optional
 
 from common.rate import FULL_RATE, Rate
 from ucfp.accounts.bookkeeper import Bookkeeper
@@ -74,25 +77,38 @@ class Claimant:
 
 @dataclass( frozen = True )
 class Assumptions:
-    """The economic backdrop the comparison projects under: general `inflation` (the present-value
-    discount), the Social Security `cola` (annual benefit growth), and the funding-shortfall
-    reduction -- `benefits_payable`, the retained share of scheduled benefits from `reduction_year`
-    on (the full rate = no reduction, the default)."""
+    """The economic backdrop the comparison projects under: general `inflation` (the economic outlook the
+    runs project under, and the fallback present-value discount), the Social Security `cola` (annual
+    benefit growth), the funding-shortfall reduction -- `benefits_payable`, the retained share of
+    scheduled benefits from `reduction_year` on (the full rate = no reduction, the default) -- and an
+    optional `expected_return`, the visitor's expected nominal investment return, which when given becomes
+    the present-value discount (see `discount_rate`)."""
 
     inflation        : Rate
     cola             : Rate
-    benefits_payable : Rate = FULL_RATE
-    reduction_year   : int  = 2032
+    benefits_payable : Rate           = FULL_RATE
+    reduction_year   : int            = 2032
+    expected_return  : Optional[ Rate ] = None
+
+    @property
+    def discount_rate( self ) -> Rate:
+        """The nominal rate present value discounts at: the visitor's `expected_return` when given --
+        pricing in the opportunity cost of deferring benefits (money left invested keeps compounding) --
+        else `inflation`, the zero-real-opportunity-cost "today's dollars" view. The engine run itself
+        always projects under `inflation`; this rate only weighs the resulting benefit stream."""
+        return self.expected_return if self.expected_return is not None else self.inflation
 
     @classmethod
     def from_inflation( cls, inflation : Rate, benefits_payable : Rate = FULL_RATE,
-                        reduction_year : int = 2032 ) -> 'Assumptions':
+                        reduction_year : int = 2032,
+                        expected_return : Optional[ Rate ] = None ) -> 'Assumptions':
         """Assumptions from a single inflation figure: the SS COLA is derived as inflation less the
         historical lag (`COLA_INFLATION_LAG`), floored at zero, so the visitor sets one familiar number
-        rather than two rates that co-vary."""
+        rather than two rates that co-vary. `expected_return`, when given, drives the present-value
+        discount instead of inflation (the opportunity-cost view)."""
         cola = max( inflation.fraction - COLA_INFLATION_LAG.fraction, Decimal( '0' ) )
-        return cls( inflation = inflation, cola = Rate( cola ),
-                    benefits_payable = benefits_payable, reduction_year = reduction_year )
+        return cls( inflation = inflation, cola = Rate( cola ), benefits_payable = benefits_payable,
+                    reduction_year = reduction_year, expected_return = expected_return )
 
 
 @dataclass( frozen = True )
@@ -337,16 +353,17 @@ def _year_benefits(
         horizon : _Horizon ) -> tuple[ YearBenefit, ... ]:
     """Each year's household Social Security from the run's books, nominal and present-valued. The
     nominal figure is the total booked to the Social Security revenue accounts that year; present
-    value discounts it to start-year dollars at the inflation assumption."""
-    cumulative = _cumulative_social_security( result )
-    inflation  = assumptions.inflation.fraction
-    benefits   = list()
-    previous   = cumulative( horizon.start_year - 1 )
+    value discounts it to start-year dollars at the assumptions' discount rate (the expected investment
+    return when given, else inflation)."""
+    cumulative    = _cumulative_social_security( result )
+    discount_rate = assumptions.discount_rate.fraction
+    benefits      = list()
+    previous      = cumulative( horizon.start_year - 1 )
     for year in range( horizon.start_year, horizon.end_year + 1 ):
         through  = cumulative( year )
         nominal  = through - previous
         previous = through
-        discount = ( Decimal( '1' ) + inflation ) ** ( year - horizon.start_year )
+        discount = ( Decimal( '1' ) + discount_rate ) ** ( year - horizon.start_year )
         benefits.append( YearBenefit(
             year = year, nominal = nominal, present_value = nominal / discount ) )
         continue
