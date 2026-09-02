@@ -1,0 +1,27 @@
+{% comment %}The anonymous app navbar interior: the login-free calculators as nav links, plus a quiet Sign
+in for a returning visitor. Included by `app_base.html` for an anonymous visitor -- only possible on the
+auth-exempt calculator pages, since every other app page redirects an anonymous visitor to sign-in. It
+mirrors the home page's anonymous chrome: Sign in lives here in the bar, while the "see how it works"
+conversion CTA lives in the page content (the calculators' onward band), not the navbar. The calculators
+come from `ucfp.calculators.navigation` so this bar and the future signed-in dropdown share one list.{% endcomment %}
+{% load calculator_tags %}
+{% public_calculators as calculators %}
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#app-nav"
+            aria-controls="app-nav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="app-nav">
+      <ul class="navbar-nav">
+        {% for calculator in calculators %}
+        <li class="nav-item">
+          <a class="nav-link {% if request.resolver_match.namespace == calculator.namespace %}active{% endif %}"
+             href="{% url calculator.url_name %}">{{ calculator.label }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+      <ul class="navbar-nav ml-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'user_signin' %}">Sign in</a>
+        </li>
+      </ul>
+    </div>
