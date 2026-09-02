@@ -7,12 +7,12 @@ reduction). It is deliberately thin: validation lives here, but the raw values p
 drive the results page, so the value<->domain mapping (`claimants_and_assumptions`, `default_inputs`) is
 standalone -- the results view rebuilds the domain inputs from the stored dict without a bound form.
 """
-from datetime import date
 from decimal import Decimal
 from typing import Optional
 
 from django import forms
 
+from common.datetime_utils import today_utc
 from common.forms import MoneyField, PercentField, StyledFormMixin
 from common.rate import Rate
 
@@ -130,7 +130,7 @@ class InputsForm( StyledFormMixin, forms.Form ):
                 self.add_error( 's0_life', 'Enter an expected lifetime.' )
             if is_couple and cleaned.get( 's1_life' ) in ( None, '' ):
                 self.add_error( 's1_life', 'Enter this for the partner.' )
-        this_year = date.today().year
+        this_year = today_utc().year
         for field_name in ( 's0_birth_year', 's1_birth_year' ):
             birth_year = cleaned.get( field_name )
             if birth_year is not None and birth_year > this_year:

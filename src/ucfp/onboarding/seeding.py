@@ -19,7 +19,8 @@ from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.utils import timezone
+
+from common.datetime_utils import today_utc
 
 from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
@@ -136,7 +137,7 @@ def _seed_records( organization ):
     Encrypted fields re-encrypt on save. The Profile starts on January 1 of the current year, so the run
     begins on a full-year boundary."""
     fixture = _load_fixture()
-    effective = date( timezone.localdate().year, 1, 1 )
+    effective = date( today_utc().year, 1, 1 )
 
     profile_record = ProfileRecord.objects.create(
         organization = organization, effective_date = effective, label = effective.strftime( '%B %Y' ),
