@@ -12,7 +12,7 @@ Social Security to a lifetime total -- the nominal ("raw") sum and its present v
 Every strategy runs over one shared horizon -- from the earliest age-62 claim in the household to the
 last expected death -- so early claiming's extra years and late claiming's larger checks are weighed
 on equal footing. Present value discounts each year's benefit at the assumptions' `discount_rate` -- the
-visitor's expected investment return when one is given, else general inflation (the app's "today's
+visitor's expected asset return when one is given, else general inflation (the app's "today's
 dollars" convention, `overview._in_start_year_dollars`). Discounting at the expected return prices in the
 opportunity cost of deferring benefits (money drawn from savings to bridge the wait forfeits its
 compounding); discounting at inflation is the zero-real-opportunity-cost view. The discount base is the
@@ -81,7 +81,7 @@ class Assumptions:
     runs project under, and the fallback present-value discount), the Social Security `cola` (annual
     benefit growth), the funding-shortfall reduction -- `benefits_payable`, the retained share of
     scheduled benefits from `reduction_year` on (the full rate = no reduction, the default) -- and an
-    optional `expected_return`, the visitor's expected nominal investment return, which when given becomes
+    optional `expected_return`, the visitor's expected nominal asset return, which when given becomes
     the present-value discount (see `discount_rate`)."""
 
     inflation        : Rate
@@ -353,7 +353,7 @@ def _year_benefits(
         horizon : _Horizon ) -> tuple[ YearBenefit, ... ]:
     """Each year's household Social Security from the run's books, nominal and present-valued. The
     nominal figure is the total booked to the Social Security revenue accounts that year; present
-    value discounts it to start-year dollars at the assumptions' discount rate (the expected investment
+    value discounts it to start-year dollars at the assumptions' discount rate (the expected asset
     return when given, else inflation)."""
     cumulative    = _cumulative_social_security( result )
     discount_rate = assumptions.discount_rate.fraction

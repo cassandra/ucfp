@@ -39,7 +39,7 @@ class AssumptionsFromInflationTest( unittest.TestCase ):
 
 
 class OpportunityCostDiscountTest( unittest.TestCase ):
-    """Present value discounts at the visitor's expected investment return when given -- pricing in the
+    """Present value discounts at the visitor's expected asset return when given -- pricing in the
     opportunity cost of deferring benefits -- else at inflation. A higher discount weighs earlier benefits
     more, so it pulls the best claiming age earlier without collapsing to a corner."""
 

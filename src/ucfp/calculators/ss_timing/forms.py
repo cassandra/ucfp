@@ -9,6 +9,7 @@ standalone -- the results view rebuilds the domain inputs from the stored dict w
 """
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 
 from django import forms
 
@@ -66,6 +67,7 @@ class InputsForm( StyledFormMixin, forms.Form ):
     s1_life          = forms.IntegerField( label = 'Expected lifetime', min_value = EARLIEST_CLAIM_AGE,
                                            max_value = _OLDEST_AGE, required = False )
     inflation        = PercentField( label = 'Inflation', min_value = Decimal( '0' ) )
+    expected_return  = PercentField( label = 'Expected asset return', min_value = Decimal( '0' ) )
     benefits_payable = PercentField( label = 'Reduce benefits to', min_value = Decimal( '0' ),
                                      max_value = Decimal( '100' ) )
     reduction_year   = forms.IntegerField( label = 'starting in', min_value = 2025, max_value = 2100 )
@@ -107,6 +109,7 @@ class InputsForm( StyledFormMixin, forms.Form ):
         data = self.cleaned_data
         return {
             'inflation'        : str( data[ 'inflation' ] ),
+            'expected_return'  : str( data[ 'expected_return' ] ),
             'benefits_payable' : str( data[ 'benefits_payable' ] ),
             'reduction_year'   : data[ 'reduction_year' ] }
 
@@ -157,17 +160,20 @@ def claimants_and_assumptions( facts : SessionFacts,
     assumptions = Assumptions.from_inflation(
         inflation        = _rate_from_percent( assumptions_inputs[ 'inflation' ] ),
         benefits_payable = _rate_from_percent( assumptions_inputs[ 'benefits_payable' ] ),
-        reduction_year   = int( assumptions_inputs[ 'reduction_year' ] ) )
+        reduction_year   = int( assumptions_inputs[ 'reduction_year' ] ),
+        expected_return  = _optional_rate_from_percent( assumptions_inputs.get( 'expected_return' ) ) )
     return claimants, assumptions
 
 
 def default_inputs( assumptions : Assumptions ) -> dict:
     """The blank form's prefill: a couple household with empty people and the assumption fields seeded from
-    `assumptions` (the anonymous system defaults, or a signed-in scenario's -- resolved by the caller).
-    Only the assumption fields carry a value; the people are left for the visitor to fill."""
+    `assumptions` (the anonymous system defaults, or a signed-in scenario's -- resolved by the caller). The
+    expected return defaults to a conservative safe real rate above inflation (see
+    `_default_expected_return_percent`); the people are left for the visitor to fill."""
     return {
         'household'        : HOUSEHOLD_COUPLE,
         'inflation'        : _percent_from_rate( assumptions.inflation ),
+        'expected_return'  : _default_expected_return_percent( assumptions.inflation ),
         'benefits_payable' : _percent_from_rate( assumptions.benefits_payable ),
         'reduction_year'   : assumptions.reduction_year }
 
@@ -180,9 +186,29 @@ def _claimant( person : PersonFacts, index : int ) -> Claimant:
         expected_lifetime = int( person.life_expectancy ) )
 
 
+# The default expected return, as a real rate above inflation: a conservative, TIPS-anchored safe real
+# return. Deferring Social Security is itself a guaranteed real return, so the honest opportunity-cost
+# hurdle is a guaranteed alternative (~2% real), not a risky equity return. Expressed above whatever
+# inflation is in effect, so the real default holds regardless of the inflation assumption.
+_DEFAULT_REAL_RETURN = Rate( Decimal( '0.02' ) )
+
+
+def _default_expected_return_percent( inflation : Rate ) -> str:
+    """The default expected _nominal_ return: the conservative safe real rate above `inflation`."""
+    return _percent_from_rate( Rate( inflation.fraction + _DEFAULT_REAL_RETURN.fraction ) )
+
+
 def _rate_from_percent( percent ) -> Rate:
     """A `Rate` from a percent value (a whole-number-ish figure): 2.5 -> Rate(0.025)."""
     return Rate( Decimal( str( percent ) ) / Decimal( '100' ) )
+
+
+def _optional_rate_from_percent( percent ) -> Optional[ Rate ]:
+    """A `Rate` from a percent value, or None when absent/blank -- so a session stored before the expected
+    return existed simply discounts at inflation (the pre-feature behavior) rather than failing."""
+    if percent in ( None, '' ):
+        return None
+    return _rate_from_percent( percent )
 
 
 def _percent_from_rate( rate : Rate ) -> str:

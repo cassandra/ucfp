@@ -76,7 +76,8 @@ def _couple_form_data() -> dict:
     return { 'household' : 'couple',
              's0_birth_year' : '1960', 's0_pia' : '3000', 's0_life' : '84',
              's1_birth_year' : '1962', 's1_pia' : '1200', 's1_life' : '88',
-             'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
+             'inflation' : '2.5', 'expected_return' : '4.5',
+             'benefits_payable' : '100', 'reduction_year' : '2033' }
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
