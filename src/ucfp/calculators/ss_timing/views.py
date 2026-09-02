@@ -21,9 +21,9 @@ from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
 
 from . import methodology, results
+from .comparison_cache import cached_comparison
 from .compute import (
-    CLAIM_AGES, COLA_INFLATION_LAG, compare_claiming_strategies, compute_strategy, earners_of,
-    strategy_year_details )
+    CLAIM_AGES, COLA_INFLATION_LAG, compute_strategy, earners_of, strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions, is_runnable
 from .prefill import build_prefill
 
@@ -71,7 +71,7 @@ class ResultsView( View ):
         if resolved is None:
             return redirect( 'calculators:ss_timing:inputs' )
         claimants, assumptions = resolved
-        comparison  = compare_claiming_strategies( claimants, assumptions )
+        comparison  = cached_comparison( claimants, assumptions )
         selected    = comparison.best
         combo       = results.combo_of( selected.claim_ages )
         real_return        = Rate( assumptions.discount_rate.fraction - assumptions.inflation.fraction )
