@@ -187,6 +187,8 @@ class InputsViewTest( TestCase ):
             response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Compare claiming ages' )
+        self.assertContains( response, 'Expected asset return' )         # the opportunity-cost input ...
+        self.assertContains( response, 'value="4.5"' )                   # ... default = inflation + 2% real
         self.assertNotContains( response, 'aria-label="breadcrumb"' )    # no app to return to
 
     def test_a_signed_in_visitor_sees_the_dashboard_breadcrumb( self ):

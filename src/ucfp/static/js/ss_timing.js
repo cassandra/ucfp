@@ -30,32 +30,47 @@
     }
 
     function initReturnHints() {
-        // Keep two live hints in sync with the entered rates, since what the comparison actually uses is
-        // the asset return *above* inflation (benefits already rise with inflation): beside the input, the
-        // real equivalent of what they typed; in the help, the conservative default in their own nominal
-        // terms (so "~2% above inflation" reads as a concrete number, not a value to type in).
+        // The asset return is a nominal figure, but what the comparison uses is the part *above* inflation
+        // (benefits already rise with inflation). Keep that legible and inflation-relative: fill an empty
+        // return with the conservative default (inflation + ~2% real); show the real equivalent of what is
+        // typed beside the input; and state the default in concrete nominal terms in the help (the bold
+        // number IS the value to enter), so nothing reads as a bare "2%" to type into the box.
         var DEFAULT_REAL = 2;   // the conservative safe real return the default targets (see forms.py)
         var $return    = $( '#id_expected_return' );
         var $inflation = $( '#id_inflation' );
         var $hint      = $( '#return-real-hint' );
-        var $example   = $( '#return-example' );
+        var $default   = $( '#return-default' );
+        var $note      = $( '#return-default-note' );
         if ( !$return.length || !$inflation.length ) { return; }
-        function update() {
-            var nominal   = parseFloat( $return.val() );
+        function conservativeNominal( inflation ) {
+            return ( inflation + DEFAULT_REAL ).toFixed( 1 );
+        }
+        function fillIfEmpty() {
+            // Only on load and when inflation changes -- never on the return's own input, or clearing it
+            // to retype would refill instantly.
             var inflation = parseFloat( $inflation.val() );
+            if ( !isNaN( inflation ) && $return.val().trim() === '' ) {
+                $return.val( conservativeNominal( inflation ) );
+            }
+        }
+        function refresh() {
+            var inflation = parseFloat( $inflation.val() );
+            var nominal   = parseFloat( $return.val() );
             if ( $hint.length ) {
                 $hint.text( ( isNaN( nominal ) || isNaN( inflation ) ) ? ''
                     : '≈ ' + ( nominal - inflation ).toFixed( 1 ) + '% above inflation' );
             }
-            if ( $example.length ) {
-                $example.text( isNaN( inflation ) ? ''
-                    : 'At your ' + inflation + '% inflation, that’s about '
-                      + ( inflation + DEFAULT_REAL ).toFixed( 1 ) + '%.' );
+            if ( $default.length && !isNaN( inflation ) ) {
+                $default.text( conservativeNominal( inflation ) + '%' );          // the number to enter
+                if ( $note.length ) {
+                    $note.text( ' — roughly ' + DEFAULT_REAL + '% above your ' + inflation + '% inflation' );
+                }
             }
         }
-        $return.on( 'input', update );
-        $inflation.on( 'input', update );
-        update();
+        $return.on( 'input', refresh );
+        $inflation.on( 'input', function () { fillIfEmpty(); refresh(); } );
+        fillIfEmpty();
+        refresh();
     }
 
     function focusErrorSummary() {
