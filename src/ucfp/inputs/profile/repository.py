@@ -19,9 +19,9 @@ from datetime import date
 from typing import Optional
 
 from django.db.models import QuerySet
-from django.utils import timezone
 
 from common.dataclass_json import from_json_data, to_json_data
+from common.datetime_utils import today_utc
 
 from organization.models import Organization
 
@@ -46,8 +46,9 @@ def store_profile( record: ProfileRecord, profile: Profile ) -> None:
 def current_effective_date() -> date:
     """The canonical effective date for a profile saved now -- the first of the current month.
     The monthly resolution policy lives here, not in the schema, so it can change without a
-    migration."""
-    return timezone.localdate().replace( day = 1 )
+    migration. Computed in UTC (`today_utc`), not the active timezone, so a profile stamped inside
+    a request carries the same month the rest of the app compares it against outside one."""
+    return today_utc().replace( day = 1 )
 
 
 def profiles_for( organization: Organization ) -> QuerySet:

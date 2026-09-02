@@ -1,7 +1,9 @@
 import datetime
 from zoneinfo import ZoneInfo
 
+import time_machine
 from django.test import TestCase
+from django.utils import timezone
 
 from common import datetime_utils as dt
 from common.datetime_utils import TIMEZONE_NAME_LIST, DEFAULT_TIME_ZONE_NAME
@@ -128,6 +130,27 @@ class AgeOnTest(TestCase):
     def test_leap_day_birthday_before_feb_29_in_a_non_leap_year(self):
         # Feb 28 in a non-leap year is before a Feb 29 birthday, so it reads a year younger.
         self.assertEqual(dt.age_on(datetime.date(2000, 2, 29), datetime.date(2025, 2, 28)), 24)
+
+
+class TodayUtcTest(TestCase):
+    # 03:00 UTC on New Year's is still the previous evening (and previous year) in the Americas, so a
+    # UTC-vs-local disagreement is guaranteed regardless of which side of DST we are on.
+    BOUNDARY_INSTANT = datetime.datetime(2026, 1, 1, 3, 0, tzinfo=UTC)
+
+    def test_returns_the_utc_date(self):
+        with time_machine.travel(self.BOUNDARY_INSTANT):
+            self.assertEqual(dt.today_utc(), datetime.date(2026, 1, 1))
+
+    def test_is_context_independent_of_the_active_timezone(self):
+        # The exact skew from issue #246: under a non-UTC active zone, localdate() names the local
+        # calendar day (still 2025-12-31 in Chicago) while today_utc() stays on the UTC day. The whole
+        # point of the helper is that activating a timezone cannot move it.
+        with time_machine.travel(self.BOUNDARY_INSTANT):
+            with timezone.override('America/Chicago'):
+                self.assertEqual(timezone.localdate(), datetime.date(2025, 12, 31))
+                self.assertEqual(dt.today_utc(), datetime.date(2026, 1, 1))
+            with timezone.override('UTC'):
+                self.assertEqual(dt.today_utc(), datetime.date(2026, 1, 1))
 
 
 class TimezoneNameListTest(TestCase):

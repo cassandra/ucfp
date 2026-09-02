@@ -2,14 +2,17 @@
 mapping, and the public inputs/results views (anonymous access, session persistence, the prefill round
 trip). The signed-in Profile/scenario prefill and the #235 estimator arrive in later phases.
 """
+from datetime import datetime, timezone as datetime_timezone
 from decimal import Decimal
 from importlib import import_module
 from unittest.mock import patch
 
+import time_machine
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from organization.models import Organization
 
@@ -64,6 +67,16 @@ class FormValidationTest( SimpleTestCase ):
         form = InputsForm( data = _single_data( s0_birth_year = '3000' ) )
         self.assertFalse( form.is_valid() )
         self.assertIn( 's0_birth_year', form.errors )
+
+    def test_the_future_birth_year_check_uses_the_utc_year_at_a_year_boundary( self ):
+        # Regression for #246: at 03:00 UTC on Jan 1 the local zone is still the prior year (2025 in
+        # Chicago), but the "not in the future" bound is the UTC year (2026). A birth year equal to the
+        # UTC year must validate -- the old local-year check would have wrongly rejected it in this window.
+        with time_machine.travel( datetime( 2026, 1, 1, 3, 0, tzinfo = datetime_timezone.utc ) ):
+            with timezone.override( 'America/Chicago' ):
+                form = InputsForm( data = _single_data( s0_birth_year = '2026' ) )
+                self.assertTrue( form.is_valid() )
+                self.assertNotIn( 's0_birth_year', form.errors )
 
     def test_a_return_below_inflation_is_rejected( self ):
         # A below-inflation return would invert the opportunity-cost framing ("above inflation"), so it is

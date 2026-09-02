@@ -22,6 +22,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.relativedelta import relativedelta
 
+from django.utils import timezone
+
 logger = logging.getLogger(__name__)
 
 # Fallback used when a caller passes an unrecognized timezone name.
@@ -85,6 +87,16 @@ def _safe_zoneinfo( tzname ):
         logger.warning( "Unrecognized time zone '%s' (%s); falling back to %s",
                         tzname, e, DEFAULT_TIME_ZONE_NAME )
         return ZoneInfo( DEFAULT_TIME_ZONE_NAME )
+
+
+def today_utc():
+    """Today's calendar date in UTC -- context-independent, unlike
+    ``timezone.localdate()``, which resolves to whatever timezone is *active*
+    (a request's local zone inside a view, the ``UTC`` default outside one) and
+    so can name a different month/year on either side of a local/UTC boundary.
+    This is the "compute in UTC everywhere; convert only at display" date: the
+    same value inside and outside a request."""
+    return timezone.now().date()
 
 
 def distant_past( tzname = None ):

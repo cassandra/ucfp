@@ -5,13 +5,16 @@ The fast tests validate that the fixture loads into correct, *runnable* records 
 that return before the (slow) forecast. The actual forecast generation is exercised under the `e2e` tag,
 which the frequently-run suite excludes.
 """
-from datetime import date
+from datetime import date, datetime, timezone as datetime_timezone
 
+import time_machine
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, tag
 from django.utils import timezone
+
+from common.datetime_utils import today_utc
 
 from organization.enums import OrganizationRole
 from organization.models import Organization, OrganizationMember
@@ -57,7 +60,7 @@ class SeedRecordsFromFixtureTest( TestCase ):
         self.assertIsNotNone( completed_profile( organization ) )       # profile is complete
         self.assertTrue( profile_record.acknowledged_sections )         # review state carried
         self.assertEqual(
-            profile_record.effective_date, date( timezone.localdate().year, 1, 1 ) )  # January boundary
+            profile_record.effective_date, date( today_utc().year, 1, 1 ) )  # January boundary, UTC year
         self.assertEqual( scenario.uuid, EXAMPLE_SCENARIO_UUID )
         self.assertEqual( scenario.plans.organization_id, organization.pk )
         # The whole scenario is runnable now (profile + plans + assumptions complete, no drift).
@@ -67,6 +70,17 @@ class SeedRecordsFromFixtureTest( TestCase ):
         # the fixture exercises them and a re-dump that dropped them would be caught here.
         self.assertTrue( any( debt.terms is not None for debt in load_profile( profile_record ).debts ) )
         self.assertTrue( load_plans( scenario.plans ).loan_terms_snapshots )
+
+    def test_the_seed_year_is_the_utc_year_at_a_year_boundary( self ):
+        # Regression for #246: 03:00 UTC on Jan 1 is still Dec 31 of the prior year across the Americas.
+        # The seed's January-boundary date must take the UTC year, not the active zone's, or a seed run in
+        # that window would date the example household a year behind.
+        organization = Organization.objects.create(
+            uuid = EXAMPLE_ORGANIZATION_UUID, name = EXAMPLE_ORGANIZATION_NAME )
+        with time_machine.travel( datetime( 2026, 1, 1, 3, 0, tzinfo = datetime_timezone.utc ) ):
+            with timezone.override( 'America/Chicago' ):   # still 2025-12-31 locally
+                profile_record, _scenario = _seed_records( organization )
+        self.assertEqual( profile_record.effective_date, date( 2026, 1, 1 ) )
 
 
 class FixtureMatchTest( TestCase ):

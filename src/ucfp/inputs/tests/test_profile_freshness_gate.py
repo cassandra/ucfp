@@ -6,12 +6,14 @@ to the Profile page; the Profile page shows the review prompt whose POST advance
 Scenarios/Plans/Assumptions surfaces carry an advisory banner (tested via `profile_refresh_required` here,
 rendered by their templates). A read-only viewer and the read-only example org are carved out.
 """
-from datetime import date
+from datetime import date, datetime, timezone as datetime_timezone
 from types import SimpleNamespace
 
+import time_machine
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from organization.models import Organization
 
@@ -181,6 +183,25 @@ class HubAndInterviewGateTests( TestCase ):
         prior.refresh_from_db()
         self.assertEqual( prior.acknowledged_section_keys, set( _profile_section_keys( _profile() ) ) )
         self.assertEqual( ProfileRecord.objects.filter( organization = self.org ).count(), 1 )
+
+
+class CurrentEffectiveDateBoundaryTests( TestCase ):
+    """Regression for #246: the canonical effective month is computed in UTC, so it is the same value
+    whether or not a request has activated a local timezone. Before the fix, `localdate()` read the
+    *active* zone, so a profile stamped inside a request during the local/UTC month-boundary window
+    disagreed with the month the rest of the app compared it against outside one."""
+
+    # 03:00 UTC on the 1st is still late on the previous evening -- and the previous month -- across the
+    # Americas, so the active zone and UTC sit in different calendar months.
+    BOUNDARY_INSTANT = datetime( 2026, 9, 1, 3, 0, tzinfo = datetime_timezone.utc )
+
+    def test_the_effective_month_is_the_utc_month_regardless_of_active_timezone( self ):
+        with time_machine.travel( self.BOUNDARY_INSTANT ):
+            with timezone.override( 'America/Chicago' ):   # still 2026-08-31 locally
+                self.assertEqual( timezone.localdate(), date( 2026, 8, 31 ) )
+                self.assertEqual( current_effective_date(), date( 2026, 9, 1 ) )
+            # Outside any activated zone (the settings UTC default) the value is unchanged: inside == outside.
+            self.assertEqual( current_effective_date(), date( 2026, 9, 1 ) )
 
 
 class FreshnessGateThroughTheStackTests( TestCase ):
