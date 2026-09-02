@@ -96,16 +96,14 @@
         } );
     }
 
-    function initSelectionSync() {
-        // Direct listeners on the cells and rows, NOT delegated at document: the heatmap cell is an
-        // antinode link, and antinode's document-level handling stops the click bubbling, so a delegated
-        // handler never sees it (the detail swaps but the gold selection would not move). The cells and
-        // rows live in the static part of the page -- only #ss-detail swaps -- so binding once is safe. A
-        // ranked row triggers its matching cell, so both surfaces and the antinode fetch stay in sync.
-        document.querySelectorAll( '.ss-hm-cell' ).forEach( function ( cell ) {
-            cell.addEventListener( 'click', function () { moveSelection( cell.dataset.combo ); } );
-        } );
+    function bindRankRows() {
+        // A ranked row triggers its matching heatmap cell, so both surfaces and the antinode fetch stay in
+        // sync. The ranked table is re-rendered on each drill-in (to pull in an out-of-top-10 pick as the
+        // 11th row), so its rows are fresh elements each time; the data-sel-bound guard wires each row once
+        // and skips ones already bound (e.g. after an unrelated async render like a modal).
         document.querySelectorAll( '.rank-row' ).forEach( function ( row ) {
+            if ( row.dataset.selBound ) { return; }
+            row.dataset.selBound = '1';
             function activate() {
                 var cell = document.querySelector( '.ss-hm-cell[data-combo="' + row.dataset.combo + '"]' );
                 if ( cell ) { cell.click(); }
@@ -118,6 +116,21 @@
                 }
             } );
         } );
+    }
+
+    function initSelectionSync() {
+        // Direct listeners on the cells, NOT delegated at document: the heatmap cell is an antinode link,
+        // and antinode's document-level handling stops the click bubbling, so a delegated handler never
+        // sees it (the detail swaps but the gold selection would not move). The heatmap is static (only
+        // #ss-detail and #ss-rank swap), so binding the cells once is safe; the ranked rows are re-bound
+        // after each swap (see bindRankRows).
+        document.querySelectorAll( '.ss-hm-cell' ).forEach( function ( cell ) {
+            cell.addEventListener( 'click', function () { moveSelection( cell.dataset.combo ); } );
+        } );
+        bindRankRows();
+        if ( window.AN ) {
+            AN.addAfterAsyncRenderFunction( bindRankRows );
+        }
     }
 
     $( function () {

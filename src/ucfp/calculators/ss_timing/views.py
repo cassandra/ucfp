@@ -33,6 +33,7 @@ _ESTIMATOR_TEMPLATE   = 'calculators/ss_timing/modals/estimator.html'
 _ESTIMATE_FRAGMENT    = 'calculators/ss_timing/modals/benefit_estimate.html'
 _PIA_INPUT_TEMPLATE   = 'calculators/ss_timing/modals/pia_input.html'
 _DETAIL_TEMPLATE      = 'calculators/ss_timing/_detail.html'
+_RANK_TEMPLATE        = 'calculators/ss_timing/_rank.html'
 _METHODOLOGY_TEMPLATE = 'calculators/ss_timing/modals/methodology.html'
 
 
@@ -114,7 +115,14 @@ class StrategyDetailView( View ):
             _detail_context( detail_earners, strategy, _is_opportunity_cost( assumptions ),
                              basis is LifeExpectancyBasis.ACTUARIAL ),
             request = request )
-        return antinode.response( replace_map = { 'ss-detail' : content } )
+        # Re-render the ranked table too, selecting this combo: it pulls in an out-of-top-10 pick as the
+        # 11th row so its lifetime figures stay visible (the year-by-year no longer repeats them).
+        comparison = cached_comparison( claimants, assumptions, basis )
+        rank     = render_to_string( _RANK_TEMPLATE, {
+            'ranked'              : results.ranked( comparison, combo ),
+            'is_couple'           : len( claimants ) == 2,
+            'is_opportunity_cost' : _is_opportunity_cost( assumptions ) }, request = request )
+        return antinode.response( replace_map = { 'ss-detail' : content, 'ss-rank' : rank } )
 
 
 class MethodologyModalView( ModalView ):

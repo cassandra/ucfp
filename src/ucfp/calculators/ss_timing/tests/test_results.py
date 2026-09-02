@@ -73,6 +73,24 @@ class HeatmapViewModelTest( SimpleTestCase ):
         self.assertEqual( rows[ 0 ].ages, ( 70, 70 ) )
         self.assertEqual( len( rows ), 10 )                 # _RANK_LIMIT
 
+    def test_a_selection_in_the_top_ten_adds_no_extra_row( self ):
+        comparison = _couple_comparison()
+        rows = results.ranked( comparison, results.combo_of( comparison.best.claim_ages ) )
+        self.assertEqual( len( rows ), 10 )
+        self.assertFalse( any( row.beyond_top for row in rows ) )
+
+    def test_a_selection_outside_the_top_ten_is_appended_with_its_true_rank( self ):
+        # (62, 62) is the worst combo here (value rises with age), so selecting it appends an 11th row
+        # carrying its real rank -- so its lifetime figures stay visible without a top-ten place.
+        rows = results.ranked( _couple_comparison(), '62-62' )
+        self.assertEqual( len( rows ), 11 )
+        extra = rows[ -1 ]
+        self.assertTrue( extra.beyond_top )
+        self.assertTrue( extra.is_selected )
+        self.assertEqual( extra.combo, '62-62' )
+        self.assertEqual( extra.rank, 81 )                  # the true rank, not 11
+        self.assertFalse( any( row.beyond_top for row in rows[ :10 ] ) )
+
     def test_the_heatmap_marks_and_shades_by_effective_value_not_present( self ):
         # Present value rises with age (best at 70) while effective value falls (best at 62); the mark and
         # the top shade must follow effective value -- the decision metric -- not present value.
@@ -143,6 +161,19 @@ class ResultsRenderTest( TestCase ):
         detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
         self.assertIn( 'Total', detail )
         self.assertIn( 'Present value', detail )
+
+    def test_drilling_into_an_out_of_top_ten_cell_swaps_in_its_rank_row( self ):
+        # The drill-in re-renders the ranked table too, so an out-of-top-ten pick (claiming both at 62)
+        # appears as the highlighted 11th row -- its figures stay reachable though the year-by-year no
+        # longer carries totals.
+        self._submit()
+        payload = json.loads( self.client.get(
+            reverse( 'calculators:ss_timing:detail', args = [ '62-62' ] ),
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' ).content )[ 'replace' ]
+        self.assertIn( 'ss-detail', payload )
+        self.assertIn( 'ss-rank', payload )
+        self.assertIn( 'beyond', payload[ 'ss-rank' ] )                     # the 11th row's visual break
+        self.assertIn( 'data-combo="62-62"', payload[ 'ss-rank' ] )
 
     def test_the_year_by_year_is_income_only_no_totals_or_effective_value( self ):
         # The year-by-year is an income picture: the lifetime total and the effective value (the decision

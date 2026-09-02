@@ -66,6 +66,9 @@
 .ss-rank tr.sel td { background: #e6f1f5; }
 .ss-rank tr.best td:first-child { box-shadow: inset 3px 0 0 #b07d05; }
 .ss-rank .rk { color: #8996a4; font-weight: 600; }
+/* The 11th row: a selected strategy pulled in from outside the top ten, set off by a stronger rule above
+   it so it reads as separate from the ranked list rather than an unbroken continuation. */
+.ss-rank tr.beyond td { border-top: 2px solid #d4dbe2; }
 
 /* -- year-by-year detail -- */
 .ss-years-scroll {

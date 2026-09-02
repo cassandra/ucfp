@@ -63,33 +63,7 @@ the seam just after the results.{% endcomment %}
     <div class="col-lg-5 mb-3">
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-2">Top strategies</div>
-        <div class="table-responsive">
-          <table class="ss-rank">
-            <thead><tr>
-              <th></th><th>{% if is_couple %}Ages{% else %}Age{% endif %}</th>
-              <th class="num">Total</th><th class="num">Present<br>value</th>
-              {% if is_opportunity_cost %}<th class="num">Effective<br>value</th>{% endif %}
-            </tr></thead>
-            <tbody>
-              {% for row in ranked %}
-                <tr class="rank-row{% if row.is_best %} best{% endif %}{% if row.is_selected %} sel{% endif %}"
-                    data-combo="{{ row.combo }}" tabindex="0" role="button"
-                    aria-label="Show the year-by-year detail for claiming at {{ row.ages|join:' and ' }}">
-                  <td class="rk">{{ row.rank }}</td>
-                  <td>{{ row.ages|join:" / " }}</td>
-                  <td class="num">${{ row.raw_total|floatformat:0|intcomma }}</td>
-                  <td class="num">${{ row.present_value|floatformat:0|intcomma }}</td>
-                  {% if is_opportunity_cost %}<td class="num">${{ row.effective_value|floatformat:0|intcomma }}</td>{% endif %}
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        <small class="text-muted d-block mt-2">
-          {% if is_opportunity_cost %}Ranked by <strong>effective value</strong> &mdash; today&rsquo;s
-          dollars, further adjusted for the investment growth you&rsquo;d give up while
-          waiting.{% else %}Present value converts the total to today&rsquo;s dollars.{% endif %}
-        </small>
+        {% include "calculators/ss_timing/_rank.html" %}
       </div></div>
     </div>
   </div>
