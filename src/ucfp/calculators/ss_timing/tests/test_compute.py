@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from common.rate import Rate, ZERO_RATE
 from ucfp.calculators.ss_timing.compute import (
-    Assumptions, Claimant, compare_claiming_strategies, strategy_year_details )
+    Assumptions, Claimant, claiming_crossover, compare_claiming_strategies, strategy_year_details )
 
 _NO_OVERLAY = Assumptions( inflation = ZERO_RATE, cola = ZERO_RATE )
 
@@ -89,6 +89,38 @@ class OpportunityCostDiscountTest( unittest.TestCase ):
         best_age = comparison.best.claim_ages[ 0 ]
         self.assertGreater( best_age, 62 )
         self.assertLess( best_age, 70 )
+
+
+class ClaimingCrossoverTest( unittest.TestCase ):
+    """`claiming_crossover` finds the real return at which claiming at 62 ties, in present value, with
+    delaying to 70 -- the threshold that frames the whole early-vs-late question."""
+
+    def _comparison( self, life : int ):
+        return compare_claiming_strategies(
+            [ Claimant( 'Solo', 1960, Decimal( '2000' ), life ) ],
+            Assumptions.from_inflation( inflation = Rate( Decimal( '0.025' ) ) ) )
+
+    def test_average_longevity_yields_a_positive_real_threshold( self ):
+        crossover = claiming_crossover( self._comparison( life = 88 ), Rate( Decimal( '0.025' ) ) )
+        self.assertEqual( crossover.state, 'threshold' )
+        self.assertGreater( crossover.real_return.fraction, Decimal( '0' ) )     # delaying wins below it
+
+    def test_the_threshold_equalizes_early_and_late_present_value( self ):
+        comparison = self._comparison( life = 88 )
+        crossover  = claiming_crossover( comparison, Rate( Decimal( '0.025' ) ) )
+        nominal    = crossover.real_return.fraction + Decimal( '0.025' )         # real + inflation
+        early = next( s for s in comparison.strategies if s.claim_ages == ( 62, ) )
+        late  = next( s for s in comparison.strategies if s.claim_ages == ( 70, ) )
+        start = early.year_benefits[ 0 ].year
+
+        def present_value( strategy ):
+            return sum( ( benefit.nominal / ( Decimal( '1' ) + nominal ) ** ( benefit.year - start )
+                          for benefit in strategy.year_benefits ), Decimal( '0' ) )
+        self.assertAlmostEqual( present_value( early ), present_value( late ), delta = Decimal( '1' ) )
+
+    def test_a_short_life_expectancy_favors_claiming_early( self ):
+        crossover = claiming_crossover( self._comparison( life = 72 ), Rate( Decimal( '0.025' ) ) )
+        self.assertEqual( crossover.state, 'early_wins' )                        # early wins even at 0 real
 
 
 class ClaimingSweepShapeTest( unittest.TestCase ):

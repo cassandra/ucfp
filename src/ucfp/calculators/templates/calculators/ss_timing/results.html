@@ -6,7 +6,9 @@
   detail for the selected strategy. Cells and ranked rows carry `data-combo`; clicking swaps the detail
   (antinode) and moves the gold selection (ss_timing.js). Present value is explained at the foot. Context:
   `earners` (higher first), `is_couple`, `cola_lag_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
-  `is_reduced`, `axis_ages`, `heatmap`, `ranked`, plus the merged detail context.
+  `is_reduced`, the opportunity-cost fields `expected_return_pct`/`real_return_pct`/`is_opportunity_cost`
+  and the `crossover_state`/`crossover_pct` headline, `axis_ages`, `heatmap`, `ranked`, plus the merged
+  detail context.
 {% endcomment %}
 
 {% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
@@ -42,10 +44,37 @@ the seam just after the results.{% endcomment %}
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-2">Assumptions</div>
         <span class="ss-chip"><span class="k">Inflation</span><b>{{ inflation_pct }}</b></span>
+        {% if is_opportunity_cost %}<span class="ss-chip"><span class="k">Asset return</span><b>{{ expected_return_pct }} &middot; {{ real_return_pct }} real</b></span>{% endif %}
         {% if is_reduced %}<span class="ss-chip"><span class="k">Benefits</span><b>{{ payable_pct }} from {{ reduction_year }}</b></span>{% endif %}
       </div></div>
     </div>
   </div>
+
+  {% comment %}Directional guidance, not a verdict: which way the trade-off leans for this household's
+  longevity and return, deferring to the ranked strategies below for the specific best age. The crossover
+  (the 62-vs-70 tie) is a rough balance point, not the optimum -- which is often an interior age -- so it
+  is framed as a tendency ("earlier/later tends to win"), never "claim at 62".{% endcomment %}
+  {% if crossover_state == 'threshold' %}
+  <div class="alert alert-light border ss-crossover" role="note">
+    <strong>Waiting longer tends to pay off</strong> the more years you expect to live and the less your
+    savings earn &mdash; delaying is a guaranteed raise a low-earning portfolio may not beat. For a
+    household like yours the balance sits around <strong>{{ crossover_pct }} above inflation</strong>:
+    below that, later claiming tends to come out ahead; above it, earlier. The ranked strategies below use
+    the return you entered.
+  </div>
+  {% elif crossover_state == 'early_wins' %}
+  <div class="alert alert-light border ss-crossover" role="note">
+    <strong>At this life expectancy, claiming earlier tends to come out ahead</strong> &mdash; there may
+    not be enough years to recoup the larger benefit from waiting, even before the opportunity cost. The
+    ranked strategies below show the trade-off in full.
+  </div>
+  {% elif crossover_state == 'delay_wins' %}
+  <div class="alert alert-light border ss-crossover" role="note">
+    <strong>Waiting tends to pay off across the board here</strong> &mdash; the delay credit outweighs the
+    opportunity cost unless your savings earn well above inflation. The ranked strategies below use the
+    return you entered.
+  </div>
+  {% endif %}
 
   <div class="row">
     <div class="col-lg-8 mb-3">
@@ -103,9 +132,11 @@ the seam just after the results.{% endcomment %}
   <div class="text-muted small">
     <p>
       <strong>Total</strong> is the sum of every year&rsquo;s benefit as paid (grown by the SS
-      adjustment). <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars by
-      discounting each future year at inflation, so money far in the future counts for what it is worth
-      now.
+      adjustment). <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars,
+      {% if is_opportunity_cost %}discounting each future year at your expected asset return
+      ({{ real_return_pct }} above inflation): a deferred benefit is weighed against the growth that money
+      could otherwise earn, the opportunity cost of waiting{% else %}discounting each future year at
+      inflation, so money far in the future counts for what it is worth now{% endif %}.
     </p>
     <p class="mb-0">
       The Social Security cost-of-living adjustment (the &ldquo;SS adjustment&rdquo; above) is modeled at

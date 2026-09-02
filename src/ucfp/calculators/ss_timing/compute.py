@@ -56,6 +56,10 @@ _GOVERNMENT_PENSION = GovernmentPension( JurisdictionType.US_FEDERAL )
 # familiar input, at the cost of a fixed assumed gap (see the results page's methodology note).
 COLA_INFLATION_LAG = Rate( Decimal( '0.003' ) )
 
+# The upper bound of the claiming crossover search: a real return above ~20% is not a realistic hurdle, so
+# beyond it we simply report that delaying wins at any sane return rather than a precise threshold.
+_CROSSOVER_MAX_REAL = Decimal( '0.20' )
+
 
 @dataclass( frozen = True )
 class Claimant:
@@ -194,6 +198,18 @@ class Comparison:
             self.strategies, key = lambda strategy: strategy.present_value, reverse = True ) )
 
 
+@dataclass( frozen = True )
+class Crossover:
+    """Where claiming everyone as early as possible ties, in present value, with delaying everyone to 70 --
+    the real return above which claiming early comes out ahead. `state` names the three cases the results
+    page phrases: `threshold` (the crossover falls in a realistic range, in `real_return`), `early_wins`
+    (claiming early already wins even at a 0% real return -- typically a short life expectancy), and
+    `delay_wins` (delaying still wins even at the search cap, so no realistic return favors early)."""
+
+    state       : str
+    real_return : Optional[ Rate ] = None
+
+
 def compare_claiming_strategies(
         claimants : list[ Claimant ], assumptions : Assumptions ) -> Comparison:
     """Sweep the 62..70 claiming grid for `claimants` (one person or a couple) and rank the
@@ -250,6 +266,52 @@ def strategy_year_details(
         seen_survivor = seen_survivor or has_survivor
         continue
     return tuple( details )
+
+
+def claiming_crossover( comparison : Comparison, inflation : Rate ) -> Optional[ Crossover ]:
+    """The real return at which claiming everyone as early as possible ties, in present value, with
+    delaying everyone to 70 -- the crossover that frames the whole early-vs-late question (below it delaying
+    wins, above it claiming early does). Pure arithmetic over the two strategies' fixed nominal streams (the
+    discount never changed the benefits), so no re-run. None when the household has no all-62 / all-70
+    strategy to compare; otherwise a `Crossover` naming which of the three cases holds."""
+    earliest = _strategy_with_uniform_age( comparison, EARLIEST_CLAIM_AGE )
+    latest   = _strategy_with_uniform_age( comparison, LATEST_CLAIM_AGE )
+    if earliest is None or latest is None:
+        return None
+    start = earliest.year_benefits[ 0 ].year                             # the shared horizon (age-62) start
+
+    def surplus( real : Decimal ) -> Decimal:
+        """Delaying's present-value advantage at real return `real` (nominal = inflation + real)."""
+        nominal = inflation.fraction + real
+        return ( _present_value_at( latest.year_benefits, nominal, start )
+                 - _present_value_at( earliest.year_benefits, nominal, start ) )
+
+    if surplus( Decimal( '0' ) ) <= 0:                                   # early wins even at a 0% real return
+        return Crossover( state = 'early_wins' )
+    if surplus( _CROSSOVER_MAX_REAL ) >= 0:                              # delay wins even at the search cap
+        return Crossover( state = 'delay_wins' )
+    low, high = Decimal( '0' ), _CROSSOVER_MAX_REAL                      # bisect the single crossing between
+    for _ in range( 60 ):
+        mid = ( low + high ) / 2
+        if surplus( mid ) > 0:
+            low = mid
+        else:
+            high = mid
+        continue
+    return Crossover( state = 'threshold', real_return = Rate( ( low + high ) / 2 ) )
+
+
+def _strategy_with_uniform_age( comparison : Comparison, age : int ) -> Optional[ Strategy ]:
+    """The strategy where every claimant claims at `age` (the all-62 or all-70 combination), or None."""
+    target = tuple( age for _ in comparison.claimants )
+    return next( ( strategy for strategy in comparison.strategies if strategy.claim_ages == target ), None )
+
+
+def _present_value_at(
+        year_benefits : tuple[ YearBenefit, ... ], rate : Decimal, start_year : int ) -> Decimal:
+    """A fixed nominal benefit stream's present value discounted at nominal `rate` to `start_year`."""
+    return sum( ( benefit.nominal / ( Decimal( '1' ) + rate ) ** ( benefit.year - start_year )
+                  for benefit in year_benefits ), Decimal( '0' ) )
 
 
 def _household_members(
