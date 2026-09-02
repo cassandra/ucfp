@@ -11,12 +11,11 @@ Social Security to a lifetime total -- the nominal ("raw") sum and its present v
 
 Every strategy runs over one shared horizon -- from the earliest age-62 claim in the household to the
 last expected death -- so early claiming's extra years and late claiming's larger checks are weighed
-on equal footing. Present value discounts each year's benefit at the assumptions' `discount_rate` -- the
-visitor's expected asset return when one is given, else general inflation (the app's "today's
-dollars" convention, `overview._in_start_year_dollars`). Discounting at the expected return prices in the
-opportunity cost of deferring benefits (money drawn from savings to bridge the wait forfeits its
-compounding); discounting at inflation is the zero-real-opportunity-cost view. The discount base is the
-start (age-62) year, shared by every strategy.
+on equal footing. Each year's benefit is discounted two ways to the start (age-62) year, shared by every
+strategy: `present_value` at inflation (the app's "today's dollars" convention), and `effective_value` at
+the visitor's expected asset return -- which additionally prices in the opportunity cost of deferring
+(money drawn from savings to bridge the wait forfeits its compounding). Strategies are ranked by effective
+value; the two coincide when no return above inflation is set.
 
 For the results drill-in, `strategy_year_details` apportions each year's engine household total into the
 members' own / spousal / survivor parts. Because the COLA and reduction scale the whole benefit uniformly,
@@ -55,10 +54,6 @@ _GOVERNMENT_PENSION = GovernmentPension( JurisdictionType.US_FEDERAL )
 # both, the calculator takes one inflation figure and derives the COLA as inflation less this lag. A single
 # familiar input, at the cost of a fixed assumed gap (see the results page's methodology note).
 COLA_INFLATION_LAG = Rate( Decimal( '0.003' ) )
-
-# The upper bound of the claiming crossover search: a real return above ~20% is not a realistic hurdle, so
-# beyond it we simply report that delaying wins at any sane return rather than a precise threshold.
-_CROSSOVER_MAX_REAL = Decimal( '0.20' )
 
 
 @dataclass( frozen = True )
@@ -117,12 +112,15 @@ class Assumptions:
 
 @dataclass( frozen = True )
 class YearBenefit:
-    """One year of a strategy: the household's total Social Security that year, `nominal` (as paid --
-    COLA-grown and shortfall-reduced) and `present_value` (discounted to start-year dollars)."""
+    """One year of a strategy: the household's total Social Security that year -- `nominal` (as paid,
+    COLA-grown and shortfall-reduced), `present_value` (that year in today's dollars, discounted at
+    inflation), and `effective_value` (discounted instead at the expected asset return, so it also carries
+    the opportunity cost of deferring). The two discounts coincide when no return above inflation is set."""
 
-    year          : int
-    nominal       : Decimal
-    present_value : Decimal
+    year            : int
+    nominal         : Decimal
+    present_value   : Decimal
+    effective_value : Decimal
 
 
 @dataclass( frozen = True )
@@ -143,8 +141,8 @@ class MemberYear:
 @dataclass( frozen = True )
 class YearDetail:
     """One year of a strategy for the drill-in table: each member's nominal parts (aligned to the earners,
-    higher first), each member's age, the `household` total and its `present_value` (both the engine's),
-    and `is_transition` -- the first-death year where the survivor benefit begins."""
+    higher first), each member's age, the `household` total and its `present_value` (today's dollars, at
+    inflation), and `is_transition` -- the first-death year where the survivor benefit begins."""
 
     year          : int
     ages          : tuple[ int, ... ]
@@ -168,13 +166,16 @@ class YearDetail:
 class Strategy:
     """One claiming combination and its lifetime outcome. `claim_ages` is the age each claimant
     files, ordered higher earner first (the heatmap's two axes for a couple; a single value for one
-    person). `raw_total` is the nominal lifetime sum; `present_value` discounts it to start-year
-    dollars -- the figure strategies are ranked by. `year_benefits` is the year-by-year detail."""
+    person). `raw_total` is the nominal lifetime sum; `present_value` restates it in today's dollars
+    (discounted at inflation); `effective_value` discounts instead at the expected asset return, pricing in
+    the opportunity cost of deferring -- the figure strategies are ranked by. `year_benefits` is the
+    year-by-year detail."""
 
-    claim_ages    : tuple[ int, ... ]
-    raw_total     : Decimal
-    present_value : Decimal
-    year_benefits : tuple[ YearBenefit, ... ]
+    claim_ages      : tuple[ int, ... ]
+    raw_total       : Decimal
+    present_value   : Decimal
+    effective_value : Decimal
+    year_benefits   : tuple[ YearBenefit, ... ]
 
 
 @dataclass( frozen = True )
@@ -188,26 +189,15 @@ class Comparison:
 
     @property
     def best( self ) -> Strategy:
-        """The strategy with the greatest present value -- the one the results page marks."""
-        return max( self.strategies, key = lambda strategy: strategy.present_value )
+        """The strategy with the greatest effective value -- the opportunity-cost-adjusted figure the
+        results page marks as best (it equals the greatest present value when no return is set)."""
+        return max( self.strategies, key = lambda strategy: strategy.effective_value )
 
     @property
     def ranked( self ) -> tuple[ Strategy, ... ]:
-        """Strategies from best to worst by present value -- the ranked-list order."""
+        """Strategies from best to worst by effective value -- the ranked-list order."""
         return tuple( sorted(
-            self.strategies, key = lambda strategy: strategy.present_value, reverse = True ) )
-
-
-@dataclass( frozen = True )
-class Crossover:
-    """Where claiming everyone as early as possible ties, in present value, with delaying everyone to 70 --
-    the real return above which claiming early comes out ahead. `state` names the three cases the results
-    page phrases: `threshold` (the crossover falls in a realistic range, in `real_return`), `early_wins`
-    (claiming early already wins even at a 0% real return -- typically a short life expectancy), and
-    `delay_wins` (delaying still wins even at the search cap, so no realistic return favors early)."""
-
-    state       : str
-    real_return : Optional[ Rate ] = None
+            self.strategies, key = lambda strategy: strategy.effective_value, reverse = True ) )
 
 
 def compare_claiming_strategies(
@@ -268,52 +258,6 @@ def strategy_year_details(
     return tuple( details )
 
 
-def claiming_crossover( comparison : Comparison, inflation : Rate ) -> Optional[ Crossover ]:
-    """The real return at which claiming everyone as early as possible ties, in present value, with
-    delaying everyone to 70 -- the crossover that frames the whole early-vs-late question (below it delaying
-    wins, above it claiming early does). Pure arithmetic over the two strategies' fixed nominal streams (the
-    discount never changed the benefits), so no re-run. None when the household has no all-62 / all-70
-    strategy to compare; otherwise a `Crossover` naming which of the three cases holds."""
-    earliest = _strategy_with_uniform_age( comparison, EARLIEST_CLAIM_AGE )
-    latest   = _strategy_with_uniform_age( comparison, LATEST_CLAIM_AGE )
-    if earliest is None or latest is None:
-        return None
-    start = earliest.year_benefits[ 0 ].year                             # the shared horizon (age-62) start
-
-    def surplus( real : Decimal ) -> Decimal:
-        """Delaying's present-value advantage at real return `real` (nominal = inflation + real)."""
-        nominal = inflation.fraction + real
-        return ( _present_value_at( latest.year_benefits, nominal, start )
-                 - _present_value_at( earliest.year_benefits, nominal, start ) )
-
-    if surplus( Decimal( '0' ) ) <= 0:                                   # early wins even at a 0% real return
-        return Crossover( state = 'early_wins' )
-    if surplus( _CROSSOVER_MAX_REAL ) >= 0:                              # delay wins even at the search cap
-        return Crossover( state = 'delay_wins' )
-    low, high = Decimal( '0' ), _CROSSOVER_MAX_REAL                      # bisect the single crossing between
-    for _ in range( 60 ):
-        mid = ( low + high ) / 2
-        if surplus( mid ) > 0:
-            low = mid
-        else:
-            high = mid
-        continue
-    return Crossover( state = 'threshold', real_return = Rate( ( low + high ) / 2 ) )
-
-
-def _strategy_with_uniform_age( comparison : Comparison, age : int ) -> Optional[ Strategy ]:
-    """The strategy where every claimant claims at `age` (the all-62 or all-70 combination), or None."""
-    target = tuple( age for _ in comparison.claimants )
-    return next( ( strategy for strategy in comparison.strategies if strategy.claim_ages == target ), None )
-
-
-def _present_value_at(
-        year_benefits : tuple[ YearBenefit, ... ], rate : Decimal, start_year : int ) -> Decimal:
-    """A fixed nominal benefit stream's present value discounted at nominal `rate` to `start_year`."""
-    return sum( ( benefit.nominal / ( Decimal( '1' ) + rate ) ** ( benefit.year - start_year )
-                  for benefit in year_benefits ), Decimal( '0' ) )
-
-
 def _household_members(
         earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ] ) -> list[ HouseholdMember ]:
     """The jurisdiction calculator's members for this combination -- each earner claiming at their swept
@@ -360,14 +304,15 @@ def _run_strategy(
         assumptions : Assumptions, horizon : _Horizon ) -> Strategy:
     """One claiming combination: build its Social-Security-only forecast, run it, and reduce the
     booked benefit to per-year and lifetime totals (nominal and present value)."""
-    parameters    = _forecast_parameters( earners, claim_ages, assumptions, horizon )
-    result        = Forecast( parameters ).run()
-    year_benefits = _year_benefits( result, assumptions, horizon )
-    raw_total     = sum( ( benefit.nominal for benefit in year_benefits ), Decimal( '0' ) )
-    present_value = sum( ( benefit.present_value for benefit in year_benefits ), Decimal( '0' ) )
+    parameters      = _forecast_parameters( earners, claim_ages, assumptions, horizon )
+    result          = Forecast( parameters ).run()
+    year_benefits   = _year_benefits( result, assumptions, horizon )
+    raw_total       = sum( ( benefit.nominal for benefit in year_benefits ), Decimal( '0' ) )
+    present_value   = sum( ( benefit.present_value for benefit in year_benefits ), Decimal( '0' ) )
+    effective_value = sum( ( benefit.effective_value for benefit in year_benefits ), Decimal( '0' ) )
     return Strategy(
-        claim_ages = claim_ages, raw_total = raw_total,
-        present_value = present_value, year_benefits = year_benefits )
+        claim_ages = claim_ages, raw_total = raw_total, present_value = present_value,
+        effective_value = effective_value, year_benefits = year_benefits )
 
 
 def _forecast_parameters(
@@ -413,21 +358,25 @@ def _handle( index : int ) -> str:
 def _year_benefits(
         result : ForecastResult, assumptions : Assumptions,
         horizon : _Horizon ) -> tuple[ YearBenefit, ... ]:
-    """Each year's household Social Security from the run's books, nominal and present-valued. The
-    nominal figure is the total booked to the Social Security revenue accounts that year; present
-    value discounts it to start-year dollars at the assumptions' discount rate (the expected asset
-    return when given, else inflation)."""
-    cumulative    = _cumulative_social_security( result )
-    discount_rate = assumptions.discount_rate.fraction
-    benefits      = list()
-    previous      = cumulative( horizon.start_year - 1 )
+    """Each year's household Social Security from the run's books: the `nominal` total booked to the Social
+    Security revenue accounts, its `present_value` (discounted to start-year dollars at inflation, today's
+    dollars), and its `effective_value` (discounted instead at the assumptions' discount rate -- the
+    expected asset return when given, else inflation -- so it carries the opportunity cost of deferring)."""
+    cumulative     = _cumulative_social_security( result )
+    inflation_rate = assumptions.inflation.fraction
+    effective_rate = assumptions.discount_rate.fraction
+    benefits       = list()
+    previous       = cumulative( horizon.start_year - 1 )
     for year in range( horizon.start_year, horizon.end_year + 1 ):
         through  = cumulative( year )
         nominal  = through - previous
         previous = through
-        discount = ( Decimal( '1' ) + discount_rate ) ** ( year - horizon.start_year )
+        periods  = year - horizon.start_year
         benefits.append( YearBenefit(
-            year = year, nominal = nominal, present_value = nominal / discount ) )
+            year            = year,
+            nominal         = nominal,
+            present_value   = nominal / ( Decimal( '1' ) + inflation_rate ) ** periods,
+            effective_value = nominal / ( Decimal( '1' ) + effective_rate ) ** periods ) )
         continue
     return tuple( benefits )
 

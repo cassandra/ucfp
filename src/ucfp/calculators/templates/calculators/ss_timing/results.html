@@ -7,8 +7,8 @@
   (antinode) and moves the gold selection (ss_timing.js). Present value is explained at the foot. Context:
   `earners` (higher first), `is_couple`, `cola_lag_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
   `is_reduced`, the opportunity-cost fields `expected_return_pct`/`real_return_pct`/`is_opportunity_cost`
-  and the `crossover_state`/`crossover_pct` headline, `axis_ages`, `heatmap`, `ranked`, plus the merged
-  detail context.
+  (when on, the ranked list gains an Effective value column), `axis_ages`, `heatmap`, `ranked`, plus the
+  merged detail context.
 {% endcomment %}
 
 {% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
@@ -50,32 +50,6 @@ the seam just after the results.{% endcomment %}
     </div>
   </div>
 
-  {% comment %}Directional guidance, not a verdict: which way the trade-off leans for this household's
-  longevity and return, deferring to the ranked strategies below for the specific best age. The crossover
-  (the 62-vs-70 tie) is a rough balance point, not the optimum -- which is often an interior age -- so it
-  is framed as a tendency ("earlier/later tends to win"), never "claim at 62".{% endcomment %}
-  {% if crossover_state == 'threshold' %}
-  <div class="alert alert-light border ss-crossover" role="note">
-    <strong>Waiting longer tends to pay off</strong> the more years you expect to live and the less your
-    savings earn &mdash; delaying is a guaranteed raise a low-earning portfolio may not beat. For a
-    household like yours the balance sits around <strong>{{ crossover_pct }} above inflation</strong>:
-    below that, later claiming tends to come out ahead; above it, earlier. The ranked strategies below use
-    the return you entered.
-  </div>
-  {% elif crossover_state == 'early_wins' %}
-  <div class="alert alert-light border ss-crossover" role="note">
-    <strong>At this life expectancy, claiming earlier tends to come out ahead</strong> &mdash; there may
-    not be enough years to recoup the larger benefit from waiting, even before the opportunity cost. The
-    ranked strategies below show the trade-off in full.
-  </div>
-  {% elif crossover_state == 'delay_wins' %}
-  <div class="alert alert-light border ss-crossover" role="note">
-    <strong>Waiting tends to pay off across the board here</strong> &mdash; the delay credit outweighs the
-    opportunity cost unless your savings earn well above inflation. The ranked strategies below use the
-    return you entered.
-  </div>
-  {% endif %}
-
   <div class="row">
     <div class="col-lg-8 mb-3">
       <div class="card h-100"><div class="card-body">
@@ -93,6 +67,7 @@ the seam just after the results.{% endcomment %}
             <thead><tr>
               <th></th><th>{% if is_couple %}Ages{% else %}Age{% endif %}</th>
               <th class="num">Total</th><th class="num">Present<br>value</th>
+              {% if is_opportunity_cost %}<th class="num">Effective<br>value</th>{% endif %}
             </tr></thead>
             <tbody>
               {% for row in ranked %}
@@ -103,12 +78,17 @@ the seam just after the results.{% endcomment %}
                   <td>{{ row.ages|join:" / " }}</td>
                   <td class="num">${{ row.raw_total|floatformat:0|intcomma }}</td>
                   <td class="num">${{ row.present_value|floatformat:0|intcomma }}</td>
+                  {% if is_opportunity_cost %}<td class="num">${{ row.effective_value|floatformat:0|intcomma }}</td>{% endif %}
                 </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
-        <small class="text-muted d-block mt-2">Present value converts total to today&rsquo;s dollars.</small>
+        <small class="text-muted d-block mt-2">
+          {% if is_opportunity_cost %}Ranked by <strong>effective value</strong> &mdash; today&rsquo;s
+          dollars, further adjusted for the investment growth you&rsquo;d give up while
+          waiting.{% else %}Present value converts the total to today&rsquo;s dollars.{% endif %}
+        </small>
       </div></div>
     </div>
   </div>
@@ -131,12 +111,12 @@ the seam just after the results.{% endcomment %}
 
   <div class="text-muted small">
     <p>
-      <strong>Total</strong> is the sum of every year&rsquo;s benefit as paid (grown by the SS
-      adjustment). <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars,
-      {% if is_opportunity_cost %}discounting each future year at your expected asset return
-      ({{ real_return_pct }} above inflation): a deferred benefit is weighed against the growth that money
-      could otherwise earn, the opportunity cost of waiting{% else %}discounting each future year at
-      inflation, so money far in the future counts for what it is worth now{% endif %}.
+      <strong>Total</strong> is the benefit dollars received over a lifetime (grown by the SS adjustment).
+      <strong>Present value</strong> restates that in today&rsquo;s dollars, discounting each future year
+      at inflation.{% if is_opportunity_cost %} <strong>Effective value</strong> discounts instead at your
+      expected asset return ({{ real_return_pct }} above inflation), so a deferred benefit is also weighed
+      against the growth that money could otherwise earn &mdash; the opportunity cost of waiting, and the
+      figure strategies are ranked by.{% endif %}
     </p>
     <p class="mb-0">
       The Social Security cost-of-living adjustment (the &ldquo;SS adjustment&rdquo; above) is modeled at

@@ -11,11 +11,8 @@ from django.urls import reverse
 
 from organization.models import Organization
 
-from common.rate import Rate
-
 from ucfp.calculators.ss_timing import results
 from ucfp.calculators.ss_timing.compute import Claimant, Comparison, Strategy
-from ucfp.calculators.ss_timing.views import _threshold_percent
 
 User = get_user_model()
 
@@ -23,9 +20,10 @@ _HIGHER = Claimant( 'Higher', 1960, Decimal( '3000' ), 85 )
 _LOWER  = Claimant( 'Lower', 1962, Decimal( '1000' ), 88 )
 
 
-def _strategy( claim_ages, present_value ) -> Strategy:
-    return Strategy( claim_ages = claim_ages, raw_total = Decimal( present_value ),
-                     present_value = Decimal( present_value ), year_benefits = () )
+def _strategy( claim_ages, value ) -> Strategy:
+    return Strategy( claim_ages = claim_ages, raw_total = Decimal( value ),
+                     present_value = Decimal( value ), effective_value = Decimal( value ),
+                     year_benefits = () )
 
 
 def _couple_comparison() -> Comparison:
@@ -34,15 +32,6 @@ def _couple_comparison() -> Comparison:
         _strategy( ( higher, lower ), 100000 + higher * 100 + lower )
         for higher in range( 62, 71 ) for lower in range( 62, 71 ) )
     return Comparison( claimants = ( _HIGHER, _LOWER ), strategies = strategies )
-
-
-class ThresholdPercentTest( SimpleTestCase ):
-    """The crossover rate is a bisection result, so the headline rounds it to a tenth of a point rather
-    than rendering its full precision."""
-
-    def test_it_rounds_to_a_tenth_of_a_percent( self ):
-        self.assertEqual( _threshold_percent( Rate( Decimal( '0.009823381109050067' ) ) ), '1%' )
-        self.assertEqual( _threshold_percent( Rate( Decimal( '0.0318' ) ) ), '3.2%' )
 
 
 class HeatmapViewModelTest( SimpleTestCase ):
@@ -110,17 +99,18 @@ class ResultsRenderTest( TestCase ):
         self._submit()                                                      # return 4.5% over 2.5% inflation
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
         self.assertContains( response, 'Asset return' )                     # the recap chip ...
-        self.assertContains( response, 'opportunity cost of waiting' )      # ... the adapted PV footnote ...
-        self.assertContains( response, 'ss-crossover' )                     # ... and the crossover headline
+        self.assertContains( response, 'Effective' )                        # ... the third ranked column ...
+        self.assertContains( response, 'opportunity cost of waiting' )      # ... and the footnote
 
-    def test_a_return_equal_to_inflation_shows_the_plain_present_value( self ):
-        # Setting the asset return equal to inflation is the zero-real-opportunity-cost view: the plain PV
-        # framing, no asset-return chip.
+    def test_a_return_equal_to_inflation_shows_only_total_and_present_value( self ):
+        # Setting the asset return equal to inflation is the zero-real-opportunity-cost view: no asset-return
+        # chip, no Effective value column, plain PV framing.
         data = _couple_form_data()
         data[ 'expected_return' ] = data[ 'inflation' ]
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), data )
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
         self.assertNotContains( response, 'Asset return' )
+        self.assertNotContains( response, 'Effective' )
         self.assertNotContains( response, 'opportunity cost of waiting' )
 
     def test_the_drill_in_endpoint_swaps_one_strategy_detail( self ):

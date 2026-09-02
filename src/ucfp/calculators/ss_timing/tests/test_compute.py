@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from common.rate import Rate, ZERO_RATE
 from ucfp.calculators.ss_timing.compute import (
-    Assumptions, Claimant, claiming_crossover, compare_claiming_strategies, strategy_year_details )
+    Assumptions, Claimant, compare_claiming_strategies, strategy_year_details )
 
 _NO_OVERLAY = Assumptions( inflation = ZERO_RATE, cola = ZERO_RATE )
 
@@ -53,15 +53,17 @@ class OpportunityCostDiscountTest( unittest.TestCase ):
                                    expected_return = Rate( Decimal( '0.06' ) ) )
         self.assertEqual( with_return.discount_rate, Rate( Decimal( '0.06' ) ) )
 
-    def test_a_higher_expected_return_discounts_a_deferred_strategy_harder( self ):
+    def test_a_higher_expected_return_lowers_a_deferred_strategy_effective_value( self ):
         base = compare_claiming_strategies(
             self._solo(), Assumptions.from_inflation( inflation = Rate( Decimal( '0.03' ) ) ) )
         priced = compare_claiming_strategies( self._solo(), Assumptions.from_inflation(
             inflation = Rate( Decimal( '0.03' ) ), expected_return = Rate( Decimal( '0.08' ) ) ) )
         claim_70_base   = next( s for s in base.strategies if s.claim_ages == ( 70, ) )
         claim_70_priced = next( s for s in priced.strategies if s.claim_ages == ( 70, ) )
-        self.assertEqual( claim_70_base.raw_total, claim_70_priced.raw_total )     # same nominal benefits ...
-        self.assertLess( claim_70_priced.present_value, claim_70_base.present_value )   # ... discounted more
+        self.assertEqual( claim_70_base.raw_total, claim_70_priced.raw_total )       # same nominal ...
+        self.assertEqual( claim_70_base.present_value, claim_70_priced.present_value )   # ... same today's $
+        self.assertLess(                                                            # ... but lower effective
+            claim_70_priced.effective_value, claim_70_base.effective_value )
 
     def test_an_expected_return_of_inflation_leaves_the_best_unchanged( self ):
         # Setting the expected return equal to inflation is the zero-real-opportunity-cost view -- identical
@@ -89,38 +91,6 @@ class OpportunityCostDiscountTest( unittest.TestCase ):
         best_age = comparison.best.claim_ages[ 0 ]
         self.assertGreater( best_age, 62 )
         self.assertLess( best_age, 70 )
-
-
-class ClaimingCrossoverTest( unittest.TestCase ):
-    """`claiming_crossover` finds the real return at which claiming at 62 ties, in present value, with
-    delaying to 70 -- the threshold that frames the whole early-vs-late question."""
-
-    def _comparison( self, life : int ):
-        return compare_claiming_strategies(
-            [ Claimant( 'Solo', 1960, Decimal( '2000' ), life ) ],
-            Assumptions.from_inflation( inflation = Rate( Decimal( '0.025' ) ) ) )
-
-    def test_average_longevity_yields_a_positive_real_threshold( self ):
-        crossover = claiming_crossover( self._comparison( life = 88 ), Rate( Decimal( '0.025' ) ) )
-        self.assertEqual( crossover.state, 'threshold' )
-        self.assertGreater( crossover.real_return.fraction, Decimal( '0' ) )     # delaying wins below it
-
-    def test_the_threshold_equalizes_early_and_late_present_value( self ):
-        comparison = self._comparison( life = 88 )
-        crossover  = claiming_crossover( comparison, Rate( Decimal( '0.025' ) ) )
-        nominal    = crossover.real_return.fraction + Decimal( '0.025' )         # real + inflation
-        early = next( s for s in comparison.strategies if s.claim_ages == ( 62, ) )
-        late  = next( s for s in comparison.strategies if s.claim_ages == ( 70, ) )
-        start = early.year_benefits[ 0 ].year
-
-        def present_value( strategy ):
-            return sum( ( benefit.nominal / ( Decimal( '1' ) + nominal ) ** ( benefit.year - start )
-                          for benefit in strategy.year_benefits ), Decimal( '0' ) )
-        self.assertAlmostEqual( present_value( early ), present_value( late ), delta = Decimal( '1' ) )
-
-    def test_a_short_life_expectancy_favors_claiming_early( self ):
-        crossover = claiming_crossover( self._comparison( life = 72 ), Rate( Decimal( '0.025' ) ) )
-        self.assertEqual( crossover.state, 'early_wins' )                        # early wins even at 0 real
 
 
 class ClaimingSweepShapeTest( unittest.TestCase ):
@@ -157,14 +127,16 @@ class ClaimingSweepShapeTest( unittest.TestCase ):
 
 class ClaimingSweepReductionTest( unittest.TestCase ):
 
-    def test_year_benefits_sum_to_the_raw_and_present_value_totals( self ):
+    def test_year_benefits_sum_to_the_lifetime_totals( self ):
         comparison = compare_claiming_strategies(
             [ Claimant( 'Solo', 1960, Decimal( '2000' ), 85 ) ], _assumptions() )
         for strategy in comparison.strategies:
             raw = sum( ( benefit.nominal for benefit in strategy.year_benefits ), Decimal( '0' ) )
             pv  = sum( ( benefit.present_value for benefit in strategy.year_benefits ), Decimal( '0' ) )
+            ev  = sum( ( benefit.effective_value for benefit in strategy.year_benefits ), Decimal( '0' ) )
             self.assertEqual( strategy.raw_total, raw )
             self.assertEqual( strategy.present_value, pv )
+            self.assertEqual( strategy.effective_value, ev )
 
     def test_present_value_does_not_exceed_the_raw_total_under_inflation( self ):
         # A positive inflation discount makes each year's present value <= its nominal, so the totals do too.
@@ -173,14 +145,14 @@ class ClaimingSweepReductionTest( unittest.TestCase ):
         for strategy in comparison.strategies:
             self.assertLessEqual( strategy.present_value, strategy.raw_total )
 
-    def test_best_is_the_highest_present_value_and_ranked_is_descending( self ):
+    def test_best_is_the_highest_effective_value_and_ranked_is_descending( self ):
         comparison = compare_claiming_strategies(
             [ Claimant( 'Solo', 1960, Decimal( '2000' ), 95 ) ], _assumptions() )
         self.assertEqual(
-            comparison.best.present_value,
-            max( strategy.present_value for strategy in comparison.strategies ) )
-        present_values = [ strategy.present_value for strategy in comparison.ranked ]
-        self.assertEqual( present_values, sorted( present_values, reverse = True ) )
+            comparison.best.effective_value,
+            max( strategy.effective_value for strategy in comparison.strategies ) )
+        effective_values = [ strategy.effective_value for strategy in comparison.ranked ]
+        self.assertEqual( effective_values, sorted( effective_values, reverse = True ) )
 
 
 class ClaimingSweepSurvivorTest( unittest.TestCase ):

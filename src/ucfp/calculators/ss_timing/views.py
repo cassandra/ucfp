@@ -22,7 +22,7 @@ from ucfp.jurisdiction.government_pension import GovernmentPension
 
 from . import methodology, results
 from .compute import (
-    CLAIM_AGES, COLA_INFLATION_LAG, claiming_crossover, compare_claiming_strategies, compute_strategy,
+    CLAIM_AGES, COLA_INFLATION_LAG, compare_claiming_strategies, compute_strategy,
     strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions, is_runnable
 from .prefill import build_prefill
@@ -75,7 +75,6 @@ class ResultsView( View ):
         selected    = comparison.best
         combo       = results.combo_of( selected.claim_ages )
         real_return = Rate( assumptions.discount_rate.fraction - assumptions.inflation.fraction )
-        crossover   = claiming_crossover( comparison, assumptions.inflation )
         context     = {
             'axis_ages'           : CLAIM_AGES,
             'cola_lag_pct'        : _percent( COLA_INFLATION_LAG ),
@@ -83,9 +82,6 @@ class ResultsView( View ):
             'expected_return_pct' : _percent( assumptions.discount_rate ),
             'real_return_pct'     : _percent( real_return ),
             'is_opportunity_cost' : real_return.fraction != 0,
-            'crossover_state'     : None if crossover is None else crossover.state,
-            'crossover_pct'       : ( _threshold_percent( crossover.real_return )
-                                      if crossover is not None and crossover.state == 'threshold' else None ),
             'payable_pct'         : _percent( assumptions.benefits_payable ),
             'reduction_year'      : assumptions.reduction_year,
             'is_reduced'          : assumptions.benefits_payable != FULL_RATE,
@@ -227,12 +223,6 @@ def _percent( rate ) -> str:
     Rate(1) -> '100%'. Fixed-point format so a whole percent does not render in scientific notation."""
     value = ( rate.fraction * Decimal( '100' ) ).normalize()
     return f'{ format( value, "f" ) }%'
-
-
-def _threshold_percent( rate : Rate ) -> str:
-    """The crossover rate as a percent, rounded to a tenth of a point for the headline -- it is a bisection
-    result carrying full precision, unlike the clean form-entered rates `_percent` usually formats."""
-    return _percent( Rate( rate.fraction.quantize( Decimal( '0.001' ) ) ) )
 
 
 def _parse_combo( combo : str, count : int ) -> tuple[ int, ... ]:
