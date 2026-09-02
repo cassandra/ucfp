@@ -36,9 +36,11 @@
         // typed beside the input; and state the default in concrete nominal terms in the help (the bold
         // number IS the value to enter), so nothing reads as a bare "2%" to type into the box.
         var DEFAULT_REAL = 2;   // the conservative safe real return the default targets (see forms.py)
+        var HIGH_REAL    = 5;   // above ~5% real is beyond even an aggressive long-run estimate -> warn
         var $return    = $( '#id_expected_return' );
         var $inflation = $( '#id_inflation' );
         var $hint      = $( '#return-real-hint' );
+        var $warn      = $( '#return-warn' );
         var $default   = $( '#return-default' );
         var $note      = $( '#return-default-note' );
         if ( !$return.length || !$inflation.length ) { return; }
@@ -56,9 +58,16 @@
         function refresh() {
             var inflation = parseFloat( $inflation.val() );
             var nominal   = parseFloat( $return.val() );
+            var real      = nominal - inflation;
             if ( $hint.length ) {
                 $hint.text( ( isNaN( nominal ) || isNaN( inflation ) ) ? ''
-                    : '≈ ' + ( nominal - inflation ).toFixed( 1 ) + '% above inflation' );
+                    : '≈ ' + real.toFixed( 1 ) + '% above inflation' );
+            }
+            if ( $warn.length ) {
+                $warn.text( ( !isNaN( real ) && real > HIGH_REAL )
+                    ? 'That’s optimistic — even aggressive long-run estimates are around ' + HIGH_REAL
+                      + '% above inflation, and money you may spend soon can’t safely earn that much.'
+                    : '' );
             }
             if ( $default.length && !isNaN( inflation ) ) {
                 $default.text( conservativeNominal( inflation ) + '%' );          // the number to enter

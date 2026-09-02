@@ -77,6 +77,7 @@
              aria-expanded="false" aria-controls="return-help">What&rsquo;s this?</a>
         </div>
         {% include "calculators/ss_timing/_field_errors.html" with field=form.expected_return %}
+        <small id="return-warn" class="text-danger d-block mt-1" aria-live="polite"></small>
         <div class="collapse" id="return-help">
           <small class="form-text text-muted">
             Waiting to claim means spending savings that could otherwise stay invested &mdash; the
