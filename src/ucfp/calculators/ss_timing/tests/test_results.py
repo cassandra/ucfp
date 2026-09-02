@@ -175,6 +175,14 @@ class ResultsRenderTest( TestCase ):
         self.assertIn( 'beyond', payload[ 'ss-rank' ] )                     # the 11th row's visual break
         self.assertIn( 'data-combo="62-62"', payload[ 'ss-rank' ] )
 
+    def test_the_specific_mode_methodology_omits_the_mortality_basis( self ):
+        # The Methodology section always explains the value figures and the SS adjustment, but the
+        # life-expectancy/mortality paragraph is actuarial-only (specific mode enters ages directly).
+        self._submit()                                                     # specific couple
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertContains( response, 'Methodology' )
+        self.assertNotContains( response, 'period life table' )
+
     def test_the_year_by_year_is_income_only_no_totals_or_effective_value( self ):
         # The year-by-year is an income picture: the lifetime total and the effective value (the decision
         # figures) live once, in the Top strategies table, and must not reappear per-year -- even with the
@@ -206,14 +214,24 @@ class ActuarialResultsTest( TestCase ):
     def test_the_recap_reports_the_estimated_life_expectancy( self ):
         self._submit()
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
-        self.assertContains( response, 'life expectancy' )
+        self.assertContains( response, 'Life expectancy' )
         self.assertContains( response, 'male, average' )                    # the higher earner's basis words
 
     def test_the_figures_are_framed_as_expected_values( self ):
         self._submit()
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
         self.assertContains( response, 'Expected lifetime benefit' )       # the heatmap eyebrow
-        self.assertContains( response, 'weighted by the chance' )           # the expected-value framing
+        self.assertContains( response, 'expectancy probabilities' )         # the expected-value framing
+
+    def test_the_methodology_section_documents_the_mortality_basis( self ):
+        # The predictive life-expectancy method lives in the page Methodology (not the per-strategy modal):
+        # the SSA life-table citation, cross-check, and the couple simplification.
+        self._submit()
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertContains( response, 'Methodology' )
+        self.assertContains( response, 'period life table' )
+        self.assertContains( response, 'table4c6' )                        # the SSA life-table URL
+        self.assertContains( response, 'independent' )                     # the couple mortality note
 
     def test_the_year_by_year_is_a_representative_lifetime_with_a_survivor_step_up( self ):
         self._submit()

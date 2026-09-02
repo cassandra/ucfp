@@ -91,6 +91,7 @@ class ResultsView( View ):
             'payable_pct'               : _percent( assumptions.benefits_payable ),
             'reduction_year'            : assumptions.reduction_year,
             'is_reduced'                : assumptions.benefits_payable != FULL_RATE,
+            'life_table_url'            : methodology.LIFE_TABLE_URL,
             'heatmap'                   : results.heatmap( comparison, combo ),
             'ranked'                    : results.ranked( comparison, combo ) }
         context.update( _detail_context( detail_earners, detail_strategy, is_opportunity_cost, estimated ) )
@@ -135,16 +136,15 @@ class MethodologyModalView( ModalView ):
         resolved = _session_claimants_and_assumptions( request )
         if resolved is None:
             raise Http404( 'No calculator inputs in this session.' )
-        claimants, _assumptions, basis = resolved
+        claimants, _assumptions, _basis = resolved
         earners    = earners_of( claimants )
         claim_ages = _parse_combo( combo, len( claimants ) )
+        # The per-strategy modal covers only the statutory benefit calculation (the deterministic terms and
+        # their values); the predictive life-expectancy/value method lives in the results-page Methodology.
         return self.modal_response( request, context = {
-            'terms'          : methodology.methodology( earners, claim_ages ),
-            'claim_pairs'    : list( zip( earners, claim_ages ) ),
-            'is_actuarial'   : basis is LifeExpectancyBasis.ACTUARIAL,
-            'is_couple'      : len( earners ) == 2,
-            'reference_url'  : methodology.REFERENCE_URL,
-            'life_table_url' : methodology.LIFE_TABLE_URL } )
+            'terms'         : methodology.methodology( earners, claim_ages ),
+            'claim_pairs'   : list( zip( earners, claim_ages ) ),
+            'reference_url' : methodology.REFERENCE_URL } )
 
 
 class BenefitEstimatorModalView( ModalView ):

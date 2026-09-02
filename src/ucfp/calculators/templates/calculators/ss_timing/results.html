@@ -1,10 +1,12 @@
 {% extends "pages/base_public.html" %}
 {% load common_tags humanize %}
 {% comment %}
-  The Social Security claiming comparison: household + assumptions recap (with an Adjust link back to the
-  inputs), the claiming-age heatmap and ranked list (click either to drill in), and the year-by-year
-  detail for the selected strategy. Cells and ranked rows carry `data-combo`; clicking swaps the detail
-  (antinode) and moves the gold selection (ss_timing.js). Present value is explained at the foot. Context:
+  The Social Security claiming comparison, results first: the claiming-age heatmap and ranked list (click
+  either to drill in), then the household + assumptions recap (a secondary sanity-check, with an Adjust link
+  back to the inputs), then the year-by-year detail for the selected strategy. Cells and ranked rows carry
+  `data-combo`; clicking swaps the detail (antinode) and moves the gold selection (ss_timing.js). The value
+  figures, life-expectancy weighting, and SS adjustment are explained in the Methodology at the foot (the
+  per-strategy modal on the year-by-year covers only that strategy's statutory benefit terms). Context:
   `earners` (higher first), `is_couple`, `cola_lag_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
   `is_reduced`, the opportunity-cost fields `expected_return_pct`/`real_return_pct`/`is_opportunity_cost`
   (when on, the ranked list gains an Effective value column), `axis_ages`, `heatmap`, `ranked`, plus the
@@ -17,10 +19,34 @@
 
 {% block public_content %}
 {% comment %}The signed-in breadcrumb sits at the top -- wayfinding, not a pitch, so it does not compete with
-the results. An anonymous visitor has no app to return to; their onward path is the upsell lower down, at
-the seam just after the results.{% endcomment %}
+the results. An anonymous visitor has no app to return to; their onward path is the upsell lower down, after
+the recap and before the year-by-year depth.{% endcomment %}
 {% include "calculators/ss_timing/_dashboard_breadcrumb.html" %}
 <div class="ss-results">
+
+  {% comment %}The results lead -- the heatmap of the whole claiming-age landscape and the ranked list.
+  The household/assumptions recap follows below (a sanity-check of what was entered, secondary to the
+  results), which also buffers the now loosely-connected year-by-year.{% endcomment %}
+  <div class="row">
+    <div class="col-lg-7 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-1">{% if life_expectancy_estimated %}Expected lifetime benefit{% else %}Lifetime benefit{% endif %} by claiming age{% if is_couple %}s{% endif %}</div>
+        {% include "calculators/ss_timing/_heatmap.html" %}
+        <div class="ss-hm-legend"><span>Lower</span><span class="bar"></span><span>Higher</span>
+          <span class="ml-auto"><span style="color:#0e4b61">&#9733; highest</span> · click any cell</span></div>
+        <p class="text-muted small mb-0 mt-2">Nearby ages are often close, so look for the best
+          <em>range</em> to consider rather than one exact age.</p>
+      </div></div>
+    </div>
+    <div class="col-lg-5 mb-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="ss-eyebrow mb-2">Top strategies</div>
+        {% if life_expectancy_estimated %}<p class="text-muted small mb-2">Expected value across life
+          expectancy probabilities.</p>{% endif %}
+        {% include "calculators/ss_timing/_rank.html" %}
+      </div></div>
+    </div>
+  </div>
 
   <div class="row">
     <div class="col-md-7 mb-3">
@@ -34,8 +60,8 @@ the seam just after the results.{% endcomment %}
             <div class="col ss-person">
               <div class="font-weight-bold">{{ recap.name }}{% if recap.role %}
                 <span class="ss-role">· {{ recap.role }}</span>{% endif %}</div>
-              <div class="text-muted small mt-1">PIA ${{ recap.pia|floatformat:0|intcomma }}/mo ·
-                {% if life_expectancy_estimated %}life expectancy ~{{ recap.lifetime_age }} ({{ recap.basis_words }}){% else %}through age {{ recap.lifetime_age }}{% endif %}</div>
+              <div class="text-muted small mt-1">PIA ${{ recap.pia|floatformat:0|intcomma }}/mo</div>
+              <div class="text-muted small">{% if life_expectancy_estimated %}Life expectancy ~{{ recap.lifetime_age }} ({{ recap.basis_words }}){% else %}Through age {{ recap.lifetime_age }}{% endif %}</div>
             </div>
           {% endfor %}
         </div>
@@ -51,29 +77,9 @@ the seam just after the results.{% endcomment %}
     </div>
   </div>
 
-  <div class="row">
-    <div class="col-lg-7 mb-3">
-      <div class="card h-100"><div class="card-body">
-        <div class="ss-eyebrow mb-1">{% if life_expectancy_estimated %}Expected lifetime benefit{% else %}Lifetime benefit{% endif %} by claiming age{% if is_couple %}s{% endif %}</div>
-        {% include "calculators/ss_timing/_heatmap.html" %}
-        <div class="ss-hm-legend"><span>Lower</span><span class="bar"></span><span>Higher</span>
-          <span class="ml-auto" style="color:#b07d05">&#9733; best · click any cell</span></div>
-      </div></div>
-    </div>
-    <div class="col-lg-5 mb-3">
-      <div class="card h-100"><div class="card-body">
-        <div class="ss-eyebrow mb-2">Top strategies</div>
-        {% if life_expectancy_estimated %}<p class="text-muted small mb-2">Expected value across your
-          possible lifespans, weighted by the chance of living to each age.</p>{% endif %}
-        {% include "calculators/ss_timing/_rank.html" %}
-      </div></div>
-    </div>
-  </div>
-
-  {% comment %}The onward path for an anonymous visitor, placed at the seam between the results (the answer)
-  and the year-by-year detail (the supporting depth): a slim band nudging them to the full planner, since
-  claiming timing is one piece of a whole retirement plan. A signed-in visitor already has the app and gets
-  the breadcrumb up top instead.{% endcomment %}
+  {% comment %}The onward path for an anonymous visitor, after the recap and before the year-by-year depth:
+  a slim band nudging them to the full planner, since claiming timing is one piece of a whole retirement
+  plan. A signed-in visitor already has the app and gets the breadcrumb up top instead.{% endcomment %}
   {% if onboarding_state == 'anonymous' %}
   <div class="ss-onward d-flex flex-wrap align-items-center justify-content-between mb-3 p-3">
     <p class="mb-2 mb-sm-0 mr-sm-3">Claiming timing is one piece of your retirement. See how it fits with
@@ -86,23 +92,37 @@ the seam just after the results.{% endcomment %}
     {% include "calculators/ss_timing/_detail.html" %}
   </div></div>
 
-  <div class="text-muted small">
+  {% comment %}The page-level Methodology: how the comparison as a whole is computed -- the value figures,
+  the life-expectancy weighting (the predictive method), and the SS adjustment. Distinct from the per-
+  strategy modal on the year-by-year, which covers only that strategy's statutory benefit terms.{% endcomment %}
+  <div class="ss-methodology text-muted small mt-4 pt-3 border-top">
+    <h2 class="ss-eyebrow mb-2">Methodology</h2>
     <p>
-      <strong>Total</strong> is the benefit dollars received over a lifetime (grown by the SS adjustment).
+      <strong>Values.</strong> Totals are the "raw" benefit dollars received over a lifetime (grown by the SS adjustment).
       <strong>Present value</strong> restates that in today&rsquo;s dollars, discounting each future year
       at inflation.{% if is_opportunity_cost %} <strong>Effective value</strong> discounts instead at your
       expected asset return ({{ real_return_pct }} above inflation), so a deferred benefit is also weighed
-      against the growth that money could otherwise earn &mdash; the opportunity cost of waiting, and the
-      figure strategies are ranked by.{% endif %}{% if life_expectancy_estimated %} Every figure above is
-      an <strong>expected</strong> value &mdash; each future year weighted by the chance you&rsquo;re alive
-      to receive it, then summed &mdash; so no single lifetime produces exactly these totals. The
-      year-by-year below shows one representative lifetime instead.{% endif %}
+      against the growth that money could otherwise earn: the opportunity cost of waiting, and the
+      figure strategies are ranked by.{% endif %}
     </p>
+    {% if life_expectancy_estimated %}
+    <p>
+      <strong>Life expectancy.</strong> Each future year is weighted by your chance of still being alive to
+      collect it, from the
+      <a href="{{ life_table_url }}" target="_blank" rel="noopener">SSA period life table (ssa.gov)</a>
+      (cross-checked against CDC/NCHS). The ranked figures average over the lifespans you might have &mdash;
+      so they are <strong>expected</strong> values that no single lifetime lands on exactly; the year-by-year
+      above instead traces one representative lifetime, each person to about their life expectancy. It uses
+      today&rsquo;s mortality rates, so it runs slightly conservative on longevity{% if is_couple %}, treats
+      the two lifespans as independent, and pays the survivor the deceased&rsquo;s claim-age
+      benefit{% endif %}. Shorter / Longer shifts the estimate a few years.
+    </p>
+    {% endif %}
     <p class="mb-0">
-      The Social Security cost-of-living adjustment (the &ldquo;SS adjustment&rdquo; above) is modeled at
-      about {{ cola_lag_pct }} below inflation, its long-run pattern &mdash; so benefits keep most, but not
-      quite all, of their purchasing power over time. Set the inflation rate to match how fast you expect
-      prices to rise; the adjustment follows from it.
+      <strong>SS adjustment.</strong> The Social Security cost-of-living adjustment is modeled at about
+      {{ cola_lag_pct }} below inflation, its long-run pattern, so benefits keep most, but not quite
+      all, of their purchasing power over time. Set the inflation rate to match how fast you expect prices to
+      rise; the adjustment follows from it.
     </p>
   </div>
 </div>

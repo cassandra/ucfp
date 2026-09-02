@@ -84,16 +84,16 @@ def _actuarial_couple_form_data() -> dict:
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
 class ActuarialMethodologyModalTest( TestCase ):
-    """Under the actuarial basis the modal adds the mortality basis: the SSA life-table citation, the
-    expected-value framing, and the honest simplifications."""
+    """The per-strategy modal covers only the statutory benefit calculation; the predictive
+    life-expectancy/value method lives in the results-page Methodology, not here -- even under the actuarial
+    basis, the modal must not carry the mortality note."""
 
     def setUp( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), _actuarial_couple_form_data() )
 
-    def test_the_modal_documents_the_mortality_basis( self ):
+    def test_the_modal_omits_the_mortality_note_even_when_actuarial( self ):
         modal = json.loads( self.client.get(
             reverse( 'calculators:ss_timing:methodology', args = [ '67-67' ] ),
             HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' ).content )[ 'modal' ]
-        self.assertIn( 'period life table', modal )                        # the SSA citation
-        self.assertIn( 'table4c6', modal )                                 # its URL
-        self.assertIn( 'independent', modal )                              # the couple simplification
+        self.assertIn( 'PIA', modal )                                      # the statutory terms remain
+        self.assertNotIn( 'period life table', modal )                     # the mortality basis moved out
