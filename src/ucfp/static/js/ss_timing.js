@@ -96,18 +96,26 @@
     }
 
     function initSelectionSync() {
-        // A ranked row delegates to its matching heatmap cell (the antinode link that swaps the detail),
-        // so both surfaces and the fetch stay in sync through one path; keyboard activation mirrors a click.
-        $( document ).on( 'click', '.ss-hm-cell', function () { moveSelection( this.dataset.combo ); } );
-        $( document ).on( 'click', '.rank-row', function () {
-            var cell = document.querySelector( '.ss-hm-cell[data-combo="' + this.dataset.combo + '"]' );
-            if ( cell ) { cell.click(); }
+        // Direct listeners on the cells and rows, NOT delegated at document: the heatmap cell is an
+        // antinode link, and antinode's document-level handling stops the click bubbling, so a delegated
+        // handler never sees it (the detail swaps but the gold selection would not move). The cells and
+        // rows live in the static part of the page -- only #ss-detail swaps -- so binding once is safe. A
+        // ranked row triggers its matching cell, so both surfaces and the antinode fetch stay in sync.
+        document.querySelectorAll( '.ss-hm-cell' ).forEach( function ( cell ) {
+            cell.addEventListener( 'click', function () { moveSelection( cell.dataset.combo ); } );
         } );
-        $( document ).on( 'keydown', '.rank-row', function ( event ) {
-            if ( event.key === 'Enter' || event.key === ' ' ) {
-                event.preventDefault();
-                $( this ).trigger( 'click' );
+        document.querySelectorAll( '.rank-row' ).forEach( function ( row ) {
+            function activate() {
+                var cell = document.querySelector( '.ss-hm-cell[data-combo="' + row.dataset.combo + '"]' );
+                if ( cell ) { cell.click(); }
             }
+            row.addEventListener( 'click', activate );
+            row.addEventListener( 'keydown', function ( event ) {
+                if ( event.key === 'Enter' || event.key === ' ' ) {
+                    event.preventDefault();
+                    activate();
+                }
+            } );
         } );
     }
 

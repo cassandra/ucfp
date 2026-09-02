@@ -122,6 +122,7 @@ class ResultsRenderTest( TestCase ):
         detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
         self.assertIn( 'Total', detail )
         self.assertIn( 'Lifetime total', detail )
+        self.assertIn( '>EV<', detail )        # the effective-value column shows on drill-in (opp. cost on)
 
     def test_a_bad_or_mismatched_combo_is_not_found( self ):
         self._submit()

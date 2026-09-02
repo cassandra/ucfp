@@ -81,13 +81,14 @@ class ResultsView( View ):
             'inflation_pct'       : _percent( assumptions.inflation ),
             'expected_return_pct' : _percent( assumptions.discount_rate ),
             'real_return_pct'     : _percent( real_return ),
-            'is_opportunity_cost' : real_return.fraction != 0,
+            'is_opportunity_cost' : _is_opportunity_cost( assumptions ),
             'payable_pct'         : _percent( assumptions.benefits_payable ),
             'reduction_year'      : assumptions.reduction_year,
             'is_reduced'          : assumptions.benefits_payable != FULL_RATE,
             'heatmap'             : results.heatmap( comparison, combo ),
             'ranked'              : results.ranked( comparison, combo ) }
-        context.update( _detail_context( comparison.claimants, selected ) )
+        context.update( _detail_context(
+            comparison.claimants, selected, _is_opportunity_cost( assumptions ) ) )
         return render( request, self.template_name, context )
 
 
@@ -103,7 +104,9 @@ class StrategyDetailView( View ):
         claimants, assumptions = resolved
         strategy = compute_strategy( claimants, _parse_combo( combo, len( claimants ) ), assumptions )
         content  = render_to_string(
-            _DETAIL_TEMPLATE, _detail_context( _by_earning( claimants ), strategy ), request = request )
+            _DETAIL_TEMPLATE,
+            _detail_context( _by_earning( claimants ), strategy, _is_opportunity_cost( assumptions ) ),
+            request = request )
         return antinode.response( replace_map = { 'ss-detail' : content } )
 
 
@@ -201,16 +204,24 @@ def _submitted_amount( request, field : str ) -> Decimal:
     return value if value is not None else Decimal( '0' )
 
 
-def _detail_context( earners, strategy ) -> dict:
+def _detail_context( earners, strategy, is_opportunity_cost ) -> dict:
     """The year-by-year detail table's context for `strategy` -- the earners (higher first) for the column
-    labels and the per-year rows apportioned into own/spousal/survivor."""
+    labels, the per-year rows apportioned into own/spousal/survivor, and `is_opportunity_cost` so the table
+    shows the effective-value column (it renders standalone on drill-in, so it carries the flag itself)."""
     return {
-        'earners'     : earners,
-        'is_couple'   : len( earners ) == 2,
-        'strategy'    : strategy,
-        'combo'       : results.combo_of( strategy.claim_ages ),
-        'claim_pairs' : list( zip( earners, strategy.claim_ages ) ),
-        'rows'        : strategy_year_details( tuple( earners ), strategy ) }
+        'earners'             : earners,
+        'is_couple'           : len( earners ) == 2,
+        'is_opportunity_cost' : is_opportunity_cost,
+        'strategy'            : strategy,
+        'combo'               : results.combo_of( strategy.claim_ages ),
+        'claim_pairs'         : list( zip( earners, strategy.claim_ages ) ),
+        'rows'                : strategy_year_details( tuple( earners ), strategy ) }
+
+
+def _is_opportunity_cost( assumptions ) -> bool:
+    """Whether present value and effective value differ -- the expected return is set above inflation, so
+    the discount prices in an opportunity cost. False recovers the plain today's-dollars view."""
+    return assumptions.discount_rate != assumptions.inflation
 
 
 def _by_earning( claimants ):

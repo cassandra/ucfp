@@ -141,15 +141,17 @@ class MemberYear:
 @dataclass( frozen = True )
 class YearDetail:
     """One year of a strategy for the drill-in table: each member's nominal parts (aligned to the earners,
-    higher first), each member's age, the `household` total and its `present_value` (today's dollars, at
-    inflation), and `is_transition` -- the first-death year where the survivor benefit begins."""
+    higher first), each member's age, the `household` total with its `present_value` (today's dollars, at
+    inflation) and `effective_value` (at the expected asset return), and `is_transition` -- the first-death
+    year where the survivor benefit begins."""
 
-    year          : int
-    ages          : tuple[ int, ... ]
-    members       : tuple[ MemberYear, ... ]
-    household     : Decimal
-    present_value : Decimal
-    is_transition : bool
+    year            : int
+    ages            : tuple[ int, ... ]
+    members         : tuple[ MemberYear, ... ]
+    household       : Decimal
+    present_value   : Decimal
+    effective_value : Decimal
+    is_transition   : bool
 
     @property
     def survivor( self ) -> Decimal:
@@ -247,12 +249,13 @@ def strategy_year_details(
             for index in range( len( members ) ) )
         has_survivor = any( member.survivor > 0 for member in member_years )
         details.append( YearDetail(
-            year          = benefit.year,
-            ages          = tuple( benefit.year - earner.birth_year for earner in earners ),
-            members       = member_years,
-            household     = benefit.nominal,
-            present_value = benefit.present_value,
-            is_transition = has_survivor and not seen_survivor ) )
+            year            = benefit.year,
+            ages            = tuple( benefit.year - earner.birth_year for earner in earners ),
+            members         = member_years,
+            household       = benefit.nominal,
+            present_value   = benefit.present_value,
+            effective_value = benefit.effective_value,
+            is_transition   = has_survivor and not seen_survivor ) )
         seen_survivor = seen_survivor or has_survivor
         continue
     return tuple( details )

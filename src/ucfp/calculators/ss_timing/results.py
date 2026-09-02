@@ -19,15 +19,16 @@ _RANK_LIMIT   = 10    # rows in the "Top strategies" list
 
 @dataclass( frozen = True )
 class HeatCell:
-    """One heatmap cell: a claiming combination, its nominal `raw_total` and `effective_value` (the
-    opportunity-cost-adjusted figure it is shaded and ranked by), and its ramp `bucket` (0 lowest ..
-    `_HEAT_BUCKETS`-1 highest). `combo` keys the drill-in; `is_best` marks the optimum, `is_selected` the
-    shown cell."""
+    """One heatmap cell: a claiming combination, its lifetime figures (`raw_total`, `present_value`, and
+    `effective_value` -- the opportunity-cost-adjusted figure it is shaded and ranked by), and its ramp
+    `bucket` (0 lowest .. `_HEAT_BUCKETS`-1 highest). `combo` keys the drill-in; `is_best` marks the
+    optimum, `is_selected` the shown cell."""
 
     combo           : str
     higher_age      : int
     lower_age       : Optional[ int ]
     raw_total       : Decimal
+    present_value   : Decimal
     effective_value : Decimal
     bucket          : int
     is_best         : bool
@@ -91,6 +92,7 @@ def _cell( claim_ages, by_combo, bucket, best_combo, selected_combo ) -> HeatCel
         higher_age      = claim_ages[ 0 ],
         lower_age       = claim_ages[ 1 ] if len( claim_ages ) == 2 else None,
         raw_total       = strategy.raw_total,
+        present_value   = strategy.present_value,
         effective_value = strategy.effective_value,
         bucket          = bucket( strategy.effective_value ),
         is_best         = combo == best_combo,

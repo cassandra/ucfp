@@ -3,8 +3,9 @@
   The year-by-year Social Security detail for the selected strategy -- the antinode swap target
   (#ss-detail). The claim ages lead the header (connecting the table to the chosen cell). Columns split
   each year into the earners' own / spousal / survivor parts (higher earner first) beside the nominal
-  Total and its present value; the first-death row is highlighted. Column headers stick on scroll.
-  Context: `earners`, `is_couple`, `strategy`, `combo`, `claim_pairs`, `rows`.
+  Total, its present value (PV), and -- when opportunity cost is modeled -- its effective value (EV); the
+  first-death row is highlighted. Column headers stick on scroll.
+  Context: `earners`, `is_couple`, `is_opportunity_cost`, `strategy`, `combo`, `claim_pairs`, `rows`.
 {% endcomment %}
 <div id="ss-detail">
   <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
@@ -27,6 +28,7 @@
           {% endif %}
           <th>Total</th>
           <th>PV</th>
+          {% if is_opportunity_cost %}<th>EV</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -41,6 +43,7 @@
             {% endif %}
             <td>${{ row.household|floatformat:0|intcomma }}</td>
             <td>${{ row.present_value|floatformat:0|intcomma }}</td>
+            {% if is_opportunity_cost %}<td>${{ row.effective_value|floatformat:0|intcomma }}</td>{% endif %}
           </tr>
         {% endfor %}
       </tbody>
@@ -50,6 +53,7 @@
           {% if is_couple %}<td colspan="4"></td>{% else %}<td></td>{% endif %}
           <td>${{ strategy.raw_total|floatformat:0|intcomma }}</td>
           <td>${{ strategy.present_value|floatformat:0|intcomma }}</td>
+          {% if is_opportunity_cost %}<td>${{ strategy.effective_value|floatformat:0|intcomma }}</td>{% endif %}
         </tr>
       </tfoot>
     </table>
