@@ -47,13 +47,13 @@
     <div class="row">
       <div class="col-md-6 mb-3 mb-md-0">
         <div class="card h-100"><div class="card-body">
-          <h2 class="h6 text-muted">Individual</h2>
+          <div class="h6 text-muted">Individual</div>
           {% include "calculators/ss_timing/_person_facts.html" with birth_year=form.s0_birth_year pia=form.s0_pia index=0 %}
         </div></div>
       </div>
       <div class="col-md-6 ss-partner">
         <div class="card h-100"><div class="card-body">
-          <h2 class="h6 text-muted">Partner</h2>
+          <div class="h6 text-muted">Partner</div>
           {% include "calculators/ss_timing/_person_facts.html" with birth_year=form.s1_birth_year pia=form.s1_pia index=1 %}
         </div></div>
       </div>
@@ -62,8 +62,8 @@
 
   {% comment %}Section 2 -- How long will you live: the life-expectancy mode is a js-switch (inputs.js)
   whose control (the mode radios) reveals each person's "actuarial" or "specific" case block (in
-  _person_lifespan.html) -- now co-located with the toggle rather than buried in the cards below. Pure
-  presentation -- InputsForm.clean requires the age only in the specific mode.{% endcomment %}
+  _person_lifespan.html). Pure presentation -- InputsForm.clean requires the age only in the specific
+  mode.{% endcomment %}
   <div class="border rounded bg-light p-3 mb-4 {{ AppConst.SWITCH_CLASS }}">
     <fieldset class="form-group mb-2">
       <legend class="h6 text-muted mb-2">How long will you live?</legend>
@@ -83,13 +83,13 @@
     <div class="row">
       <div class="col-md-6 mb-3 mb-md-0">
         <div class="card h-100"><div class="card-body">
-          <h2 class="h6 text-muted">Individual</h2>
+          <div class="h6 text-muted">Individual</div>
           {% include "calculators/ss_timing/_person_lifespan.html" with life=form.s0_life sex=form.s0_sex longevity=form.s0_longevity %}
         </div></div>
       </div>
       <div class="col-md-6 ss-partner">
         <div class="card h-100"><div class="card-body">
-          <h2 class="h6 text-muted">Partner</h2>
+          <div class="h6 text-muted">Partner</div>
           {% include "calculators/ss_timing/_person_lifespan.html" with life=form.s1_life sex=form.s1_sex longevity=form.s1_longevity %}
         </div></div>
       </div>

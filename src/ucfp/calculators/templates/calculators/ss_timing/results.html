@@ -33,7 +33,7 @@ the recap and before the year-by-year depth.{% endcomment %}
         <div class="ss-eyebrow mb-1">{% if life_expectancy_estimated %}Expected lifetime benefit{% else %}Lifetime benefit{% endif %} by claiming age{% if is_couple %}s{% endif %}</div>
         {% include "calculators/ss_timing/_heatmap.html" %}
         <div class="ss-hm-legend"><span>Lower</span><span class="bar"></span><span>Higher</span>
-          <span class="ml-auto"><span style="color:#0e4b61">&#9733; highest</span> · click any cell</span></div>
+          <span class="ml-auto"><span class="ss-hm-star">&#9733; highest</span> · click any cell</span></div>
         <p class="text-muted small mb-0 mt-2">Nearby ages are often close, so look for the best
           <em>range</em> to consider rather than one exact age.</p>
       </div></div>
@@ -88,7 +88,9 @@ the recap and before the year-by-year depth.{% endcomment %}
   </div>
   {% endif %}
 
-  <div class="card mb-3"><div class="card-body">
+  {% comment %}aria-live on the static wrapper (not the swapped #ss-detail) so a screen reader announces
+  the year-by-year update when a cell/row is selected.{% endcomment %}
+  <div class="card mb-3"><div class="card-body" aria-live="polite">
     {% include "calculators/ss_timing/_detail.html" %}
   </div></div>
 

@@ -2,10 +2,10 @@
   A bound RadioSelect field rendered as a Bootstrap btn-group-toggle -- the compact in-card choices on the
   inputs form (life expectancy, mortality table). Context: `field` (the bound radio field) and an optional
   `size` (a btn size suffix, e.g. "sm"). An unselected group (no initial) renders with no button active,
-  which for the mortality table is the "blend both" default.
+  which for the mortality table is the "blend both" default. Wrap it in a fieldset whose legend names the
+  group -- that supplies the accessible group name, so the button-group carries none of its own.
 {% endcomment %}
-<div class="btn-group btn-group-toggle{% if size %} btn-group-{{ size }}{% endif %}" data-toggle="buttons"
-     role="group" aria-label="{{ field.label }}">
+<div class="btn-group btn-group-toggle{% if size %} btn-group-{{ size }}{% endif %}" data-toggle="buttons">
   {% for radio in field %}
     <label class="btn btn-outline-secondary{% if size %} btn-{{ size }}{% endif %}{% if radio.data.selected %} active{% endif %}">
       {{ radio.tag }} {{ radio.choice_label }}

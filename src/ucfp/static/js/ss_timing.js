@@ -121,6 +121,9 @@
     }
 
     function initSelectionSync() {
+        // Only the results page has a heatmap; bail on every other page so the after-render hook below is
+        // not registered app-wide (ss_timing.js is in the global bundle).
+        if ( !document.querySelector( '.ss-hm-cell' ) ) { return; }
         // Direct listeners on the cells, NOT delegated at document: the heatmap cell is an antinode link,
         // and antinode's document-level handling stops the click bubbling, so a delegated handler never
         // sees it (the detail swaps but the gold selection would not move). The heatmap is static (only

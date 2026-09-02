@@ -29,6 +29,10 @@
 /* The two axis captions ("Partner claims at (age)" / "Individual claims at"): sentence case and lighter
    than the uppercase eyebrow card title, so the axis reads as a chart annotation, not a second heading. */
 .ss-hm-axis { font-size: .74rem; color: #8996a4; font-weight: 500; }
+.ss-hm-axis--vertical { writing-mode: vertical-rl; transform: rotate( 180deg ); }
+/* The legend's "highest" star key, coloured to the top of the value ramp (deep teal) rather than gold --
+   gold is reserved for the selection ring, so the star reads as "top of scale", not "selected". */
+.ss-hm-star { color: #0e4b61; }
 .ss-hm-cell {
     aspect-ratio: 1 / .84; border-radius: 5px; border: 1px solid transparent;
     display: block; cursor: pointer; position: relative; transition: transform .08s ease, box-shadow .08s ease;

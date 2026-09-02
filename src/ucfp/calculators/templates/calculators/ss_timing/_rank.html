@@ -16,9 +16,9 @@
       </tr></thead>
       <tbody>
         {% for row in ranked %}
-          <tr class="rank-row{% if row.is_best %} best{% endif %}{% if row.is_selected %} sel{% endif %}{% if row.beyond_top %} beyond{% endif %}"
-              data-combo="{{ row.combo }}" tabindex="0" role="button"
-              aria-label="Show the year-by-year detail for claiming at {{ row.ages|join:' and ' }}">
+          <tr class="rank-row{% if row.is_selected %} sel{% endif %}{% if row.beyond_top %} beyond{% endif %}"
+              data-combo="{{ row.combo }}" tabindex="0" role="button"{% if row.is_selected %} aria-current="true"{% endif %}
+              aria-label="Rank {{ row.rank }}, claiming at {{ row.ages|join:' and ' }} &mdash; total ${{ row.raw_total|floatformat:0|intcomma }}, present value ${{ row.present_value|floatformat:0|intcomma }}{% if is_opportunity_cost %}, effective value ${{ row.effective_value|floatformat:0|intcomma }}{% endif %}. Show the year-by-year detail.">
             <td class="rk">{{ row.rank }}</td>
             <td>{{ row.ages|join:" / " }}</td>
             <td class="num">${{ row.raw_total|floatformat:0|intcomma }}</td>

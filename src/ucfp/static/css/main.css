@@ -173,6 +173,13 @@ a:hover, a:focus {
     color: var(--primary-highlight-color);
 }
 
+/* btn-group-toggle hides its radio inside the label, so keyboard focus lands with no visible ring. Give
+   the focused label an outline (keyboard only, via :focus-visible) to meet the visible-focus requirement. */
+.btn-group-toggle .btn:has( input:focus-visible ) {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+}
+
 /* Map Bootstrap contextual text colors to the theme palette -- its .text-* utilities
    otherwise use Bootstrap's own hues (e.g. .text-primary would be #007bff, not Trust
    Blue). !important to match Bootstrap's own .text-* utilities. The paired .text-on-*
