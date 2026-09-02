@@ -46,15 +46,22 @@
     </div>
   </fieldset>
 
-  <div class="card-deck">
-    <div class="card" id="person-0"><div class="card-body">
-      <h2 class="h6 text-muted">Individual</h2>
-      {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life index=0 %}
-    </div></div>
-    <div class="card" id="person-1"><div class="card-body">
-      <h2 class="h6 text-muted">Partner</h2>
-      {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life index=1 %}
-    </div></div>
+  {% comment %}A row of half-width person columns (not a card-deck, which would stretch the lone card to
+  full width for a one-person household). The partner column is toggled by household choice; the individual
+  column stays half-width either way, so the fields never balloon.{% endcomment %}
+  <div class="row">
+    <div class="col-md-6 mb-3 mb-md-0" id="person-0">
+      <div class="card h-100"><div class="card-body">
+        <h2 class="h6 text-muted">Individual</h2>
+        {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life index=0 %}
+      </div></div>
+    </div>
+    <div class="col-md-6" id="person-1">
+      <div class="card h-100"><div class="card-body">
+        <h2 class="h6 text-muted">Partner</h2>
+        {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life index=1 %}
+      </div></div>
+    </div>
   </div>
 
   <div class="card mt-4"><div class="card-body">
@@ -108,7 +115,7 @@
     </div>
   </div></div>
 
-  <div class="mt-5">
+  <div class="mt-4 mb-5">
     <button type="submit" class="btn btn-cta btn-lg">Compare claiming ages</button>
   </div>
 </form>
