@@ -19,16 +19,16 @@
     <table class="ss-years">
       <thead>
         <tr>
-          <th>Year (age{% if is_couple %}s{% endif %})</th>
-          <th>{{ earners.0.name }} (own)</th>
+          <th scope="col">Year (age{% if is_couple %}s{% endif %})</th>
+          <th scope="col">{{ earners.0.name }} (own)</th>
           {% if is_couple %}
-            <th>{{ earners.1.name }} (own)</th>
-            <th>Spousal</th>
-            <th>Survivor</th>
+            <th scope="col">{{ earners.1.name }} (own)</th>
+            <th scope="col">Spousal</th>
+            <th scope="col">Survivor</th>
           {% endif %}
-          <th>Total</th>
-          <th>PV</th>
-          {% if is_opportunity_cost %}<th>EV</th>{% endif %}
+          <th scope="col">Total</th>
+          <th scope="col"><abbr title="Present value">PV</abbr></th>
+          {% if is_opportunity_cost %}<th scope="col"><abbr title="Effective value">EV</abbr></th>{% endif %}
         </tr>
       </thead>
       <tbody>

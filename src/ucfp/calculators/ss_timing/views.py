@@ -22,7 +22,7 @@ from ucfp.jurisdiction.government_pension import GovernmentPension
 
 from . import methodology, results
 from .compute import (
-    CLAIM_AGES, COLA_INFLATION_LAG, compare_claiming_strategies, compute_strategy,
+    CLAIM_AGES, COLA_INFLATION_LAG, compare_claiming_strategies, compute_strategy, earners_of,
     strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions, is_runnable
 from .prefill import build_prefill
@@ -74,21 +74,21 @@ class ResultsView( View ):
         comparison  = compare_claiming_strategies( claimants, assumptions )
         selected    = comparison.best
         combo       = results.combo_of( selected.claim_ages )
-        real_return = Rate( assumptions.discount_rate.fraction - assumptions.inflation.fraction )
+        real_return        = Rate( assumptions.discount_rate.fraction - assumptions.inflation.fraction )
+        is_opportunity_cost = _is_opportunity_cost( assumptions )
         context     = {
             'axis_ages'           : CLAIM_AGES,
             'cola_lag_pct'        : _percent( COLA_INFLATION_LAG ),
             'inflation_pct'       : _percent( assumptions.inflation ),
             'expected_return_pct' : _percent( assumptions.discount_rate ),
             'real_return_pct'     : _percent( real_return ),
-            'is_opportunity_cost' : _is_opportunity_cost( assumptions ),
+            'is_opportunity_cost' : is_opportunity_cost,
             'payable_pct'         : _percent( assumptions.benefits_payable ),
             'reduction_year'      : assumptions.reduction_year,
             'is_reduced'          : assumptions.benefits_payable != FULL_RATE,
             'heatmap'             : results.heatmap( comparison, combo ),
             'ranked'              : results.ranked( comparison, combo ) }
-        context.update( _detail_context(
-            comparison.claimants, selected, _is_opportunity_cost( assumptions ) ) )
+        context.update( _detail_context( comparison.claimants, selected, is_opportunity_cost ) )
         return render( request, self.template_name, context )
 
 
@@ -105,7 +105,7 @@ class StrategyDetailView( View ):
         strategy = compute_strategy( claimants, _parse_combo( combo, len( claimants ) ), assumptions )
         content  = render_to_string(
             _DETAIL_TEMPLATE,
-            _detail_context( _by_earning( claimants ), strategy, _is_opportunity_cost( assumptions ) ),
+            _detail_context( earners_of( claimants ), strategy, _is_opportunity_cost( assumptions ) ),
             request = request )
         return antinode.response( replace_map = { 'ss-detail' : content } )
 
@@ -122,7 +122,7 @@ class MethodologyModalView( ModalView ):
         if resolved is None:
             raise Http404( 'No calculator inputs in this session.' )
         claimants, _assumptions = resolved
-        earners    = _by_earning( claimants )
+        earners    = earners_of( claimants )
         claim_ages = _parse_combo( combo, len( claimants ) )
         return self.modal_response( request, context = {
             'terms'         : methodology.methodology( earners, claim_ages ),
@@ -222,11 +222,6 @@ def _is_opportunity_cost( assumptions ) -> bool:
     """Whether present value and effective value differ -- the expected return is set above inflation, so
     the discount prices in an opportunity cost. False recovers the plain today's-dollars view."""
     return assumptions.discount_rate != assumptions.inflation
-
-
-def _by_earning( claimants ):
-    """Claimants ordered higher earner first (by PIA) -- the order the detail columns read."""
-    return tuple( sorted( claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
 
 
 def _percent( rate ) -> str:

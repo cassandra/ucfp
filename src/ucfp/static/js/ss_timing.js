@@ -4,9 +4,10 @@
    presence and defers all DOM work to ready. Inputs page: show/hide the partner card for a one-person
    household, initialise the year-only birth-year picker, keep the asset-return "above inflation" hints in
    sync, and move focus to the error summary on a failed submit. Results page: move the gold selection when
-   a heatmap cell or ranked row is activated (the detail
-   swap itself is antinode's; this only tracks the selection), and make the ranked rows keyboard-operable.
-   Events are delegated so an antinode detail swap never drops a handler. */
+   a heatmap cell or ranked row is activated (the detail swap itself is antinode's; this only tracks the
+   selection), and make the ranked rows keyboard-operable. The selection listeners are bound directly to
+   the (static) cells and rows -- not delegated at document -- because antinode stops the async click from
+   bubbling; see initSelectionSync. */
 ( function ( $ ) {
     'use strict';
 

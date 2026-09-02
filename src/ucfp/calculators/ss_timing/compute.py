@@ -7,7 +7,7 @@ and the survivor step-up after a death -- lives in the engine
 Social-Security-only materialization above it: from a household's claiming facts it builds a
 stripped `ForecastParameters` (subjects + Social Security entitlements + expected-lifetime removals +
 the economic outlook), runs one forecast per claiming combination, and reduces each run's booked
-Social Security to a lifetime total -- the nominal ("raw") sum and its present value.
+Social Security to a lifetime total -- the nominal ("raw") sum, its present value, and its effective value.
 
 Every strategy runs over one shared horizon -- from the earliest age-62 claim in the household to the
 last expected death -- so early claiming's extra years and late claiming's larger checks are weighed
@@ -202,18 +202,23 @@ class Comparison:
             self.strategies, key = lambda strategy: strategy.effective_value, reverse = True ) )
 
 
+def earners_of( claimants : list[ Claimant ] ) -> tuple[ Claimant, ... ]:
+    """`claimants` ordered higher earner first (by PIA) -- the single household orientation the whole
+    comparison reads: the heatmap axes, the ranked and detail columns, and the spousal/survivor roles."""
+    return tuple( sorted( claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
+
+
 def compare_claiming_strategies(
         claimants : list[ Claimant ], assumptions : Assumptions ) -> Comparison:
     """Sweep the 62..70 claiming grid for `claimants` (one person or a couple) and rank the
-    strategies by lifetime present value. Each combination is a full engine run over the shared
-    horizon; the couple's spousal and survivor benefits, the COLA, and the funding-shortfall
-    reduction all come from the engine. Claimants are ordered by PIA (higher earner first), the
-    orientation the results grid reads."""
+    strategies by lifetime effective value (present value adjusted for the opportunity cost of deferring).
+    Each combination is a full engine run over the shared horizon; the couple's spousal and survivor
+    benefits, the COLA, and the funding-shortfall reduction all come from the engine. Claimants are ordered
+    by PIA (higher earner first), the orientation the results grid reads."""
     if not 1 <= len( claimants ) <= 2:
         raise ValueError(
             f'A Social Security comparison covers one person or a couple; got {len( claimants )}.' )
-    earners      = tuple( sorted(
-        claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
+    earners      = earners_of( claimants )
     horizon      = _Horizon.for_household( earners )
     combinations = product( CLAIM_AGES, repeat = len( earners ) )
     strategies   = tuple(
@@ -228,7 +233,7 @@ def compute_strategy(
     """One strategy for a chosen claiming combination (the higher earner's age first) -- the results page's
     drill-in recompute, a single engine run rather than the whole sweep. Claimants are ordered by PIA, so
     `claim_ages` aligns to the heatmap's axes."""
-    earners = tuple( sorted( claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
+    earners = earners_of( claimants )
     return _run_strategy( earners, claim_ages, assumptions, _Horizon.for_household( earners ) )
 
 
@@ -306,7 +311,7 @@ def _run_strategy(
         earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
         assumptions : Assumptions, horizon : _Horizon ) -> Strategy:
     """One claiming combination: build its Social-Security-only forecast, run it, and reduce the
-    booked benefit to per-year and lifetime totals (nominal and present value)."""
+    booked benefit to per-year and lifetime totals (nominal, present value, and effective value)."""
     parameters      = _forecast_parameters( earners, claim_ages, assumptions, horizon )
     result          = Forecast( parameters ).run()
     year_benefits   = _year_benefits( result, assumptions, horizon )

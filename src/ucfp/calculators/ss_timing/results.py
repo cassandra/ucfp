@@ -81,6 +81,7 @@ def ranked( comparison : Comparison, selected_combo : str ) -> list[ RankRow ]:
             raw_total = strategy.raw_total, present_value = strategy.present_value,
             effective_value = strategy.effective_value,
             is_best = combo == best, is_selected = combo == selected_combo ) )
+        continue
     return rows
 
 

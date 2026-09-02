@@ -53,6 +53,14 @@ class OpportunityCostDiscountTest( unittest.TestCase ):
                                    expected_return = Rate( Decimal( '0.06' ) ) )
         self.assertEqual( with_return.discount_rate, Rate( Decimal( '0.06' ) ) )
 
+    def test_no_return_makes_effective_value_equal_present_value( self ):
+        # With no expected return, the effective-value discount coincides with the present-value discount,
+        # so the two figures are identical everywhere and the ranking is unchanged from plain PV.
+        comparison = compare_claiming_strategies(
+            self._solo(), Assumptions.from_inflation( inflation = Rate( Decimal( '0.03' ) ) ) )
+        for strategy in comparison.strategies:
+            self.assertEqual( strategy.present_value, strategy.effective_value )
+
     def test_a_higher_expected_return_lowers_a_deferred_strategy_effective_value( self ):
         base = compare_claiming_strategies(
             self._solo(), Assumptions.from_inflation( inflation = Rate( Decimal( '0.03' ) ) ) )

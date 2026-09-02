@@ -65,6 +65,13 @@ class FormValidationTest( SimpleTestCase ):
         self.assertFalse( form.is_valid() )
         self.assertIn( 's0_birth_year', form.errors )
 
+    def test_a_return_below_inflation_is_rejected( self ):
+        # A below-inflation return would invert the opportunity-cost framing ("above inflation"), so it is
+        # rejected rather than modeled.
+        form = InputsForm( data = _single_data( inflation = '3', expected_return = '2' ) )
+        self.assertFalse( form.is_valid() )
+        self.assertIn( 'expected_return', form.errors )
+
 
 class FormMappingTest( SimpleTestCase ):
 

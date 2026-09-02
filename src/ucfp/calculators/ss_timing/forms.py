@@ -85,6 +85,12 @@ class InputsForm( StyledFormMixin, forms.Form ):
             birth_year = cleaned.get( field_name )
             if birth_year is not None and birth_year > this_year:
                 self.add_error( field_name, 'A birth year cannot be in the future.' )
+        # A below-inflation return would invert the opportunity-cost framing (the "above inflation" copy),
+        # so reject it rather than model a negative real return.
+        inflation       = cleaned.get( 'inflation' )
+        expected_return = cleaned.get( 'expected_return' )
+        if ( inflation is not None ) and ( expected_return is not None ) and ( expected_return < inflation ):
+            self.add_error( 'expected_return', 'The expected return can’t be below inflation.' )
         return cleaned
 
     def session_facts( self ) -> SessionFacts:
