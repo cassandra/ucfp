@@ -318,6 +318,20 @@ class ActuarialBasisTest( unittest.TestCase ):
             return next( s for s in comparison.strategies if s.claim_ages == ( 67, 67 ) ).raw_total
         self.assertLess( household_total( 3 ), household_total( 0 ) )
 
+    def test_no_expected_benefit_before_the_earliest_claim( self ):
+        # Regression: the couple survival-state runs placed each death at the horizon start, and the
+        # decedent's inherited benefit was ungated -- so the survivor states booked a benefit from year one,
+        # giving pre-claim years a spurious expected value. With both claiming at 70, every year before the
+        # older earner's age-70 claim must be exactly zero.
+        comparison = compare_claiming_strategies(
+            self._couple(), _assumptions(), LifeExpectancyBasis.ACTUARIAL )
+        strategy            = next( s for s in comparison.strategies if s.claim_ages == ( 70, 70 ) )
+        earliest_claim_year = 1958 + 70                                    # the older earner's age-70 claim
+        pre_claim           = [ b for b in strategy.year_benefits if b.year < earliest_claim_year ]
+        self.assertTrue( pre_claim )                                       # there are pre-claim years
+        for benefit in pre_claim:
+            self.assertEqual( benefit.nominal, Decimal( '0' ) )
+
     def test_the_specific_basis_is_the_default( self ):
         # The default basis is SPECIFIC (the exact deterministic path); ACTUARIAL is opt-in.
         solo    = [ Claimant( 'Solo', 1960, Decimal( '2000' ), 100, Sex.MALE ) ]

@@ -125,13 +125,18 @@ def _has_died( claim : _Claim, on_date : date ) -> bool:
 def _survivor_benefit(
         survivor : _Claim, decedent : _Claim, government_pension : GovernmentPension,
         on_date : date ) -> Decimal:
-    """The survivor's benefit after the first death: the larger of their own claim-adjusted benefit (once
-    they have claimed) and the decedent's own claim-adjusted benefit -- so delaying the higher earner buys
-    a larger survivor benefit. Spousal top-ups end; a non-earning decedent (zero PIA) leaves the survivor's
-    own."""
+    """The survivor's benefit after the first death: the larger of their own claim-adjusted benefit and the
+    decedent's -- each counted only once that person has (or would have) claimed -- so delaying the higher
+    earner buys a larger survivor benefit. Spousal top-ups end; a non-earning decedent (zero PIA) leaves the
+    survivor's own.
+
+    The decedent's side is gated on the decedent's own claiming date, not just the date of death: the
+    survivor inherits the benefit stream the decedent would have been collecting, which does not begin
+    before the decedent's claim age. This matters only when death precedes that claim age (a young death, or
+    the survival-state runs the SS timing calculator places at the horizon start) -- otherwise the survivor
+    transition already falls after both claim dates."""
     survivor_own = _own_benefit( survivor, government_pension, on_date )
-    decedent_own = government_pension.realized_annual_benefit(
-        decedent.pia_monthly, decedent.birthdate, decedent.claiming_date )
+    decedent_own = _own_benefit( decedent, government_pension, on_date )
     return max( survivor_own, decedent_own )
 
 
