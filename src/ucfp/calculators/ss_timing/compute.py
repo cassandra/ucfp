@@ -26,6 +26,7 @@ the engine's -- so no economic overlay is reproduced here, and the per-person fi
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from enum import Enum
 from itertools import product
 from typing import Optional
 
@@ -40,11 +41,19 @@ from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForec
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 from ucfp.jurisdiction.social_security_household import HouseholdMember, household_benefit_breakdown
+from ucfp.jurisdiction.us.mortality import Sex, alive_fraction
 
 
 EARLIEST_CLAIM_AGE = 62
 LATEST_CLAIM_AGE   = 70
 CLAIM_AGES         = tuple( range( EARLIEST_CLAIM_AGE, LATEST_CLAIM_AGE + 1 ) )
+
+# The actuarial horizon cap: the age each claimant's survival curve is projected through in the
+# mortality-weighted basis. Survival past ~100 is slight and the weighted benefit there rounds to nothing,
+# so the sweep stops here rather than running the curve to its 119 tail.
+HORIZON_CAP_AGE = 100
+
+_ONE = Decimal( '1' )
 
 # The calculator is US-only (the FRA/PIA rules behind the benefit are the US ones); the facade is
 # stateless, so a single instance serves the per-person breakdown split.
@@ -56,17 +65,33 @@ _GOVERNMENT_PENSION = GovernmentPension( JurisdictionType.US_FEDERAL )
 COLA_INFLATION_LAG = Rate( Decimal( '0.003' ) )
 
 
+class LifeExpectancyBasis( Enum ):
+    """How long each claimant is assumed to live, the household-level choice between the comparison's two
+    paths. SPECIFIC treats each claimant's `expected_lifetime` as a fixed death age -- one engine run per
+    strategy, the exact deterministic result. ACTUARIAL instead weights every future year's benefit by the
+    probability the claimant is alive to receive it (from the SSA survival curves, per `Claimant.sex` and
+    `Claimant.setback`) and reports the mortality-weighted expected value; `expected_lifetime` is unused."""
+
+    SPECIFIC  = 'specific'
+    ACTUARIAL = 'actuarial'
+
+
 @dataclass( frozen = True )
 class Claimant:
     """One person's Social Security facts for the comparison: their `name`, `birth_year`, monthly
     PIA (`pia_monthly` -- the benefit at full retirement age, in start-year dollars) and
     `expected_lifetime` -- the age through which they are assumed to live, after which their benefit
-    ends. Birthdays are modeled on January 1, so a claiming age lands on an exact date."""
+    ends (the SPECIFIC basis). `sex` and `setback` drive the ACTUARIAL basis instead: the survival curve
+    to weight by, and a shift of the mortality lookup age in years (positive = frailer/shorter life,
+    negative = healthier/longer) for a claimant who expects to differ from average. Birthdays are modeled
+    on January 1, so a claiming age lands on an exact date."""
 
     name              : str
     birth_year        : int
     pia_monthly       : Decimal
     expected_lifetime : int
+    sex               : Optional[ Sex ] = None
+    setback           : int             = 0
 
     @property
     def birthdate( self ) -> date:
@@ -209,32 +234,36 @@ def earners_of( claimants : list[ Claimant ] ) -> tuple[ Claimant, ... ]:
 
 
 def compare_claiming_strategies(
-        claimants : list[ Claimant ], assumptions : Assumptions ) -> Comparison:
+        claimants : list[ Claimant ], assumptions : Assumptions,
+        basis : LifeExpectancyBasis = LifeExpectancyBasis.SPECIFIC ) -> Comparison:
     """Sweep the 62..70 claiming grid for `claimants` (one person or a couple) and rank the
     strategies by lifetime effective value (present value adjusted for the opportunity cost of deferring).
-    Each combination is a full engine run over the shared horizon; the couple's spousal and survivor
-    benefits, the COLA, and the funding-shortfall reduction all come from the engine. Claimants are ordered
-    by PIA (higher earner first), the orientation the results grid reads."""
+    `basis` chooses how long each claimant lives: SPECIFIC uses their expected lifetime (one run per
+    strategy), ACTUARIAL weights each year by survival (the mortality-weighted expected value). The
+    couple's spousal and survivor benefits, the COLA, and the funding-shortfall reduction all come from the
+    engine. Claimants are ordered by PIA (higher earner first), the orientation the results grid reads."""
     if not 1 <= len( claimants ) <= 2:
         raise ValueError(
             f'A Social Security comparison covers one person or a couple; got {len( claimants )}.' )
     earners      = earners_of( claimants )
-    horizon      = _Horizon.for_household( earners )
+    horizon      = _horizon_for( earners, basis )
     combinations = product( CLAIM_AGES, repeat = len( earners ) )
     strategies   = tuple(
-        _run_strategy( earners, claim_ages, assumptions, horizon )
+        _strategy_for( earners, claim_ages, assumptions, horizon, basis )
         for claim_ages in combinations )
     return Comparison( claimants = earners, strategies = strategies )
 
 
 def compute_strategy(
         claimants : list[ Claimant ], claim_ages : tuple[ int, ... ],
-        assumptions : Assumptions ) -> Strategy:
+        assumptions : Assumptions,
+        basis : LifeExpectancyBasis = LifeExpectancyBasis.SPECIFIC ) -> Strategy:
     """One strategy for a chosen claiming combination (the higher earner's age first) -- the results page's
-    drill-in recompute, a single engine run rather than the whole sweep. Claimants are ordered by PIA, so
-    `claim_ages` aligns to the heatmap's axes."""
+    drill-in recompute, a single strategy rather than the whole sweep. `basis` matches the sweep's (see
+    `compare_claiming_strategies`). Claimants are ordered by PIA, so `claim_ages` aligns to the heatmap's
+    axes."""
     earners = earners_of( claimants )
-    return _run_strategy( earners, claim_ages, assumptions, _Horizon.for_household( earners ) )
+    return _strategy_for( earners, claim_ages, assumptions, _horizon_for( earners, basis ), basis )
 
 
 def strategy_year_details(
@@ -302,19 +331,47 @@ class _Horizon:
 
     @classmethod
     def for_household( cls, claimants : tuple[ Claimant, ... ] ) -> '_Horizon':
+        """The SPECIFIC-basis span: earliest age-62 claim to the last entered expected death."""
         start = min( claimant.birth_year + EARLIEST_CLAIM_AGE for claimant in claimants )
         end   = max( claimant.birth_year + claimant.expected_lifetime for claimant in claimants )
         return cls( start_year = start, end_year = end )
 
+    @classmethod
+    def actuarial( cls, claimants : tuple[ Claimant, ... ] ) -> '_Horizon':
+        """The ACTUARIAL-basis span: earliest age-62 claim to the last claimant's age-100 cap -- long
+        enough for the survival weights to taper to nothing without running the curve to its tail."""
+        start = min( claimant.birth_year + EARLIEST_CLAIM_AGE for claimant in claimants )
+        end   = max( claimant.birth_year + HORIZON_CAP_AGE for claimant in claimants )
+        return cls( start_year = start, end_year = end )
 
-def _run_strategy(
+
+def _horizon_for(
+        claimants : tuple[ Claimant, ... ], basis : LifeExpectancyBasis ) -> _Horizon:
+    """The projection span for the chosen basis -- the age-100 cap for ACTUARIAL, the entered expected
+    lifetimes for SPECIFIC."""
+    if basis is LifeExpectancyBasis.ACTUARIAL:
+        return _Horizon.actuarial( claimants )
+    return _Horizon.for_household( claimants )
+
+
+def _strategy_for(
         earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions, horizon : _Horizon, basis : LifeExpectancyBasis ) -> Strategy:
+    """One claiming combination on the chosen basis: the SPECIFIC single-run reduction, or the ACTUARIAL
+    survival-weighted expected value."""
+    if basis is LifeExpectancyBasis.ACTUARIAL:
+        nominals = _actuarial_nominals( earners, claim_ages, assumptions, horizon )
+    else:
+        nominals = _specific_nominals( earners, claim_ages, assumptions, horizon )
+    return _strategy_from_nominals( claim_ages, nominals, assumptions, horizon )
+
+
+def _strategy_from_nominals(
+        claim_ages : tuple[ int, ... ], nominals : list[ Decimal ],
         assumptions : Assumptions, horizon : _Horizon ) -> Strategy:
-    """One claiming combination: build its Social-Security-only forecast, run it, and reduce the
-    booked benefit to per-year and lifetime totals (nominal, present value, and effective value)."""
-    parameters      = _forecast_parameters( earners, claim_ages, assumptions, horizon )
-    result          = Forecast( parameters ).run()
-    year_benefits   = _year_benefits( result, assumptions, horizon )
+    """A `Strategy` from a per-year household nominal stream (deterministic or expected): discount each year
+    two ways and sum to the lifetime nominal, present, and effective totals."""
+    year_benefits   = _year_benefits( nominals, assumptions, horizon )
     raw_total       = sum( ( benefit.nominal for benefit in year_benefits ), Decimal( '0' ) )
     present_value   = sum( ( benefit.present_value for benefit in year_benefits ), Decimal( '0' ) )
     effective_value = sum( ( benefit.effective_value for benefit in year_benefits ), Decimal( '0' ) )
@@ -323,13 +380,94 @@ def _run_strategy(
         effective_value = effective_value, year_benefits = year_benefits )
 
 
+def _specific_nominals(
+        earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions, horizon : _Horizon ) -> list[ Decimal ]:
+    """The SPECIFIC basis: one engine run in which each claimant dies at their expected lifetime, reduced to
+    the per-year household nominal -- the exact deterministic benefit stream."""
+    deaths = [ claimant.birth_year + claimant.expected_lifetime for claimant in earners ]
+    return _nominal_by_year( _run( earners, claim_ages, assumptions, deaths, horizon ), horizon )
+
+
+def _actuarial_nominals(
+        earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions, horizon : _Horizon ) -> list[ Decimal ]:
+    """The ACTUARIAL basis: each year's *expected* household nominal, weighting the engine's benefit by the
+    probability the household is in each survival state that year. One person is one run weighted by their
+    own survival; a couple is three runs -- both alive, higher earner survives, lower earner survives --
+    weighted by the (mid-year) joint survival probabilities, assuming independent lifetimes."""
+    if len( earners ) == 1:
+        return _weighted_single( earners[ 0 ], claim_ages, assumptions, horizon )
+    return _weighted_couple( earners, claim_ages, assumptions, horizon )
+
+
+def _weighted_single(
+        claimant : Claimant, claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions, horizon : _Horizon ) -> list[ Decimal ]:
+    """A single claimant's expected nominal stream: the run in which they live the whole horizon, each
+    year's benefit scaled by the expected fraction of that year they are alive to receive it."""
+    alive = _nominal_by_year(
+        _run( ( claimant, ), claim_ages, assumptions, [ None ], horizon ), horizon )
+    return [ nominal * _alive_fraction( claimant, horizon.start_year + offset, horizon )
+             for offset, nominal in enumerate( alive ) ]
+
+
+def _weighted_couple(
+        earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions, horizon : _Horizon ) -> list[ Decimal ]:
+    """A couple's expected nominal stream from three survival-state runs. Each state is realized by placing
+    the deceased's removal just before the horizon (so they are a survivor for every year), which the engine
+    turns into the survivor step-up; the neither-alive state pays nothing. Per year the states are combined
+    by their joint (mid-year) survival weights -- the linearity-of-expectation collapse of every death-year
+    pairing into a per-year state weighting."""
+    higher, lower = earners
+    before_start  = horizon.start_year - 1                # a death here reads as gone for the whole horizon
+    both   = _nominal_by_year(
+        _run( earners, claim_ages, assumptions, [ None, None ], horizon ), horizon )
+    higher_alone = _nominal_by_year(
+        _run( earners, claim_ages, assumptions, [ None, before_start ], horizon ), horizon )
+    lower_alone  = _nominal_by_year(
+        _run( earners, claim_ages, assumptions, [ before_start, None ], horizon ), horizon )
+    expected = list()
+    for offset in range( len( both ) ):
+        year       = horizon.start_year + offset
+        higher_f   = _alive_fraction( higher, year, horizon )
+        lower_f    = _alive_fraction( lower, year, horizon )
+        expected.append(
+            both[ offset ]         * ( higher_f * lower_f )
+            + higher_alone[ offset ] * ( higher_f * ( _ONE - lower_f ) )
+            + lower_alone[ offset ]  * ( lower_f * ( _ONE - higher_f ) ) )
+        continue
+    return expected
+
+
+def _alive_fraction( claimant : Claimant, year : int, horizon : _Horizon ) -> Decimal:
+    """The expected fraction of `year` the claimant is alive, conditioned on being alive at the horizon
+    start (the earliest-claim year) -- the mid-year-of-death weight from their survival curve, per sex and
+    setback."""
+    current_age = horizon.start_year - claimant.birth_year
+    year_age    = year - claimant.birth_year
+    return alive_fraction( current_age, year_age, claimant.sex, claimant.setback )
+
+
+def _run(
+        earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
+        assumptions : Assumptions, deaths : list[ Optional[ int ] ],
+        horizon : _Horizon ) -> ForecastResult:
+    """Run one Social-Security-only forecast for a claiming combination with the given per-earner death
+    years (None = lives the whole horizon)."""
+    return Forecast( _forecast_parameters( earners, claim_ages, assumptions, deaths, horizon ) ).run()
+
+
 def _forecast_parameters(
         earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ],
-        assumptions : Assumptions, horizon : _Horizon ) -> ForecastParameters:
+        assumptions : Assumptions, deaths : list[ Optional[ int ] ],
+        horizon : _Horizon ) -> ForecastParameters:
     """The stripped, Social-Security-only forecast for one claiming combination: a subject and SS
-    entitlement per claimant (claiming at their swept age), an expected-lifetime removal each, a
-    single cash hub for the benefits to land in, and the economic outlook -- no other income, assets,
-    or expenses, so only the Social Security lines carry value."""
+    entitlement per claimant (claiming at their swept age), a subject removal for each claimant with a death
+    year (None leaves them alive for the whole horizon), a single cash hub for the benefits to land in, and
+    the economic outlook -- no other income, assets, or expenses, so only the Social Security lines carry
+    value."""
     subjects     = [ Subject( claimant.name, claimant.birthdate, handle = _handle( index ) )
                      for index, claimant in enumerate( earners ) ]
     entitlements = [
@@ -337,9 +475,8 @@ def _forecast_parameters(
             subject, claimant.pia_monthly, date( claimant.birth_year + age, 1, 1 ) )
         for subject, claimant, age in zip( subjects, earners, claim_ages ) ]
     removals     = [
-        SubjectRemoval(
-            date( claimant.birth_year + claimant.expected_lifetime, 1, 1 ), subject.handle )
-        for subject, claimant in zip( subjects, earners ) ]
+        SubjectRemoval( date( death, 1, 1 ), subject.handle )
+        for subject, death in zip( subjects, deaths ) if death is not None ]
     return ForecastParameters(
         start_date       = date( horizon.start_year, 1, 1 ),
         end_date         = date( horizon.end_year, 12, 31 ),
@@ -359,32 +496,40 @@ def _forecast_parameters(
 
 def _handle( index : int ) -> str:
     """A stable subject handle for the `index`-th earner (higher earner first) -- keys the subject to
-    its Social Security account and its expected-lifetime removal."""
+    its Social Security account and its subject removal."""
     return f'claimant-{index}'
 
 
+def _nominal_by_year( result : ForecastResult, horizon : _Horizon ) -> list[ Decimal ]:
+    """The run's per-year household Social Security nominal, indexed from the horizon start: the year-over-
+    year change in the cumulative booked to the household's Social Security revenue accounts."""
+    cumulative = _cumulative_social_security( result )
+    nominals   = list()
+    previous   = cumulative( horizon.start_year - 1 )
+    for year in range( horizon.start_year, horizon.end_year + 1 ):
+        through  = cumulative( year )
+        nominals.append( through - previous )
+        previous = through
+        continue
+    return nominals
+
+
 def _year_benefits(
-        result : ForecastResult, assumptions : Assumptions,
+        nominals : list[ Decimal ], assumptions : Assumptions,
         horizon : _Horizon ) -> tuple[ YearBenefit, ... ]:
-    """Each year's household Social Security from the run's books: the `nominal` total booked to the Social
-    Security revenue accounts, its `present_value` (discounted to start-year dollars at inflation, today's
-    dollars), and its `effective_value` (discounted instead at the assumptions' discount rate -- the
+    """Each year's household Social Security discounted two ways: the `nominal` (deterministic, or the
+    survival-weighted expected value), its `present_value` (discounted to start-year dollars at inflation,
+    today's dollars), and its `effective_value` (discounted instead at the assumptions' discount rate -- the
     expected asset return when given, else inflation -- so it carries the opportunity cost of deferring)."""
-    cumulative     = _cumulative_social_security( result )
     inflation_rate = assumptions.inflation.fraction
     effective_rate = assumptions.discount_rate.fraction
     benefits       = list()
-    previous       = cumulative( horizon.start_year - 1 )
-    for year in range( horizon.start_year, horizon.end_year + 1 ):
-        through  = cumulative( year )
-        nominal  = through - previous
-        previous = through
-        periods  = year - horizon.start_year
+    for periods, nominal in enumerate( nominals ):          # periods = years discounted from the start
         benefits.append( YearBenefit(
-            year            = year,
+            year            = horizon.start_year + periods,
             nominal         = nominal,
-            present_value   = nominal / ( Decimal( '1' ) + inflation_rate ) ** periods,
-            effective_value = nominal / ( Decimal( '1' ) + effective_rate ) ** periods ) )
+            present_value   = nominal / ( _ONE + inflation_rate ) ** periods,
+            effective_value = nominal / ( _ONE + effective_rate ) ** periods ) )
         continue
     return tuple( benefits )
 
