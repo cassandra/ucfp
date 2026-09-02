@@ -325,6 +325,22 @@ class InputsViewTest( TestCase ):
         self.assertContains( response, 'data-switch-case="specific"' )
 
 
+@override_settings( SUPPRESS_AUTHENTICATION = True )
+class SelfHostedInputsTest( TestCase ):
+    """Self-hosted (single-user) deployment: the identity middleware logs the request in as the singleton
+    Guest, so the calculator renders inside the authenticated app shell -- never the anonymous Sign in /
+    upsell bar, which would be meaningless where there is no sign-in and no planner to be upsold to."""
+
+    def test_the_calculator_renders_the_app_navbar_not_the_anonymous_upsell( self ):
+        with patch( 'ucfp.calculators.ss_timing.prefill.default_economics',
+                    return_value = _STUB_ECONOMICS ):
+            response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
+        self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, reverse( 'dashboard' ) )          # the authenticated app nav ...
+        self.assertNotContains( response, reverse( 'user_signin' ) )     # ... not the anonymous Sign in ...
+        self.assertNotContains( response, 'See more' )                   # ... nor the anonymous upsell CTA
+
+
 @override_settings( SUPPRESS_AUTHENTICATION = False )
 class ResultsViewTest( TestCase ):
 
