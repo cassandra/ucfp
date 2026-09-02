@@ -20,9 +20,11 @@ _HIGHER = Claimant( 'Higher', 1960, Decimal( '3000' ), 85 )
 _LOWER  = Claimant( 'Lower', 1962, Decimal( '1000' ), 88 )
 
 
-def _strategy( claim_ages, present_value ) -> Strategy:
-    return Strategy( claim_ages = claim_ages, raw_total = Decimal( present_value ),
-                     present_value = Decimal( present_value ), year_benefits = () )
+def _strategy( claim_ages, value, effective_value = None ) -> Strategy:
+    effective_value = value if effective_value is None else effective_value
+    return Strategy( claim_ages = claim_ages, raw_total = Decimal( value ),
+                     present_value = Decimal( value ), effective_value = Decimal( effective_value ),
+                     year_benefits = () )
 
 
 def _couple_comparison() -> Comparison:
@@ -71,12 +73,25 @@ class HeatmapViewModelTest( SimpleTestCase ):
         self.assertEqual( rows[ 0 ].ages, ( 70, 70 ) )
         self.assertEqual( len( rows ), 10 )                 # _RANK_LIMIT
 
+    def test_the_heatmap_marks_and_shades_by_effective_value_not_present( self ):
+        # Present value rises with age (best at 70) while effective value falls (best at 62); the mark and
+        # the top shade must follow effective value -- the decision metric -- not present value.
+        comparison = Comparison(
+            claimants = ( _HIGHER, ),
+            strategies = tuple( _strategy( ( age, ), value = 100 + age, effective_value = 200 - age )
+                                for age in range( 62, 71 ) ) )
+        cells = [ cell for row in results.heatmap(
+            comparison, results.combo_of( comparison.best.claim_ages ) ) for cell in row ]
+        self.assertEqual( next( cell for cell in cells if cell.is_best ).higher_age, 62 )
+        self.assertEqual( max( cells, key = lambda cell: cell.bucket ).higher_age, 62 )
+
 
 def _couple_form_data() -> dict:
     return { 'household' : 'couple',
              's0_birth_year' : '1960', 's0_pia' : '3000', 's0_life' : '84',
              's1_birth_year' : '1962', 's1_pia' : '1200', 's1_life' : '88',
-             'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
+             'inflation' : '2.5', 'expected_return' : '4.5',
+             'benefits_payable' : '100', 'reduction_year' : '2033' }
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
@@ -93,6 +108,22 @@ class ResultsRenderTest( TestCase ):
         self.assertContains( response, 'data-combo' )
         self.assertContains( response, 'Survivor' )                         # the couple detail column
 
+    def test_the_results_show_the_opportunity_cost_framing( self ):
+        self._submit()                                                      # return 4.5% over 2.5% inflation
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertContains( response, 'Asset return' )                     # the recap chip ...
+        self.assertContains( response, 'Effective<br>value' )               # ... and the third ranked column
+
+    def test_a_return_equal_to_inflation_shows_only_total_and_present_value( self ):
+        # Setting the asset return equal to inflation is the zero-real-opportunity-cost view: no asset-return
+        # chip and no Effective value column.
+        data = _couple_form_data()
+        data[ 'expected_return' ] = data[ 'inflation' ]
+        self.client.post( reverse( 'calculators:ss_timing:inputs' ), data )
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertNotContains( response, 'Asset return' )
+        self.assertNotContains( response, 'Effective<br>value' )
+
     def test_the_drill_in_endpoint_swaps_one_strategy_detail( self ):
         self._submit()
         response = self.client.get(
@@ -102,6 +133,19 @@ class ResultsRenderTest( TestCase ):
         detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
         self.assertIn( 'Total', detail )
         self.assertIn( 'Lifetime total', detail )
+        self.assertIn( 'Effective value', detail )   # the EV column shows on drill-in (opportunity cost on)
+
+    def test_the_drill_in_omits_effective_value_without_opportunity_cost( self ):
+        # The drill-in fragment renders standalone and re-derives is_opportunity_cost; with the return equal
+        # to inflation it must drop the EV column, so a mis-threaded flag on this endpoint is caught.
+        data = _couple_form_data()
+        data[ 'expected_return' ] = data[ 'inflation' ]
+        self.client.post( reverse( 'calculators:ss_timing:inputs' ), data )
+        response = self.client.get(
+            reverse( 'calculators:ss_timing:detail', args = [ '67-67' ] ),
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
+        detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
+        self.assertNotIn( 'Effective value', detail )
 
     def test_a_bad_or_mismatched_combo_is_not_found( self ):
         self._submit()

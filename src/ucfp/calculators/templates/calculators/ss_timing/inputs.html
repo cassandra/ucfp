@@ -2,9 +2,10 @@
 {% load common_tags %}
 {% comment %}
   The login-free Social Security claiming calculator inputs. Collects one or two people (birth year, PIA,
-  expected lifetime) and the economic assumptions, then posts to itself; on success it redirects to the
-  results. ss_timing.js (bundled) hides the partner card for a one-person household, initialises the
-  year-only birth-year picker, and focuses the error summary on a failed submit.
+  expected lifetime) and the economic assumptions (inflation, expected asset return, funding reduction),
+  then posts to itself; on success it redirects to the results. ss_timing.js (bundled) hides the partner
+  column for a one-person household, initialises the year-only birth-year picker, keeps the asset-return
+  "above inflation" and default hints in sync, and focuses the error summary on a failed submit.
 {% endcomment %}
 
 {% block head_title %}Social Security claiming calculator · {% settings_value 'SITE_NAME' %}{% endblock %}
@@ -46,28 +47,59 @@
     </div>
   </fieldset>
 
-  <div class="card-deck">
-    <div class="card" id="person-0"><div class="card-body">
-      <h2 class="h6 text-muted">Individual</h2>
-      {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life index=0 %}
-    </div></div>
-    <div class="card" id="person-1"><div class="card-body">
-      <h2 class="h6 text-muted">Partner</h2>
-      {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life index=1 %}
-    </div></div>
+  {% comment %}A row of half-width person columns (not a card-deck, which would stretch the lone card to
+  full width for a one-person household). The partner column is toggled by household choice; the individual
+  column stays half-width either way, so the fields never balloon.{% endcomment %}
+  <div class="row">
+    <div class="col-md-6 mb-3 mb-md-0" id="person-0">
+      <div class="card h-100"><div class="card-body">
+        <h2 class="h6 text-muted">Individual</h2>
+        {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life index=0 %}
+      </div></div>
+    </div>
+    <div class="col-md-6" id="person-1">
+      <div class="card h-100"><div class="card-body">
+        <h2 class="h6 text-muted">Partner</h2>
+        {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life index=1 %}
+      </div></div>
+    </div>
   </div>
 
   <div class="card mt-4"><div class="card-body">
     <h2 class="h6 text-muted">Economic assumptions</h2>
     <div class="row">
-      <div class="col-md-4 mb-2 mb-md-0">
+      <div class="col-md-3 mb-3 mb-md-0">
         <div class="d-flex align-items-center">
           <label class="mb-0 mr-2" for="{{ form.inflation.id_for_label }}">{{ form.inflation.label }}</label>
           <div style="width:6.5rem">{{ form.inflation }}</div>
         </div>
         {% include "calculators/ss_timing/_field_errors.html" with field=form.inflation %}
       </div>
-      <div class="col-md-8">
+      <div class="col-md-9">
+        <div class="d-flex flex-wrap align-items-center">
+          <label class="mb-0 mr-2"
+                 for="{{ form.expected_return.id_for_label }}">{{ form.expected_return.label }}</label>
+          <div style="width:6.5rem">{{ form.expected_return }}</div>
+          <small id="return-real-hint" class="text-muted ml-2" aria-live="polite"></small>
+          <a class="ml-2 small" data-toggle="collapse" href="#return-help" role="button"
+             aria-expanded="false" aria-controls="return-help">What&rsquo;s this?</a>
+        </div>
+        {% include "calculators/ss_timing/_field_errors.html" with field=form.expected_return %}
+        <small id="return-warn" class="text-danger d-block mt-1" aria-live="polite"></small>
+        <div class="collapse" id="return-help">
+          <small class="form-text text-muted">
+            Waiting to claim means spending savings that could otherwise stay invested &mdash; the
+            opportunity cost of delaying. Enter what you expect your assets to earn overall. What matters is
+            the part <em>above inflation</em> (benefits already rise with inflation), so keep it
+            conservative: money you may need soon can&rsquo;t chase stock-market returns. A sensible
+            default is <strong id="return-default">about 2% above inflation</strong><span
+            id="return-default-note"></span>.
+          </small>
+        </div>
+      </div>
+    </div>
+    <div class="row mt-3">
+      <div class="col">
         <div class="d-flex flex-wrap align-items-center">
           <label class="mb-1 mr-2" for="{{ form.benefits_payable.id_for_label }}">Reduce to</label>
           <div class="mr-2 mb-1" style="width:6.5rem">{{ form.benefits_payable }}</div>
@@ -84,8 +116,8 @@
     </div>
   </div></div>
 
-  <div class="mt-4">
-    <button type="submit" class="btn btn-primary btn-lg">Compare claiming ages</button>
+  <div class="mt-4 mb-5">
+    <button type="submit" class="btn btn-cta btn-lg">Compare claiming ages</button>
   </div>
 </form>
 {% endblock %}

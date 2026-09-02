@@ -39,9 +39,10 @@ page, a sister of the returning-user sign-in for someone who arrived as a Guest 
 A quiet "Calculators" sub-nav under the title -- the signed-in home for the standalone calculators, kept
 off the main app navbar (which stays the built planning perspectives). Add links here as calculators ship.
 {% endcomment %}
-<nav class="mb-4" aria-label="Calculators">
+<nav class="mb-4 d-flex align-items-center" aria-label="Calculators">
   <span class="text-uppercase text-muted small font-weight-bold mr-2">Calculators</span>
-  <a href="{% url 'calculators:ss_timing:inputs' %}">Social Security Timing</a>
+  <a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-primary btn-sm">
+    Social Security Timing</a>
 </nav>
 
 {% include 'planning/panes/forecast_overview_card.html' with overview=forecast_overview %}

@@ -205,7 +205,8 @@ class PrefillThroughTheViewTest( TestCase ):
         # entry never overrides it. (The assumption knobs, being what-ifs, are still remembered.)
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
             'household' : 'single', 's0_birth_year' : '1955', 's0_pia' : '900', 's0_life' : '85',
-            'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' } )
+            'inflation' : '2.5', 'expected_return' : '4.5',
+            'benefits_payable' : '100', 'reduction_year' : '2033' } )
         response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertContains( response, 'value="1960"' )              # the profile people win ...
         self.assertNotContains( response, 'value="1955"' )           # ... not the session entry
@@ -216,7 +217,8 @@ class PrefillThroughTheViewTest( TestCase ):
             'household' : 'couple',
             's0_birth_year' : '1900', 's0_pia' : '1', 's0_life' : '70',
             's1_birth_year' : '1901', 's1_pia' : '2', 's1_life' : '71',
-            'inflation' : '9', 'benefits_payable' : '50', 'reduction_year' : '2033' } )
+            'inflation' : '9', 'expected_return' : '11',
+            'benefits_payable' : '50', 'reduction_year' : '2033' } )
         profile = load_profile( latest_profile( self.organization ) )
         self.assertEqual( profile.subjects[ 0 ].birthdate, date( 1960, 1, 1 ) )
         self.assertEqual( profile.government_pension[ 0 ].monthly_at_normal_age, Decimal( '3000' ) )

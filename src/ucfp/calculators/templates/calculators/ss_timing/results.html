@@ -6,7 +6,9 @@
   detail for the selected strategy. Cells and ranked rows carry `data-combo`; clicking swaps the detail
   (antinode) and moves the gold selection (ss_timing.js). Present value is explained at the foot. Context:
   `earners` (higher first), `is_couple`, `cola_lag_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
-  `is_reduced`, `axis_ages`, `heatmap`, `ranked`, plus the merged detail context.
+  `is_reduced`, the opportunity-cost fields `expected_return_pct`/`real_return_pct`/`is_opportunity_cost`
+  (when on, the ranked list gains an Effective value column), `axis_ages`, `heatmap`, `ranked`, plus the
+  merged detail context.
 {% endcomment %}
 
 {% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
@@ -42,13 +44,14 @@ the seam just after the results.{% endcomment %}
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-2">Assumptions</div>
         <span class="ss-chip"><span class="k">Inflation</span><b>{{ inflation_pct }}</b></span>
+        {% if is_opportunity_cost %}<span class="ss-chip"><span class="k">Asset return</span><b>{{ expected_return_pct }} &middot; {{ real_return_pct }} real</b></span>{% endif %}
         {% if is_reduced %}<span class="ss-chip"><span class="k">Benefits</span><b>{{ payable_pct }} from {{ reduction_year }}</b></span>{% endif %}
       </div></div>
     </div>
   </div>
 
   <div class="row">
-    <div class="col-lg-8 mb-3">
+    <div class="col-lg-7 mb-3">
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-1">Lifetime benefit by claiming age{% if is_couple %}s{% endif %}</div>
         {% include "calculators/ss_timing/_heatmap.html" %}
@@ -56,7 +59,7 @@ the seam just after the results.{% endcomment %}
           <span class="ml-auto" style="color:#b07d05">&#9733; best · click any cell</span></div>
       </div></div>
     </div>
-    <div class="col-lg-4 mb-3">
+    <div class="col-lg-5 mb-3">
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-2">Top strategies</div>
         <div class="table-responsive">
@@ -64,6 +67,7 @@ the seam just after the results.{% endcomment %}
             <thead><tr>
               <th></th><th>{% if is_couple %}Ages{% else %}Age{% endif %}</th>
               <th class="num">Total</th><th class="num">Present<br>value</th>
+              {% if is_opportunity_cost %}<th class="num">Effective<br>value</th>{% endif %}
             </tr></thead>
             <tbody>
               {% for row in ranked %}
@@ -74,12 +78,17 @@ the seam just after the results.{% endcomment %}
                   <td>{{ row.ages|join:" / " }}</td>
                   <td class="num">${{ row.raw_total|floatformat:0|intcomma }}</td>
                   <td class="num">${{ row.present_value|floatformat:0|intcomma }}</td>
+                  {% if is_opportunity_cost %}<td class="num">${{ row.effective_value|floatformat:0|intcomma }}</td>{% endif %}
                 </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
-        <small class="text-muted d-block mt-2">Present value converts total to today&rsquo;s dollars.</small>
+        <small class="text-muted d-block mt-2">
+          {% if is_opportunity_cost %}Ranked by <strong>effective value</strong> &mdash; today&rsquo;s
+          dollars, further adjusted for the investment growth you&rsquo;d give up while
+          waiting.{% else %}Present value converts the total to today&rsquo;s dollars.{% endif %}
+        </small>
       </div></div>
     </div>
   </div>
@@ -92,7 +101,7 @@ the seam just after the results.{% endcomment %}
   <div class="ss-onward d-flex flex-wrap align-items-center justify-content-between mb-3 p-3">
     <p class="mb-2 mb-sm-0 mr-sm-3">Claiming timing is one piece of your retirement. See how it fits with
       the rest of your plan.</p>
-    <a href="{% url 'explain' %}" class="btn btn-primary text-nowrap">See how it works</a>
+    <a href="{% url 'explain' %}" class="btn btn-cta text-nowrap">See how it works</a>
   </div>
   {% endif %}
 
@@ -102,10 +111,12 @@ the seam just after the results.{% endcomment %}
 
   <div class="text-muted small">
     <p>
-      <strong>Total</strong> is the sum of every year&rsquo;s benefit as paid (grown by the SS
-      adjustment). <strong>Present value (PV)</strong> restates that in today&rsquo;s dollars by
-      discounting each future year at inflation, so money far in the future counts for what it is worth
-      now.
+      <strong>Total</strong> is the benefit dollars received over a lifetime (grown by the SS adjustment).
+      <strong>Present value</strong> restates that in today&rsquo;s dollars, discounting each future year
+      at inflation.{% if is_opportunity_cost %} <strong>Effective value</strong> discounts instead at your
+      expected asset return ({{ real_return_pct }} above inflation), so a deferred benefit is also weighed
+      against the growth that money could otherwise earn &mdash; the opportunity cost of waiting, and the
+      figure strategies are ranked by.{% endif %}
     </p>
     <p class="mb-0">
       The Social Security cost-of-living adjustment (the &ldquo;SS adjustment&rdquo; above) is modeled at

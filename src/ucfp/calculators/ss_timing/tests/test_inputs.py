@@ -29,7 +29,8 @@ _SessionStore = import_module( settings.SESSION_ENGINE ).SessionStore
 _STUB_ECONOMICS = EconomicParameters( inflation = Rate( Decimal( '0.025' ) ),
                                       social_security_cola = Rate( Decimal( '0.025' ) ) )
 
-_ASSUMPTIONS = { 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
+_ASSUMPTIONS = { 'inflation' : '2.5', 'expected_return' : '4.5',
+                 'benefits_payable' : '100', 'reduction_year' : '2033' }
 
 
 def _single_data( ** overrides ) -> dict:
@@ -64,6 +65,13 @@ class FormValidationTest( SimpleTestCase ):
         self.assertFalse( form.is_valid() )
         self.assertIn( 's0_birth_year', form.errors )
 
+    def test_a_return_below_inflation_is_rejected( self ):
+        # A below-inflation return would invert the opportunity-cost framing ("above inflation"), so it is
+        # rejected rather than modeled.
+        form = InputsForm( data = _single_data( inflation = '3', expected_return = '2' ) )
+        self.assertFalse( form.is_valid() )
+        self.assertIn( 'expected_return', form.errors )
+
 
 class FormMappingTest( SimpleTestCase ):
 
@@ -77,8 +85,19 @@ class FormMappingTest( SimpleTestCase ):
         self.assertEqual( claimants[ 1 ].pia_monthly, Decimal( '1200' ) )
         self.assertEqual( claimants[ 1 ].expected_lifetime, 90 )
         self.assertEqual( assumptions.cola, Rate( Decimal( '0.022' ) ) )     # inflation less the 0.3% lag
-        self.assertEqual( assumptions.inflation, Rate( Decimal( '0.025' ) ) )       # the discount percent
+        self.assertEqual( assumptions.inflation, Rate( Decimal( '0.025' ) ) )       # the run's inflation
+        self.assertEqual( assumptions.expected_return, Rate( Decimal( '0.045' ) ) )  # 4.5% nominal ...
+        self.assertEqual( assumptions.discount_rate, Rate( Decimal( '0.045' ) ) )    # ... = the PV discount
         self.assertEqual( assumptions.benefits_payable, Rate( Decimal( '1' ) ) )    # 100%
+
+    def test_a_session_without_an_expected_return_discounts_at_inflation( self ):
+        # A session stored before this feature has no expected_return; it falls back to inflation gracefully
+        # rather than erroring, so an old session still renders results.
+        facts  = SessionFacts( people = [ PersonFacts( 1960, Decimal( '2000' ), 85 ) ] )
+        legacy = { 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
+        _claimants, assumptions = claimants_and_assumptions( facts, legacy )
+        self.assertIsNone( assumptions.expected_return )
+        self.assertEqual( assumptions.discount_rate, assumptions.inflation )
 
     def test_a_single_household_maps_to_one_claimant( self ):
         form = InputsForm( data = _single_data() )
@@ -92,6 +111,7 @@ class FormMappingTest( SimpleTestCase ):
             inflation = Rate( Decimal( '0.03' ) ), cola = Rate( Decimal( '0.02' ) ) ) )
         self.assertEqual( seeded[ 'household' ], HOUSEHOLD_COUPLE )
         self.assertEqual( seeded[ 'inflation' ], '3' )               # 0.03 -> '3'
+        self.assertEqual( seeded[ 'expected_return' ], '5' )         # inflation 3% + the 2% real default
         self.assertNotIn( 'cola', seeded )                           # COLA is derived, not an input
         self.assertNotIn( 's0_birth_year', seeded )                  # people are left blank
 
@@ -174,6 +194,8 @@ class InputsViewTest( TestCase ):
             response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Compare claiming ages' )
+        self.assertContains( response, 'Expected asset return' )         # the opportunity-cost input ...
+        self.assertContains( response, 'value="4.5"' )                   # ... default = inflation + 2% real
         self.assertNotContains( response, 'aria-label="breadcrumb"' )    # no app to return to
 
     def test_a_signed_in_visitor_sees_the_dashboard_breadcrumb( self ):

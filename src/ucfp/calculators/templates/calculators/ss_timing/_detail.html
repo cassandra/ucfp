@@ -3,8 +3,9 @@
   The year-by-year Social Security detail for the selected strategy -- the antinode swap target
   (#ss-detail). The claim ages lead the header (connecting the table to the chosen cell). Columns split
   each year into the earners' own / spousal / survivor parts (higher earner first) beside the nominal
-  Total and its present value; the first-death row is highlighted. Column headers stick on scroll.
-  Context: `earners`, `is_couple`, `strategy`, `combo`, `claim_pairs`, `rows`.
+  Total, its present value (PV), and -- when opportunity cost is modeled -- its effective value (EV); the
+  first-death row is highlighted. Column headers stick on scroll.
+  Context: `earners`, `is_couple`, `is_opportunity_cost`, `strategy`, `combo`, `claim_pairs`, `rows`.
 {% endcomment %}
 <div id="ss-detail">
   <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
@@ -18,15 +19,16 @@
     <table class="ss-years">
       <thead>
         <tr>
-          <th>Year (age{% if is_couple %}s{% endif %})</th>
-          <th>{{ earners.0.name }} (own)</th>
+          <th scope="col">Year (age{% if is_couple %}s{% endif %})</th>
+          <th scope="col">{{ earners.0.name }} (own)</th>
           {% if is_couple %}
-            <th>{{ earners.1.name }} (own)</th>
-            <th>Spousal</th>
-            <th>Survivor</th>
+            <th scope="col">{{ earners.1.name }} (own)</th>
+            <th scope="col">Spousal</th>
+            <th scope="col">Survivor</th>
           {% endif %}
-          <th>Total</th>
-          <th>PV</th>
+          <th scope="col">Total</th>
+          <th scope="col"><abbr title="Present value">PV</abbr></th>
+          {% if is_opportunity_cost %}<th scope="col"><abbr title="Effective value">EV</abbr></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -41,6 +43,7 @@
             {% endif %}
             <td>${{ row.household|floatformat:0|intcomma }}</td>
             <td>${{ row.present_value|floatformat:0|intcomma }}</td>
+            {% if is_opportunity_cost %}<td>${{ row.effective_value|floatformat:0|intcomma }}</td>{% endif %}
           </tr>
         {% endfor %}
       </tbody>
@@ -50,6 +53,7 @@
           {% if is_couple %}<td colspan="4"></td>{% else %}<td></td>{% endif %}
           <td>${{ strategy.raw_total|floatformat:0|intcomma }}</td>
           <td>${{ strategy.present_value|floatformat:0|intcomma }}</td>
+          {% if is_opportunity_cost %}<td>${{ strategy.effective_value|floatformat:0|intcomma }}</td>{% endif %}
         </tr>
       </tfoot>
     </table>
