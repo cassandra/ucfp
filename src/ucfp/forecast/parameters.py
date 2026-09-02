@@ -705,11 +705,13 @@ class ForecastParameters:
     property_sale_costs : TransactionCosts                   = field( default_factory = TransactionCosts )
     net_worth_calculation : NetWorthCalculation              = field( default_factory = NetWorthCalculation )
     initial_tax_state : Optional[ TaxState ]                 = None
-    # Skip income-tax assessment and settlement entirely (no per-period tax engine): for a run whose
-    # consumer reads only pre-tax figures, so the tax computation is wasted work. The engine already
-    # no-ops every tax step when the period's tax engine is absent; this drives that path. The Social
-    # Security timing calculator sets it -- it ranks by gross booked benefit, which tax never changes.
-    skip_income_tax   : bool                                 = False
+    # Carry no tax engine at all -- for a run whose consumer reads only pre-tax figures, so the tax
+    # computation is wasted work. The engine already no-ops every tax step when the period's tax engine is
+    # absent; this drives that path. NOTE the blast radius: an absent engine suppresses the *whole* tax
+    # layer -- not just income-tax assessment/settlement, but also FICA/employment tax, RMDs and other
+    # forced transactions, penalties, and contribution-limit enforcement. Only safe on a run with no
+    # wages, pre-tax accounts, or contributions (those steps are then already no-ops). Default off.
+    skip_taxation     : bool                                 = False
 
     def __post_init__( self ) -> None:
         """Reject inputs that would silently mismodel. At most two filing subjects (a return has

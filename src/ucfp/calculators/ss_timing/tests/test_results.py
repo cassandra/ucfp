@@ -68,8 +68,7 @@ class HeatmapViewModelTest( SimpleTestCase ):
     def test_ranked_lists_the_best_first( self ):
         comparison = _couple_comparison()
         rows = results.ranked( comparison, results.combo_of( comparison.best.claim_ages ) )
-        self.assertEqual( rows[ 0 ].rank, 1 )
-        self.assertTrue( rows[ 0 ].is_best )
+        self.assertEqual( rows[ 0 ].rank, 1 )                            # rank 1 is the best, by order
         self.assertEqual( rows[ 0 ].ages, ( 70, 70 ) )
         self.assertEqual( len( rows ), 10 )                 # _RANK_LIMIT
 

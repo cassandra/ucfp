@@ -1,19 +1,19 @@
 """Process-local cache of a claiming-strategy sweep, keyed by its immutable inputs.
 
-A couple's ACTUARIAL sweep is 243 engine runs (81 combinations x 3 survival states) -- a few seconds of
-CPU. The sweep is a pure function of its inputs (the household's claimants, the economic assumptions, and
-the life-expectancy basis), so a results page re-render or a refresh with unchanged inputs re-runs the
-same work. This memoizes the sweep so those repeats become a lookup; only the first view of a given
-household pays the compute.
+A couple's ACTUARIAL sweep is the 9x9 claiming grid times three survival-state runs each -- enough CPU to
+be worth not repeating. The sweep is a pure function of its inputs (the household's claimants, the economic
+assumptions, and the life-expectancy basis), so a results page re-render or a refresh with unchanged inputs
+re-runs the same work. This memoizes the sweep so those repeats become a lookup; only the first view of a
+given household pays the compute.
 
-Bounded to a handful of recent sweeps (LRU). A `Comparison` is small next to a reloaded run's books, so a
-modest bound keeps a session's recent variations warm with a firm memory ceiling regardless of traffic.
+Bounded to a handful of recent sweeps (LRU), so a session's recent variations stay warm with a firm memory
+ceiling regardless of traffic.
 
-Process-local by design (mirrors `planning.run_books_cache`): correctness never depends on process
-affinity -- a miss simply recomputes -- so under multiple workers this degrades to partial hit-rates.
-Keyed by the *value* signature of the inputs (all immutable, hashable dataclasses/enums), so the sweep is
-a deterministic function of the key alone: a hit for one visitor is identical to what another with the
-same figures would compute, leaking nothing beyond what those identical inputs already determine.
+Process-local by design: correctness never depends on process affinity -- a miss simply recomputes -- so
+under multiple workers this degrades to partial hit-rates. Keyed by the *value* signature of the inputs
+(all immutable, hashable dataclasses/enums), so the sweep is a deterministic function of the key alone: a
+hit for one visitor is identical to what another with the same figures would compute, leaking nothing
+beyond what those identical inputs already determine.
 
 The returned `Comparison` is SHARED and read-only -- it is a frozen dataclass of frozen strategies, so
 there is nothing to mutate, but callers must not attempt to.
@@ -25,8 +25,7 @@ from ucfp.calculators.ss_timing.compute import (
     Assumptions, Claimant, Comparison, LifeExpectancyBasis, compare_claiming_strategies, earners_of )
 
 
-# Recent sweeps kept warm. A Comparison is far lighter than a run's books graph, so this bounds the cache
-# to a few megabytes -- comfortable on a small host, and a firm ceiling however many households are swept.
+# How many recent sweeps stay warm -- a firm ceiling however many households are swept.
 _MAX_CACHED_SWEEPS = 32
 
 _comparison_by_key : "OrderedDict" = OrderedDict()   # (earners, assumptions, basis) -> Comparison (LRU)
@@ -60,6 +59,6 @@ def cached_comparison(
 
 def clear_comparison_cache() -> None:
     """Drop every cached sweep. Ordinary operation needs no invalidation -- a sweep is a pure function of
-    its inputs -- so this is for test hygiene and any future explicit-eviction need."""
+    its inputs -- so this is for test hygiene."""
     with _lock:
         _comparison_by_key.clear()

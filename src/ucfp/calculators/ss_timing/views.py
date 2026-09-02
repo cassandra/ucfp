@@ -23,8 +23,8 @@ from ucfp.jurisdiction.government_pension import GovernmentPension
 from . import methodology, results
 from .comparison_cache import cached_comparison
 from .compute import (
-    CLAIM_AGES, COLA_INFLATION_LAG, LifeExpectancyBasis, compute_strategy, earners_of,
-    representative_claimants, strategy_year_details )
+    CLAIM_AGES, COLA_INFLATION_LAG, Assumptions, Claimant, LifeExpectancyBasis, Strategy,
+    compute_strategy, earners_of, representative_claimants, strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions, is_runnable
 from .prefill import build_prefill
 
@@ -44,8 +44,6 @@ class InputsView( View ):
     template_name = 'calculators/ss_timing/inputs.html'
 
     def get( self, request ):
-        # build_prefill also resolves the provenance (from_profile / assumptions_source); the form no
-        # longer surfaces it (the prefill alert was removed), so only the initial values are used here.
         form = InputsForm( initial = build_prefill( request ).initial )
         return render( request, self.template_name, { 'form' : form } )
 
@@ -221,7 +219,8 @@ def _submitted_amount( request, field : str ) -> Decimal:
     return value if value is not None else Decimal( '0' )
 
 
-def _detail( claimants, claim_ages, assumptions, basis ):
+def _detail( claimants : list[ Claimant ], claim_ages : tuple[ int, ... ], assumptions : Assumptions,
+             basis : LifeExpectancyBasis ) -> tuple[ tuple[ Claimant, ... ], Strategy ]:
     """The year-by-year detail's earners and its deterministic strategy for `claim_ages`. Under the
     actuarial basis this is a *representative* lifetime -- the earners' expected ages from the mortality
     tables, run deterministically -- so the detail shows real annual income and a real survivor step-up
@@ -233,7 +232,8 @@ def _detail( claimants, claim_ages, assumptions, basis ):
     return earners, strategy
 
 
-def _detail_context( earners, strategy, is_opportunity_cost, is_representative ) -> dict:
+def _detail_context( earners : tuple[ Claimant, ... ], strategy : Strategy,
+                     is_opportunity_cost : bool, is_representative : bool ) -> dict:
     """The year-by-year detail table's context for `strategy` -- the earners (higher first) for the column
     labels, the per-year rows apportioned into own/spousal/survivor, `is_opportunity_cost` (retained for the
     footnote wording), and `is_representative` so the actuarial detail is framed as one representative
@@ -249,13 +249,13 @@ def _detail_context( earners, strategy, is_opportunity_cost, is_representative )
         'rows'                : strategy_year_details( tuple( earners ), strategy ) }
 
 
-def _is_opportunity_cost( assumptions ) -> bool:
+def _is_opportunity_cost( assumptions : Assumptions ) -> bool:
     """Whether present value and effective value differ -- the expected return is set above inflation, so
     the discount prices in an opportunity cost. False recovers the plain today's-dollars view."""
     return assumptions.discount_rate != assumptions.inflation
 
 
-def _percent( rate ) -> str:
+def _percent( rate : Rate ) -> str:
     """A Rate as a trimmed percent string for the assumptions chips -- Rate(0.025) -> '2.5%',
     Rate(1) -> '100%'. Fixed-point format so a whole percent does not render in scientific notation."""
     value = ( rate.fraction * Decimal( '100' ) ).normalize()

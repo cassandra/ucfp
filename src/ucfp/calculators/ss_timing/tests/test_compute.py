@@ -15,10 +15,11 @@ from ucfp.calculators.ss_timing import compute as _compute
 from ucfp.calculators.ss_timing.compute import (
     Assumptions, Claimant, LifeExpectancyBasis, compare_claiming_strategies, earners_of,
     strategy_year_details )
+from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.forecast.forecast import Forecast
 from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
-from ucfp.jurisdiction.us.mortality import Sex, alive_fraction
+from ucfp.jurisdiction.us.mortality import Sex, alive_fraction, life_expectancy
 
 _NO_OVERLAY = Assumptions( inflation = ZERO_RATE, cola = ZERO_RATE )
 
@@ -336,6 +337,47 @@ class ActuarialBasisTest( unittest.TestCase ):
         for benefit in pre_claim:
             self.assertEqual( benefit.nominal, Decimal( '0' ) )
 
+    def test_couple_expected_value_matches_the_weighted_state_streams( self ):
+        # The per-year expected nominal must equal the three survival-state runs combined by the joint
+        # mid-year survival weights: both*hf*lf + higher-survivor*hf*(1-lf) + lower-survivor*lf*(1-hf).
+        # Recompute it independently to catch a state/weight pairing or sign slip in _weighted_couple.
+        earners = earners_of( [ Claimant( 'Higher', 1958, Decimal( '3000' ), 100, Sex.MALE ),
+                                Claimant( 'Lower', 1960, Decimal( '1200' ), 100, Sex.FEMALE ) ] )
+        horizon       = _compute._Horizon.actuarial( earners )
+        claim, before = ( 66, 68 ), horizon.start_year - 1
+
+        def state_stream( deaths ):
+            return _compute._nominal_by_year(
+                _compute._run( earners, claim, _NO_OVERLAY, deaths, horizon ), horizon )
+
+        both, hi_al, lo_al = ( state_stream( [ None, None ] ),
+                               state_stream( [ None, before ] ), state_stream( [ before, None ] ) )
+        higher, lower = earners
+        got           = _compute._weighted_couple( earners, claim, _NO_OVERLAY, horizon )
+        for offset, year in enumerate( range( horizon.start_year, horizon.end_year + 1 ) ):
+            hf = alive_fraction( horizon.start_year - higher.birth_year, year - higher.birth_year,
+                                 higher.sex, higher.setback )
+            lf = alive_fraction( horizon.start_year - lower.birth_year, year - lower.birth_year,
+                                 lower.sex, lower.setback )
+            expected = ( both[ offset ] * ( hf * lf )
+                         + hi_al[ offset ] * ( hf * ( 1 - lf ) )
+                         + lo_al[ offset ] * ( lf * ( 1 - hf ) ) )
+            self.assertEqual( got[ offset ], expected )
+
+    def test_representative_claimants_fill_expected_lifetime_from_the_tables( self ):
+        # The recap's reported life expectancy and the year-by-year survivor transition both read these
+        # ages, so each must be the mortality table's life_expectancy at that person's earliest-claim age.
+        couple = [ Claimant( 'Higher', 1958, Decimal( '3000' ), None, Sex.MALE ),
+                   Claimant( 'Lower', 1960, Decimal( '1200' ), None, Sex.FEMALE ) ]
+        reps  = _compute.representative_claimants( couple )
+        self.assertEqual( [ rep.name for rep in reps ], [ 'Higher', 'Lower' ] )      # higher earner first
+        start = min( claimant.birth_year + 62 for claimant in couple )               # earliest age-62 claim
+        for rep in reps:
+            self.assertEqual( rep.expected_lifetime,
+                              round( life_expectancy( start - rep.birth_year, rep.sex, rep.setback ) ) )
+        preset = _compute.representative_claimants( [ replace( couple[ 0 ], expected_lifetime = 999 ) ] )
+        self.assertNotEqual( preset[ 0 ].expected_lifetime, 999 )                    # recomputed, not kept
+
     def test_the_specific_basis_is_the_default( self ):
         # The default basis is SPECIFIC (the exact deterministic path); ACTUARIAL is opt-in.
         solo    = [ Claimant( 'Solo', 1960, Decimal( '2000' ), 100, Sex.MALE ) ]
@@ -344,22 +386,34 @@ class ActuarialBasisTest( unittest.TestCase ):
         self.assertEqual( default.best.raw_total, chosen.best.raw_total )
 
 
-class SkipIncomeTaxTest( unittest.TestCase ):
-    """The SS-only run skips income-tax assessment for speed. Since the comparison ranks by gross booked
-    Social Security -- which income tax never changes -- the benefit stream must be identical with tax
-    skipped; this guards that the optimization stays correctness-preserving."""
+def _income_tax_booked( result, through ) -> Decimal:
+    """The income tax the run booked through `through` -- summed across the income-tax expense accounts."""
+    reader = Bookkeeper( result.books )
+    return sum( ( reader.ledger.natural_balance( account, through = through )
+                  for account in result.books.accounts if 'Income Tax' in account.name ),
+                Decimal( '0' ) )
 
-    def test_skipping_income_tax_leaves_the_benefit_stream_identical( self ):
-        earners = earners_of( [ Claimant( 'Higher', 1958, Decimal( '3000' ), 95 ),
-                                Claimant( 'Lower', 1960, Decimal( '1200' ), 95 ) ] )
+
+class SkipTaxationTest( unittest.TestCase ):
+    """The SS-only run skips the tax layer for speed. Since the comparison ranks by gross booked Social
+    Security -- which taxation never changes -- the benefit stream must be identical with tax skipped."""
+
+    def test_skipping_taxation_preserves_social_security_when_tax_actually_applies( self ):
+        # A high-PIA couple genuinely incurs income tax, so this is not a no-tax no-op: the taxed run books
+        # real income tax and the skipped run books none, yet the gross Social Security stream is identical.
+        earners = earners_of( [ Claimant( 'Higher', 1958, Decimal( '8000' ), 90 ),
+                                Claimant( 'Lower', 1960, Decimal( '8000' ), 90 ) ] )
         horizon = _compute._Horizon.for_household( earners )
+        through = date( horizon.end_year, 12, 31 )
         deaths  = [ earner.birth_year + earner.expected_lifetime for earner in earners ]
         skipped = _compute._forecast_parameters( earners, ( 67, 67 ), _assumptions(), deaths, horizon )
-        self.assertTrue( skipped.skip_income_tax )                          # the SS calculator sets it
-        taxed   = replace( skipped, skip_income_tax = False )
-        self.assertEqual(
-            _compute._nominal_by_year( Forecast( skipped ).run(), horizon ),
-            _compute._nominal_by_year( Forecast( taxed ).run(), horizon ) )
+        self.assertTrue( skipped.skip_taxation )                            # the SS calculator sets it
+        taxed   = replace( skipped, skip_taxation = False )
+        skipped_run, taxed_run = Forecast( skipped ).run(), Forecast( taxed ).run()
+        self.assertGreater( _income_tax_booked( taxed_run, through ), Decimal( '0' ) )   # taxed path taxes
+        self.assertEqual( _income_tax_booked( skipped_run, through ), Decimal( '0' ) )   # skipped books none
+        self.assertEqual( _compute._nominal_by_year( skipped_run, horizon ),             # SS identical
+                          _compute._nominal_by_year( taxed_run, horizon ) )
 
 
 if __name__ == '__main__':

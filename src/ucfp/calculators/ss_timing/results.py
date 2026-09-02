@@ -9,9 +9,9 @@ key ("67-67") the results page uses to drill into a cell.
 """
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
+from typing import Callable, Optional
 
-from .compute import CLAIM_AGES, Claimant, Comparison, Sex
+from .compute import CLAIM_AGES, Claimant, Comparison, Sex, Strategy
 
 _HEAT_BUCKETS = 7     # sequential-ramp intensity levels (matched by the .hm-b0..6 classes in the stylesheet)
 _RANK_LIMIT   = 10    # rows in the "Top strategies" list
@@ -39,8 +39,8 @@ class HeatCell:
 class RankRow:
     """One row of the ranked list: its `rank` (1 = best), the claiming `ages` (higher first), and its three
     lifetime figures -- nominal `raw_total`, `present_value` (today's dollars), and `effective_value` (the
-    opportunity-cost-adjusted figure it is ranked by). `combo` keys the drill-in; `is_best` / `is_selected`
-    mirror the heatmap."""
+    opportunity-cost-adjusted figure it is ranked by). `combo` keys the drill-in; `is_selected` mirrors the
+    heatmap's gold selection (rank 1 needs no separate "best" mark -- it is first by construction)."""
 
     rank            : int
     combo           : str
@@ -48,7 +48,6 @@ class RankRow:
     raw_total       : Decimal
     present_value   : Decimal
     effective_value : Decimal
-    is_best         : bool
     is_selected     : bool
     beyond_top      : bool     # a selected strategy pulled in from outside the top list (the 11th row)
 
@@ -121,27 +120,27 @@ def ranked( comparison : Comparison, selected_combo : str ) -> list[ RankRow ]:
     so a visitor who picks a lower-ranked cell still sees its lifetime figures (the year-by-year no longer
     repeats them). That extra row is flagged `beyond_top` for its own visual break."""
     ordered = comparison.ranked
-    best    = combo_of( comparison.best.claim_ages )
-    rows    = [ _rank_row( rank, strategy, best, selected_combo, beyond_top = False )
+    rows    = [ _rank_row( rank, strategy, selected_combo, beyond_top = False )
                 for rank, strategy in enumerate( ordered[ : _RANK_LIMIT ], start = 1 ) ]
     if selected_combo and not any( row.is_selected for row in rows ):
         for rank, strategy in enumerate( ordered, start = 1 ):
             if combo_of( strategy.claim_ages ) == selected_combo:
-                rows.append( _rank_row( rank, strategy, best, selected_combo, beyond_top = True ) )
+                rows.append( _rank_row( rank, strategy, selected_combo, beyond_top = True ) )
                 break
     return rows
 
 
-def _rank_row( rank, strategy, best_combo, selected_combo, beyond_top ) -> RankRow:
+def _rank_row( rank : int, strategy : Strategy, selected_combo : str, beyond_top : bool ) -> RankRow:
     combo = combo_of( strategy.claim_ages )
     return RankRow(
         rank = rank, combo = combo, ages = strategy.claim_ages,
         raw_total = strategy.raw_total, present_value = strategy.present_value,
         effective_value = strategy.effective_value,
-        is_best = combo == best_combo, is_selected = combo == selected_combo, beyond_top = beyond_top )
+        is_selected = combo == selected_combo, beyond_top = beyond_top )
 
 
-def _cell( claim_ages, by_combo, bucket, best_combo, selected_combo ) -> HeatCell:
+def _cell( claim_ages : tuple[ int, ... ], by_combo : dict, bucket : Callable[ [ Decimal ], int ],
+           best_combo : str, selected_combo : str ) -> HeatCell:
     combo    = combo_of( claim_ages )
     strategy = by_combo[ combo ]
     return HeatCell(
@@ -156,7 +155,7 @@ def _cell( claim_ages, by_combo, bucket, best_combo, selected_combo ) -> HeatCel
         is_selected     = combo == selected_combo )
 
 
-def _bucketer( comparison : Comparison ):
+def _bucketer( comparison : Comparison ) -> Callable[ [ Decimal ], int ]:
     """An effective-value -> ramp-bucket function over the sweep's range (all one bucket when flat)."""
     values = [ strategy.effective_value for strategy in comparison.strategies ]
     low    = min( values )

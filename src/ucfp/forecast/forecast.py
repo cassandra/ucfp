@@ -1067,9 +1067,9 @@ class Forecast:
         `full_tax_year`."""
         year_fraction = self._year_fraction( span )
         annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
-        # With income tax skipped, carry no engine: every tax step in the Period already no-ops on an
+        # With taxation skipped, carry no engine: every tax step in the Period already no-ops on an
         # absent engine, so the assessment/settlement work (and its chart scans) is elided entirely.
-        tax_engine = ( None if self._parameters.skip_income_tax
+        tax_engine = ( None if self._parameters.skip_taxation
                        else self._tax_law.engine_for( span.end_date.year ) )
         return PeriodParameters(
             date_span         = span,

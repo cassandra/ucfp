@@ -40,7 +40,8 @@ from ucfp.forecast.parameters import (
 from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForecastType
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
-from ucfp.jurisdiction.social_security_household import HouseholdMember, household_benefit_breakdown
+from ucfp.jurisdiction.social_security_household import (
+    HouseholdMember, MemberBenefit, household_benefit_breakdown )
 from ucfp.jurisdiction.us.mortality import Sex, alive_fraction, life_expectancy
 
 
@@ -52,6 +53,10 @@ CLAIM_AGES         = tuple( range( EARLIEST_CLAIM_AGE, LATEST_CLAIM_AGE + 1 ) )
 # mortality-weighted basis. Survival past ~100 is slight and the weighted benefit there rounds to nothing,
 # so the sweep stops here rather than running the curve to its 119 tail.
 HORIZON_CAP_AGE = 100
+
+# The default year the funding-shortfall reduction begins (see `Assumptions.benefits_payable`), when the
+# visitor sets no other. The SSA trust-fund depletion is currently projected for the early 2030s.
+_DEFAULT_REDUCTION_YEAR = 2032
 
 _ONE = Decimal( '1' )
 
@@ -111,7 +116,7 @@ class Assumptions:
     inflation        : Rate
     cola             : Rate
     benefits_payable : Rate           = FULL_RATE
-    reduction_year   : int            = 2032
+    reduction_year   : int            = _DEFAULT_REDUCTION_YEAR
     expected_return  : Optional[ Rate ] = None
 
     @property
@@ -124,7 +129,7 @@ class Assumptions:
 
     @classmethod
     def from_inflation( cls, inflation : Rate, benefits_payable : Rate = FULL_RATE,
-                        reduction_year : int = 2032,
+                        reduction_year : int = _DEFAULT_REDUCTION_YEAR,
                         expected_return : Optional[ Rate ] = None ) -> 'Assumptions':
         """Assumptions from a single inflation figure: the SS COLA is derived as inflation less the
         historical lag (`COLA_INFLATION_LAG`), floored at zero, so the visitor sets one familiar number
@@ -331,7 +336,8 @@ def _household_members(
         for index, ( earner, age ) in enumerate( zip( earners, claim_ages ) ) ]
 
 
-def _apportion( part, household_nominal : Decimal, today_total : Decimal ) -> MemberYear:
+def _apportion( part : Optional[ MemberBenefit ], household_nominal : Decimal,
+                today_total : Decimal ) -> MemberYear:
     """A member's nominal parts: their today's-dollars own/spousal/survivor scaled to the engine's nominal
     household total by their share of it. Empty when no benefit is paid that year (nothing to apportion)."""
     if part is None or today_total == 0:
@@ -429,7 +435,7 @@ def _weighted_single(
     year's benefit scaled by the expected fraction of that year they are alive to receive it."""
     alive = _nominal_by_year(
         _run( ( claimant, ), claim_ages, assumptions, [ None ], horizon ), horizon )
-    return [ nominal * _alive_fraction( claimant, horizon.start_year + offset, horizon )
+    return [ nominal * _claimant_alive_fraction( claimant, horizon.start_year + offset, horizon )
              for offset, nominal in enumerate( alive ) ]
 
 
@@ -452,8 +458,8 @@ def _weighted_couple(
     expected = list()
     for offset in range( len( both ) ):
         year       = horizon.start_year + offset
-        higher_f   = _alive_fraction( higher, year, horizon )
-        lower_f    = _alive_fraction( lower, year, horizon )
+        higher_f   = _claimant_alive_fraction( higher, year, horizon )
+        lower_f    = _claimant_alive_fraction( lower, year, horizon )
         expected.append(
             both[ offset ]         * ( higher_f * lower_f )
             + higher_alone[ offset ] * ( higher_f * ( _ONE - lower_f ) )
@@ -462,7 +468,7 @@ def _weighted_couple(
     return expected
 
 
-def _alive_fraction( claimant : Claimant, year : int, horizon : _Horizon ) -> Decimal:
+def _claimant_alive_fraction( claimant : Claimant, year : int, horizon : _Horizon ) -> Decimal:
     """The expected fraction of `year` the claimant is alive, conditioned on being alive at the horizon
     start (the earliest-claim year) -- the mid-year-of-death weight from their survival curve, per sex and
     setback."""
@@ -508,10 +514,11 @@ def _forecast_parameters(
         assets           = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ) ],
         social_security  = entitlements,
         subject_removals = removals,
-        # The comparison ranks by gross booked Social Security; income tax never changes that number, so
-        # skip the per-period tax assessment/settlement -- roughly a 3x speed-up per run (the couple
-        # actuarial sweep is 243 runs), with identical results.
-        skip_income_tax  = True,
+        # The comparison ranks by gross booked Social Security; taxation never changes that number, and
+        # this stripped run has no wages, pre-tax accounts, or contributions -- so skip the tax layer
+        # entirely. A sizeable per-run speed-up (the couple actuarial sweep is many runs), identical
+        # results.
+        skip_taxation    = True,
         economic_outlook = EconomicOutlook.constant( EconomicParameters(
             inflation                        = assumptions.inflation,
             social_security_cola             = assumptions.cola,
