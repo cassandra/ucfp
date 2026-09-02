@@ -23,7 +23,7 @@ the parts' ratios are overlay-free: the split comes from the jurisdiction breakd
 the engine's -- so no economic overlay is reproduced here, and the per-person figures never read the books
 (sidestepping the engine's account-retitling on a death).
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 from enum import Enum
@@ -41,7 +41,7 @@ from ucfp.jurisdiction.enums import FilingStatus, JurisdictionType, StatuteForec
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.law import StatuteProfile, TaxProjection
 from ucfp.jurisdiction.social_security_household import HouseholdMember, household_benefit_breakdown
-from ucfp.jurisdiction.us.mortality import Sex, alive_fraction
+from ucfp.jurisdiction.us.mortality import Sex, alive_fraction, life_expectancy
 
 
 EARLIEST_CLAIM_AGE = 62
@@ -231,6 +231,27 @@ def earners_of( claimants : list[ Claimant ] ) -> tuple[ Claimant, ... ]:
     """`claimants` ordered higher earner first (by PIA) -- the single household orientation the whole
     comparison reads: the heatmap axes, the ranked and detail columns, and the spousal/survivor roles."""
     return tuple( sorted( claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
+
+
+def representative_claimants( claimants : list[ Claimant ] ) -> tuple[ Claimant, ... ]:
+    """The earners (higher first) with `expected_lifetime` filled from each person's actuarial life
+    expectancy -- their survival curve (sex + setback) read at the earliest-claim year. This turns an
+    ACTUARIAL household into a single deterministic *representative* lifetime: the year-by-year detail runs
+    to these ages (real income, a real survivor step-up) and the recap reports them, while the ranked
+    heatmap keeps the full probabilistic expectation. On a claimant who already has an expected lifetime
+    (the SPECIFIC path) this is unnecessary, but it recomputes from the tables regardless."""
+    earners = earners_of( claimants )
+    start   = min( earner.birth_year + EARLIEST_CLAIM_AGE for earner in earners )
+    return tuple(
+        replace( earner, expected_lifetime = _expected_death_age( earner, start ) )
+        for earner in earners )
+
+
+def _expected_death_age( claimant : Claimant, horizon_start_year : int ) -> int:
+    """The claimant's expected age at death from the life table, conditioned on surviving to the household's
+    earliest-claim year (the weighting's anchor) -- rounded to a whole age for the deterministic run."""
+    current_age = horizon_start_year - claimant.birth_year
+    return round( life_expectancy( current_age, claimant.sex, claimant.setback ) )
 
 
 def compare_claiming_strategies(

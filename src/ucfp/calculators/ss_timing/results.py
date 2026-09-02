@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 
-from .compute import CLAIM_AGES, Comparison
+from .compute import CLAIM_AGES, Claimant, Comparison, Sex
 
 _HEAT_BUCKETS = 7     # sequential-ramp intensity levels (matched by the .hm-b0..6 classes in the stylesheet)
 _RANK_LIMIT   = 10    # rows in the "Top strategies" list
@@ -52,9 +52,53 @@ class RankRow:
     is_selected     : bool
 
 
+@dataclass( frozen = True )
+class PersonRecap:
+    """One person in the household recap panel: their `name`, `role` label ('higher earner' / 'lower
+    earner', or None for a single household), monthly `pia`, the assumed `lifetime_age`, and -- under the
+    actuarial basis -- the `basis_words` describing where that age came from ('male, average'); empty in
+    the specific basis, where the age was entered rather than estimated."""
+
+    name         : str
+    role         : Optional[ str ]
+    pia          : Decimal
+    lifetime_age : Optional[ int ]
+    basis_words  : str
+
+
 def combo_of( claim_ages : tuple[ int, ... ] ) -> str:
     """A claim-age combination as a URL-safe key -- '67' for one person, '70-64' for a couple."""
     return '-'.join( str( age ) for age in claim_ages )
+
+
+def person_recaps( earners : tuple[ Claimant, ... ], estimated : bool ) -> list[ PersonRecap ]:
+    """The household recap rows for `earners` (higher first). `estimated` marks the actuarial basis, where
+    the lifetime age is the derived life expectancy and `basis_words` names the survival curve used;
+    otherwise the age was entered and the words are blank. Each earner must carry `expected_lifetime` (the
+    entered age, or the representative age filled by `compute.representative_claimants`)."""
+    is_couple = len( earners ) == 2
+    recaps    = list()
+    for index, earner in enumerate( earners ):
+        role = None
+        if is_couple:
+            role = 'higher earner' if index == 0 else 'lower earner'
+        recaps.append( PersonRecap(
+            name         = earner.name,
+            role         = role,
+            pia          = earner.pia_monthly,
+            lifetime_age = earner.expected_lifetime,
+            basis_words  = _basis_words( earner ) if estimated else '' ) )
+        continue
+    return recaps
+
+
+def _basis_words( claimant : Claimant ) -> str:
+    """The survival curve behind a claimant's estimated life expectancy, as a short phrase -- the mortality
+    table and the longevity setback, e.g. 'male, average' or 'blended, longer-lived'."""
+    table     = { Sex.FEMALE: 'female', Sex.MALE: 'male' }.get( claimant.sex, 'blended' )
+    setback   = claimant.setback
+    longevity = 'shorter-lived' if setback > 0 else 'longer-lived' if setback < 0 else 'average'
+    return f'{table}, {longevity}'
 
 
 def heatmap( comparison : Comparison, selected_combo : str ) -> list[ list[ HeatCell ] ]:

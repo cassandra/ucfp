@@ -94,6 +94,16 @@ def _couple_form_data() -> dict:
              'benefits_payable' : '100', 'reduction_year' : '2033' }
 
 
+def _actuarial_couple_form_data() -> dict:
+    # A couple estimating life expectancy from the tables (no entered ages): the higher earner male, the
+    # lower female, both average longevity.
+    return { 'household' : 'couple', 'life_expectancy_mode' : 'actuarial',
+             's0_birth_year' : '1960', 's0_pia' : '3000', 's0_sex' : 'male', 's0_longevity' : '0',
+             's1_birth_year' : '1962', 's1_pia' : '1200', 's1_sex' : 'female', 's1_longevity' : '0',
+             'inflation' : '2.5', 'expected_return' : '4.5',
+             'benefits_payable' : '100', 'reduction_year' : '2033' }
+
+
 @override_settings( SUPPRESS_AUTHENTICATION = False )
 class ResultsRenderTest( TestCase ):
 
@@ -132,19 +142,17 @@ class ResultsRenderTest( TestCase ):
         self.assertEqual( response.status_code, 200 )
         detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
         self.assertIn( 'Total', detail )
-        self.assertIn( 'Lifetime total', detail )
-        self.assertIn( 'Effective value', detail )   # the EV column shows on drill-in (opportunity cost on)
+        self.assertIn( 'Present value', detail )
 
-    def test_the_drill_in_omits_effective_value_without_opportunity_cost( self ):
-        # The drill-in fragment renders standalone and re-derives is_opportunity_cost; with the return equal
-        # to inflation it must drop the EV column, so a mis-threaded flag on this endpoint is caught.
-        data = _couple_form_data()
-        data[ 'expected_return' ] = data[ 'inflation' ]
-        self.client.post( reverse( 'calculators:ss_timing:inputs' ), data )
-        response = self.client.get(
+    def test_the_year_by_year_is_income_only_no_totals_or_effective_value( self ):
+        # The year-by-year is an income picture: the lifetime total and the effective value (the decision
+        # figures) live once, in the Top strategies table, and must not reappear per-year -- even with the
+        # opportunity cost on -- so nothing there competes with or contradicts the ranked figure.
+        self._submit()                                                      # return 4.5% over 2.5% inflation
+        detail = json.loads( self.client.get(
             reverse( 'calculators:ss_timing:detail', args = [ '67-67' ] ),
-            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
-        detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' ).content )[ 'replace' ][ 'ss-detail' ]
+        self.assertNotIn( 'Lifetime total', detail )
         self.assertNotIn( 'Effective value', detail )
 
     def test_a_bad_or_mismatched_combo_is_not_found( self ):
@@ -153,6 +161,31 @@ class ResultsRenderTest( TestCase ):
             reverse( 'calculators:ss_timing:detail', args = [ '99-99' ] ) ).status_code, 404 )
         self.assertEqual( self.client.get(                                  # single arity for a couple
             reverse( 'calculators:ss_timing:detail', args = [ '67' ] ) ).status_code, 404 )
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class ActuarialResultsTest( TestCase ):
+    """The actuarial basis on the results page: the recap reports the derived life expectancy, and the
+    year-by-year is a representative deterministic lifetime (real income + a real survivor step-up), not the
+    survival-blended average that no real year would show."""
+
+    def _submit( self ):
+        self.client.post( reverse( 'calculators:ss_timing:inputs' ), _actuarial_couple_form_data() )
+
+    def test_the_recap_reports_the_estimated_life_expectancy( self ):
+        self._submit()
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertContains( response, 'life expectancy' )
+        self.assertContains( response, 'male, average' )                    # the higher earner's basis words
+
+    def test_the_year_by_year_is_a_representative_lifetime_with_a_survivor_step_up( self ):
+        self._submit()
+        detail = json.loads( self.client.get(
+            reverse( 'calculators:ss_timing:detail', args = [ '70-67' ] ),
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' ).content )[ 'replace' ][ 'ss-detail' ]
+        self.assertIn( 'representative lifetime', detail )                  # framed as one path, not the mean
+        self.assertIn( 'transition', detail )                              # the survivor row is flagged
+        self.assertNotIn( 'Lifetime total', detail )
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )

@@ -30,11 +30,12 @@ the seam just after the results.{% endcomment %}
           <a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-secondary btn-sm">Adjust</a>
         </div>
         <div class="row">
-          {% for earner in earners %}
+          {% for recap in recaps %}
             <div class="col ss-person">
-              <div class="font-weight-bold">{{ earner.name }}{% if is_couple %}
-                <span class="ss-role">· {% if forloop.first %}higher earner{% else %}lower earner{% endif %}</span>{% endif %}</div>
-              <div class="text-muted small mt-1">PIA ${{ earner.pia_monthly|floatformat:0|intcomma }}/mo · through age {{ earner.expected_lifetime }}</div>
+              <div class="font-weight-bold">{{ recap.name }}{% if recap.role %}
+                <span class="ss-role">· {{ recap.role }}</span>{% endif %}</div>
+              <div class="text-muted small mt-1">PIA ${{ recap.pia|floatformat:0|intcomma }}/mo ·
+                {% if life_expectancy_estimated %}life expectancy ~{{ recap.lifetime_age }} ({{ recap.basis_words }}){% else %}through age {{ recap.lifetime_age }}{% endif %}</div>
             </div>
           {% endfor %}
         </div>

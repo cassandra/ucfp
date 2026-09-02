@@ -23,7 +23,8 @@ from ucfp.jurisdiction.government_pension import GovernmentPension
 from . import methodology, results
 from .comparison_cache import cached_comparison
 from .compute import (
-    CLAIM_AGES, COLA_INFLATION_LAG, compute_strategy, earners_of, strategy_year_details )
+    CLAIM_AGES, COLA_INFLATION_LAG, LifeExpectancyBasis, compute_strategy, earners_of,
+    representative_claimants, strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions, is_runnable
 from .prefill import build_prefill
 
@@ -74,21 +75,25 @@ class ResultsView( View ):
         comparison  = cached_comparison( claimants, assumptions, basis )
         selected    = comparison.best
         combo       = results.combo_of( selected.claim_ages )
+        estimated   = basis is LifeExpectancyBasis.ACTUARIAL
+        detail_earners, detail_strategy = _detail( claimants, selected.claim_ages, assumptions, basis )
         real_return        = Rate( assumptions.discount_rate.fraction - assumptions.inflation.fraction )
         is_opportunity_cost = _is_opportunity_cost( assumptions )
         context     = {
-            'axis_ages'           : CLAIM_AGES,
-            'cola_lag_pct'        : _percent( COLA_INFLATION_LAG ),
-            'inflation_pct'       : _percent( assumptions.inflation ),
-            'expected_return_pct' : _percent( assumptions.discount_rate ),
-            'real_return_pct'     : _percent( real_return ),
-            'is_opportunity_cost' : is_opportunity_cost,
-            'payable_pct'         : _percent( assumptions.benefits_payable ),
-            'reduction_year'      : assumptions.reduction_year,
-            'is_reduced'          : assumptions.benefits_payable != FULL_RATE,
-            'heatmap'             : results.heatmap( comparison, combo ),
-            'ranked'              : results.ranked( comparison, combo ) }
-        context.update( _detail_context( comparison.claimants, selected, is_opportunity_cost ) )
+            'axis_ages'                 : CLAIM_AGES,
+            'cola_lag_pct'              : _percent( COLA_INFLATION_LAG ),
+            'inflation_pct'             : _percent( assumptions.inflation ),
+            'expected_return_pct'       : _percent( assumptions.discount_rate ),
+            'real_return_pct'           : _percent( real_return ),
+            'is_opportunity_cost'       : is_opportunity_cost,
+            'life_expectancy_estimated' : estimated,
+            'recaps'                    : results.person_recaps( detail_earners, estimated ),
+            'payable_pct'               : _percent( assumptions.benefits_payable ),
+            'reduction_year'            : assumptions.reduction_year,
+            'is_reduced'                : assumptions.benefits_payable != FULL_RATE,
+            'heatmap'                   : results.heatmap( comparison, combo ),
+            'ranked'                    : results.ranked( comparison, combo ) }
+        context.update( _detail_context( detail_earners, detail_strategy, is_opportunity_cost, estimated ) )
         return render( request, self.template_name, context )
 
 
@@ -102,11 +107,12 @@ class StrategyDetailView( View ):
         if resolved is None:
             raise Http404( 'No calculator inputs in this session.' )
         claimants, assumptions, basis = resolved
-        strategy = compute_strategy(
+        detail_earners, strategy = _detail(
             claimants, _parse_combo( combo, len( claimants ) ), assumptions, basis )
         content  = render_to_string(
             _DETAIL_TEMPLATE,
-            _detail_context( earners_of( claimants ), strategy, _is_opportunity_cost( assumptions ) ),
+            _detail_context( detail_earners, strategy, _is_opportunity_cost( assumptions ),
+                             basis is LifeExpectancyBasis.ACTUARIAL ),
             request = request )
         return antinode.response( replace_map = { 'ss-detail' : content } )
 
@@ -205,14 +211,28 @@ def _submitted_amount( request, field : str ) -> Decimal:
     return value if value is not None else Decimal( '0' )
 
 
-def _detail_context( earners, strategy, is_opportunity_cost ) -> dict:
+def _detail( claimants, claim_ages, assumptions, basis ):
+    """The year-by-year detail's earners and its deterministic strategy for `claim_ages`. Under the
+    actuarial basis this is a *representative* lifetime -- the earners' expected ages from the mortality
+    tables, run deterministically -- so the detail shows real annual income and a real survivor step-up
+    rather than a survival-blended average; the specific basis runs the entered ages. Both compute the same
+    (specific) way, differing only in where the death ages come from."""
+    earners  = ( representative_claimants( claimants ) if basis is LifeExpectancyBasis.ACTUARIAL
+                 else earners_of( claimants ) )
+    strategy = compute_strategy( list( earners ), claim_ages, assumptions, LifeExpectancyBasis.SPECIFIC )
+    return earners, strategy
+
+
+def _detail_context( earners, strategy, is_opportunity_cost, is_representative ) -> dict:
     """The year-by-year detail table's context for `strategy` -- the earners (higher first) for the column
-    labels, the per-year rows apportioned into own/spousal/survivor, and `is_opportunity_cost` so the table
-    shows the effective-value column (it renders standalone on drill-in, so it carries the flag itself)."""
+    labels, the per-year rows apportioned into own/spousal/survivor, `is_opportunity_cost` (retained for the
+    footnote wording), and `is_representative` so the actuarial detail is framed as one representative
+    lifetime. It renders standalone on drill-in, so it carries these flags itself."""
     return {
         'earners'             : earners,
         'is_couple'           : len( earners ) == 2,
         'is_opportunity_cost' : is_opportunity_cost,
+        'is_representative'   : is_representative,
         'strategy'            : strategy,
         'combo'               : results.combo_of( strategy.claim_ages ),
         'claim_pairs'         : list( zip( earners, strategy.claim_ages ) ),

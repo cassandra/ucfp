@@ -326,4 +326,4 @@ class ResultsViewTest( TestCase ):
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Top strategies' )
-        self.assertContains( response, 'Lifetime total' )
+        self.assertContains( response, 'Year (age' )              # the year-by-year income table renders
