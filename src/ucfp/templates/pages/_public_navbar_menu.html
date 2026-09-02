@@ -1,9 +1,10 @@
-{% comment %}The anonymous app navbar interior: the login-free calculators as nav links, plus a quiet Sign
-in for a returning visitor. Included by `app_base.html` for an anonymous visitor -- only possible on the
-auth-exempt calculator pages, since every other app page redirects an anonymous visitor to sign-in. It
-mirrors the home page's anonymous chrome: Sign in lives here in the bar, while the "see how it works"
-conversion CTA lives in the page content (the calculators' onward band), not the navbar. The calculators
-come from `ucfp.calculators.navigation` so this bar and the future signed-in dropdown share one list.{% endcomment %}
+{% comment %}The anonymous app navbar interior: the login-free calculators as nav links on the left, and on
+the right the onward path into the app -- a short prompt, the "see how it works" CTA (mirroring the home
+page's anonymous CTA), and a Sign in for a returning visitor. Keeping the CTA in the bar makes the obvious
+navigation obvious, rather than burying it in the page. Included by `app_base.html` for an anonymous visitor,
+only ever possible on the auth-exempt calculator pages, since every other app page redirects to sign-in. The
+calculators come from `ucfp.calculators.navigation`, so this bar and the future signed-in dropdown share one
+list.{% endcomment %}
 {% load calculator_tags %}
 {% public_calculators as calculators %}
     <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#app-nav"
@@ -19,9 +20,9 @@ come from `ucfp.calculators.navigation` so this bar and the future signed-in dro
         </li>
         {% endfor %}
       </ul>
-      <ul class="navbar-nav ml-auto">
-        <li class="nav-item">
-          <a class="nav-link" href="{% url 'user_signin' %}">Sign in</a>
-        </li>
-      </ul>
+      <div class="ml-auto d-lg-flex align-items-lg-center">
+        <span class="navbar-text mr-lg-3">One piece of your whole plan.</span>
+        <a class="btn btn-cta btn-sm mr-lg-3 my-2 my-lg-0" href="{% url 'explain' %}">See more</a>
+        <a class="nav-link" href="{% url 'user_signin' %}">Sign in</a>
+      </div>
     </div>

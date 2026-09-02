@@ -278,7 +278,9 @@ class InputsViewTest( TestCase ):
         self.assertContains( response, 'Compare claiming ages' )
         self.assertContains( response, 'Expected asset return' )         # the opportunity-cost input ...
         self.assertContains( response, 'value="4.5"' )                   # ... default = inflation + 2% real
-        self.assertContains( response, reverse( 'user_signin' ) )        # the anonymous app bar offers Sign in
+        self.assertContains( response, reverse( 'user_signin' ) )        # the anonymous app bar: Sign in ...
+        self.assertContains( response, reverse( 'explain' ) )            # ... and the "see more" upsell CTA
+        self.assertContains( response, 'See more' )
         self.assertNotContains( response, reverse( 'dashboard' ) )       # but none of the signed-in nav items
 
     def test_a_signed_in_visitor_gets_the_app_navbar( self ):
