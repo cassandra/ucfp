@@ -508,6 +508,10 @@ def _forecast_parameters(
         assets           = [ AssetParameters( 'Cash', AssetClass.CASH, Decimal( '0' ), Decimal( '0' ) ) ],
         social_security  = entitlements,
         subject_removals = removals,
+        # The comparison ranks by gross booked Social Security; income tax never changes that number, so
+        # skip the per-period tax assessment/settlement -- roughly a 3x speed-up per run (the couple
+        # actuarial sweep is 243 runs), with identical results.
+        skip_income_tax  = True,
         economic_outlook = EconomicOutlook.constant( EconomicParameters(
             inflation                        = assumptions.inflation,
             social_security_cola             = assumptions.cola,

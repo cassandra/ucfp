@@ -6,12 +6,16 @@ materialization -> engine -> books reduction). Claimants are born January 1 so a
 exact date; horizons are kept short to keep an 81-run couple sweep fast.
 """
 import unittest
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
 from common.rate import Rate, ZERO_RATE
+from ucfp.calculators.ss_timing import compute as _compute
 from ucfp.calculators.ss_timing.compute import (
-    Assumptions, Claimant, LifeExpectancyBasis, compare_claiming_strategies, strategy_year_details )
+    Assumptions, Claimant, LifeExpectancyBasis, compare_claiming_strategies, earners_of,
+    strategy_year_details )
+from ucfp.forecast.forecast import Forecast
 from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
 from ucfp.jurisdiction.us.mortality import Sex, alive_fraction
@@ -338,6 +342,24 @@ class ActuarialBasisTest( unittest.TestCase ):
         default = compare_claiming_strategies( solo, _assumptions() )
         chosen  = compare_claiming_strategies( solo, _assumptions(), LifeExpectancyBasis.SPECIFIC )
         self.assertEqual( default.best.raw_total, chosen.best.raw_total )
+
+
+class SkipIncomeTaxTest( unittest.TestCase ):
+    """The SS-only run skips income-tax assessment for speed. Since the comparison ranks by gross booked
+    Social Security -- which income tax never changes -- the benefit stream must be identical with tax
+    skipped; this guards that the optimization stays correctness-preserving."""
+
+    def test_skipping_income_tax_leaves_the_benefit_stream_identical( self ):
+        earners = earners_of( [ Claimant( 'Higher', 1958, Decimal( '3000' ), 95 ),
+                                Claimant( 'Lower', 1960, Decimal( '1200' ), 95 ) ] )
+        horizon = _compute._Horizon.for_household( earners )
+        deaths  = [ earner.birth_year + earner.expected_lifetime for earner in earners ]
+        skipped = _compute._forecast_parameters( earners, ( 67, 67 ), _assumptions(), deaths, horizon )
+        self.assertTrue( skipped.skip_income_tax )                          # the SS calculator sets it
+        taxed   = replace( skipped, skip_income_tax = False )
+        self.assertEqual(
+            _compute._nominal_by_year( Forecast( skipped ).run(), horizon ),
+            _compute._nominal_by_year( Forecast( taxed ).run(), horizon ) )
 
 
 if __name__ == '__main__':
