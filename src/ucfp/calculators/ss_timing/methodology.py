@@ -16,6 +16,10 @@ from ucfp.jurisdiction.government_pension import GovernmentPension
 # benefits) -- the reference the methodology modal links to.
 REFERENCE_URL = 'https://www.ssa.gov/policy/docs/rsnotes/rsn2017-01.html'
 
+# The SSA period life table behind the actuarial life-expectancy mode -- the mortality-basis citation the
+# methodology modal links to when that mode is in use (see ucfp.jurisdiction.us.mortality).
+LIFE_TABLE_URL = 'https://www.ssa.gov/oact/STATS/table4c6.html'
+
 _GOVERNMENT_PENSION = GovernmentPension( JurisdictionType.US_FEDERAL )
 
 

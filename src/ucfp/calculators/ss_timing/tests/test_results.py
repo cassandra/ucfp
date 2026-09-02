@@ -209,6 +209,12 @@ class ActuarialResultsTest( TestCase ):
         self.assertContains( response, 'life expectancy' )
         self.assertContains( response, 'male, average' )                    # the higher earner's basis words
 
+    def test_the_figures_are_framed_as_expected_values( self ):
+        self._submit()
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertContains( response, 'Expected lifetime benefit' )       # the heatmap eyebrow
+        self.assertContains( response, 'weighted by the chance' )           # the expected-value framing
+
     def test_the_year_by_year_is_a_representative_lifetime_with_a_survivor_step_up( self ):
         self._submit()
         detail = json.loads( self.client.get(

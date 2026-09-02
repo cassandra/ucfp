@@ -38,4 +38,23 @@
   delayed-credit factors follow SSA policy &mdash; see the
   <a href="{{ reference_url }}" target="_blank" rel="noopener">SSA definitions (ssa.gov)</a>.
 </p>
+
+{% if is_actuarial %}
+  <hr class="my-3">
+  <h6>Life expectancy</h6>
+  <p class="text-muted small mb-2">
+    Each future year&rsquo;s benefit is weighted by the probability you&rsquo;re alive to receive it, from
+    the <a href="{{ life_table_url }}" target="_blank" rel="noopener">SSA period life table (ssa.gov)</a>
+    &mdash; cross-checked against the CDC/NCHS US life tables. The ranked figures are the resulting
+    <em>expected</em> values; the year-by-year shows one representative lifetime (each person to their
+    estimated age) so it reads as real income.
+  </p>
+  <p class="text-muted small mb-0">
+    Simplifications: it is a period table (today&rsquo;s mortality, not a cohort projection), so it is
+    slightly conservative on longevity{% if is_couple %}; each spouse&rsquo;s lifespan is treated as
+    independent, and the survivor is assumed to keep the deceased&rsquo;s claim-age benefit{% endif %}. The
+    &ldquo;shorter / longer&rdquo; choice shifts the estimate by a few years for someone who expects to
+    differ from average.
+  </p>
+{% endif %}
 {% endblock %}

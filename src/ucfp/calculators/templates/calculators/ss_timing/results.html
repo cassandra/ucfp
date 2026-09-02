@@ -54,7 +54,7 @@ the seam just after the results.{% endcomment %}
   <div class="row">
     <div class="col-lg-7 mb-3">
       <div class="card h-100"><div class="card-body">
-        <div class="ss-eyebrow mb-1">Lifetime benefit by claiming age{% if is_couple %}s{% endif %}</div>
+        <div class="ss-eyebrow mb-1">{% if life_expectancy_estimated %}Expected lifetime benefit{% else %}Lifetime benefit{% endif %} by claiming age{% if is_couple %}s{% endif %}</div>
         {% include "calculators/ss_timing/_heatmap.html" %}
         <div class="ss-hm-legend"><span>Lower</span><span class="bar"></span><span>Higher</span>
           <span class="ml-auto" style="color:#b07d05">&#9733; best · click any cell</span></div>
@@ -63,6 +63,8 @@ the seam just after the results.{% endcomment %}
     <div class="col-lg-5 mb-3">
       <div class="card h-100"><div class="card-body">
         <div class="ss-eyebrow mb-2">Top strategies</div>
+        {% if life_expectancy_estimated %}<p class="text-muted small mb-2">Expected value across your
+          possible lifespans, weighted by the chance of living to each age.</p>{% endif %}
         {% include "calculators/ss_timing/_rank.html" %}
       </div></div>
     </div>
@@ -91,7 +93,10 @@ the seam just after the results.{% endcomment %}
       at inflation.{% if is_opportunity_cost %} <strong>Effective value</strong> discounts instead at your
       expected asset return ({{ real_return_pct }} above inflation), so a deferred benefit is also weighed
       against the growth that money could otherwise earn &mdash; the opportunity cost of waiting, and the
-      figure strategies are ranked by.{% endif %}
+      figure strategies are ranked by.{% endif %}{% if life_expectancy_estimated %} Every figure above is
+      an <strong>expected</strong> value &mdash; each future year weighted by the chance you&rsquo;re alive
+      to receive it, then summed &mdash; so no single lifetime produces exactly these totals. The
+      year-by-year below shows one representative lifetime instead.{% endif %}
     </p>
     <p class="mb-0">
       The Social Security cost-of-living adjustment (the &ldquo;SS adjustment&rdquo; above) is modeled at

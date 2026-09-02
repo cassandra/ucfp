@@ -136,13 +136,16 @@ class MethodologyModalView( ModalView ):
         resolved = _session_claimants_and_assumptions( request )
         if resolved is None:
             raise Http404( 'No calculator inputs in this session.' )
-        claimants, _assumptions, _basis = resolved
+        claimants, _assumptions, basis = resolved
         earners    = earners_of( claimants )
         claim_ages = _parse_combo( combo, len( claimants ) )
         return self.modal_response( request, context = {
-            'terms'         : methodology.methodology( earners, claim_ages ),
-            'claim_pairs'   : list( zip( earners, claim_ages ) ),
-            'reference_url' : methodology.REFERENCE_URL } )
+            'terms'          : methodology.methodology( earners, claim_ages ),
+            'claim_pairs'    : list( zip( earners, claim_ages ) ),
+            'is_actuarial'   : basis is LifeExpectancyBasis.ACTUARIAL,
+            'is_couple'      : len( earners ) == 2,
+            'reference_url'  : methodology.REFERENCE_URL,
+            'life_table_url' : methodology.LIFE_TABLE_URL } )
 
 
 class BenefitEstimatorModalView( ModalView ):

@@ -62,6 +62,38 @@ class MethodologyModalTest( TestCase ):
         self.assertIn( 'How this is calculated', modal )
         self.assertIn( 'PIA', modal )
 
+    def test_the_specific_basis_omits_the_mortality_note( self ):
+        # The life-expectancy / mortality-basis section is actuarial-only; the specific basis entered ages.
+        modal = json.loads( self.client.get(
+            reverse( 'calculators:ss_timing:methodology', args = [ '67-67' ] ),
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' ).content )[ 'modal' ]
+        self.assertNotIn( 'period life table', modal )
+
     def test_a_bad_combo_is_not_found( self ):
         self.assertEqual( self.client.get(
             reverse( 'calculators:ss_timing:methodology', args = [ '80-80' ] ) ).status_code, 404 )
+
+
+def _actuarial_couple_form_data() -> dict:
+    return { 'household' : 'couple', 'life_expectancy_mode' : 'actuarial',
+             's0_birth_year' : '1960', 's0_pia' : '3000', 's0_sex' : 'male', 's0_longevity' : '0',
+             's1_birth_year' : '1962', 's1_pia' : '1200', 's1_sex' : 'female', 's1_longevity' : '0',
+             'inflation' : '2.5', 'expected_return' : '4.5',
+             'benefits_payable' : '100', 'reduction_year' : '2033' }
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class ActuarialMethodologyModalTest( TestCase ):
+    """Under the actuarial basis the modal adds the mortality basis: the SSA life-table citation, the
+    expected-value framing, and the honest simplifications."""
+
+    def setUp( self ):
+        self.client.post( reverse( 'calculators:ss_timing:inputs' ), _actuarial_couple_form_data() )
+
+    def test_the_modal_documents_the_mortality_basis( self ):
+        modal = json.loads( self.client.get(
+            reverse( 'calculators:ss_timing:methodology', args = [ '67-67' ] ),
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' ).content )[ 'modal' ]
+        self.assertIn( 'period life table', modal )                        # the SSA citation
+        self.assertIn( 'table4c6', modal )                                 # its URL
+        self.assertIn( 'independent', modal )                              # the couple simplification
