@@ -44,11 +44,10 @@ class InputsView( View ):
     template_name = 'calculators/ss_timing/inputs.html'
 
     def get( self, request ):
-        prefill = build_prefill( request )
-        form    = InputsForm( initial = prefill.initial )
-        return render( request, self.template_name,
-                       { 'form' : form, 'from_profile' : prefill.from_profile,
-                         'assumptions_source' : prefill.assumptions_source } )
+        # build_prefill also resolves the provenance (from_profile / assumptions_source); the form no
+        # longer surfaces it (the prefill alert was removed), so only the initial values are used here.
+        form = InputsForm( initial = build_prefill( request ).initial )
+        return render( request, self.template_name, { 'form' : form } )
 
     def post( self, request ):
         form = InputsForm( request.POST )

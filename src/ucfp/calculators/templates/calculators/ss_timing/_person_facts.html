@@ -1,0 +1,20 @@
+{% comment %}
+  One person's benefit facts in the "Who's planning?" section: birth year and PIA. Params: `birth_year`,
+  `pia`, `index` (0 the primary, 1 the partner). The PIA input is the estimator's swap target; the
+  "Estimate" helper beside it opens the benefit estimator modal.
+{% endcomment %}
+<div class="form-group">
+  <label for="{{ birth_year.id_for_label }}">{{ birth_year.label }}</label>
+  {{ birth_year }}
+  {% include "calculators/ss_timing/_field_errors.html" with field=birth_year %}
+</div>
+<div class="form-group mb-0">
+  <label for="{{ pia.id_for_label }}">{{ pia.label }}</label>
+  <div class="d-flex align-items-start">
+    <span id="pia-input-{{ index }}" class="flex-grow-1">{{ pia }}</span>
+    <a role="button" class="btn btn-link btn-sm ml-2 text-nowrap" data-async="modal"
+       href="{% url 'calculators:ss_timing:estimate' index %}"
+       aria-label="Estimate the benefit at full retirement age">Estimate</a>
+  </div>
+  {% include "calculators/ss_timing/_field_errors.html" with field=pia %}
+</div>

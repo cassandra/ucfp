@@ -156,6 +156,14 @@ class LifeExpectancyModeTest( SimpleTestCase ):
         self.assertIsNone( claimants[ 0 ].sex )                     # blended table
         self.assertEqual( claimants[ 0 ].setback, 0 )              # average
 
+    def test_the_mortality_table_defaults_to_blended_which_maps_to_no_sex( self ):
+        # Blended is the default and an explicit, reselectable option; it stores as no sex, so the compute
+        # core blends the male and female curves.
+        self.assertEqual( InputsForm().fields[ 's0_sex' ].initial, 'blended' )
+        form = InputsForm( data = self._actuarial( s0_sex = 'blended' ) )
+        self.assertTrue( form.is_valid(), form.errors )
+        self.assertIsNone( form.session_facts().people[ 0 ].sex )
+
     def test_session_facts_carry_the_sex_and_setback( self ):
         form = InputsForm( data = self._actuarial( s0_sex = 'male', s0_longevity = '3' ) )
         self.assertTrue( form.is_valid(), form.errors )

@@ -18,13 +18,6 @@
   Compare the lifetime Social Security benefit for each claiming age from 62 to 70.
 </p>
 
-{% if from_profile %}
-  <div class="alert alert-info" role="status">
-    Prefilled from your profile{% if assumptions_source %} and {{ assumptions_source }}{% endif %} &mdash;
-    add each person&rsquo;s expected lifetime to run the comparison. Nothing here changes your saved data.
-  </div>
-{% endif %}
-
 <form method="post" data-synchronous="true" novalidate>
   {% csrf_token %}
   {% comment %}A single error summary at the top of the form: the per-field errors below are easy to miss,
@@ -37,24 +30,43 @@
     </div>
   {% endif %}
 
-  <fieldset class="form-group">
-    <legend class="h6">Who&rsquo;s planning?</legend>
-    <div class="btn-group btn-group-toggle" data-toggle="buttons" id="household-choice">
-      {% for radio in form.household %}
-        <label class="btn btn-outline-primary {% if radio.data.selected %}active{% endif %}">
-          {{ radio.tag }} {{ radio.choice_label }}
-        </label>
-      {% endfor %}
+  {% comment %}Section 1 -- Who's planning: the household toggle and each person's benefit facts (birth
+  year, PIA). The partner column carries `ss-partner`, the class ss_timing.js shows/hides with the household
+  choice -- it tags the partner column in this section and the next, so one toggle governs both.{% endcomment %}
+  <div class="border rounded bg-light p-3 mb-4">
+    <fieldset class="form-group mb-3">
+      <legend class="h6 mb-2">Who&rsquo;s planning?</legend>
+      <div class="btn-group btn-group-toggle" data-toggle="buttons" id="household-choice">
+        {% for radio in form.household %}
+          <label class="btn btn-outline-primary {% if radio.data.selected %}active{% endif %}">
+            {{ radio.tag }} {{ radio.choice_label }}
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <div class="row">
+      <div class="col-md-6 mb-3 mb-md-0">
+        <div class="card h-100"><div class="card-body">
+          <h2 class="h6 text-muted">Individual</h2>
+          {% include "calculators/ss_timing/_person_facts.html" with birth_year=form.s0_birth_year pia=form.s0_pia index=0 %}
+        </div></div>
+      </div>
+      <div class="col-md-6 ss-partner">
+        <div class="card h-100"><div class="card-body">
+          <h2 class="h6 text-muted">Partner</h2>
+          {% include "calculators/ss_timing/_person_facts.html" with birth_year=form.s1_birth_year pia=form.s1_pia index=1 %}
+        </div></div>
+      </div>
     </div>
-  </fieldset>
+  </div>
 
-  {% comment %}The life-expectancy mode is a js-switch (inputs.js): the mode radios are the switch control,
-  and each person's fields carry an "actuarial" and a "specific" case block (in _person_fields.html) that
-  the chosen mode reveals. Pure presentation -- the form validates the expected-lifetime field only in the
-  specific mode (InputsForm.clean), so switching never walls on a blank age.{% endcomment %}
-  <div class="{{ AppConst.SWITCH_CLASS }}">
-    <fieldset class="form-group">
-      <legend class="h6">How long will you live?</legend>
+  {% comment %}Section 2 -- How long will you live: the life-expectancy mode is a js-switch (inputs.js)
+  whose control (the mode radios) reveals each person's "actuarial" or "specific" case block (in
+  _person_lifespan.html) -- now co-located with the toggle rather than buried in the cards below. Pure
+  presentation -- InputsForm.clean requires the age only in the specific mode.{% endcomment %}
+  <div class="border rounded bg-light p-3 mb-4 {{ AppConst.SWITCH_CLASS }}">
+    <fieldset class="form-group mb-2">
+      <legend class="h6 mb-2">How long will you live?</legend>
       <div class="btn-group btn-group-toggle" data-toggle="buttons" id="life-mode-choice">
         {% for radio in form.life_expectancy_mode %}
           <label class="btn btn-outline-primary {% if radio.data.selected %}active{% endif %}">
@@ -62,32 +74,30 @@
           </label>
         {% endfor %}
       </div>
-      <small class="form-text text-muted">
-        Estimate each person&rsquo;s life expectancy from Social Security&rsquo;s mortality tables, or enter
-        a specific age if you prefer. The comparison weighs each claiming age against how long you live.
-      </small>
     </fieldset>
-
-    {% comment %}A row of half-width person columns (not a card-deck, which would stretch the lone card to
-    full width for a one-person household). The partner column is toggled by household choice; the individual
-    column stays half-width either way, so the fields never balloon.{% endcomment %}
+    <p class="text-muted small mb-3">
+      We estimate each person&rsquo;s life expectancy from Social Security&rsquo;s mortality tables &mdash;
+      nudge it shorter or longer if you expect to differ, or enter a specific age instead. The comparison
+      weighs each claiming age against how long you live.
+    </p>
     <div class="row">
-      <div class="col-md-6 mb-3 mb-md-0" id="person-0">
+      <div class="col-md-6 mb-3 mb-md-0">
         <div class="card h-100"><div class="card-body">
           <h2 class="h6 text-muted">Individual</h2>
-          {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s0_birth_year pia=form.s0_pia life=form.s0_life sex=form.s0_sex longevity=form.s0_longevity index=0 %}
+          {% include "calculators/ss_timing/_person_lifespan.html" with life=form.s0_life sex=form.s0_sex longevity=form.s0_longevity %}
         </div></div>
       </div>
-      <div class="col-md-6" id="person-1">
+      <div class="col-md-6 ss-partner">
         <div class="card h-100"><div class="card-body">
           <h2 class="h6 text-muted">Partner</h2>
-          {% include "calculators/ss_timing/_person_fields.html" with birth_year=form.s1_birth_year pia=form.s1_pia life=form.s1_life sex=form.s1_sex longevity=form.s1_longevity index=1 %}
+          {% include "calculators/ss_timing/_person_lifespan.html" with life=form.s1_life sex=form.s1_sex longevity=form.s1_longevity %}
         </div></div>
       </div>
     </div>
   </div>
 
-  <div class="card mt-4"><div class="card-body">
+  {% comment %}Section 3 -- Economic assumptions.{% endcomment %}
+  <div class="border rounded bg-light p-3 mb-4">
     <h2 class="h6 text-muted">Economic assumptions</h2>
     <div class="row">
       <div class="col-md-3 mb-3 mb-md-0">
@@ -136,7 +146,7 @@
         </small>
       </div>
     </div>
-  </div></div>
+  </div>
 
   <div class="mt-4 mb-5">
     <button type="submit" class="btn btn-cta btn-lg">Compare claiming ages</button>

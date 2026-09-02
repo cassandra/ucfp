@@ -47,8 +47,10 @@ _LONGEVITY_CHOICES = [ ( str( _LONGEVITY_SETBACK ), 'Shorter' ),
                        ( str( -_LONGEVITY_SETBACK ), 'Longer' ) ]
 
 # The mortality-table radio (actuarial mode), framed as which table to read rather than a demographic
-# question: neither option is preselected, so leaving it blank blends the male and female curves.
-_SEX_CHOICES = [ ( Sex.FEMALE.value, 'Female' ), ( Sex.MALE.value, 'Male' ) ]
+# question. "Blended" is an explicit, default-selected option that averages the male and female curves --
+# so the neutral choice is visible and can be returned to (a two-way radio could not be un-picked).
+_SEX_BLENDED = 'blended'
+_SEX_CHOICES = [ ( _SEX_BLENDED, 'Blended' ), ( Sex.FEMALE.value, 'Female' ), ( Sex.MALE.value, 'Male' ) ]
 
 
 def _year_widget() -> forms.TextInput:
@@ -88,7 +90,8 @@ class InputsForm( StyledFormMixin, forms.Form ):
     s0_life          = forms.IntegerField( label = 'Expected lifetime', required = False,
                                            min_value = EARLIEST_CLAIM_AGE, max_value = _OLDEST_AGE )
     s0_sex           = forms.ChoiceField( label = 'Mortality table', choices = _SEX_CHOICES,
-                                          required = False, widget = forms.RadioSelect )
+                                          required = False, initial = _SEX_BLENDED,
+                                          widget = forms.RadioSelect )
     s0_longevity     = forms.ChoiceField( label = 'Life expectancy', choices = _LONGEVITY_CHOICES,
                                           required = False, initial = _LONGEVITY_AVERAGE,
                                           widget = forms.RadioSelect )
@@ -99,7 +102,8 @@ class InputsForm( StyledFormMixin, forms.Form ):
     s1_life          = forms.IntegerField( label = 'Expected lifetime', min_value = EARLIEST_CLAIM_AGE,
                                            max_value = _OLDEST_AGE, required = False )
     s1_sex           = forms.ChoiceField( label = 'Mortality table', choices = _SEX_CHOICES,
-                                          required = False, widget = forms.RadioSelect )
+                                          required = False, initial = _SEX_BLENDED,
+                                          widget = forms.RadioSelect )
     s1_longevity     = forms.ChoiceField( label = 'Life expectancy', choices = _LONGEVITY_CHOICES,
                                           required = False, initial = _LONGEVITY_AVERAGE,
                                           widget = forms.RadioSelect )
@@ -150,11 +154,12 @@ class InputsForm( StyledFormMixin, forms.Form ):
 
     def _person_facts( self, index : int ) -> PersonFacts:
         data = self.cleaned_data
+        sex  = data.get( f's{index}_sex' )
         return PersonFacts(
             birth_year                 = data[ f's{index}_birth_year' ],
             government_pension_monthly = data[ f's{index}_pia' ],
             life_expectancy            = data.get( f's{index}_life' ),
-            sex                        = data.get( f's{index}_sex' ) or None,
+            sex                        = sex if sex in ( Sex.FEMALE.value, Sex.MALE.value ) else None,
             longevity_setback          = _setback_of( data.get( f's{index}_longevity' ) ) )
 
     def assumptions_inputs( self ) -> dict:

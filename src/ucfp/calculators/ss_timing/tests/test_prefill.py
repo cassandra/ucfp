@@ -196,9 +196,8 @@ class PrefillThroughTheViewTest( TestCase ):
         with patch( _DEFAULT_ECONOMICS, return_value = EconomicParameters() ):
             response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertEqual( response.status_code, 200 )
-        self.assertContains( response, 'Prefilled from your profile' )
-        self.assertContains( response, 'value="1960"' )
-        self.assertContains( response, 'value="3000"' )
+        self.assertContains( response, 'value="1960"' )              # the profile birth year prefills
+        self.assertContains( response, 'value="3000"' )              # and its PIA
 
     def test_the_profile_wins_over_a_remembered_session_entry( self ):
         # People are facts: a signed-in visitor's Profile is authoritative, so a prior what-if session
@@ -211,7 +210,6 @@ class PrefillThroughTheViewTest( TestCase ):
         response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertContains( response, 'value="1960"' )              # the profile people win ...
         self.assertNotContains( response, 'value="1955"' )           # ... not the session entry
-        self.assertContains( response, 'Prefilled from your profile' )
 
     def test_submitting_does_not_change_the_saved_profile( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {

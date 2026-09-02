@@ -16,7 +16,9 @@
         if ( !$choice.length ) { return; }
         function sync() {
             var couple = $choice.find( 'input:checked' ).val() === 'couple';
-            $( '#person-1' ).toggle( couple );
+            // The partner appears once per section (facts, then life expectancy); each partner column
+            // carries .ss-partner, so one toggle shows/hides them together.
+            $( '.ss-partner' ).toggle( couple );
         }
         $choice.on( 'change', sync );
         sync();
