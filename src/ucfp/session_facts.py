@@ -43,11 +43,15 @@ class PersonFacts:
     """One household member's facts as entered into a tool. Every field is optional -- a tool records only
     what it asked. `government_pension_monthly` is the monthly state-pension benefit at the jurisdiction's
     normal retirement age (the US Social Security PIA at full retirement age); `life_expectancy` is an age
-    (no Profile home yet -- carried for a tool's own re-prefill and for a future Profile fact)."""
+    (no Profile home yet -- carried for a tool's own re-prefill and for a future Profile fact). `sex`
+    ('female'/'male'/None) and `longevity_setback` (years a person expects to differ from average lifespan,
+    positive = shorter) are the two ways an actuarial estimate is tuned, carried the same neutral way."""
 
     birth_year                 : Optional[ int ]     = None
     government_pension_monthly : Optional[ Decimal ] = None
     life_expectancy            : Optional[ int ]     = None
+    sex                        : Optional[ str ]     = None
+    longevity_setback          : Optional[ int ]     = None
 
     def to_storage( self ) -> dict:
         """This person as a JSON-serializable dict (the monthly amount stringified)."""
@@ -55,7 +59,9 @@ class PersonFacts:
             'birth_year'                 : self.birth_year,
             'government_pension_monthly' : ( None if self.government_pension_monthly is None
                                              else str( self.government_pension_monthly ) ),
-            'life_expectancy'            : self.life_expectancy }
+            'life_expectancy'            : self.life_expectancy,
+            'sex'                        : self.sex,
+            'longevity_setback'          : self.longevity_setback }
 
     @staticmethod
     def from_storage( raw ) -> 'PersonFacts':
@@ -64,7 +70,9 @@ class PersonFacts:
         return PersonFacts(
             birth_year                 = _int_or_none( raw.get( 'birth_year' ) ),
             government_pension_monthly = _decimal_or_none( raw.get( 'government_pension_monthly' ) ),
-            life_expectancy            = _int_or_none( raw.get( 'life_expectancy' ) ) )
+            life_expectancy            = _int_or_none( raw.get( 'life_expectancy' ) ),
+            sex                        = raw.get( 'sex' ) or None,
+            longevity_setback          = _int_or_none( raw.get( 'longevity_setback' ) ) )
 
 
 @dataclass

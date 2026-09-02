@@ -62,7 +62,6 @@ class PrefillPeopleTest( TestCase ):
     def test_a_couple_profile_prefills_birth_years_and_pias_but_not_lifetimes( self ):
         save_profile( self.organization, _couple_profile() )
         prefill = self._build( self.user )
-        self.assertTrue( prefill.from_profile )
         self.assertEqual( prefill.initial[ 'household' ], 'couple' )
         self.assertEqual( prefill.initial[ 's0_birth_year' ], 1960 )
         self.assertEqual( prefill.initial[ 's0_pia' ], '3000' )
@@ -87,10 +86,8 @@ class PrefillPeopleTest( TestCase ):
         self.assertEqual( prefill.initial[ 's0_birth_year' ], 1960 )
         self.assertNotIn( 's0_pia', prefill.initial )
 
-    def test_an_anonymous_visitor_gets_blank_people_and_the_default_source( self ):
+    def test_an_anonymous_visitor_gets_blank_people( self ):
         prefill = self._build( AnonymousUser() )
-        self.assertFalse( prefill.from_profile )
-        self.assertEqual( prefill.assumptions_source, 'system defaults' )
         self.assertNotIn( 's0_birth_year', prefill.initial )
 
     def _build_with_facts( self, user, facts ):
@@ -105,7 +102,6 @@ class PrefillPeopleTest( TestCase ):
         save_profile( self.organization, _couple_profile() )
         prefill = self._build_with_facts( self.user, SessionFacts( people = [
             PersonFacts( birth_year = 1901, government_pension_monthly = Decimal( '99' ) ) ] ) )
-        self.assertTrue( prefill.from_profile )
         self.assertEqual( prefill.initial[ 's0_birth_year' ], 1960 )    # the profile, not the session 1901
         self.assertEqual( prefill.initial[ 's0_pia' ], '3000' )         # the profile, not the session 99
 
@@ -126,7 +122,6 @@ class PrefillPeopleTest( TestCase ):
         # the Profile structurally cannot hold.
         prefill = self._build_with_facts( self.user, SessionFacts( people = [
             PersonFacts( birth_year = 1958, life_expectancy = 82 ) ] ) )
-        self.assertFalse( prefill.from_profile )
         self.assertEqual( prefill.initial[ 's0_birth_year' ], 1958 )
         self.assertEqual( prefill.initial[ 's0_life' ], 82 )
 
@@ -146,8 +141,8 @@ class PrefillPeopleTest( TestCase ):
 
 
 class PrefillAssumptionsTest( TestCase ):
-    """Where the assumptions are drawn from: the most recent saved scenario's economics, labelled by its
-    name; the system defaults otherwise."""
+    """Where the assumptions are drawn from: the most recent saved scenario's economics, else the system
+    defaults (told apart by the resulting inflation value)."""
 
     def setUp( self ):
         self.user         = get_user_model().objects.create_user( email = 'a@x.test' )
@@ -172,14 +167,12 @@ class PrefillAssumptionsTest( TestCase ):
         self._save_scenario( 'Baseline', EconomicParameters(
             inflation = Rate( Decimal( '0.02' ) ), social_security_cola = Rate( Decimal( '0.04' ) ) ) )
         prefill = build_prefill( self._request() )
-        self.assertEqual( prefill.assumptions_source, 'your scenario “Baseline”' )
         self.assertEqual( prefill.initial[ 'inflation' ], '2' )       # from the scenario inflation
 
     def test_falls_back_to_the_system_defaults_without_a_scenario( self ):
         with patch( _DEFAULT_ECONOMICS, return_value = EconomicParameters(
                 inflation = Rate( Decimal( '0.025' ) ) ) ):
             prefill = build_prefill( self._request() )
-        self.assertEqual( prefill.assumptions_source, 'system defaults' )
         self.assertEqual( prefill.initial[ 'inflation' ], '2.5' )
 
 
@@ -196,25 +189,24 @@ class PrefillThroughTheViewTest( TestCase ):
         with patch( _DEFAULT_ECONOMICS, return_value = EconomicParameters() ):
             response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertEqual( response.status_code, 200 )
-        self.assertContains( response, 'Prefilled from your profile' )
-        self.assertContains( response, 'value="1960"' )
-        self.assertContains( response, 'value="3000"' )
+        self.assertContains( response, 'value="1960"' )              # the profile birth year prefills
+        self.assertContains( response, 'value="3000"' )              # and its PIA
 
     def test_the_profile_wins_over_a_remembered_session_entry( self ):
         # People are facts: a signed-in visitor's Profile is authoritative, so a prior what-if session
         # entry never overrides it. (The assumption knobs, being what-ifs, are still remembered.)
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
-            'household' : 'single', 's0_birth_year' : '1955', 's0_pia' : '900', 's0_life' : '85',
+            'household' : 'single', 'life_expectancy_mode' : 'specific',
+            's0_birth_year' : '1955', 's0_pia' : '900', 's0_life' : '85',
             'inflation' : '2.5', 'expected_return' : '4.5',
             'benefits_payable' : '100', 'reduction_year' : '2033' } )
         response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertContains( response, 'value="1960"' )              # the profile people win ...
         self.assertNotContains( response, 'value="1955"' )           # ... not the session entry
-        self.assertContains( response, 'Prefilled from your profile' )
 
     def test_submitting_does_not_change_the_saved_profile( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), {
-            'household' : 'couple',
+            'household' : 'couple', 'life_expectancy_mode' : 'specific',
             's0_birth_year' : '1900', 's0_pia' : '1', 's0_life' : '70',
             's1_birth_year' : '1901', 's1_pia' : '2', 's1_life' : '71',
             'inflation' : '9', 'expected_return' : '11',

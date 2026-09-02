@@ -30,18 +30,13 @@ from ucfp.inputs.scenarios.repository import latest_scenario
 from .compute import Assumptions
 from .forms import HOUSEHOLD_COUPLE, HOUSEHOLD_SINGLE, default_inputs
 
-_DEFAULT_SOURCE = 'system defaults'
-
 
 @dataclass( frozen = True )
 class Prefill:
-    """The form's resolved starting point: the field `initial` map, whether the people came from a saved
-    Profile (`from_profile`, so the page can say so and nudge for the missing lifetimes), and a short
-    `assumptions_source` label for where the economic assumptions were drawn from."""
+    """The form's resolved starting point: the field `initial` map -- the people (merged Profile-then-
+    session), the economic assumptions, and the household kind."""
 
-    initial            : dict
-    from_profile       : bool
-    assumptions_source : str
+    initial : dict
 
 
 def build_prefill( request ) -> Prefill:
@@ -49,35 +44,32 @@ def build_prefill( request ) -> Prefill:
     Profile then this session's facts (blank for a fresh anonymous visit); the assumptions from this
     session, else a scenario, else the system defaults. Best-effort -- any missing piece falls back rather
     than failing, since the calculator must open for anyone."""
-    organization                    = _organization( request )
-    economics_initial, source       = _economics_initial( request, organization )
-    people, household, from_profile = _people( request, organization )
-    initial = dict( economics_initial )
+    organization      = _organization( request )
+    initial           = dict( _economics_initial( request, organization ) )
+    people, household = _people( request, organization )
     initial.update( people )
     initial[ 'household' ] = household
-    return Prefill( initial = initial, from_profile = from_profile, assumptions_source = source )
+    return Prefill( initial = initial )
 
 
-def _economics_initial( request, organization ) -> tuple[ dict, str ]:
-    """The assumption fields' initial values and a source label: this session's stored run assumptions
-    first (re-prefilled exactly, with no source note), else the fields seeded from a scenario or the system
-    defaults."""
+def _economics_initial( request, organization ) -> dict:
+    """The assumption fields' initial values: this session's stored run assumptions first (re-prefilled
+    exactly), else the fields seeded from a scenario or the system defaults."""
     stored = request.session_state.ss_timing_assumptions
     if stored:
-        return stored, None
-    economics, source = _scenario_economics( request, organization )
-    return default_inputs( _assumptions( economics ) ), source
+        return stored
+    return default_inputs( _assumptions( _scenario_economics( request, organization ) ) )
 
 
-def _people( request, organization ) -> tuple[ dict, str, bool ]:
-    """The people fields, the household kind, and whether any came from the saved Profile. Best effort and
-    field by field: each field takes the Profile's value where it has one -- people are facts, so the
-    Profile wins and a prior "what if" session entry never overrides it -- else this session's
-    `SessionFacts` (which also carries the expected lifetime the Profile has no home for), else blank. The
-    household kind follows the Profile when it holds people, else the session, else the couple default."""
-    facts                             = request.session_state.session_facts
+def _people( request, organization ) -> tuple[ dict, str ]:
+    """The people fields and the household kind. Best effort and field by field: each field takes the
+    Profile's value where it has one -- people are facts, so the Profile wins and a prior "what if" session
+    entry never overrides it -- else this session's `SessionFacts` (which also carries the expected lifetime
+    the Profile has no home for), else blank. The household kind follows the Profile when it holds people,
+    else the session, else the couple default."""
+    facts                                           = request.session_state.session_facts
     profile_fields, profile_household, from_profile = _people_from_profile( _profile( organization ) )
-    facts_fields, facts_household, _  = _people_from_facts( facts )
+    facts_fields, facts_household                   = _people_from_facts( facts )
     initial = dict( facts_fields )
     initial.update( profile_fields )            # a Profile value wins each field it has; facts fill the rest
     if from_profile:
@@ -86,12 +78,12 @@ def _people( request, organization ) -> tuple[ dict, str, bool ]:
         household = facts_household
     else:
         household = HOUSEHOLD_COUPLE            # the blank-form default
-    return initial, household, from_profile
+    return initial, household
 
 
-def _people_from_facts( facts ) -> tuple[ dict, str, bool ]:
-    """The people fields from this session's facts -- each person's birth year, PIA, and expected lifetime,
-    whatever was entered -- and the household kind by whether a partner is present."""
+def _people_from_facts( facts ) -> tuple[ dict, str ]:
+    """The people fields from this session's facts -- each person's birth year, PIA, expected lifetime, sex,
+    and longevity setback, whatever was entered -- and the household kind by whether a partner is present."""
     initial = dict()
     for index, person in enumerate( facts.people[ :2 ] ):
         if person.birth_year is not None:
@@ -100,8 +92,12 @@ def _people_from_facts( facts ) -> tuple[ dict, str, bool ]:
             initial[ f's{index}_pia' ] = str( person.government_pension_monthly )
         if person.life_expectancy is not None:
             initial[ f's{index}_life' ] = person.life_expectancy
+        if person.sex is not None:
+            initial[ f's{index}_sex' ] = person.sex
+        if person.longevity_setback is not None:
+            initial[ f's{index}_longevity' ] = str( person.longevity_setback )
     household = HOUSEHOLD_COUPLE if facts.is_couple else HOUSEHOLD_SINGLE
-    return initial, household, False
+    return initial, household
 
 
 def _organization( request ):
@@ -129,9 +125,9 @@ def _profile( organization ):
 
 def _people_from_profile( profile ) -> tuple[ dict, str, bool ]:
     """The people fields from a saved Profile: each person's birth year and PIA (the expected lifetime is
-    left blank -- not a Profile fact yet), the household kind by whether there is a partner, and
-    `from_profile` True when any were prefilled. Blank people and a couple default when there is no
-    profile."""
+    left blank -- not a Profile fact yet), the household kind by whether there is a partner, and whether any
+    were prefilled (`from_profile`, used to choose the household kind). Blank people and a couple default
+    when there is no profile."""
     if profile is None or not profile.subjects:
         return {}, HOUSEHOLD_COUPLE, False
     pia_by_handle = {
@@ -147,18 +143,18 @@ def _people_from_profile( profile ) -> tuple[ dict, str, bool ]:
     return initial, household, True
 
 
-def _scenario_economics( request, organization ) -> tuple[ object, str ]:
-    """The economic parameters to seed the assumptions from, with a source label: the current scenario's,
-    else the most recent saved scenario's, else the system defaults. A scenario carrying no economics
-    falls through to the defaults too."""
+def _scenario_economics( request, organization ):
+    """The economic parameters to seed the assumptions from: the current scenario's, else the most recent
+    saved scenario's, else the system defaults. A scenario carrying no economics falls through to the
+    defaults too."""
     if organization is None:
-        return default_economics(), _DEFAULT_SOURCE
+        return default_economics()
     record = _current_scenario( request, organization ) or latest_scenario( organization )
     if record is not None:
         economics = load_assumptions( record.assumptions ).economics
         if economics is not None:
-            return economics, f'your scenario “{record.label}”'
-    return default_economics(), _DEFAULT_SOURCE
+            return economics
+    return default_economics()
 
 
 def _current_scenario( request, organization ):

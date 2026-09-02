@@ -26,15 +26,27 @@
     display: flex; align-items: center; justify-content: center;
     font-size: .72rem; color: #6c7a89; font-weight: 600;
 }
+/* The two axis captions ("Partner claims at (age)" / "Individual claims at"): sentence case and lighter
+   than the uppercase eyebrow card title, so the axis reads as a chart annotation, not a second heading. */
+.ss-hm-axis { font-size: .74rem; color: #8996a4; font-weight: 500; }
+.ss-hm-axis--vertical { writing-mode: vertical-rl; transform: rotate( 180deg ); }
+/* The legend's "highest" star key, coloured to the top of the value ramp (deep teal) rather than gold --
+   gold is reserved for the selection ring, so the star reads as "top of scale", not "selected". */
+.ss-hm-star { color: #0e4b61; }
 .ss-hm-cell {
     aspect-ratio: 1 / .84; border-radius: 5px; border: 1px solid transparent;
     display: block; cursor: pointer; position: relative; transition: transform .08s ease, box-shadow .08s ease;
 }
 .ss-hm-cell:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(20, 40, 60, .22); z-index: 2; }
 .ss-hm-cell:focus-visible { outline: 2px solid #16202e; outline-offset: 1px; z-index: 3; }
+/* Selected cell: the brand highlight gold (--secondary-color) as a ring INSET inside the cell edge (so it
+   never bleeds past it), over a thin dark hairline so the bright gold reads even on the palest cells, plus
+   a soft neutral lift shadow -- picked-up and clearly highlighted without the old fuzzy glow, and distinct
+   from the best cell's centred star. */
 .ss-hm-cell.sel {
-    box-shadow: 0 0 0 3px #b07d05, 0 5px 16px rgba(176, 125, 5, .45);
-    transform: scale(1.1); z-index: 4; border-color: #b07d05;
+    box-shadow: inset 0 0 0 1px rgba(20, 40, 60, .55), inset 0 0 0 3px var(--secondary-color),
+                0 2px 8px rgba(20, 40, 60, .28);
+    z-index: 4;
 }
 .ss-hm-cell.best::after {
     content: "\2605"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -63,9 +75,15 @@
 .ss-rank th.num, .ss-rank td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .ss-rank td { padding: .45rem .5rem; border-bottom: 1px solid #eef1f4; cursor: pointer; }
 .ss-rank tr:hover td { background: #f4f7fa; }
-.ss-rank tr.sel td { background: #e6f1f5; }
-.ss-rank tr.best td:first-child { box-shadow: inset 3px 0 0 #b07d05; }
+/* Selection is the moving gold marker (matching the heatmap ring): a gold left-bar and a light gold tint.
+   The best strategy needs no separate marker here -- it is simply rank 1 by the list's order (and it is the
+   default selection on load), so gold stays one thing: "the row you're looking at". */
+.ss-rank tr.sel td { background: rgba(245, 185, 69, .14); }
+.ss-rank tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--secondary-color); }
 .ss-rank .rk { color: #8996a4; font-weight: 600; }
+/* The 11th row: a selected strategy pulled in from outside the top ten, set off by a stronger rule above
+   it so it reads as separate from the ranked list rather than an unbroken continuation. */
+.ss-rank tr.beyond td { border-top: 2px solid #d4dbe2; }
 
 /* -- year-by-year detail -- */
 .ss-years-scroll {

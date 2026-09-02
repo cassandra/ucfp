@@ -14,9 +14,9 @@ from django.urls import reverse
 from organization.models import Organization
 
 from common.rate import Rate
-from ucfp.calculators.ss_timing.compute import Assumptions
+from ucfp.calculators.ss_timing.compute import Assumptions, LifeExpectancyBasis, Sex
 from ucfp.calculators.ss_timing.forms import (
-    HOUSEHOLD_COUPLE, HOUSEHOLD_SINGLE, InputsForm,
+    HOUSEHOLD_COUPLE, HOUSEHOLD_SINGLE, LIFE_MODE_ACTUARIAL, LIFE_MODE_SPECIFIC, InputsForm,
     claimants_and_assumptions, default_inputs, is_runnable )
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.session_facts import PersonFacts, SessionFacts
@@ -34,8 +34,8 @@ _ASSUMPTIONS = { 'inflation' : '2.5', 'expected_return' : '4.5',
 
 
 def _single_data( ** overrides ) -> dict:
-    data = { 'household' : HOUSEHOLD_SINGLE, 's0_birth_year' : '1960', 's0_pia' : '2000',
-             's0_life' : '85', ** _ASSUMPTIONS }
+    data = { 'household' : HOUSEHOLD_SINGLE, 'life_expectancy_mode' : LIFE_MODE_SPECIFIC,
+             's0_birth_year' : '1960', 's0_pia' : '2000', 's0_life' : '85', ** _ASSUMPTIONS }
     data.update( overrides )
     return data
 
@@ -78,7 +78,7 @@ class FormMappingTest( SimpleTestCase ):
     def test_the_form_maps_to_two_claimants_and_the_assumptions( self ):
         form = InputsForm( data = _couple_data() )
         self.assertTrue( form.is_valid(), form.errors )
-        claimants, assumptions = claimants_and_assumptions(
+        claimants, assumptions, _basis = claimants_and_assumptions(
             form.session_facts(), form.assumptions_inputs() )
         self.assertEqual( [ c.name for c in claimants ], [ 'Individual', 'Partner' ] )
         self.assertEqual( claimants[ 0 ].birth_year, 1960 )
@@ -95,14 +95,14 @@ class FormMappingTest( SimpleTestCase ):
         # rather than erroring, so an old session still renders results.
         facts  = SessionFacts( people = [ PersonFacts( 1960, Decimal( '2000' ), 85 ) ] )
         legacy = { 'inflation' : '2.5', 'benefits_payable' : '100', 'reduction_year' : '2033' }
-        _claimants, assumptions = claimants_and_assumptions( facts, legacy )
+        _claimants, assumptions, _basis = claimants_and_assumptions( facts, legacy )
         self.assertIsNone( assumptions.expected_return )
         self.assertEqual( assumptions.discount_rate, assumptions.inflation )
 
     def test_a_single_household_maps_to_one_claimant( self ):
         form = InputsForm( data = _single_data() )
         self.assertTrue( form.is_valid(), form.errors )
-        claimants, _assumptions = claimants_and_assumptions(
+        claimants, _assumptions, _basis = claimants_and_assumptions(
             form.session_facts(), form.assumptions_inputs() )
         self.assertEqual( len( claimants ), 1 )
 
@@ -114,6 +114,67 @@ class FormMappingTest( SimpleTestCase ):
         self.assertEqual( seeded[ 'expected_return' ], '5' )         # inflation 3% + the 2% real default
         self.assertNotIn( 'cola', seeded )                           # COLA is derived, not an input
         self.assertNotIn( 's0_birth_year', seeded )                  # people are left blank
+
+
+class LifeExpectancyModeTest( SimpleTestCase ):
+    """The household life-expectancy mode: the actuarial default validates without expected-lifetime fields
+    and carries sex + setback into the claimants; the specific mode still requires the ages."""
+
+    def _actuarial( self, ** overrides ) -> dict:
+        return _single_data( life_expectancy_mode = LIFE_MODE_ACTUARIAL, s0_life = '', ** overrides )
+
+    def test_actuarial_mode_validates_without_an_expected_lifetime( self ):
+        self.assertTrue( InputsForm( data = self._actuarial() ).is_valid() )
+
+    def test_specific_mode_requires_the_expected_lifetime( self ):
+        form = InputsForm( data = _single_data( s0_life = '' ) )     # _single_data is specific
+        self.assertFalse( form.is_valid() )
+        self.assertIn( 's0_life', form.errors )
+
+    def test_actuarial_mode_maps_sex_setback_and_the_basis( self ):
+        form = InputsForm( data = self._actuarial( s0_sex = 'female', s0_longevity = '-3' ) )
+        self.assertTrue( form.is_valid(), form.errors )
+        claimants, _assumptions, basis = claimants_and_assumptions(
+            form.session_facts(), form.assumptions_inputs() )
+        self.assertEqual( basis, LifeExpectancyBasis.ACTUARIAL )
+        self.assertEqual( claimants[ 0 ].sex, Sex.FEMALE )
+        self.assertEqual( claimants[ 0 ].setback, -3 )              # "Longer"
+        self.assertIsNone( claimants[ 0 ].expected_lifetime )      # unused under the actuarial basis
+
+    def test_specific_mode_gives_the_specific_basis( self ):
+        form = InputsForm( data = _single_data() )
+        self.assertTrue( form.is_valid(), form.errors )
+        _claimants, _assumptions, basis = claimants_and_assumptions(
+            form.session_facts(), form.assumptions_inputs() )
+        self.assertEqual( basis, LifeExpectancyBasis.SPECIFIC )
+
+    def test_an_unset_mortality_table_and_longevity_default_to_blended_average( self ):
+        form = InputsForm( data = self._actuarial( s0_sex = '' ) )   # no table, no longevity
+        self.assertTrue( form.is_valid(), form.errors )
+        claimants, _assumptions, _basis = claimants_and_assumptions(
+            form.session_facts(), form.assumptions_inputs() )
+        self.assertIsNone( claimants[ 0 ].sex )                     # blended table
+        self.assertEqual( claimants[ 0 ].setback, 0 )              # average
+
+    def test_the_mortality_table_defaults_to_blended_which_maps_to_no_sex( self ):
+        # Blended is the default and an explicit, reselectable option; it stores as no sex, so the compute
+        # core blends the male and female curves.
+        self.assertEqual( InputsForm().fields[ 's0_sex' ].initial, 'blended' )
+        form = InputsForm( data = self._actuarial( s0_sex = 'blended' ) )
+        self.assertTrue( form.is_valid(), form.errors )
+        self.assertIsNone( form.session_facts().people[ 0 ].sex )
+
+    def test_session_facts_carry_the_sex_and_setback( self ):
+        form = InputsForm( data = self._actuarial( s0_sex = 'male', s0_longevity = '3' ) )
+        self.assertTrue( form.is_valid(), form.errors )
+        person = form.session_facts().people[ 0 ]
+        self.assertEqual( person.sex, 'male' )
+        self.assertEqual( person.longevity_setback, 3 )
+
+    def test_default_inputs_seed_the_actuarial_mode( self ):
+        seeded = default_inputs( Assumptions(
+            inflation = Rate( Decimal( '0.03' ) ), cola = Rate( Decimal( '0.02' ) ) ) )
+        self.assertEqual( seeded[ 'life_expectancy_mode' ], LIFE_MODE_ACTUARIAL )
 
 
 class SessionRoundTripTest( SimpleTestCase ):
@@ -133,6 +194,12 @@ class SessionRoundTripTest( SimpleTestCase ):
         self.assertEqual( person.government_pension_monthly, Decimal( '2000' ) )   # money survives as Decimal
         self.assertEqual( person.life_expectancy, 85 )
         self.assertEqual( restored.ss_timing_assumptions, _ASSUMPTIONS )
+
+    def test_sex_and_longevity_setback_survive_a_storage_round_trip( self ):
+        stored = PersonFacts( birth_year = 1960, sex = 'female', longevity_setback = -3 ).to_storage()
+        person = PersonFacts.from_storage( stored )
+        self.assertEqual( person.sex, 'female' )
+        self.assertEqual( person.longevity_setback, -3 )
 
     def test_a_benefit_less_person_round_trips_with_no_benefit( self ):
         # A visitor who enters a birth year but skips the benefit: the None must survive the JSON round
@@ -181,6 +248,21 @@ class RunnableGateTest( SimpleTestCase ):
         self.assertFalse( is_runnable( SessionFacts(), dict( _ASSUMPTIONS ) ) )
         self.assertFalse( is_runnable( SessionFacts( people = [ self._complete_person() ] ), {} ) )
 
+    def test_actuarial_mode_is_runnable_without_an_expected_lifetime( self ):
+        # The actuarial mode derives the lifetime from the tables, so a person with no expected lifetime is
+        # runnable -- unlike the specific mode, which needs it.
+        person      = PersonFacts( birth_year = 1960, government_pension_monthly = Decimal( '2000' ) )
+        actuarial   = { ** _ASSUMPTIONS, 'life_expectancy_mode' : LIFE_MODE_ACTUARIAL }
+        specific    = { ** _ASSUMPTIONS, 'life_expectancy_mode' : LIFE_MODE_SPECIFIC }
+        self.assertTrue( is_runnable( SessionFacts( people = [ person ] ), actuarial ) )
+        self.assertFalse( is_runnable( SessionFacts( people = [ person ] ), specific ) )
+
+    def test_a_stored_session_without_a_mode_still_requires_the_lifetime( self ):
+        # A session written before the mode existed had the specific behavior; the absent mode reads as
+        # specific, so it still needs the lifetime it always carried.
+        person = PersonFacts( birth_year = 1960, government_pension_monthly = Decimal( '2000' ) )
+        self.assertFalse( is_runnable( SessionFacts( people = [ person ] ), dict( _ASSUMPTIONS ) ) )
+
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
 class InputsViewTest( TestCase ):
@@ -225,6 +307,17 @@ class InputsViewTest( TestCase ):
         response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
         self.assertContains( response, 'value="1960"' )        # the remembered birth year prefills
 
+    def test_the_form_renders_the_life_expectancy_mode_switch( self ):
+        # The mode is a js-switch: a switch wrapper + control, with an actuarial and a specific case per
+        # person (the client-side reveal is exercised by inputs.js, not here).
+        with patch( 'ucfp.calculators.ss_timing.prefill.default_economics',
+                    return_value = _STUB_ECONOMICS ):
+            response = self.client.get( reverse( 'calculators:ss_timing:inputs' ) )
+        self.assertContains( response, 'js-switch' )
+        self.assertContains( response, 'js-switch-control' )
+        self.assertContains( response, 'data-switch-case="actuarial"' )
+        self.assertContains( response, 'data-switch-case="specific"' )
+
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
 class ResultsViewTest( TestCase ):
@@ -241,4 +334,4 @@ class ResultsViewTest( TestCase ):
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
         self.assertEqual( response.status_code, 200 )
         self.assertContains( response, 'Top strategies' )
-        self.assertContains( response, 'Lifetime total' )
+        self.assertContains( response, 'Year (age' )              # the year-by-year income table renders

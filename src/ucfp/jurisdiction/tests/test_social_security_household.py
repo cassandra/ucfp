@@ -94,6 +94,19 @@ class HouseholdSurvivorTest( unittest.TestCase ):
         self.assertEqual( _benefits( 2028, earner, spouse )[ 'spouse' ], Decimal( '12000' ) )   # spousal
         self.assertEqual( _benefits( 2031, earner, spouse )[ 'spouse' ], Decimal( '28800' ) )   # survivor
 
+    def test_inherited_benefit_waits_for_the_decedent_claim_when_death_precedes_it( self ):
+        # Regression: the decedent's side of the survivor benefit was ungated, so when death fell before the
+        # decedent's own claim date the survivor was paid the (larger) inherited benefit years early -- which
+        # inflated the SS-timing calculator's actuarial expected values in pre-claim years. The survivor
+        # should get only their own benefit until the decedent's claim date, then the inherited one.
+        hi        = _member( 'hi', 1960, '3000', 2030, death_year = 2025 )   # claims at 70; dies before it
+        lo        = _member( 'lo', 1960, '1000', 2027 )                      # survivor; own from 2027
+        inherited = _US.realized_annual_benefit( Decimal( '3000' ), date( 1960, 1, 1 ), date( 2030, 1, 1 ) )
+        self.assertEqual( _benefits( 2027, hi, lo )[ 'lo' ], Decimal( '12000' ) )   # own only, pre-claim
+        self.assertEqual( _benefits( 2029, hi, lo )[ 'lo' ], Decimal( '12000' ) )   # right up to the claim
+        self.assertEqual( _benefits( 2030, hi, lo )[ 'lo' ], inherited )            # inherited benefit begins
+        self.assertGreater( inherited, Decimal( '12000' ) )                         # and it is the larger
+
 
 class BenefitBreakdownTest( unittest.TestCase ):
     """The own / spousal / survivor split (`household_benefit_breakdown`); its per-member totals are what

@@ -6,10 +6,9 @@
 {% endcomment %}
 <div class="ss-hm-wrap">
 {% if is_couple %}
-  <div class="ss-eyebrow text-center mb-1">{{ earners.1.name }} claims at (age)</div>
+  <div class="ss-hm-axis text-center mb-1">{{ earners.1.name }} claims at (age)</div>
   <div class="d-flex">
-    <div class="ss-eyebrow d-flex align-items-center justify-content-center px-1"
-         style="writing-mode:vertical-rl;transform:rotate(180deg)">{{ earners.0.name }} claims at</div>
+    <div class="ss-hm-axis ss-hm-axis--vertical d-flex align-items-center justify-content-center px-1">{{ earners.0.name }} claims at</div>
     <div class="flex-grow-1">
       <div class="ss-hm-grid">
         <div class="ss-hm-corner"></div>
@@ -22,7 +21,7 @@
     </div>
   </div>
 {% else %}
-  <div class="ss-eyebrow text-center mb-1">Claim at (age)</div>
+  <div class="ss-hm-axis text-center mb-1">Claim at (age)</div>
   <div class="ss-hm-strip">
     {% for cell in heatmap.0 %}{% include "calculators/ss_timing/_heatcell.html" %}{% endfor %}
   </div>

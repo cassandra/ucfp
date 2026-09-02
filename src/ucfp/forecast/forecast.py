@@ -1067,7 +1067,10 @@ class Forecast:
         `full_tax_year`."""
         year_fraction = self._year_fraction( span )
         annual_rates = self._parameters.economic_outlook.asset_rates_at( span.start_date )
-        tax_engine = self._tax_law.engine_for( span.end_date.year )
+        # With taxation skipped, carry no engine: every tax step in the Period already no-ops on an
+        # absent engine, so the assessment/settlement work (and its chart scans) is elided entirely.
+        tax_engine = ( None if self._parameters.skip_taxation
+                       else self._tax_law.engine_for( span.end_date.year ) )
         return PeriodParameters(
             date_span         = span,
             tax_context       = self._tax_context_for( span ),
@@ -1081,9 +1084,10 @@ class Forecast:
             prior_property_sales = tuple( self._recorded_property_sales ),
             funding_policy    = self._funding_policy_for( span ),
             tax_engine        = tax_engine,
-            full_tax_year     = self._is_full_tax_year( span, tax_engine ),
+            full_tax_year     = ( tax_engine is not None ) and self._is_full_tax_year( span, tax_engine ),
             opening_tax_state = opening_tax_state,
-            fiscal_window     = self._fiscal_window_for( span, bookkeeper, tax_engine ),
+            fiscal_window     = ( None if tax_engine is None
+                                  else self._fiscal_window_for( span, bookkeeper, tax_engine ) ),
             property_sale_realtor_fee_rate = self._parameters.property_sale_costs.property_sale_realtor_fee_rate,
             property_sale_fixed_cost       = (
                 self._parameters.property_sale_costs.property_sale_fixed_cost

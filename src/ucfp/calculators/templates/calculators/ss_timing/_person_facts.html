@@ -1,15 +1,14 @@
 {% comment %}
-  One person's three claiming fields (birth year, PIA, expected lifetime), shared by both people on the
-  calculator form. The including template passes `birth_year`, `pia`, `life`, and `index` (0 the primary,
-  1 the partner). The PIA input is the estimator's swap target; the "Estimate" helper beside it opens the
-  benefit estimator modal.
+  One person's benefit facts in the "Who's planning?" section: birth year and PIA. Params: `birth_year`,
+  `pia`, `index` (0 the primary, 1 the partner). The PIA input is the estimator's swap target; the
+  "Estimate" helper beside it opens the benefit estimator modal.
 {% endcomment %}
 <div class="form-group">
   <label for="{{ birth_year.id_for_label }}">{{ birth_year.label }}</label>
   {{ birth_year }}
   {% include "calculators/ss_timing/_field_errors.html" with field=birth_year %}
 </div>
-<div class="form-group">
+<div class="form-group mb-0">
   <label for="{{ pia.id_for_label }}">{{ pia.label }}</label>
   <div class="d-flex align-items-start">
     <span id="pia-input-{{ index }}" class="flex-grow-1">{{ pia }}</span>
@@ -18,9 +17,4 @@
        aria-label="Estimate the benefit at full retirement age">Estimate</a>
   </div>
   {% include "calculators/ss_timing/_field_errors.html" with field=pia %}
-</div>
-<div class="form-group mb-0">
-  <label for="{{ life.id_for_label }}">{{ life.label }}</label>
-  {{ life }}
-  {% include "calculators/ss_timing/_field_errors.html" with field=life %}
 </div>

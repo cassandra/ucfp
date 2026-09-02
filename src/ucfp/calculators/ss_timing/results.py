@@ -9,9 +9,9 @@ key ("67-67") the results page uses to drill into a cell.
 """
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
+from typing import Callable, Optional
 
-from .compute import CLAIM_AGES, Comparison
+from .compute import CLAIM_AGES, Claimant, Comparison, Sex, Strategy
 
 _HEAT_BUCKETS = 7     # sequential-ramp intensity levels (matched by the .hm-b0..6 classes in the stylesheet)
 _RANK_LIMIT   = 10    # rows in the "Top strategies" list
@@ -39,8 +39,8 @@ class HeatCell:
 class RankRow:
     """One row of the ranked list: its `rank` (1 = best), the claiming `ages` (higher first), and its three
     lifetime figures -- nominal `raw_total`, `present_value` (today's dollars), and `effective_value` (the
-    opportunity-cost-adjusted figure it is ranked by). `combo` keys the drill-in; `is_best` / `is_selected`
-    mirror the heatmap."""
+    opportunity-cost-adjusted figure it is ranked by). `combo` keys the drill-in; `is_selected` mirrors the
+    heatmap's gold selection (rank 1 needs no separate "best" mark -- it is first by construction)."""
 
     rank            : int
     combo           : str
@@ -48,13 +48,57 @@ class RankRow:
     raw_total       : Decimal
     present_value   : Decimal
     effective_value : Decimal
-    is_best         : bool
     is_selected     : bool
+    beyond_top      : bool     # a selected strategy pulled in from outside the top list (the 11th row)
+
+
+@dataclass( frozen = True )
+class PersonRecap:
+    """One person in the household recap panel: their `name`, `role` label ('higher earner' / 'lower
+    earner', or None for a single household), monthly `pia`, the assumed `lifetime_age`, and -- under the
+    actuarial basis -- the `basis_words` describing where that age came from ('male, average'); empty in
+    the specific basis, where the age was entered rather than estimated."""
+
+    name         : str
+    role         : Optional[ str ]
+    pia          : Decimal
+    lifetime_age : Optional[ int ]
+    basis_words  : str
 
 
 def combo_of( claim_ages : tuple[ int, ... ] ) -> str:
     """A claim-age combination as a URL-safe key -- '67' for one person, '70-64' for a couple."""
     return '-'.join( str( age ) for age in claim_ages )
+
+
+def person_recaps( earners : tuple[ Claimant, ... ], estimated : bool ) -> list[ PersonRecap ]:
+    """The household recap rows for `earners` (higher first). `estimated` marks the actuarial basis, where
+    the lifetime age is the derived life expectancy and `basis_words` names the survival curve used;
+    otherwise the age was entered and the words are blank. Each earner must carry `expected_lifetime` (the
+    entered age, or the representative age filled by `compute.representative_claimants`)."""
+    is_couple = len( earners ) == 2
+    recaps    = list()
+    for index, earner in enumerate( earners ):
+        role = None
+        if is_couple:
+            role = 'higher earner' if index == 0 else 'lower earner'
+        recaps.append( PersonRecap(
+            name         = earner.name,
+            role         = role,
+            pia          = earner.pia_monthly,
+            lifetime_age = earner.expected_lifetime,
+            basis_words  = _basis_words( earner ) if estimated else '' ) )
+        continue
+    return recaps
+
+
+def _basis_words( claimant : Claimant ) -> str:
+    """The survival curve behind a claimant's estimated life expectancy, as a short phrase -- the mortality
+    table and the longevity setback, e.g. 'male, average' or 'blended, longer-lived'."""
+    table     = { Sex.FEMALE: 'female', Sex.MALE: 'male' }.get( claimant.sex, 'blended' )
+    setback   = claimant.setback
+    longevity = 'shorter-lived' if setback > 0 else 'longer-lived' if setback < 0 else 'average'
+    return f'{table}, {longevity}'
 
 
 def heatmap( comparison : Comparison, selected_combo : str ) -> list[ list[ HeatCell ] ]:
@@ -71,21 +115,32 @@ def heatmap( comparison : Comparison, selected_combo : str ) -> list[ list[ Heat
 
 
 def ranked( comparison : Comparison, selected_combo : str ) -> list[ RankRow ]:
-    """The top strategies by effective value (best first), for the ranked list beside the heatmap."""
-    best = combo_of( comparison.best.claim_ages )
-    rows = list()
-    for rank, strategy in enumerate( comparison.ranked[ : _RANK_LIMIT ], start = 1 ):
-        combo = combo_of( strategy.claim_ages )
-        rows.append( RankRow(
-            rank = rank, combo = combo, ages = strategy.claim_ages,
-            raw_total = strategy.raw_total, present_value = strategy.present_value,
-            effective_value = strategy.effective_value,
-            is_best = combo == best, is_selected = combo == selected_combo ) )
-        continue
+    """The top strategies by effective value (best first) for the ranked list beside the heatmap, plus --
+    when the selected strategy falls outside that top list -- one extra row for it carrying its true rank,
+    so a visitor who picks a lower-ranked cell still sees its lifetime figures (the year-by-year no longer
+    repeats them). That extra row is flagged `beyond_top` for its own visual break."""
+    ordered = comparison.ranked
+    rows    = [ _rank_row( rank, strategy, selected_combo, beyond_top = False )
+                for rank, strategy in enumerate( ordered[ : _RANK_LIMIT ], start = 1 ) ]
+    if selected_combo and not any( row.is_selected for row in rows ):
+        for rank, strategy in enumerate( ordered, start = 1 ):
+            if combo_of( strategy.claim_ages ) == selected_combo:
+                rows.append( _rank_row( rank, strategy, selected_combo, beyond_top = True ) )
+                break
     return rows
 
 
-def _cell( claim_ages, by_combo, bucket, best_combo, selected_combo ) -> HeatCell:
+def _rank_row( rank : int, strategy : Strategy, selected_combo : str, beyond_top : bool ) -> RankRow:
+    combo = combo_of( strategy.claim_ages )
+    return RankRow(
+        rank = rank, combo = combo, ages = strategy.claim_ages,
+        raw_total = strategy.raw_total, present_value = strategy.present_value,
+        effective_value = strategy.effective_value,
+        is_selected = combo == selected_combo, beyond_top = beyond_top )
+
+
+def _cell( claim_ages : tuple[ int, ... ], by_combo : dict, bucket : Callable[ [ Decimal ], int ],
+           best_combo : str, selected_combo : str ) -> HeatCell:
     combo    = combo_of( claim_ages )
     strategy = by_combo[ combo ]
     return HeatCell(
@@ -100,7 +155,7 @@ def _cell( claim_ages, by_combo, bucket, best_combo, selected_combo ) -> HeatCel
         is_selected     = combo == selected_combo )
 
 
-def _bucketer( comparison : Comparison ):
+def _bucketer( comparison : Comparison ) -> Callable[ [ Decimal ], int ]:
     """An effective-value -> ramp-bucket function over the sweep's range (all one bucket when flat)."""
     values = [ strategy.effective_value for strategy in comparison.strategies ]
     low    = min( values )

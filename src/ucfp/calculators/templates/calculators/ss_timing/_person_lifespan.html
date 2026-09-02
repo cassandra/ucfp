@@ -1,0 +1,21 @@
+{% comment %}
+  One person's life-expectancy inputs in the "How long will you live?" section -- the two js-switch case
+  blocks the household mode reveals. Actuarial: the longevity nudge (Shorter/Average/Longer) and the
+  mortality table (Blended/Female/Male). Specific: an entered age. The section explains both once, so no
+  per-field helper text here. Params: `life`, `sex`, `longevity`.
+{% endcomment %}
+<div data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="actuarial">
+  <fieldset class="form-group">
+    <legend class="col-form-label pt-0 mb-1">{{ longevity.label }}</legend>
+    {% include "calculators/ss_timing/_radio_toggle.html" with field=longevity size="sm" %}
+  </fieldset>
+  <fieldset class="form-group mb-0">
+    <legend class="col-form-label pt-0 mb-1">{{ sex.label }}</legend>
+    {% include "calculators/ss_timing/_radio_toggle.html" with field=sex size="sm" %}
+  </fieldset>
+</div>
+<div class="form-group mb-0" data-{{ AppConst.SWITCH_CASE_DATA_ATTR }}="specific">
+  <label for="{{ life.id_for_label }}">{{ life.label }}</label>
+  {{ life }}
+  {% include "calculators/ss_timing/_field_errors.html" with field=life %}
+</div>
