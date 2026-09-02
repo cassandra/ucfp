@@ -35,7 +35,7 @@
   choice -- it tags the partner column in this section and the next, so one toggle governs both.{% endcomment %}
   <div class="border rounded bg-light p-3 mb-4">
     <fieldset class="form-group mb-3">
-      <legend class="h6 mb-2">Who&rsquo;s planning?</legend>
+      <legend class="h6 text-muted mb-2">Who&rsquo;s planning?</legend>
       <div class="btn-group btn-group-toggle" data-toggle="buttons" id="household-choice">
         {% for radio in form.household %}
           <label class="btn btn-outline-primary {% if radio.data.selected %}active{% endif %}">
@@ -66,7 +66,7 @@
   presentation -- InputsForm.clean requires the age only in the specific mode.{% endcomment %}
   <div class="border rounded bg-light p-3 mb-4 {{ AppConst.SWITCH_CLASS }}">
     <fieldset class="form-group mb-2">
-      <legend class="h6 mb-2">How long will you live?</legend>
+      <legend class="h6 text-muted mb-2">How long will you live?</legend>
       <div class="btn-group btn-group-toggle" data-toggle="buttons" id="life-mode-choice">
         {% for radio in form.life_expectancy_mode %}
           <label class="btn btn-outline-primary {% if radio.data.selected %}active{% endif %}">
@@ -96,9 +96,15 @@
     </div>
   </div>
 
-  {% comment %}Section 3 -- Economic assumptions.{% endcomment %}
+  {% comment %}Section 3 -- Assumptions, in two subsection cards: the "Economy" rates (inflation, expected
+  return) and the "Social Security funding" scenario (the trust-fund shortfall). They are characteristically
+  different -- continuous economic rates vs a discrete program-policy lever -- so each is its own card. The
+  white cards also keep the three sections on one pattern and the $/% addons legible on the shaded panel.
+  {% endcomment %}
   <div class="border rounded bg-light p-3 mb-4">
-    <h2 class="h6 text-muted">Economic assumptions</h2>
+    <h2 class="h6 text-muted">Assumptions</h2>
+    <div class="card mb-3"><div class="card-body">
+    <h3 class="h6 text-muted">Economy</h3>
     <div class="row">
       <div class="col-md-3 mb-3 mb-md-0">
         <div class="d-flex align-items-center">
@@ -130,7 +136,10 @@
         </div>
       </div>
     </div>
-    <div class="row mt-3">
+    </div></div>
+    <div class="card"><div class="card-body">
+    <h3 class="h6 text-muted">Social Security funding</h3>
+    <div class="row">
       <div class="col">
         <div class="d-flex flex-wrap align-items-center">
           <label class="mb-1 mr-2" for="{{ form.benefits_payable.id_for_label }}">Reduce to</label>
@@ -146,6 +155,7 @@
         </small>
       </div>
     </div>
+    </div></div>
   </div>
 
   <div class="mt-4 mb-5">
