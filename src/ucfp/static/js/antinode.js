@@ -570,8 +570,11 @@ function getAsyncTarget( anchorNode ) {
 // The Async "loading" spinner
 
 function insertLoadingImage() {
+    // Fixed (viewport-relative), not absolute: the spinner must stay centred in the visible area whatever
+    // the scroll position -- an absolute top:50% is 50% of the whole document, so on a long page a submit
+    // from below the fold would flash the spinner off-screen above the viewport.
     // N.B. The negative margins in the css should be half the width of the loading image.
-    let htmlString = '<div id="antinode-loader" style="display:none; position: absolute; top: 50%; left: 50%; margin-left: -64px; margin-top: -64px; z-index: 1055;"><img src="/static/img/antinode-loading.svg" alt="Loading…"/></div>';
+    let htmlString = '<div id="antinode-loader" style="display:none; position: fixed; top: 50%; left: 50%; margin-left: -64px; margin-top: -64px; z-index: 1055;"><img src="/static/img/antinode-loading.svg" alt="Loading…"/></div>';
     let loadingObj = $.parseHTML(htmlString);
     $('body').append( loadingObj );
     return;
