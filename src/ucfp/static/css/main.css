@@ -1271,3 +1271,8 @@ body.has-cookie-notice {
     .overview-prompt       { padding-left: 0; }
     .forecast-kpis         { grid-template-columns: 1fr; }
 }
+
+/* -- shared calculator shell (chrome common to any calculator inside the app shell) -- */
+/* A calculator's inputs are a form: hold them to a readable single column rather than the full app width
+   (two classes so this wins over Bootstrap's own .container max-widths). */
+.container.calc-inputs { max-width: 760px; }

@@ -1,0 +1,83 @@
+{% comment %}The signed-in app navbar interior (toggler + collapsible menu): Dashboard/Forecast, the current
+household, and Profile/Scenarios/Account. Included by `app_base.html` for an authenticated visitor; the
+anonymous counterpart is `_public_navbar_menu.html`. Active state keys off `url_name` (see app_base) and,
+for the flow editors, the view-supplied `active_nav`.{% endcomment %}
+{% load icons %}
+{% with url_name=request.resolver_match.url_name %}
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#app-nav"
+            aria-controls="app-nav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="app-nav">
+      {% comment %}
+      Only the Financial Forecast perspective is built, so Planning is a single direct link ("Forecast")
+      rather than a dropdown -- a menu over one item is pure friction. Restore the dropdown pattern (a
+      "Planning" toggle lit while any perspective is active, one dropdown-item per feature) when a second
+      perspective ships; the three still to come are previewed on the dashboard (Retirement Timing #40,
+      Social Security #6, Cash Flow #5).
+      {% endcomment %}
+      <ul class="navbar-nav">
+        {# Dashboard is the app home; the logo goes to the public home. #}
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'dashboard' %}active{% endif %}"
+             data-synchronous="true"
+             href="{% url 'dashboard' %}">Dashboard</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if url_name == 'financial_forecast' %}active{% endif %}"
+             href="{% url 'financial_forecast' %}">Forecast</a>
+        </li>
+      </ul>
+      {% comment %} Current household, shown for context -- a subtle link into Settings, where switching
+      between households lives. Display only; not a switching control in the bar. The `mx-auto` list is
+      always rendered (even without a current household) so it keeps pushing the right-hand nav right. {% endcomment %}
+      <ul class="navbar-nav mx-auto">
+        {% if request.organization %}
+        <li class="nav-item d-flex align-items-center">
+          <a class="nav-link current-household" href="{% url 'organization_settings' %}"
+             aria-label="Current household {{ request.organization.display_name }}, open Settings"
+             title="Current household, open Settings">{{ request.organization.display_name }}</a>
+          {% if not can_edit_organization %}
+          <span class="readonly-badge" title="You have read-only access to this household">Read-only</span>
+          {% endif %}
+        </li>
+        {% endif %}
+      </ul>
+      <ul class="navbar-nav">
+        {% comment %}
+        Profile and Scenarios stay lit while editing their flows: the flow editors all resolve to
+        `interview_section`, so the view supplies `active_nav` rather than keying on the url name.
+        {% endcomment %}
+        <li class="nav-item">
+          <a class="nav-link {% if active_nav == 'profile' %}active{% endif %}"
+             href="{% url 'flow_profile' %}">Profile</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if active_nav == 'scenarios' %}active{% endif %}"
+             href="{% url 'scenarios_home' %}">Scenarios</a>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if url_name == 'user_account' or url_name == 'organization_settings' %}active{% endif %}"
+             href="#" id="user-menu" role="button" data-toggle="dropdown"
+             aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+            {% icon 'user' size='lg' %}
+          </a>
+          <div class="dropdown-menu dropdown-menu-right" aria-labelledby="user-menu">
+            <a class="dropdown-item" href="{% url 'user_account' %}">Account</a>
+            <a class="dropdown-item" href="{% url 'organization_settings' %}">Settings</a>
+            {% comment %}
+              Only a Verified user can sign out: a Guest's session is the sole handle to their data,
+              so signing out would strand it. A Guest adds an email (Account) to become recoverable.
+            {% endcomment %}
+            {% if request.user.is_verified %}
+            <div class="dropdown-divider"></div>
+            <form method="post" action="{% url 'user_signout' %}" class="mb-0">
+              {% csrf_token %}
+              <button type="submit" class="dropdown-item">Sign out</button>
+            </form>
+            {% endif %}
+          </div>
+        </li>
+      </ul>
+    </div>
+{% endwith %}

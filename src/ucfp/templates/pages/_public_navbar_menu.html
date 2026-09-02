@@ -1,0 +1,28 @@
+{% comment %}The anonymous app navbar interior: the login-free calculators as nav links on the left, and on
+the right the onward path into the app -- a short prompt, the "see how it works" CTA (mirroring the home
+page's anonymous CTA), and a Sign in for a returning visitor. Keeping the CTA in the bar makes the obvious
+navigation obvious, rather than burying it in the page. Included by `app_base.html` for an anonymous visitor,
+only ever possible on the auth-exempt calculator pages, since every other app page redirects to sign-in. The
+calculators come from `ucfp.calculators.navigation`, so this bar and the future signed-in dropdown share one
+list.{% endcomment %}
+{% load calculator_tags %}
+{% public_calculators as calculators %}
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#app-nav"
+            aria-controls="app-nav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="app-nav">
+      <ul class="navbar-nav">
+        {% for calculator in calculators %}
+        <li class="nav-item">
+          <a class="nav-link {% if request.resolver_match.namespace == calculator.namespace %}active{% endif %}"
+             href="{% url calculator.url_name %}">{{ calculator.label }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="ml-auto d-lg-flex align-items-lg-center">
+        <span class="navbar-text mr-lg-3">One piece of your whole plan.</span>
+        <a class="btn btn-cta btn-sm mr-lg-3 my-2 my-lg-0" href="{% url 'explain' %}">See more</a>
+        <a class="nav-link" href="{% url 'user_signin' %}">Sign in</a>
+      </div>
+    </div>

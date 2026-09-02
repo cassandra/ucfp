@@ -1,9 +1,10 @@
-{% extends "pages/base_public.html" %}
+{% extends "pages/top_page.html" %}
 {% load common_tags humanize %}
 {% comment %}
   The Social Security claiming comparison, results first: the claiming-age heatmap and ranked list (click
-  either to drill in), then the household + assumptions recap (a secondary sanity-check, with an Adjust link
-  back to the inputs), then the year-by-year detail for the selected strategy. Cells and ranked rows carry
+  either to drill in), then the household + assumptions recap (a secondary sanity-check), then the
+  year-by-year detail for the selected strategy. "Adjust inputs" is a page action in the header (top_page's
+  page_actions slot), back to the inputs form. Cells and ranked rows carry
   `data-combo`; clicking swaps the detail (antinode) and moves the gold selection (ss_timing.js). The value
   figures, life-expectancy weighting, and SS adjustment are explained in the Methodology at the foot (the
   per-strategy modal on the year-by-year covers only that strategy's statutory benefit terms). Context:
@@ -15,13 +16,11 @@
 
 {% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
 {% block page_title %}Social Security claiming comparison{% endblock %}
-{% block public_container_max_width %}1140px{% endblock %}
+{% block page_actions %}
+<a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-secondary">Adjust inputs</a>
+{% endblock %}
 
-{% block public_content %}
-{% comment %}The signed-in breadcrumb sits at the top -- wayfinding, not a pitch, so it does not compete with
-the results. An anonymous visitor has no app to return to; their onward path is the upsell lower down, after
-the recap and before the year-by-year depth.{% endcomment %}
-{% include "calculators/ss_timing/_dashboard_breadcrumb.html" %}
+{% block page_body %}
 <div class="ss-results">
 
   {% comment %}The results lead -- the heatmap of the whole claiming-age landscape and the ranked list.
@@ -51,10 +50,7 @@ the recap and before the year-by-year depth.{% endcomment %}
   <div class="row">
     <div class="col-md-7 mb-3">
       <div class="card h-100"><div class="card-body">
-        <div class="d-flex justify-content-between align-items-start mb-2">
-          <div class="ss-eyebrow">Household</div>
-          <a href="{% url 'calculators:ss_timing:inputs' %}" class="btn btn-outline-secondary btn-sm">Adjust</a>
-        </div>
+        <div class="ss-eyebrow mb-2">Household</div>
         <div class="row">
           {% for recap in recaps %}
             <div class="col ss-person">
@@ -76,17 +72,6 @@ the recap and before the year-by-year depth.{% endcomment %}
       </div></div>
     </div>
   </div>
-
-  {% comment %}The onward path for an anonymous visitor, after the recap and before the year-by-year depth:
-  a slim band nudging them to the full planner, since claiming timing is one piece of a whole retirement
-  plan. A signed-in visitor already has the app and gets the breadcrumb up top instead.{% endcomment %}
-  {% if onboarding_state == 'anonymous' %}
-  <div class="ss-onward d-flex flex-wrap align-items-center justify-content-between mb-3 p-3">
-    <p class="mb-2 mb-sm-0 mr-sm-3">Claiming timing is one piece of your retirement. See how it fits with
-      the rest of your plan.</p>
-    <a href="{% url 'explain' %}" class="btn btn-cta text-nowrap">See how it works</a>
-  </div>
-  {% endif %}
 
   {% comment %}aria-live on the static wrapper (not the swapped #ss-detail) so a screen reader announces
   the year-by-year update when a cell/row is selected.{% endcomment %}

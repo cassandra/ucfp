@@ -1,99 +1,32 @@
 {% extends "pages/base.html" %}
 {% load common_tags %}
 {% load static %}
-{% load icons %}
 {% comment %}
-  The shared application shell: the top navbar + a content region, extended by every
-  authenticated app page (home, the planning features, the inputs area, settings). Sign-in,
-  error, and interstitial pages extend `pages/base.html` directly and get no app chrome.
+  The shared application shell: the branded top navbar + a content region, extended by every
+  authenticated app page (home, the planning features, the inputs area, settings) and by the
+  login-free calculators. The navbar is auth-adaptive: a signed-in visitor gets the full app
+  menu (Dashboard, Forecast, household, Profile, Scenarios, Account); an anonymous visitor --
+  only ever on the auth-exempt calculator pages, since every other app page redirects to sign-in
+  -- gets the same branded bar reduced to the calculator links and a quiet Sign in. The two
+  interiors live in `_app_navbar_menu.html` / `_public_navbar_menu.html`; only the shared brand
+  bar, `<main>` content region, and footer live here. Sign-in, error, and interstitial pages
+  extend `pages/base.html` directly and get no app chrome.
 
   Active nav state is derived from `request.resolver_match.url_name` (the `request` context
   processor is enabled), so pages need not pass anything to highlight their nav item.
 {% endcomment %}
 
 {% block content %}
-{% with url_name=request.resolver_match.url_name %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
   <div class="container">
     <a class="navbar-brand py-1" href="{% url 'home' %}">
       <img src="{% static 'img/app-logo-inverse-h64.png' %}" height="36" alt="{% settings_value 'SITE_NAME' %}">
     </a>
-    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#app-nav"
-            aria-controls="app-nav" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="app-nav">
-      {% comment %}
-      Only the Financial Forecast perspective is built, so Planning is a single direct link ("Forecast")
-      rather than a dropdown -- a menu over one item is pure friction. Restore the dropdown pattern (a
-      "Planning" toggle lit while any perspective is active, one dropdown-item per feature) when a second
-      perspective ships; the three still to come are previewed on the dashboard (Retirement Timing #40,
-      Social Security #6, Cash Flow #5).
-      {% endcomment %}
-      <ul class="navbar-nav">
-        {# Dashboard is the app home; the logo goes to the public home. #}
-        <li class="nav-item">
-          <a class="nav-link {% if url_name == 'dashboard' %}active{% endif %}"
-             data-synchronous="true" 
-             href="{% url 'dashboard' %}">Dashboard</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if url_name == 'financial_forecast' %}active{% endif %}"
-             href="{% url 'financial_forecast' %}">Forecast</a>
-        </li>
-      </ul>
-      {% comment %} Current household, shown for context -- a subtle link into Settings, where switching
-      between households lives. Display only; not a switching control in the bar. The `mx-auto` list is
-      always rendered (even without a current household) so it keeps pushing the right-hand nav right. {% endcomment %}
-      <ul class="navbar-nav mx-auto">
-        {% if request.organization %}
-        <li class="nav-item d-flex align-items-center">
-          <a class="nav-link current-household" href="{% url 'organization_settings' %}"
-             aria-label="Current household {{ request.organization.display_name }}, open Settings"
-             title="Current household, open Settings">{{ request.organization.display_name }}</a>
-          {% if not can_edit_organization %}
-          <span class="readonly-badge" title="You have read-only access to this household">Read-only</span>
-          {% endif %}
-        </li>
-        {% endif %}
-      </ul>
-      <ul class="navbar-nav">
-        {% comment %}
-        Profile and Scenarios stay lit while editing their flows: the flow editors all resolve to
-        `interview_section`, so the view supplies `active_nav` rather than keying on the url name.
-        {% endcomment %}
-        <li class="nav-item">
-          <a class="nav-link {% if active_nav == 'profile' %}active{% endif %}"
-             href="{% url 'flow_profile' %}">Profile</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_nav == 'scenarios' %}active{% endif %}"
-             href="{% url 'scenarios_home' %}">Scenarios</a>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if url_name == 'user_account' or url_name == 'organization_settings' %}active{% endif %}"
-             href="#" id="user-menu" role="button" data-toggle="dropdown"
-             aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
-            {% icon 'user' size='lg' %}
-          </a>
-          <div class="dropdown-menu dropdown-menu-right" aria-labelledby="user-menu">
-            <a class="dropdown-item" href="{% url 'user_account' %}">Account</a>
-            <a class="dropdown-item" href="{% url 'organization_settings' %}">Settings</a>
-            {% comment %}
-              Only a Verified user can sign out: a Guest's session is the sole handle to their data,
-              so signing out would strand it. A Guest adds an email (Account) to become recoverable.
-            {% endcomment %}
-            {% if request.user.is_verified %}
-            <div class="dropdown-divider"></div>
-            <form method="post" action="{% url 'user_signout' %}" class="mb-0">
-              {% csrf_token %}
-              <button type="submit" class="dropdown-item">Sign out</button>
-            </form>
-            {% endif %}
-          </div>
-        </li>
-      </ul>
-    </div>
+    {% if user.is_authenticated %}
+      {% include "pages/_app_navbar_menu.html" %}
+    {% else %}
+      {% include "pages/_public_navbar_menu.html" %}
+    {% endif %}
   </div>
 </nav>
 
@@ -101,5 +34,4 @@
   {% block app_content %}{% endblock %}
 </main>
 {% include "components/base_footer.html" %}
-{% endwith %}
 {% endblock %}

@@ -135,6 +135,14 @@ class ResultsRenderTest( TestCase ):
         self.assertContains( response, 'data-combo' )
         self.assertContains( response, 'Survivor' )                         # the couple detail column
 
+    def test_adjusting_the_inputs_is_a_page_action_not_a_recap_control( self ):
+        # "Adjust inputs" is a page-level action in the header (the top_page page_actions slot), so it reads
+        # as "go back and change what you entered" rather than a button buried in the household recap card.
+        self._submit()
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertContains( response, 'Adjust inputs' )
+        self.assertContains( response, reverse( 'calculators:ss_timing:inputs' ) )
+
     def test_the_results_show_the_opportunity_cost_framing( self ):
         self._submit()                                                      # return 4.5% over 2.5% inflation
         response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
@@ -244,9 +252,9 @@ class ActuarialResultsTest( TestCase ):
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
 class ResultsPathBackTest( TestCase ):
-    """The onward path from this standalone calculator, split by purpose: an anonymous visitor gets a
-    conversion upsell to the full planner, placed at the results/detail seam; a signed-in visitor gets a
-    quiet dashboard breadcrumb at the top -- wayfinding, not a pitch."""
+    """The onward path from this standalone calculator: an anonymous visitor gets a conversion upsell to the
+    full planner in the app bar (the "see how it works" CTA next to Sign in); a signed-in visitor gets the
+    full app navbar (with Dashboard) and no upsell -- they are already inside the app."""
 
     def _submit_and_get( self ):
         self.client.post( reverse( 'calculators:ss_timing:inputs' ), _couple_form_data() )
@@ -254,16 +262,17 @@ class ResultsPathBackTest( TestCase ):
 
     def test_an_anonymous_visitor_is_upsold_to_the_full_planner( self ):
         response = self._submit_and_get()
-        self.assertContains( response, 'ss-onward' )                    # the upsell band
-        self.assertContains( response, reverse( 'explain' ) )
-        self.assertContains( response, 'See how it works' )
+        self.assertContains( response, reverse( 'explain' ) )           # the upsell CTA, in the app bar ...
+        self.assertContains( response, 'See more' )
+        self.assertContains( response, reverse( 'user_signin' ) )       # ... alongside Sign in
         self.assertNotContains( response, 'aria-label="breadcrumb"' )   # no signed-in breadcrumb
 
-    def test_a_signed_in_visitor_gets_a_dashboard_breadcrumb( self ):
+    def test_a_signed_in_visitor_gets_the_app_navbar_not_an_upsell( self ):
         user = User.objects.create_user( email = 'owner@x.test', password = 'x' )
         Organization.objects.create_for_owner( user, name = 'Mine' )
         self.client.force_login( user )
         response = self._submit_and_get()
-        self.assertContains( response, 'aria-label="breadcrumb"' )      # the breadcrumb nav
-        self.assertContains( response, reverse( 'dashboard' ) )
-        self.assertNotContains( response, 'ss-onward' )                 # no anonymous upsell band
+        self.assertContains( response, reverse( 'dashboard' ) )         # the full app nav ...
+        self.assertNotContains( response, 'aria-label="breadcrumb"' )   # ... no breadcrumb band-aid ...
+        self.assertNotContains( response, reverse( 'explain' ) )        # ... and no anonymous upsell CTA ...
+        self.assertNotContains( response, reverse( 'user_signin' ) )    # ... nor the anonymous Sign in bar
