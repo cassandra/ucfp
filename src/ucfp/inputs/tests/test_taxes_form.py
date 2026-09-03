@@ -2,11 +2,11 @@
 assumptions and recomposes the tax projection at the outlook's inflation on apply. Also that the Advanced
 section replaced the two thin Assumptions steps in the interview spine (#255)."""
 import unittest
+from decimal import Decimal
 
 from django.http import QueryDict
 
 from common.rate import Rate
-from decimal import Decimal
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.inputs.assumptions.defaults import tax_projection
 from ucfp.inputs.assumptions.schemas import Assumptions

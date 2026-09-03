@@ -16,7 +16,7 @@ from django.test import SimpleTestCase
 from common.date_window import DateWindow
 from common.rate import Rate
 from ucfp.forecast.economic_outlook import EconomicParameters
-from ucfp.inputs.assumptions.defaults import tax_projection
+from ucfp.inputs.assumptions.defaults import DEFAULT_TAX_FORECAST_TYPE, tax_projection
 from ucfp.inputs.assumptions.schemas import Assumptions
 from ucfp.inputs.external_factors import (
     ECONOMIC_FACTORS, AdvancedEconomicsForm, ExternalFactorsForm, SocialSecurityFundingForm )
@@ -100,6 +100,39 @@ class EconomicsApplyTests( SimpleTestCase ):
         self.assertEqual( applied.economics.social_security_benefits_payable, Rate.percent( Decimal( '75' ) ) )
         self.assertEqual( applied.economics.social_security_reduction_year, 2035 )
 
+    def test_apply_preserves_the_niche_rates_it_does_not_edit( self ):
+        # the niche rates left the main pane for Advanced; a main-pane save must not reset them to preset.
+        economics   = EconomicParameters( bond_appreciation = Rate.percent( Decimal( '5' ) ) )
+        assumptions = Assumptions( economics = economics )
+        form = ExternalFactorsForm( _economics_post( economics, inflation = 2 ), assumptions = assumptions )
+        self.assertTrue( form.is_valid(), form.errors )
+        _profile, applied = form.apply( None, assumptions )
+        self.assertEqual( applied.economics.bond_appreciation, Rate.percent( Decimal( '5' ) ) )
+
+    def test_apply_keeps_a_stored_current_law_projection_frozen( self ):
+        # recomposition reads the STORED forecast type: editing a rate must not manufacture a COLA
+        # projection over a user's frozen-bracket (current-law) choice.
+        economics   = _seed()
+        assumptions = Assumptions(
+            economics = economics,
+            tax_projection = tax_projection( StatuteForecastType.CURRENT_LAW, economics ) )
+        form = ExternalFactorsForm( _economics_post( economics, inflation = 4 ), assumptions = assumptions )
+        self.assertTrue( form.is_valid(), form.errors )
+        _profile, applied = form.apply( None, assumptions )
+        self.assertEqual( applied.tax_projection.forecast_type, StatuteForecastType.CURRENT_LAW )
+        self.assertIsNone( applied.tax_projection.projection )
+
+    def test_apply_falls_back_to_the_default_projection_when_none_is_stored( self ):
+        # the form no longer submits a tax type, so a save with none stored composes the default
+        # (COLA-indexed) projection, indexed at the edited inflation.
+        economics   = _seed()
+        assumptions = Assumptions( economics = economics, tax_projection = None )
+        form = ExternalFactorsForm( _economics_post( economics, inflation = 4 ), assumptions = assumptions )
+        self.assertTrue( form.is_valid(), form.errors )
+        _profile, applied = form.apply( None, assumptions )
+        self.assertEqual( applied.tax_projection.forecast_type, DEFAULT_TAX_FORECAST_TYPE )
+        self.assertEqual( applied.tax_projection.projection.cola_rate, Rate.percent( Decimal( '4' ) ) )
+
     def test_apply_preserves_the_unedited_window( self ):
         # apply replaces onto the seed rather than building fresh: fields the form never edits (the
         # outlook window) must survive a save.
@@ -181,6 +214,17 @@ class SocialSecurityFundingFormTests( SimpleTestCase ):
         _profile, assumptions = form.apply( None, Assumptions( economics = economics ) )
         self.assertEqual( assumptions.economics.inflation, Rate.percent( Decimal( '3' ) ) )      # untouched
         self.assertEqual( assumptions.economics.social_security_benefits_payable, Rate.percent( Decimal( '80' ) ) )
+
+    def test_apply_leaves_the_tax_projection_untouched( self ):
+        # funding does not edit inflation, so it must not recompose the projection (unlike the main pane).
+        economics   = _seed()
+        projection  = tax_projection( StatuteForecastType.COLA_INDEXED, economics )
+        assumptions = Assumptions( economics = economics, tax_projection = projection )
+        form = SocialSecurityFundingForm(
+            QueryDict( f'{_PAYABLE}=80&{_YEAR}=2032' ), assumptions = assumptions )
+        self.assertTrue( form.is_valid(), form.errors )
+        _profile, applied = form.apply( None, assumptions )
+        self.assertEqual( applied.tax_projection, projection )
 
     def test_benefits_payable_is_bounded_to_0_100( self ):
         for bad in ( 150, -10 ):
