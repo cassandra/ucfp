@@ -24,6 +24,16 @@ from organization.models import Organization
 from .enums import UsageRole
 
 
+# Section keys that were folded into a current key as the interview re-sectioned: acknowledging every old
+# key in a fold counts as acknowledging the current one. Acknowledgment is advisory UX keyed by section,
+# so a tolerant reader here is preferable to a data migration per reshaping -- extend as sectioning
+# evolves. The "advanced" step folds in the former Selling costs ("transaction-costs") and Net worth
+# ("net-worth") steps.
+_FOLDED_SECTION_KEYS = {
+    'advanced': frozenset( { 'transaction-costs', 'net-worth' } ),
+}
+
+
 class InputFields( models.Model ):
     """The fields and workflow common to every input record, independent of whether its
     `data` document is stored in the clear or encrypted.
@@ -31,6 +41,9 @@ class InputFields( models.Model ):
     `acknowledged_sections` holds the guided-interview sections the user has seen, as
     opaque keys: robust to section churn, since an unknown or removed key is ignored and
     a missing key means unacknowledged (so a new or re-keyed section forces a fresh look).
+    A section that merely *absorbed* older sections is the exception: a record that
+    acknowledged all of an entry's folded keys counts as having acknowledged the current
+    one (see `_FOLDED_SECTION_KEYS`), so a pure re-sectioning need not force a re-review.
     `usage_role` partitions each record into a `WORKING` copy (app-managed in the
     exploration loop, overwritten as the user tweaks and pruned automatically) or a
     `SAVED` one (user-managed, retained until deleted); it defaults to `SAVED`."""
@@ -44,14 +57,23 @@ class InputFields( models.Model ):
 
     @property
     def acknowledged_section_keys( self ) -> set:
-        """The section keys the user has acknowledged for this record."""
-        return set( self.acknowledged_sections or () )
+        """The section keys the user has acknowledged for this record, plus any current key implied by a
+        legacy fold (every folded key acknowledged -> the current key counts as acknowledged). Reading the
+        fold here -- the one choke point every acknowledgment read goes through -- lets the interview
+        re-section without a data migration; storage still holds only the keys actually acknowledged."""
+        acknowledged = set( self.acknowledged_sections or () )
+        for current, folded in _FOLDED_SECTION_KEYS.items():
+            if folded <= acknowledged:
+                acknowledged.add( current )
+        return acknowledged
 
     def acknowledge( self, section_key : str ) -> None:
-        """Record `section_key` as seen -- idempotent, persisting only when it is newly added."""
+        """Record `section_key` as seen -- idempotent (including keys already implied by a fold), and
+        persisting only the keys actually acknowledged, never a fold-derived one."""
         if section_key in self.acknowledged_section_keys:
             return
-        self.acknowledged_sections = sorted( self.acknowledged_section_keys | { section_key } )
+        stored = set( self.acknowledged_sections or () )
+        self.acknowledged_sections = sorted( stored | { section_key } )
         self.save( update_fields = [ 'acknowledged_sections', 'updated_datetime' ] )
 
 

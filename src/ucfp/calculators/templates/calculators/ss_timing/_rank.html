@@ -18,7 +18,7 @@
         {% for row in ranked %}
           <tr class="rank-row{% if row.is_selected %} sel{% endif %}{% if row.beyond_top %} beyond{% endif %}"
               data-combo="{{ row.combo }}" tabindex="0" role="button"{% if row.is_selected %} aria-current="true"{% endif %}
-              aria-label="Rank {{ row.rank }}, claiming at {{ row.ages|join:' and ' }} &mdash; total ${{ row.raw_total|floatformat:0|intcomma }}, present value ${{ row.present_value|floatformat:0|intcomma }}{% if is_opportunity_cost %}, effective value ${{ row.effective_value|floatformat:0|intcomma }}{% endif %}. Show the year-by-year detail.">
+              aria-label="Rank {{ row.rank }}, claiming at {{ row.ages|join:' and ' }} : total ${{ row.raw_total|floatformat:0|intcomma }}, present value ${{ row.present_value|floatformat:0|intcomma }}{% if is_opportunity_cost %}, effective value ${{ row.effective_value|floatformat:0|intcomma }}{% endif %}. Show the year-by-year detail.">
             <td class="rk">{{ row.rank }}</td>
             <td>{{ row.ages|join:" / " }}</td>
             <td class="num">${{ row.raw_total|floatformat:0|intcomma }}</td>
@@ -30,7 +30,7 @@
     </table>
   </div>
   <small class="text-muted d-block mt-2">
-    {% if is_opportunity_cost %}Ranked by <strong>effective value</strong> &mdash; today&rsquo;s
+    {% if is_opportunity_cost %}Ranked by <strong>effective value</strong>: today&rsquo;s
     dollars, further adjusted for the investment growth you&rsquo;d give up while
     waiting.{% else %}Present value converts the total to today&rsquo;s dollars.{% endif %}
   </small>

@@ -21,7 +21,7 @@ Individual accounts and cost basis are later drill-downs. Reads `accounts_form`.
       <div class="col-md-6">
         <div class="border rounded bg-light p-3">
           {% for group in accounts_form.retirement_groups %}
-          <h3 class="h6 {% if forloop.first %}mt-0{% else %}mt-3{% endif %}">Retirement &mdash; {{ group.subject }}</h3>
+          <h3 class="h6 {% if forloop.first %}mt-0{% else %}mt-3{% endif %}">Retirement: {{ group.subject }}</h3>
           {% for field in group.fields %}
           {% include 'inputs/interview/_field_row.html' with field=field %}
           {% endfor %}

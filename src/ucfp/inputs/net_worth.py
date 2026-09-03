@@ -1,10 +1,13 @@
-"""The net-worth section: the assumed tax rates that adjust reported net worth toward realizable wealth.
+"""The Net worth calculation section of the Advanced page: the opt-in estimate that adjusts reported net
+worth toward realizable (after-tax) wealth.
 
-A small Assumptions-flow section, sibling to Selling Costs: the two rates the Estimated Future Taxes
-overlay applies -- the ordinary rate on pre-tax retirement balances (taxable in full on withdrawal), and
-the capital-gains rate on unrealized investment gains. Both default to zero, which books no overlay and
-leaves net worth gross, so the section is opt-in. Seeded from the assumptions or the shared (zero)
-default; materialization reads the copy stored here.
+By default net worth is assets minus liabilities at face value, but pre-tax retirement balances and
+unrealized investment gains carry a latent tax that comes due on withdrawal or sale, so the naive figure
+overstates what is realizable. These two assumed rates -- the latent ordinary rate on pre-tax retirement
+balances and the latent capital-gains rate on unrealized gains -- let the Estimated Future Taxes overlay
+subtract an estimate of that embedded tax. Both default to zero, which books no overlay and leaves net
+worth gross, so the section is opt-in. Seeded from the assumptions or the shared (zero) default;
+materialization reads the copy stored here.
 """
 from dataclasses import replace
 from decimal import Decimal
@@ -20,11 +23,13 @@ from .assumptions.defaults import default_net_worth_calculation
 
 
 class NetWorthForm( forms.Form ):
-    """The net-worth rates editor: seeded from the assumptions (or the zero default), `apply` stores the
-    edited rates back on the assumptions. Zero rates (the default) leave net worth gross."""
+    """The Net worth calculation editor: the two latent-tax rates the Estimated Future Taxes overlay
+    applies to estimate the tax embedded in pre-tax retirement balances and unrealized gains. Seeded from
+    the assumptions (or the zero default), `apply` stores the edited rates back. Zero rates (the default)
+    leave net worth gross."""
 
-    ordinary_rate      = PercentField( label = 'Pre-tax retirement rate' )   # ordinary rate on withdrawal
-    capital_gains_rate = PercentField( label = 'Unrealized gains rate' )     # cap-gains rate on the gain
+    ordinary_rate      = PercentField( label = 'Latent ordinary tax rate' )        # on pre-tax retirement
+    capital_gains_rate = PercentField( label = 'Latent capital-gains tax rate' )   # on unrealized gains
 
     def __init__( self, data = None, *, profile = None, assumptions = None ):
         super().__init__( data )
@@ -43,23 +48,3 @@ class NetWorthForm( forms.Form ):
             ordinary_tax_rate      = Rate.percent( self.cleaned_data[ 'ordinary_rate' ] ),
             capital_gains_tax_rate = Rate.percent( self.cleaned_data[ 'capital_gains_rate' ] ) )
         return profile, replace( assumptions, net_worth = rates )
-
-
-class NetWorthSectionForm:
-    """Section wrapper for the Net Worth pane. The pane self-saves through `NetWorthView`, so this only
-    carries the flow: it always validates and its `apply` is a no-op, leaving Next to advance without
-    re-saving. It exposes the editor (`net_worth_form`) for the pane to render."""
-
-    def __init__( self, data = None, *, profile = None, assumptions = None ):
-        self._profile     = profile
-        self._assumptions = assumptions
-
-    def is_valid( self ) -> bool:
-        return True
-
-    @property
-    def net_worth_form( self ) -> NetWorthForm:
-        return NetWorthForm( profile = self._profile, assumptions = self._assumptions )
-
-    def apply( self, profile, assumptions ):
-        return profile, assumptions

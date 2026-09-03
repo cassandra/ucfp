@@ -1,0 +1,23 @@
+{% comment %}
+The self-saving Advanced Economics form (id=advanced-economics): the niche economic rates that apply only
+to specific, less-common holdings or income -- shown here rather than on the main Economics pane. Each is
+a percent per factor with a one-line help. The js-autosave form posts each edit to
+`AdvancedEconomicsView`, which persists silently and re-renders only on a genuine field error. Reads
+`economics_form`.
+{% endcomment %}
+<div id="advanced-economics">
+  <form method="post" action="{% url 'advanced_economics' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <div class="assumption-list mt-2">
+      {% for factor in economics_form.factor_rows %}
+      <div class="mb-2">
+        <div class="d-flex justify-content-between align-items-center">
+          {{ factor.field.label_tag }}
+          <div class="text-nowrap">{{ factor.field }}{% if factor.field.errors %}<span class="text-danger small d-block">{{ factor.field.errors|join:" " }}</span>{% endif %}</div>
+        </div>
+        <div class="text-muted small pl-3">{{ factor.help }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </form>
+</div>

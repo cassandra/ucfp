@@ -1,0 +1,27 @@
+{% comment %}
+The self-saving Social Security funding form (id=advanced-ss-funding): the retained share of scheduled
+benefits if the trust-fund shortfall is not addressed, and the year the reduction takes effect. The
+js-autosave form posts each edit to `SocialSecurityFundingView`, which persists silently and re-renders
+only on a genuine field error. Reads `funding_form`.
+{% endcomment %}
+<div id="advanced-ss-funding">
+  <form method="post" action="{% url 'ss_funding' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <div class="assumption-list mt-2">
+      <div class="mb-2">
+        <div class="d-flex justify-content-between align-items-center">
+          {{ funding_form.social_security_benefits_payable.label_tag }}
+          <div class="text-nowrap">{{ funding_form.social_security_benefits_payable }}{% if funding_form.social_security_benefits_payable.errors %}<span class="text-danger small d-block">{{ funding_form.social_security_benefits_payable.errors|join:" " }}</span>{% endif %}</div>
+        </div>
+        <div class="text-muted small pl-3">Retained share of scheduled benefits if the shortfall is not addressed (commonly cited around 75%). 100% assumes no reduction.</div>
+      </div>
+      <div class="mb-2">
+        <div class="d-flex justify-content-between align-items-center">
+          {{ funding_form.social_security_reduction_year.label_tag }}
+          <div class="text-nowrap">{{ funding_form.social_security_reduction_year }}{% if funding_form.social_security_reduction_year.errors %}<span class="text-danger small d-block">{{ funding_form.social_security_reduction_year.errors|join:" " }}</span>{% endif %}</div>
+        </div>
+        <div class="text-muted small pl-3">The year the reduction takes effect. Only applies if benefits payable is below 100%.</div>
+      </div>
+    </div>
+  </form>
+</div>

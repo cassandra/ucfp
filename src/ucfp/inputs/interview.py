@@ -40,10 +40,12 @@ from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsFor
 from .debt_plan import DebtPlanForm, debt_plan_debts, vehicle_plan_debts
 from .debts import debts_context
 from .events import EventsForm
-from .external_factors import ExternalFactorsSectionForm
+from .external_factors import (
+    AdvancedEconomicsForm, ExternalFactorsSectionForm, SocialSecurityFundingForm )
 from .cash_plan import CashPlanSectionForm
-from .net_worth import NetWorthSectionForm
-from .transaction_costs import TransactionCostsSectionForm
+from .taxes import TaxesForm
+from .net_worth import NetWorthForm
+from .transaction_costs import TransactionCostsForm
 from .income import IncomeTableForm
 from .retirement_benefits import RetirementBenefitsForm
 from .properties import PossessionsForm, properties_context
@@ -933,6 +935,43 @@ class LivingExpensesSectionForm:
             plans, recurring_expenses = merged_recurring_expenses( profile, plans ) )
 
 
+class AdvancedSectionForm:
+    """The Advanced Assumptions section wrapper. Its five sub-panes -- Economics (niche rates), Taxes,
+    Selling costs, Social Security funding, and the Net worth calculation -- each self-save through their
+    own view, so this only carries the flow: it always validates and its `apply` is a no-op, leaving Next
+    to advance without re-saving. It exposes the five editors for the composite pane to render."""
+
+    def __init__( self, data = None, *, profile = None, assumptions = None ):
+        self._profile     = profile
+        self._assumptions = assumptions
+
+    def is_valid( self ) -> bool:
+        return True
+
+    @property
+    def economics_form( self ) -> AdvancedEconomicsForm:
+        return AdvancedEconomicsForm( profile = self._profile, assumptions = self._assumptions )
+
+    @property
+    def taxes_form( self ) -> TaxesForm:
+        return TaxesForm( profile = self._profile, assumptions = self._assumptions )
+
+    @property
+    def costs_form( self ) -> TransactionCostsForm:
+        return TransactionCostsForm( profile = self._profile, assumptions = self._assumptions )
+
+    @property
+    def funding_form( self ) -> SocialSecurityFundingForm:
+        return SocialSecurityFundingForm( profile = self._profile, assumptions = self._assumptions )
+
+    @property
+    def net_worth_form( self ) -> NetWorthForm:
+        return NetWorthForm( profile = self._profile, assumptions = self._assumptions )
+
+    def apply( self, profile, assumptions ):
+        return profile, assumptions
+
+
 # Section keys other modules route to by name -- the interview owns its own key vocabulary, so the run
 # gate borrows these rather than re-spelling the strings (readiness maps its field issues onto them).
 SUBJECTS_STEP         = 'subjects'
@@ -1024,18 +1063,17 @@ SECTIONS = [
     # environment). Last in the Plans flow.
     Section( 'tax-planning', 'Tax planning', ( Aggregate.PLANS, ), TaxPlanningSectionForm,
              outer_template = 'inputs/interview/sections/tax_planning.html' ),
-    Section( EXTERNAL_FACTORS_STEP, 'Economic assumptions', ( Aggregate.ASSUMPTIONS, ),
+    Section( EXTERNAL_FACTORS_STEP, 'Economics', ( Aggregate.ASSUMPTIONS, ),
              ExternalFactorsSectionForm,
-             outer_template = 'inputs/interview/sections/external_factors.html',
-             rail_title = 'Economics' ),   # the flow heading already says "Assumptions"
-    # Selling costs (realtor fee + fixed costs) applied when a property is sold -- an assumption, but
-    # distinct from the economic outlook, so its own step after it.
-    Section( 'transaction-costs', 'Sales', ( Aggregate.ASSUMPTIONS, ),
-             TransactionCostsSectionForm,
-             outer_template = 'inputs/interview/sections/transaction_costs.html' ),
-    Section( 'net-worth', 'Net worth', ( Aggregate.ASSUMPTIONS, ),
-             NetWorthSectionForm,
-             outer_template = 'inputs/interview/sections/net_worth.html' ),
+             outer_template = 'inputs/interview/sections/external_factors.html' ),
+    # The Advanced page gathers the lesser-used, opt-in, or conditional assumptions as one step with
+    # subsections: the tax-bracket projection and the opt-in latent taxes on net worth (Taxes), the
+    # selling costs applied when a property is sold, and the Social Security funding what-if. Each
+    # subsection self-saves through its own view; none is an economic rate, so all live off the Economics
+    # pane. Last in the Assumptions flow.
+    Section( 'advanced', 'Advanced', ( Aggregate.ASSUMPTIONS, ),
+             AdvancedSectionForm,
+             outer_template = 'inputs/interview/sections/advanced.html' ),
 ]
 
 

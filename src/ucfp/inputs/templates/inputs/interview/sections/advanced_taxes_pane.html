@@ -1,0 +1,16 @@
+{% comment %}
+The self-saving Taxes form (id=advanced-taxes): the future-tax-bracket projection. The js-autosave form
+posts each edit to `TaxesView`, which persists silently and re-renders only on a genuine field error. The
+net-worth latent-tax estimate is a separate section (Net worth calculation). Reads `taxes_form`.
+{% endcomment %}
+<div id="advanced-taxes">
+  <form method="post" action="{% url 'taxes' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
+    {% csrf_token %}
+    <div class="mb-2">
+      {{ taxes_form.forecast_type.label_tag }} {{ taxes_form.forecast_type }}
+      {% if taxes_form.forecast_type.errors %}<span class="text-danger small d-block">{{ taxes_form.forecast_type.errors|join:" " }}</span>{% endif %}
+      <span class="text-muted d-block small">Whether future tax brackets track inflation (realistic) or
+        stay frozen at today's levels (a more conservative, higher-tax assumption).</span>
+    </div>
+  </form>
+</div>

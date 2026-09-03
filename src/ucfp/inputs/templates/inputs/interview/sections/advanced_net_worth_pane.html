@@ -1,10 +1,11 @@
 {% comment %}
-The self-saving Net Worth form (id=net-worth): the ordinary rate on pre-tax retirement balances and the
-capital-gains rate on unrealized investment gains, both applied by the Estimated Future Taxes overlay.
-The js-autosave form posts each edit to `NetWorthView`, which persists silently and re-renders only on a
-genuine field error. Reads `net_worth_form`.
+The self-saving Net worth calculation form (id=advanced-net-worth): the two latent-tax rates the
+Estimated Future Taxes overlay uses to estimate the tax embedded in pre-tax retirement balances and
+unrealized gains, adjusting reported net worth toward realizable wealth. The js-autosave form posts each
+edit to `NetWorthView`, which persists silently and re-renders only on a genuine field error. Reads
+`net_worth_form`.
 {% endcomment %}
-<div id="net-worth">
+<div id="advanced-net-worth">
   <form method="post" action="{% url 'net_worth' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
     <div class="assumption-list mt-2">
@@ -13,14 +14,14 @@ genuine field error. Reads `net_worth_form`.
           {{ net_worth_form.ordinary_rate.label_tag }}
           <div class="text-nowrap">{{ net_worth_form.ordinary_rate }}{% if net_worth_form.ordinary_rate.errors %}<span class="text-danger small d-block">{{ net_worth_form.ordinary_rate.errors|join:" " }}</span>{% endif %}</div>
         </div>
-        <div class="text-muted small pl-3">The ordinary rate you expect on withdrawals, applied to the whole balance. <em>e.g., 401(k), Traditional IRA.</em></div>
+        <div class="text-muted small pl-3">The ordinary income-tax rate you'd expect when withdrawing from pre-tax retirement accounts (401(k), Traditional IRA) -- applied to the full balance to estimate its latent tax.</div>
       </div>
       <div class="mb-2">
         <div class="d-flex justify-content-between align-items-center">
           {{ net_worth_form.capital_gains_rate.label_tag }}
           <div class="text-nowrap">{{ net_worth_form.capital_gains_rate }}{% if net_worth_form.capital_gains_rate.errors %}<span class="text-danger small d-block">{{ net_worth_form.capital_gains_rate.errors|join:" " }}</span>{% endif %}</div>
         </div>
-        <div class="text-muted small pl-3">The capital-gains rate you expect on gains, applied to unrealized gains only. <em>e.g., stocks, bonds, a second home or rental.</em></div>
+        <div class="text-muted small pl-3">The capital-gains rate you'd expect on investment gains (stocks, bonds, a second home or rental) -- applied to unrealized gains only to estimate their latent tax.</div>
       </div>
     </div>
   </form>
