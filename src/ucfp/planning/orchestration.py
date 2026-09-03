@@ -18,6 +18,7 @@ from ucfp.forecast.forecast import Forecast
 from ucfp.inputs.profile.schemas import Profile
 from ucfp.inputs.plans.schemas import Plans
 from ucfp.inputs.assumptions.schemas import Assumptions
+from ucfp.jurisdiction.tax_worksheet import TaxDisplayWorksheet
 
 from .display_placement import stamp_display_placements
 from .materialization import ForecastFrame, materialize
@@ -57,7 +58,20 @@ def _summarize( result ) -> ProjectionResult:
     """The non-books result data worth persisting (figures derivable from the books are not)."""
     return ProjectionResult(
         stopped_early = result.stopped_early,
-        steps = [ _step( step ) for step in result.steps ] )
+        steps         = [ _step( step ) for step in result.steps ],
+        tax_worksheet = _tax_worksheet( result ) )
+
+
+def _tax_worksheet( result ) -> Optional[ TaxDisplayWorksheet ]:
+    """The run's whole tax display worksheet, assembled from the per-year worksheets the engine attached to
+    each tax-year-settling step: one shared column schema (stable across the run's years) and one value row
+    per tax year, in order. None when no step settled a tax year."""
+    yearly = [ step.result.tax_worksheet for step in result.steps if step.result.tax_worksheet is not None ]
+    if not yearly:
+        return None
+    rows = tuple( row for worksheet in yearly for row in worksheet.years )
+    return TaxDisplayWorksheet(
+        jurisdiction = yearly[ 0 ].jurisdiction, groups = yearly[ 0 ].groups, years = rows )
 
 
 def _step( step ) -> StepResult:

@@ -12,6 +12,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
+from ucfp.jurisdiction.tax_worksheet import TaxDisplayWorksheet
 from ucfp.period.results import NoticeKind, NoticeSeverity
 from ucfp.inputs.profile.schemas import Profile
 from ucfp.inputs.plans.schemas import Plans
@@ -43,9 +44,14 @@ class StepResult:
 
 @dataclass( frozen = True )
 class ProjectionResult:
-    """A run's non-books result: whether it stopped early and each interval's step."""
+    """A run's non-books result: whether it stopped early, each interval's step, and the tax display
+    worksheet -- the per-tax-year intermediate figures behind the run's taxes, assembled from the years the
+    engine assessed (None for a run captured before the worksheet existed, or one that assessed no tax
+    year). Unlike per-step figures, the worksheet's inputs (AGI, deductions, rates) are not in the books, so
+    it is persisted here rather than re-derived."""
     stopped_early: bool = False
     steps: list[ StepResult ] = field( default_factory = list )
+    tax_worksheet: Optional[ TaxDisplayWorksheet ] = None
 
 
 @dataclass( frozen = True )

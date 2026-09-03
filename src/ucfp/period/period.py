@@ -663,6 +663,7 @@ class Period:
         assessment = self._parameters.tax_engine.assess(
             fiscal_window, tax_context, self._parameters.opening_tax_state )
         result.closing_tax_state = assessment.closing_tax_state
+        result.tax_worksheet     = assessment.worksheet
         settlements = (
             [ ( charge.tax_class, charge.amount, charge.detail ) for charge in assessment.charges ]
             + [ ( credit.tax_class, -credit.amount, credit.detail ) for credit in assessment.credits ] )
