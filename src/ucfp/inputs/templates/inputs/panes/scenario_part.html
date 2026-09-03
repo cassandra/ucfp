@@ -12,7 +12,7 @@ that uses it). Renaming a part happens by drilling in, not here. Reads `kind`, `
       <div class="text-muted small text-uppercase">{{ kind }}</div>
       <div class="font-weight-bold">{{ record.label }}{% if uses > 1 %}
         <span class="badge badge-light border text-muted font-weight-normal ml-1"
-              title="Shared with {{ uses|add:'-1' }} other scenario{{ uses|add:'-1'|pluralize }} &mdash; editing it changes them all"
+              title="Shared with {{ uses|add:'-1' }} other scenario{{ uses|add:'-1'|pluralize }}: editing it changes them all"
               aria-label="Shared with {{ uses|add:'-1' }} other scenario{{ uses|add:'-1'|pluralize }}; editing it changes them all">Shared</span>{% endif %}</div>
       <div class="text-muted small">{{ description }}</div>
     </div>

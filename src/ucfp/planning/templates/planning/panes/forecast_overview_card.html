@@ -17,7 +17,7 @@ ForecastOverview) and `currency`.
           {% if overview.has_run %}Latest run &middot;
             <span class="text-body font-weight-bold">{{ overview.card.label }}</span> &middot;
             {% if overview.card.source_label and overview.card.source_label != overview.card.label %}from {{ overview.card.source_label }} &middot; {% endif %}{{ overview.card.created_datetime|date:"M j, Y, g:i a" }}
-          {% else %}Project your finances across past, present, and future &mdash; and see whether your
+          {% else %}Project your finances across past, present, and future and see whether your
             money lasts.{% endif %}
         </p>
       </div>
@@ -75,7 +75,7 @@ ForecastOverview) and `currency`.
     <div class="overview-body">
       <div class="alert alert-info mb-0">
         <h3 class="h6 mb-1">First, set up your profile</h3>
-        <p class="small mb-2">A forecast runs on your <strong>profile</strong> &mdash; who it's for, and your
+        <p class="small mb-2">A forecast runs on your <strong>profile</strong>: who it's for, and your
           accounts, income, and debts.</p>
         <a href="{% url 'flow_profile' %}" class="btn btn-cta btn-sm edit-only">Set up your profile</a>
       </div>

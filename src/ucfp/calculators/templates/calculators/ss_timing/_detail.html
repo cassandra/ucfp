@@ -19,7 +19,7 @@
   </div>
   {% if is_representative %}
     <p class="text-muted small mb-3">
-      A representative lifetime &mdash; {% for earner in earners %}{{ earner.name }} to about
+      A representative lifetime: {% for earner in earners %}{{ earner.name }} to about
       age&nbsp;{{ earner.expected_lifetime }}{% if not forloop.last %}, {% endif %}{% endfor %}. Your actual
       benefits depend on how long each of you lives; the comparison above weighs every possibility.
     </p>

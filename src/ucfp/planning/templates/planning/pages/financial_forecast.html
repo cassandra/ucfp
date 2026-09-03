@@ -39,7 +39,7 @@ home_rent_drift}, each notice None when that kind does not apply.
   <h2 class="h5 mb-2">First, set up your profile</h2>
   <p class="mb-3">A forecast runs on your <strong>profile</strong> (who it's for; your accounts, income,
     and debts) and a <strong>future scenario</strong> (the plans and assumptions you want to test). Set up
-    your profile now &mdash; you'll build a scenario next &mdash; then come back here to run your
+    your profile now, you'll build a scenario next, then come back here to run your
     forecast.</p>
   <a href="{% url 'flow_profile' %}" class="btn btn-cta">Set up your profile</a>
 </div>
@@ -67,7 +67,7 @@ shown below -- it does not use this form.{% endcomment %}
 use it. Name the anchor and offer Resume; what has diverged from the anchor is shown on the Explore
 workspace itself, not repeated here.{% endcomment %}
 <div class="alert alert-info d-flex flex-wrap align-items-center mt-3 mb-0">
-  <span class="mr-3 my-1">Exploration in progress &mdash; <strong>{{ resume.source.label }}</strong>.</span>
+  <span class="mr-3 my-1">Exploration in progress: <strong>{{ resume.source.label }}</strong>.</span>
   {% comment %}Explore is a heavily edit-dependent sandbox; a read-only member is kept out of it (the
   entry is inert) rather than shown a mostly-disabled workspace.{% endcomment %}
   <a href="{% url 'explore' %}" data-synchronous="true" class="btn btn-primary btn-sm my-1 edit-only">Resume</a>
@@ -102,7 +102,7 @@ workspace itself, not repeated here.{% endcomment %}
   {% endfor %}
 </div>
 {% else %}
-<p class="text-muted">No saved runs yet &mdash; run a forecast above to save one.</p>
+<p class="text-muted">No saved runs yet. Run a forecast above to save one.</p>
 {% endif %}
 {% endif %}
 {% endblock %}

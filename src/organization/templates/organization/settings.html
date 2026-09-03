@@ -22,7 +22,7 @@
             {% if form.currency.errors %}
             <div class="text-danger small">{{ form.currency.errors|join:" " }}</div>
             {% endif %}
-            <small class="form-text text-muted">Sets how amounts are shown &mdash; the currency symbol and
+            <small class="form-text text-muted">Sets how amounts are shown: the currency symbol and
               decimal convention (e.g. $1,000.00, or &yen;1,000 with no decimals). Display only: the app never
               converts values or reinterprets the underlying numbers.</small>
           </div>
@@ -32,7 +32,7 @@
             {% if form.timezone.errors %}
             <div class="text-danger small">{{ form.timezone.errors|join:" " }}</div>
             {% endif %}
-            <small class="form-text text-muted">Sets the timezone dates and times are shown in &mdash; such as
+            <small class="form-text text-muted">Sets the timezone dates and times are shown in, such as
               when a forecast run was captured, and the default name it is given. Display only: the underlying
               timestamps are always stored in UTC.</small>
           </div>

@@ -11,11 +11,11 @@ resuming ends on the Scenarios page; the user returns to a feature via the nav.
   {% if build_scenario %}
   {% if build_scenario_started %}
   <h2 class="h5 mb-2">Finish your Future Scenario</h2>
-  <p class="mb-3">You have one in progress &mdash; pick up where you left off, then come back here to
+  <p class="mb-3">You have one in progress. Pick up where you left off, then come back here to
     run your forecast.</p>
   {% else %}
   <h2 class="h5 mb-2">Next, build a Future Scenario</h2>
-  <p class="mb-3">A forecast also needs a <strong>Future Scenario</strong> &mdash; the plans you're
+  <p class="mb-3">A forecast also needs a <strong>Future Scenario</strong>: the plans you're
     contemplating and the assumptions you expect. Build one now, then come back here to run your
     forecast.</p>
   {% endif %}
@@ -27,7 +27,7 @@ resuming ends on the Scenarios page; the user returns to a feature via the nav.
   {% else %}
   {% comment %} No scenario at all (the Default was removed): fall back to composing one on the Scenarios page. {% endcomment %}
   <h2 class="h5 mb-2">Next, build a Future Scenario</h2>
-  <p class="mb-3">A forecast also needs a <strong>Future Scenario</strong> &mdash; the plans you're
+  <p class="mb-3">A forecast also needs a <strong>Future Scenario</strong>: the plans you're
     contemplating and the assumptions you expect.</p>
   <a href="{% url 'scenario_compose' %}" class="btn btn-cta">Build a Future Scenario</a>
   {% endif %}

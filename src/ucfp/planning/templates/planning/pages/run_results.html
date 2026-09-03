@@ -50,7 +50,7 @@ hub's per-row delete, landing back on the hub. Opens the styled confirm modal.{%
       </span>
       <span>
         <span class="text-muted small mr-1">{{ notice.year }}</span>
-        <span class="font-weight-bold">{{ notice.kind }}</span>{% if notice.amount %} &mdash; {{ notice.amount|money:currency }}{% if notice.detail %} {{ notice.detail }}{% endif %}{% endif %}
+        <span class="font-weight-bold">{{ notice.kind }}</span>{% if notice.amount %}: {{ notice.amount|money:currency }}{% if notice.detail %} {{ notice.detail }}{% endif %}{% endif %}
       </span>
     </li>
     {% endfor %}
