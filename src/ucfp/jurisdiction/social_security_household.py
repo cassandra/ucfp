@@ -21,7 +21,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
+from common.datetime_utils import add_years
+
 from ucfp.jurisdiction.government_pension import GovernmentPension
+
+# The earliest age a spousal benefit can be claimed. A non-earning spouse claims when the earner files, but
+# never before this -- a spousal benefit is not payable before age 62, even if the earner filed earlier.
+_EARLIEST_SPOUSAL_CLAIM_AGE = 62
 
 
 @dataclass( frozen = True )
@@ -187,11 +193,15 @@ def _active_claims( members : list[ HouseholdMember ] ) -> list[ _Claim ]:
 def _non_earning_spouse(
         entitled : list[ HouseholdMember ], members : list[ HouseholdMember ] ) -> Optional[ _Claim ]:
     """The non-earning-spouse claim for a couple where exactly one member is entitled: the other at zero PIA
-    claiming on the earner's date (a pure spousal benefit, which cannot begin before the earner files). None
-    when both (or neither) are entitled, or there is no partner."""
+    claiming a pure spousal benefit. That benefit cannot begin before the earner files, nor before the
+    spouse reaches age 62 (a spousal benefit is not payable earlier) -- so it starts on the later of the
+    two, which matters when the earner files while the spouse is still under 62. None when both (or neither)
+    are entitled, or there is no partner."""
     if len( members ) != 2 or len( entitled ) != 1:
         return None
-    earner = entitled[ 0 ]
-    spouse = next( member for member in members if member.subject_handle != earner.subject_handle )
-    return _Claim( spouse.subject_handle, spouse.birthdate, Decimal( 0 ), earner.claiming_date,
+    earner           = entitled[ 0 ]
+    spouse           = next( member for member in members if member.subject_handle != earner.subject_handle )
+    earliest_spousal = add_years( spouse.birthdate, _EARLIEST_SPOUSAL_CLAIM_AGE )
+    claiming_date    = max( earner.claiming_date, earliest_spousal )
+    return _Claim( spouse.subject_handle, spouse.birthdate, Decimal( 0 ), claiming_date,
                    spouse.death_date )

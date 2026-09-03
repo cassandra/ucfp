@@ -279,15 +279,21 @@ def member_claims(
     (one swept age each); a trailing non-earning spouse (zero PIA) is not swept and claims when the primary
     earner files (the calculator's same-time assumption -- a non-earning spouse gains nothing by waiting).
     The primary earner leads, so the household always has at least one deciding earner (the form and
-    `compare_claiming_strategies` reject an all-zero household)."""
+    `compare_claiming_strategies` reject an all-zero household).
+
+    Each member is classified an earner by their own PIA, and the swept ages are drawn in order for those
+    earners -- the two agree only when `claim_ages` carries exactly one age per deciding earner, which the
+    assertion pins so a mismatched-length call fails loudly rather than silently misclassifying a member."""
+    assert len( claim_ages ) == deciding_count( earners ), (
+        'member_claims expects one swept age per deciding earner (a positive PIA)' )
     primary_claiming = date( earners[ 0 ].birth_year + claim_ages[ 0 ], 1, 1 )
+    swept_ages       = iter( claim_ages )
     claims           = list()
-    for index, earner in enumerate( earners ):
-        if index < len( claim_ages ):
-            claiming = date( earner.birth_year + claim_ages[ index ], 1, 1 )
-            claims.append( MemberClaim( earner, claiming, is_earner = True ) )
-        else:
-            claims.append( MemberClaim( earner, primary_claiming, is_earner = False ) )
+    for earner in earners:
+        is_earner = bool( earner.pia_monthly > 0 )
+        claiming  = ( date( earner.birth_year + next( swept_ages ), 1, 1 ) if is_earner
+                      else primary_claiming )
+        claims.append( MemberClaim( claimant = earner, claiming_date = claiming, is_earner = is_earner ) )
         continue
     return claims
 

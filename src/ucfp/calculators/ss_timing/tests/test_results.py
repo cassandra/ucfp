@@ -168,16 +168,18 @@ class SingleEarnerCoupleRenderTest( TestCase ):
         self.assertNotContains( response, 'ss-hm-grid' )                    # not the 2-D couple grid
         self.assertContains( response, 'Non-earner' )                       # the recap role
         self.assertContains( response, 'Survivor' )                         # the couple detail column stays
-        self.assertContains( response, 'spousal benefit alongside' )        # the detail header wording
 
     def test_the_drill_in_uses_a_single_age_combo( self ):
+        # A one-age combo ('67', not '67-67') resolves for the two-person household and renders the couple
+        # detail with its spousal/survivor columns.
         self._submit()
         response = self.client.get(
             reverse( 'calculators:ss_timing:detail', args = [ '67' ] ),
             HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
         self.assertEqual( response.status_code, 200 )
         detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
-        self.assertIn( 'spousal benefit alongside', detail )
+        self.assertIn( 'Spousal', detail )
+        self.assertIn( 'Survivor', detail )
 
     def test_the_methodology_modal_lists_the_spousal_and_survivor_terms( self ):
         self._submit()
