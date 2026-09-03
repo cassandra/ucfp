@@ -67,8 +67,10 @@ from .vehicle_profile import (
     delete_current_vehicle, vehicle_heading )
 from .credit_card import CreditCardPlanForm
 from .retirement_plans import ContributionsForm, ConversionsForm, WithdrawalsForm
-from .external_factors import ExternalFactorsForm
+from .external_factors import (
+    AdvancedEconomicsForm, ExternalFactorsForm, SocialSecurityFundingForm )
 from .cash_plan import DrawdownForm
+from .taxes import TaxesForm
 from .net_worth import NetWorthForm
 from .transaction_costs import TransactionCostsForm
 from .debt_plan import DebtPlanForm
@@ -1554,16 +1556,67 @@ class TransactionCostsView( SelfSavingPaneView ):
         save_assumptions( current_assumptions_record( request ), assumptions )
 
 
-class NetWorthView( SelfSavingPaneView ):
-    """`/inputs/interview/net-worth/edit/` -- the Net Worth pane of the Assumptions flow. It persists the
-    latent-tax rates the Estimated Future Taxes overlay applies to pre-tax balances and unrealized gains."""
+class AdvancedEconomicsView( SelfSavingPaneView ):
+    """`/inputs/interview/advanced/economics/edit/` -- the Economics sub-pane of the Advanced Assumptions
+    page. It persists the niche economic rates (bond appreciation, precious metals, collectibles, vehicle
+    depreciation, rental-income increase) onto the assumptions' economics copy."""
 
-    template     = 'inputs/interview/sections/net_worth_pane.html'
-    target       = 'net-worth'
+    template     = 'inputs/interview/sections/advanced_economics_pane.html'
+    target       = 'advanced-economics'
+    context_name = 'economics_form'
+
+    def build_form( self, request, data = None ):
+        return AdvancedEconomicsForm( data, assumptions = _current_assumptions( request ) )
+
+    def persist( self, request, form ):
+        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
+        save_assumptions( current_assumptions_record( request ), assumptions )
+
+
+class TaxesView( SelfSavingPaneView ):
+    """`/inputs/interview/advanced/taxes/edit/` -- the Taxes sub-pane of the Advanced Assumptions page. It
+    persists the future-tax-bracket projection."""
+
+    template     = 'inputs/interview/sections/advanced_taxes_pane.html'
+    target       = 'advanced-taxes'
+    context_name = 'taxes_form'
+
+    def build_form( self, request, data = None ):
+        return TaxesForm( data, assumptions = _current_assumptions( request ) )
+
+    def persist( self, request, form ):
+        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
+        save_assumptions( current_assumptions_record( request ), assumptions )
+
+
+class NetWorthView( SelfSavingPaneView ):
+    """`/inputs/interview/advanced/net-worth/edit/` -- the Net worth calculation sub-pane of the Advanced
+    Assumptions page. It persists the latent-tax rates the Estimated Future Taxes overlay applies to
+    estimate the tax embedded in pre-tax retirement balances and unrealized gains."""
+
+    template     = 'inputs/interview/sections/advanced_net_worth_pane.html'
+    target       = 'advanced-net-worth'
     context_name = 'net_worth_form'
 
     def build_form( self, request, data = None ):
         return NetWorthForm( data, assumptions = _current_assumptions( request ) )
+
+    def persist( self, request, form ):
+        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
+        save_assumptions( current_assumptions_record( request ), assumptions )
+
+
+class SocialSecurityFundingView( SelfSavingPaneView ):
+    """`/inputs/interview/advanced/ss-funding/edit/` -- the Social Security funding sub-pane of the Advanced
+    Assumptions page. It persists the funding what-if (retained benefits share + effective year) onto the
+    assumptions' economics copy."""
+
+    template     = 'inputs/interview/sections/advanced_ss_funding_pane.html'
+    target       = 'advanced-ss-funding'
+    context_name = 'funding_form'
+
+    def build_form( self, request, data = None ):
+        return SocialSecurityFundingForm( data, assumptions = _current_assumptions( request ) )
 
     def persist( self, request, form ):
         _profile, assumptions = form.apply( None, _current_assumptions( request ) )

@@ -1,0 +1,38 @@
+{% comment %}
+The Advanced Assumptions section pane: the lesser-used, opt-in, or conditional assumptions gathered as one
+step with five self-saving subsections -- Economics (niche rates), Taxes (the bracket projection), Selling
+costs, the Social Security funding what-if, and the Net worth calculation (the opt-in latent-tax estimate,
+last). Each sub-pane renders outside the section's Next form (a nested form would be invalid HTML) and
+persists on its own through its view. The editors come from the section wrapper (`form.economics_form`,
+`form.taxes_form`, `form.costs_form`, `form.funding_form`, `form.net_worth_form`); each partial is
+re-rendered by its view on a field error.
+{% endcomment %}
+<p class="text-muted">Assumptions most plans can leave at their defaults -- adjust them only if they
+  apply to you.</p>
+
+<h6 class="font-weight-bold border-bottom pb-1 mt-4 mb-3">Economics</h6>
+<p class="text-muted small">Rates that apply only to specific, less-common holdings or income -- the
+  broadly-applicable outlook is on the Economics step.</p>
+{% include 'inputs/interview/sections/advanced_economics_pane.html' with economics_form=form.economics_form %}
+
+<h6 class="font-weight-bold border-bottom pb-1 mt-4 mb-3">Taxes</h6>
+{% include 'inputs/interview/sections/advanced_taxes_pane.html' with taxes_form=form.taxes_form %}
+
+<h6 class="font-weight-bold border-bottom pb-1 mt-4 mb-3">Selling costs</h6>
+<p class="text-muted small">What it costs to sell a property, applied whenever a property is sold in the
+  plan: the realtor fee is a share of the sale price, and the fixed costs (title, escrow, transfer) are
+  in today's dollars and grow with inflation to the year of the sale.</p>
+{% include 'inputs/interview/sections/transaction_costs_pane.html' with costs_form=form.costs_form %}
+
+<h6 class="font-weight-bold border-bottom pb-1 mt-4 mb-3">Social Security funding</h6>
+<p class="text-muted small">A what-if for the Social Security trust-fund shortfall: model a reduction in
+  scheduled benefits from a given year on. Leave benefits payable at 100% to assume no reduction.</p>
+{% include 'inputs/interview/sections/advanced_ss_funding_pane.html' with funding_form=form.funding_form %}
+
+<h6 class="font-weight-bold border-bottom pb-1 mt-4 mb-3">Net worth calculation</h6>
+<p class="text-muted small">By default, net worth is your assets minus liabilities at face value -- but
+  part of that value isn't yours to keep. Pre-tax retirement accounts and unrealized investment gains
+  carry a latent tax that comes due when you withdraw or sell, so the naive figure can overstate what
+  you'd actually realize. To calculate net worth after that embedded tax, set the rates below and we'll
+  subtract an estimate of it; leave them at 0% (the default) to report gross balances.</p>
+{% include 'inputs/interview/sections/advanced_net_worth_pane.html' with net_worth_form=form.net_worth_form %}

@@ -1,13 +1,12 @@
-"""The Net Worth section form (#177 phase 4): it seeds the two latent-tax rates from the assumptions and
-applies edits back, converting between the percent UI and the stored Rate. The section is registered in
-the Assumptions flow right after Sales."""
+"""The Net worth calculation editor (`NetWorthForm`): it seeds the two latent-tax rates from the
+assumptions and applies edits back, converting between the percent UI and the stored Rate. The section is
+the last subsection of the Advanced Assumptions page (#255)."""
 import unittest
 from decimal import Decimal
 
 from common.rate import Rate
 from ucfp.forecast.parameters import NetWorthCalculation
 from ucfp.inputs.assumptions.schemas import Assumptions
-from ucfp.inputs.interview import SECTIONS
 from ucfp.inputs.net_worth import NetWorthForm
 
 _D = Decimal
@@ -18,6 +17,11 @@ def _assumptions( net_worth = None ) -> Assumptions:
 
 
 class NetWorthFormTests( unittest.TestCase ):
+
+    def test_field_labels_flag_the_rates_as_latent_estimates( self ):
+        form = NetWorthForm( assumptions = _assumptions() )
+        self.assertEqual( form.fields[ 'ordinary_rate' ].label, 'Latent ordinary tax rate' )
+        self.assertEqual( form.fields[ 'capital_gains_rate' ].label, 'Latent capital-gains tax rate' )
 
     def test_seeds_field_initials_from_the_assumptions_rates( self ):
         rates = NetWorthCalculation(
@@ -39,14 +43,6 @@ class NetWorthFormTests( unittest.TestCase ):
             assumptions.net_worth,
             NetWorthCalculation( ordinary_tax_rate = Rate.percent( _D( '30' ) ),
                                  capital_gains_tax_rate = Rate.percent( _D( '18' ) ) ) )
-
-
-class NetWorthSectionRegistrationTests( unittest.TestCase ):
-
-    def test_net_worth_follows_sales_in_the_assumptions_flow( self ):
-        keys = [ section.key for section in SECTIONS ]
-        self.assertIn( 'net-worth', keys )
-        self.assertEqual( keys[ keys.index( 'transaction-costs' ) + 1 ], 'net-worth' )
 
 
 if __name__ == '__main__':

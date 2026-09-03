@@ -1,15 +1,14 @@
 {% comment %}
-The self-saving External Factors form (id=external-factors): the assumptions' economic-factors copy
-and the tax projection. The js-autosave form posts each edit to `ExternalFactorsView`, which persists
-silently and re-renders only on a genuine field error. The economic factors are the main content --
-shown directly, grouped and ordered, a percent per factor with a one-line help; the tax projection is
-one more control. Reads `factors_form`.
+The self-saving Economics form (id=external-factors): the assumptions' economic-factors copy, grouped
+and ordered, a percent per factor with a one-line help. The js-autosave form posts each edit to
+`ExternalFactorsView`, which persists silently and re-renders only on a genuine field error. The tax
+projection and the Social Security funding what-if are on the Advanced page, not here. Reads
+`factors_form`.
 {% endcomment %}
 <div id="external-factors">
   <form method="post" action="{% url 'external_factors' %}" class="{{ AppConst.AUTOSAVE_CLASS }}">
     {% csrf_token %}
-    <h6>Economic factors <span class="text-muted font-weight-normal small">(annual rates, except where
-      noted)</span></h6>
+    <h6>Economic factors <span class="text-muted font-weight-normal small">(annual rates)</span></h6>
     <div class="assumption-list mt-2">
       {% for group in factors_form.factor_groups %}
       <div class="font-weight-bold border-bottom pb-1 mt-3 mb-2">{{ group.label }}</div>
@@ -23,12 +22,6 @@ one more control. Reads `factors_form`.
       </div>
       {% endfor %}
       {% endfor %}
-    </div>
-    <div class="mt-3">
-      {{ factors_form.forecast_type.label_tag }} {{ factors_form.forecast_type }}
-      {% if factors_form.forecast_type.errors %}<span class="text-danger small d-block">{{ factors_form.forecast_type.errors|join:" " }}</span>{% endif %}
-      <span class="text-muted d-block small">Whether future tax brackets track inflation (realistic) or
-        stay frozen at today's levels (a more conservative, higher-tax assumption).</span>
     </div>
   </form>
 </div>
