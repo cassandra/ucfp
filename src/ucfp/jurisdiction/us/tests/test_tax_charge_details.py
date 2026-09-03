@@ -43,6 +43,9 @@ class _Window:
     def income_by_account( self, income_tax_class ):
         return []
 
+    def income_accounts( self ):
+        return []
+
     def expense( self, expense_tax_class ):
         return _D( '0' )
 

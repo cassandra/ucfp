@@ -89,6 +89,7 @@ from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
 from .filing import resolve_filing_status
 from .parameters import StandardDeduction, TaxParameters
+from .tax_worksheet import TaxYearInputs, build_worksheet
 from .subdivision_tax import StateIncomeTax
 from .state import CapitalLossCarryover, PassiveLossCarryover, TaxState
 
@@ -237,8 +238,8 @@ class USFederalTaxEngine( TaxEngine ):
             tax_state.passive_loss_carryover.suspended, tax_context )
         ordinary_income = ordinary_nonrental + passive.deductible
 
-        taxable_ss = self._taxable_social_security(
-            status, ss_gross, ordinary_income + total_gains + tax_exempt_interest )
+        ss_worksheet_income = ordinary_income + total_gains + tax_exempt_interest
+        taxable_ss = self._taxable_social_security( status, ss_gross, ss_worksheet_income )
         agi        = ordinary_income + total_gains + taxable_ss
         figures    = TaxFigures(
             agi                     = agi,
@@ -248,8 +249,9 @@ class USFederalTaxEngine( TaxEngine ):
         # Computed before the deduction step because it feeds the SALT itemized deduction, then reused
         # as its own charge below. State tax depends only on AGI, so a single pass stays acyclic.
         state_income_tax = self._state_income_tax_charge( fiscal_window, agi, taxable_ss )
+        standard_deduction = self._standard_deduction( status, tax_context, agi )
         deduction  = max(
-            self._standard_deduction( status, tax_context, agi ),
+            standard_deduction,
             self._itemized_deduction( fiscal_window, agi, state_income_tax ) )
 
         taxable_income = max( _ZERO, agi - deduction )
@@ -299,6 +301,30 @@ class USFederalTaxEngine( TaxEngine ):
                     ExpenseTaxClass.ORDINARY_INCOME_TAX, premium_credit,
                     f'ACA premium tax credit at {format_money( figures.aca_magi )} MAGI.' ) )
         income_tax_total = self._net_income_tax( charges, credits )
+        worksheet = build_worksheet( TaxYearInputs(
+            year                    = fiscal_window.span.end_date.year,
+            ordinary_brackets       = self._parameters.ordinary_brackets[ status ],
+            ltcg_brackets           = self._parameters.ltcg_brackets[ status ],
+            niit_threshold          = niit_threshold,
+            income_accounts         = fiscal_window.income_accounts(),
+            provisional_income      = self._provisional_income( ss_gross, ss_worksheet_income ),
+            ss_gross                = ss_gross,
+            taxable_ss              = taxable_ss,
+            agi                     = agi,
+            taxable_long_term_gains = split.preferential,
+            net_investment_income   = net_investment_income,
+            standard_deduction      = standard_deduction,
+            applied_deduction       = deduction,
+            taxable_ordinary_income = split.ordinary,
+            taxable_income          = taxable_income,
+            niit_magi               = figures.niit_magi,
+            ordinary_tax            = income_tax.ordinary,
+            capital_gains_tax       = income_tax.capital_gains,
+            section_1250_tax        = income_tax.section_1250,
+            collectibles_tax        = income_tax.collectibles,
+            niit                    = niit,
+            state_income_tax        = state_income_tax,
+            total_tax               = income_tax_total ) )
         return TaxAssessment(
             charges           = charges,
             credits           = credits,
@@ -307,6 +333,7 @@ class USFederalTaxEngine( TaxEngine ):
                 passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ),
                 prior_year_income_tax  = income_tax_total ),
             figures           = figures,
+            worksheet         = worksheet,
         )
 
     def assess_employment_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext ) -> Decimal:
@@ -642,6 +669,12 @@ class USFederalTaxEngine( TaxEngine ):
         credit = max( _ZERO, enrollment.reference_premium - expected_contribution )
         return min( credit, enrollment.actual_premium )
 
+    def _provisional_income( self, ss_gross : Decimal, other_income : Decimal ) -> Decimal:
+        """The Social Security provisional-income base: other income (which includes tax-exempt interest,
+        counted here though not in AGI) plus half the gross benefits -- what the two-tier inclusion
+        worksheet is measured against. Shared by the inclusion calculation and the tax display worksheet."""
+        return other_income + ss_gross * _HALF
+
     def _taxable_social_security(
             self, status : FilingStatus, ss_gross : Decimal, other_income : Decimal ) -> Decimal:
         """The taxable portion of Social Security via the IRS two-tier worksheet:
@@ -650,7 +683,7 @@ class USFederalTaxEngine( TaxEngine ):
         base (it includes tax-exempt interest, which counts here though not in AGI); the
         worksheet has no inner dependency on the tax being computed."""
         thresholds  = self._parameters.ss_thresholds[ status ]
-        provisional = other_income + ss_gross * _HALF
+        provisional = self._provisional_income( ss_gross, other_income )
         if provisional <= thresholds.base:
             return _ZERO
         if provisional <= thresholds.additional:
