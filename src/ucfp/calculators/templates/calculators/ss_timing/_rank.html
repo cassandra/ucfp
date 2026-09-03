@@ -4,13 +4,13 @@
   the selected strategy's lifetime figures stay visible even when it falls outside the top ten: an extra
   `beyond_top` row, set off by a rule, carries its true rank (the year-by-year no longer repeats these
   figures). Rows carry `data-combo`; clicking swaps the detail and this table, and ss_timing.js re-binds the
-  rows after each swap. Context: `ranked`, `is_couple`, `is_opportunity_cost`.
+  rows after each swap. Context: `ranked`, `two_axis`, `is_opportunity_cost`.
 {% endcomment %}
 <div id="ss-rank">
   <div class="table-responsive">
     <table class="ss-rank">
       <thead><tr>
-        <th></th><th>{% if is_couple %}Ages{% else %}Age{% endif %}</th>
+        <th></th><th>{% if two_axis %}Ages{% else %}Age{% endif %}</th>
         <th class="num">Total</th><th class="num">Present<br>value</th>
         {% if is_opportunity_cost %}<th class="num">Effective<br>value</th>{% endif %}
       </tr></thead>

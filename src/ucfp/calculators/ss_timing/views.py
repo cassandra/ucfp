@@ -24,7 +24,8 @@ from . import methodology, results
 from .comparison_cache import cached_comparison
 from .compute import (
     CLAIM_AGES, COLA_INFLATION_LAG, Assumptions, Claimant, LifeExpectancyBasis, Strategy,
-    compute_strategy, earners_of, representative_claimants, strategy_year_details )
+    compute_strategy, deciding_count, earners_of, member_claims, representative_claimants,
+    strategy_year_details )
 from .forms import BenefitEstimateForm, InputsForm, claimants_and_assumptions, is_runnable
 from .prefill import build_prefill
 
@@ -90,6 +91,7 @@ class ResultsView( View ):
             'reduction_year'            : assumptions.reduction_year,
             'is_reduced'                : assumptions.benefits_payable != FULL_RATE,
             'life_table_url'            : methodology.LIFE_TABLE_URL,
+            'two_axis'                  : comparison.dimensions == 2,
             'heatmap'                   : results.heatmap( comparison, combo ),
             'ranked'                    : results.ranked( comparison, combo ) }
         context.update( _detail_context( detail_earners, detail_strategy, is_opportunity_cost, estimated ) )
@@ -107,7 +109,7 @@ class StrategyDetailView( View ):
             raise Http404( 'No calculator inputs in this session.' )
         claimants, assumptions, basis = resolved
         detail_earners, strategy = _detail(
-            claimants, _parse_combo( combo, len( claimants ) ), assumptions, basis )
+            claimants, _parse_combo( combo, deciding_count( claimants ) ), assumptions, basis )
         content  = render_to_string(
             _DETAIL_TEMPLATE,
             _detail_context( detail_earners, strategy, _is_opportunity_cost( assumptions ),
@@ -118,7 +120,7 @@ class StrategyDetailView( View ):
         comparison = cached_comparison( claimants, assumptions, basis )
         rank     = render_to_string( _RANK_TEMPLATE, {
             'ranked'              : results.ranked( comparison, combo ),
-            'is_couple'           : len( claimants ) == 2,
+            'two_axis'            : comparison.dimensions == 2,
             'is_opportunity_cost' : _is_opportunity_cost( assumptions ) }, request = request )
         return antinode.response( replace_map = { 'ss-detail' : content, 'ss-rank' : rank } )
 
@@ -136,12 +138,12 @@ class MethodologyModalView( ModalView ):
             raise Http404( 'No calculator inputs in this session.' )
         claimants, _assumptions, _basis = resolved
         earners    = earners_of( claimants )
-        claim_ages = _parse_combo( combo, len( claimants ) )
+        claim_ages = _parse_combo( combo, deciding_count( claimants ) )
         # The per-strategy modal covers only the statutory benefit calculation (the deterministic terms and
         # their values); the predictive life-expectancy/value method lives in the results-page Methodology.
         return self.modal_response( request, context = {
             'terms'         : methodology.methodology( earners, claim_ages ),
-            'claim_pairs'   : list( zip( earners, claim_ages ) ),
+            'claims'        : member_claims( earners, claim_ages ),
             'reference_url' : methodology.REFERENCE_URL } )
 
 
@@ -235,17 +237,20 @@ def _detail( claimants : list[ Claimant ], claim_ages : tuple[ int, ... ], assum
 def _detail_context( earners : tuple[ Claimant, ... ], strategy : Strategy,
                      is_opportunity_cost : bool, is_representative : bool ) -> dict:
     """The year-by-year detail table's context for `strategy` -- the earners (higher first) for the column
-    labels, the per-year rows apportioned into own/spousal/survivor, `is_opportunity_cost` (retained for the
-    footnote wording), and `is_representative` so the actuarial detail is framed as one representative
-    lifetime. It renders standalone on drill-in, so it carries these flags itself."""
+    labels, the resolved `claims` for the header (each earner's claim age, or a non-earning spouse claiming
+    alongside), the per-year rows apportioned into own/spousal/survivor, `is_opportunity_cost` (retained for
+    the footnote wording), `is_representative` so the actuarial detail is framed as one representative
+    lifetime, and `cola_lag_pct` for the note on why present value declines. It renders standalone on
+    drill-in, so it carries these flags itself."""
     return {
         'earners'             : earners,
         'is_couple'           : len( earners ) == 2,
         'is_opportunity_cost' : is_opportunity_cost,
         'is_representative'   : is_representative,
+        'cola_lag_pct'        : _percent( COLA_INFLATION_LAG ),
         'strategy'            : strategy,
         'combo'               : results.combo_of( strategy.claim_ages ),
-        'claim_pairs'         : list( zip( earners, strategy.claim_ages ) ),
+        'claims'              : member_claims( tuple( earners ), strategy.claim_ages ),
         'rows'                : strategy_year_details( tuple( earners ), strategy ) }
 
 

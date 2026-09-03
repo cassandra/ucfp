@@ -78,6 +78,22 @@ class FormValidationTest( SimpleTestCase ):
                 self.assertTrue( form.is_valid() )
                 self.assertNotIn( 's0_birth_year', form.errors )
 
+    def test_a_couple_may_enter_a_zero_pia_for_a_non_earning_spouse( self ):
+        # The single-earner case: one partner has never worked (PIA 0). The form accepts it -- the compute
+        # core collapses the sweep to one dimension and the engine pays the spousal benefit.
+        form = InputsForm( data = _couple_data( s1_pia = '0' ) )
+        self.assertTrue( form.is_valid(), form.errors )
+
+    def test_a_household_with_no_positive_pia_is_rejected( self ):
+        # Someone must have a benefit to claim: an all-zero couple (or a lone person at zero) has nothing to
+        # compare, so it is a validation error rather than an empty sweep.
+        both_zero = InputsForm( data = _couple_data( s0_pia = '0', s1_pia = '0' ) )
+        self.assertFalse( both_zero.is_valid() )
+        self.assertIn( 's0_pia', both_zero.errors )
+        lone_zero = InputsForm( data = _single_data( s0_pia = '0' ) )
+        self.assertFalse( lone_zero.is_valid() )
+        self.assertIn( 's0_pia', lone_zero.errors )
+
     def test_a_return_below_inflation_is_rejected( self ):
         # A below-inflation return would invert the opportunity-cost framing ("above inflation"), so it is
         # rejected rather than modeled.

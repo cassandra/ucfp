@@ -103,12 +103,92 @@ class HeatmapViewModelTest( SimpleTestCase ):
         self.assertEqual( max( cells, key = lambda cell: cell.bucket ).higher_age, 62 )
 
 
+class SingleEarnerCoupleViewModelTest( SimpleTestCase ):
+    """A two-person household with a non-earning spouse (one PIA zero) renders the one-dimensional shape:
+    a single heatmap strip over the earner's age, and 'Earner' / 'Non-earner' recap roles rather than
+    'higher earner' / 'lower earner'."""
+
+    _EARNER  = Claimant( 'Individual', 1960, Decimal( '3000' ), 84 )
+    _PARTNER = Claimant( 'Partner', 1960, Decimal( '0' ), 88 )
+
+    def _comparison( self ) -> Comparison:
+        # Two claimants, but a one-dimensional sweep: strategies carry a single (earner) claim age.
+        return Comparison(
+            claimants  = ( self._EARNER, self._PARTNER ),
+            strategies = tuple( _strategy( ( age, ), 1000 + age ) for age in range( 62, 71 ) ) )
+
+    def test_the_heatmap_is_a_single_strip_though_the_household_has_two_people( self ):
+        comparison = self._comparison()
+        grid       = results.heatmap( comparison, results.combo_of( comparison.best.claim_ages ) )
+        self.assertEqual( comparison.dimensions, 1 )
+        self.assertEqual( len( grid ), 1 )
+        self.assertEqual( len( grid[ 0 ] ), 9 )
+        self.assertIsNone( grid[ 0 ][ 0 ].lower_age )
+
+    def test_the_recap_roles_are_earner_and_non_earner( self ):
+        recaps = results.person_recaps( ( self._EARNER, self._PARTNER ), estimated = False )
+        roles  = { recap.name: recap.role for recap in recaps }
+        self.assertEqual( roles, { 'Individual' : 'Earner', 'Partner' : 'Non-earner' } )
+
+    def test_a_dual_earner_couple_keeps_the_higher_lower_roles( self ):
+        recaps = results.person_recaps( ( _HIGHER, _LOWER ), estimated = False )
+        roles  = { recap.name: recap.role for recap in recaps }
+        self.assertEqual( roles, { 'Higher' : 'higher earner', 'Lower' : 'lower earner' } )
+
+
 def _couple_form_data() -> dict:
     return { 'household' : 'couple', 'life_expectancy_mode' : 'specific',
              's0_birth_year' : '1960', 's0_pia' : '3000', 's0_life' : '84',
              's1_birth_year' : '1962', 's1_pia' : '1200', 's1_life' : '88',
              'inflation' : '2.5', 'expected_return' : '4.5',
              'benefits_payable' : '100', 'reduction_year' : '2033' }
+
+
+def _single_earner_couple_form_data() -> dict:
+    # A couple where the partner never worked: the partner's PIA is zero.
+    data = _couple_form_data()
+    data[ 's1_pia' ] = '0'
+    return data
+
+
+@override_settings( SUPPRESS_AUTHENTICATION = False )
+class SingleEarnerCoupleRenderTest( TestCase ):
+    """The full results render for a couple with a non-earning spouse: a one-dimensional strip (not the
+    2-D grid), the 'Non-earner' recap role, and a detail that still carries the spousal / survivor columns
+    with the spouse claiming alongside the earner. Drives the real sweep through the session."""
+
+    def _submit( self ):
+        self.client.post( reverse( 'calculators:ss_timing:inputs' ), _single_earner_couple_form_data() )
+
+    def test_the_results_render_a_single_strip_not_the_grid( self ):
+        self._submit()
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, 'ss-hm-strip' )                      # the one-dimensional heatmap
+        self.assertNotContains( response, 'ss-hm-grid' )                    # not the 2-D couple grid
+        self.assertContains( response, 'Non-earner' )                       # the recap role
+        self.assertContains( response, 'Survivor' )                         # the couple detail column stays
+
+    def test_the_drill_in_uses_a_single_age_combo( self ):
+        # A one-age combo ('67', not '67-67') resolves for the two-person household and renders the couple
+        # detail with its spousal/survivor columns.
+        self._submit()
+        response = self.client.get(
+            reverse( 'calculators:ss_timing:detail', args = [ '67' ] ),
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
+        self.assertEqual( response.status_code, 200 )
+        detail = json.loads( response.content )[ 'replace' ][ 'ss-detail' ]
+        self.assertIn( 'Spousal', detail )
+        self.assertIn( 'Survivor', detail )
+
+    def test_the_methodology_modal_lists_the_spousal_and_survivor_terms( self ):
+        self._submit()
+        response = self.client.get(
+            reverse( 'calculators:ss_timing:methodology', args = [ '67' ] ),
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
+        self.assertEqual( response.status_code, 200 )
+        self.assertContains( response, 'Spousal top-up' )
+        self.assertContains( response, 'Survivor benefit' )
 
 
 def _actuarial_couple_form_data() -> dict:
@@ -181,6 +261,14 @@ class ResultsRenderTest( TestCase ):
         self.assertIn( 'ss-rank', payload )
         self.assertIn( 'beyond', payload[ 'ss-rank' ] )                     # the 11th row's visual break
         self.assertIn( 'data-combo="62-62"', payload[ 'ss-rank' ] )
+
+    def test_the_pv_decline_note_shows_in_the_specific_mode_detail( self ):
+        # The note explaining why present value declines applies whenever the PV column is shown, so it must
+        # render under the specific basis too -- not only the actuarial representative-lifetime framing it
+        # was once nested under. It renders the COLA-lag figure from context, not a hardcoded percent.
+        self._submit()                                                     # specific couple
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertContains( response, 'present value (PV) goes down' )
 
     def test_the_specific_mode_methodology_omits_the_mortality_basis( self ):
         # The Methodology section always explains the value figures and the SS adjustment, but the

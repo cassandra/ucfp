@@ -63,6 +63,18 @@ class HouseholdBenefitTest( unittest.TestCase ):
         self.assertEqual( _benefits( 2026, earner, spouse )[ 'spouse' ], Decimal( '0' ) )   # not filed yet
         self.assertEqual( _benefits( 2028, earner, spouse )[ 'spouse' ], Decimal( '12000' ) )
 
+    def test_a_non_earning_spouse_spousal_waits_for_age_62_when_the_earner_files_earlier( self ):
+        # A spousal benefit is not payable before age 62. The earner (born 1958) files at 62 in 2020, but the
+        # spouse (born 1968) does not reach 62 until 2030 -- so their spousal begins in 2030, not at the
+        # earner's earlier filing. (Regression: the spouse was previously paid from the earner's date.)
+        earner, spouse = _member( 'earner', 1958, '2400', 2020 ), _member( 'spouse', 1968 )
+        self.assertEqual( _benefits( 2029, earner, spouse )[ 'spouse' ], Decimal( '0' ) )   # spouse is 61
+        self.assertGreater( _benefits( 2030, earner, spouse )[ 'spouse' ], Decimal( '0' ) )  # spouse turns 62
+        # Once payable it is the age-62 reduced spousal (claimed at the earliest, not the earner's date).
+        spouse_at_62 = _member( 'spouse', 1968, '0', 2030 )
+        self.assertEqual( _benefits( 2031, earner, spouse )[ 'spouse' ],
+                          _breakdown( 2031, earner, spouse_at_62 )[ 'spouse' ].spousal )
+
     def test_entitled_member_without_a_claiming_date_raises( self ):
         with self.assertRaises( ValueError ):
             _benefits( 2028, _member( 'earner', 1960, '2000' ) )
@@ -134,6 +146,25 @@ class BenefitBreakdownTest( unittest.TestCase ):
         parts = _breakdown( 2028, earner, spouse )
         self.assertEqual( parts[ 'spouse' ].own, Decimal( '0' ) )
         self.assertEqual( parts[ 'spouse' ].spousal, Decimal( '12000' ) )
+
+    def test_the_survivor_keeps_their_own_when_the_decedent_had_no_larger_benefit( self ):
+        # When the lower earner dies, the higher earner does not inherit anything larger -- they keep their
+        # own benefit, so it stays in the own part, not the survivor part. Only the spousal top-up is lost.
+        hi = _member( 'hi', 1960, '3000', 2027 )
+        lo = _member( 'lo', 1960, '1000', 2027, death_year = 2030 )
+        parts = _breakdown( 2031, hi, lo )
+        self.assertEqual( parts[ 'hi' ].own, Decimal( '36000' ) )       # keeps own ...
+        self.assertEqual( parts[ 'hi' ].survivor, Decimal( '0' ) )      # ... not relabeled a survivor benefit
+        self.assertEqual( parts[ 'hi' ].spousal, Decimal( '0' ) )
+
+    def test_a_non_earning_spouse_death_leaves_the_earner_on_their_own_benefit( self ):
+        # The non-earning spouse has no own benefit to bequeath, so after their death the earner simply keeps
+        # their own -- there is no survivor benefit.
+        earner = _member( 'earner', 1960, '2400', 2027 )
+        spouse = _member( 'spouse', 1962, death_year = 2030 )
+        parts = _breakdown( 2031, earner, spouse )
+        self.assertEqual( parts[ 'earner' ].own, Decimal( '28800' ) )   # 2400 * 12, own only
+        self.assertEqual( parts[ 'earner' ].survivor, Decimal( '0' ) )
 
     def test_totals_match_household_benefits( self ):
         hi, lo = _member( 'hi', 1960, '3000', 2027 ), _member( 'lo', 1960, '1000', 2022 )

@@ -2,7 +2,7 @@
 {% comment %}
   The "how this is calculated" modal for the selected strategy: the SSA terms and their values (from the
   jurisdiction facade, so they match the ranked numbers). Opened from the detail's button (data-async=modal);
-  the centred DONE button (from the action_done base) dismisses it. Context: `terms`, `claim_pairs`,
+  the centred DONE button (from the action_done base) dismisses it. Context: `terms`, `claims`,
   `reference_url`.
 {% endcomment %}
 
@@ -12,7 +12,7 @@
 
 {% block body %}
 <h5 class="mb-3">
-  {% for earner, age in claim_pairs %}{{ earner.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}{% endfor %}
+  {% for claim in claims %}{{ claim.claimant.name }} claims {% if claim.is_earner %}at {{ claim.claim_age }}{% else %}a spousal benefit alongside{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
 </h5>
 <div class="table-responsive">
   <table class="table table-sm mb-0">

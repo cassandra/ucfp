@@ -8,10 +8,11 @@
   `data-combo`; clicking swaps the detail (antinode) and moves the gold selection (ss_timing.js). The value
   figures, life-expectancy weighting, and SS adjustment are explained in the Methodology at the foot (the
   per-strategy modal on the year-by-year covers only that strategy's statutory benefit terms). Context:
-  `earners` (higher first), `is_couple`, `cola_lag_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/
-  `is_reduced`, the opportunity-cost fields `expected_return_pct`/`real_return_pct`/`is_opportunity_cost`
-  (when on, the ranked list gains an Effective value column), `axis_ages`, `heatmap`, `ranked`, plus the
-  merged detail context.
+  `earners` (higher first), `is_couple` (a two-person household -- drives the detail columns and survivor
+  wording), `two_axis` (a two-dimensional sweep -- the heatmap grid and ranked "Ages" column; false for a
+  single-earner couple), `cola_lag_pct`/`inflation_pct`/`payable_pct`/`reduction_year`/`is_reduced`, the
+  opportunity-cost fields `expected_return_pct`/`real_return_pct`/`is_opportunity_cost` (when on, the ranked
+  list gains an Effective value column), `axis_ages`, `heatmap`, `ranked`, plus the merged detail context.
 {% endcomment %}
 
 {% block head_title %}Your claiming comparison · {% settings_value 'SITE_NAME' %}{% endblock %}
@@ -29,7 +30,7 @@
   <div class="row">
     <div class="col-lg-7 mb-3">
       <div class="card h-100"><div class="card-body">
-        <div class="ss-eyebrow mb-1">{% if life_expectancy_estimated %}Expected lifetime benefit{% else %}Lifetime benefit{% endif %} by claiming age{% if is_couple %}s{% endif %}</div>
+        <div class="ss-eyebrow mb-1">{% if life_expectancy_estimated %}Expected lifetime benefit{% else %}Lifetime benefit{% endif %} by claiming age{% if two_axis %}s{% endif %}</div>
         {% include "calculators/ss_timing/_heatmap.html" %}
         <div class="ss-hm-legend"><span>Lower</span><span class="bar"></span><span>Higher</span>
           <span class="ml-auto"><span class="ss-hm-star">&#9733; highest</span> · click any cell</span></div>

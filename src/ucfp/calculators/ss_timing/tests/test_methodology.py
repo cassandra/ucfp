@@ -26,6 +26,18 @@ class MethodologyTermsTest( SimpleTestCase ):
         self.assertEqual( by_symbol[ 'MB_s' ], '$500/mo' )         # spousal excess: half 3000, less 1000
         self.assertEqual( by_symbol[ 'MB_surv' ], '$3,000/mo' )    # survivor: the larger own benefit
 
+    def test_a_single_earner_couple_shows_one_own_block_plus_spousal_and_survivor( self ):
+        # The non-earning spouse (PIA 0) has no own benefit block: one un-suffixed earner block, then the
+        # spousal top-up (claimed at the earner's filing, here the spouse's FRA -> full half-PIA) and the
+        # survivor (the earner's own). The old code raised IndexError reaching for a swept spouse age.
+        earners   = ( Claimant( 'Individual', 1960, Decimal( '3000' ), 84 ),
+                      Claimant( 'Partner', 1960, Decimal( '0' ), 88 ) )
+        by_symbol = { term.symbol: term.value for term in methodology( earners, ( 67, ) ) }
+        self.assertIn( 'PIA', by_symbol )                          # one earner: no _h/_l suffix
+        self.assertNotIn( 'PIA_l', by_symbol )                     # the spouse has no own block
+        self.assertEqual( by_symbol[ 'MB_s' ], '$1,500/mo' )       # half the 3,000 PIA, less zero own
+        self.assertEqual( by_symbol[ 'MB_surv' ], '$3,000/mo' )    # survivor: the earner's own benefit
+
     def test_an_early_single_claim_shows_a_reduction_and_no_couple_terms( self ):
         solo      = ( Claimant( 'Solo', 1960, Decimal( '2000' ), 85 ), )
         by_symbol = { term.symbol: term.value for term in methodology( solo, ( 62, ) ) }

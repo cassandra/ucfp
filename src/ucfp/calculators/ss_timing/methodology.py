@@ -12,6 +12,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from ucfp.jurisdiction.enums import JurisdictionType
 from ucfp.jurisdiction.government_pension import GovernmentPension
 
+from .compute import member_claims
+
 # The SSA research note that defines these terms (PIA, reduction/credit factors, spousal and survivor
 # benefits) -- the reference the methodology modal links to.
 REFERENCE_URL = 'https://www.ssa.gov/policy/docs/rsnotes/rsn2017-01.html'
@@ -35,48 +37,54 @@ class Term:
 
 
 def methodology( earners : tuple, claim_ages : tuple[ int, ... ] ) -> list[ Term ]:
-    """The SSA terms behind the selected strategy: for each person their PIA, full retirement age, claim
+    """The SSA terms behind the selected strategy: for each earner their PIA, full retirement age, claim
     age and its reduction/credit, and monthly benefit; plus -- for a couple -- the lower earner's spousal
-    top-up and the household's survivor benefit. `earners` are higher earner first."""
-    couple = len( earners ) == 2
-    terms  = list()
-    for index, ( earner, age ) in enumerate( zip( earners, claim_ages ) ):
-        suffix  = _suffix( couple, index )
-        monthly = _own_monthly( earner, age )
+    top-up and the household's survivor benefit. `earners` are higher earner first. A non-earning spouse has
+    no own benefit, so their own terms are omitted; they claim their spousal top-up when the primary files
+    (their resolved claiming date), which is what the spousal term below is reduced for."""
+    claims      = member_claims( earners, claim_ages )
+    own_claims  = [ claim for claim in claims if claim.is_earner ]
+    couple      = len( earners ) == 2
+    two_earners = len( own_claims ) == 2
+    terms       = list()
+    for index, claim in enumerate( own_claims ):
+        earner  = claim.claimant
+        suffix  = _suffix( two_earners, index )
+        monthly = _own_monthly( earner, claim.claiming_date )
         terms += [
             Term( 'Primary Insurance Amount', f'PIA{suffix}', _money( earner.pia_monthly ),
                   'the benefit at full retirement age' ),
             Term( 'Full retirement age', f'FRA{suffix}', _age_label( earner.birthdate ),
                   'when the full PIA is payable' ),
-            Term( 'Claim age', f'CA{suffix}', str( age ), 'the age this person files' ),
+            Term( 'Claim age', f'CA{suffix}', str( claim.claim_age ), 'the age this person files' ),
             Term( 'Reduction / credit', f'R{suffix}', _percent( monthly / earner.pia_monthly - 1 ),
                   'from claiming before or after full retirement age' ),
             Term( 'Monthly benefit', f'MB{suffix}', _money( monthly ),
                   'PIA times the claim adjustment' ) ]
     if couple:
-        higher, lower = earners
-        spousal       = _spousal_monthly( higher, lower, claim_ages[ 1 ] )
+        higher_claim, lower_claim = claims
+        spousal = _spousal_monthly(
+            higher_claim.claimant, lower_claim.claimant, lower_claim.claiming_date )
         if spousal > 0:
             terms.append( Term(
                 'Spousal top-up', 'MB_s', _money( spousal ),
                 'up to half the higher PIA, less the lower earner’s own benefit' ) )
-        survivor = max( _own_monthly( higher, claim_ages[ 0 ] ), _own_monthly( lower, claim_ages[ 1 ] ) )
+        survivor = max( _own_monthly( higher_claim.claimant, higher_claim.claiming_date ),
+                        _own_monthly( lower_claim.claimant, lower_claim.claiming_date ) )
         terms.append( Term(
             'Survivor benefit', 'MB_surv', _money( survivor ),
             'the larger benefit, paid to the survivor after the first death' ) )
     return terms
 
 
-def _own_monthly( earner, age : int ) -> Decimal:
-    claiming = date( earner.birth_year + age, 1, 1 )
+def _own_monthly( earner, claiming : date ) -> Decimal:
     return _GOVERNMENT_PENSION.realized_annual_benefit(
         earner.pia_monthly, earner.birthdate, claiming ) / 12
 
 
-def _spousal_monthly( higher, lower, lower_age : int ) -> Decimal:
-    claiming = date( lower.birth_year + lower_age, 1, 1 )
+def _spousal_monthly( higher, lower, lower_claiming : date ) -> Decimal:
     return _GOVERNMENT_PENSION.spousal_excess_annual_benefit(
-        higher.pia_monthly, lower.pia_monthly, lower.birthdate, claiming ) / 12
+        higher.pia_monthly, lower.pia_monthly, lower.birthdate, lower_claiming ) / 12
 
 
 def _age_label( birthdate : date ) -> str:
@@ -85,9 +93,10 @@ def _age_label( birthdate : date ) -> str:
     return f'{years}' if months == 0 else f'{years} yr {months} mo'
 
 
-def _suffix( couple : bool, index : int ) -> str:
-    """The symbol suffix distinguishing the two earners ('_h' / '_l'), empty for a single person."""
-    if not couple:
+def _suffix( two_earners : bool, index : int ) -> str:
+    """The symbol suffix distinguishing two earners ('_h' / '_l'), empty when a single earner owns the only
+    benefit block (a lone person, or a couple with a non-earning spouse)."""
+    if not two_earners:
         return ''
     return '_h' if index == 0 else '_l'
 

@@ -1,11 +1,11 @@
 {% comment %}
-  The claiming-age heatmap. Couple: rows = higher earner's claim age, columns = lower earner's, with the
-  column axis labelled on top. Single: one strip of ages. Each cell links (antinode) to its strategy
-  detail; ss_timing.js moves the gold selection. Context: `heatmap` rows, `axis_ages`, `is_couple`,
-  `earners`.
+  The claiming-age heatmap. Two-axis (a dual-earner couple): rows = higher earner's claim age, columns =
+  lower earner's, with the column axis labelled on top. One-axis (a single person, or a couple with a
+  non-earning spouse): one strip of ages. Each cell links (antinode) to its strategy detail; ss_timing.js
+  moves the gold selection. Context: `heatmap` rows, `axis_ages`, `two_axis`, `earners`.
 {% endcomment %}
 <div class="ss-hm-wrap">
-{% if is_couple %}
+{% if two_axis %}
   <div class="ss-hm-axis text-center mb-1">{{ earners.1.name }} claims at (age)</div>
   <div class="d-flex">
     <div class="ss-hm-axis ss-hm-axis--vertical d-flex align-items-center justify-content-center px-1">{{ earners.0.name }} claims at</div>
