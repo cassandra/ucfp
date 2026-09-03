@@ -262,6 +262,14 @@ class ResultsRenderTest( TestCase ):
         self.assertIn( 'beyond', payload[ 'ss-rank' ] )                     # the 11th row's visual break
         self.assertIn( 'data-combo="62-62"', payload[ 'ss-rank' ] )
 
+    def test_the_pv_decline_note_shows_in_the_specific_mode_detail( self ):
+        # The note explaining why present value declines applies whenever the PV column is shown, so it must
+        # render under the specific basis too -- not only the actuarial representative-lifetime framing it
+        # was once nested under. It renders the COLA-lag figure from context, not a hardcoded percent.
+        self._submit()                                                     # specific couple
+        response = self.client.get( reverse( 'calculators:ss_timing:results' ) )
+        self.assertContains( response, 'present value (PV) goes down' )
+
     def test_the_specific_mode_methodology_omits_the_mortality_basis( self ):
         # The Methodology section always explains the value figures and the SS adjustment, but the
         # life-expectancy/mortality paragraph is actuarial-only (specific mode enters ages directly).

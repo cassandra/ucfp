@@ -239,13 +239,15 @@ def _detail_context( earners : tuple[ Claimant, ... ], strategy : Strategy,
     """The year-by-year detail table's context for `strategy` -- the earners (higher first) for the column
     labels, the resolved `claims` for the header (each earner's claim age, or a non-earning spouse claiming
     alongside), the per-year rows apportioned into own/spousal/survivor, `is_opportunity_cost` (retained for
-    the footnote wording), and `is_representative` so the actuarial detail is framed as one representative
-    lifetime. It renders standalone on drill-in, so it carries these flags itself."""
+    the footnote wording), `is_representative` so the actuarial detail is framed as one representative
+    lifetime, and `cola_lag_pct` for the note on why present value declines. It renders standalone on
+    drill-in, so it carries these flags itself."""
     return {
         'earners'             : earners,
         'is_couple'           : len( earners ) == 2,
         'is_opportunity_cost' : is_opportunity_cost,
         'is_representative'   : is_representative,
+        'cola_lag_pct'        : _percent( COLA_INFLATION_LAG ),
         'strategy'            : strategy,
         'combo'               : results.combo_of( strategy.claim_ages ),
         'claims'              : member_claims( tuple( earners ), strategy.claim_ages ),
