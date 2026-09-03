@@ -20,7 +20,7 @@ from common.rate import Rate
 from common.recurrence import TimeUnit
 
 from ucfp.inputs.assumptions.schemas import Assumptions
-from ucfp.inputs.external_factors import ECONOMIC_FACTORS
+from ucfp.inputs.external_factors import ECONOMICS_SECTION_FACTORS
 from ucfp.inputs.plans.schemas import Plans
 
 # The inputs shown by default in each Explore section before the user curates the set -- the big variable
@@ -117,9 +117,10 @@ class LivingExpensesExploreForm( forms.Form ):
 
 
 class EconomicAssumptionsExploreForm( forms.Form ):
-    """The Economic Assumptions section view: every economic rate as a percentage (the same fields and
-    labels as the full external-factors editor). `apply` writes them back onto the assumptions'
-    `EconomicParameters`, leaving the window and non-rate fields intact."""
+    """The Economic Assumptions section view: the Economics-section rates as percentages (the same fields
+    and labels as the main Economics editor -- the niche rates and the funding what-if stay on the Advanced
+    page, out of the Explore sandbox). `apply` writes them back onto the assumptions' `EconomicParameters`,
+    leaving the window and every non-Economics-section field intact."""
 
     def __init__( self, data = None, *, scenario = None, selected = None ):
         super().__init__( data )
@@ -127,7 +128,7 @@ class EconomicAssumptionsExploreForm( forms.Form ):
         economics   = self._assumptions.economics
         chosen      = set( selected ) if selected is not None else set( _DEFAULT_RATE_FIELDS )
         self._rows  = list()
-        for factor in ECONOMIC_FACTORS:
+        for factor in ECONOMICS_SECTION_FACTORS:
             field         = factor.percent_field( required = False )   # carries the factor's bounds
             field.initial = ( getattr( economics, factor.field ).fraction * 100 ) if economics is not None else None
             self.fields[ factor.field ] = field
@@ -144,6 +145,6 @@ class EconomicAssumptionsExploreForm( forms.Form ):
             return scenario
         cleaned = self.cleaned_data
         changes = { factor.field : Rate.percent( cleaned[ factor.field ] )
-                    for factor in ECONOMIC_FACTORS if cleaned.get( factor.field ) is not None }
+                    for factor in ECONOMICS_SECTION_FACTORS if cleaned.get( factor.field ) is not None }
         return replace(
             scenario, assumptions = replace( self._assumptions, economics = replace( economics, **changes ) ) )

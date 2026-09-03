@@ -120,12 +120,12 @@ _ADVANCED_ECONOMICS_FACTORS = (
              'Annual growth of gross rental income.' ),
 )
 
-# The main-pane rate factors in display order, and the canonical all-rates list -- the main pane plus the
-# niche Advanced rates plus the funding factor -- shared with the Explore workspace's economic section so
-# its dials carry the same fields and labels. A fail-fast guard holds the canonical list to exactly the
-# engine's rate factors (the non-rate `window` is excluded).
-_ECONOMICS_FACTORS = tuple( factor for _group, factors in _FACTOR_GROUPS for factor in factors )
-ECONOMIC_FACTORS   = _ECONOMICS_FACTORS + _ADVANCED_ECONOMICS_FACTORS + ( _FUNDING_FACTOR, )
+# The main Economics-pane rate factors in display order -- shared with the Explore workspace's economic
+# section, so its dials mirror the rates the Economics step shows. The canonical all-rates list adds the
+# niche Advanced rates and the funding factor; a fail-fast guard holds it to exactly the engine's rate
+# factors (the non-rate `window` is excluded), so every rate has a home somewhere in the UI.
+ECONOMICS_SECTION_FACTORS = tuple( factor for _group, factors in _FACTOR_GROUPS for factor in factors )
+ECONOMIC_FACTORS          = ECONOMICS_SECTION_FACTORS + _ADVANCED_ECONOMICS_FACTORS + ( _FUNDING_FACTOR, )
 _ENGINE_RATE_FIELDS = frozenset(
     spec.name for spec in fields( EconomicParameters ) if isinstance( spec.default, Rate ) )
 assert set( factor.field for factor in ECONOMIC_FACTORS ) == _ENGINE_RATE_FIELDS, (
@@ -185,7 +185,7 @@ class ExternalFactorsForm( _EconomicRateForm ):
     keeps the projection in step. The niche rates, the forecast type, and the funding what-if are edited on
     the Advanced page, not here."""
 
-    _factors = _ECONOMICS_FACTORS
+    _factors = ECONOMICS_SECTION_FACTORS
 
     @property
     def factor_groups( self ) -> list:
