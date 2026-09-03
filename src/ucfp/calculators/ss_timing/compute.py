@@ -213,11 +213,18 @@ class Strategy:
 @dataclass( frozen = True )
 class Comparison:
     """The full sweep: the `claimants` (higher earner first) and every `Strategy` over the 62..70
-    grid (9 for one person, 81 for a couple). `best` and `ranked` are derived so the heatmap and the
-    ranked list read one settled result."""
+    grid (9 for one person or a single-earner couple, 81 for a dual-earner couple). `best` and `ranked` are
+    derived so the heatmap and the ranked list read one settled result."""
 
     claimants  : tuple[ Claimant, ... ]
     strategies : tuple[ Strategy, ... ]
+
+    @property
+    def dimensions( self ) -> int:
+        """How many claiming ages the sweep varies -- 1 for a single person or a single-earner couple (the
+        1-D strip), 2 for a dual-earner couple (the 2-D grid). Read from a strategy's claim ages, so the
+        heatmap and ranked list render the right shape regardless of the household size."""
+        return len( self.strategies[ 0 ].claim_ages )
 
     @property
     def best( self ) -> Strategy:
@@ -234,8 +241,55 @@ class Comparison:
 
 def earners_of( claimants : list[ Claimant ] ) -> tuple[ Claimant, ... ]:
     """`claimants` ordered higher earner first (by PIA) -- the single household orientation the whole
-    comparison reads: the heatmap axes, the ranked and detail columns, and the spousal/survivor roles."""
+    comparison reads: the heatmap axes, the ranked and detail columns, and the spousal/survivor roles. A
+    non-earning spouse (zero PIA) sorts last, so the deciding earners always lead the tuple."""
     return tuple( sorted( claimants, key = lambda claimant: claimant.pia_monthly, reverse = True ) )
+
+
+def deciding_count( claimants : list[ Claimant ] ) -> int:
+    """How many claiming ages the sweep varies -- one per earner with a positive PIA. A dual-earner couple
+    decides two (the 2-D heatmap grid); a single person, or a couple with a non-earning spouse, decides one
+    (the 1-D strip). The non-earning spouse is not swept: they claim their spousal benefit when the primary
+    earner files (see `member_claims`), so the couple's decision stays one-dimensional."""
+    return sum( 1 for claimant in claimants if claimant.pia_monthly > 0 )
+
+
+@dataclass( frozen = True )
+class MemberClaim:
+    """One household member resolved for a claiming combination: the `claimant`, the `claiming_date` their
+    benefit begins, and whether they are a deciding earner (`is_earner` -- a positive PIA, whose claim age
+    the sweep varies) or a non-earning spouse (a zero PIA, who claims a spousal benefit when the primary
+    earner files, so their claim is derived rather than swept)."""
+
+    claimant      : Claimant
+    claiming_date : date
+    is_earner     : bool
+
+    @property
+    def claim_age( self ) -> int:
+        """The claimant's age on their claiming date -- the swept age for an earner, the derived age (at the
+        primary earner's filing) for a non-earning spouse."""
+        return self.claiming_date.year - self.claimant.birth_year
+
+
+def member_claims(
+        earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ] ) -> list[ MemberClaim ]:
+    """Resolve each household member's claim for a swept combination. `earners` are PIA-ordered (higher
+    first), so the deciding earners -- those with a positive PIA -- lead the tuple and align to `claim_ages`
+    (one swept age each); a trailing non-earning spouse (zero PIA) is not swept and claims when the primary
+    earner files (the calculator's same-time assumption -- a non-earning spouse gains nothing by waiting).
+    The primary earner leads, so the household always has at least one deciding earner (the form and
+    `compare_claiming_strategies` reject an all-zero household)."""
+    primary_claiming = date( earners[ 0 ].birth_year + claim_ages[ 0 ], 1, 1 )
+    claims           = list()
+    for index, earner in enumerate( earners ):
+        if index < len( claim_ages ):
+            claiming = date( earner.birth_year + claim_ages[ index ], 1, 1 )
+            claims.append( MemberClaim( earner, claiming, is_earner = True ) )
+        else:
+            claims.append( MemberClaim( earner, primary_claiming, is_earner = False ) )
+        continue
+    return claims
 
 
 def representative_claimants( claimants : list[ Claimant ] ) -> tuple[ Claimant, ... ]:
@@ -267,13 +321,20 @@ def compare_claiming_strategies(
     `basis` chooses how long each claimant lives: SPECIFIC uses their expected lifetime (one run per
     strategy), ACTUARIAL weights each year by survival (the mortality-weighted expected value). The
     couple's spousal and survivor benefits, the COLA, and the funding-shortfall reduction all come from the
-    engine. Claimants are ordered by PIA (higher earner first), the orientation the results grid reads."""
+    engine. Claimants are ordered by PIA (higher earner first), the orientation the results grid reads.
+
+    The sweep varies one claim age per *deciding* earner (a positive PIA): 9 strategies for a single person,
+    81 for a dual-earner couple, and 9 for a couple with a non-earning spouse -- whose spousal benefit is
+    claimed when the primary earner files, collapsing the couple's decision to one dimension."""
     if not 1 <= len( claimants ) <= 2:
         raise ValueError(
             f'A Social Security comparison covers one person or a couple; got {len( claimants )}.' )
+    dimensions = deciding_count( claimants )
+    if dimensions == 0:
+        raise ValueError( 'A Social Security comparison needs at least one earner with a positive PIA.' )
     earners      = earners_of( claimants )
     horizon      = _horizon_for( earners, basis )
-    combinations = product( CLAIM_AGES, repeat = len( earners ) )
+    combinations = product( CLAIM_AGES, repeat = dimensions )
     strategies   = tuple(
         _strategy_for( earners, claim_ages, assumptions, horizon, basis )
         for claim_ages in combinations )
@@ -323,17 +384,19 @@ def strategy_year_details(
 
 def _household_members(
         earners : tuple[ Claimant, ... ], claim_ages : tuple[ int, ... ] ) -> list[ HouseholdMember ]:
-    """The jurisdiction calculator's members for this combination -- each earner claiming at their swept
-    age and leaving at their expected lifetime -- handles index-keyed to the earners (higher first), the
-    same keys the forecast used, so the breakdown reads back in that order."""
+    """The jurisdiction calculator's members for this combination -- each earner claiming at their resolved
+    date and leaving at their expected lifetime -- handles index-keyed to the earners (higher first), the
+    same keys the forecast used, so the breakdown reads back in that order. A non-earning spouse carries no
+    own PIA (None), so the calculator synthesizes their pure spousal benefit claimed on the primary's date."""
     return [
         HouseholdMember(
             subject_handle = _handle( index ),
-            birthdate      = earner.birthdate,
-            pia_monthly    = earner.pia_monthly,
-            claiming_date  = date( earner.birth_year + age, 1, 1 ),
-            death_date     = date( earner.birth_year + earner.expected_lifetime, 1, 1 ) )
-        for index, ( earner, age ) in enumerate( zip( earners, claim_ages ) ) ]
+            birthdate      = claim.claimant.birthdate,
+            pia_monthly    = claim.claimant.pia_monthly if claim.is_earner else None,
+            claiming_date  = claim.claiming_date,
+            death_date     = date(
+                claim.claimant.birth_year + claim.claimant.expected_lifetime, 1, 1 ) )
+        for index, claim in enumerate( member_claims( earners, claim_ages ) ) ]
 
 
 def _apportion( part : Optional[ MemberBenefit ], household_nominal : Decimal,
@@ -491,16 +554,20 @@ def _forecast_parameters(
         assumptions : Assumptions, deaths : list[ Optional[ int ] ],
         horizon : _Horizon ) -> ForecastParameters:
     """The stripped, Social-Security-only forecast for one claiming combination: a subject and SS
-    entitlement per claimant (claiming at their swept age), a subject removal for each claimant with a death
-    year (None leaves them alive for the whole horizon), a single cash hub for the benefits to land in, and
-    the economic outlook -- no other income, assets, or expenses, so only the Social Security lines carry
-    value."""
-    subjects     = [ Subject( claimant.name, claimant.birthdate, handle = _handle( index ) )
-                     for index, claimant in enumerate( earners ) ]
+    entitlement per claimant (each earner claiming at their swept age), a subject removal for each claimant
+    with a death year (None leaves them alive for the whole horizon), a single cash hub for the benefits to
+    land in, and the economic outlook -- no other income, assets, or expenses, so only the Social Security
+    lines carry value. A non-earning spouse gets an entitlement with no PIA, so the engine synthesizes their
+    spousal benefit claimed on the primary earner's date rather than sweeping a claim age they do not have."""
+    claims       = member_claims( earners, claim_ages )
+    subjects     = [ Subject( claim.claimant.name, claim.claimant.birthdate, handle = _handle( index ) )
+                     for index, claim in enumerate( claims ) ]
     entitlements = [
         SocialSecurityEntitlement(
-            subject, claimant.pia_monthly, date( claimant.birth_year + age, 1, 1 ) )
-        for subject, claimant, age in zip( subjects, earners, claim_ages ) ]
+            subject,
+            claim.claimant.pia_monthly if claim.is_earner else None,
+            claim.claiming_date if claim.is_earner else None )
+        for subject, claim in zip( subjects, claims ) ]
     removals     = [
         SubjectRemoval( date( death, 1, 1 ), subject.handle )
         for subject, death in zip( subjects, deaths ) if death is not None ]

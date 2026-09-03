@@ -7,12 +7,12 @@
   once in the Top strategies table. The first-death (survivor) row is highlighted; column headers stick on
   scroll. Under the actuarial basis this is one *representative* lifetime (each person to their expected
   age), framed as such, since no single year of a probabilistic run is a real income.
-  Context: `earners`, `is_couple`, `is_representative`, `strategy`, `combo`, `claim_pairs`, `rows`.
+  Context: `earners`, `is_couple`, `is_representative`, `strategy`, `combo`, `claims`, `rows`.
 {% endcomment %}
 <div id="ss-detail">
   <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
     <h5 class="mb-0">
-      {% for earner, age in claim_pairs %}{{ earner.name }} claims at {{ age }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% for claim in claims %}{{ claim.claimant.name }} claims {% if claim.is_earner %}at {{ claim.claim_age }}{% else %}a spousal benefit alongside{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
     </h5>
     <a role="button" class="btn btn-outline-secondary btn-sm" data-async="modal"
        href="{% url 'calculators:ss_timing:methodology' combo %}">Show how this is calculated</a>
@@ -21,7 +21,7 @@
     <p class="text-muted small mb-3">
       A representative lifetime: {% for earner in earners %}{{ earner.name }} to about
       age&nbsp;{{ earner.expected_lifetime }}{% if not forloop.last %}, {% endif %}{% endfor %}. Your actual
-      benefits depend on how long each of you lives; the comparison above weighs every possibility.
+      benefits depend on how long each of you lives; the comparison above weighs every possibility. The present value (PV) goes down over time because Social Security benefits, though inflation-indexed, lag by about 0.3% per year.
     </p>
   {% endif %}
   <div class="ss-years-scroll">

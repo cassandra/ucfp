@@ -13,8 +13,8 @@ from decimal import Decimal
 from common.rate import Rate, ZERO_RATE
 from ucfp.calculators.ss_timing import compute as _compute
 from ucfp.calculators.ss_timing.compute import (
-    Assumptions, Claimant, LifeExpectancyBasis, compare_claiming_strategies, earners_of,
-    strategy_year_details )
+    Assumptions, Claimant, LifeExpectancyBasis, compare_claiming_strategies, deciding_count, earners_of,
+    member_claims, strategy_year_details )
 from ucfp.accounts.bookkeeper import Bookkeeper
 from ucfp.forecast.forecast import Forecast
 from ucfp.jurisdiction.enums import JurisdictionType
@@ -140,6 +140,86 @@ class ClaimingSweepShapeTest( unittest.TestCase ):
     def test_a_household_must_be_one_person_or_a_couple( self ):
         with self.assertRaises( ValueError ):
             compare_claiming_strategies( [], _assumptions() )
+
+
+class SingleEarnerCoupleTest( unittest.TestCase ):
+    """A couple with a non-earning spouse (one PIA is zero). The spouse claims a spousal benefit when the
+    primary earner files, so the couple's decision collapses to one dimension: 9 strategies over the
+    earner's claim age, not the 81-cell grid. The spouse's spousal and survivor benefits still flow, from
+    the engine's non-earning-spouse path (a None PIA, not the entered zero)."""
+
+    def _couple( self, higher_life = 84, partner_life = 88 ):
+        # The partner has never worked (PIA 0); the earner sorts first regardless of input order.
+        return [ Claimant( 'Individual', 1960, Decimal( '3000' ), higher_life ),
+                 Claimant( 'Partner', 1960, Decimal( '0' ), partner_life ) ]
+
+    def _rows( self, household, claim_ages, assumptions = _NO_OVERLAY ) -> dict:
+        comparison = compare_claiming_strategies( household, assumptions )
+        strategy   = next( s for s in comparison.strategies if s.claim_ages == claim_ages )
+        return { row.year: row for row in strategy_year_details( comparison.claimants, strategy ) }
+
+    def test_deciding_count_is_one_for_a_non_earning_spouse( self ):
+        self.assertEqual( deciding_count( self._couple() ), 1 )                       # one earner decides
+        self.assertEqual( deciding_count(
+            [ Claimant( 'Higher', 1960, Decimal( '3000' ), 84 ),
+              Claimant( 'Lower', 1962, Decimal( '1200' ), 88 ) ] ), 2 )              # dual earners
+        self.assertEqual( deciding_count( [ Claimant( 'Solo', 1960, Decimal( '2000' ), 85 ) ] ), 1 )
+
+    def test_the_sweep_collapses_to_the_nine_earner_ages( self ):
+        comparison = compare_claiming_strategies( self._couple(), _assumptions() )
+        self.assertEqual( len( comparison.strategies ), 9 )                           # not 81
+        self.assertTrue( all(
+            len( strategy.claim_ages ) == 1 for strategy in comparison.strategies ) )
+        self.assertEqual(
+            sorted( strategy.claim_ages[ 0 ] for strategy in comparison.strategies ),
+            list( range( 62, 71 ) ) )
+
+    def test_the_household_stays_two_people_with_the_earner_first( self ):
+        # Even collapsed to one dimension the household keeps both people (for the recap and detail), the
+        # positive-PIA earner ordered first whichever way the input was entered.
+        reversed_input = [ Claimant( 'Partner', 1960, Decimal( '0' ), 88 ),
+                           Claimant( 'Individual', 1960, Decimal( '3000' ), 84 ) ]
+        comparison     = compare_claiming_strategies( reversed_input, _assumptions() )
+        self.assertEqual( [ c.name for c in comparison.claimants ], [ 'Individual', 'Partner' ] )
+
+    def test_an_all_zero_household_has_no_strategy_to_compare( self ):
+        with self.assertRaises( ValueError ):
+            compare_claiming_strategies(
+                [ Claimant( 'A', 1960, Decimal( '0' ), 84 ),
+                  Claimant( 'B', 1960, Decimal( '0' ), 88 ) ], _assumptions() )
+
+    def test_the_non_earning_spouse_claims_a_full_spousal_at_the_earners_fra( self ):
+        # Both born 1960 (FRA 67); the earner claims at 67, so the spouse claims spousal that same year at
+        # their own FRA -> the full half-PIA, unreduced. Higher own 36,000/yr; spousal 18,000/yr.
+        both_alive = self._rows( self._couple(), ( 67, ) )[ 2028 ]
+        self.assertEqual( both_alive.members[ 0 ].own, Decimal( '36000' ) )           # earner: own only
+        self.assertEqual( both_alive.members[ 1 ].own, Decimal( '0' ) )               # spouse: no own
+        self.assertEqual( both_alive.members[ 1 ].spousal, Decimal( '18000' ) )       # half the earner PIA
+
+    def test_the_spousal_benefit_begins_when_the_primary_files_not_at_a_swept_age( self ):
+        # The spouse is not swept: whenever the earner claims (here 62, in 2022), the spousal begins that
+        # same year -- the one-dimensional, same-time assumption. So a both-alive year right after pays a
+        # spousal top-up even though the spouse chose no age of their own.
+        early = self._rows( self._couple(), ( 62, ) )[ 2023 ]
+        self.assertGreater( early.members[ 1 ].spousal, Decimal( '0' ) )
+
+    def test_the_non_earning_survivor_inherits_the_earners_benefit( self ):
+        # The earner dies at 70 (2030); the non-earning spouse survives on the survivor benefit = the
+        # earner's own (the spouse's own is zero), replacing their spousal.
+        rows          = self._rows( self._couple( higher_life = 70, partner_life = 85 ), ( 67, ) )
+        survivor_year = rows[ 2031 ]
+        self.assertTrue( survivor_year.is_transition )
+        self.assertEqual( survivor_year.members[ 1 ].survivor, Decimal( '36000' ) )   # the earner's own
+        self.assertEqual( survivor_year.members[ 1 ].spousal, Decimal( '0' ) )        # spousal ends
+        self.assertEqual( survivor_year.members[ 0 ].total, Decimal( '0' ) )          # the decedent
+
+    def test_member_claims_pins_the_spouse_to_the_primary_date_with_no_own_pia( self ):
+        earners = earners_of( self._couple() )
+        claims  = member_claims( earners, ( 64, ) )
+        self.assertTrue( claims[ 0 ].is_earner )
+        self.assertEqual( claims[ 0 ].claim_age, 64 )
+        self.assertFalse( claims[ 1 ].is_earner )                                     # the non-earning spouse
+        self.assertEqual( claims[ 1 ].claiming_date, claims[ 0 ].claiming_date )      # claims with the primary
 
 
 class ClaimingSweepReductionTest( unittest.TestCase ):

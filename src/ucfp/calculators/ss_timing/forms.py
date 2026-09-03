@@ -125,6 +125,15 @@ class InputsForm( StyledFormMixin, forms.Form ):
             for part in ( 'birth_year', 'pia' ):
                 if cleaned.get( f's1_{part}' ) in ( None, '' ):
                     self.add_error( f's1_{part}', 'Enter this for the partner.' )
+        # The sweep needs someone with a benefit to claim: a couple may enter a zero PIA for a non-earning
+        # spouse (the one-dimensional, spousal-only case), but not for both -- an all-zero household has no
+        # benefit to compare. Checked once both PIAs are present so it does not pile onto a blank-field error.
+        pias    = [ cleaned.get( 's0_pia' ) ]
+        if is_couple:
+            pias.append( cleaned.get( 's1_pia' ) )
+        entered = [ pia for pia in pias if pia is not None ]
+        if entered and all( pia == 0 for pia in entered ):
+            self.add_error( 's0_pia', 'Enter a benefit at full retirement age for at least one person.' )
         if specific:
             if cleaned.get( 's0_life' ) in ( None, '' ):
                 self.add_error( 's0_life', 'Enter an expected lifetime.' )

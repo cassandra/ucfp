@@ -75,12 +75,19 @@ def person_recaps( earners : tuple[ Claimant, ... ], estimated : bool ) -> list[
     """The household recap rows for `earners` (higher first). `estimated` marks the actuarial basis, where
     the lifetime age is the derived life expectancy and `basis_words` names the survival curve used;
     otherwise the age was entered and the words are blank. Each earner must carry `expected_lifetime` (the
-    entered age, or the representative age filled by `compute.representative_claimants`)."""
-    is_couple = len( earners ) == 2
-    recaps    = list()
+    entered age, or the representative age filled by `compute.representative_claimants`).
+
+    The role labels distinguish the two people of a couple: a dual-earner couple by earnings ('higher
+    earner' / 'lower earner'); a single-earner couple as 'Earner' / 'Non-earner' (one partner has a zero
+    PIA and receives only a spousal benefit). A single person has no role label."""
+    is_couple     = len( earners ) == 2
+    single_earner = is_couple and any( earner.pia_monthly == 0 for earner in earners )
+    recaps        = list()
     for index, earner in enumerate( earners ):
         role = None
-        if is_couple:
+        if single_earner:
+            role = 'Non-earner' if earner.pia_monthly == 0 else 'Earner'
+        elif is_couple:
             role = 'higher earner' if index == 0 else 'lower earner'
         recaps.append( PersonRecap(
             name         = earner.name,
@@ -103,11 +110,12 @@ def _basis_words( claimant : Claimant ) -> str:
 
 def heatmap( comparison : Comparison, selected_combo : str ) -> list[ list[ HeatCell ] ]:
     """The cells as rows: one row per higher-earner claim age (each column a lower-earner claim age) for a
-    couple, a single row for one person. Shading buckets span the sweep's effective-value range."""
+    dual-earner couple's 2-D sweep, a single row for a one-dimensional sweep (one person, or a couple with a
+    non-earning spouse). Shading buckets span the sweep's effective-value range."""
     by_combo = { combo_of( strategy.claim_ages ): strategy for strategy in comparison.strategies }
     bucket   = _bucketer( comparison )
     best     = combo_of( comparison.best.claim_ages )
-    if len( comparison.claimants ) == 1:
+    if comparison.dimensions == 1:
         return [ [ _cell( ( age, ), by_combo, bucket, best, selected_combo ) for age in CLAIM_AGES ] ]
     return [ [ _cell( ( higher, lower ), by_combo, bucket, best, selected_combo )
                for lower in CLAIM_AGES ]
