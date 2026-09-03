@@ -79,10 +79,11 @@ def household_benefit_breakdown(
     """Each member's annual Social Security on `on_date` (today's dollars), keyed by `subject_handle` and
     split into own / spousal / survivor parts -- the couple logic exposed for a per-person view. Own is the
     claim-adjusted benefit once claimed; the lower earner adds the spousal excess once both collect; after
-    the first death the survivor's parts are replaced by the survivor benefit (the larger of the two own
-    benefits), and a member is gone the year after their death. A member not yet collecting has empty parts;
-    a member with no entitlement yields none, except a non-earning spouse in a couple whose partner has one.
-    `household_benefits` is the per-member totals of this."""
+    the first death the spousal top-up ends and the survivor keeps the larger of the two own benefits -- a
+    survivor benefit when they inherit the decedent's larger one, otherwise simply their own continuing (see
+    `_post_death_benefit`). A member is gone the year after their death. A member not yet collecting has empty
+    parts; a member with no entitlement yields none, except a non-earning spouse in a couple whose partner
+    has one. `household_benefits` is the per-member totals of this."""
     active = _active_claims( members )
     breakdown = { claim.subject_handle: MemberBenefit() for claim in active }
     if len( active ) == 1:
@@ -95,11 +96,11 @@ def household_benefit_breakdown(
         higher, lower = sorted( active, key = lambda claim: claim.pia_monthly, reverse = True )
         higher_dead, lower_dead = _has_died( higher, on_date ), _has_died( lower, on_date )
         if higher_dead and not lower_dead:
-            breakdown[ lower.subject_handle ] = MemberBenefit(
-                survivor = _survivor_benefit( lower, higher, government_pension, on_date ) )
+            breakdown[ lower.subject_handle ] = _post_death_benefit(
+                lower, higher, government_pension, on_date )
         elif lower_dead and not higher_dead:
-            breakdown[ higher.subject_handle ] = MemberBenefit(
-                survivor = _survivor_benefit( higher, lower, government_pension, on_date ) )
+            breakdown[ higher.subject_handle ] = _post_death_benefit(
+                higher, lower, government_pension, on_date )
         elif not higher_dead and not lower_dead:
             breakdown[ higher.subject_handle ] = MemberBenefit(
                 own = _own_benefit( higher, government_pension, on_date ) )
@@ -128,13 +129,16 @@ def _has_died( claim : _Claim, on_date : date ) -> bool:
     return claim.death_date is not None and on_date.year > claim.death_date.year
 
 
-def _survivor_benefit(
+def _post_death_benefit(
         survivor : _Claim, decedent : _Claim, government_pension : GovernmentPension,
-        on_date : date ) -> Decimal:
-    """The survivor's benefit after the first death: the larger of their own claim-adjusted benefit and the
-    decedent's -- each counted only once that person has (or would have) claimed -- so delaying the higher
-    earner buys a larger survivor benefit. Spousal top-ups end; a non-earning decedent (zero PIA) leaves the
-    survivor's own.
+        on_date : date ) -> MemberBenefit:
+    """The surviving member's benefit after the first death -- the larger of their own claim-adjusted
+    benefit and the decedent's, each counted only once that person has (or would have) claimed. Only the
+    *inherited* case is a survivor benefit: when the decedent's own is the larger, it replaces the survivor's
+    own (the survivor transition -- so delaying the higher earner buys a larger survivor benefit). When the
+    survivor's own already meets or exceeds the decedent's -- the higher earner outliving the lower, or an
+    earner outliving a non-earning spouse -- they simply keep their own benefit, which is not a survivor
+    benefit; the household has only lost the spousal top-up. Either way the spousal top-up ends.
 
     The decedent's side is gated on the decedent's own claiming date, not just the date of death: the
     survivor inherits the benefit stream the decedent would have been collecting, which does not begin
@@ -143,7 +147,9 @@ def _survivor_benefit(
     transition already falls after both claim dates."""
     survivor_own = _own_benefit( survivor, government_pension, on_date )
     decedent_own = _own_benefit( decedent, government_pension, on_date )
-    return max( survivor_own, decedent_own )
+    if decedent_own > survivor_own:
+        return MemberBenefit( survivor = decedent_own )
+    return MemberBenefit( own = survivor_own )
 
 
 def _own_benefit( claim : _Claim, government_pension : GovernmentPension, on_date : date ) -> Decimal:

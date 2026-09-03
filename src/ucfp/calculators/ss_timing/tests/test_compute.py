@@ -242,6 +242,27 @@ class SingleEarnerCoupleTest( unittest.TestCase ):
             parts = sum( ( member.total for member in row.members ), Decimal( '0' ) )
             self.assertLess( abs( parts - row.household ), Decimal( '0.05' ) )
 
+    def test_a_non_earner_dying_first_leaves_the_earner_on_their_own_benefit( self ):
+        # The non-earning spouse (younger, dies first) has no own benefit to bequeath, so after their death
+        # the earner simply keeps their own benefit -- it is not a survivor benefit and the year is not a
+        # survivor transition; only the spousal top-up is lost.
+        household = [ Claimant( 'Individual', 1960, Decimal( '3000' ), 89 ),
+                      Claimant( 'Partner', 1969, Decimal( '0' ), 75 ) ]        # partner dies 2044
+        after     = self._rows( household, ( 67, ) )[ 2045 ]                   # the year after
+        self.assertEqual( after.members[ 0 ].own, Decimal( '36000' ) )        # earner keeps their own
+        self.assertEqual( after.members[ 0 ].survivor, Decimal( '0' ) )       # not relabeled a survivor
+        self.assertEqual( after.survivor, Decimal( '0' ) )
+        self.assertFalse( after.is_transition )                              # nothing to flag
+
+    def test_the_earner_dying_first_gives_the_non_earner_a_survivor_benefit( self ):
+        # The mirror: the earner dies first, so the non-earning spouse inherits the earner's benefit -- a
+        # genuine survivor benefit, and a flagged transition.
+        household = [ Claimant( 'Individual', 1960, Decimal( '3000' ), 75 ),   # earner dies 2035
+                      Claimant( 'Partner', 1962, Decimal( '0' ), 89 ) ]
+        after     = self._rows( household, ( 67, ) )[ 2036 ]
+        self.assertEqual( after.members[ 1 ].survivor, Decimal( '36000' ) )
+        self.assertTrue( after.is_transition )
+
     def test_the_actuarial_basis_sweeps_nine_and_stays_positive( self ):
         # The survivor weighting still runs for a single-earner couple (the spouse can outlive the earner on
         # the survivor benefit); the sweep stays one-dimensional and every strategy has a positive expected

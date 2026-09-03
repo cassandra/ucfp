@@ -147,6 +147,25 @@ class BenefitBreakdownTest( unittest.TestCase ):
         self.assertEqual( parts[ 'spouse' ].own, Decimal( '0' ) )
         self.assertEqual( parts[ 'spouse' ].spousal, Decimal( '12000' ) )
 
+    def test_the_survivor_keeps_their_own_when_the_decedent_had_no_larger_benefit( self ):
+        # When the lower earner dies, the higher earner does not inherit anything larger -- they keep their
+        # own benefit, so it stays in the own part, not the survivor part. Only the spousal top-up is lost.
+        hi = _member( 'hi', 1960, '3000', 2027 )
+        lo = _member( 'lo', 1960, '1000', 2027, death_year = 2030 )
+        parts = _breakdown( 2031, hi, lo )
+        self.assertEqual( parts[ 'hi' ].own, Decimal( '36000' ) )       # keeps own ...
+        self.assertEqual( parts[ 'hi' ].survivor, Decimal( '0' ) )      # ... not relabeled a survivor benefit
+        self.assertEqual( parts[ 'hi' ].spousal, Decimal( '0' ) )
+
+    def test_a_non_earning_spouse_death_leaves_the_earner_on_their_own_benefit( self ):
+        # The non-earning spouse has no own benefit to bequeath, so after their death the earner simply keeps
+        # their own -- there is no survivor benefit.
+        earner = _member( 'earner', 1960, '2400', 2027 )
+        spouse = _member( 'spouse', 1962, death_year = 2030 )
+        parts = _breakdown( 2031, earner, spouse )
+        self.assertEqual( parts[ 'earner' ].own, Decimal( '28800' ) )   # 2400 * 12, own only
+        self.assertEqual( parts[ 'earner' ].survivor, Decimal( '0' ) )
+
     def test_totals_match_household_benefits( self ):
         hi, lo = _member( 'hi', 1960, '3000', 2027 ), _member( 'lo', 1960, '1000', 2022 )
         parts   = _breakdown( 2028, hi, lo )
