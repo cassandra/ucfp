@@ -106,7 +106,7 @@ _FACTOR_GROUPS = (
 )
 
 # Niche economic rates -- applicable only to a specific, less-common holding or income -- shown on the
-# Advanced page's Economics subsection, not the main pane, to keep the common outlook uncluttered (#255).
+# Advanced page's Economics subsection, not the main pane, to keep the common outlook uncluttered.
 _ADVANCED_ECONOMICS_FACTORS = (
     _Factor( 'bond_appreciation', 'Bond appreciation',
              'Price growth of bonds -- typically near zero, since the return is the coupon.' ),

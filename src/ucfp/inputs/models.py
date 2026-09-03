@@ -27,8 +27,8 @@ from .enums import UsageRole
 # Section keys that were folded into a current key as the interview re-sectioned: acknowledging every old
 # key in a fold counts as acknowledging the current one. Acknowledgment is advisory UX keyed by section,
 # so a tolerant reader here is preferable to a data migration per reshaping -- extend as sectioning
-# evolves. #255 merged the Assumptions flow's Selling costs ("transaction-costs") and Net worth
-# ("net-worth") steps into one "advanced" step.
+# evolves. The "advanced" step folds in the former Selling costs ("transaction-costs") and Net worth
+# ("net-worth") steps.
 _FOLDED_SECTION_KEYS = {
     'advanced': frozenset( { 'transaction-costs', 'net-worth' } ),
 }
