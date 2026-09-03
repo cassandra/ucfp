@@ -145,6 +145,7 @@ class EconomicAssumptionsExploreForm( forms.Form ):
             return scenario
         cleaned = self.cleaned_data
         changes = { factor.field : Rate.percent( cleaned[ factor.field ] )
-                    for factor in ECONOMICS_SECTION_FACTORS if cleaned.get( factor.field ) is not None }
+                    for factor in ECONOMICS_SECTION_FACTORS
+                    if cleaned.get( factor.field ) is not None }
         return replace(
             scenario, assumptions = replace( self._assumptions, economics = replace( economics, **changes ) ) )

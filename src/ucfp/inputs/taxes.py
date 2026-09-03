@@ -12,7 +12,7 @@ from django import forms
 
 from ucfp.jurisdiction.enums import StatuteForecastType
 
-from .assumptions.defaults import DEFAULT_TAX_FORECAST_TYPE, default_economics, tax_projection
+from .assumptions.defaults import DEFAULT_TAX_FORECAST_TYPE, seed_economics, tax_projection
 
 
 class TaxesForm( forms.Form ):
@@ -33,14 +33,9 @@ class TaxesForm( forms.Form ):
             return { 'forecast_type': assumptions.tax_projection.forecast_type.name.lower() }
         return dict()
 
-    @staticmethod
-    def _economics( assumptions ):
-        """The economics the COLA-indexed projection is indexed at -- the assumptions' own, or the default."""
-        if assumptions is not None and assumptions.economics is not None:
-            return assumptions.economics
-        return default_economics()
-
     def apply( self, profile, assumptions ):
+        # The COLA-indexed projection is indexed at the outlook's inflation, so recompose it from the
+        # stored economics (the assumptions' own, or the default).
         tax_type = StatuteForecastType.from_name( self.cleaned_data[ 'forecast_type' ] )
         return profile, replace(
-            assumptions, tax_projection = tax_projection( tax_type, self._economics( assumptions ) ) )
+            assumptions, tax_projection = tax_projection( tax_type, seed_economics( assumptions ) ) )

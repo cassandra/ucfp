@@ -27,7 +27,7 @@ from common.rate import Rate
 from ucfp.forecast.economic_outlook import EconomicParameters
 from ucfp.jurisdiction.enums import StatuteForecastType
 
-from .assumptions.defaults import DEFAULT_TAX_FORECAST_TYPE, default_economics, tax_projection
+from .assumptions.defaults import DEFAULT_TAX_FORECAST_TYPE, seed_economics, tax_projection
 
 
 @dataclass( frozen = True )
@@ -133,13 +133,6 @@ assert set( factor.field for factor in ECONOMIC_FACTORS ) == _ENGINE_RATE_FIELDS
     f'{set( factor.field for factor in ECONOMIC_FACTORS ) ^ _ENGINE_RATE_FIELDS}' )
 
 
-def _seed_economics( assumptions ) -> EconomicParameters:
-    """The economics copy an editor seeds from -- the assumptions' own, or the shared preset default."""
-    if assumptions is not None and assumptions.economics is not None:
-        return assumptions.economics
-    return default_economics()
-
-
 def _stored_forecast_type( assumptions ) -> StatuteForecastType:
     """The tax-bracket forecast type currently stored on the assumptions, or the default -- read by the
     Economics form so it can recompose the tax projection on a rate edit without owning the choice."""
@@ -159,7 +152,7 @@ class _EconomicRateForm( forms.Form ):
 
     def __init__( self, data = None, *, profile = None, assumptions = None ):
         super().__init__( data )
-        economics = _seed_economics( assumptions )
+        economics = seed_economics( assumptions )
         for factor in self._factors:
             field         = factor.percent_field()
             field.initial = factor.seeded_initial( economics )
@@ -167,7 +160,7 @@ class _EconomicRateForm( forms.Form ):
 
     def _edited_economics( self, assumptions ) -> EconomicParameters:
         return replace(
-            _seed_economics( assumptions ),
+            seed_economics( assumptions ),
             **{ factor.field: Rate.percent( self.cleaned_data[ factor.field ] )
                 for factor in self._factors } )
 
@@ -234,26 +227,23 @@ class ExternalFactorsSectionForm:
         return profile, assumptions
 
 
-class SocialSecurityFundingForm( forms.Form ):
+class SocialSecurityFundingForm( _EconomicRateForm ):
     """The Advanced page's Social Security funding what-if: the retained share of scheduled benefits from
-    the reduction year on, and the year it takes effect. Both edit the assumptions' economics copy; `apply`
-    replaces them onto the stored economics, preserving every rate. Seeded from the assumptions or the
-    shared preset default."""
+    the reduction year on (a rate factor, built by the base), and the year it takes effect (a bespoke
+    integer added here). Both edit the assumptions' economics copy; `apply` replaces the share via the base
+    and the year alongside it, preserving every other rate."""
+
+    _factors = ( _FUNDING_FACTOR, )
 
     def __init__( self, data = None, *, profile = None, assumptions = None ):
-        super().__init__( data )
-        economics = _seed_economics( assumptions )
-        payable   = _FUNDING_FACTOR.percent_field()
-        payable.initial = _FUNDING_FACTOR.seeded_initial( economics )
-        self.fields[ _FUNDING_PAYABLE_FIELD ] = payable
+        super().__init__( data, profile = profile, assumptions = assumptions )
         self.fields[ _FUNDING_YEAR_FIELD ] = forms.IntegerField(
             label = _FUNDING_YEAR_LABEL, min_value = 2020, max_value = 2100,
-            initial = economics.social_security_reduction_year,
+            initial = seed_economics( assumptions ).social_security_reduction_year,
             widget = forms.NumberInput( attrs = { 'class' : 'form-control' } ) )
 
     def apply( self, profile, assumptions ):
         economics = replace(
-            _seed_economics( assumptions ),
-            social_security_benefits_payable = Rate.percent( self.cleaned_data[ _FUNDING_PAYABLE_FIELD ] ),
-            social_security_reduction_year   = self.cleaned_data[ _FUNDING_YEAR_FIELD ] )
+            self._edited_economics( assumptions ),
+            social_security_reduction_year = self.cleaned_data[ _FUNDING_YEAR_FIELD ] )
         return profile, replace( assumptions, economics = economics )

@@ -1524,39 +1524,45 @@ class ResidenceView( SelfSavingPaneView ):
         _save_profile_and_plans( request, profile, plans )
 
 
-class ExternalFactorsView( SelfSavingPaneView ):
-    """`/inputs/interview/external-factors/edit/` -- the External Factors pane of the Assumptions
-    flow. It persists the assumptions' economic factors and tax projection."""
+class AssumptionsPaneView( SelfSavingPaneView ):
+    """Shared shape for an Assumptions self-saving pane. Every such pane edits one subset of the current
+    Assumptions and persists the whole record, so they share one `build_form`/`persist`: build the pane's
+    `form_class` from the current assumptions, and on a valid edit apply it and save. A concrete pane
+    declares only its `template`, `target`, `context_name`, and `form_class`. The load-modify-save is what
+    lets several panes edit the same value-object without clobbering (each form replaces only its own
+    fields)."""
 
-    template     = 'inputs/interview/sections/external_factors_pane.html'
-    target       = 'external-factors'
-    context_name = 'factors_form'
+    form_class : type
 
     def build_form( self, request, data = None ):
-        return ExternalFactorsForm( data, assumptions = _current_assumptions( request ) )
+        return self.form_class( data, assumptions = _current_assumptions( request ) )
 
     def persist( self, request, form ):
         _profile, assumptions = form.apply( None, _current_assumptions( request ) )
         save_assumptions( current_assumptions_record( request ), assumptions )
 
 
-class TransactionCostsView( SelfSavingPaneView ):
-    """`/inputs/interview/transaction-costs/edit/` -- the Selling Costs pane of the Assumptions flow. It
+class ExternalFactorsView( AssumptionsPaneView ):
+    """`/inputs/interview/external-factors/edit/` -- the Economics pane of the Assumptions flow. It
+    persists the assumptions' common economic rates (and keeps the tax projection indexed at inflation)."""
+
+    template     = 'inputs/interview/sections/external_factors_pane.html'
+    target       = 'external-factors'
+    context_name = 'factors_form'
+    form_class   = ExternalFactorsForm
+
+
+class TransactionCostsView( AssumptionsPaneView ):
+    """`/inputs/interview/transaction-costs/edit/` -- the Selling costs sub-pane of the Advanced page. It
     persists the transaction-cost assumptions applied when an asset is sold."""
 
     template     = 'inputs/interview/sections/transaction_costs_pane.html'
     target       = 'transaction-costs'
     context_name = 'costs_form'
-
-    def build_form( self, request, data = None ):
-        return TransactionCostsForm( data, assumptions = _current_assumptions( request ) )
-
-    def persist( self, request, form ):
-        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
-        save_assumptions( current_assumptions_record( request ), assumptions )
+    form_class   = TransactionCostsForm
 
 
-class AdvancedEconomicsView( SelfSavingPaneView ):
+class AdvancedEconomicsView( AssumptionsPaneView ):
     """`/inputs/interview/advanced/economics/edit/` -- the Economics sub-pane of the Advanced Assumptions
     page. It persists the niche economic rates (bond appreciation, precious metals, collectibles, vehicle
     depreciation, rental-income increase) onto the assumptions' economics copy."""
@@ -1564,32 +1570,20 @@ class AdvancedEconomicsView( SelfSavingPaneView ):
     template     = 'inputs/interview/sections/advanced_economics_pane.html'
     target       = 'advanced-economics'
     context_name = 'economics_form'
-
-    def build_form( self, request, data = None ):
-        return AdvancedEconomicsForm( data, assumptions = _current_assumptions( request ) )
-
-    def persist( self, request, form ):
-        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
-        save_assumptions( current_assumptions_record( request ), assumptions )
+    form_class   = AdvancedEconomicsForm
 
 
-class TaxesView( SelfSavingPaneView ):
+class TaxesView( AssumptionsPaneView ):
     """`/inputs/interview/advanced/taxes/edit/` -- the Taxes sub-pane of the Advanced Assumptions page. It
     persists the future-tax-bracket projection."""
 
     template     = 'inputs/interview/sections/advanced_taxes_pane.html'
     target       = 'advanced-taxes'
     context_name = 'taxes_form'
-
-    def build_form( self, request, data = None ):
-        return TaxesForm( data, assumptions = _current_assumptions( request ) )
-
-    def persist( self, request, form ):
-        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
-        save_assumptions( current_assumptions_record( request ), assumptions )
+    form_class   = TaxesForm
 
 
-class NetWorthView( SelfSavingPaneView ):
+class NetWorthView( AssumptionsPaneView ):
     """`/inputs/interview/advanced/net-worth/edit/` -- the Net worth calculation sub-pane of the Advanced
     Assumptions page. It persists the latent-tax rates the Estimated Future Taxes overlay applies to
     estimate the tax embedded in pre-tax retirement balances and unrealized gains."""
@@ -1597,16 +1591,10 @@ class NetWorthView( SelfSavingPaneView ):
     template     = 'inputs/interview/sections/advanced_net_worth_pane.html'
     target       = 'advanced-net-worth'
     context_name = 'net_worth_form'
-
-    def build_form( self, request, data = None ):
-        return NetWorthForm( data, assumptions = _current_assumptions( request ) )
-
-    def persist( self, request, form ):
-        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
-        save_assumptions( current_assumptions_record( request ), assumptions )
+    form_class   = NetWorthForm
 
 
-class SocialSecurityFundingView( SelfSavingPaneView ):
+class SocialSecurityFundingView( AssumptionsPaneView ):
     """`/inputs/interview/advanced/ss-funding/edit/` -- the Social Security funding sub-pane of the Advanced
     Assumptions page. It persists the funding what-if (retained benefits share + effective year) onto the
     assumptions' economics copy."""
@@ -1614,13 +1602,7 @@ class SocialSecurityFundingView( SelfSavingPaneView ):
     template     = 'inputs/interview/sections/advanced_ss_funding_pane.html'
     target       = 'advanced-ss-funding'
     context_name = 'funding_form'
-
-    def build_form( self, request, data = None ):
-        return SocialSecurityFundingForm( data, assumptions = _current_assumptions( request ) )
-
-    def persist( self, request, form ):
-        _profile, assumptions = form.apply( None, _current_assumptions( request ) )
-        save_assumptions( current_assumptions_record( request ), assumptions )
+    form_class   = SocialSecurityFundingForm
 
 
 class CashPlanView( SelfSavingPaneView ):

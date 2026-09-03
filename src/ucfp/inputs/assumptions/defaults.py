@@ -37,6 +37,15 @@ def default_economics() -> EconomicParameters:
     return economic_parameters( EconomicOutlookVariant.EXPECTED.label )
 
 
+def seed_economics( assumptions ) -> EconomicParameters:
+    """The economics copy an editor seeds from -- the assumptions' own, or the shared preset default. The
+    single source the Economics editors (main pane, niche rates, funding) and the Taxes pane share, so a
+    partial editor always modifies the stored outlook rather than a fresh default."""
+    if assumptions is not None and assumptions.economics is not None:
+        return assumptions.economics
+    return default_economics()
+
+
 def tax_projection(
         forecast_type : StatuteForecastType, economics : EconomicParameters ) -> TaxProjection:
     """The tax projection for a chosen forecast type under `economics`: a COLA-indexed forecast indexes
