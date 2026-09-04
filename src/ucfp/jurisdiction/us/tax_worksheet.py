@@ -63,6 +63,7 @@ class TaxYearInputs:
     taxable_ss              : Decimal
     agi                     : Decimal
     taxable_long_term_gains : Decimal
+    section_1250_depreciation : Decimal
     net_investment_income   : Decimal
     standard_deduction      : Decimal
     taxable_ordinary_income : Decimal
@@ -84,6 +85,11 @@ _DERIVED_COLUMNS = (
     ( 'taxable_ss_pct', 'Taxable Social Security %', ColumnFormat.PERCENT ),
     ( 'agi', 'Adjusted Gross Income (AGI)', ColumnFormat.MONEY ),
     ( 'taxable_ltcg', 'Taxable Long-Term Gains', ColumnFormat.MONEY ),
+    # The §1250 depreciation on a sold rental -- the unrecaptured §1250 gain, part of the taxable gain and
+    # net investment income (its tax is the "Section 1250 Recapture" column). It is the §1250 computed
+    # ("allowed or allowable") depreciation, not necessarily what was claimed. Shown so NII reconciles
+    # against these lines: without it the depreciation portion is invisible on the income side.
+    ( 'section_1250_depreciation', 'Section 1250 Depreciation', ColumnFormat.MONEY ),
     ( 'net_investment_income', 'Net Investment Income', ColumnFormat.MONEY ),
     ( 'standard_deduction', 'Standard Deduction', ColumnFormat.MONEY ),
     ( 'applied_deduction', 'Applied Deduction', ColumnFormat.MONEY ),
@@ -160,8 +166,9 @@ def _derived_cells( inputs : TaxYearInputs ) -> dict:
         'provisional_income'    : inputs.provisional_income,
         'taxable_ss_pct'        : _ratio( inputs.taxable_ss, inputs.ss_gross ),
         'agi'                   : inputs.agi,
-        'taxable_ltcg'          : inputs.taxable_long_term_gains,
-        'net_investment_income' : inputs.net_investment_income,
+        'taxable_ltcg'              : inputs.taxable_long_term_gains,
+        'section_1250_depreciation' : inputs.section_1250_depreciation,
+        'net_investment_income'     : inputs.net_investment_income,
         'standard_deduction'    : inputs.standard_deduction,
         'applied_deduction'     : inputs.applied_deduction,
         'taxable_ordinary'      : inputs.taxable_ordinary_income }

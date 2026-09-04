@@ -35,6 +35,7 @@ def _inputs( ** overrides ) -> TaxYearInputs:
         niit_threshold = _D( '200000' ), income_accounts = [],
         provisional_income = _D( '44000' ), ss_gross = _D( '40000' ), taxable_ss = _D( '34000' ),
         agi = _D( '90000' ), taxable_long_term_gains = _D( '20000' ),
+        section_1250_depreciation = _D( '0' ),
         net_investment_income = _D( '20500' ), standard_deduction = _D( '15000' ),
         applied_deduction = _D( '15000' ),
         taxable_ordinary_income = _D( '30000' ), taxable_income = _D( '50000' ),
@@ -58,6 +59,12 @@ class DerivedColumnTest( unittest.TestCase ):
     def test_a_zero_base_share_is_not_applicable_not_a_division_error( self ):
         cells = _cells( build_worksheet( _inputs( ss_gross = _D( '0' ), taxable_ss = _D( '0' ) ) ) )
         self.assertIsNone( cells[ 'taxable_ss_pct' ] )
+
+    def test_section_1250_depreciation_surfaces_the_unrecaptured_gain( self ):
+        # The §1250 depreciation on a sold rental is part of the gain and NII; showing it lets NII
+        # reconcile against the income lines (its tax is the separate §1250 recapture column).
+        cells = _cells( build_worksheet( _inputs( section_1250_depreciation = _D( '168775' ) ) ) )
+        self.assertEqual( cells[ 'section_1250_depreciation' ], _D( '168775' ) )
 
     def test_effective_rate_is_total_over_taxable_income( self ):
         cells = _cells( build_worksheet( _inputs() ) )
