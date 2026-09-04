@@ -27,6 +27,8 @@ from .enums import PlanningFeature
 from .gating import partition_scenarios, scenario_started
 from .run_books_cache import load_run_books
 from .models import PlanningResultRecord
+from .books_table import run_period_spans
+from .inflation import to_todays_dollars
 from .run_charts import net_worth_chart as build_net_worth_chart
 from .schemas import ProjectionRun
 
@@ -39,6 +41,12 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
     frame  = run.frame
     ledger = Bookkeeper( books ).snapshot_ledger
     steps  = run.result.steps
+    # The starting net worth is read at the opening instant -- the day before the first period, the same
+    # point the books table's opening row and the chart's first point use (`run_period_spans`' opening span).
+    # Reading it at `frame.start_date` instead would include the first period's growth, which the engine
+    # books at the period's start date, overstating the "starting" figure against the table and chart.
+    opening_span = run_period_spans( run )[ 0 ]
+    opening_date = opening_span.end_date
     lasted = not run.result.stopped_early
     end_date = frame.end_date if lasted else steps[ -1 ].end_date
     depleted = ( not lasted ) and steps[ -1 ].is_depleted
@@ -57,7 +65,7 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
             'start'    : {
                 'year'      : frame.start_date.year,
                 'ages'      : _join_ages( start_ages ),
-                'net_worth' : ledger.net_worth( through = frame.start_date ) },
+                'net_worth' : ledger.net_worth( through = opening_date ) },
             'end'      : {
                 'year'            : end_date.year,
                 'ages'            : _join_ages( end_ages ),
@@ -68,21 +76,7 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
                 # figure is read against money the viewer knows. None when the restatement would add nothing
                 # -- not solvent, a same-year horizon, or a zero/absent inflation assumption -- and the
                 # summary then simply omits the companion line.
-                'net_worth_today' : _in_start_year_dollars( end_net_worth, run, end_date ) if solvent else None } } }
-
-
-def _in_start_year_dollars( amount : Decimal, run : ProjectionRun, end_date ) -> Optional[ Decimal ]:
-    """`amount`, a figure at `end_date`, discounted to the run's start-year dollars by its general
-    inflation assumption -- the "in today's dollars" companion to a nominal, far-horizon net worth. None
-    when the discount is a no-op: a same-year horizon (nothing to discount) or a zero/absent inflation rate
-    (the figure would merely repeat the nominal one). Uses the same inflation the engine grew the run by, so
-    the two figures are a consistent nominal/real pair."""
-    economics = run.assumptions.economics if run.assumptions else None
-    inflation = economics.inflation.fraction if economics else Decimal( '0' )
-    years     = end_date.year - run.frame.start_date.year
-    if ( inflation <= 0 ) or ( years <= 0 ):
-        return None
-    return amount / ( ( Decimal( '1' ) + inflation ) ** years )
+                'net_worth_today' : to_todays_dollars( run, end_net_worth, end_date ) if solvent else None } } }
 
 
 def _ages( profile, on_date ) -> list:
@@ -181,14 +175,17 @@ class ForecastOverview:
         return self.state is ForecastState.NEEDS_SCENARIO
 
 
-def forecast_overview( organization : Organization ) -> ForecastOverview:
+def forecast_overview( organization : Organization, *,
+                       adjust_for_inflation : bool = False ) -> ForecastOverview:
     """The forecast card's state for `organization`. A saved run always wins (it is immutable and always
     viewable, whatever the inputs look like now), so it is checked first; only then does the setup ladder
     apply -- a complete profile, then a runnable scenario. The ladder mirrors the hub's own gating, and the
-    NEEDS_SCENARIO result carries the scenario the shared pane will offer to build or resume."""
+    NEEDS_SCENARIO result carries the scenario the shared pane will offer to build or resume.
+    `adjust_for_inflation` draws the card's net-worth chart in today's dollars (the session preference)."""
     latest = _latest_saved_run( organization )
     if latest is not None:
-        return ForecastOverview( state = ForecastState.HAS_RUN, card = _run_card( latest ) )
+        return ForecastOverview(
+            state = ForecastState.HAS_RUN, card = _run_card( latest, adjust_for_inflation ) )
 
     profile_record = completed_profile( organization )
     if profile_record is None:
@@ -214,7 +211,7 @@ def _latest_saved_run( organization : Organization ) -> Optional[ PlanningResult
              .order_by( '-created_datetime' ).first() )
 
 
-def _run_card( result : PlanningResultRecord ) -> ForecastRunCard:
+def _run_card( result : PlanningResultRecord, adjust_for_inflation : bool = False ) -> ForecastRunCard:
     """The display card for a saved run: its identity plus the horizon and the net-worth/outcome figures,
     the latter from a single books load through `run_outcome` (one run's books -- the dashboard's only
     projection load). Horizon comes from the parsed frame, so it is right even if the run stopped early."""
@@ -239,4 +236,5 @@ def _run_card( result : PlanningResultRecord ) -> ForecastRunCard:
         start_net_worth  = summary[ 'start' ][ 'net_worth' ],
         end_net_worth    = end[ 'net_worth' ] if end[ 'has_net_worth' ] else None,
         net_worth_chart  = build_net_worth_chart(
-            run, books, chrome = CHROME_FULL, width = 960, height = 220 ) )
+            run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust_for_inflation,
+            width = 960, height = 220 ) )

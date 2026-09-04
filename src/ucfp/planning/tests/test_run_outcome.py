@@ -36,7 +36,8 @@ def _run( frame, *, stopped_early, end_date, is_depleted, birthdate = date( 1960
         frame       = frame,
         result      = SimpleNamespace(
             stopped_early = stopped_early,
-            steps = [ SimpleNamespace( end_date = end_date, is_depleted = is_depleted ) ] ),
+            steps = [ SimpleNamespace(
+                start_date = frame.start_date, end_date = end_date, is_depleted = is_depleted ) ] ),
         profile     = SimpleNamespace( subjects = subjects ),
         assumptions = SimpleNamespace( economics = SimpleNamespace( inflation = Rate( inflation ) ) ) )
 
@@ -64,6 +65,30 @@ class RunOutcomeTests( unittest.TestCase ):
             'start': { 'year': 2026, 'ages': '66', 'net_worth': _D( '500000' ) },
             'end': { 'year': 2028, 'ages': '68', 'net_worth': _D( '500000' ), 'has_net_worth': True,
                      'net_worth_today': None } } )   # zero inflation -> no separate today's-dollars figure
+
+    def test_the_starting_net_worth_excludes_the_first_periods_growth( self ):
+        # The engine books a period's growth at the period-START date, so reading the start figure at
+        # frame.start_date would fold the first year's appreciation into the "starting" net worth. It must
+        # read the opening instant -- the day before the first period -- matching the books table's opening
+        # row and the chart's first point. $500,000 of stocks growing 5%/yr: start stays $500,000 while the
+        # end has grown.
+        frame  = ForecastFrame(
+            start_date = date( 2026, 1, 1 ), end_date = date( 2027, 12, 31 ),
+            granularity = Duration( 1, TimeUnit.YEAR ) )
+        params = ForecastParameters(
+            start_date = frame.start_date, end_date = frame.end_date, filing_status = FilingStatus.SINGLE,
+            statute = _STATUTE, subjects = [ Subject( 'you', date( 1960, 1, 1 ) ) ],
+            assets = [ AssetParameters( 'Stocks', AssetClass.STOCKS, _D( '500000' ), _D( '500000' ) ) ],
+            economic_outlook = EconomicOutlook.constant(
+                EconomicParameters( stock_appreciation = Rate( _D( '0.05' ) ) ) ) )
+        books = Forecast( params ).run().books
+
+        summary = run_outcome(
+            _run( frame, stopped_early = False, end_date = frame.end_date, is_depleted = False ),
+            books )[ 'summary' ]
+
+        self.assertEqual( summary[ 'start' ][ 'net_worth' ], _D( '500000' ) )   # the opening, not $525,000
+        self.assertGreater( summary[ 'end' ][ 'net_worth' ], _D( '500000' ) )   # growth did happen
 
     def test_ages_track_the_dates_not_just_the_year( self ):
         # Born Dec 22 1990; a run from Aug to Dec 2026 -> 35 at the start (birthday not yet reached in

@@ -18,6 +18,7 @@ source of truth). Assets and liabilities are end-of-period balances (stock);
 income and expenses are within-period flows -- so the opening span, being
 zero-length, contributes a zero flow and the starting balances.
 """
+from dataclasses import replace
 from typing import Optional
 
 from common.datetime_utils import age_on
@@ -40,6 +41,7 @@ from ucfp.accounts.books_table import (
 from ucfp.accounts.enums import AccountType
 
 from .books_table import run_period_spans
+from .inflation import deflation_factor
 from .materialization import primary_birthdate
 from .schemas import ProjectionRun
 
@@ -80,7 +82,7 @@ _MAX_COLUMN_LINES  = 8
 
 
 def net_worth_chart( run : ProjectionRun, books : BooksOfAccount, *,
-                     chrome : str = CHROME_SPARKLINE,
+                     chrome : str = CHROME_SPARKLINE, adjust_for_inflation : bool = False,
                      width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
     """A single net-worth line over the run's timeline (defaults to a sparkline)."""
     spans  = run_period_spans( run )
@@ -89,11 +91,12 @@ def net_worth_chart( run : ProjectionRun, books : BooksOfAccount, *,
         values = [ float( ledger.net_worth( through = span.end_date )) for span in spans ],
         label  = _NET_WORTH_LABEL,
         color  = _NET_WORTH_COLOR ) ]
-    return _chart( spans, series, chrome, run = run, width = width, height = height )
+    return _chart( spans, series, chrome, run = run, adjust_for_inflation = adjust_for_inflation,
+                   width = width, height = height )
 
 
 def balances_chart( run : ProjectionRun, books : BooksOfAccount, *,
-                    chrome : str = CHROME_FULL,
+                    chrome : str = CHROME_FULL, adjust_for_inflation : bool = False,
                     width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
     """Net worth and its two components -- assets and liabilities -- over the run's
     timeline: end-of-period balances (stock) on a shared scale. Net worth is listed
@@ -111,11 +114,12 @@ def balances_chart( run : ProjectionRun, books : BooksOfAccount, *,
         LineChartSeries( balance( AccountType.ASSET ), 'Assets', _ASSETS_COLOR ),
         LineChartSeries( balance( AccountType.LIABILITY ), 'Liabilities', _LIABILITIES_COLOR ),
     ]
-    return _chart( spans, series, chrome, run = run, width = width, height = height )
+    return _chart( spans, series, chrome, run = run, adjust_for_inflation = adjust_for_inflation,
+                   width = width, height = height )
 
 
 def flows_chart( run : ProjectionRun, books : BooksOfAccount, *,
-                 chrome : str = CHROME_FULL,
+                 chrome : str = CHROME_FULL, adjust_for_inflation : bool = False,
                  width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
     """Income and expenses over the run's timeline: within-period flows (flow) on
     their own scale, kept separate from the balances, which are orders of magnitude
@@ -131,10 +135,12 @@ def flows_chart( run : ProjectionRun, books : BooksOfAccount, *,
         LineChartSeries( flow( AccountType.REVENUE ), 'Income', _INCOME_COLOR ),
         LineChartSeries( flow( AccountType.EXPENSE ), 'Expenses', _EXPENSES_COLOR ),
     ]
-    return _chart( spans, series, chrome, run = run, width = width, height = height )
+    return _chart( spans, series, chrome, run = run, adjust_for_inflation = adjust_for_inflation,
+                   width = width, height = height )
 
 
 def column_chart( run : ProjectionRun, books : BooksOfAccount, column_key : BooksColumnKey, *,
+                  adjust_for_inflation : bool = False,
                   width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
     """A per-column drill-in: the column's value over time (the same figure the table cell
     shows) and, when it is a rollup, its immediate children beside it. Children that read
@@ -177,7 +183,8 @@ def column_chart( run : ProjectionRun, books : BooksOfAccount, column_key : Book
                 color, dash = _child_style( index )
                 series.append( LineChartSeries( values, label, color, dash = dash ))
 
-    return _chart( spans, series, CHROME_FULL, run = run, width = width, height = height )
+    return _chart( spans, series, CHROME_FULL, run = run, adjust_for_inflation = adjust_for_inflation,
+                   width = width, height = height )
 
 
 def _child_style( index : int ):
@@ -187,10 +194,23 @@ def _child_style( index : int ):
     return ( color, dash )
 
 
+def _deflated_series( series : list, spans : list, run : ProjectionRun ) -> list:
+    """`series` with each line's nominal values restated in the run's start-year ("today's") dollars, per
+    span -- one factor per span from `planning.inflation`, so every line shares the run's inflation basis.
+    Identity where there is nothing to discount (a no-inflation run passes through unchanged)."""
+    factors = [ float( deflation_factor( run, span.end_date ) ) for span in spans ]
+    return [ replace( line, values = [ value * factor for value, factor in zip( line.values, factors ) ] )
+             for line in series ]
+
+
 def _chart( spans : list, series : list[ LineChartSeries ], chrome : str, *,
-            run : Optional[ ProjectionRun ] = None,
+            run : Optional[ ProjectionRun ] = None, adjust_for_inflation : bool = False,
             width : Optional[ float ] = None, height : Optional[ float ] = None ) -> LineChart:
-    x    = [ _x_position( span.end_date ) for span in spans ]
+    x = [ _x_position( span.end_date ) for span in spans ]
+    # Deflate before drawing (and before the sparkline early-return, so thumbnails follow the basis too),
+    # so the y-axis ticks and scale are computed on the today's-dollars values.
+    if adjust_for_inflation and run is not None:
+        series = _deflated_series( series, spans, run )
     dims = {}
     if width is not None:
         dims[ 'width' ] = width

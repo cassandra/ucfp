@@ -14,6 +14,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.http import urlencode
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -310,7 +311,9 @@ class RunResultsView( View ):
         context.update( run_books_table_context( request, run, books ) )
         # A compact balances sparkline beside the summary; the full charts open in a
         # modal (RunChartsModalView), so only the thumbnail is built for the page.
-        context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
+        context[ 'balances_thumbnail' ] = balances_chart(
+            run, books, chrome = CHROME_SPARKLINE,
+            adjust_for_inflation = request.session_state.adjust_charts_for_inflation )
         context[ 'tax_details_url' ] = _tax_details_url( run, record.uuid )
         context.update( self._extra_context( request ) )
         return render( request, self.results_template, context )
@@ -392,8 +395,38 @@ class RunDiscardConfirmView( ModalView ):
         return self.modal_response( request, context = { 'record': record } )
 
 
+class ChartBasisToggleModalView( PermitsReadonlyMutation, ModalView ):
+    """Base for a chart modal that carries the inflation-basis toggle (today's vs future dollars).
+
+    A GET renders the modal; a POST flips the per-session basis preference and re-renders the *whole* modal
+    in the new basis -- the toggle is infrequent, so a full re-render is simpler than an in-place swap.
+    Opted out of the read-only write-gate: it persists only the member's own session view preference, never
+    organization data.
+
+    Subclasses build their own chart-specific context in `_context`, merging in the two shared toggle keys
+    via `_toggle_context` (the current basis and the URL the toggle posts back to)."""
+
+    def get( self, request, run_uuid ):
+        return self.modal_response( request, context = self._context( request, run_uuid ) )
+
+    def post( self, request, run_uuid ):
+        request.session_state.adjust_charts_for_inflation = bool( request.POST.get( 'adjust' ) == 'on' )
+        request.session_state.to_session( request )
+        return self.modal_response( request, context = self._context( request, run_uuid ) )
+
+    def _toggle_context( self, request, toggle_url : str ) -> dict:
+        """The two context keys every chart modal's toggle needs: the current basis and its post-back URL."""
+        return {
+            'adjust_charts_for_inflation' : request.session_state.adjust_charts_for_inflation,
+            'chart_basis_toggle_url'      : toggle_url,
+        }
+
+    def _context( self, request, run_uuid ) -> dict:
+        raise NotImplementedError
+
+
 @method_decorator( ensure_organization, name = 'dispatch' )
-class RunChartsModalView( ModalView ):
+class RunChartsModalView( ChartBasisToggleModalView ):
     """`/run/<uuid>/charts/` -- the wide modal opened from the summary's balances
     thumbnail: the fully-labelled charts split by scale -- balances (net worth,
     assets, liabilities) and annual flows (income, expenses) -- each with a legend."""
@@ -401,31 +434,33 @@ class RunChartsModalView( ModalView ):
     def get_template_name( self ):
         return _CHARTS_MODAL_TEMPLATE
 
-    def get( self, request, run_uuid ):
+    def _context( self, request, run_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
-        run   = from_json_data( ProjectionRun, record.data )
-        books = load_run_books( record.books )
-        context = {
+        run    = from_json_data( ProjectionRun, record.data )
+        books  = load_run_books( record.books )
+        adjust = request.session_state.adjust_charts_for_inflation
+        return {
             'record'         : record,
             'balances_chart' : balances_chart(
-                run, books, chrome = CHROME_FULL, width = 720, height = 300 ),
+                run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust, width = 720, height = 300 ),
             'flows_chart'    : flows_chart(
-                run, books, chrome = CHROME_FULL, width = 720, height = 300 ),
+                run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust, width = 720, height = 300 ),
+            **self._toggle_context( request, reverse( 'run_charts_modal', args = [ record.uuid ] ) ),
         }
-        return self.modal_response( request, context = context )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class RunColumnChartModalView( ModalView ):
+class RunColumnChartModalView( ChartBasisToggleModalView ):
     """`/run/<uuid>/column-chart/?column=<token>` -- the modal opened from a books-table
     column's "Chart" action: that column's value over time, with its immediate children
-    beside it when it is a small-enough rollup."""
+    beside it when it is a small-enough rollup. The `?column=` selection rides the toggle
+    URL so the drill-in survives a basis re-render."""
 
     def get_template_name( self ):
         return _COLUMN_CHART_MODAL_TEMPLATE
 
-    def get( self, request, run_uuid ):
+    def _context( self, request, run_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         token = request.GET.get( 'column' )
@@ -434,10 +469,18 @@ class RunColumnChartModalView( ModalView ):
         run   = from_json_data( ProjectionRun, record.data )
         books = load_run_books( record.books )
         try:
-            chart = column_chart( run, books, BooksColumnKey( token ), width = 720, height = 320 )
+            chart = column_chart(
+                run, books, BooksColumnKey( token ), width = 720, height = 320,
+                adjust_for_inflation = request.session_state.adjust_charts_for_inflation )
         except ValueError as error:
             raise Http404( str( error ) )
-        return self.modal_response( request, context = { 'record': record, 'column_chart': chart } )
+        toggle_url = ( reverse( 'run_column_chart', args = [ record.uuid ] )
+                       + '?' + urlencode( { 'column': token } ) )
+        return {
+            'record'       : record,
+            'column_chart' : chart,
+            **self._toggle_context( request, toggle_url ),
+        }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -556,7 +599,9 @@ class ExploreView( InputGatedMixin, View ):
         context.update( run_books_table_context( request, run, books ) )
         # The same balances thumbnail the results page shows -- charts are as useful while
         # exploring as on a saved run; the modal keys on `record` (the selected run), set above.
-        context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
+        context[ 'balances_thumbnail' ] = balances_chart(
+            run, books, chrome = CHROME_SPARKLINE,
+            adjust_for_inflation = request.session_state.adjust_charts_for_inflation )
         context[ 'tax_details_url' ] = _tax_details_url( run, selected.run.uuid )
         return context
 

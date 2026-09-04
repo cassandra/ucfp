@@ -3,10 +3,17 @@
 GETs that load a captured run's books and render server-side SVG; the column modal also
 resolves an untrusted `?column=` token, which must 404 (never 500) when it names no column.
 """
+from django.contrib.auth import get_user_model
 from django.http import Http404
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
+from django.utils.http import urlencode
 
-from organization.models import Organization
+from common.dataclass_json import from_json_data
+from common.line_chart import CHROME_FULL
+
+from organization.enums import OrganizationRole
+from organization.models import Organization, OrganizationMember
 
 from ucfp.accounts.books_table import BooksColumnKey, BooksDerivedFigure
 from ucfp.inputs.assumptions.repository import save_assumptions
@@ -18,7 +25,12 @@ from ucfp.inputs.scenarios.repository import create_scenario, load_scenario
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.orchestration import run_and_capture
 from ucfp.planning.tests.support import expected_assumptions, forecast_frame, forecast_profile
+from ucfp.planning.overview import run_outcome
+from ucfp.planning.run_books_cache import load_run_books
+from ucfp.planning.run_charts import net_worth_chart
+from ucfp.planning.schemas import ProjectionRun
 from ucfp.planning.views import RunChartsModalView, RunColumnChartModalView
+from ucfp.session_state import SessionState
 
 
 class RunChartModalsTests( TestCase ):
@@ -38,7 +50,15 @@ class RunChartModalsTests( TestCase ):
 
     def _request( self, path, organization = None, **params ):
         request = self.factory.get( path, params, HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
-        request.organization = organization or self.org
+        request.organization  = organization or self.org
+        request.session_state = SessionState()   # middleware attaches this on a real request
+        return request
+
+    def _toggle_request( self, path, adjust, session_state = None ):
+        request = self.factory.post( path, { 'adjust': adjust }, HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
+        request.organization  = self.org
+        request.session_state = session_state or SessionState()
+        request.session       = {}   # `to_session` writes the preference through to the session
         return request
 
     # -- RunChartsModalView (balances + flows) --------------------------------------
@@ -81,3 +101,73 @@ class RunChartModalsTests( TestCase ):
             RunColumnChartModalView().get(
                 self._request( '/column-chart', column = self._net_worth_token(), organization = other ),
                 run_uuid = self.run.uuid )
+
+    # -- inflation basis (#263) -----------------------------------------------------
+
+    def _run_and_books( self ):
+        return ( from_json_data( ProjectionRun, self.run.data ), load_run_books( self.run.books ) )
+
+    def test_a_chart_deflates_to_todays_dollars_when_adjusted( self ):
+        run, books = self._run_and_books()
+        nominal  = net_worth_chart( run, books, chrome = CHROME_FULL, adjust_for_inflation = False )
+        adjusted = net_worth_chart( run, books, chrome = CHROME_FULL, adjust_for_inflation = True )
+        nom, adj = nominal.series[ 0 ].values, adjusted.series[ 0 ].values
+        self.assertEqual( adj[ 0 ], nom[ 0 ] )       # opening: nothing to discount in the start year
+        self.assertLess( adj[ -1 ], nom[ -1 ] )      # a later year is fewer of today's dollars
+
+    def test_the_adjusted_chart_end_agrees_with_the_summarys_todays_dollars( self ):
+        # The chart and the run summary must derive their real-terms figures from the one shared helper, so
+        # the chart's ending net worth in today's dollars matches the summary's "Today's $" companion.
+        run, books = self._run_and_books()
+        today_figure = run_outcome( run, books )[ 'summary' ][ 'end' ][ 'net_worth_today' ]
+        self.assertIsNotNone( today_figure )         # solvent, multi-year, inflation set -> a real figure
+        chart_end = net_worth_chart(
+            run, books, chrome = CHROME_FULL, adjust_for_inflation = True ).series[ 0 ].values[ -1 ]
+        self.assertAlmostEqual( chart_end, float( today_figure ), delta = 1.0 )   # agree to the dollar
+
+    # -- the modal toggle (POST flips the app-wide preference, re-renders the modal) ------------------
+
+    def test_charts_modal_toggle_persists_the_preference_and_re_renders( self ):
+        state    = SessionState( adjust_charts_for_inflation = True )
+        request  = self._toggle_request( '/charts', adjust = 'off', session_state = state )
+        response = RunChartsModalView().post( request, run_uuid = self.run.uuid )
+        self.assertEqual( response.status_code, 200 )
+        self.assertIn( 'line-chart', response.content.decode() )
+        self.assertFalse( request.session_state.adjust_charts_for_inflation )        # flipped on the state
+        self.assertFalse( request.session[ 'adjust_charts_for_inflation' ] )         # and persisted
+
+    def test_charts_modal_toggle_can_turn_adjustment_back_on( self ):
+        state    = SessionState( adjust_charts_for_inflation = False )
+        request  = self._toggle_request( '/charts', adjust = 'on', session_state = state )
+        response = RunChartsModalView().post( request, run_uuid = self.run.uuid )
+        self.assertEqual( response.status_code, 200 )
+        self.assertIn( 'line-chart', response.content.decode() )
+        self.assertTrue( request.session_state.adjust_charts_for_inflation )
+
+    def test_a_read_only_member_may_toggle_the_chart_basis( self ):
+        # The toggle persists only the member's own session view preference, so it opts out of the read-only
+        # write-gate (PermitsReadonlyMutation). A viewer POSTing it must be served, not 403'd -- exercised
+        # through the real URL so the `ensure_organization` gate and its resolver_match are in play.
+        viewer = get_user_model().objects.create_user( email = 'viewer@x.test' )
+        OrganizationMember.objects.create(
+            organization = self.org, user = viewer, organization_role = OrganizationRole.VIEWER )
+        self.client.force_login( viewer )
+        session = self.client.session
+        session[ 'current_organization_uuid' ] = str( self.org.uuid )
+        session.save()
+
+        response = self.client.post(
+            reverse( 'run_charts_modal', args = [ self.run.uuid ] ), { 'adjust': 'off' },
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
+
+        self.assertEqual( response.status_code, 200 )                        # served, not write-gated
+        self.assertFalse( self.client.session[ 'adjust_charts_for_inflation' ] )   # and the flip persisted
+
+    def test_column_modal_toggle_preserves_the_column( self ):
+        path     = '/column-chart?' + urlencode( { 'column': self._net_worth_token() } )
+        state    = SessionState( adjust_charts_for_inflation = True )
+        request  = self._toggle_request( path, adjust = 'off', session_state = state )
+        response = RunColumnChartModalView().post( request, run_uuid = self.run.uuid )
+        self.assertEqual( response.status_code, 200 )   # the ?column= token survived into the re-render
+        self.assertIn( 'line-chart', response.content.decode() )
+        self.assertFalse( request.session_state.adjust_charts_for_inflation )

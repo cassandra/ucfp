@@ -122,6 +122,11 @@ class SessionState:
     # shown again this session (see ucfp.privacy_consent).
     cookies_acknowledged : bool = False
 
+    # Whether forecast charts are drawn in today's (inflation-adjusted) dollars rather than nominal
+    # ("future") dollars -- an app-wide view preference, on by default (see planning.inflation). A
+    # per-session setting: flipped from the chart modals, read wherever a chart is drawn.
+    adjust_charts_for_inflation : bool = True
+
     # Feature-neutral household facts a visitor has entered into the login-free tools (birth years, benefit
     # amounts, an expected lifetime), so a tool can re-prefill them and a brand-new Profile can be seeded
     # from them. NOT org-scoped -- it works for an anonymous visitor with no organization. The neutral bag
@@ -230,6 +235,7 @@ class SessionState:
         request.session[ 'forecast_duration_years' ] = self.forecast_duration_years
         request.session[ 'forecast_interval' ] = self.forecast_interval
         request.session[ 'cookies_acknowledged' ] = self.cookies_acknowledged
+        request.session[ 'adjust_charts_for_inflation' ] = self.adjust_charts_for_inflation
         request.session[ 'session_facts' ] = self.session_facts.to_storage()
         request.session[ 'ss_timing_assumptions' ] = self.ss_timing_assumptions
         return
@@ -252,5 +258,7 @@ class SessionState:
             forecast_duration_years = _int_or_none( request.session.get( 'forecast_duration_years' ) ),
             forecast_interval = request.session.get( 'forecast_interval' ),
             cookies_acknowledged = bool( request.session.get( 'cookies_acknowledged', False ) ),
+            adjust_charts_for_inflation = bool(
+                request.session.get( 'adjust_charts_for_inflation', True ) ),
             session_facts = SessionFacts.from_storage( request.session.get( 'session_facts' ) ),
             ss_timing_assumptions = request.session.get( 'ss_timing_assumptions' ) or {} )
