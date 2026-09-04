@@ -332,9 +332,12 @@ class RunResultsView( View ):
 @method_decorator( ensure_organization, name = 'dispatch' )
 class RunTaxDetailsView( View ):
     """`/run/<uuid>/tax-details/` -- the Tax Details page for a captured run: the year-by-year
-    intermediate figures behind each year's projected taxes, as a static (minimize/maximize) table. A
-    temporary navigation surface reached from the results page; runs captured before the worksheet existed
-    have none, so the page shows a note to re-run."""
+    intermediate figures behind each year's projected taxes, as a static (minimize/maximize) table. Runs
+    captured before the worksheet existed have none, so the page shows a note to re-run."""
+
+    # The full-page template; overridable so a wrapper (the example-data tour) can render the same tax
+    # table under a different shell.
+    details_template = _TAX_DETAILS_TEMPLATE
 
     def get( self, request, run_uuid ):
         record = get_object_or_404(
@@ -343,7 +346,14 @@ class RunTaxDetailsView( View ):
         worksheet = run.result.tax_worksheet
         table = ( build_table( worksheet, primary_birthdate( run.profile ) )
                   if worksheet is not None else None )
-        return render( request, _TAX_DETAILS_TEMPLATE, { 'record' : record, 'table' : table } )
+        context = { 'record' : record, 'table' : table }
+        context.update( self._extra_context( request ) )
+        return render( request, self.details_template, context )
+
+    def _extra_context( self, request ) -> dict:
+        """Extra template context a wrapper wants merged in (e.g. the example-data tour marking its active
+        step for the shell's step-nav). Empty by default; overridden alongside `details_template`."""
+        return {}
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

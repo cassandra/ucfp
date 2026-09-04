@@ -1,0 +1,63 @@
+{% load static common_tags icons %}
+{% comment %}
+The Tax Details table panel: the intermediate figures behind each year's projected taxes, as a static
+minimize/maximize table reusing the books table's panel (.run-table-panel), scroll/sticky (.bt-scroll), and
+header tint (.bt-head + the tw-cat-* category colors). Shared so the run page and the tour render it
+identically. A run captured before the worksheet existed has none, so a note invites a re-run.
+Reads `record` and `table` (a WorksheetTable or None).
+{% endcomment %}
+{% if table and not table.is_empty %}
+<div class="run-table-panel card">
+  <div class="card-header">
+    <h2 class="h6 mb-0">The calculations behind each year&rsquo;s taxes.</h2>
+  </div>
+  <div class="card-body">
+    <div class="bt-panel-controls d-flex align-items-center mb-2">
+      <button type="button" class="bt-maximized-only bt-minimize mr-3 flex-shrink-0 border-0 bg-transparent p-0"
+              aria-label="Minimize the table" title="Minimize the table">
+        <img src="{% static 'img/app-logo-h64.png' %}" height="30" alt="">
+      </button>
+      <span class="bt-maximized-only bt-run-name text-primary font-weight-bold">Tax Details for: {{ record.label }}</span>
+      <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle ml-auto flex-shrink-0"
+              aria-pressed="false" title="Maximize the table to fill the window (Esc to minimize)">
+        <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
+        <span class="bt-maximize-label-close d-none">{% icon 'minimize' size='sm' css_class='mr-1' %}Minimize</span>
+      </button>
+    </div>
+    <div class="bt-scroll tw-scroll preserve-scroll-bar">
+      <table class="tw-table">
+        <thead>
+          <tr class="tw-head-groups">
+            <th class="tw-year" rowspan="2" scope="col">Year</th>
+            <th class="tw-age" rowspan="2" scope="col">Age</th>
+            {% for span in table.spans %}
+            <th class="bt-head bt-depth-0 {{ span.css }}" colspan="{{ span.colspan }}"
+                scope="colgroup">{{ span.label }}</th>
+            {% endfor %}
+          </tr>
+          <tr class="tw-head-cols">
+            {% for column in table.columns %}
+            <th class="bt-head bt-depth-0 {{ column.css }}" scope="col">{{ column.label }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in table.rows %}
+          <tr>
+            <th class="tw-year" scope="row">{{ row.year }}</th>
+            <th class="tw-age" scope="row">{{ row.age }}</th>
+            {% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% include "planning/pages/_bt_maximize_script.html" %}
+{% else %}
+<div class="alert alert-info">
+  Tax detail isn&rsquo;t available for this run{% if table %} (no taxes were assessed){% endif %}. Re-run the
+  forecast to generate the tax details.
+</div>
+{% endif %}

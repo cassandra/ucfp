@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.shortcuts import render, resolve_url
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import View
 
@@ -18,7 +19,7 @@ from ucfp.inputs.views import InterviewView
 
 from ucfp.planning.enums import PlanningFeature
 from ucfp.planning.models import PlanningResultRecord
-from ucfp.planning.views import RunResultsView
+from ucfp.planning.views import RunResultsView, RunTaxDetailsView
 
 from . import reconciliation_service
 from .constants import EXAMPLE_ORGANIZATION_UUID, EXAMPLE_SCENARIO_UUID
@@ -205,6 +206,29 @@ class TourForecastView( RunResultsView ):
     is pure client-side, so neither escapes the tour."""
 
     results_template = 'onboarding/tour/forecast.html'
+
+    def _extra_context( self, request ) -> dict:
+        # Point the panel's Tax Details entry at the tour-wrapped page (not the app route) so it stays inside
+        # the tour. The example run always has a worksheet, so the entry is always offered here.
+        return { 'tour_active_step': _TOUR_STEP_FORECAST,
+                 'tax_details_url' : reverse( 'tour_tax_details' ) }
+
+    def get( self, request ):
+        result = PlanningResultRecord.objects.filter(
+            organization = request.organization, feature = PlanningFeature.FINANCIAL_FORECAST
+        ).select_related( 'run' ).order_by( '-created_datetime' ).first()
+        if result is None:
+            raise DataNotAvailableError( 'The example forecast is not available.' )
+        return super().get( request, run_uuid = result.run.uuid )
+
+
+class TourTaxDetailsView( RunTaxDetailsView ):
+    """The Tax Details drill-down of the tour's Forecast step: the example run's tax table
+    (`RunTaxDetailsView`) rendered under the tour shell. Like `TourForecastView` it resolves the example
+    org's Financial Forecast run itself rather than taking a uuid, and it stays on the Forecast step -- a
+    sub-page of Forecast, not a fifth pillar. The in-window Maximize keeps working (pure client-side)."""
+
+    details_template = 'onboarding/tour/tax_details.html'
 
     def _extra_context( self, request ) -> dict:
         return { 'tour_active_step': _TOUR_STEP_FORECAST }
