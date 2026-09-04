@@ -306,7 +306,8 @@ class PropertyOverrideDriftTest( SimpleTestCase ):
 
 def _accounts_profile() -> Profile:
     """A profile spanning the transfer-relevant account classes: a liquid account, a marketable security, a
-    pre-tax retirement account, and a Roth."""
+    pre-tax retirement account, a Roth, a possession, and a vehicle -- the last three are the accounts the
+    old picker allowed as transfer endpoints and #262 now excludes."""
     return Profile(
         subjects = [ SubjectProfile( handle = 'you', name = 'You', birthdate = date( 1960, 1, 1 ) ) ],
         assets = [
@@ -317,6 +318,10 @@ def _accounts_profile() -> Profile:
             AssetProfile( handle = 'pretax', name = '401k', asset_class = AssetClass.PRETAX_RETIREMENT,
                           opening_value = Decimal( '0' ) ),
             AssetProfile( handle = 'roth', name = 'Roth', asset_class = AssetClass.ROTH,
+                          opening_value = Decimal( '0' ) ),
+            AssetProfile( handle = 'metal', name = 'Gold', asset_class = AssetClass.PRECIOUS_METALS,
+                          opening_value = Decimal( '0' ) ),
+            AssetProfile( handle = 'car', name = 'Car', asset_class = AssetClass.DEPRECIATING,
                           opening_value = Decimal( '0' ) ) ] )
 
 
@@ -330,10 +335,34 @@ class TransferEndpointCompatibilityTest( SimpleTestCase ):
     compatibility issue -- reported, blocked at a run, and pruned by the reconcile -- even though its
     accounts still exist. Roth is source-only; pre-tax, possessions, and vehicles are not endpoints."""
 
-    def test_a_disallowed_transfer_is_reported( self ):
-        issues = compatibility_issues( _accounts_profile(), Plans( events = [ _transfer( 'pretax', 'roth' ) ] ) )
+    def test_a_disallowed_transfer_is_reported_by_resolved_account_name( self ):
+        issues = compatibility_issues(
+            _accounts_profile(), Plans( events = [ _transfer( 'pretax', 'roth' ) ] ) )
         self.assertEqual( len( issues ), 1 )
         self.assertIn( 'no longer a supported move', issues[ 0 ] )
+        self.assertIn( '401k', issues[ 0 ] )            # the message resolves handles to account names
+        self.assertIn( 'Roth', issues[ 0 ] )
+
+    def test_a_possession_or_vehicle_source_transfer_is_reported_and_dropped( self ):
+        # possessions and vehicles were valid endpoints under the old picker -- the durable data #262 flags
+        for source in ( 'metal', 'car' ):
+            plans = Plans( events = [ _transfer( source, 'cash' ) ] )
+            self.assertEqual( len( compatibility_issues( _accounts_profile(), plans ) ), 1 )
+            self.assertEqual( plans_reconciled_with_profile( _accounts_profile(), plans ).events, [] )
+
+    def test_only_one_endpoint_disallowed_still_flags_the_transfer( self ):
+        # guards against the source/target checks being ANDed the wrong way (either bad endpoint is enough)
+        for transfer in ( _transfer( 'cash', 'pretax' ),     # target-only invalid
+                          _transfer( 'metal', 'cash' ) ):    # source-only invalid
+            issues = compatibility_issues( _accounts_profile(), Plans( events = [ transfer ] ) )
+            self.assertEqual( len( issues ), 1 )
+
+    def test_an_unresolved_endpoint_is_reported_once_by_existence_only( self ):
+        # a transfer with an unknown source and a disallowed target must not be double-reported
+        issues = compatibility_issues(
+            _accounts_profile(), Plans( events = [ _transfer( 'gone', 'pretax' ) ] ) )
+        self.assertEqual( len( issues ), 1 )
+        self.assertIn( 'unknown source', issues[ 0 ] )
 
     def test_a_disallowed_transfer_blocks_a_run( self ):
         with self.assertRaises( PlansIncompatibleError ):

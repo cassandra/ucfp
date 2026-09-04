@@ -266,11 +266,8 @@ _PARTIALLY_DRAWABLE_ASSET_CLASSES = frozenset(
       AssetClass.ROTH, AssetClass.PRETAX_RETIREMENT ) )
 
 
-# The liquid financial classes -- cash, CDs, and marketable securities -- the money accounts a transfer
-# moves value between (see `is_liquid_financial`). Retirement accounts, real estate, possessions, and
-# vehicles are deliberately excluded: each has a dedicated lifecycle (Tax Planning, a sale event, the
-# vehicle plan) rather than being a free-move endpoint. Unlike `_PARTIALLY_DRAWABLE_ASSET_CLASSES` this
-# INCLUDES cash (a transfer's natural hub) and EXCLUDES the retirement classes.
+# The canonical membership of the liquid financial classes -- cash, CDs, and marketable securities. The
+# domain meaning and how it differs from `_PARTIALLY_DRAWABLE_ASSET_CLASSES` live on `is_liquid_financial`.
 _LIQUID_FINANCIAL_ASSET_CLASSES = frozenset(
     ( AssetClass.CASH, AssetClass.CDS, AssetClass.STOCKS, AssetClass.DIVIDEND_STOCKS,
       AssetClass.BONDS ) )

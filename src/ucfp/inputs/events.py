@@ -358,8 +358,8 @@ class TransferEvent( EventType ):
         return any( source != destination for source in sources for destination in destinations )
 
     def validate( self, selections : dict, profile ) -> Optional[ str ]:
-        source       = selections.get( SOURCE_ROLE )
-        target       = selections.get( TARGET_ROLE )
+        source         = selections.get( SOURCE_ROLE )
+        target         = selections.get( TARGET_ROLE )
         source_handles = { handle for handle, _ in _transfer_sources( profile ) }
         target_handles = { handle for handle, _ in _transfer_destinations( profile ) }
         if source not in source_handles:
@@ -382,10 +382,10 @@ class TransferEvent( EventType ):
         classes      = _asset_classes( profile )
         source_class = classes.get( source )
         target_class = classes.get( target )
-        # Moving out of an appreciating holding is a sale: realize the proportional embedded gain into
-        # the source class's realized-gain income (a capital gain for stocks, an ordinary distribution
-        # for a pre-tax account) rather than a no-tax value move. A face-value source (cash, CDs) has
-        # no gain and takes the plain transfer below.
+        # Moving out of an appreciating holding is a sale: realize the proportional embedded gain into the
+        # source class's realized-gain income (a capital gain for stocks, ordinary earnings for a Roth)
+        # rather than a no-tax value move. A face-value source (cash, CDs) has no gain and takes the plain
+        # transfer below.
         realizes_gain = ( source_class is not None ) and source_class.accrues_unrealized_gains
         if realizes_gain:
             # Proceeds to the cash hub for a cash target, else a conversion into the target holding

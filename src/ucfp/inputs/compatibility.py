@@ -6,8 +6,8 @@ independently selected and edited, so a Plans can drift out of step with the Pro
 against (the Profile gained or lost an entity the Plans still names). Rather than prevent that
 structurally, we check it *at use*: this module resolves every Plans reference against the current
 Profile and reports the ones that do not resolve -- plus a plan item that still resolves but no longer
-works under a current rule (a transfer whose endpoint is no longer a valid transfer account, #262), pruned
-by the same reconcile.
+works under a current rule (a transfer whose endpoint is no longer a valid transfer account), pruned by the
+same reconcile.
 
 It lives here, above `profile` and `plans`, because it depends on both -- neither input subpackage
 may depend on the other. Materialization calls `assert_compatible` before composing the engine
@@ -39,7 +39,8 @@ DRIFT_LEAD_IN = 'These plans include items that no longer work with your profile
 
 
 class PlansIncompatibleError( ValueError ):
-    """A Plans names Profile entities that do not exist in the Profile it is run against. Carries the
+    """A Plans is not compatible with the Profile it is run against -- it names entities the Profile lacks,
+    or uses one in a way a current rule no longer allows (a transfer to a now-invalid account). Carries the
     human-readable `issues` so the run surface can show exactly what to fix."""
 
     def __init__( self, issues: list[ str ] ):
@@ -48,9 +49,10 @@ class PlansIncompatibleError( ValueError ):
 
 
 def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
-    """Every Plans reference that does not resolve against `profile`, as user-facing messages -- empty
-    when the Plans is fully compatible. The single place that enumerates the Plans -> Profile
-    references, so neither materialization nor a selection surface re-spells them."""
+    """Every Plans item that is not valid against `profile`, as user-facing messages -- a reference that does
+    not resolve, or a transfer whose endpoints are no longer valid transfer accounts -- empty when the Plans
+    is fully compatible. The single place that enumerates these, so neither materialization nor a selection
+    surface re-spells them."""
     subjects = { subject.handle for subject in profile.subjects }
     accounts = { asset.handle for asset in profile.assets }
     debts    = { debt.handle for debt in profile.debts }
@@ -106,7 +108,7 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
     account_class = { asset.handle: asset.asset_class for asset in profile.assets }
     account_name  = { asset.handle: asset.name for asset in profile.assets }
     for event in plans.events:
-        if not _transfer_endpoints_valid( event, account_class ):
+        if not _transfer_endpoints_valid( event, account_class, entities ):
             source = event.selections.get( SOURCE_ROLE )
             target = event.selections.get( TARGET_ROLE )
             issues.append(
@@ -116,18 +118,19 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
 
 
 def assert_compatible( profile: Profile, plans: Plans ) -> None:
-    """Raise `PlansIncompatibleError` if any Plans reference fails to resolve against `profile`."""
+    """Raise `PlansIncompatibleError` if the Plans is not compatible with `profile` -- any reference that
+    fails to resolve, or a transfer to a now-invalid account."""
     issues = compatibility_issues( profile, plans )
     if issues:
         raise PlansIncompatibleError( issues )
 
 
 def plans_reconciled_with_profile( profile: Profile, plans: Plans ) -> Plans:
-    """`plans` with every reference that does not resolve against `profile` pruned, so the result is
-    compatible (`compatibility_issues` returns nothing for it). The write-side twin of
-    `compatibility_issues`, mirroring it category for category so report and prune stay in step. This is
-    the single on-demand cleanup a run surface offers to reconcile a drifted scenario -- where a stale
-    reference in any scenario is resolved, since a Profile edit no longer prunes Plans eagerly."""
+    """`plans` with every item not valid against `profile` pruned -- a reference that does not resolve, or a
+    transfer whose endpoints are no longer valid transfer accounts -- so the result is compatible
+    (`compatibility_issues` returns nothing for it). The write-side twin of `compatibility_issues`, mirroring
+    it category for category so report and prune stay in step. This is the single on-demand cleanup a run
+    surface offers to reconcile a drifted scenario, since a Profile edit no longer prunes Plans eagerly."""
     subjects   = { subject.handle for subject in profile.subjects }
     accounts   = { asset.handle for asset in profile.assets }
     debts      = { debt.handle for debt in profile.debts }
@@ -152,7 +155,7 @@ def plans_reconciled_with_profile( profile: Profile, plans: Plans ) -> Plans:
         drawdown          = _reconciled_drawdown( plans.drawdown, accounts ),
         events            = [ e for e in plans.events
                               if _event_resolves( e, entities )
-                              and _transfer_endpoints_valid( e, account_class ) ] )
+                              and _transfer_endpoints_valid( e, account_class, entities ) ] )
 
 
 # --- Loan-terms drift (value drift) --------------------------------------
@@ -358,13 +361,15 @@ def _event_resolves( event, entities: set ) -> bool:
     return all( handle in entities for handle in event.selections.values() )
 
 
-def _transfer_endpoints_valid( event, account_class: dict ) -> bool:
+def _transfer_endpoints_valid( event, account_class: dict, entities: set ) -> bool:
     """Whether a transfer event's endpoints are still valid transfer accounts -- a source that can be
-    transferred out of and a target that can be transferred into (the endpoint rule tightened in #262, so a
-    transfer stored earlier may use a now-excluded account such as a pre-tax or retirement account). True for
-    any non-transfer event, and for an endpoint whose handle is unknown -- an absent account is existence
-    drift, judged by `_event_resolves`, so this only weighs endpoints that still resolve."""
-    if event.kind is not EventKind.TRANSFER:
+    transferred out of and a target that can be transferred into. A transfer stored under an earlier, looser
+    rule may name a now-excluded account (e.g. a pre-tax or retirement account); this flags it. True for any
+    non-transfer event, and for a transfer that does not fully resolve -- an unresolved endpoint is existence
+    drift, dropped whole by `_event_resolves`, so weighing it here too would double-report. A resolved
+    endpoint that is not an account (a debt or subject handle) cannot arise from the transfer picker, which
+    offers only accounts, so it is out of scope here (its class is absent, read as valid)."""
+    if event.kind is not EventKind.TRANSFER or not _event_resolves( event, entities ):
         return True
     source_class = account_class.get( event.selections.get( SOURCE_ROLE ) )
     target_class = account_class.get( event.selections.get( TARGET_ROLE ) )
