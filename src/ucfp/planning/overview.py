@@ -27,6 +27,7 @@ from .enums import PlanningFeature
 from .gating import partition_scenarios, scenario_started
 from .run_books_cache import load_run_books
 from .models import PlanningResultRecord
+from .books_table import run_period_spans
 from .run_charts import net_worth_chart as build_net_worth_chart
 from .schemas import ProjectionRun
 
@@ -39,6 +40,11 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
     frame  = run.frame
     ledger = Bookkeeper( books ).snapshot_ledger
     steps  = run.result.steps
+    # The starting net worth is read at the opening instant -- the day before the first period, the same
+    # point the books table's opening row and the chart's first point use (`run_period_spans`' opening span).
+    # Reading it at `frame.start_date` instead would include the first period's growth, which the engine
+    # books at the period's start date, overstating the "starting" figure against the table and chart.
+    opening_date = run_period_spans( run )[ 0 ].end_date
     lasted = not run.result.stopped_early
     end_date = frame.end_date if lasted else steps[ -1 ].end_date
     depleted = ( not lasted ) and steps[ -1 ].is_depleted
@@ -57,7 +63,7 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
             'start'    : {
                 'year'      : frame.start_date.year,
                 'ages'      : _join_ages( start_ages ),
-                'net_worth' : ledger.net_worth( through = frame.start_date ) },
+                'net_worth' : ledger.net_worth( through = opening_date ) },
             'end'      : {
                 'year'            : end_date.year,
                 'ages'            : _join_ages( end_ages ),
