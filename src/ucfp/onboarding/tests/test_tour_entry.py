@@ -122,6 +122,14 @@ class StartTourTest( TestCase ):
 
         self.assertEqual( 404, response.status_code )            # DataNotAvailableError, not the run page
 
+    def test_tour_tax_details_is_unavailable_without_a_captured_run( self ):
+        _seed_records( self._seed_example() )                     # records but no forecast run
+        self.client.post( reverse( 'start_tour' ) )
+
+        response = self.client.get( reverse( 'tour_tax_details' ) )
+
+        self.assertEqual( 404, response.status_code )            # DataNotAvailableError, like the forecast step
+
     def test_unseeded_example_makes_the_tour_unavailable( self ):
         response = self.client.post( reverse( 'start_tour' ) )
 
@@ -180,6 +188,32 @@ class TourForecastRenderTest( TestCase ):
         self.assertTemplateUsed( response, 'planning/pages/run_books_table.html' )  # the real books table
         self.assertTemplateNotUsed( response, 'pages/app_base.html' )             # not the app chrome
         self.assertEqual( 4, response.context[ 'tour_active_step' ] )             # the shell lights Forecast
+        self.assertContains( response, reverse( 'tour_tax_details' ) )            # entry stays inside the tour
+
+
+@tag( 'e2e' )
+class TourTaxDetailsRenderTest( TestCase ):
+    """The Tax Details drill-down renders the example org's captured tax table under the tour shell -- needs
+    a real captured run (seed_example_org runs a forecast), so it is e2e."""
+
+    def setUp( self ):
+        seed_default_parameter_sets()
+        User.objects.create_superuser( email = 'admin@x.test', password = 'x' )
+        seed_example_org()                                        # example org + a captured forecast run
+
+    def test_tour_tax_details_renders_the_example_tax_table_under_the_tour_shell( self ):
+        self.client.post( reverse( 'start_tour' ) )              # enter as a VIEWER guest
+
+        response = self.client.get( reverse( 'tour_tax_details' ) )
+
+        self.assertEqual( response.status_code, 200 )
+        self.assertTemplateUsed( response, 'onboarding/tour/tax_details.html' )
+        self.assertTemplateUsed( response, 'pages/tour_base.html' )               # the no-nav tour shell
+        self.assertTemplateUsed( response, 'planning/pages/tax_details_panel.html' )  # the shared tax panel
+        self.assertTemplateNotUsed( response, 'pages/app_base.html' )             # not the app chrome
+        self.assertEqual( 4, response.context[ 'tour_active_step' ] )             # a sub-page of Forecast
+        self.assertContains( response, reverse( 'tour_forecast' ) )               # the Back to forecast link
+        self.assertContains( response, 'Adjusted Gross Income' )                  # the real table, not the note
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )

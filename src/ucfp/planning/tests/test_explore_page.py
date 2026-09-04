@@ -52,6 +52,12 @@ class ExplorePageRenderTest( TestCase ):
         self.assertIn( 'run-summary', body )                        # the shared outcome summary rendered
         self.assertIn( 'Start', body )                             # the start→end arc from the shared summary
 
+    def test_page_offers_the_tax_details_entry( self ):
+        # The shared panel's Tax Details entry appears for the selected transient run, just as on a saved run.
+        body = self._get().content.decode()
+        self.assertIn( 'bt-tax-details', body )
+        self.assertIn( '/tax-details/', body )
+
     def test_page_renders_the_balances_thumbnail( self ):
         # Charts are as useful while exploring as on a saved run, so the summary's
         # clickable balances thumbnail renders here too.

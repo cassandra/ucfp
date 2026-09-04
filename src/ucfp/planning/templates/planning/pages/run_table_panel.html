@@ -21,24 +21,38 @@ Reads `summary`, `currency`, and whatever run_books_table.html reads (`books_tab
     covered, so this same row becomes the top bar on a single line: it swaps the hint for minimal branding
     (a home escape hatch) on the left and the run's name -- centred and emphasised -- for orientation,
     keeping the toggle (now Minimize) on the right. The card header (the summary) is hidden in that state.{% endcomment %}
-    <div class="bt-panel-controls d-flex align-items-center mb-2">
-      {% comment %}The brand, shown only while maximized. Clicking it minimizes (same as the toggle and
-      Esc) -- a maximized full-window table has nowhere else to send you, so it is a way back, not a way
-      out.{% endcomment %}
-      <button type="button" class="bt-maximized-only bt-minimize mr-3 flex-shrink-0 border-0 bg-transparent p-0"
-              aria-label="Minimize the table" title="Minimize the table">
-        <img src="{% static 'img/app-logo-h64.png' %}" height="30" alt="">
-      </button>
-      <p class="run-table-hint text-muted small mb-0">
-        {% icon 'gear' size='sm' %} Each column header is a menu: click it to expand, collapse,
-        reorder, or hide the column.
-      </p>
+    {% comment %}A three-slot row: the column-menu hint on the left, the Tax Details entry centred, and the
+    Maximize toggle on the right. Equal `col-4` thirds centre the button on the table (not merely between two
+    variable-width neighbours), and the same layout gives the maximized bar a truly centred run name. Tax
+    Details is a navigate-away action, so it hides when maximized (like the hint) via `.bt-tax-details`.{% endcomment %}
+    <div class="bt-panel-controls row no-gutters align-items-center mb-2">
+      <div class="col-4 d-flex align-items-center">
+        {% comment %}The brand, shown only while maximized. Clicking it minimizes (same as the toggle and
+        Esc) -- a maximized full-window table has nowhere else to send you, so it is a way back, not a way
+        out.{% endcomment %}
+        <button type="button" class="bt-maximized-only bt-minimize mr-3 flex-shrink-0 border-0 bg-transparent p-0"
+                aria-label="Minimize the table" title="Minimize the table">
+          <img src="{% static 'img/app-logo-h64.png' %}" height="30" alt="">
+        </button>
+        <p class="run-table-hint text-muted small mb-0 text-nowrap"
+           title="Click any column header to expand, collapse, reorder, or hide it.">
+          {% icon 'gear' size='sm' %}<span class="d-none d-md-inline"> Adjust columns and see details</span>
+        </p>
+      </div>
+      <div class="col-4 text-center">
+        {% if tax_details_url %}
+        <a href="{{ tax_details_url }}" class="btn btn-outline-primary btn-sm bt-tax-details">
+          {% icon 'calculator' size='sm' css_class='mr-1' %}Tax Details</a>
+        {% endif %}
+      </div>
+      <div class="col-4 text-right">
+        <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle"
+                aria-pressed="false" title="Maximize the table to fill the window (Esc to minimize)">
+          <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
+          <span class="bt-maximize-label-close d-none">{% icon 'minimize' size='sm' css_class='mr-1' %}Minimize</span>
+        </button>
+      </div>
       <span class="bt-maximized-only bt-run-name text-primary font-weight-bold">{{ record.label }}</span>
-      <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle ml-auto flex-shrink-0"
-              aria-pressed="false" title="Maximize the table to fill the window (Esc to minimize)">
-        <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
-        <span class="bt-maximize-label-close d-none">{% icon 'minimize' size='sm' css_class='mr-1' %}Minimize</span>
-      </button>
     </div>
     {% include "planning/pages/run_books_table.html" %}
   </div>

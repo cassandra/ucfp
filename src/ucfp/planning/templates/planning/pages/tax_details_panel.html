@@ -1,27 +1,11 @@
-{% extends "pages/detail_page.html" %}
 {% load static common_tags icons %}
 {% comment %}
-The tax worksheet page for a captured run: the intermediate figures behind each year's projected taxes, as a
-static minimize/maximize table reusing the books table's panel (.run-table-panel), scroll/sticky (.bt-scroll),
-and header tint (.bt-head + the tw-cat-* category colors). Columns with no activity across the run are
-dropped in the view. A temporary navigation surface reached from the results page; a run captured before the
-worksheet existed has none, so a note invites a re-run. Context: `record`, `table` (a WorksheetTable or None).
+The Tax Details table panel: the intermediate figures behind each year's projected taxes, as a static
+minimize/maximize table reusing the books table's panel (.run-table-panel), scroll/sticky (.bt-scroll), and
+header tint (.bt-head + the tw-cat-* category colors). Shared so the run page and the tour render it
+identically. A run captured before the worksheet existed has none, so a note invites a re-run.
+Reads `record` and `table` (a WorksheetTable or None).
 {% endcomment %}
-
-{% block head_title %}Tax Worksheet · {% settings_value 'SITE_NAME' %}{% endblock %}
-
-{% block breadcrumb %}
-<li class="breadcrumb-item"><a href="{% url 'financial_forecast' %}">Financial Forecast</a></li>
-<li class="breadcrumb-item"><a href="{% url 'run_results' record.uuid %}">{{ record.label }}</a></li>
-{% endblock %}
-
-{% block page_type %}Tax Worksheet{% endblock %}
-
-{% block page_actions %}
-<a href="{% url 'run_results' record.uuid %}" class="btn btn-outline-secondary flex-shrink-0">Back to results</a>
-{% endblock %}
-
-{% block page_body %}
 {% if table and not table.is_empty %}
 <div class="run-table-panel card">
   <div class="card-header">
@@ -33,7 +17,7 @@ worksheet existed has none, so a note invites a re-run. Context: `record`, `tabl
               aria-label="Minimize the table" title="Minimize the table">
         <img src="{% static 'img/app-logo-h64.png' %}" height="30" alt="">
       </button>
-      <span class="bt-maximized-only bt-run-name text-primary font-weight-bold">Tax Worksheet for: {{ record.label }}</span>
+      <span class="bt-maximized-only bt-run-name text-primary font-weight-bold">Tax Details for: {{ record.label }}</span>
       <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle ml-auto flex-shrink-0"
               aria-pressed="false" title="Maximize the table to fill the window (Esc to minimize)">
         <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
@@ -74,7 +58,6 @@ worksheet existed has none, so a note invites a re-run. Context: `record`, `tabl
 {% else %}
 <div class="alert alert-info">
   Tax detail isn&rsquo;t available for this run{% if table %} (no taxes were assessed){% endif %}. Re-run the
-  forecast to generate the tax worksheet.
+  forecast to generate the tax details.
 </div>
 {% endif %}
-{% endblock %}

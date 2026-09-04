@@ -13,6 +13,7 @@ from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -58,7 +59,7 @@ from .tax_worksheet_display import build_table
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
 _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
 _BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
-_TAX_WORKSHEET_TEMPLATE = 'planning/pages/run_tax_worksheet.html'
+_TAX_DETAILS_TEMPLATE = 'planning/pages/run_tax_details.html'
 _JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
 _DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
 _CHARTS_MODAL_TEMPLATE = 'planning/modals/run_charts.html'
@@ -270,6 +271,14 @@ class FinancialForecastView( InputGatedMixin, View ):
         return defaults
 
 
+def _tax_details_url( run, run_uuid ):
+    """The Tax Details entry URL for a captured run, or None when it has no worksheet -- so the run panel
+    hides the link for runs captured before the worksheet existed rather than offering a dead end."""
+    if run.result.tax_worksheet is None:
+        return None
+    return reverse( 'run_tax_details', args = [ run_uuid ] )
+
+
 @method_decorator( ensure_organization, name = 'dispatch' )
 class RunResultsView( View ):
     """`/run/<uuid>/` -- a captured run: its Books of Account as a drill-down table
@@ -302,6 +311,7 @@ class RunResultsView( View ):
         # A compact balances sparkline beside the summary; the full charts open in a
         # modal (RunChartsModalView), so only the thumbnail is built for the page.
         context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
+        context[ 'tax_details_url' ] = _tax_details_url( run, record.uuid )
         context.update( self._extra_context( request ) )
         return render( request, self.results_template, context )
 
@@ -325,11 +335,14 @@ class RunResultsView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class RunTaxWorksheetView( View ):
-    """`/run/<uuid>/tax-worksheet/` -- the year-by-year tax display worksheet for a captured run: the
-    intermediate figures behind each year's projected taxes, as a static (minimize/maximize) table. A
-    temporary navigation surface reached from the results page; runs captured before the worksheet existed
-    have none, so the page shows a note to re-run."""
+class RunTaxDetailsView( View ):
+    """`/run/<uuid>/tax-details/` -- the Tax Details page for a captured run: the year-by-year
+    intermediate figures behind each year's projected taxes, as a static (minimize/maximize) table. Runs
+    captured before the worksheet existed have none, so the page shows a note to re-run."""
+
+    # The full-page template; overridable so a wrapper (the example-data tour) can render the same tax
+    # table under a different shell.
+    details_template = _TAX_DETAILS_TEMPLATE
 
     def get( self, request, run_uuid ):
         record = get_object_or_404(
@@ -338,7 +351,14 @@ class RunTaxWorksheetView( View ):
         worksheet = run.result.tax_worksheet
         table = ( build_table( worksheet, primary_birthdate( run.profile ) )
                   if worksheet is not None else None )
-        return render( request, _TAX_WORKSHEET_TEMPLATE, { 'record' : record, 'table' : table } )
+        context = { 'record' : record, 'table' : table }
+        context.update( self._extra_context( request ) )
+        return render( request, self.details_template, context )
+
+    def _extra_context( self, request ) -> dict:
+        """Extra template context a wrapper wants merged in (e.g. the example-data tour marking its active
+        step for the shell's step-nav). Empty by default; overridden alongside `details_template`."""
+        return {}
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
@@ -537,6 +557,7 @@ class ExploreView( InputGatedMixin, View ):
         # The same balances thumbnail the results page shows -- charts are as useful while
         # exploring as on a saved run; the modal keys on `record` (the selected run), set above.
         context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
+        context[ 'tax_details_url' ] = _tax_details_url( run, selected.run.uuid )
         return context
 
     @staticmethod

@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.shortcuts import render, resolve_url
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import View
 
@@ -18,7 +19,7 @@ from ucfp.inputs.views import InterviewView
 
 from ucfp.planning.enums import PlanningFeature
 from ucfp.planning.models import PlanningResultRecord
-from ucfp.planning.views import RunResultsView
+from ucfp.planning.views import RunResultsView, RunTaxDetailsView
 
 from . import reconciliation_service
 from .constants import EXAMPLE_ORGANIZATION_UUID, EXAMPLE_SCENARIO_UUID
@@ -197,17 +198,10 @@ class TourScenarioView( TourInterviewView ):
         return super().get( request, section )
 
 
-class TourForecastView( RunResultsView ):
-    """The Forecast step of the tour: the captured example run's outcome summary and books table
-    (`RunResultsView`) rendered under the tour shell. Unlike the run page it needs no run uuid in the URL --
-    it resolves the example org's Financial Forecast run itself. The books-table column operations and the
-    in-window Maximize keep working unchanged: the column op is a fragment swap (no navigation) and Maximize
-    is pure client-side, so neither escapes the tour."""
-
-    results_template = 'onboarding/tour/forecast.html'
-
-    def _extra_context( self, request ) -> dict:
-        return { 'tour_active_step': _TOUR_STEP_FORECAST }
+class _ExampleForecastRunView:
+    """Resolves the example org's captured Financial Forecast run itself -- the tour carries no run uuid in
+    the URL -- then delegates to the wrapped run view through the MRO. Shared by the tour's Forecast step and
+    its Tax Details drill-down so the example-run lookup lives in one place."""
 
     def get( self, request ):
         result = PlanningResultRecord.objects.filter(
@@ -216,3 +210,27 @@ class TourForecastView( RunResultsView ):
         if result is None:
             raise DataNotAvailableError( 'The example forecast is not available.' )
         return super().get( request, run_uuid = result.run.uuid )
+
+
+class TourForecastView( _ExampleForecastRunView, RunResultsView ):
+    """The Forecast step of the tour: the captured example run's outcome summary and books table rendered
+    under the tour shell. The books-table column operations (a fragment swap) and the in-window Maximize
+    (pure client-side) keep working, so neither escapes the tour."""
+
+    results_template = 'onboarding/tour/forecast.html'
+
+    def _extra_context( self, request ) -> dict:
+        # Point the panel's Tax Details entry at the tour-wrapped page (not the app route) so it stays inside
+        # the tour. The example run always has a worksheet, so the entry is always offered here.
+        return { 'tour_active_step': _TOUR_STEP_FORECAST,
+                 'tax_details_url' : reverse( 'tour_tax_details' ), }
+
+
+class TourTaxDetailsView( _ExampleForecastRunView, RunTaxDetailsView ):
+    """The example run's tax table rendered under the tour shell, as a drill-down of the tour's Forecast
+    step -- a sub-page, not a fifth pillar."""
+
+    details_template = 'onboarding/tour/tax_details.html'
+
+    def _extra_context( self, request ) -> dict:
+        return { 'tour_active_step': _TOUR_STEP_FORECAST }

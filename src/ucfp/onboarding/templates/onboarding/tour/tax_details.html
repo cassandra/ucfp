@@ -1,0 +1,20 @@
+{% extends "pages/tour_base.html" %}
+{% load common_tags %}
+{% block head_title %}Tax Details · Guided Tour · {% settings_value 'SITE_NAME' %}{% endblock %}
+{% comment %}
+The Tax Details drill-down of the tour's Forecast step: the example run's tax table under the tour shell,
+reusing the shared tax panel -- including the in-window Maximize. A sub-page of the Forecast step (not a fifth
+pillar); a Back to forecast link returns to the forecast table.
+{% endcomment %}
+
+{% block tour_step_desc %}How this example&rsquo;s taxes are figured, year by year: income by tax class, the
+derived amounts (AGI, taxable Social Security), the taxes, and the marginal and effective rates.{% endblock %}
+
+{% block app_content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="mb-0">Tax Details</h1>
+  <a href="{% url 'tour_forecast' %}" data-synchronous="true"
+     class="btn btn-outline-secondary">Back to forecast</a>
+</div>
+{% include "planning/pages/tax_details_panel.html" %}
+{% endblock %}

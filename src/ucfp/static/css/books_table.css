@@ -255,6 +255,9 @@
 .run-table-panel.is-maximized .run-table-hint {
     display: none;            /* the control row stays as the bar, but its hint text yields to the branding */
 }
+.run-table-panel.is-maximized .bt-tax-details {
+    display: none;            /* a navigate-away action does not belong in the immersive maximized bar */
+}
 
 /* The start/end stat labels: quiet, tracked-out uppercase caps over their values. */
 .run-summary-label {

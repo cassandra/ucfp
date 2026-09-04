@@ -85,6 +85,7 @@
 
       {% if tour_active_step %}
       <p class="tour-step-desc">
+        {% block tour_step_desc %}
         {% if tour_active_step == 1 %}The household snapshot the whole forecast is built on: the
           people, accounts, and property. This is what you&rsquo;d fill in for yourself.
         {% elif tour_active_step == 2 %}Part of your Scenario: your spending and the moves you&rsquo;re
@@ -95,6 +96,7 @@
         {% elif tour_active_step == 4 %}The forecast this example produces: net worth and cash flow year
           by year. Scroll the table, and use the column controls to change the view.
         {% endif %}
+        {% endblock %}
       </p>
       {% endif %}
     </div>

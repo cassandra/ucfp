@@ -1,0 +1,24 @@
+{% extends "pages/detail_page.html" %}
+{% load common_tags %}
+{% comment %}
+The Tax Details page for a captured run: the shared tax panel (planning/pages/tax_details_panel.html) under
+the app shell, with a breadcrumb back to the run. Reached from the run table panel's Tax Details entry.
+Context: `record`, `table` (a WorksheetTable or None).
+{% endcomment %}
+
+{% block head_title %}Tax Details · {% settings_value 'SITE_NAME' %}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'financial_forecast' %}">Financial Forecast</a></li>
+<li class="breadcrumb-item"><a href="{% url 'run_results' record.uuid %}">{{ record.label }}</a></li>
+{% endblock %}
+
+{% block page_type %}Tax Details{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'run_results' record.uuid %}" class="btn btn-outline-secondary flex-shrink-0">Back to results</a>
+{% endblock %}
+
+{% block page_body %}
+{% include "planning/pages/tax_details_panel.html" %}
+{% endblock %}
