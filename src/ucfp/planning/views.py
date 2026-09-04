@@ -310,7 +310,9 @@ class RunResultsView( View ):
         context.update( run_books_table_context( request, run, books ) )
         # A compact balances sparkline beside the summary; the full charts open in a
         # modal (RunChartsModalView), so only the thumbnail is built for the page.
-        context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
+        context[ 'balances_thumbnail' ] = balances_chart(
+            run, books, chrome = CHROME_SPARKLINE,
+            adjust_for_inflation = request.session_state.adjust_charts_for_inflation )
         context[ 'tax_details_url' ] = _tax_details_url( run, record.uuid )
         context.update( self._extra_context( request ) )
         return render( request, self.results_template, context )
@@ -404,14 +406,15 @@ class RunChartsModalView( ModalView ):
     def get( self, request, run_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
-        run   = from_json_data( ProjectionRun, record.data )
-        books = load_run_books( record.books )
+        run    = from_json_data( ProjectionRun, record.data )
+        books  = load_run_books( record.books )
+        adjust = request.session_state.adjust_charts_for_inflation
         context = {
             'record'         : record,
             'balances_chart' : balances_chart(
-                run, books, chrome = CHROME_FULL, width = 720, height = 300 ),
+                run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust, width = 720, height = 300 ),
             'flows_chart'    : flows_chart(
-                run, books, chrome = CHROME_FULL, width = 720, height = 300 ),
+                run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust, width = 720, height = 300 ),
         }
         return self.modal_response( request, context = context )
 
@@ -434,7 +437,9 @@ class RunColumnChartModalView( ModalView ):
         run   = from_json_data( ProjectionRun, record.data )
         books = load_run_books( record.books )
         try:
-            chart = column_chart( run, books, BooksColumnKey( token ), width = 720, height = 320 )
+            chart = column_chart(
+                run, books, BooksColumnKey( token ), width = 720, height = 320,
+                adjust_for_inflation = request.session_state.adjust_charts_for_inflation )
         except ValueError as error:
             raise Http404( str( error ) )
         return self.modal_response( request, context = { 'record': record, 'column_chart': chart } )
@@ -556,7 +561,9 @@ class ExploreView( InputGatedMixin, View ):
         context.update( run_books_table_context( request, run, books ) )
         # The same balances thumbnail the results page shows -- charts are as useful while
         # exploring as on a saved run; the modal keys on `record` (the selected run), set above.
-        context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
+        context[ 'balances_thumbnail' ] = balances_chart(
+            run, books, chrome = CHROME_SPARKLINE,
+            adjust_for_inflation = request.session_state.adjust_charts_for_inflation )
         context[ 'tax_details_url' ] = _tax_details_url( run, selected.run.uuid )
         return context
 

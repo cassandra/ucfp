@@ -174,14 +174,17 @@ class ForecastOverview:
         return self.state is ForecastState.NEEDS_SCENARIO
 
 
-def forecast_overview( organization : Organization ) -> ForecastOverview:
+def forecast_overview( organization : Organization, *,
+                       adjust_for_inflation : bool = False ) -> ForecastOverview:
     """The forecast card's state for `organization`. A saved run always wins (it is immutable and always
     viewable, whatever the inputs look like now), so it is checked first; only then does the setup ladder
     apply -- a complete profile, then a runnable scenario. The ladder mirrors the hub's own gating, and the
-    NEEDS_SCENARIO result carries the scenario the shared pane will offer to build or resume."""
+    NEEDS_SCENARIO result carries the scenario the shared pane will offer to build or resume.
+    `adjust_for_inflation` draws the card's net-worth chart in today's dollars (the session preference)."""
     latest = _latest_saved_run( organization )
     if latest is not None:
-        return ForecastOverview( state = ForecastState.HAS_RUN, card = _run_card( latest ) )
+        return ForecastOverview(
+            state = ForecastState.HAS_RUN, card = _run_card( latest, adjust_for_inflation ) )
 
     profile_record = completed_profile( organization )
     if profile_record is None:
@@ -207,7 +210,7 @@ def _latest_saved_run( organization : Organization ) -> Optional[ PlanningResult
              .order_by( '-created_datetime' ).first() )
 
 
-def _run_card( result : PlanningResultRecord ) -> ForecastRunCard:
+def _run_card( result : PlanningResultRecord, adjust_for_inflation : bool = False ) -> ForecastRunCard:
     """The display card for a saved run: its identity plus the horizon and the net-worth/outcome figures,
     the latter from a single books load through `run_outcome` (one run's books -- the dashboard's only
     projection load). Horizon comes from the parsed frame, so it is right even if the run stopped early."""
@@ -232,4 +235,5 @@ def _run_card( result : PlanningResultRecord ) -> ForecastRunCard:
         start_net_worth  = summary[ 'start' ][ 'net_worth' ],
         end_net_worth    = end[ 'net_worth' ] if end[ 'has_net_worth' ] else None,
         net_worth_chart  = build_net_worth_chart(
-            run, books, chrome = CHROME_FULL, width = 960, height = 220 ) )
+            run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust_for_inflation,
+            width = 960, height = 220 ) )

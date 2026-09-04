@@ -209,7 +209,9 @@ class DashboardView( InputGatedMixin, View ):
 
     def get( self, request, *args, **kwargs ):
         return render( request, 'pages/dashboard.html', {
-            'forecast_overview'   : forecast_overview( request.organization ),
+            'forecast_overview'   : forecast_overview(
+                request.organization,
+                adjust_for_inflation = request.session_state.adjust_charts_for_inflation ),
             'offer_account_signin': self._offer_account_signin( request ) } )
 
     @staticmethod

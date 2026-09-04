@@ -6,6 +6,9 @@ resolves an untrusted `?column=` token, which must 404 (never 500) when it names
 from django.http import Http404
 from django.test import RequestFactory, TestCase
 
+from common.dataclass_json import from_json_data
+from common.line_chart import CHROME_FULL
+
 from organization.models import Organization
 
 from ucfp.accounts.books_table import BooksColumnKey, BooksDerivedFigure
@@ -18,7 +21,12 @@ from ucfp.inputs.scenarios.repository import create_scenario, load_scenario
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
 from ucfp.planning.orchestration import run_and_capture
 from ucfp.planning.tests.support import expected_assumptions, forecast_frame, forecast_profile
+from ucfp.planning.overview import run_outcome
+from ucfp.planning.run_books_cache import load_run_books
+from ucfp.planning.run_charts import net_worth_chart
+from ucfp.planning.schemas import ProjectionRun
 from ucfp.planning.views import RunChartsModalView, RunColumnChartModalView
+from ucfp.session_state import SessionState
 
 
 class RunChartModalsTests( TestCase ):
@@ -38,7 +46,8 @@ class RunChartModalsTests( TestCase ):
 
     def _request( self, path, organization = None, **params ):
         request = self.factory.get( path, params, HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
-        request.organization = organization or self.org
+        request.organization  = organization or self.org
+        request.session_state = SessionState()   # middleware attaches this on a real request
         return request
 
     # -- RunChartsModalView (balances + flows) --------------------------------------
@@ -81,3 +90,26 @@ class RunChartModalsTests( TestCase ):
             RunColumnChartModalView().get(
                 self._request( '/column-chart', column = self._net_worth_token(), organization = other ),
                 run_uuid = self.run.uuid )
+
+    # -- inflation basis (#263) -----------------------------------------------------
+
+    def _run_and_books( self ):
+        return ( from_json_data( ProjectionRun, self.run.data ), load_run_books( self.run.books ) )
+
+    def test_a_chart_deflates_to_todays_dollars_when_adjusted( self ):
+        run, books = self._run_and_books()
+        nominal  = net_worth_chart( run, books, chrome = CHROME_FULL, adjust_for_inflation = False )
+        adjusted = net_worth_chart( run, books, chrome = CHROME_FULL, adjust_for_inflation = True )
+        nom, adj = nominal.series[ 0 ].values, adjusted.series[ 0 ].values
+        self.assertEqual( adj[ 0 ], nom[ 0 ] )       # opening: nothing to discount in the start year
+        self.assertLess( adj[ -1 ], nom[ -1 ] )      # a later year is fewer of today's dollars
+
+    def test_the_adjusted_chart_end_agrees_with_the_summarys_todays_dollars( self ):
+        # The chart and the run summary must derive their real-terms figures from the one shared helper, so
+        # the chart's ending net worth in today's dollars matches the summary's "Today's $" companion.
+        run, books = self._run_and_books()
+        today_figure = run_outcome( run, books )[ 'summary' ][ 'end' ][ 'net_worth_today' ]
+        self.assertIsNotNone( today_figure )         # solvent, multi-year, inflation set -> a real figure
+        chart_end = net_worth_chart(
+            run, books, chrome = CHROME_FULL, adjust_for_inflation = True ).series[ 0 ].values[ -1 ]
+        self.assertAlmostEqual( chart_end, float( today_figure ), delta = 1.0 )   # agree to the dollar
