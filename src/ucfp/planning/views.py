@@ -13,6 +13,7 @@ from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -302,6 +303,10 @@ class RunResultsView( View ):
         # A compact balances sparkline beside the summary; the full charts open in a
         # modal (RunChartsModalView), so only the thumbnail is built for the page.
         context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
+        # The panel's entry to the Tax Details view; None (so the button is hidden) for runs captured
+        # before the worksheet existed. A wrapper (the tour) overrides this in `_extra_context`.
+        context[ 'tax_details_url' ] = ( reverse( 'run_tax_details', args = [ record.uuid ] )
+                                         if run.result.tax_worksheet is not None else None )
         context.update( self._extra_context( request ) )
         return render( request, self.results_template, context )
 
@@ -537,6 +542,9 @@ class ExploreView( InputGatedMixin, View ):
         # The same balances thumbnail the results page shows -- charts are as useful while
         # exploring as on a saved run; the modal keys on `record` (the selected run), set above.
         context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
+        # The panel's entry to the Tax Details view for the selected transient run (hidden when absent).
+        context[ 'tax_details_url' ] = ( reverse( 'run_tax_details', args = [ selected.run.uuid ] )
+                                         if run.result.tax_worksheet is not None else None )
         return context
 
     @staticmethod

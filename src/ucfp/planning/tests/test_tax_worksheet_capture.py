@@ -140,11 +140,31 @@ class RunResultsRenderTest( TestCase ):
         seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
 
-    def test_the_results_page_renders( self ):
-        record  = _capture( self.organization )
+    def _render( self, record ):
         request = RequestFactory().get( f'/run/{ record.uuid }/' )
         request.organization  = self.organization
         request.session       = dict()
         request.session_state = SessionState( current_organization_uuid = str( self.organization.uuid ) )
-        response = RunResultsView().get( request, run_uuid = record.uuid )
+        return RunResultsView().get( request, run_uuid = record.uuid )
+
+    def test_the_results_page_renders( self ):
+        record   = _capture( self.organization )
+        response = self._render( record )
         self.assertEqual( response.status_code, 200 )
+
+    def test_the_panel_links_to_tax_details_when_a_worksheet_is_present( self ):
+        record  = _capture( self.organization )
+        content = self._render( record ).content.decode()
+        self.assertIn( f'/run/{ record.uuid }/tax-details/', content )
+        self.assertIn( 'Tax Details', content )
+
+    def test_the_panel_hides_tax_details_when_the_run_has_no_worksheet( self ):
+        # A run captured before the worksheet field existed reloads with no worksheet, so the panel must not
+        # offer a dead-end Tax Details link.
+        record   = _capture( self.organization )
+        document = record.data
+        del document[ 'result' ][ 'tax_worksheet' ]
+        record.data = document
+        record.save( update_fields = [ 'data' ] )
+        content = self._render( record ).content.decode()
+        self.assertNotIn( 'tax-details/', content )
