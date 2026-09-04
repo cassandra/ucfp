@@ -213,6 +213,15 @@ class AssetClass( LabeledEnum ):
         waterfall routes them to that handler instead of a partial `realize`."""
         return self in _PARTIALLY_DRAWABLE_ASSET_CLASSES
 
+    @property
+    def is_liquid_financial( self ) -> bool:
+        """Whether this class is a liquid financial account -- cash, CDs, and marketable securities (stocks,
+        dividend stocks, bonds) -- the money accounts you freely move value between. Distinct from
+        `supports_partial_draw`, which excludes cash and includes the retirement classes: this is the plain
+        "is it a liquid money account?" concept, excluding retirement accounts, real estate, possessions,
+        and vehicles -- each of which has its own lifecycle rather than being a free-move account."""
+        return self in _LIQUID_FINANCIAL_ASSET_CLASSES
+
 
 # Cash-like classes carried at face value: their return is distributed as interest
 # income, not accrued as appreciation, so they have no valuation companion.
@@ -255,6 +264,13 @@ _REAL_ESTATE_ASSET_CLASSES = frozenset(
 _PARTIALLY_DRAWABLE_ASSET_CLASSES = frozenset(
     ( AssetClass.CDS, AssetClass.BONDS, AssetClass.STOCKS, AssetClass.DIVIDEND_STOCKS,
       AssetClass.ROTH, AssetClass.PRETAX_RETIREMENT ) )
+
+
+# The canonical membership of the liquid financial classes -- cash, CDs, and marketable securities. The
+# domain meaning and how it differs from `_PARTIALLY_DRAWABLE_ASSET_CLASSES` live on `is_liquid_financial`.
+_LIQUID_FINANCIAL_ASSET_CLASSES = frozenset(
+    ( AssetClass.CASH, AssetClass.CDS, AssetClass.STOCKS, AssetClass.DIVIDEND_STOCKS,
+      AssetClass.BONDS ) )
 
 
 class RealPropertyType( LabeledEnum ):

@@ -90,11 +90,30 @@ def _subjects( profile ) -> list:
     return [ ( subject.handle, subject.name ) for subject in profile.subjects ]
 
 
-def _accounts( profile ) -> list:
-    """The money accounts a transfer can move between -- every holding except real estate (a property is
-    not a cash account)."""
+def is_transfer_destination_class( asset_class ) -> bool:
+    """Whether a transfer may move value *into* a holding of this class -- the liquid financial accounts
+    only. Roth is source-only, and retirement, real estate, possessions, and vehicles are not transfer
+    endpoints (each has its own home)."""
+    return asset_class.is_liquid_financial
+
+
+def is_transfer_source_class( asset_class ) -> bool:
+    """Whether a transfer may move value *out of* a holding of this class -- a liquid destination class or
+    Roth. A one-time Roth withdrawal to a liquid account is a plain money move; pre-tax withdrawals and Roth
+    conversions are tax planning, not transfers, so pre-tax is excluded."""
+    return is_transfer_destination_class( asset_class ) or asset_class is AssetClass.ROTH
+
+
+def _transfer_destinations( profile ) -> list:
+    """The accounts a transfer can move value into (see `is_transfer_destination_class`)."""
     return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.handle is not None and not asset.asset_class.is_real_estate ]
+             if asset.handle is not None and is_transfer_destination_class( asset.asset_class ) ]
+
+
+def _transfer_sources( profile ) -> list:
+    """The accounts a transfer can move value out of (see `is_transfer_source_class`)."""
+    return [ ( asset.handle, asset.name ) for asset in profile.assets
+             if asset.handle is not None and is_transfer_source_class( asset.asset_class ) ]
 
 
 def _properties( profile ) -> list:
@@ -327,16 +346,27 @@ class TransferEvent( EventType ):
     description = 'Move money between two of your accounts.'
 
     def references( self, profile ) -> list:
-        return [ ReferenceSpec( SOURCE_ROLE, 'From account', _accounts ),
-                 ReferenceSpec( TARGET_ROLE, 'To account', _accounts ) ]
+        return [ ReferenceSpec( SOURCE_ROLE, 'From account', _transfer_sources ),
+                 ReferenceSpec( TARGET_ROLE, 'To account', _transfer_destinations ) ]
 
     def offerable( self, profile ) -> bool:
-        """A meaningful transfer needs two distinct accounts -- the references are correlated, so
-        the plain per-reference rule under-constrains."""
-        return len( _accounts( profile ) ) >= 2
+        """A meaningful transfer needs a valid source and a valid destination that differ. Sources and
+        destinations are separate lists (Roth is source-only), so the plain per-reference rule -- which
+        would fire on any single account -- under-constrains."""
+        sources      = [ handle for handle, _ in _transfer_sources( profile ) ]
+        destinations = [ handle for handle, _ in _transfer_destinations( profile ) ]
+        return any( source != destination for source in sources for destination in destinations )
 
     def validate( self, selections : dict, profile ) -> Optional[ str ]:
-        if selections.get( SOURCE_ROLE ) == selections.get( TARGET_ROLE ):
+        source         = selections.get( SOURCE_ROLE )
+        target         = selections.get( TARGET_ROLE )
+        source_handles = { handle for handle, _ in _transfer_sources( profile ) }
+        target_handles = { handle for handle, _ in _transfer_destinations( profile ) }
+        if source not in source_handles:
+            return 'Choose a valid account to transfer from.'
+        if target not in target_handles:
+            return 'Choose a valid account to transfer to.'
+        if source == target:
             return 'Choose two different accounts.'
         return None
 
@@ -352,10 +382,10 @@ class TransferEvent( EventType ):
         classes      = _asset_classes( profile )
         source_class = classes.get( source )
         target_class = classes.get( target )
-        # Moving out of an appreciating holding is a sale: realize the proportional embedded gain into
-        # the source class's realized-gain income (a capital gain for stocks, an ordinary distribution
-        # for a pre-tax account) rather than a no-tax value move. A face-value source (cash, CDs) has
-        # no gain and takes the plain transfer below.
+        # Moving out of an appreciating holding is a sale: realize the proportional embedded gain into the
+        # source class's realized-gain income (a capital gain for stocks, ordinary earnings for a Roth)
+        # rather than a no-tax value move. A face-value source (cash, CDs) has no gain and takes the plain
+        # transfer below.
         realizes_gain = ( source_class is not None ) and source_class.accrues_unrealized_gains
         if realizes_gain:
             # Proceeds to the cash hub for a cash target, else a conversion into the target holding

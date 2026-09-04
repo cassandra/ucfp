@@ -34,7 +34,8 @@ from ucfp.inputs.views import EventEditView
 
 def _profile( *holdings ):
     """A minimal stand-in profile: `(handle, asset_class)` pairs a transfer can move between."""
-    assets = [ SimpleNamespace( handle = handle, asset_class = klass ) for handle, klass in holdings ]
+    assets = [ SimpleNamespace( handle = handle, asset_class = klass, name = handle )
+               for handle, klass in holdings ]
     return SimpleNamespace( assets = assets )
 
 
@@ -63,11 +64,11 @@ class TransferMaterializationTests( unittest.TestCase ):
 
     def test_appreciating_source_to_holding_is_a_conversion( self ):
         # a non-cash target keeps the destination handle, so the proceeds re-establish basis there
-        profile = _profile( ( 'stk', AssetClass.STOCKS ), ( 'roth', AssetClass.ROTH ) )
-        events  = _materialize( profile, _transfer( 'stk', 'roth' ) )
+        profile = _profile( ( 'stk', AssetClass.STOCKS ), ( 'bond', AssetClass.BONDS ) )
+        events  = _materialize( profile, _transfer( 'stk', 'bond' ) )
         realization = events[ 0 ]
         self.assertIsInstance( realization, ScheduledRealization )
-        self.assertEqual( realization.destination, 'roth' )
+        self.assertEqual( realization.destination, 'bond' )
 
     def test_face_value_source_stays_a_plain_transfer( self ):
         # a CD (or cash) source carries no embedded gain -- a plain, no-tax value move
@@ -78,6 +79,69 @@ class TransferMaterializationTests( unittest.TestCase ):
         self.assertIsInstance( transfer, ScheduledTransfer )
         self.assertEqual( ( transfer.source, transfer.target, transfer.amount ),
                           ( 'cd', 'stk', Decimal( '50000' ) ) )
+
+
+class TransferEligibilityTests( unittest.TestCase ):
+    """#262 Phase 1: the Transfer pickers are constrained to liquid financial accounts. The source also
+    allows Roth (a Roth withdrawal is a plain money move, not a tax strategy); pre-tax, possessions,
+    vehicles, and real estate are never transfer endpoints -- each has a dedicated home."""
+
+    _EVERY_CLASS = (
+        ( 'cash', AssetClass.CASH ),
+        ( 'cd', AssetClass.CDS ),
+        ( 'stk', AssetClass.STOCKS ),
+        ( 'div', AssetClass.DIVIDEND_STOCKS ),
+        ( 'bond', AssetClass.BONDS ),
+        ( 'roth', AssetClass.ROTH ),
+        ( 'pretax', AssetClass.PRETAX_RETIREMENT ),
+        ( 'metal', AssetClass.PRECIOUS_METALS ),
+        ( 'art', AssetClass.COLLECTIBLES ),
+        ( 'car', AssetClass.DEPRECIATING ),
+        ( 'home', AssetClass.REAL_ESTATE_RESIDENCE ) )
+
+    def _candidate_handles( self, role ):
+        profile = _profile( *self._EVERY_CLASS )
+        spec = next( r for r in TransferEvent().references( profile ) if r.role == role )
+        return { handle for handle, _ in spec.choices( profile ) }
+
+    def test_source_is_liquid_plus_roth( self ):
+        self.assertEqual( self._candidate_handles( SOURCE_ROLE ),
+                          { 'cash', 'cd', 'stk', 'div', 'bond', 'roth' } )
+
+    def test_destination_is_liquid_only_no_roth( self ):
+        self.assertEqual( self._candidate_handles( TARGET_ROLE ),
+                          { 'cash', 'cd', 'stk', 'div', 'bond' } )
+
+    def test_pretax_possessions_vehicles_real_estate_are_never_endpoints( self ):
+        excluded = { 'pretax', 'metal', 'art', 'car', 'home' }
+        for role in ( SOURCE_ROLE, TARGET_ROLE ):
+            self.assertTrue( self._candidate_handles( role ).isdisjoint( excluded ) )
+
+    def test_offerable_needs_a_distinct_source_and_destination( self ):
+        # a lone liquid account cannot transfer to itself
+        self.assertFalse( TransferEvent().offerable( _profile( ( 'cash', AssetClass.CASH ) ) ) )
+        # only a Roth (a valid source) but no liquid destination -- nowhere to send
+        self.assertFalse( TransferEvent().offerable( _profile( ( 'roth', AssetClass.ROTH ) ) ) )
+        # neither endpoint is valid
+        self.assertFalse( TransferEvent().offerable(
+            _profile( ( 'pretax', AssetClass.PRETAX_RETIREMENT ), ( 'car', AssetClass.DEPRECIATING ) ) ) )
+        # a Roth source plus a liquid destination is a valid one-time Roth withdrawal
+        self.assertTrue( TransferEvent().offerable(
+            _profile( ( 'roth', AssetClass.ROTH ), ( 'cash', AssetClass.CASH ) ) ) )
+
+    def test_validate_rejects_out_of_set_endpoints( self ):
+        profile = _profile( *self._EVERY_CLASS )
+        self.assertEqual(
+            TransferEvent().validate( { SOURCE_ROLE: 'pretax', TARGET_ROLE: 'cash' }, profile ),
+            'Choose a valid account to transfer from.' )
+        self.assertEqual(                                                   # Roth is source-only
+            TransferEvent().validate( { SOURCE_ROLE: 'cash', TARGET_ROLE: 'roth' }, profile ),
+            'Choose a valid account to transfer to.' )
+        self.assertEqual(
+            TransferEvent().validate( { SOURCE_ROLE: 'cash', TARGET_ROLE: 'cash' }, profile ),
+            'Choose two different accounts.' )
+        self.assertIsNone(
+            TransferEvent().validate( { SOURCE_ROLE: 'roth', TARGET_ROLE: 'cash' }, profile ) )
 
 
 def _debt_stub( handle, secured_asset, name ):
