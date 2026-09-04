@@ -90,11 +90,21 @@ def _subjects( profile ) -> list:
     return [ ( subject.handle, subject.name ) for subject in profile.subjects ]
 
 
-def _accounts( profile ) -> list:
-    """The money accounts a transfer can move between -- every holding except real estate (a property is
-    not a cash account)."""
+def _transfer_destinations( profile ) -> list:
+    """The accounts a transfer can move value *into* -- the liquid financial accounts (cash, CDs, and
+    marketable securities). Retirement accounts, real estate, possessions, and vehicles are not transfer
+    endpoints: each has its own home (Tax Planning, a sale event, the vehicle plan)."""
     return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.handle is not None and not asset.asset_class.is_real_estate ]
+             if asset.handle is not None and asset.asset_class.is_liquid_financial ]
+
+
+def _transfer_sources( profile ) -> list:
+    """The accounts a transfer can move value *out of* -- the liquid destinations plus Roth. A one-time
+    Roth withdrawal to a liquid account is a plain money move, not a tax strategy, so it belongs here;
+    pre-tax withdrawals and Roth *conversions* are tax planning, not transfers, so pre-tax is excluded."""
+    return [ ( asset.handle, asset.name ) for asset in profile.assets
+             if asset.handle is not None
+             and ( asset.asset_class.is_liquid_financial or asset.asset_class is AssetClass.ROTH ) ]
 
 
 def _properties( profile ) -> list:
@@ -327,16 +337,27 @@ class TransferEvent( EventType ):
     description = 'Move money between two of your accounts.'
 
     def references( self, profile ) -> list:
-        return [ ReferenceSpec( SOURCE_ROLE, 'From account', _accounts ),
-                 ReferenceSpec( TARGET_ROLE, 'To account', _accounts ) ]
+        return [ ReferenceSpec( SOURCE_ROLE, 'From account', _transfer_sources ),
+                 ReferenceSpec( TARGET_ROLE, 'To account', _transfer_destinations ) ]
 
     def offerable( self, profile ) -> bool:
-        """A meaningful transfer needs two distinct accounts -- the references are correlated, so
-        the plain per-reference rule under-constrains."""
-        return len( _accounts( profile ) ) >= 2
+        """A meaningful transfer needs a valid source and a valid destination that differ. Sources and
+        destinations are separate lists (Roth is source-only), so the plain per-reference rule -- which
+        would fire on any single account -- under-constrains."""
+        sources      = [ handle for handle, _ in _transfer_sources( profile ) ]
+        destinations = [ handle for handle, _ in _transfer_destinations( profile ) ]
+        return any( source != destination for source in sources for destination in destinations )
 
     def validate( self, selections : dict, profile ) -> Optional[ str ]:
-        if selections.get( SOURCE_ROLE ) == selections.get( TARGET_ROLE ):
+        source       = selections.get( SOURCE_ROLE )
+        target       = selections.get( TARGET_ROLE )
+        source_handles = { handle for handle, _ in _transfer_sources( profile ) }
+        target_handles = { handle for handle, _ in _transfer_destinations( profile ) }
+        if source not in source_handles:
+            return 'Choose a valid account to transfer from.'
+        if target not in target_handles:
+            return 'Choose a valid account to transfer to.'
+        if source == target:
             return 'Choose two different accounts.'
         return None
 
