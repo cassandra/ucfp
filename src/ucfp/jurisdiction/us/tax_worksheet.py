@@ -104,7 +104,9 @@ _RATE_COLUMNS = (
     ( 'effective', 'Effective (overall)', ColumnFormat.RATE ),
     ( 'headroom_ordinary', 'Headroom (ordinary)', ColumnFormat.MONEY ),
     ( 'headroom_ltcg', 'Headroom (LTCG)', ColumnFormat.MONEY ),
-    ( 'headroom_niit', 'Headroom (NIIT)', ColumnFormat.MONEY ) )
+    # Not a bracket headroom like the two above: the distance from AGI (the model's NIIT MAGI) to the NIIT
+    # threshold -- how much more income before the 3.8% tax begins applying to net investment income.
+    ( 'headroom_niit', 'AGI to NIIT threshold', ColumnFormat.MONEY ) )
 
 
 def build_worksheet( inputs : TaxYearInputs ) -> TaxDisplayWorksheet:
