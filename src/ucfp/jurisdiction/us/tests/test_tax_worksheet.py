@@ -42,7 +42,7 @@ def _inputs( ** overrides ) -> TaxYearInputs:
         taxable_ordinary_income = _D( '30000' ), taxable_income = _D( '50000' ),
         niit_magi = _D( '210000' ), ordinary_tax = _D( '3000' ), capital_gains_tax = _D( '3000' ),
         section_1250_tax = _D( '0' ), collectibles_tax = _D( '0' ), niit = _D( '380' ),
-        state_income_tax = _D( '1620' ), total_tax = _D( '8000' ) )
+        state_income_tax = _D( '1620' ), premium_tax_credit = _D( '0' ), total_tax = _D( '8000' ) )
     base.update( overrides )
     return TaxYearInputs( ** base )
 
@@ -154,6 +154,28 @@ class WorksheetShapeTest( unittest.TestCase ):
         self.assertEqual( [ group.category for group in worksheet.groups ],
                           [ ColumnCategory.INCOME, ColumnCategory.INCOME_DERIVED,
                             ColumnCategory.TAXES, ColumnCategory.RATES ] )
+
+    def test_the_premium_credit_shows_negative_and_the_tax_layers_foot_to_the_total( self ):
+        # The ACA premium credit is refundable, so it shows as a reduction and the per-layer taxes plus the
+        # credit reconcile to Total Tax (the layers are gross, before the credit).
+        cells  = _cells( build_worksheet( _inputs(
+            ordinary_tax = _D( '3000' ), capital_gains_tax = _D( '3000' ), section_1250_tax = _D( '0' ),
+            collectibles_tax = _D( '0' ), niit = _D( '380' ), state_income_tax = _D( '1620' ),
+            premium_tax_credit = _D( '2000' ), total_tax = _D( '6000' ) ) ) )
+        self.assertEqual( cells[ 'premium_tax_credit' ], _D( '-2000' ) )
+        layers = [ 'ordinary_tax', 'capital_gains_tax', 'section_1250_tax', 'collectibles_tax',
+                   'niit', 'state_income_tax', 'premium_tax_credit' ]
+        self.assertEqual( sum( cells[ key ] for key in layers ), cells[ 'total_tax' ] )
+
+    def test_every_non_income_column_has_a_cell_and_no_cell_is_orphaned( self ):
+        # Guard the parallel spec/cell lists: a renamed key in one place but not the other would leave a
+        # column permanently blank (then silently dropped) or an orphan cell. Income columns key on account
+        # UUIDs (dynamic), so this checks the fixed derived/tax/rate columns.
+        worksheet = build_worksheet( _inputs() )
+        column_keys = { column.key for group in worksheet.groups
+                        if group.category is not ColumnCategory.INCOME for column in group.columns }
+        cell_keys   = { key for key in _cells( worksheet ) if not key.startswith( 'income:' ) }
+        self.assertEqual( column_keys, cell_keys )
 
     def test_rate_columns_are_formatted_as_rates( self ):
         rates = build_worksheet( _inputs() ).groups[ 3 ]

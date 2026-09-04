@@ -342,6 +342,7 @@ class USFederalTaxEngine( TaxEngine ):
             collectibles_tax        = income_tax.collectibles,
             niit                    = niit,
             state_income_tax        = state_income_tax,
+            premium_tax_credit      = premium_credit,
             total_tax               = income_tax_total ) )
         return TaxAssessment(
             charges           = charges,

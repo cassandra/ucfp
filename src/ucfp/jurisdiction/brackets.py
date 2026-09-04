@@ -53,4 +53,5 @@ class BracketTable:
         for lower, _rate in self.rows:
             if lower > amount:
                 return lower
+            continue
         return None

@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Optional
 
 from ucfp.jurisdiction.tax_worksheet import (
-    Column, ColumnCategory, ColumnFormat, TaxDisplayWorksheet )
+    Column, ColumnCategory, ColumnFormat, TaxDisplayWorksheet, YearRow )
 
 # The category color classes -- green / purple / red / orange (see css/tax_worksheet.css), borrowing the
 # books table's revenue / net-worth / liability / expense hues so income reads green and the derived income
@@ -87,7 +87,9 @@ def build_table(
     return WorksheetTable( spans = spans, columns = columns, rows = rows )
 
 
-def _visible_columns( worksheet, years ) -> list[ tuple[ ColumnCategory, Column ] ]:
+def _visible_columns(
+        worksheet : TaxDisplayWorksheet, years : tuple[ YearRow, ... ]
+) -> list[ tuple[ ColumnCategory, Column ] ]:
     """Each group's columns that carry a non-zero value in at least one year, paired with their category
     (for coloring), in group then column order."""
     visible = list()
@@ -100,7 +102,7 @@ def _visible_columns( worksheet, years ) -> list[ tuple[ ColumnCategory, Column 
     return visible
 
 
-def _spans( worksheet, visible ):
+def _spans( worksheet : TaxDisplayWorksheet, visible : list ):
     """The top-header spans over the visible columns: one per group, except the income group, which is split
     into a span per contiguous tax-class sub-group (the account's `subgroup`)."""
     visible_keys = { column.key for _category, column in visible }
@@ -131,7 +133,7 @@ def _column_label( column : Column ) -> str:
     return column.label
 
 
-def _subgroup_runs( columns ):
+def _subgroup_runs( columns : list[ Column ] ):
     """Contiguous runs of columns sharing a `subgroup`, as (label, columns) -- the income sub-group bands."""
     runs = list()
     for column in columns:

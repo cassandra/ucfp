@@ -78,6 +78,7 @@ class TaxYearInputs:
     collectibles_tax        : Decimal
     niit                    : Decimal
     state_income_tax        : Decimal
+    premium_tax_credit      : Decimal
     total_tax               : Decimal
 
 
@@ -109,6 +110,9 @@ _TAX_COLUMNS = (
     ( 'collectibles_tax', 'Collectibles Tax', ColumnFormat.MONEY ),
     ( 'niit', 'Net Investment Income Tax', ColumnFormat.MONEY ),
     ( 'state_income_tax', 'State Income Tax', ColumnFormat.MONEY ),
+    # A refundable credit, so shown negative -- it reduces the total. With it, the tax columns foot to Total
+    # Tax (the layers above are gross, before the credit that offsets the ordinary income tax).
+    ( 'premium_tax_credit', 'Premium Tax Credit', ColumnFormat.MONEY ),
     ( 'total_tax', 'Total Tax', ColumnFormat.MONEY ) )
 
 _RATE_COLUMNS = (
@@ -140,15 +144,16 @@ def build_worksheet( inputs : TaxYearInputs ) -> TaxDisplayWorksheet:
         years        = ( YearRow( year = inputs.year, cells = cells ), ) )
 
 
-def _columns( specs ) -> tuple[ Column, ... ]:
+def _columns( specs : tuple[ tuple[ str, str, ColumnFormat ], ... ] ) -> tuple[ Column, ... ]:
     return tuple( Column( key = key, label = label, format = fmt ) for key, label, fmt in specs )
 
 
 def _income_group(
-        income_accounts : list[ tuple[ Account, Decimal ] ] ) -> tuple[ tuple[ Column, ... ], dict ]:
+        income_accounts : list[ tuple[ Account, Decimal ] ]
+) -> tuple[ tuple[ Column, ... ], dict[ str, Optional[ Decimal ] ] ]:
     """The Income columns and their cells: one column per taxable revenue account, ordered by tax class then
     the account's chart order, each banded (as a sub-group) by its tax class. TAX_FREE accounts are left
-    off. The column key is the account handle, so the schema is stable across the run's years."""
+    off. The column key is the account UUID, so the schema is stable across the run's years."""
     shown = [ ( account, amount ) for account, amount in income_accounts
               if account.income_tax_class in _INCOME_CLASS_RANK ]
     ordered = sorted( enumerate( shown ),
@@ -168,7 +173,7 @@ def _income_group(
     return tuple( columns ), cells
 
 
-def _derived_cells( inputs : TaxYearInputs ) -> dict:
+def _derived_cells( inputs : TaxYearInputs ) -> dict[ str, Optional[ Decimal ] ]:
     return {
         'provisional_income'    : inputs.provisional_income,
         'taxable_ss_pct'        : _ratio( inputs.taxable_ss, inputs.ss_gross ),
@@ -183,18 +188,19 @@ def _derived_cells( inputs : TaxYearInputs ) -> dict:
         'taxable_ordinary'      : inputs.taxable_ordinary_income }
 
 
-def _tax_cells( inputs : TaxYearInputs ) -> dict:
+def _tax_cells( inputs : TaxYearInputs ) -> dict[ str, Optional[ Decimal ] ]:
     return {
         'ordinary_tax'     : inputs.ordinary_tax,
         'capital_gains_tax' : inputs.capital_gains_tax,
         'section_1250_tax' : inputs.section_1250_tax,
         'collectibles_tax' : inputs.collectibles_tax,
-        'niit'             : inputs.niit,
-        'state_income_tax' : inputs.state_income_tax,
-        'total_tax'        : inputs.total_tax }
+        'niit'               : inputs.niit,
+        'state_income_tax'   : inputs.state_income_tax,
+        'premium_tax_credit' : -inputs.premium_tax_credit,   # a credit reduces tax -> shown negative
+        'total_tax'          : inputs.total_tax }
 
 
-def _rate_cells( inputs : TaxYearInputs ) -> dict:
+def _rate_cells( inputs : TaxYearInputs ) -> dict[ str, Optional[ Decimal ] ]:
     # Long-term gains stack on top of taxable ordinary income, so the marginal gains rate and its headroom
     # are read at that stacked position in the preferential-rate table.
     gains_position = inputs.taxable_ordinary_income + inputs.taxable_long_term_gains

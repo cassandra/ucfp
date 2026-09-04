@@ -56,7 +56,7 @@
 
   --line-color: #cbd5e1;
   /* A stronger line for data-table column delimiters, which the pale --line-color leaves too faint --
-     especially against the tinted (blue/green/red/orange) group headers. */
+     especially against the tinted group headers. */
   --table-line-color: #94a3b8;
 
   --change-highlight-color: #b8d8f5;   /* a value that differs from its reference (age band / Default) */

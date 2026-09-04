@@ -61,4 +61,7 @@
 .tw-scroll th.tw-year, .tw-scroll td.tw-year { left: 0; }
 .tw-scroll th.tw-age, .tw-scroll td.tw-age   { left: var( --tw-year-width ); }
 .tw-scroll thead th.tw-year, .tw-scroll thead th.tw-age { z-index: 3; }
-.tw-scroll tbody th.tw-year, .tw-scroll tbody td.tw-age { z-index: 1; }
+.tw-scroll tbody th.tw-year, .tw-scroll tbody th.tw-age { z-index: 1; }
+/* Both frozen columns are <th> row headers (so the zebra rule, which targets td, never overrides their
+ * opaque white). Year stays bold; Age is a lighter reference. */
+.tw-table tbody th.tw-age { font-weight: normal; }

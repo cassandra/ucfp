@@ -69,6 +69,11 @@ def _tax_worksheet( result ) -> Optional[ TaxDisplayWorksheet ]:
     yearly = [ step.result.tax_worksheet for step in result.steps if step.result.tax_worksheet is not None ]
     if not yearly:
         return None
+    # Take the schema from the first year and concatenate every year's row. This holds because the revenue
+    # chart is created complete at baseline (forecast `_create_income_accounts` / `_create_asset_income_
+    # accounts`) and income columns key on the stable account UUID, so every year's schema is identical; a
+    # future change that created a revenue account mid-run would need this revisited (the year-0 schema
+    # would omit it).
     rows = tuple( row for worksheet in yearly for row in worksheet.years )
     return TaxDisplayWorksheet(
         jurisdiction = yearly[ 0 ].jurisdiction, groups = yearly[ 0 ].groups, years = rows )

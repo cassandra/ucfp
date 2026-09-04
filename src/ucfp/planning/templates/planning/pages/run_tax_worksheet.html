@@ -46,23 +46,24 @@ worksheet existed has none, so a note invites a re-run. Context: `record`, `tabl
       <table class="tw-table">
         <thead>
           <tr class="tw-head-groups">
-            <th class="tw-year" rowspan="2">Year</th>
-            <th class="tw-age" rowspan="2">Age</th>
+            <th class="tw-year" rowspan="2" scope="col">Year</th>
+            <th class="tw-age" rowspan="2" scope="col">Age</th>
             {% for span in table.spans %}
-            <th class="bt-head bt-depth-0 {{ span.css }}" colspan="{{ span.colspan }}">{{ span.label }}</th>
+            <th class="bt-head bt-depth-0 {{ span.css }}" colspan="{{ span.colspan }}"
+                scope="colgroup">{{ span.label }}</th>
             {% endfor %}
           </tr>
           <tr class="tw-head-cols">
             {% for column in table.columns %}
-            <th class="bt-head bt-depth-0 {{ column.css }}">{{ column.label }}</th>
+            <th class="bt-head bt-depth-0 {{ column.css }}" scope="col">{{ column.label }}</th>
             {% endfor %}
           </tr>
         </thead>
         <tbody>
           {% for row in table.rows %}
           <tr>
-            <th class="tw-year">{{ row.year }}</th>
-            <td class="tw-age">{{ row.age }}</td>
+            <th class="tw-year" scope="row">{{ row.year }}</th>
+            <th class="tw-age" scope="row">{{ row.age }}</th>
             {% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
           </tr>
           {% endfor %}

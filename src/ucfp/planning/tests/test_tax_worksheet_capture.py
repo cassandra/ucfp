@@ -84,6 +84,13 @@ class TaxWorksheetCaptureTest( TestCase ):
         self.assertIsInstance( first_year.cells[ 'agi' ], Decimal )
         self.assertIn( 'total_tax', first_year.cells )
 
+    def test_the_senior_deduction_lapses_after_its_final_year_in_the_captured_run( self ):
+        # The subject (born 1960) is 65+ with low AGI throughout, so the senior bonus is fully in through its
+        # 2028 final year and gone after -- the sunset, seen on the persisted run rather than just the unit.
+        cells = { row.year: row.cells for row in self._reloaded().result.tax_worksheet.years }
+        self.assertGreater( cells[ 2028 ][ 'senior_deduction' ], Decimal( '0' ) )   # applies through 2028
+        self.assertEqual( cells[ 2029 ][ 'senior_deduction' ], Decimal( '0' ) )      # lapses after
+
 
 class BackwardCompatibilityTest( SimpleTestCase ):
     """A run captured before the worksheet field existed has no `tax_worksheet` key in its stored JSON; the
