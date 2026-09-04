@@ -123,6 +123,7 @@
 .icon-left  { margin-right: 0.375rem; }
 .icon-right { margin-left: 0.375rem; }
 
+/* Snug a following amount up against a preceding icon glyph (e.g. the $ and price in the compare table). */
 .icon-right-negative  { margin-right: -0.2rem; }
 
 /* Modal width helpers (applied via the modal_dialog_class block). */

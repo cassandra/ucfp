@@ -271,6 +271,14 @@ class FinancialForecastView( InputGatedMixin, View ):
         return defaults
 
 
+def _tax_details_url( run, run_uuid ):
+    """The Tax Details entry URL for a captured run, or None when it has no worksheet -- so the run panel
+    hides the link for runs captured before the worksheet existed rather than offering a dead end."""
+    if run.result.tax_worksheet is None:
+        return None
+    return reverse( 'run_tax_details', args = [ run_uuid ] )
+
+
 @method_decorator( ensure_organization, name = 'dispatch' )
 class RunResultsView( View ):
     """`/run/<uuid>/` -- a captured run: its Books of Account as a drill-down table
@@ -303,10 +311,7 @@ class RunResultsView( View ):
         # A compact balances sparkline beside the summary; the full charts open in a
         # modal (RunChartsModalView), so only the thumbnail is built for the page.
         context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
-        # The panel's entry to the Tax Details view; None (so the button is hidden) for runs captured
-        # before the worksheet existed. A wrapper (the tour) overrides this in `_extra_context`.
-        context[ 'tax_details_url' ] = ( reverse( 'run_tax_details', args = [ record.uuid ] )
-                                         if run.result.tax_worksheet is not None else None )
+        context[ 'tax_details_url' ] = _tax_details_url( run, record.uuid )
         context.update( self._extra_context( request ) )
         return render( request, self.results_template, context )
 
@@ -552,9 +557,7 @@ class ExploreView( InputGatedMixin, View ):
         # The same balances thumbnail the results page shows -- charts are as useful while
         # exploring as on a saved run; the modal keys on `record` (the selected run), set above.
         context[ 'balances_thumbnail' ] = balances_chart( run, books, chrome = CHROME_SPARKLINE )
-        # The panel's entry to the Tax Details view for the selected transient run (hidden when absent).
-        context[ 'tax_details_url' ] = ( reverse( 'run_tax_details', args = [ selected.run.uuid ] )
-                                         if run.result.tax_worksheet is not None else None )
+        context[ 'tax_details_url' ] = _tax_details_url( run, selected.run.uuid )
         return context
 
     @staticmethod

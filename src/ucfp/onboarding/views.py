@@ -198,12 +198,24 @@ class TourScenarioView( TourInterviewView ):
         return super().get( request, section )
 
 
-class TourForecastView( RunResultsView ):
-    """The Forecast step of the tour: the captured example run's outcome summary and books table
-    (`RunResultsView`) rendered under the tour shell. Unlike the run page it needs no run uuid in the URL --
-    it resolves the example org's Financial Forecast run itself. The books-table column operations and the
-    in-window Maximize keep working unchanged: the column op is a fragment swap (no navigation) and Maximize
-    is pure client-side, so neither escapes the tour."""
+class _ExampleForecastRunView:
+    """Resolves the example org's captured Financial Forecast run itself -- the tour carries no run uuid in
+    the URL -- then delegates to the wrapped run view through the MRO. Shared by the tour's Forecast step and
+    its Tax Details drill-down so the example-run lookup lives in one place."""
+
+    def get( self, request ):
+        result = PlanningResultRecord.objects.filter(
+            organization = request.organization, feature = PlanningFeature.FINANCIAL_FORECAST
+        ).select_related( 'run' ).order_by( '-created_datetime' ).first()
+        if result is None:
+            raise DataNotAvailableError( 'The example forecast is not available.' )
+        return super().get( request, run_uuid = result.run.uuid )
+
+
+class TourForecastView( _ExampleForecastRunView, RunResultsView ):
+    """The Forecast step of the tour: the captured example run's outcome summary and books table rendered
+    under the tour shell. The books-table column operations (a fragment swap) and the in-window Maximize
+    (pure client-side) keep working, so neither escapes the tour."""
 
     results_template = 'onboarding/tour/forecast.html'
 
@@ -211,32 +223,14 @@ class TourForecastView( RunResultsView ):
         # Point the panel's Tax Details entry at the tour-wrapped page (not the app route) so it stays inside
         # the tour. The example run always has a worksheet, so the entry is always offered here.
         return { 'tour_active_step': _TOUR_STEP_FORECAST,
-                 'tax_details_url' : reverse( 'tour_tax_details' ) }
-
-    def get( self, request ):
-        result = PlanningResultRecord.objects.filter(
-            organization = request.organization, feature = PlanningFeature.FINANCIAL_FORECAST
-        ).select_related( 'run' ).order_by( '-created_datetime' ).first()
-        if result is None:
-            raise DataNotAvailableError( 'The example forecast is not available.' )
-        return super().get( request, run_uuid = result.run.uuid )
+                 'tax_details_url' : reverse( 'tour_tax_details' ), }
 
 
-class TourTaxDetailsView( RunTaxDetailsView ):
-    """The Tax Details drill-down of the tour's Forecast step: the example run's tax table
-    (`RunTaxDetailsView`) rendered under the tour shell. Like `TourForecastView` it resolves the example
-    org's Financial Forecast run itself rather than taking a uuid, and it stays on the Forecast step -- a
-    sub-page of Forecast, not a fifth pillar. The in-window Maximize keeps working (pure client-side)."""
+class TourTaxDetailsView( _ExampleForecastRunView, RunTaxDetailsView ):
+    """The example run's tax table rendered under the tour shell, as a drill-down of the tour's Forecast
+    step -- a sub-page, not a fifth pillar."""
 
     details_template = 'onboarding/tour/tax_details.html'
 
     def _extra_context( self, request ) -> dict:
         return { 'tour_active_step': _TOUR_STEP_FORECAST }
-
-    def get( self, request ):
-        result = PlanningResultRecord.objects.filter(
-            organization = request.organization, feature = PlanningFeature.FINANCIAL_FORECAST
-        ).select_related( 'run' ).order_by( '-created_datetime' ).first()
-        if result is None:
-            raise DataNotAvailableError( 'The example forecast is not available.' )
-        return super().get( request, run_uuid = result.run.uuid )

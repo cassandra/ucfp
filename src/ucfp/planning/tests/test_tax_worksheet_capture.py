@@ -130,6 +130,18 @@ class RunTaxDetailsViewTest( TestCase ):
         with self.assertRaises( Http404 ):
             self._get( record, other )
 
+    def test_the_page_notes_when_no_worksheet_was_captured( self ):
+        # A run captured before the worksheet existed can still be reached directly (e.g. an old bookmark);
+        # it renders the re-run note rather than a table.
+        record   = _capture( self.organization )
+        document = record.data
+        del document[ 'result' ][ 'tax_worksheet' ]
+        record.data = document
+        record.save( update_fields = [ 'data' ] )
+        response = self._get( record, self.organization )
+        self.assertEqual( 200, response.status_code )
+        self.assertIn( 'generate the tax details', response.content.decode() )   # the re-run note
+
 
 class RunResultsRenderTest( TestCase ):
     """Regression: the run results page must render. Adding a neighboring view once captured
@@ -166,5 +178,6 @@ class RunResultsRenderTest( TestCase ):
         del document[ 'result' ][ 'tax_worksheet' ]
         record.data = document
         record.save( update_fields = [ 'data' ] )
-        content = self._render( record ).content.decode()
-        self.assertNotIn( 'tax-details/', content )
+        response = self._render( record )
+        self.assertEqual( 200, response.status_code )
+        self.assertNotIn( 'tax-details/', response.content.decode() )

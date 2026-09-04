@@ -213,6 +213,7 @@ class TourTaxDetailsRenderTest( TestCase ):
         self.assertTemplateNotUsed( response, 'pages/app_base.html' )             # not the app chrome
         self.assertEqual( 4, response.context[ 'tour_active_step' ] )             # a sub-page of Forecast
         self.assertContains( response, reverse( 'tour_forecast' ) )               # the Back to forecast link
+        self.assertContains( response, 'Adjusted Gross Income' )                  # the real table, not the note
 
 
 @override_settings( SUPPRESS_AUTHENTICATION = False )
