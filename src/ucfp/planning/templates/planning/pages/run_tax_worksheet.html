@@ -25,9 +25,7 @@ worksheet existed has none, so a note invites a re-run. Context: `record`, `tabl
 {% if table and not table.is_empty %}
 <div class="run-table-panel card">
   <div class="card-header">
-    <h2 class="h6 mb-0">Projected taxes, year by year</h2>
-    <p class="text-muted small mb-0">The calculations behind each year&rsquo;s taxes. Columns with no
-      activity across the run are omitted.</p>
+    <h2 class="h6 mb-0">The calculations behind each year&rsquo;s taxes.</h2>
   </div>
   <div class="card-body">
     <div class="bt-panel-controls d-flex align-items-center mb-2">
@@ -35,7 +33,7 @@ worksheet existed has none, so a note invites a re-run. Context: `record`, `tabl
               aria-label="Minimize the table" title="Minimize the table">
         <img src="{% static 'img/app-logo-h64.png' %}" height="30" alt="">
       </button>
-      <span class="bt-maximized-only bt-run-name text-primary font-weight-bold">{{ record.label }}</span>
+      <span class="bt-maximized-only bt-run-name text-primary font-weight-bold">Tax Worksheet for: {{ record.label }}</span>
       <button type="button" class="btn btn-outline-primary btn-sm bt-maximize-toggle ml-auto flex-shrink-0"
               aria-pressed="false" title="Maximize the table to fill the window (Esc to minimize)">
         <span class="bt-maximize-label-open">{% icon 'maximize' size='sm' css_class='mr-1' %}Maximize</span>
