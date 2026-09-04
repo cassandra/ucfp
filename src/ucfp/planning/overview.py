@@ -28,6 +28,7 @@ from .gating import partition_scenarios, scenario_started
 from .run_books_cache import load_run_books
 from .models import PlanningResultRecord
 from .books_table import run_period_spans
+from .inflation import to_todays_dollars
 from .run_charts import net_worth_chart as build_net_worth_chart
 from .schemas import ProjectionRun
 
@@ -74,21 +75,7 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
                 # figure is read against money the viewer knows. None when the restatement would add nothing
                 # -- not solvent, a same-year horizon, or a zero/absent inflation assumption -- and the
                 # summary then simply omits the companion line.
-                'net_worth_today' : _in_start_year_dollars( end_net_worth, run, end_date ) if solvent else None } } }
-
-
-def _in_start_year_dollars( amount : Decimal, run : ProjectionRun, end_date ) -> Optional[ Decimal ]:
-    """`amount`, a figure at `end_date`, discounted to the run's start-year dollars by its general
-    inflation assumption -- the "in today's dollars" companion to a nominal, far-horizon net worth. None
-    when the discount is a no-op: a same-year horizon (nothing to discount) or a zero/absent inflation rate
-    (the figure would merely repeat the nominal one). Uses the same inflation the engine grew the run by, so
-    the two figures are a consistent nominal/real pair."""
-    economics = run.assumptions.economics if run.assumptions else None
-    inflation = economics.inflation.fraction if economics else Decimal( '0' )
-    years     = end_date.year - run.frame.start_date.year
-    if ( inflation <= 0 ) or ( years <= 0 ):
-        return None
-    return amount / ( ( Decimal( '1' ) + inflation ) ** years )
+                'net_worth_today' : to_todays_dollars( run, end_net_worth, end_date ) if solvent else None } } }
 
 
 def _ages( profile, on_date ) -> list:
