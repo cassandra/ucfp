@@ -14,6 +14,7 @@ encoding colour alone can't provide). Reads `balances_chart` and `flows_chart`
 {% block title_text %}{{ record.label }}: charts{% endblock %}
 
 {% block body %}
+{% include "planning/modals/_inflation_toggle.html" %}
 <figure class="modal-chart">
   <figcaption class="modal-chart__title">Balances</figcaption>
   {% line_chart balances_chart css_class="modal-chart__svg" aria_label="Net worth, assets and liabilities over time" %}

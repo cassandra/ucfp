@@ -12,6 +12,7 @@ only when there is more than one line. Reads `column_chart` (a LineChart) and `r
 {% block title_text %}{{ column_chart.series.0.label }} over time{% endblock %}
 
 {% block body %}
+{% include "planning/modals/_inflation_toggle.html" %}
 <figure class="modal-chart">
   {% line_chart column_chart css_class="modal-chart__svg" aria_label="Column value over time" %}
   {% if column_chart.series|length > 1 %}{% chart_legend column_chart %}{% endif %}

@@ -5,6 +5,7 @@ resolves an untrusted `?column=` token, which must 404 (never 500) when it names
 """
 from django.http import Http404
 from django.test import RequestFactory, TestCase
+from django.utils.http import urlencode
 
 from common.dataclass_json import from_json_data
 from common.line_chart import CHROME_FULL
@@ -48,6 +49,13 @@ class RunChartModalsTests( TestCase ):
         request = self.factory.get( path, params, HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
         request.organization  = organization or self.org
         request.session_state = SessionState()   # middleware attaches this on a real request
+        return request
+
+    def _toggle_request( self, path, adjust, session_state = None ):
+        request = self.factory.post( path, { 'adjust': adjust }, HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
+        request.organization  = self.org
+        request.session_state = session_state or SessionState()
+        request.session       = {}   # `to_session` writes the preference through to the session
         return request
 
     # -- RunChartsModalView (balances + flows) --------------------------------------
@@ -113,3 +121,29 @@ class RunChartModalsTests( TestCase ):
         chart_end = net_worth_chart(
             run, books, chrome = CHROME_FULL, adjust_for_inflation = True ).series[ 0 ].values[ -1 ]
         self.assertAlmostEqual( chart_end, float( today_figure ), delta = 1.0 )   # agree to the dollar
+
+    # -- the modal toggle (POST flips the app-wide preference, re-renders the modal) ------------------
+
+    def test_charts_modal_toggle_persists_the_preference_and_re_renders( self ):
+        state    = SessionState( adjust_charts_for_inflation = True )
+        request  = self._toggle_request( '/charts', adjust = 'off', session_state = state )
+        response = RunChartsModalView().post( request, run_uuid = self.run.uuid )
+        self.assertEqual( response.status_code, 200 )
+        self.assertIn( 'line-chart', response.content.decode() )
+        self.assertFalse( request.session_state.adjust_charts_for_inflation )        # flipped on the state
+        self.assertFalse( request.session[ 'adjust_charts_for_inflation' ] )         # and persisted
+
+    def test_charts_modal_toggle_can_turn_adjustment_back_on( self ):
+        state    = SessionState( adjust_charts_for_inflation = False )
+        request  = self._toggle_request( '/charts', adjust = 'on', session_state = state )
+        RunChartsModalView().post( request, run_uuid = self.run.uuid )
+        self.assertTrue( request.session_state.adjust_charts_for_inflation )
+
+    def test_column_modal_toggle_preserves_the_column( self ):
+        path     = '/column-chart?' + urlencode( { 'column': self._net_worth_token() } )
+        state    = SessionState( adjust_charts_for_inflation = True )
+        request  = self._toggle_request( path, adjust = 'off', session_state = state )
+        response = RunColumnChartModalView().post( request, run_uuid = self.run.uuid )
+        self.assertEqual( response.status_code, 200 )   # the ?column= token survived into the re-render
+        self.assertIn( 'line-chart', response.content.decode() )
+        self.assertFalse( request.session_state.adjust_charts_for_inflation )

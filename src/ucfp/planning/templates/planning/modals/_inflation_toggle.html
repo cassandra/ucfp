@@ -1,0 +1,18 @@
+{% comment %}
+The inflation-basis toggle for a chart modal. Posts the flipped preference to `chart_basis_toggle_url` (the
+modal's own URL, carrying any params it needs) and re-renders the whole modal in the new basis
+(`data-async="modal"`). The preference is app-wide, so the other chart surfaces pick it up on their next
+load. Reads `adjust_charts_for_inflation`.
+{% endcomment %}
+<div class="d-flex align-items-center flex-wrap mb-3">
+  <form method="post" action="{{ chart_basis_toggle_url }}" data-async="modal" class="m-0 mr-2">
+    {% csrf_token %}
+    <input type="hidden" name="adjust" value="{% if adjust_charts_for_inflation %}off{% else %}on{% endif %}">
+    <button type="submit" class="btn btn-outline-secondary btn-sm">
+      {% if adjust_charts_for_inflation %}Show future dollars{% else %}Adjust for inflation{% endif %}
+    </button>
+  </form>
+  <span class="text-muted small">Showing
+    {% if adjust_charts_for_inflation %}today&rsquo;s dollars (inflation-adjusted){% else %}future dollars (nominal){% endif %}.
+  </span>
+</div>

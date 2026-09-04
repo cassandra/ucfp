@@ -14,6 +14,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.http import urlencode
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -394,41 +395,71 @@ class RunDiscardConfirmView( ModalView ):
         return self.modal_response( request, context = { 'record': record } )
 
 
+def _apply_chart_basis_toggle( request ):
+    """Persist the chart inflation-basis preference posted by a modal's toggle onto the session (`adjust=on`
+    shows today's dollars, anything else shows nominal). Shared by the two chart modals' POST handlers."""
+    request.session_state.adjust_charts_for_inflation = ( request.POST.get( 'adjust' ) == 'on' )
+    request.session_state.to_session( request )
+
+
 @method_decorator( ensure_organization, name = 'dispatch' )
-class RunChartsModalView( ModalView ):
+class RunChartsModalView( PermitsReadonlyMutation, ModalView ):
     """`/run/<uuid>/charts/` -- the wide modal opened from the summary's balances
     thumbnail: the fully-labelled charts split by scale -- balances (net worth,
-    assets, liabilities) and annual flows (income, expenses) -- each with a legend."""
+    assets, liabilities) and annual flows (income, expenses) -- each with a legend.
+
+    A POST flips the inflation-basis toggle and re-renders the whole modal in the new basis (the toggle is
+    infrequent, so a full re-render is simpler than an in-place swap). Opted out of the read-only write-gate:
+    it persists only the member's own session view preference, never organization data."""
 
     def get_template_name( self ):
         return _CHARTS_MODAL_TEMPLATE
 
     def get( self, request, run_uuid ):
+        return self.modal_response( request, context = self._context( request, run_uuid ) )
+
+    def post( self, request, run_uuid ):
+        _apply_chart_basis_toggle( request )
+        return self.modal_response( request, context = self._context( request, run_uuid ) )
+
+    def _context( self, request, run_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run    = from_json_data( ProjectionRun, record.data )
         books  = load_run_books( record.books )
         adjust = request.session_state.adjust_charts_for_inflation
-        context = {
+        return {
             'record'         : record,
             'balances_chart' : balances_chart(
                 run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust, width = 720, height = 300 ),
             'flows_chart'    : flows_chart(
                 run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust, width = 720, height = 300 ),
+            'adjust_charts_for_inflation' : adjust,
+            'chart_basis_toggle_url'      : reverse( 'run_charts_modal', args = [ record.uuid ] ),
         }
-        return self.modal_response( request, context = context )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class RunColumnChartModalView( ModalView ):
+class RunColumnChartModalView( PermitsReadonlyMutation, ModalView ):
     """`/run/<uuid>/column-chart/?column=<token>` -- the modal opened from a books-table
     column's "Chart" action: that column's value over time, with its immediate children
-    beside it when it is a small-enough rollup."""
+    beside it when it is a small-enough rollup.
+
+    A POST flips the inflation-basis toggle and re-renders the whole modal in the new basis, preserving the
+    `?column=` selection through the toggle URL. Opted out of the read-only write-gate: it persists only the
+    member's own session view preference, never organization data."""
 
     def get_template_name( self ):
         return _COLUMN_CHART_MODAL_TEMPLATE
 
     def get( self, request, run_uuid ):
+        return self.modal_response( request, context = self._context( request, run_uuid ) )
+
+    def post( self, request, run_uuid ):
+        _apply_chart_basis_toggle( request )
+        return self.modal_response( request, context = self._context( request, run_uuid ) )
+
+    def _context( self, request, run_uuid ):
         record = get_object_or_404(
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         token = request.GET.get( 'column' )
@@ -442,7 +473,13 @@ class RunColumnChartModalView( ModalView ):
                 adjust_for_inflation = request.session_state.adjust_charts_for_inflation )
         except ValueError as error:
             raise Http404( str( error ) )
-        return self.modal_response( request, context = { 'record': record, 'column_chart': chart } )
+        toggle_url = reverse( 'run_column_chart', args = [ record.uuid ] ) + '?' + urlencode( { 'column': token } )
+        return {
+            'record'       : record,
+            'column_chart' : chart,
+            'adjust_charts_for_inflation' : request.session_state.adjust_charts_for_inflation,
+            'chart_basis_toggle_url'      : toggle_url,
+        }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
