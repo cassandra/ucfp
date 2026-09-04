@@ -23,8 +23,10 @@ _LTCG = BracketTable( (
     ( _D( '0' ), _D( '0' ) ), ( _D( '50000' ), _D( '0.15' ) ), ( _D( '500000' ), _D( '0.20' ) ) ) )
 
 
-def _account( tax_class, name, handle ):
-    return SimpleNamespace( income_tax_class = tax_class, name = name, handle = handle )
+def _account( tax_class, name, uuid ):
+    # Real revenue accounts carry no `handle` (only `account_uuid`), so the stub deliberately omits handle
+    # -- the worksheet must key columns on the uuid.
+    return SimpleNamespace( income_tax_class = tax_class, name = name, account_uuid = uuid )
 
 
 def _inputs( ** overrides ) -> TaxYearInputs:
@@ -113,10 +115,24 @@ class IncomeColumnTest( unittest.TestCase ):
         self.assertEqual( [ column.subgroup for column in income.columns ],
                           [ 'Wages', 'Taxable Interest', 'Tax-Exempt Interest' ] )
 
-    def test_income_cells_key_on_the_account_handle( self ):
+    def test_income_cells_key_on_the_account_uuid( self ):
         cells = _cells( self._worksheet() )
         self.assertEqual( cells[ 'income:w1' ], _D( '60000' ) )
         self.assertNotIn( 'income:g1', cells )                            # tax-free account excluded
+
+    def test_same_class_accounts_get_distinct_columns_not_one_collapsed_column( self ):
+        # Regression: keying on `handle` (None for every revenue account) collapsed all income columns onto
+        # one cell -- so two accounts of the same class must yield two columns with their own values.
+        accounts = [
+            ( _account( IncomeTaxClass.WAGES, 'Wages — Alice', 'a' ), _D( '60000' ) ),
+            ( _account( IncomeTaxClass.WAGES, 'Wages — Bob', 'b' ), _D( '25000' ) ) ]
+        worksheet = build_worksheet( _inputs( income_accounts = accounts ) )
+        income    = worksheet.groups[ 0 ]
+        self.assertEqual( [ column.label for column in income.columns ],
+                          [ 'Wages — Alice', 'Wages — Bob' ] )
+        cells = _cells( worksheet )
+        self.assertEqual( cells[ 'income:a' ], _D( '60000' ) )
+        self.assertEqual( cells[ 'income:b' ], _D( '25000' ) )           # distinct, not collapsed
 
 
 class WorksheetShapeTest( unittest.TestCase ):

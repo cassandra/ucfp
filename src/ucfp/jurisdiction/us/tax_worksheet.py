@@ -141,7 +141,10 @@ def _income_group(
     columns = list()
     cells   = dict()
     for _position, ( account, amount ) in ordered:
-        key = f'income:{ account.handle }'
+        # Key on the account's stable UUID, not its handle: revenue accounts carry no handle, so keying on
+        # `handle` collapses every income column onto one shared `None` key. `account_uuid` is the per-account
+        # identity meant for exactly this (a results-table column) and is stable across the run's years.
+        key = f'income:{ account.account_uuid }'
         columns.append( Column(
             key = key, label = account.name, format = ColumnFormat.MONEY,
             subgroup = account.income_tax_class.label ) )
