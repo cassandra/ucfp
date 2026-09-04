@@ -14,8 +14,9 @@ from typing import Optional
 from ucfp.jurisdiction.tax_worksheet import (
     Column, ColumnCategory, ColumnFormat, TaxDisplayWorksheet )
 
-# The category color classes -- the same blue / green / red / orange the books table tints its groups with
-# (see css/tax_worksheet.css, which mirrors the books table's asset / revenue / liability / expense hues).
+# The category color classes -- green / purple / red / orange (see css/tax_worksheet.css), borrowing the
+# books table's revenue / net-worth / liability / expense hues so income reads green and the derived income
+# calculations read purple like net worth, another derived figure.
 _CATEGORY_CSS = {
     ColumnCategory.INCOME: 'tw-cat-income',
     ColumnCategory.INCOME_DERIVED: 'tw-cat-income-derived',
