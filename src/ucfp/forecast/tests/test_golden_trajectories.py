@@ -23,10 +23,14 @@ _D = Decimal
 # or 2026-parameter change is intended -- a diff here means composed behaviour moved.
 _GOLDEN = {
     'wage_earner': ( None, _D( '985859.89283' ), _D( '681602.23229' ) ),
-    'retiree': ( 2036, _D( '-106659.42830' ), _D( '193747.28191' ) ),
+    # retiree / couple_survivor / life_events shifted deliberately in this branch: the senior-deduction
+    # sunset (raising tax once the bonus lapses) and the calendar-year age-window inclusivity (recurring
+    # conversions/withdrawals firing in the intended years) both raise lifetime tax and lower terminal net
+    # worth for the senior-heavy and age-windowed profiles. The other four profiles are unaffected.
+    'retiree': ( 2036, _D( '-110684.58718' ), _D( '196423.43135' ) ),
     'rental_owner': ( None, _D( '1789578.52462' ), _D( '874528.38332' ) ),
-    'couple_survivor': ( None, _D( '1529957.76814' ), _D( '238303.00155' ) ),
-    'life_events': ( 2044, _D( '-36143.31918' ), _D( '-7945.46672' ) ),
+    'couple_survivor': ( None, _D( '1501500.30803' ), _D( '253027.83523' ) ),
+    'life_events': ( 2044, _D( '-57744.70231' ), _D( '7177.77035' ) ),
     'gig_worker': ( None, _D( '539139.39912' ), _D( '174505.36504' ) ),
     'lumpy_income': ( None, _D( '1837611.94105' ), _D( '780448.08528' ) ),
 }
