@@ -90,21 +90,30 @@ def _subjects( profile ) -> list:
     return [ ( subject.handle, subject.name ) for subject in profile.subjects ]
 
 
+def is_transfer_destination_class( asset_class ) -> bool:
+    """Whether a transfer may move value *into* a holding of this class -- the liquid financial accounts
+    only. Roth is source-only, and retirement, real estate, possessions, and vehicles are not transfer
+    endpoints (each has its own home)."""
+    return asset_class.is_liquid_financial
+
+
+def is_transfer_source_class( asset_class ) -> bool:
+    """Whether a transfer may move value *out of* a holding of this class -- a liquid destination class or
+    Roth. A one-time Roth withdrawal to a liquid account is a plain money move; pre-tax withdrawals and Roth
+    conversions are tax planning, not transfers, so pre-tax is excluded."""
+    return is_transfer_destination_class( asset_class ) or asset_class is AssetClass.ROTH
+
+
 def _transfer_destinations( profile ) -> list:
-    """The accounts a transfer can move value *into* -- the liquid financial accounts (cash, CDs, and
-    marketable securities). Retirement accounts, real estate, possessions, and vehicles are not transfer
-    endpoints: each has its own home (Tax Planning, a sale event, the vehicle plan)."""
+    """The accounts a transfer can move value into (see `is_transfer_destination_class`)."""
     return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.handle is not None and asset.asset_class.is_liquid_financial ]
+             if asset.handle is not None and is_transfer_destination_class( asset.asset_class ) ]
 
 
 def _transfer_sources( profile ) -> list:
-    """The accounts a transfer can move value *out of* -- the liquid destinations plus Roth. A one-time
-    Roth withdrawal to a liquid account is a plain money move, not a tax strategy, so it belongs here;
-    pre-tax withdrawals and Roth *conversions* are tax planning, not transfers, so pre-tax is excluded."""
+    """The accounts a transfer can move value out of (see `is_transfer_source_class`)."""
     return [ ( asset.handle, asset.name ) for asset in profile.assets
-             if asset.handle is not None
-             and ( asset.asset_class.is_liquid_financial or asset.asset_class is AssetClass.ROTH ) ]
+             if asset.handle is not None and is_transfer_source_class( asset.asset_class ) ]
 
 
 def _properties( profile ) -> list:

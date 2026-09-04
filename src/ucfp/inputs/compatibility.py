@@ -5,7 +5,9 @@ property, retirement timing names a subject, ...) but carry no enforced foreign 
 independently selected and edited, so a Plans can drift out of step with the Profile it is run
 against (the Profile gained or lost an entity the Plans still names). Rather than prevent that
 structurally, we check it *at use*: this module resolves every Plans reference against the current
-Profile and reports the ones that do not resolve.
+Profile and reports the ones that do not resolve -- plus a plan item that still resolves but no longer
+works under a current rule (a transfer whose endpoint is no longer a valid transfer account, #262), pruned
+by the same reconcile.
 
 It lives here, above `profile` and `plans`, because it depends on both -- neither input subpackage
 may depend on the other. Materialization calls `assert_compatible` before composing the engine
@@ -20,6 +22,9 @@ from dataclasses import replace
 from decimal import Decimal
 from typing import Optional
 
+from ucfp.inputs.events import (
+    SOURCE_ROLE, TARGET_ROLE, is_transfer_destination_class, is_transfer_source_class )
+from ucfp.inputs.plans.enums import EventKind
 from ucfp.inputs.plans.schemas import LoanRepayment, LoanTermsSnapshot, Plans
 from ucfp.inputs.profile.schemas import Debt, LoanTerms, Profile
 from ucfp.inputs.expenses import is_renting
@@ -27,9 +32,10 @@ from ucfp.inputs.property_expenses import property_handles_for, set_home_rent
 from ucfp.inputs.vehicle_expenses import plan_has_content
 
 
-# The shared lead-in for a plans-drift report, so the raise-at-use error and the pre-run readiness
-# check spell the drift the same way.
-DRIFT_LEAD_IN = 'These plans reference things your profile no longer has:'
+# The shared lead-in for a plans-drift report, so the raise-at-use error and the pre-run readiness check
+# spell the drift the same way. It covers both a reference the profile no longer has and a plan item that no
+# longer works under a current rule (e.g. a transfer between accounts that can no longer be transferred).
+DRIFT_LEAD_IN = 'These plans include items that no longer work with your profile:'
 
 
 class PlansIncompatibleError( ValueError ):
@@ -97,6 +103,15 @@ def compatibility_issues( profile: Profile, plans: Plans ) -> list[ str ]:
             if handle not in entities:
                 issues.append(
                     f'the event "{event.kind.label}" on an unknown {role} "{handle}";' )
+    account_class = { asset.handle: asset.asset_class for asset in profile.assets }
+    account_name  = { asset.handle: asset.name for asset in profile.assets }
+    for event in plans.events:
+        if not _transfer_endpoints_valid( event, account_class ):
+            source = event.selections.get( SOURCE_ROLE )
+            target = event.selections.get( TARGET_ROLE )
+            issues.append(
+                f'a transfer from "{account_name.get( source, source )}" to '
+                f'"{account_name.get( target, target )}", no longer a supported move;' )
     return issues
 
 
@@ -119,6 +134,7 @@ def plans_reconciled_with_profile( profile: Profile, plans: Plans ) -> Plans:
     leased     = { vehicle.handle for vehicle in profile.leased_vehicles }
     properties = set( property_handles_for( profile ) )
     entities   = subjects | accounts | debts
+    account_class = { asset.handle: asset.asset_class for asset in profile.assets }
 
     return replace(
         plans,
@@ -134,7 +150,9 @@ def plans_reconciled_with_profile( profile: Profile, plans: Plans ) -> Plans:
                               for e in plans.property_expenses ],
         vehicle_plan      = _reconciled_vehicle_plan( plans.vehicle_plan, accounts, leased ),
         drawdown          = _reconciled_drawdown( plans.drawdown, accounts ),
-        events            = [ e for e in plans.events if _event_resolves( e, entities ) ] )
+        events            = [ e for e in plans.events
+                              if _event_resolves( e, entities )
+                              and _transfer_endpoints_valid( e, account_class ) ] )
 
 
 # --- Loan-terms drift (value drift) --------------------------------------
@@ -338,3 +356,18 @@ def _event_resolves( event, entities: set ) -> bool:
     """Whether every entity a plan event selects still exists -- an event is dropped whole when any role
     it names (a subject, an account, a debt) is gone, matching how the drift check flags it."""
     return all( handle in entities for handle in event.selections.values() )
+
+
+def _transfer_endpoints_valid( event, account_class: dict ) -> bool:
+    """Whether a transfer event's endpoints are still valid transfer accounts -- a source that can be
+    transferred out of and a target that can be transferred into (the endpoint rule tightened in #262, so a
+    transfer stored earlier may use a now-excluded account such as a pre-tax or retirement account). True for
+    any non-transfer event, and for an endpoint whose handle is unknown -- an absent account is existence
+    drift, judged by `_event_resolves`, so this only weighs endpoints that still resolve."""
+    if event.kind is not EventKind.TRANSFER:
+        return True
+    source_class = account_class.get( event.selections.get( SOURCE_ROLE ) )
+    target_class = account_class.get( event.selections.get( TARGET_ROLE ) )
+    source_ok = source_class is None or is_transfer_source_class( source_class )
+    target_ok = target_class is None or is_transfer_destination_class( target_class )
+    return source_ok and target_ok
