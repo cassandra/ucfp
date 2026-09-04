@@ -65,7 +65,9 @@ class TaxYearInputs:
     taxable_long_term_gains : Decimal
     section_1250_depreciation : Decimal
     net_investment_income   : Decimal
-    standard_deduction      : Decimal
+    deduction_base          : Decimal
+    age_65_deduction        : Decimal
+    senior_deduction        : Decimal
     taxable_ordinary_income : Decimal
     applied_deduction       : Decimal
     taxable_income          : Decimal
@@ -91,7 +93,12 @@ _DERIVED_COLUMNS = (
     # against these lines: without it the depreciation portion is invisible on the income side.
     ( 'section_1250_depreciation', 'Section 1250 Depreciation', ColumnFormat.MONEY ),
     ( 'net_investment_income', 'Net Investment Income', ColumnFormat.MONEY ),
-    ( 'standard_deduction', 'Standard Deduction', ColumnFormat.MONEY ),
+    # The standard deduction split into its parts: the base, the age-65 bonus (per subject 65+), and the
+    # senior bonus (per subject 65+, after its AGI phase-out). Their sum is the standard deduction; the
+    # applied deduction is the larger of that and itemized -- what actually reduces income.
+    ( 'deduction_base', 'Base Deduction', ColumnFormat.MONEY ),
+    ( 'age_65_deduction', 'Age-65 Bonus', ColumnFormat.MONEY ),
+    ( 'senior_deduction', 'Senior Bonus', ColumnFormat.MONEY ),
     ( 'applied_deduction', 'Applied Deduction', ColumnFormat.MONEY ),
     ( 'taxable_ordinary', 'Taxable Ordinary Income', ColumnFormat.MONEY ) )
 
@@ -169,7 +176,9 @@ def _derived_cells( inputs : TaxYearInputs ) -> dict:
         'taxable_ltcg'              : inputs.taxable_long_term_gains,
         'section_1250_depreciation' : inputs.section_1250_depreciation,
         'net_investment_income'     : inputs.net_investment_income,
-        'standard_deduction'    : inputs.standard_deduction,
+        'deduction_base'        : inputs.deduction_base,
+        'age_65_deduction'      : inputs.age_65_deduction,
+        'senior_deduction'      : inputs.senior_deduction,
         'applied_deduction'     : inputs.applied_deduction,
         'taxable_ordinary'      : inputs.taxable_ordinary_income }
 

@@ -150,6 +150,20 @@ class _RentalGainSplit( NamedTuple ):
     long_term    : Decimal
 
 
+class _StandardDeduction( NamedTuple ):
+    """The standard deduction split into its parts: the `base`, the age-65 bonus totalled across the
+    subjects 65+, and the senior bonus totalled across them (after the AGI phase-out). They sum to the
+    deduction (`total`)."""
+
+    base   : Decimal
+    age_65 : Decimal
+    senior : Decimal
+
+    @property
+    def total( self ) -> Decimal:
+        return self.base + self.age_65 + self.senior
+
+
 class USFederalTaxEngine( TaxEngine ):
     """Assesses US federal income tax for one fiscal year against the parameters it
     is constructed with."""
@@ -249,9 +263,9 @@ class USFederalTaxEngine( TaxEngine ):
         # Computed before the deduction step because it feeds the SALT itemized deduction, then reused
         # as its own charge below. State tax depends only on AGI, so a single pass stays acyclic.
         state_income_tax = self._state_income_tax_charge( fiscal_window, agi, taxable_ss )
-        standard_deduction = self._standard_deduction( status, tax_context, agi )
+        standard   = self._standard_deduction( status, tax_context, agi )
         deduction  = max(
-            standard_deduction,
+            standard.total,
             self._itemized_deduction( fiscal_window, agi, state_income_tax ) )
 
         taxable_income = max( _ZERO, agi - deduction )
@@ -314,7 +328,9 @@ class USFederalTaxEngine( TaxEngine ):
             taxable_long_term_gains   = split.preferential,
             section_1250_depreciation = section_1250,
             net_investment_income     = net_investment_income,
-            standard_deduction      = standard_deduction,
+            deduction_base          = standard.base,
+            age_65_deduction        = standard.age_65,
+            senior_deduction        = standard.senior,
             applied_deduction       = deduction,
             taxable_ordinary_income = split.ordinary,
             taxable_income          = taxable_income,
@@ -693,15 +709,17 @@ class USFederalTaxEngine( TaxEngine ):
         upper_tier = ( provisional - thresholds.additional ) * _SS_MAX_RATE
         return min( ss_gross * _SS_MAX_RATE, lower_tier + upper_tier )
 
-    def _standard_deduction( self, status : FilingStatus, tax_context : TaxContext, agi : Decimal ) -> Decimal:
-        """Base deduction plus the age-65 and senior bonuses for each subject 65+, with the
-        senior bonus phased out linearly across the phase-out band -- keyed on AGI, not the
-        senior deduction's own MAGI (a simplification)."""
+    def _standard_deduction(
+            self, status : FilingStatus, tax_context : TaxContext, agi : Decimal ) -> _StandardDeduction:
+        """The standard deduction split into its parts (`.total` is the deduction): the base, the age-65
+        bonus for each subject 65+, and the senior bonus for each, phased out linearly across the phase-out
+        band -- keyed on AGI, not the senior deduction's own MAGI (a simplification)."""
         standard = self._parameters.standard_deduction[ status ]
         seniors  = tax_context.count_age_at_least( 65 )
-        deduction = standard.base + standard.age_65_bonus * seniors
-        deduction += standard.senior_bonus * seniors * self._senior_phaseout_factor( standard, agi )
-        return deduction
+        return _StandardDeduction(
+            base   = standard.base,
+            age_65 = standard.age_65_bonus * seniors,
+            senior = standard.senior_bonus * seniors * self._senior_phaseout_factor( standard, agi ) )
 
     def _itemized_deduction(
             self, fiscal_window : FiscalWindowView, agi : Decimal, state_income_tax : Decimal ) -> Decimal:

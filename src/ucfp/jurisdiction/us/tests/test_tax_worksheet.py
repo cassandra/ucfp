@@ -36,7 +36,8 @@ def _inputs( ** overrides ) -> TaxYearInputs:
         provisional_income = _D( '44000' ), ss_gross = _D( '40000' ), taxable_ss = _D( '34000' ),
         agi = _D( '90000' ), taxable_long_term_gains = _D( '20000' ),
         section_1250_depreciation = _D( '0' ),
-        net_investment_income = _D( '20500' ), standard_deduction = _D( '15000' ),
+        net_investment_income = _D( '20500' ),
+        deduction_base = _D( '15000' ), age_65_deduction = _D( '0' ), senior_deduction = _D( '0' ),
         applied_deduction = _D( '15000' ),
         taxable_ordinary_income = _D( '30000' ), taxable_income = _D( '50000' ),
         niit_magi = _D( '210000' ), ordinary_tax = _D( '3000' ), capital_gains_tax = _D( '3000' ),
@@ -90,13 +91,16 @@ class DerivedColumnTest( unittest.TestCase ):
         under = _cells( build_worksheet( _inputs( niit_magi = _D( '150000' ) ) ) )
         self.assertEqual( under[ 'headroom_niit' ], _D( '50000' ) )
 
-    def test_the_standard_and_applied_deductions_are_both_shown( self ):
-        # The standard deduction is always shown as a projected reference; the applied deduction is the one
-        # actually used (the larger of standard and itemized). They coincide unless itemizing wins.
-        cells = _cells( build_worksheet(
-            _inputs( standard_deduction = _D( '15000' ), applied_deduction = _D( '22000' ) ) ) )
-        self.assertEqual( cells[ 'standard_deduction' ], _D( '15000' ) )
-        self.assertEqual( cells[ 'applied_deduction' ], _D( '22000' ) )
+    def test_the_deduction_is_split_into_its_parts_beside_the_applied_deduction( self ):
+        # The standard deduction is broken into base + age-65 bonus + senior bonus (their sum is the
+        # standard deduction); the applied deduction is the larger of that and itemized -- what is used.
+        cells = _cells( build_worksheet( _inputs(
+            deduction_base = _D( '32200' ), age_65_deduction = _D( '3300' ),
+            senior_deduction = _D( '12000' ), applied_deduction = _D( '47500' ) ) ) )
+        self.assertEqual( cells[ 'deduction_base' ], _D( '32200' ) )
+        self.assertEqual( cells[ 'age_65_deduction' ], _D( '3300' ) )
+        self.assertEqual( cells[ 'senior_deduction' ], _D( '12000' ) )
+        self.assertEqual( cells[ 'applied_deduction' ], _D( '47500' ) )
 
     def test_top_bracket_headroom_is_not_applicable( self ):
         cells = _cells( build_worksheet( _inputs( taxable_ordinary_income = _D( '250000' ) ) ) )
