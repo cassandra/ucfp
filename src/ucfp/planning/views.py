@@ -395,32 +395,44 @@ class RunDiscardConfirmView( ModalView ):
         return self.modal_response( request, context = { 'record': record } )
 
 
-def _apply_chart_basis_toggle( request ):
-    """Persist the chart inflation-basis preference posted by a modal's toggle onto the session (`adjust=on`
-    shows today's dollars, anything else shows nominal). Shared by the two chart modals' POST handlers."""
-    request.session_state.adjust_charts_for_inflation = ( request.POST.get( 'adjust' ) == 'on' )
-    request.session_state.to_session( request )
+class ChartBasisToggleModalView( PermitsReadonlyMutation, ModalView ):
+    """Base for a chart modal that carries the inflation-basis toggle (today's vs future dollars).
 
+    A GET renders the modal; a POST flips the per-session basis preference and re-renders the *whole* modal
+    in the new basis -- the toggle is infrequent, so a full re-render is simpler than an in-place swap.
+    Opted out of the read-only write-gate: it persists only the member's own session view preference, never
+    organization data.
 
-@method_decorator( ensure_organization, name = 'dispatch' )
-class RunChartsModalView( PermitsReadonlyMutation, ModalView ):
-    """`/run/<uuid>/charts/` -- the wide modal opened from the summary's balances
-    thumbnail: the fully-labelled charts split by scale -- balances (net worth,
-    assets, liabilities) and annual flows (income, expenses) -- each with a legend.
-
-    A POST flips the inflation-basis toggle and re-renders the whole modal in the new basis (the toggle is
-    infrequent, so a full re-render is simpler than an in-place swap). Opted out of the read-only write-gate:
-    it persists only the member's own session view preference, never organization data."""
-
-    def get_template_name( self ):
-        return _CHARTS_MODAL_TEMPLATE
+    Subclasses build their own chart-specific context in `_context`, merging in the two shared toggle keys
+    via `_toggle_context` (the current basis and the URL the toggle posts back to)."""
 
     def get( self, request, run_uuid ):
         return self.modal_response( request, context = self._context( request, run_uuid ) )
 
     def post( self, request, run_uuid ):
-        _apply_chart_basis_toggle( request )
+        request.session_state.adjust_charts_for_inflation = bool( request.POST.get( 'adjust' ) == 'on' )
+        request.session_state.to_session( request )
         return self.modal_response( request, context = self._context( request, run_uuid ) )
+
+    def _toggle_context( self, request, toggle_url : str ) -> dict:
+        """The two context keys every chart modal's toggle needs: the current basis and its post-back URL."""
+        return {
+            'adjust_charts_for_inflation' : request.session_state.adjust_charts_for_inflation,
+            'chart_basis_toggle_url'      : toggle_url,
+        }
+
+    def _context( self, request, run_uuid ) -> dict:
+        raise NotImplementedError
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RunChartsModalView( ChartBasisToggleModalView ):
+    """`/run/<uuid>/charts/` -- the wide modal opened from the summary's balances
+    thumbnail: the fully-labelled charts split by scale -- balances (net worth,
+    assets, liabilities) and annual flows (income, expenses) -- each with a legend."""
+
+    def get_template_name( self ):
+        return _CHARTS_MODAL_TEMPLATE
 
     def _context( self, request, run_uuid ):
         record = get_object_or_404(
@@ -434,30 +446,19 @@ class RunChartsModalView( PermitsReadonlyMutation, ModalView ):
                 run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust, width = 720, height = 300 ),
             'flows_chart'    : flows_chart(
                 run, books, chrome = CHROME_FULL, adjust_for_inflation = adjust, width = 720, height = 300 ),
-            'adjust_charts_for_inflation' : adjust,
-            'chart_basis_toggle_url'      : reverse( 'run_charts_modal', args = [ record.uuid ] ),
+            **self._toggle_context( request, reverse( 'run_charts_modal', args = [ record.uuid ] ) ),
         }
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class RunColumnChartModalView( PermitsReadonlyMutation, ModalView ):
+class RunColumnChartModalView( ChartBasisToggleModalView ):
     """`/run/<uuid>/column-chart/?column=<token>` -- the modal opened from a books-table
     column's "Chart" action: that column's value over time, with its immediate children
-    beside it when it is a small-enough rollup.
-
-    A POST flips the inflation-basis toggle and re-renders the whole modal in the new basis, preserving the
-    `?column=` selection through the toggle URL. Opted out of the read-only write-gate: it persists only the
-    member's own session view preference, never organization data."""
+    beside it when it is a small-enough rollup. The `?column=` selection rides the toggle
+    URL so the drill-in survives a basis re-render."""
 
     def get_template_name( self ):
         return _COLUMN_CHART_MODAL_TEMPLATE
-
-    def get( self, request, run_uuid ):
-        return self.modal_response( request, context = self._context( request, run_uuid ) )
-
-    def post( self, request, run_uuid ):
-        _apply_chart_basis_toggle( request )
-        return self.modal_response( request, context = self._context( request, run_uuid ) )
 
     def _context( self, request, run_uuid ):
         record = get_object_or_404(
@@ -473,12 +474,12 @@ class RunColumnChartModalView( PermitsReadonlyMutation, ModalView ):
                 adjust_for_inflation = request.session_state.adjust_charts_for_inflation )
         except ValueError as error:
             raise Http404( str( error ) )
-        toggle_url = reverse( 'run_column_chart', args = [ record.uuid ] ) + '?' + urlencode( { 'column': token } )
+        toggle_url = ( reverse( 'run_column_chart', args = [ record.uuid ] )
+                       + '?' + urlencode( { 'column': token } ) )
         return {
             'record'       : record,
             'column_chart' : chart,
-            'adjust_charts_for_inflation' : request.session_state.adjust_charts_for_inflation,
-            'chart_basis_toggle_url'      : toggle_url,
+            **self._toggle_context( request, toggle_url ),
         }
 
 

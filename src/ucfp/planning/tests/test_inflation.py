@@ -32,6 +32,11 @@ class ToTodaysDollarsTests( unittest.TestCase ):
         self.assertIsNone(
             to_todays_dollars( _run( 2026, Decimal( '0' ) ), Decimal( '100' ), date( 2036, 1, 1 ) ) )
 
+    def test_none_for_a_deflationary_rate( self ):
+        # A negative captured rate is treated as nothing to discount (the `<= 0` guard), so no "real" line.
+        self.assertIsNone(
+            to_todays_dollars( _run( 2026, Decimal( '-0.02' ) ), Decimal( '100' ), date( 2036, 1, 1 ) ) )
+
     def test_none_for_a_same_year_figure( self ):
         self.assertIsNone(
             to_todays_dollars( _run( 2026, Decimal( '0.03' ) ), Decimal( '100' ), date( 2026, 12, 31 ) ) )

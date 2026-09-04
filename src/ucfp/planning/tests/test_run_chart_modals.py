@@ -3,14 +3,17 @@
 GETs that load a captured run's books and render server-side SVG; the column modal also
 resolves an untrusted `?column=` token, which must 404 (never 500) when it names no column.
 """
+from django.contrib.auth import get_user_model
 from django.http import Http404
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 from django.utils.http import urlencode
 
 from common.dataclass_json import from_json_data
 from common.line_chart import CHROME_FULL
 
-from organization.models import Organization
+from organization.enums import OrganizationRole
+from organization.models import Organization, OrganizationMember
 
 from ucfp.accounts.books_table import BooksColumnKey, BooksDerivedFigure
 from ucfp.inputs.assumptions.repository import save_assumptions
@@ -136,8 +139,29 @@ class RunChartModalsTests( TestCase ):
     def test_charts_modal_toggle_can_turn_adjustment_back_on( self ):
         state    = SessionState( adjust_charts_for_inflation = False )
         request  = self._toggle_request( '/charts', adjust = 'on', session_state = state )
-        RunChartsModalView().post( request, run_uuid = self.run.uuid )
+        response = RunChartsModalView().post( request, run_uuid = self.run.uuid )
+        self.assertEqual( response.status_code, 200 )
+        self.assertIn( 'line-chart', response.content.decode() )
         self.assertTrue( request.session_state.adjust_charts_for_inflation )
+
+    def test_a_read_only_member_may_toggle_the_chart_basis( self ):
+        # The toggle persists only the member's own session view preference, so it opts out of the read-only
+        # write-gate (PermitsReadonlyMutation). A viewer POSTing it must be served, not 403'd -- exercised
+        # through the real URL so the `ensure_organization` gate and its resolver_match are in play.
+        viewer = get_user_model().objects.create_user( email = 'viewer@x.test' )
+        OrganizationMember.objects.create(
+            organization = self.org, user = viewer, organization_role = OrganizationRole.VIEWER )
+        self.client.force_login( viewer )
+        session = self.client.session
+        session[ 'current_organization_uuid' ] = str( self.org.uuid )
+        session.save()
+
+        response = self.client.post(
+            reverse( 'run_charts_modal', args = [ self.run.uuid ] ), { 'adjust': 'off' },
+            HTTP_X_REQUESTED_WITH = 'XMLHttpRequest' )
+
+        self.assertEqual( response.status_code, 200 )                        # served, not write-gated
+        self.assertFalse( self.client.session[ 'adjust_charts_for_inflation' ] )   # and the flip persisted
 
     def test_column_modal_toggle_preserves_the_column( self ):
         path     = '/column-chart?' + urlencode( { 'column': self._net_worth_token() } )

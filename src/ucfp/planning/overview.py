@@ -45,7 +45,8 @@ def run_outcome( run : ProjectionRun, books ) -> dict:
     # point the books table's opening row and the chart's first point use (`run_period_spans`' opening span).
     # Reading it at `frame.start_date` instead would include the first period's growth, which the engine
     # books at the period's start date, overstating the "starting" figure against the table and chart.
-    opening_date = run_period_spans( run )[ 0 ].end_date
+    opening_span = run_period_spans( run )[ 0 ]
+    opening_date = opening_span.end_date
     lasted = not run.result.stopped_early
     end_date = frame.end_date if lasted else steps[ -1 ].end_date
     depleted = ( not lasted ) and steps[ -1 ].is_depleted

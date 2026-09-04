@@ -8,7 +8,9 @@ load. Reads `adjust_charts_for_inflation`.
   <form method="post" action="{{ chart_basis_toggle_url }}" data-async="modal" class="m-0 mr-2">
     {% csrf_token %}
     <input type="hidden" name="adjust" value="{% if adjust_charts_for_inflation %}off{% else %}on{% endif %}">
-    <button type="submit" class="btn btn-outline-secondary btn-sm">
+    {% comment %}`autofocus` returns keyboard focus to this control after a toggle re-renders the whole
+    modal (antinode focuses the response's autofocus element), so an AT/keyboard user keeps their place.{% endcomment %}
+    <button type="submit" class="btn btn-outline-secondary btn-sm" autofocus>
       {% if adjust_charts_for_inflation %}Show future dollars{% else %}Adjust for inflation{% endif %}
     </button>
   </form>

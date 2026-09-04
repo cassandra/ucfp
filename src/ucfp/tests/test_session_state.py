@@ -58,6 +58,23 @@ class PerOrganizationContextTests( SimpleTestCase ):
         self.assertEqual( restored.editing_scenario, 'build-a' )
 
 
+class ChartInflationPreferenceTests( SimpleTestCase ):
+    """The global `adjust_charts_for_inflation` preference: default-on, and its round-trip. The default is a
+    back-compat contract -- sessions written before the field existed lack the key and must read as True, so
+    an existing user's charts stay on the today's-dollars basis rather than silently flipping to nominal."""
+
+    def test_a_session_missing_the_key_defaults_to_adjusting_for_inflation( self ):
+        # A pre-existing session (no such key) -- from_session must supply the on-by-default.
+        restored = SessionState.from_session( _FakeRequest( dict() ) )
+        self.assertTrue( restored.adjust_charts_for_inflation )
+
+    def test_the_preference_round_trips_when_turned_off( self ):
+        state = SessionState( adjust_charts_for_inflation = False )
+        request = _FakeRequest( dict() )
+        state.to_session( request )
+        self.assertFalse( SessionState.from_session( request ).adjust_charts_for_inflation )
+
+
 class OrganizationSessionContextTests( SimpleTestCase ):
 
     def test_from_storage_ignores_unknown_keys_and_defaults_missing( self ):

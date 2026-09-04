@@ -18,9 +18,8 @@ source of truth). Assets and liabilities are end-of-period balances (stock);
 income and expenses are within-period flows -- so the opening span, being
 zero-length, contributes a zero flow and the starting balances.
 """
-from typing import Optional
-
 from dataclasses import replace
+from typing import Optional
 
 from common.datetime_utils import age_on
 from common.line_chart import (
