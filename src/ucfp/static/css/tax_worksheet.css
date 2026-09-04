@@ -39,14 +39,23 @@
 .tw-scroll thead tr.tw-head-groups th { height: var( --tw-group-row-height ); }
 .tw-scroll thead tr.tw-head-cols th   { top: var( --tw-group-row-height ); }
 
-/* The leading Year column sticks on the left; its header corner sits above the tinted headers, its body
- * cells above the scrolling data. Sticky cells need their own background, and the right divider is an inset
- * shadow (a collapsed border does not travel with a sticky cell). */
+/* Two sticky left columns -- Year, then Age (the primary subject's age that year) -- like the books table's
+ * Period/Age pair. Each keeps its own opaque white so scrolling data never shows through, and a right
+ * divider drawn as an inset shadow (a collapsed border does not travel with a sticky cell). The Age column
+ * is offset by the fixed Year width; header corners sit above the tinted headers, body cells above the
+ * scrolling data. */
+.tw-scroll { --tw-year-width: 4rem; }
+.tw-scroll th.tw-year, .tw-scroll td.tw-year {
+    width: var( --tw-year-width ); min-width: var( --tw-year-width );
+}
 .tw-scroll th.tw-year, .tw-scroll td.tw-year,
-.tw-scroll tbody th.tw-year {
-    position: sticky; left: 0;
+.tw-scroll th.tw-age, .tw-scroll td.tw-age {
+    position: sticky;
     background-color: var( --white );
     box-shadow: inset -1px 0 0 0 var( --table-line-color );
+    text-align: right;
 }
-.tw-scroll thead th.tw-year { z-index: 3; }
-.tw-scroll tbody th.tw-year { z-index: 1; }
+.tw-scroll th.tw-year, .tw-scroll td.tw-year { left: 0; }
+.tw-scroll th.tw-age, .tw-scroll td.tw-age   { left: var( --tw-year-width ); }
+.tw-scroll thead th.tw-year, .tw-scroll thead th.tw-age { z-index: 3; }
+.tw-scroll tbody th.tw-year, .tw-scroll tbody td.tw-age { z-index: 1; }

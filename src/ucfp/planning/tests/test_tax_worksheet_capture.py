@@ -115,6 +115,7 @@ class RunTaxWorksheetViewTest( TestCase ):
         self.assertIn( 'Tax Worksheet', content )                     # the page heading
         self.assertIn( 'run-table-panel', content )                   # the minimize/maximize panel
         self.assertIn( 'Adjusted Gross Income', content )             # a worksheet column label
+        self.assertIn( 'tw-age', content )                            # the sticky Age reference column
 
     def test_the_page_is_scoped_to_the_org( self ):
         record = _capture( self.organization )

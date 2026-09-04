@@ -47,7 +47,7 @@ from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExpl
 from .forms import ForecastForm
 from .frames import FORECAST_MIN_YEARS, GRANULARITY, default_forecast_duration_years, resolve_frame
 from .gating import partition_scenarios, scenario_readiness, scenario_started
-from .materialization import ForecastFrame
+from .materialization import ForecastFrame, primary_birthdate
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture, run_title
 from .overview import run_outcome
@@ -336,10 +336,9 @@ class RunTaxWorksheetView( View ):
             ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
         run = from_json_data( ProjectionRun, record.data )
         worksheet = run.result.tax_worksheet
-        context = {
-            'record' : record,
-            'table'  : build_table( worksheet ) if worksheet is not None else None }
-        return render( request, _TAX_WORKSHEET_TEMPLATE, context )
+        table = ( build_table( worksheet, primary_birthdate( run.profile ) )
+                  if worksheet is not None else None )
+        return render( request, _TAX_WORKSHEET_TEMPLATE, { 'record' : record, 'table' : table } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

@@ -1,6 +1,7 @@
 """The tax worksheet render model: dropping all-zero columns, the owner-only income labels (so a column
 does not repeat its tax-class sub-group heading), cell formatting, and the header spans."""
 import unittest
+from datetime import date
 from decimal import Decimal
 
 from ucfp.jurisdiction.enums import JurisdictionType
@@ -89,6 +90,19 @@ class FormattingTest( unittest.TestCase ):
         row = build_table( _worksheet( (
             _year( 2030, w_john = _D( '-1200' ), ordinary_tax = _D( '1' ) ), ) ) ).rows[ 0 ]
         self.assertEqual( row.cells[ 0 ], '-$1,200' )
+
+
+class AgeColumnTest( unittest.TestCase ):
+
+    def test_each_row_carries_the_primary_subjects_age_that_year( self ):
+        worksheet = _worksheet( ( _year( 2030, w_john = _D( '60000' ) ),
+                                  _year( 2031, w_john = _D( '61000' ) ) ) )
+        rows = build_table( worksheet, date( 1962, 6, 15 ) ).rows   # age at year-end = year - birth year
+        self.assertEqual( [ ( row.year, row.age ) for row in rows ], [ ( 2030, 68 ), ( 2031, 69 ) ] )
+
+    def test_age_is_none_without_a_birthdate( self ):
+        worksheet = _worksheet( ( _year( 2030, w_john = _D( '60000' ) ), ) )
+        self.assertIsNone( build_table( worksheet ).rows[ 0 ].age )
 
 
 class HeaderSpanTest( unittest.TestCase ):

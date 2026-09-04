@@ -7,6 +7,7 @@ testing -- the dropping of any column that is zero or blank in every year of the
 (a tax layer or income source this household never touches) never reaches the page.
 """
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 
@@ -42,10 +43,12 @@ class HeaderColumn:
 
 @dataclass( frozen = True )
 class WorksheetRow:
-    """One tax year: the `year` and its already-formatted cell strings, aligned to the visible columns."""
+    """One tax year: the `year`, the primary subject's `age` that year (None when unknown), and the
+    already-formatted cell strings, aligned to the visible columns."""
 
     year  : int
     cells : tuple[ str, ... ]
+    age   : Optional[ int ] = None
 
 
 @dataclass( frozen = True )
@@ -62,18 +65,23 @@ class WorksheetTable:
         return not self.columns
 
 
-def build_table( worksheet : TaxDisplayWorksheet ) -> WorksheetTable:
+def build_table(
+        worksheet : TaxDisplayWorksheet, primary_birthdate : Optional[ date ] = None ) -> WorksheetTable:
     """The render model for `worksheet`, with all-zero columns dropped. Columns keep their group order (and
-    income keeps its tax-class sub-group banding); each cell is formatted for its column's units."""
+    income keeps its tax-class sub-group banding); each cell is formatted for its column's units. Each row
+    also carries the primary subject's age that tax year (from `primary_birthdate`, at year-end -- so
+    `year - birth year`), the reference the sticky Age column shows; None when no birthdate is given."""
     years   = worksheet.years
     visible = _visible_columns( worksheet, years )
     spans   = tuple( _spans( worksheet, visible ) )
     columns = tuple( HeaderColumn( _column_label( column ), _CATEGORY_CSS[ category ] )
                      for category, column in visible )
     rows    = tuple(
-        WorksheetRow( row.year,
-                      tuple( _format( column.format, row.cells.get( column.key ) )
-                             for _category, column in visible ) )
+        WorksheetRow(
+            year  = row.year,
+            cells = tuple( _format( column.format, row.cells.get( column.key ) )
+                           for _category, column in visible ),
+            age   = ( row.year - primary_birthdate.year ) if primary_birthdate is not None else None )
         for row in years )
     return WorksheetTable( spans = spans, columns = columns, rows = rows )
 

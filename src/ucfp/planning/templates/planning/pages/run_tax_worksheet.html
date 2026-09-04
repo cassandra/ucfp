@@ -47,6 +47,7 @@ worksheet existed has none, so a note invites a re-run. Context: `record`, `tabl
         <thead>
           <tr class="tw-head-groups">
             <th class="tw-year" rowspan="2">Year</th>
+            <th class="tw-age" rowspan="2">Age</th>
             {% for span in table.spans %}
             <th class="bt-head bt-depth-0 {{ span.css }}" colspan="{{ span.colspan }}">{{ span.label }}</th>
             {% endfor %}
@@ -61,6 +62,7 @@ worksheet existed has none, so a note invites a re-run. Context: `record`, `tabl
           {% for row in table.rows %}
           <tr>
             <th class="tw-year">{{ row.year }}</th>
+            <td class="tw-age">{{ row.age }}</td>
             {% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
           </tr>
           {% endfor %}
