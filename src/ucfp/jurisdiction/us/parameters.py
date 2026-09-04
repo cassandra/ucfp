@@ -41,6 +41,13 @@ class StandardDeduction:
             phaseout_end   = self.phaseout_end * factor )
 
 
+# The senior bonus (the OBBBA senior deduction, the `senior_bonus` above) is a temporary provision: it
+# applies through this tax year and lapses after, unless Congress extends it. The model does not assume an
+# extension. If it is extended, bump this to the new final year (or a far-future year for a permanent one) --
+# the one place that governs the sunset.
+SENIOR_DEDUCTION_FINAL_YEAR = 2028
+
+
 @dataclass( frozen = True )
 class SocialSecurityThresholds:
     """Provisional-income thresholds for the SS taxability worksheet (the base and

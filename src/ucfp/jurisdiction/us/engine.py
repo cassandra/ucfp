@@ -88,7 +88,7 @@ from . import rmd
 from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
 from .filing import resolve_filing_status
-from .parameters import StandardDeduction, TaxParameters
+from .parameters import SENIOR_DEDUCTION_FINAL_YEAR, StandardDeduction, TaxParameters
 from .tax_worksheet import TaxYearInputs, build_worksheet
 from .subdivision_tax import StateIncomeTax
 from .state import CapitalLossCarryover, PassiveLossCarryover, TaxState
@@ -263,7 +263,8 @@ class USFederalTaxEngine( TaxEngine ):
         # Computed before the deduction step because it feeds the SALT itemized deduction, then reused
         # as its own charge below. State tax depends only on AGI, so a single pass stays acyclic.
         state_income_tax = self._state_income_tax_charge( fiscal_window, agi, taxable_ss )
-        standard   = self._standard_deduction( status, tax_context, agi )
+        standard   = self._standard_deduction(
+            status, tax_context, agi, fiscal_window.span.end_date.year )
         deduction  = max(
             standard.total,
             self._itemized_deduction( fiscal_window, agi, state_income_tax ) )
@@ -710,16 +711,20 @@ class USFederalTaxEngine( TaxEngine ):
         return min( ss_gross * _SS_MAX_RATE, lower_tier + upper_tier )
 
     def _standard_deduction(
-            self, status : FilingStatus, tax_context : TaxContext, agi : Decimal ) -> _StandardDeduction:
+            self, status : FilingStatus, tax_context : TaxContext, agi : Decimal,
+            tax_year : int ) -> _StandardDeduction:
         """The standard deduction split into its parts (`.total` is the deduction): the base, the age-65
         bonus for each subject 65+, and the senior bonus for each, phased out linearly across the phase-out
-        band -- keyed on AGI, not the senior deduction's own MAGI (a simplification)."""
-        standard = self._parameters.standard_deduction[ status ]
-        seniors  = tax_context.count_age_at_least( 65 )
+        band -- keyed on AGI, not the senior deduction's own MAGI (a simplification). The senior bonus is a
+        temporary provision that lapses after `SENIOR_DEDUCTION_FINAL_YEAR`, so it is zero in later years;
+        the model does not assume Congress extends it."""
+        standard     = self._parameters.standard_deduction[ status ]
+        seniors      = tax_context.count_age_at_least( 65 )
+        senior_bonus = standard.senior_bonus if tax_year <= SENIOR_DEDUCTION_FINAL_YEAR else _ZERO
         return _StandardDeduction(
             base   = standard.base,
             age_65 = standard.age_65_bonus * seniors,
-            senior = standard.senior_bonus * seniors * self._senior_phaseout_factor( standard, agi ) )
+            senior = senior_bonus * seniors * self._senior_phaseout_factor( standard, agi ) )
 
     def _itemized_deduction(
             self, fiscal_window : FiscalWindowView, agi : Decimal, state_income_tax : Decimal ) -> Decimal:

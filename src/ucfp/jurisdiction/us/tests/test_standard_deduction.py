@@ -20,10 +20,10 @@ class StandardDeductionTests( unittest.TestCase ):
         self.engine   = USFederalTaxEngine( federal_2026() )
         self.standard = federal_2026().standard_deduction[ _SINGLE ]
 
-    def _deduction( self, agi, *ages ):
+    def _deduction( self, agi, *ages, year = 2026 ):
         subjects = tuple( TaxSubject( age = age, birth_year = 2026 - age ) for age in ages )
         context  = TaxContext( filing_status = _SINGLE, subjects = subjects )
-        return self.engine._standard_deduction( _SINGLE, context, _D( agi ) ).total
+        return self.engine._standard_deduction( _SINGLE, context, _D( agi ), year ).total
 
     def test_base_only_with_no_seniors( self ):
         self.assertEqual( self._deduction( '100000', 40 ), _D( '16100' ) )
@@ -35,10 +35,16 @@ class StandardDeductionTests( unittest.TestCase ):
     def test_the_parts_are_split_out_base_age_65_and_senior( self ):
         subjects = ( TaxSubject( age = 70, birth_year = 1956 ), )
         context  = TaxContext( filing_status = _SINGLE, subjects = subjects )
-        parts    = self.engine._standard_deduction( _SINGLE, context, _D( '50000' ) )   # below phase-out
+        parts    = self.engine._standard_deduction( _SINGLE, context, _D( '50000' ), 2026 )   # below phaseout
         self.assertEqual( ( parts.base, parts.age_65, parts.senior ),
                           ( _D( '16100' ), _D( '2050' ), _D( '6000' ) ) )
         self.assertEqual( parts.total, _D( '24150' ) )
+
+    def test_the_senior_bonus_lapses_after_its_final_year( self ):
+        # The senior bonus applies through its final year (2028) and is gone after, unless extended -- the
+        # model does not assume Congress renews it. Only base + age-65 bonus remain in 2029.
+        self.assertEqual( self._deduction( '50000', 70, year = 2028 ), _D( '24150' ) )   # 16100+2050+6000
+        self.assertEqual( self._deduction( '50000', 70, year = 2029 ), _D( '18150' ) )   # 16100+2050, lapsed
 
     def test_senior_bonus_phases_out_linearly( self ):
         # AGI 125k is the midpoint of [75k, 175k] -> half the 6,000 senior bonus = 3,000;
