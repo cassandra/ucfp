@@ -4,7 +4,7 @@
  * its maximize overlay (.run-table-panel) from css/books_table.css. This file adds only what is specific to
  * the worksheet: the four category colors (the same blue/green/red/orange the books table uses for its
  * asset/revenue/liability/expense groups), a two-row sticky header (group/sub-group spans over column
- * labels), and a sticky leading Year column. Tint is on the headers only; body cells stay neutral. */
+ * labels), and a sticky leading Year column. Tint is on the headers only; body rows are zebra-striped. */
 
 .tw-cat-income         { --bt-hue: 210; --bt-sat: 45%; }   /* blue   -- income accounts   */
 .tw-cat-income-derived { --bt-hue: 145; --bt-sat: 40%; }   /* green  -- income calculations */
@@ -12,10 +12,25 @@
 .tw-cat-rates          { --bt-hue:  35; --bt-sat: 60%; }   /* orange -- tax rates         */
 
 .tw-table                    { border-collapse: collapse; white-space: nowrap; }
-.tw-table th, .tw-table td   { padding: 0.25rem 0.6rem; border: 1px solid var( --line-color ); }
+/* Vertical borders only -- the column delimiters. No horizontal cell borders: a collapsed horizontal border
+ * on a sticky header cell is painted transparent, so the scrolling body showed through the seam between the
+ * two header rows. Rows are separated by zebra striping instead. */
+.tw-table th, .tw-table td   { padding: 0.2rem 0.5rem;
+                               border-left: 1px solid var( --table-line-color );
+                               border-right: 1px solid var( --table-line-color ); }
 .tw-table td                 { text-align: right; }
-.tw-table thead th           { text-align: center; font-weight: 600; }
+/* Headers bottom-aligned so the column labels sit against the data (and the group spans against the labels)
+ * rather than floating in the taller two-row header. */
+.tw-table thead th           { text-align: center; font-weight: 600; vertical-align: bottom; }
 .tw-table tbody th.tw-year   { text-align: right; font-weight: 600; }
+/* Zebra striping (Bootstrap's .table-striped shade) for row separation without horizontal rules. The sticky
+ * Year column keeps its own opaque white so it never shows scrolling data behind it. */
+.tw-table tbody tr:nth-child( odd ) td { background-color: rgba( 0, 0, 0, 0.04 ); }
+
+/* Column-label headers wrap within a cap so a long label stacks onto two lines instead of stretching its
+ * column to fit; the data cells (numbers) never wrap. The group / sub-group spans above stay single-line
+ * (they are short tax-class or category names). */
+.tw-table thead tr.tw-head-cols th { white-space: normal; max-width: 8.5rem; }
 
 /* Two-row sticky header: the group / income-sub-group spans on top, the column labels just beneath. Row two
  * offsets by the fixed group-row height so it stays flush under row one on scroll (both already get
@@ -31,7 +46,7 @@
 .tw-scroll tbody th.tw-year {
     position: sticky; left: 0;
     background-color: var( --white );
-    box-shadow: inset -1px 0 0 0 var( --line-color );
+    box-shadow: inset -1px 0 0 0 var( --table-line-color );
 }
 .tw-scroll thead th.tw-year { z-index: 3; }
 .tw-scroll tbody th.tw-year { z-index: 1; }

@@ -68,7 +68,7 @@ def build_table( worksheet : TaxDisplayWorksheet ) -> WorksheetTable:
     years   = worksheet.years
     visible = _visible_columns( worksheet, years )
     spans   = tuple( _spans( worksheet, visible ) )
-    columns = tuple( HeaderColumn( column.label, _CATEGORY_CSS[ category ] )
+    columns = tuple( HeaderColumn( _column_label( column ), _CATEGORY_CSS[ category ] )
                      for category, column in visible )
     rows    = tuple(
         WorksheetRow( row.year,
@@ -106,6 +106,20 @@ def _spans( worksheet, visible ):
         else:
             yield HeaderSpan( group.category.label, css, len( shown ) )
         continue
+
+
+def _column_label( column : Column ) -> str:
+    """A column's header text. Under a sub-group the tax-class name is already the span heading, so the
+    column shows only what distinguishes the accounts within it -- the owner ('John Wages' -> 'John') --
+    and blank for the sole account of its class ('Taxable Interest', where the span already names it).
+    Columns without a sub-group (the derived / tax / rate columns) keep their full label."""
+    if not column.subgroup:
+        return column.label
+    if column.label == column.subgroup:
+        return ''                                             # the sole account of its class
+    if column.label.endswith( column.subgroup ):
+        return column.label[ : -len( column.subgroup ) ].strip()   # 'John Wages' -> 'John'
+    return column.label
 
 
 def _subgroup_runs( columns ):

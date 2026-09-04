@@ -102,9 +102,9 @@ _RATE_COLUMNS = (
     ( 'marginal_ordinary', 'Marginal (ordinary)', ColumnFormat.RATE ),
     ( 'marginal_cap_gains', 'Marginal (capital gains)', ColumnFormat.RATE ),
     ( 'effective', 'Effective (overall)', ColumnFormat.RATE ),
-    ( 'headroom_ordinary', 'Bracket Headroom (ordinary)', ColumnFormat.MONEY ),
-    ( 'headroom_ltcg', 'Bracket Headroom (LTCG)', ColumnFormat.MONEY ),
-    ( 'headroom_niit', 'Headroom to NIIT', ColumnFormat.MONEY ) )
+    ( 'headroom_ordinary', 'Headroom (ordinary)', ColumnFormat.MONEY ),
+    ( 'headroom_ltcg', 'Headroom (LTCG)', ColumnFormat.MONEY ),
+    ( 'headroom_niit', 'Headroom (NIIT)', ColumnFormat.MONEY ) )
 
 
 def build_worksheet( inputs : TaxYearInputs ) -> TaxDisplayWorksheet:
