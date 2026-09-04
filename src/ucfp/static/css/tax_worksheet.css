@@ -1,0 +1,67 @@
+/* Tax worksheet table.
+ *
+ * Reuses the books table's header tint (.bt-head + .bt-depth-0), its scroll/sticky pane (.bt-scroll), and
+ * its maximize overlay (.run-table-panel) from css/books_table.css. This file adds only what is specific to
+ * the worksheet: the four category colors (borrowing the books table's revenue/net-worth/liability/expense
+ * hues -- green/purple/red/orange), a two-row sticky header (group/sub-group spans over column labels), and
+ * sticky leading Year and Age columns. Tint is on the headers only; body rows are zebra-striped. */
+
+/* Hues chosen for semantic consistency with the books table: income accounts take its revenue green, and
+ * the derived income calculations take its net-worth purple (both are derived figures); taxes and rates
+ * keep red and orange. */
+.tw-cat-income         { --bt-hue: 145; --bt-sat: 40%; }   /* green  -- income (the revenue hue)        */
+.tw-cat-income-derived { --bt-hue: 258; --bt-sat: 45%; }   /* purple -- derived (the net-worth hue)     */
+.tw-cat-taxes          { --bt-hue:   8; --bt-sat: 55%; }   /* red    -- tax values                      */
+.tw-cat-rates          { --bt-hue:  35; --bt-sat: 60%; }   /* orange -- tax rates                       */
+
+.tw-table                    { border-collapse: collapse; white-space: nowrap; }
+/* Vertical borders only -- the column delimiters. No horizontal cell borders: a collapsed horizontal border
+ * on a sticky header cell is painted transparent, so the scrolling body showed through the seam between the
+ * two header rows. Rows are separated by zebra striping instead. */
+.tw-table th, .tw-table td   { padding: 0.2rem 0.5rem;
+                               border-left: 1px solid var( --table-line-color );
+                               border-right: 1px solid var( --table-line-color ); }
+.tw-table td                 { text-align: right; }
+/* Headers bottom-aligned so the column labels sit against the data (and the group spans against the labels)
+ * rather than floating in the taller two-row header. */
+.tw-table thead th           { text-align: center; font-weight: 600; vertical-align: bottom; }
+.tw-table tbody th.tw-year   { text-align: right; font-weight: 600; }
+/* Zebra striping (Bootstrap's .table-striped shade) for row separation without horizontal rules. The sticky
+ * Year column keeps its own opaque white so it never shows scrolling data behind it. */
+.tw-table tbody tr:nth-child( odd ) td { background-color: rgba( 0, 0, 0, 0.04 ); }
+
+/* Column-label headers wrap within a cap so a long label stacks onto two lines instead of stretching its
+ * column to fit; the data cells (numbers) never wrap. The group / sub-group spans above stay single-line
+ * (they are short tax-class or category names). */
+.tw-table thead tr.tw-head-cols th { white-space: normal; max-width: 8.5rem; }
+
+/* Two-row sticky header: the group / income-sub-group spans on top, the column labels just beneath. Row two
+ * offsets by the fixed group-row height so it stays flush under row one on scroll (both already get
+ * position:sticky; top:0; z-index:2 from .bt-scroll thead th). */
+.tw-scroll                       { --tw-group-row-height: 2rem; }
+.tw-scroll thead tr.tw-head-groups th { height: var( --tw-group-row-height ); }
+.tw-scroll thead tr.tw-head-cols th   { top: var( --tw-group-row-height ); }
+
+/* Two sticky left columns -- Year, then Age (the primary subject's age that year) -- like the books table's
+ * Period/Age pair. Each keeps its own opaque white so scrolling data never shows through, and a right
+ * divider drawn as an inset shadow (a collapsed border does not travel with a sticky cell). The Age column
+ * is offset by the fixed Year width; header corners sit above the tinted headers, body cells above the
+ * scrolling data. */
+.tw-scroll { --tw-year-width: 4rem; }
+.tw-scroll th.tw-year, .tw-scroll td.tw-year {
+    width: var( --tw-year-width ); min-width: var( --tw-year-width );
+}
+.tw-scroll th.tw-year, .tw-scroll td.tw-year,
+.tw-scroll th.tw-age, .tw-scroll td.tw-age {
+    position: sticky;
+    background-color: var( --white );
+    box-shadow: inset -1px 0 0 0 var( --table-line-color );
+    text-align: right;
+}
+.tw-scroll th.tw-year, .tw-scroll td.tw-year { left: 0; }
+.tw-scroll th.tw-age, .tw-scroll td.tw-age   { left: var( --tw-year-width ); }
+.tw-scroll thead th.tw-year, .tw-scroll thead th.tw-age { z-index: 3; }
+.tw-scroll tbody th.tw-year, .tw-scroll tbody th.tw-age { z-index: 1; }
+/* Both frozen columns are <th> row headers (so the zebra rule, which targets td, never overrides their
+ * opaque white). Year stays bold; Age is a lighter reference. */
+.tw-table tbody th.tw-age { font-weight: normal; }

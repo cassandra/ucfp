@@ -10,8 +10,11 @@
 {% block page_type %}Forecast Run{% endblock %}
 
 {% block page_actions %}
-{% comment %}Runs are kept by default; Discard is the prominent way to prune one -- the same removal as the
-hub's per-row delete, landing back on the hub. Opens the styled confirm modal.{% endcomment %}
+{% comment %}A temporary link to the year-by-year tax worksheet (a deeper view of each period's taxes).
+Runs are kept by default; Discard is the prominent way to prune one -- the same removal as the hub's per-row
+delete, landing back on the hub. Opens the styled confirm modal.{% endcomment %}
+<a href="{% url 'run_tax_worksheet' record.uuid %}"
+   class="btn btn-outline-primary flex-shrink-0 mr-2">{% icon 'calculator' size='sm' css_class='mr-1' %}Tax Worksheet</a>
 <a href="{% url 'run_discard_confirm' record.uuid %}" data-async="modal"
    class="btn btn-outline-danger flex-shrink-0 edit-only">{% icon 'delete' size='sm' css_class='mr-1' %}Discard</a>
 {% endblock %}

@@ -152,7 +152,7 @@
 .bt-period-cell,
 .bt-age-head,
 .bt-age-cell {
-    box-shadow: inset -1px 0 0 0 var( --line-color );
+    box-shadow: inset -1px 0 0 0 var( --table-line-color );
 }
 /* Extra breathing room on the trailing edge of the Age column so the scrolling figures do not butt up
    against it as they slide beneath the sticky pair. */

@@ -20,6 +20,7 @@ from ucfp.accounts.enums import ExpenseTaxClass, IncomeTaxClass
 from ucfp.accounts.schemas import Handle
 
 from .context import TaxContext
+from .tax_worksheet import TaxDisplayWorksheet
 
 
 class TaxState:
@@ -50,6 +51,9 @@ class FiscalWindowView( Protocol ):
         ...
 
     def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
+        ...
+
+    def income_accounts( self ) -> list[ tuple[ Account, Decimal ] ]:
         ...
 
     def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle : Handle ) -> Decimal:
@@ -128,12 +132,17 @@ class TaxAssessment:
     for downstream consumers. `closing_tax_state` and `figures` are opaque to the Period
     and to this neutral module: their concrete types (the US `TaxState` / `TaxFigures`) live in
     the country package and subclass the neutral marker bases here, so the agnostic layer names
-    the type without depending on a specific jurisdiction."""
+    the type without depending on a specific jurisdiction.
 
-    charges           : list[ TaxCharge ]    = field( default_factory = list )
-    credits           : list[ TaxCredit ]    = field( default_factory = list )
-    closing_tax_state : Optional[ TaxState ] = None
-    figures           : Optional[ TaxFigures ] = None
+    `worksheet` is the year's tax display worksheet -- the intermediate figures shaped for the user's tax
+    view (`TaxDisplayWorksheet`, a neutral table). Unlike `figures`, which feeds further tax computation, it
+    is purely for display; None when the engine builds none."""
+
+    charges           : list[ TaxCharge ]               = field( default_factory = list )
+    credits           : list[ TaxCredit ]               = field( default_factory = list )
+    closing_tax_state : Optional[ TaxState ]            = None
+    figures           : Optional[ TaxFigures ]          = None
+    worksheet         : Optional[ TaxDisplayWorksheet ] = None
 
 
 class ContributionKind( Enum ):

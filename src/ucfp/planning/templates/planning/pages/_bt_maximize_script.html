@@ -1,0 +1,39 @@
+{% comment %}
+The in-window Maximize/Minimize behavior for a `.run-table-panel` (the fixed full-viewport overlay defined
+in css/books_table.css), extracted so any run table -- the books table and the tax worksheet -- reuses one
+implementation. Self-guarding (window.__btMaximizeReady), delegated on document so it survives antinode
+swaps; Esc minimizes the open panel.
+{% endcomment %}
+<script>
+ (function () {
+   if ( window.__btMaximizeReady ) { return; }   // one delegated handler no matter how many panels render
+   window.__btMaximizeReady = true;
+   function setMaximized( panel, on ) {
+     panel.classList.toggle( 'is-maximized', on );
+     document.body.classList.toggle( 'bt-maximized', on );
+     var toggle = panel.querySelector( '.bt-maximize-toggle' );
+     if ( toggle ) {
+       toggle.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+       toggle.querySelector( '.bt-maximize-label-open' ).classList.toggle( 'd-none', on );
+       toggle.querySelector( '.bt-maximize-label-close' ).classList.toggle( 'd-none', !on );
+     }
+   }
+   document.addEventListener( 'click', function ( event ) {
+     var toggle = event.target.closest( '.bt-maximize-toggle' );
+     if ( ! toggle ) { return; }
+     var panel = toggle.closest( '.run-table-panel' );
+     setMaximized( panel, ! panel.classList.contains( 'is-maximized' ) );
+   } );
+   document.addEventListener( 'click', function ( event ) {
+     var minimize = event.target.closest( '.bt-minimize' );   // the maximized-only brand: click to minimize
+     if ( ! minimize ) { return; }
+     var panel = minimize.closest( '.run-table-panel' );
+     if ( panel ) { setMaximized( panel, false ); }
+   } );
+   document.addEventListener( 'keydown', function ( event ) {
+     if ( event.key !== 'Escape' ) { return; }
+     var open = document.querySelector( '.run-table-panel.is-maximized' );
+     if ( open ) { setMaximized( open, false ); }
+   } );
+ })();
+</script>

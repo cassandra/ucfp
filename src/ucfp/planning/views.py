@@ -47,16 +47,18 @@ from .explore_sections import EconomicAssumptionsExploreForm, LivingExpensesExpl
 from .forms import ForecastForm
 from .frames import FORECAST_MIN_YEARS, GRANULARITY, default_forecast_duration_years, resolve_frame
 from .gating import partition_scenarios, scenario_readiness, scenario_started
-from .materialization import ForecastFrame
+from .materialization import ForecastFrame, primary_birthdate
 from .models import ProjectionRunRecord, PlanningResultRecord
 from .orchestration import run_and_capture, run_title
 from .overview import run_outcome
 from .run_charts import balances_chart, column_chart, flows_chart
 from .schemas import ProjectionRun
+from .tax_worksheet_display import build_table
 
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
 _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
 _BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
+_TAX_WORKSHEET_TEMPLATE = 'planning/pages/run_tax_worksheet.html'
 _JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
 _DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
 _CHARTS_MODAL_TEMPLATE = 'planning/modals/run_charts.html'
@@ -320,6 +322,23 @@ class RunResultsView( View ):
             'amount'         : notice.amount,
             'detail'         : notice.detail,
         }
+
+
+@method_decorator( ensure_organization, name = 'dispatch' )
+class RunTaxWorksheetView( View ):
+    """`/run/<uuid>/tax-worksheet/` -- the year-by-year tax display worksheet for a captured run: the
+    intermediate figures behind each year's projected taxes, as a static (minimize/maximize) table. A
+    temporary navigation surface reached from the results page; runs captured before the worksheet existed
+    have none, so the page shows a note to re-run."""
+
+    def get( self, request, run_uuid ):
+        record = get_object_or_404(
+            ProjectionRunRecord, uuid = run_uuid, organization = request.organization )
+        run = from_json_data( ProjectionRun, record.data )
+        worksheet = run.result.tax_worksheet
+        table = ( build_table( worksheet, primary_birthdate( run.profile ) )
+                  if worksheet is not None else None )
+        return render( request, _TAX_WORKSHEET_TEMPLATE, { 'record' : record, 'table' : table } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

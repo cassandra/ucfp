@@ -88,7 +88,8 @@ from . import rmd
 from .depreciation import accumulated_depreciation, period_depreciation
 from .figures import TaxFigures
 from .filing import resolve_filing_status
-from .parameters import StandardDeduction, TaxParameters
+from .parameters import SENIOR_DEDUCTION_FINAL_YEAR, StandardDeduction, TaxParameters
+from .tax_worksheet import TaxYearInputs, build_worksheet
 from .subdivision_tax import StateIncomeTax
 from .state import CapitalLossCarryover, PassiveLossCarryover, TaxState
 
@@ -147,6 +148,20 @@ class _RentalGainSplit( NamedTuple ):
 
     section_1250 : Decimal
     long_term    : Decimal
+
+
+class _StandardDeduction( NamedTuple ):
+    """The standard deduction split into its parts: the `base`, the age-65 bonus totalled across the
+    subjects 65+, and the senior bonus totalled across them (after the AGI phase-out). They sum to the
+    deduction (`total`)."""
+
+    base   : Decimal
+    age_65 : Decimal
+    senior : Decimal
+
+    @property
+    def total( self ) -> Decimal:
+        return self.base + self.age_65 + self.senior
 
 
 class USFederalTaxEngine( TaxEngine ):
@@ -237,8 +252,8 @@ class USFederalTaxEngine( TaxEngine ):
             tax_state.passive_loss_carryover.suspended, tax_context )
         ordinary_income = ordinary_nonrental + passive.deductible
 
-        taxable_ss = self._taxable_social_security(
-            status, ss_gross, ordinary_income + total_gains + tax_exempt_interest )
+        ss_worksheet_income = ordinary_income + total_gains + tax_exempt_interest
+        taxable_ss = self._taxable_social_security( status, ss_gross, ss_worksheet_income )
         agi        = ordinary_income + total_gains + taxable_ss
         figures    = TaxFigures(
             agi                     = agi,
@@ -248,8 +263,10 @@ class USFederalTaxEngine( TaxEngine ):
         # Computed before the deduction step because it feeds the SALT itemized deduction, then reused
         # as its own charge below. State tax depends only on AGI, so a single pass stays acyclic.
         state_income_tax = self._state_income_tax_charge( fiscal_window, agi, taxable_ss )
+        standard   = self._standard_deduction(
+            status, tax_context, agi, fiscal_window.span.end_date.year )
         deduction  = max(
-            self._standard_deduction( status, tax_context, agi ),
+            standard.total,
             self._itemized_deduction( fiscal_window, agi, state_income_tax ) )
 
         taxable_income = max( _ZERO, agi - deduction )
@@ -299,6 +316,34 @@ class USFederalTaxEngine( TaxEngine ):
                     ExpenseTaxClass.ORDINARY_INCOME_TAX, premium_credit,
                     f'ACA premium tax credit at {format_money( figures.aca_magi )} MAGI.' ) )
         income_tax_total = self._net_income_tax( charges, credits )
+        worksheet = build_worksheet( TaxYearInputs(
+            year                    = fiscal_window.span.end_date.year,
+            ordinary_brackets       = self._parameters.ordinary_brackets[ status ],
+            ltcg_brackets           = self._parameters.ltcg_brackets[ status ],
+            niit_threshold          = niit_threshold,
+            income_accounts         = fiscal_window.income_accounts(),
+            provisional_income      = self._provisional_income( ss_gross, ss_worksheet_income ),
+            ss_gross                = ss_gross,
+            taxable_ss              = taxable_ss,
+            agi                     = agi,
+            taxable_long_term_gains   = split.preferential,
+            section_1250_depreciation = section_1250,
+            net_investment_income     = net_investment_income,
+            deduction_base          = standard.base,
+            age_65_deduction        = standard.age_65,
+            senior_deduction        = standard.senior,
+            applied_deduction       = deduction,
+            taxable_ordinary_income = split.ordinary,
+            taxable_income          = taxable_income,
+            niit_magi               = figures.niit_magi,
+            ordinary_tax            = income_tax.ordinary,
+            capital_gains_tax       = income_tax.capital_gains,
+            section_1250_tax        = income_tax.section_1250,
+            collectibles_tax        = income_tax.collectibles,
+            niit                    = niit,
+            state_income_tax        = state_income_tax,
+            premium_tax_credit      = premium_credit,
+            total_tax               = income_tax_total ) )
         return TaxAssessment(
             charges           = charges,
             credits           = credits,
@@ -307,6 +352,7 @@ class USFederalTaxEngine( TaxEngine ):
                 passive_loss_carryover = PassiveLossCarryover( suspended = passive.suspended ),
                 prior_year_income_tax  = income_tax_total ),
             figures           = figures,
+            worksheet         = worksheet,
         )
 
     def assess_employment_tax( self, fiscal_window : FiscalWindowView, tax_context : TaxContext ) -> Decimal:
@@ -642,6 +688,12 @@ class USFederalTaxEngine( TaxEngine ):
         credit = max( _ZERO, enrollment.reference_premium - expected_contribution )
         return min( credit, enrollment.actual_premium )
 
+    def _provisional_income( self, ss_gross : Decimal, other_income : Decimal ) -> Decimal:
+        """The Social Security provisional-income base: other income (which includes tax-exempt interest,
+        counted here though not in AGI) plus half the gross benefits -- what the two-tier inclusion
+        worksheet is measured against. Shared by the inclusion calculation and the tax display worksheet."""
+        return other_income + ss_gross * _HALF
+
     def _taxable_social_security(
             self, status : FilingStatus, ss_gross : Decimal, other_income : Decimal ) -> Decimal:
         """The taxable portion of Social Security via the IRS two-tier worksheet:
@@ -650,7 +702,7 @@ class USFederalTaxEngine( TaxEngine ):
         base (it includes tax-exempt interest, which counts here though not in AGI); the
         worksheet has no inner dependency on the tax being computed."""
         thresholds  = self._parameters.ss_thresholds[ status ]
-        provisional = other_income + ss_gross * _HALF
+        provisional = self._provisional_income( ss_gross, other_income )
         if provisional <= thresholds.base:
             return _ZERO
         if provisional <= thresholds.additional:
@@ -659,15 +711,21 @@ class USFederalTaxEngine( TaxEngine ):
         upper_tier = ( provisional - thresholds.additional ) * _SS_MAX_RATE
         return min( ss_gross * _SS_MAX_RATE, lower_tier + upper_tier )
 
-    def _standard_deduction( self, status : FilingStatus, tax_context : TaxContext, agi : Decimal ) -> Decimal:
-        """Base deduction plus the age-65 and senior bonuses for each subject 65+, with the
-        senior bonus phased out linearly across the phase-out band -- keyed on AGI, not the
-        senior deduction's own MAGI (a simplification)."""
-        standard = self._parameters.standard_deduction[ status ]
-        seniors  = tax_context.count_age_at_least( 65 )
-        deduction = standard.base + standard.age_65_bonus * seniors
-        deduction += standard.senior_bonus * seniors * self._senior_phaseout_factor( standard, agi )
-        return deduction
+    def _standard_deduction(
+            self, status : FilingStatus, tax_context : TaxContext, agi : Decimal,
+            tax_year : int ) -> _StandardDeduction:
+        """The standard deduction split into its parts (`.total` is the deduction): the base, the age-65
+        bonus for each subject 65+, and the senior bonus for each, phased out linearly across the phase-out
+        band -- keyed on AGI, not the senior deduction's own MAGI (a simplification). The senior bonus is a
+        temporary provision that lapses after `SENIOR_DEDUCTION_FINAL_YEAR`, so it is zero in later years;
+        the model does not assume Congress extends it."""
+        standard     = self._parameters.standard_deduction[ status ]
+        seniors      = tax_context.count_age_at_least( 65 )
+        senior_bonus = standard.senior_bonus if tax_year <= SENIOR_DEDUCTION_FINAL_YEAR else _ZERO
+        return _StandardDeduction(
+            base   = standard.base,
+            age_65 = standard.age_65_bonus * seniors,
+            senior = senior_bonus * seniors * self._senior_phaseout_factor( standard, agi ) )
 
     def _itemized_deduction(
             self, fiscal_window : FiscalWindowView, agi : Decimal, state_income_tax : Decimal ) -> Decimal:

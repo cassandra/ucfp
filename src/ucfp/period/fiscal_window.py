@@ -64,6 +64,15 @@ class FiscalWindow:
             continue
         return amounts
 
+    def income_accounts( self ) -> list[ tuple[ Account, Decimal ] ]:
+        """Every revenue account paired with its income over the fiscal year -- the per-account view *with
+        account identity* (unlike `income_by_account`, which drops it), for a per-account income breakdown
+        such as the tax display worksheet. Accounts are in chart order; each carries its `income_tax_class`,
+        so a reader can group by tax treatment."""
+        return [ ( account,
+                   self._ledger.flows( account, start = self._span.start_date, end = self._span.end_date ) )
+                 for account in self._chart.accounts( account_type = AccountType.REVENUE ) ]
+
     def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle : Handle ) -> Decimal:
         """The income recognized in `income_tax_class` on the account owned by `owner_handle` over the
         fiscal year -- the per-owner figure a rule that turns on the owner's age needs (e.g. a Roth
@@ -196,6 +205,10 @@ class AnnualizedFiscalWindow:
 
     def income_by_account( self, income_tax_class : IncomeTaxClass ) -> list[ Decimal ]:
         return [ amount * self._factor for amount in self._window.income_by_account( income_tax_class ) ]
+
+    def income_accounts( self ) -> list[ tuple[ Account, Decimal ] ]:
+        return [ ( account, amount * self._factor )
+                 for account, amount in self._window.income_accounts() ]
 
     def income_for_owner( self, income_tax_class : IncomeTaxClass, owner_handle : Handle ) -> Decimal:
         return self._window.income_for_owner( income_tax_class, owner_handle ) * self._factor

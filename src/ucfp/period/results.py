@@ -6,6 +6,7 @@ from uuid import UUID
 
 from common.labeled_enum import LabeledEnum
 from ucfp.jurisdiction.engine import TaxState
+from ucfp.jurisdiction.tax_worksheet import TaxDisplayWorksheet
 
 
 class NoticeSeverity( LabeledEnum ):
@@ -97,9 +98,14 @@ class PeriodResult:
     `property_sales` are the whole-property sales the period effected this interval, each a
     `(holding_handle, sale_date, rent_after)` -- the signal the Forecast reacts to once, to reconfigure the
     property's forward expenses (a residence's own->rent conversion). Whatever triggered the sale (a
-    scheduled event or a shortfall drawdown) reports it the same way."""
+    scheduled event or a shortfall drawdown) reports it the same way.
 
-    notices           : list[ Notice ] = field( default_factory = list )
-    is_depleted       : bool = False
-    closing_tax_state : Optional[ TaxState ] = None
-    property_sales    : list = field( default_factory = list )
+    `tax_worksheet` is the tax display worksheet the engine built for this interval's tax year -- present
+    only on the period that settles a tax year (None otherwise), for the run to assemble into the whole
+    forecast's worksheet."""
+
+    notices           : list[ Notice ]                  = field( default_factory = list )
+    is_depleted       : bool                             = False
+    closing_tax_state : Optional[ TaxState ]             = None
+    property_sales    : list                             = field( default_factory = list )
+    tax_worksheet     : Optional[ TaxDisplayWorksheet ] = None

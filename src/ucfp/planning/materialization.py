@@ -1000,10 +1000,18 @@ def _owner_birthdates( profile : Profile ) -> dict:
 
 
 def _age_window( start_age, end_age, birthdate : Optional[ date ] ) -> DateWindow:
-    """A [start_age, end_age] pair as a date window against `birthdate` -- each bound present only when
-    both its age and the birthdate are known, else left open (no bound)."""
-    start = _at_year( birthdate, start_age ) if start_age is not None and birthdate is not None else None
-    end = _at_year( birthdate, end_age ) if end_age is not None and birthdate is not None else None
+    """An [start_age, end_age] age range as a date window against `birthdate`, by the *calendar year* the
+    person reaches each age -- not their birthday within it: the window opens on January 1 of the year they
+    turn `start_age` and closes on December 31 of the year they turn `end_age`. So the range is inclusive of
+    both ages and independent of the birthday's day/month (a Dec-31 birthday behaves like a Jan-1 one) -- a
+    recurring plan gated on each period's start then runs in every year from the start age through the end
+    age. Each bound is present only when its age and the birthdate are known, else left open (no bound)."""
+    start = end = None
+    if birthdate is not None:
+        if start_age is not None:
+            start = date( birthdate.year + start_age, 1, 1 )
+        if end_age is not None:
+            end = date( birthdate.year + end_age, 12, 31 )
     return DateWindow( start = start, end = end )
 
 
