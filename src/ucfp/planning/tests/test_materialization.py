@@ -25,7 +25,7 @@ from ucfp.inputs.profile.schemas import AssetProfile, Profile
 from ucfp.parameter_sets.enums import ExpenseCategory, PropertyContext, Realization
 from ucfp.planning.display_placement import property_expense_handle
 from ucfp.planning.materialization import (
-    _assets, _health_coverage, _leased_current_expenses, _property_data, _property_expenses,
+    _age_window, _assets, _health_coverage, _leased_current_expenses, _property_data, _property_expenses,
     _rent_account_handle, _vehicle_expenses,
     _vehicle_holding_purchases, _vehicle_holdings, _vehicle_loan_originations, _vehicle_running_costs )
 
@@ -630,3 +630,37 @@ class HealthCoverageDefaultTests( unittest.TestCase ):
         plans = Plans( health_coverage = HealthCoverageAssumption(
             household_size = 1, reference_premium = Decimal( '8000' ), actual_premium = Decimal( '5000' ) ) )
         self.assertEqual( _health_coverage( plans ).actual_premium, Decimal( '5000' ) )
+
+
+class AgeWindowTest( unittest.TestCase ):
+    """An age range maps to the *calendar years* the person turns those ages -- inclusive of both ends and
+    independent of the birthday within the year. A recurring plan (a Roth conversion, withdrawal, or
+    contribution) gated on each period's start then runs in every year from the start age through the end
+    age; before the fix a mid-year birthday skipped the start-age year and only a Jan-1 birthday was
+    inclusive of the end age."""
+
+    def test_the_window_spans_whole_calendar_years_of_the_ages( self ):
+        window = _age_window( 64, 65, date( 1962, 6, 15 ) )
+        self.assertEqual( window.start, date( 2026, 1, 1 ) )     # Jan 1 of the year they turn 64
+        self.assertEqual( window.end, date( 2027, 12, 31 ) )    # Dec 31 of the year they turn 65
+
+    def test_the_window_is_independent_of_the_birthday_within_the_year( self ):
+        windows = { _age_window( 64, 65, date( 1962, month, day ) )
+                    for month, day in ( ( 1, 1 ), ( 6, 15 ), ( 12, 31 ) ) }
+        self.assertEqual( len( windows ), 1 )                   # same window regardless of the birthday
+
+    def test_both_age_years_are_covered_inclusively_and_neighbours_are_not( self ):
+        window  = _age_window( 64, 65, date( 1962, 6, 15 ) )
+        covered = [ year for year in range( 2024, 2030 ) if window.covers( date( year, 1, 1 ) ) ]
+        self.assertEqual( covered, [ 2026, 2027 ] )             # turn-64 and turn-65 years, not either side
+
+    def test_a_single_age_range_is_its_one_year( self ):
+        window = _age_window( 64, 64, date( 1962, 6, 15 ) )
+        covered = [ year for year in range( 2024, 2030 ) if window.covers( date( year, 1, 1 ) ) ]
+        self.assertEqual( covered, [ 2026 ] )
+
+    def test_a_missing_age_or_birthdate_leaves_the_bound_open( self ):
+        self.assertIsNone( _age_window( None, 65, date( 1962, 6, 15 ) ).start )
+        self.assertIsNone( _age_window( 64, None, date( 1962, 6, 15 ) ).end )
+        unbounded = _age_window( 64, 65, None )
+        self.assertEqual( ( unbounded.start, unbounded.end ), ( None, None ) )
