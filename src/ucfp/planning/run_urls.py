@@ -17,8 +17,8 @@ urlpatterns = [
           name = 'run_column_chart' ),
     path( '<uuid:run_uuid>/books/', views.ProjectionRunBooksTableView.as_view(),
           name = 'run_books_table' ),
-    path( '<uuid:run_uuid>/tax-worksheet/', views.RunTaxWorksheetView.as_view(),
-          name = 'run_tax_worksheet' ),
+    path( '<uuid:run_uuid>/tax-details/', views.RunTaxDetailsView.as_view(),
+          name = 'run_tax_details' ),
     path( '<uuid:run_uuid>/books/account/<uuid:account_uuid>/journal/',
           views.BooksTableJournalView.as_view(), name = 'books_journal' ),
 ]

@@ -58,7 +58,7 @@ from .tax_worksheet_display import build_table
 _HUB_TEMPLATE = 'planning/pages/financial_forecast.html'
 _RESULTS_TEMPLATE = 'planning/pages/run_results.html'
 _BOOKS_TABLE_TEMPLATE = 'planning/pages/run_books_table.html'
-_TAX_WORKSHEET_TEMPLATE = 'planning/pages/run_tax_worksheet.html'
+_TAX_DETAILS_TEMPLATE = 'planning/pages/run_tax_details.html'
 _JOURNAL_TEMPLATE = 'planning/modals/account_journal.html'
 _DISCARD_CONFIRM_TEMPLATE = 'planning/modals/run_discard_confirm.html'
 _CHARTS_MODAL_TEMPLATE = 'planning/modals/run_charts.html'
@@ -325,8 +325,8 @@ class RunResultsView( View ):
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )
-class RunTaxWorksheetView( View ):
-    """`/run/<uuid>/tax-worksheet/` -- the year-by-year tax display worksheet for a captured run: the
+class RunTaxDetailsView( View ):
+    """`/run/<uuid>/tax-details/` -- the Tax Details page for a captured run: the year-by-year
     intermediate figures behind each year's projected taxes, as a static (minimize/maximize) table. A
     temporary navigation surface reached from the results page; runs captured before the worksheet existed
     have none, so the page shows a note to re-run."""
@@ -338,7 +338,7 @@ class RunTaxWorksheetView( View ):
         worksheet = run.result.tax_worksheet
         table = ( build_table( worksheet, primary_birthdate( run.profile ) )
                   if worksheet is not None else None )
-        return render( request, _TAX_WORKSHEET_TEMPLATE, { 'record' : record, 'table' : table } )
+        return render( request, _TAX_DETAILS_TEMPLATE, { 'record' : record, 'table' : table } )
 
 
 @method_decorator( ensure_organization, name = 'dispatch' )

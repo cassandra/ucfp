@@ -16,7 +16,7 @@ from ucfp.planning.materialization import ForecastFrame
 from ucfp.planning.models import ProjectionRunRecord
 from ucfp.planning.orchestration import run_and_capture
 from ucfp.planning.schemas import ProjectionResult, ProjectionRun
-from ucfp.planning.views import RunResultsView, RunTaxWorksheetView
+from ucfp.planning.views import RunResultsView, RunTaxDetailsView
 from ucfp.session_state import SessionState
 from ucfp.parameter_sets.enums import EconomicOutlookVariant
 from ucfp.parameter_sets.management.seeding import seed_default_parameter_sets
@@ -103,23 +103,23 @@ class BackwardCompatibilityTest( SimpleTestCase ):
         self.assertIsNone( restored.tax_worksheet )
 
 
-class RunTaxWorksheetViewTest( TestCase ):
+class RunTaxDetailsViewTest( TestCase ):
 
     def setUp( self ):
         seed_default_parameter_sets()
         self.organization = Organization.objects.create( name = 'Org' )
 
     def _get( self, record, organization ):
-        request = RequestFactory().get( f'/run/{ record.uuid }/tax-worksheet/' )
+        request = RequestFactory().get( f'/run/{ record.uuid }/tax-details/' )
         request.organization = organization
-        return RunTaxWorksheetView().get( request, run_uuid = record.uuid )
+        return RunTaxDetailsView().get( request, run_uuid = record.uuid )
 
     def test_the_page_renders_the_worksheet( self ):
         record   = _capture( self.organization )
         response = self._get( record, self.organization )
         self.assertEqual( response.status_code, 200 )
         content = response.content.decode()
-        self.assertIn( 'Tax Worksheet', content )                     # the page heading
+        self.assertIn( 'Tax Details', content )                       # the page heading
         self.assertIn( 'run-table-panel', content )                   # the minimize/maximize panel
         self.assertIn( 'Adjusted Gross Income', content )             # a worksheet column label
         self.assertIn( 'tw-age', content )                            # the sticky Age reference column
