@@ -126,6 +126,21 @@
 /* Snug a following amount up against a preceding icon glyph (e.g. the $ and price in the compare table). */
 .icon-right-negative  { margin-right: -0.2rem; }
 
+/* Home feature/calculator cards: a screenshot banner atop the card. A white mat + a hairline divider
+   frame the (light-background) screenshot as a sample and keep it legible on any card/page background;
+   the banner inherits the card's top corner radius. */
+.home-card-media {
+    background: #fff;
+    border-bottom: 1px solid rgba( 0, 0, 0, 0.075 );
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
+    overflow: hidden;
+}
+.home-card-media img {
+    display: block;
+    width: 100%;
+}
+
 /* Modal width helpers (applied via the modal_dialog_class block). */
 .app-modal-600 { max-width: 600px; }
 .app-modal-700 { max-width: 700px; }
